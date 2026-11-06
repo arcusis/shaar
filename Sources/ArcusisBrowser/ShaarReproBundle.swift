@@ -119,7 +119,12 @@ struct ShaarReproCapture {
 
 @MainActor protocol ShaarReproTransport {
   var available: Bool { get }
+  var requiresMaskedFrames: Bool { get }
   func capture(for target: SiteControlTarget, seconds: Int) async throws -> ShaarReproCapture
+}
+
+extension ShaarReproTransport {
+  var requiresMaskedFrames: Bool { false }
 }
 
 private struct ShaarReproUnavailable: LocalizedError {
@@ -327,6 +332,7 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
 @MainActor @Observable final class ShaarReproModel {
   @ObservationIgnored let history = ShaarReproHistory()
   @ObservationIgnored let frames = ShaarReproFrames()
+  private(set) var hasMaskedFrames = false
   private(set) var target: SiteControlTarget
   private(set) var busy = false
   private(set) var savedURL: URL?
@@ -343,12 +349,32 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
     self.transport = transport
   }
 
-  var available: Bool { transport.available }
+  var recording: Bool { transport.available }
+
+  var available: Bool {
+    recording && (!transport.requiresMaskedFrames ||
+      (hasMaskedFrames && !frames.snapshot().isEmpty))
+  }
+
+  func startFrames(for target: SiteControlTarget) {
+    frames.start(for: target)
+    hasMaskedFrames = false
+  }
+
+  func stopFrames() {
+    frames.stop()
+    hasMaskedFrames = false
+  }
+
+  func receiveMaskedFrame(_ jpeg: Data) {
+    frames.record(jpeg, for: target)
+    hasMaskedFrames = !frames.snapshot().isEmpty
+  }
 
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
     self.target = target
-    frames.stop()
+    stopFrames()
     clearViewer()
     failure = nil
   }
@@ -361,17 +387,31 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
     let target = target
     do {
       let captured = try await transport.capture(for: target, seconds: ShaarReproBundle.seconds)
-      let video = frames.snapshot().isEmpty ? captured.videoMP4 : try await frames.encode()
+      let recentFrames = frames.snapshot()
+      if transport.requiresMaskedFrames &&
+        (!transport.available || recentFrames.isEmpty)
+      {
+        throw ShaarReproUnavailable()
+      }
+      let video = recentFrames.isEmpty ? captured.videoMP4 : try await frames.encode()
+      let duration: Int
+      if let first = recentFrames.first, let last = recentFrames.last {
+        duration = min(
+          ShaarReproBundle.seconds,
+          max(1, Int(ceil(last.receivedAt.timeIntervalSince(first.receivedAt)))))
+      } else {
+        duration = captured.durationSeconds
+      }
       let capture: ShaarReproCapture
       if history.isActive {
         let recent = history.snapshot()
         capture = ShaarReproCapture(
-          videoMP4: video, durationSeconds: captured.durationSeconds,
+          videoMP4: video, durationSeconds: duration,
           dom: captured.dom, console: recent.console, network: recent.network,
           environment: captured.environment)
       } else {
         capture = ShaarReproCapture(
-          videoMP4: video, durationSeconds: captured.durationSeconds,
+          videoMP4: video, durationSeconds: duration,
           dom: captured.dom, console: captured.console, network: captured.network,
           environment: captured.environment)
       }

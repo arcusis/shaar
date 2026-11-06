@@ -4,6 +4,7 @@
 
 import ChromiumBridge
 import Foundation
+import Observation
 import ShaarEngineABI
 
 @MainActor protocol ShaarPanelRequesting {
@@ -55,10 +56,11 @@ private enum ShaarPanelError: Error { case unavailable }
   init(target: SiteControlTarget) { self.target = target }
 }
 
-@MainActor final class ShaarDevToolsNativeTransport: ShaarDevToolsEventTransport {
-  private let requester: any ShaarPanelRequesting
-  private let windowID: String
-  private var session: ShaarPanelSession?
+@MainActor @Observable final class ShaarDevToolsNativeTransport: ShaarDevToolsEventTransport {
+  private(set) var recordingAvailable = false
+  @ObservationIgnored private let requester: any ShaarPanelRequesting
+  @ObservationIgnored private let windowID: String
+  @ObservationIgnored private var session: ShaarPanelSession?
 
   init(requester: any ShaarPanelRequesting, windowID: String) {
     self.requester = requester
@@ -69,7 +71,7 @@ private enum ShaarPanelError: Error { case unavailable }
     if let session { close(session) }
     let next = ShaarPanelSession(target: target)
     session = next
-    return AsyncStream { continuation in
+    return AsyncStream(bufferingPolicy: .bufferingNewest(32)) { continuation in
       next.continuation = continuation
       next.task = Task { [weak self] in await self?.start(next) }
       continuation.onTermination = { @Sendable [weak self, weak next] _ in
@@ -98,12 +100,12 @@ private enum ShaarPanelError: Error { case unavailable }
     else { return }
     session.sequence = sequence
     if projected.id == .eventsDropped {
-      session.continuation?.yield(.streamUnavailable)
+      emit(.streamUnavailable, to: session)
       close(session)
       return
     }
     if let frame = projected.data.frame {
-      session.continuation?.yield(.maskedFrame(frame.jpeg))
+      emit(.maskedFrame(frame.jpeg), to: session)
       Task { [weak self, weak session] in
         guard let self, let session, !session.closed else { return }
         try? await self.requester.request(
@@ -115,7 +117,7 @@ private enum ShaarPanelError: Error { case unavailable }
       }
       return
     }
-    if let event = Self.project(projected) { session.continuation?.yield(.event(event)) }
+    if let event = Self.project(projected) { emit(.event(event), to: session) }
   }
 
   private func start(_ session: ShaarPanelSession) async {
@@ -130,25 +132,38 @@ private enum ShaarPanelError: Error { case unavailable }
         return
       }
       session.leaseID = leaseID
-      session.continuation?.yield(.streamAvailable)
+      emit(.streamAvailable, to: session)
+      guard !session.closed else { return }
       do {
         _ = try await requester.request(
           .panelScreencast, target: session.target,
           payload: ["schemaVersion": 1, "leaseID": leaseID, "commandID": 1])
+        guard self.session === session, !session.closed else { return }
         session.recording = true
+        recordingAvailable = true
       } catch {
         // Console and Network remain available if video is unsupported.
       }
     } catch {
       guard !session.closed else { return }
-      session.continuation?.yield(.streamUnavailable)
+      emit(.streamUnavailable, to: session)
       close(session)
+    }
+  }
+
+  private func emit(_ message: ShaarDevToolsTransportMessage, to session: ShaarPanelSession) {
+    guard let continuation = session.continuation else { return }
+    switch continuation.yield(message) {
+    case .enqueued: break
+    case .dropped, .terminated: close(session)
+    @unknown default: close(session)
     }
   }
 
   private func close(_ session: ShaarPanelSession) {
     guard !session.closed else { return }
     session.closed = true
+    recordingAvailable = false
     session.task?.cancel()
     if self.session === session { self.session = nil }
     session.continuation?.finish()

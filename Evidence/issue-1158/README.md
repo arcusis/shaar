@@ -9,8 +9,9 @@ capability-unavailable state. The `after-viewer-*.png` images show a local
 fixture bundle summary opened in the same section. All images were rendered
 offscreen without changing the key window.
 
-No live engine recording is claimed. The production capture action remains
-disabled until a tab-scoped recording capability is connected.
+The `after-unavailable-*.png` and `ready-after-*.png` images show the
+capability-gated state before and after a fixture reports recording support.
+They are offscreen UI evidence; no live engine recording is claimed.
 
 The `viewer-before-*.png` files preserve the summary-only viewer from #1163.
 The `viewer-after-*.png` files show imported console content in the expanded

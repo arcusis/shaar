@@ -227,7 +227,7 @@ final class ShaarDevToolsModel {
     }
     isOpen = true
     repro.history.start(for: target)
-    repro.frames.start(for: target)
+    repro.startFrames(for: target)
     startStream()
     startLocalStreams()
     phase2.open()
@@ -243,7 +243,7 @@ final class ShaarDevToolsModel {
     cancelLocalTasks()
     streamAvailable = false
     repro.history.stop()
-    repro.frames.stop()
+    repro.stopFrames()
     events.removeAll()
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
@@ -269,7 +269,7 @@ final class ShaarDevToolsModel {
     performance.updateTarget(target, committed: committed)
     streamAvailable = false
     repro.history.stop()
-    repro.frames.stop()
+    repro.stopFrames()
     events.removeAll()
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
@@ -289,7 +289,7 @@ final class ShaarDevToolsModel {
     cancelLocalTasks()
     if isOpen {
       repro.history.start(for: target)
-      repro.frames.start(for: target)
+      repro.startFrames(for: target)
       startStream()
       startLocalStreams()
       rules.resume()
@@ -404,11 +404,11 @@ final class ShaarDevToolsModel {
     switch message {
     case .streamAvailable:
       streamAvailable = true
-      if !repro.frames.isActive { repro.frames.start(for: target) }
+      if !repro.frames.isActive { repro.startFrames(for: target) }
     case .streamUnavailable:
       streamAvailable = false
       repro.history.clear()
-      repro.frames.stop()
+      repro.stopFrames()
       events.removeAll()
       console.clearEntries()
       network.clearSelection()
@@ -419,7 +419,7 @@ final class ShaarDevToolsModel {
       if events.count > 2_000 { events.removeFirst(events.count - 2_000) }
     case .maskedFrame(let jpeg):
       guard streamAvailable else { return }
-      repro.frames.record(jpeg, for: target)
+      repro.receiveMaskedFrame(jpeg)
     }
   }
 

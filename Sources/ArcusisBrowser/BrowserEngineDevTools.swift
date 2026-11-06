@@ -39,25 +39,31 @@ extension BrowserEngine {
   @discardableResult
   func showDeveloperTools(for target: SiteControlTarget) -> Bool {
     guard siteControlTarget == target else { return false }
+    let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, engine: self)
     let viewportsTransport: any ShaarViewportsTransport
     let eventTransport: any ShaarDevToolsEventTransport
+    let reproTransport: any ShaarReproTransport
     if let shaar = runtime as? ARCShaarRuntime {
       viewportsTransport = ShaarViewportsNativeTransport(
         requester: ShaarViewportRuntimeRequester(
           runtime: shaar, windowID: windowID, contextID: nil))
-      eventTransport = ShaarDevToolsNativeTransport(
+      let panel = ShaarDevToolsNativeTransport(
         requester: ShaarPanelRuntimeRequester(runtime: shaar, windowID: windowID),
         windowID: windowID)
+      eventTransport = panel
+      reproTransport = ShaarReproNativeTransport(
+        runtime: shaar, panel: panel, inspector: inspector)
     } else {
       viewportsTransport = ShaarViewportsPendingTransport()
       eventTransport = ShaarDevToolsPendingTransport()
+      reproTransport = ShaarReproPendingTransport()
     }
     let shell =
       shaarDevTools[target.tabID]
       ?? ShaarDevToolsModel(
-        target: target, transport: eventTransport, viewportsTransport: viewportsTransport,
+        target: target, transport: eventTransport, reproTransport: reproTransport,
+        viewportsTransport: viewportsTransport,
         localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()])
-    let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, engine: self)
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector
     shell.updateTarget(target)

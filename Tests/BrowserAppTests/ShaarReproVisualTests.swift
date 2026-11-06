@@ -59,20 +59,39 @@ import XCTest
       try render(shell, inspector: inspector, scheme: scheme, label: "viewer-after", root: root)
     }
     shell.close()
+    let readyInspector = InspectorModel(target: target, engine: nil)
+    let readyShell = ShaarDevToolsModel(
+      target: target, reproTransport: ReadyReproVisualTransport())
+    readyShell.open(inspector: readyInspector)
+    readyShell.section = .repro
+    for scheme in [ColorScheme.light, .dark] {
+      try render(
+        readyShell, inspector: readyInspector, scheme: scheme, label: "ready-after", root: root,
+        directory: root)
+    }
+    readyShell.close()
     XCTAssertTrue(NSApp.keyWindow === previous)
   }
 
   private func render(
     _ shell: ShaarDevToolsModel, inspector: InspectorModel, scheme: ColorScheme,
-    label: String, root: URL
+    label: String, root: URL, directory: URL? = nil
   ) throws {
     let suffix = scheme == .dark ? "dark" : "light"
     let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
-    let view = ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {})
+    let view = ShaarDevToolsPanel(
+      model: shell, inspector: inspector, openChromium: {}, reproDirectory: directory)
       .frame(width: 1040, height: 420).environment(\.colorScheme, scheme)
     let image = try VisualCapture.renderOffscreen(
       view, size: NSSize(width: 1040, height: 420), appearance: appearance,
       to: root.appending(path: "\(label)-\(suffix).png"))
     XCTAssertEqual(image.pixelsWide, 1040)
+  }
+}
+
+private struct ReadyReproVisualTransport: ShaarReproTransport {
+  let available = true
+  func capture(for target: SiteControlTarget, seconds: Int) async throws -> ShaarReproCapture {
+    throw CancellationError()
   }
 }

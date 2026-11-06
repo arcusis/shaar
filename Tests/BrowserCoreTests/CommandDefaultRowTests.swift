@@ -128,23 +128,29 @@ private func sessionWithGmailFavoriteAndGitHubTab() throws -> (BrowserSession, U
   let sections = CommandLauncher.sections(
     for: "inbox", filter: nil, in: session, sources: CommandSources())
   #expect(sections.first?.id == "open")
-  #expect(sections.first?.results.first?.action == .open(
-    NavigationInput.destination(for: "inbox")!))
+  #expect(
+    sections.first?.results.first?.action
+      == .open(
+        NavigationInput.destination(for: "inbox")!))
 }
 
 @Test func typedURLCompletesFromRecentHistory() throws {
   let session = BrowserSession.fresh()
   let profileID = session.selectedSpace.profileID
   let now = Date().timeIntervalSince1970 * 1000
-  let history = try BrowserHistoryEntry(profileID: profileID, payload: [
-    "u": "https://github.com/arcusis/shaar", "t": "Shaar", "n": NSNumber(value: 3),
-    "v": [NSNumber(value: now)],
-  ])
+  let history = try BrowserHistoryEntry(
+    profileID: profileID,
+    payload: [
+      "u": "https://github.com/arcusis/shaar", "t": "Shaar", "n": NSNumber(value: 3),
+      "v": [NSNumber(value: now)],
+    ])
   var sources = CommandSources()
   sources.history = [history]
 
   let sections = CommandLauncher.sections(
     for: "github.com", filter: nil, in: session, sources: sources)
 
-  #expect(sections.first?.results.first?.action == .open(URL(string: "https://github.com/arcusis/shaar")!))
+  #expect(
+    sections.first?.results.first?.action == .open(URL(string: "https://github.com/arcusis/shaar")!)
+  )
 }

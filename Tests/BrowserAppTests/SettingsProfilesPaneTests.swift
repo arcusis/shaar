@@ -58,13 +58,15 @@ import Testing
 }
 
 @Test func macOSPermissionsGuidanceUsesEnglishAndHebrewCatalogValues() {
-  let key = "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings."
+  let key =
+    "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings."
   #expect(
     BrowserLocalization.string(key, table: "Settings", language: .english)
       == key)
   #expect(
     BrowserLocalization.string(key, table: "Settings", language: .hebrew)
-      == "אתרים יכולים להשתמש רק בהרשאות ש‑macOS מאפשרת. אם בקשת אתר חסומה כאן, יש לשנות זאת בהגדרות המערכת.")
+      == "אתרים יכולים להשתמש רק בהרשאות ש‑macOS מאפשרת. אם בקשת אתר חסומה כאן, יש לשנות זאת בהגדרות המערכת."
+  )
 }
 
 @Test @MainActor func profilePaneMasterDetailFitsLightAndDarkAppearances() {

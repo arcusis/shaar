@@ -44,9 +44,12 @@ import Testing
   let sections = CommandLauncher.sections(
     for: "budget", filter: nil, in: session, sources: sources)
   #expect(sections.first?.id == "open")
-  #expect(sections.first?.results.first?.action == .open(
-    NavigationInput.destination(for: "budget")!))
-  #expect(!sections.results.contains { if case .providerSearch = $0.action { true } else { false } })
+  #expect(
+    sections.first?.results.first?.action
+      == .open(
+        NavigationInput.destination(for: "budget")!))
+  #expect(
+    !sections.results.contains { if case .providerSearch = $0.action { true } else { false } })
 
   let narrowed = CommandLauncher.sections(
     for: "gmail budget", filter: .actions, in: session, sources: sources)

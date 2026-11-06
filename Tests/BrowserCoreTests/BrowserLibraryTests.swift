@@ -447,12 +447,15 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   let htmlOperations = BrowserImport.operations(for: htmlItems, otherFolderID: otherFolderID)
   #expect(htmlOperations.map { $0["t"] as? String } == [folderFallback, bookmarkFallback])
 
-  let safariURL = FileManager.default.temporaryDirectory.appending(path: "Bookmarks-\(UUID()).plist")
+  let safariURL = FileManager.default.temporaryDirectory.appending(
+    path: "Bookmarks-\(UUID()).plist")
   defer { try? FileManager.default.removeItem(at: safariURL) }
   let safari = [
-    "Children": [[
-      "Title": " \n ", "Children": [["Title": " ", "URLString": "https://safari.example"]],
-    ]]
+    "Children": [
+      [
+        "Title": " \n ", "Children": [["Title": " ", "URLString": "https://safari.example"]],
+      ]
+    ]
   ]
   try PropertyListSerialization.data(fromPropertyList: safari, format: .xml, options: 0)
     .write(to: safariURL)
@@ -461,9 +464,12 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(safariItems.map(\.title) == [bookmarkFallback])
 
   for (name, urlKey, filename) in [("name", "url", "Chrome"), ("title", "uri", "Firefox")] {
-    let jsonURL = FileManager.default.temporaryDirectory.appending(path: "\(filename)-\(UUID()).json")
+    let jsonURL = FileManager.default.temporaryDirectory.appending(
+      path: "\(filename)-\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: jsonURL) }
-    let bookmark: [String: Any] = [name: " \t ", urlKey: "https://\(filename.lowercased()).example"]
+    let bookmark: [String: Any] = [
+      name: " \t ", urlKey: "https://\(filename.lowercased()).example",
+    ]
     let folder: [String: Any] = [name: "  ", "children": [bookmark]]
     let root: [String: Any]
     if filename == "Chrome" {

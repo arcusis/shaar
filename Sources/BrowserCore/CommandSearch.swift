@@ -115,9 +115,11 @@ public enum CommandProviderSearch {
     guard !query.isEmpty else { return [] }
     let services = provider == .google ? google : microsoft
     let lowered = query.lowercased()
-    guard (google + microsoft).contains(where: {
-      hasKeywordSeparator(lowered, keyword: $0.keyword)
-    }) else { return [] }
+    guard
+      (google + microsoft).contains(where: {
+        hasKeywordSeparator(lowered, keyword: $0.keyword)
+      })
+    else { return [] }
     let requestedService = (google + microsoft).first {
       hasKeywordSeparator(lowered, keyword: $0.keyword)
     }
@@ -254,8 +256,11 @@ public enum CommandSearch {
   ) -> [CommandResult] {
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let typedAddress = NavigationInput.address(for: query)
-    let completion = typedAddress == nil ? nil : recentURLCompletion(
-      for: query, history: history, profileID: session.selectedSpace.profileID)
+    let completion =
+      typedAddress == nil
+      ? nil
+      : recentURLCompletion(
+        for: query, history: history, profileID: session.selectedSpace.profileID)
     let targetAddress = completion ?? typedAddress
     let openURL = completion ?? NavigationInput.destination(for: query, searchEngine: searchEngine)
     let candidateLimit = openURL == nil ? limit : limit - 1

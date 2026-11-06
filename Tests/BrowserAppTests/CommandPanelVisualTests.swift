@@ -101,7 +101,7 @@ final class CommandPanelVisualTests: XCTestCase {
   /// Words text recognition reads reliably on every runner. The action still proves a result row
   /// is visible when Vision misreads the short title "Notes" as "Nates".
   private func textTokens(longQuery: Bool) -> (query: String, result: String) {
-    longQuery ? ("research", "Open in") : ("Atlas", "Switch to Tab")
+    longQuery ? ("research", "Open in") : ("Atlas", "Search Web")
   }
   private func capture(
     root: URL, key: String, page: String, scheme: ColorScheme, minimum: Bool,

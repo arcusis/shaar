@@ -271,8 +271,32 @@ jobs:
           stage: visual
           extra-path: build/Verification/sidebar-chrome-ci
 
+  localization-captures:
+    name: English and Hebrew offscreen localization captures
+    needs: plan
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-localization-captures
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
+    if: needs.plan.outputs.full == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: localization
+      - name: Build and capture English and Hebrew offscreen screens
+        run: .venv/bin/python scripts/ci-stage.py localization-captures
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: localization-captures
+          extra-path: build/Verification/localization-visuals
+
   localization:
-    name: Hebrew localization, offscreen visuals, and engine locale
+    name: Native engine locale and restart probe
     needs: [plan, engine-bundle]
     concurrency:
       group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-localization
@@ -289,7 +313,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/ci-setup
         with:
-          mode: localization
+          mode: engine-probe
       - name: Download shared exact-source verification bundle
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
@@ -299,7 +323,7 @@ jobs:
         run: |
           echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ChromiumEngine/**', 'ThirdParty/FrameworkDevTools/**', 'scripts/fetch-framework-devtools.py', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/rebrand-engine-framework.py', 'scripts/engine_payload.py', 'scripts/verify_engine_bundle.py', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
           echo "CI_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
-      - name: Capture English and Hebrew screens and verify native engine language
+      - name: Verify native engine language and restart
         env:
           SHAAR_LOCALIZATION_BACKTRACE: '1'
         run: .venv/bin/python scripts/ci-stage.py localization
@@ -307,9 +331,7 @@ jobs:
         if: always()
         with:
           stage: localization
-          extra-path: |
-            build/Verification/localization-visuals
-            build/Verification/localization-engine-evidence
+          extra-path: build/Verification/localization-engine-evidence
 
   engine-bundle:
     name: Shared verification bundle
@@ -499,7 +521,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, basic-browsing, shaar-engine-simulation, shipping, shipping-probe-guard, codeql, inspector-contracts, website, sanitizers, dead-code]
+    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, localization-captures, engine, basic-browsing, shaar-engine-simulation, shipping, shipping-probe-guard, codeql, inspector-contracts, website, sanitizers, dead-code]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

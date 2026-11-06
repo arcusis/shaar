@@ -264,17 +264,18 @@ def run_visuals(checks: Commands) -> None:
         checks.run(name, ["swift", "test", "--skip-build", "--jobs", "2", "--filter", name], env=environment)
 
 
-def run_localization(checks: Commands) -> None:
+def run_localization_captures(checks: Commands) -> None:
     require_hosted_mac()
-    has_shared_bundle = restore_shared_verification_bundle()
     if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "2", "--force-resolved-versions"]):
         return
-    if checks.run("localization-captures", [sys.executable, "scripts/test-localization.py"]):
-        return
-    localization_engine = [sys.executable, "scripts/localization-fixture.py"]
-    if has_shared_bundle:
-        localization_engine.append("--skip-build")
-    checks.run("localization-engine", localization_engine)
+    checks.run("localization-captures", [sys.executable, "scripts/test-localization.py"])
+
+
+def run_localization_engine(checks: Commands) -> None:
+    require_hosted_mac()
+    if not restore_shared_verification_bundle():
+        raise RuntimeError("Localization engine probe requires the shared verification bundle")
+    checks.run("localization-engine", [sys.executable, "scripts/localization-fixture.py", "--skip-build"])
 
 
 def run_sanitizer(checks: Commands, sanitizer: str) -> None:
@@ -286,7 +287,7 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("unit", "coverage-base", "coverage-compare", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "shipping", "sanitize", "dead-code"))
+    parser.add_argument("stage", choices=("unit", "coverage-base", "coverage-compare", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "localization-captures", "shipping", "sanitize", "dead-code"))
     parser.add_argument("--shard", choices=engine_shards(10), default="baseline-1")
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
     parser.add_argument("--iterations", type=int, choices=range(1, 11), default=1)
@@ -317,7 +318,9 @@ def main() -> int:
         elif options.stage == "visual":
             run_visuals(checks)
         elif options.stage == "localization":
-            run_localization(checks)
+            run_localization_engine(checks)
+        elif options.stage == "localization-captures":
+            run_localization_captures(checks)
         elif options.stage == "sanitize":
             run_sanitizer(checks, options.sanitizer)
         elif options.stage == "dead-code":

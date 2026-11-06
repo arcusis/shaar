@@ -14,7 +14,7 @@ def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
                 browsing: bool = False, shipping_guard: bool = False) -> list[str]:
     expected = {"plan", "fast", "dependency-review", "codeql"}
     native = {
-        "python-tests", "build", "coverage", "visuals", "localization",
+        "python-tests", "build", "coverage", "visuals", "localization", "localization-captures",
         "engine", "shaar-engine-simulation", "shipping", "inspector-contracts",
     }
     if full:

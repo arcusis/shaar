@@ -305,7 +305,7 @@ class PipelineGateTests(unittest.TestCase):
     def results(self, native="success", nightly="skipped"):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
         results.update({name: {"result": native} for name in (
-            "python-tests", "build", "coverage", "visuals", "localization", "engine",
+            "python-tests", "build", "coverage", "visuals", "localization", "localization-captures", "engine",
             "shipping", "codeql", "inspector-contracts", "basic-browsing",
             "shaar-engine-simulation",
         )})
@@ -314,7 +314,8 @@ class PipelineGateTests(unittest.TestCase):
         return results
 
     def test_full_pipeline_rejects_failed_cancelled_skipped_or_missing_stage(self):
-        for stage in ("engine", "shaar-engine-simulation", "localization", "inspector-contracts", "basic-browsing"):
+        for stage in ("engine", "shaar-engine-simulation", "localization", "localization-captures",
+                      "inspector-contracts", "basic-browsing"):
             for result in ("failure", "cancelled", "skipped", None):
                 with self.subTest(stage=stage, result=result):
                     needs = self.results()
@@ -894,15 +895,19 @@ class EngineTransferTests(unittest.TestCase):
             self.assertEqual([call.args[0] for call in checks.run.call_args_list], ["normal-window-browsing"])
             self.assertTrue((root / "build" / BUNDLE_NAME).is_dir())
 
-    def test_localization_uses_restored_bundle_without_rebuilding_it(self):
+    def test_localization_engine_requires_restored_bundle_without_rebuilding_it(self):
         checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
         with patch.object(STAGES, "require_hosted_mac"), patch.object(
             STAGES, "restore_shared_verification_bundle", return_value=True
         ):
-            STAGES.run_localization(checks)
+            STAGES.run_localization_engine(checks)
         localization_engine = checks.run.call_args_list[-1].args
         self.assertEqual(localization_engine[0], "localization-engine")
         self.assertEqual(localization_engine[1][-1], "--skip-build")
+        with patch.object(STAGES, "require_hosted_mac"), patch.object(
+            STAGES, "restore_shared_verification_bundle", return_value=False
+        ), self.assertRaises(RuntimeError):
+            STAGES.run_localization_engine(checks)
 
     def test_cached_engine_bundle_counts_as_a_successful_stage_with_shards(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards

@@ -110,7 +110,9 @@ struct ShaarDevToolsPanel: View {
       }
     case .network:
       if model.streamAvailable {
-        ShaarNetworkPanel(model: model.network, events: model.events)
+        ShaarNetworkPanel(
+          model: model.network, rules: model.rules, events: model.events,
+          openChromium: openChromium)
       } else {
         unavailablePanel
       }

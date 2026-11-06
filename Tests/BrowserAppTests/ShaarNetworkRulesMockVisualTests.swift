@@ -50,12 +50,15 @@ private struct ShaarNetworkRulesMock: View {
         HStack(spacing: 0) {
           Image(systemName: "chevron.left.forwardslash.chevron.right")
             .frame(width: 30).foregroundStyle(.secondary)
-          ForEach(["Elements", "Console", "Network", "Application", "Performance", "Sources"], id: \.self) { title in
+          ForEach(
+            ["Elements", "Console", "Network", "Application", "Performance", "Sources"], id: \.self
+          ) { title in
             Text(title)
               .font(.system(size: 11, weight: title == "Network" ? .semibold : .regular))
               .padding(.horizontal, 11).frame(height: 29)
-              .background(title == "Network" ? Color.primary.opacity(0.08) : .clear,
-                          in: RoundedRectangle(cornerRadius: 6))
+              .background(
+                title == "Network" ? Color.primary.opacity(0.08) : .clear,
+                in: RoundedRectangle(cornerRadius: 6))
           }
           Spacer()
           Image(systemName: "ellipsis").frame(width: 28)
@@ -131,8 +134,9 @@ private struct ShaarNetworkRulesMock: View {
               Text("{\n  \"orders\": [],\n  \"source\": \"local fixture\"\n}")
                 .font(.system(size: 10, design: .monospaced))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8).background(Color.primary.opacity(0.04),
-                                        in: RoundedRectangle(cornerRadius: 5))
+                .padding(8).background(
+                  Color.primary.opacity(0.04),
+                  in: RoundedRectangle(cornerRadius: 5))
               Spacer()
               HStack {
                 Text("Runs only for this tab while enabled")

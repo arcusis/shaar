@@ -18,6 +18,9 @@ import XCTest
     let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appending(path: "Evidence/issue-1124")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let rulesEvidence = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1157")
+    try FileManager.default.createDirectory(at: rulesEvidence, withIntermediateDirectories: true)
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
     let inspector = InspectorModel(target: target, engine: nil)
@@ -98,6 +101,47 @@ import XCTest
           appearance: appearance, root: root)
       }
       populated.close()
+
+      let rulesTransport = ShaarNetworkRulesFixtureTransport()
+      let rulesRoot = FileManager.default.temporaryDirectory
+        .appending(path: "shaar-network-rules-\(UUID().uuidString)")
+      defer { try? FileManager.default.removeItem(at: rulesRoot) }
+      let withRules = ShaarDevToolsModel(
+        target: target,
+        transport: ShaarDevToolsFixtureTransport(fixture: fixture),
+        rulesTransport: rulesTransport,
+        rulesStore: ShaarNetworkRuleStore(root: rulesRoot))
+      withRules.section = .network
+      withRules.open(inspector: inspector)
+      for _ in 0..<30 where withRules.events.count < fixture.count { await Task.yield() }
+      let request = try XCTUnwrap(
+        withRules.network.requests(from: withRules.events)
+          .first { $0.id == requestID })
+      withRules.network.selectedID = requestID
+      withRules.rules.create(from: request)
+      withRules.rules.draft?.enabled = true
+      withRules.rules.draft?.status = 200
+      withRules.rules.draft?.bodyText = "{\"orders\":[],\"source\":\"local fixture\"}"
+      try await withRules.rules.saveDraft()
+      let saved = try XCTUnwrap(withRules.rules.rules.first)
+      withRules.rules.edit(saved)
+      try capture(
+        ShaarDevToolsPanel(model: withRules, inspector: inspector, openChromium: {}),
+        named: "after-network-rules-\(suffix)", scheme: scheme,
+        appearance: appearance, root: rulesEvidence)
+      withRules.close()
+
+      let unavailableRules = ShaarDevToolsModel(
+        target: target, transport: ShaarDevToolsFixtureTransport(fixture: fixture))
+      unavailableRules.section = .network
+      unavailableRules.open(inspector: inspector)
+      for _ in 0..<30 where unavailableRules.events.count < fixture.count { await Task.yield() }
+      unavailableRules.rules.showingRules = true
+      try capture(
+        ShaarDevToolsPanel(model: unavailableRules, inspector: inspector, openChromium: {}),
+        named: "after-network-rules-unavailable-\(suffix)", scheme: scheme,
+        appearance: appearance, root: rulesEvidence)
+      unavailableRules.close()
     }
     XCTAssertTrue(NSApp.keyWindow === previous)
   }

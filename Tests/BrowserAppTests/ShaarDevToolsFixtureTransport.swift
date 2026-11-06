@@ -18,3 +18,14 @@ struct ShaarDevToolsFixtureTransport: ShaarDevToolsEventTransport {
     }
   }
 }
+
+@MainActor final class ShaarNetworkRulesFixtureTransport: ShaarNetworkRulesTransport {
+  let available = true
+  private(set) var lastTarget: SiteControlTarget?
+  private(set) var lastRules: [ShaarResolvedNetworkRule] = []
+
+  func apply(_ rules: [ShaarResolvedNetworkRule], to target: SiteControlTarget) async throws {
+    lastTarget = target
+    lastRules = rules
+  }
+}

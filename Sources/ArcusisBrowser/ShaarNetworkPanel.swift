@@ -7,7 +7,9 @@ import SwiftUI
 
 struct ShaarNetworkPanel: View {
   @Bindable var model: ShaarNetworkModel
+  @Bindable var rules: ShaarNetworkRulesModel
   let events: [ShaarDevToolsEvent]
+  let openChromium: () -> Void
   @FocusState private var focusedRequest: String?
 
   private var rows: [ShaarNetworkRequest] { model.visibleRequests(from: events) }
@@ -22,8 +24,13 @@ struct ShaarNetworkPanel: View {
           requestList
             .frame(minWidth: 0, maxWidth: .infinity)
           Divider()
-          detail
-            .frame(width: min(340, max(220, geometry.size.width * 0.38)))
+          if rules.showingRules {
+            ShaarNetworkRulesEditor(model: rules, openChromium: openChromium)
+              .frame(width: min(340, max(220, geometry.size.width * 0.38)))
+          } else {
+            detail
+              .frame(width: min(340, max(220, geometry.size.width * 0.38)))
+          }
         }
       }
     }
@@ -48,6 +55,23 @@ struct ShaarNetworkPanel: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
       }
       Spacer(minLength: 4)
+      if rules.activeCount > 0 {
+        Text(ShellL10n.format("Rules active · %d", arguments: [.integer(rules.activeCount)]))
+          .font(.system(size: 10, weight: .medium))
+          .foregroundStyle(.orange)
+          .padding(.horizontal, 8)
+          .frame(height: 23)
+          .background(Color.orange.opacity(0.1), in: Capsule())
+          .accessibilityIdentifier("shaar.devtools.networkRulesActive")
+      }
+      Button {
+        rules.showingRules.toggle()
+      } label: {
+        Text(ShellL10n.format("Rules %d", arguments: [.integer(rules.rules.count)]))
+          .font(.system(size: 10, weight: .medium))
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("shaar.devtools.networkRules")
       TextField(ShellL10n.string("Search requests"), text: $model.search)
         .textFieldStyle(.roundedBorder)
         .font(.system(size: 11))
@@ -80,6 +104,12 @@ struct ShaarNetworkPanel: View {
             .focusable()
             .focused($focusedRequest, equals: row.id)
             .accessibilityIdentifier("shaar.devtools.networkRequest")
+            .contextMenu {
+              Button(ShellL10n.string("Create rule from request")) {
+                rules.create(from: row)
+              }
+              .disabled(!rules.available)
+            }
             Divider()
           }
         }
@@ -167,6 +197,15 @@ struct ShaarNetworkPanel: View {
             .font(.system(size: 11, weight: .semibold))
             .lineLimit(1)
           Spacer(minLength: 4)
+          Button {
+            rules.create(from: selected)
+          } label: {
+            Image(systemName: "plus.square.on.square")
+          }
+          .buttonStyle(.plain)
+          .disabled(!rules.available)
+          .help(ShellL10n.string("Create rule from request"))
+          .accessibilityLabel(ShellL10n.string("Create rule from request"))
           Menu {
             Button(ShellL10n.string("Copy as cURL")) {
               copy(model.curlCommand(for: selected))

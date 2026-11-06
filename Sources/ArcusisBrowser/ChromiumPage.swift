@@ -123,8 +123,10 @@ final class ChromiumPageContainerView: NSView {
 
   override func layout() {
     super.layout()
-    if let pageView, pageView.superview === self, pageView.frame != bounds {
-      pageView.frame = bounds
-    }
+    guard let pageView, pageView.superview === self else { return }
+    // The Shaar layer sizes the inspected page beside its borrowed DevTools
+    // frontend. Resetting that page to full width covers the dock's hit area.
+    guard !subviews.contains(where: { $0 !== pageView && !$0.isHidden }) else { return }
+    if pageView.frame != bounds { pageView.frame = bounds }
   }
 }

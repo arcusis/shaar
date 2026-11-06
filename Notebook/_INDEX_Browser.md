@@ -20,6 +20,7 @@
 - [[Shaar_Inspector_Details]]
 - [[Shaar_Inspector_Page_Tools]]
 - [[Shaar_Inspector_AI_Copy]]
+- [[Shaar_Inspector_Source]]
 - [[Shaar_Inspector_Redesign]]
 - [[Private_Browsing]]
 - [[External_App_Consent]]

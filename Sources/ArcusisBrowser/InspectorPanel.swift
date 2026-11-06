@@ -9,6 +9,7 @@ struct InspectorPanel: View {
   var layout: InspectorLayoutSnapshot? = nil
   @State private var copyButtonFrame = CGRect.zero
   @State private var breadcrumbPosition: Int?
+  @State private var showsAgentBridge = false
   var body: some View {
     GeometryReader { geometry in
       VStack(spacing: 0) {
@@ -33,7 +34,9 @@ struct InspectorPanel: View {
           } action: {
             layout?.contentFrame = $0
           }
-        if let failure = model.failure ?? model.aiCopy.failure {
+        if let failure = model.failure ?? model.aiCopy.failure ?? model.sourceActions.failure
+          ?? model.sourceActions.location
+        {
           Divider()
           Text(failure).font(.system(size: 11)).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading).padding(12)
@@ -68,7 +71,7 @@ struct InspectorPanel: View {
                   12, min(copyButtonFrame.minX, geometry.size.width - width - 12)
                 ),
                 y: min(
-                  copyButtonFrame.maxY + 6, max(6, geometry.size.height - 158))
+                  copyButtonFrame.maxY + 6, max(6, geometry.size.height - 264))
               )
               .onGeometryChange(for: CGRect.self) {
                 $0.frame(in: .named("InspectorPanel"))
@@ -102,6 +105,19 @@ struct InspectorPanel: View {
       Image(systemName: "viewfinder").font(.system(size: 12)).foregroundStyle(.secondary)
       Text(InspectorL10n.string("Inspector")).font(.system(size: 12, weight: .semibold))
       Spacer()
+      if let bridge = model.engine?.developerModels[model.target.tabID]?.agentBridge {
+        Button {
+          showsAgentBridge.toggle()
+        } label: {
+          Image(systemName: "network")
+            .font(.system(size: 12))
+            .foregroundStyle(bridge.isConnected ? .orange : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Agent bridge")
+        .accessibilityLabel("Agent bridge")
+        .popover(isPresented: $showsAgentBridge) { AgentBridgeControls(model: bridge) }
+      }
       InspectorIconButton(
         InspectorL10n.string("Pick an element"), symbol: "cursorarrow.rays"
       ) { model.pick() }
@@ -274,6 +290,8 @@ struct InspectorPanel: View {
       InspectorPageToolsView(inspector: model, model: tools)
     } else if model.tab == .notes {
       InspectorNotesView(model: model.aiCopy)
+    } else if model.tab == .accessibility {
+      InspectorDetailsView(inspector: model, model: model.details)
     } else if let selection = model.selection {
       if model.tab == .styles {
         InspectorStylesView(inspector: model, model: model.styles)

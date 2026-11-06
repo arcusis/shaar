@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "test": "node inspector.cjs"
+    "test": "node inspector.cjs && node axe-contract.cjs"
   },
   "devDependencies": {
     "esbuild": "0.25.12",

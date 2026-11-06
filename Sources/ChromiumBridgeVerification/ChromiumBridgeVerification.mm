@@ -132,6 +132,25 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
   return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count)};
 }
 
+NSDictionary *ARCProbeShaarDevToolsURLDispatch(NSDictionary *payload, BOOL validOwner) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  __block NSDictionary *received = nil;
+  runtime.onDevToolsOpenURLRequest = ^(NSDictionary *request) { received = request; };
+  NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  NSString *windowID = validOwner ? payload[@"sourceWindowID"] : @"FOREIGN-WINDOW";
+  NSString *tabID = payload[@"sourceTabID"];
+  NSString *profileID = payload[@"profileID"];
+  shaar_event event = {};
+  event.size = sizeof(event);
+  event.kind = SHAAR_EVENT_DEVTOOLS;
+  event.window_id = {windowID.UTF8String, windowID.length};
+  event.tab_id = {tabID.UTF8String, tabID.length};
+  event.profile_id = {profileID.UTF8String, profileID.length};
+  event.payload_json = {(const char *)data.bytes, data.length};
+  [runtime receiveEvent:&event];
+  return received ?: @{};
+}
+
 NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
     NSString *tabID, NSString *windowID, NSString *contextID) {
   if (!ProbeCaptureAllowed() || ![baseRuntime isKindOfClass:ARCShaarRuntime.class]) return nil;
@@ -172,6 +191,22 @@ NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
                &measured, &geometryError) == SHAAR_OK;
   double gap = geometryReady ? std::abs(measured.frontend_placeholder_right -
                                        measured.inspected_page_right) : -1;
+  NSView *container = page.superview;
+  NSPoint dockPoint = NSZeroPoint;
+  BOOL hasDockPoint = NO;
+  if (dock && container && dock.superview == container) {
+    NSRect bounds = container.bounds;
+    if (NSMaxX(page.frame) < NSMaxX(bounds) - 24) {
+      dockPoint = NSMakePoint(NSMaxX(bounds) - 24, NSMaxY(bounds) - 18);
+      hasDockPoint = YES;
+    } else if (NSMinY(page.frame) > NSMinY(bounds) + 18) {
+      dockPoint = NSMakePoint(NSMaxX(bounds) - 24, NSMinY(page.frame) - 18);
+      hasDockPoint = YES;
+    }
+  }
+  NSView *hit = hasDockPoint
+      ? [container hitTest:[container convertPoint:dockPoint toView:container.superview]] : nil;
+  BOOL frontendHit = hit && (hit == dock || [hit isDescendantOf:dock]);
   BOOL hidden = YES;
   for (NSWindow *window in NSApp.windows) hidden &= !window.isVisible;
   return @{@"open": @(dock != nil), @"sameWindow": @(page.window && dock.window == page.window),
@@ -185,6 +220,9 @@ NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
       @"inspectedPageRight": @(measured.inspected_page_right),
       @"frontendCoversContainer": @(dock && page.superview &&
           std::abs(NSWidth(dock.frame) - NSWidth(page.superview.bounds)) <= 1),
+      @"frontendHitNearTabStrip": @(frontendHit),
+      @"tabStripHitView": hit ? NSStringFromClass(hit.class) : @"none",
+      @"tabStripHitPoint": hasDockPoint ? NSStringFromPoint(dockPoint) : @"none",
       @"allWindowsHidden": @(hidden), @"pageWidth": @(page.frame.size.width),
       @"pageHeight": @(page.frame.size.height), @"hostWidth": @(host.bounds.size.width),
       @"frontendWidth": @(dock.frame.size.width), @"frontendHeight": @(dock.frame.size.height),

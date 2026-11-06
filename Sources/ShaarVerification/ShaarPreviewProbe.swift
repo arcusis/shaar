@@ -19,6 +19,8 @@ final class ShaarPreviewProbe {
   private let dataRoot: URL
   private let downloadURL: URL?
   private let pendingQuitURL: URL?
+  private let pendingPrivateQuit: Bool
+  private let privateCloseLive: Bool
   private let directQuit: Bool
   private let firstWindowID: UUID
   private let firstTabID: UUID
@@ -60,6 +62,14 @@ final class ShaarPreviewProbe {
     dataRoot = URL(filePath: try value("--probe-data-dir"), directoryHint: .isDirectory)
     downloadURL = try? URL(string: value("--probe-download-url"))
     pendingQuitURL = try Self.pendingQuitTarget(arguments: arguments)
+    pendingPrivateQuit = arguments.contains("--probe-pending-private-quit")
+    guard !pendingPrivateQuit || pendingQuitURL != nil else {
+      throw Failure("Pending private Quit requires a loopback pending navigation.")
+    }
+    privateCloseLive = arguments.contains("--probe-private-close-live")
+    guard !privateCloseLive || pendingQuitURL == nil else {
+      throw Failure("Private close and pending Quit are separate probes.")
+    }
     directQuit = arguments.contains("--probe-direct-quit")
     let framework = URL(filePath: try value("--probe-framework"))
     guard
@@ -120,7 +130,9 @@ final class ShaarPreviewProbe {
       do {
         try self.host.restore()
         Task {
-          if self.pendingQuitURL != nil {
+          if self.privateCloseLive {
+            await self.exercisePrivateClose()
+          } else if self.pendingQuitURL != nil {
             await self.exercisePendingQuit()
           } else {
             await self.exercise()
@@ -271,6 +283,11 @@ final class ShaarPreviewProbe {
         self.committed[self.firstTabID.uuidString] == self.firstURL.absoluteString
       }
     }
+    if pendingPrivateQuit {
+      await check("privateWindow") {
+        try await self.openHiddenPrivateWindow()
+      }
+    }
     await check("pendingNavigation") {
       guard let url = self.pendingQuitURL,
         self.runtime.navigateTabID(
@@ -282,6 +299,50 @@ final class ShaarPreviewProbe {
       }
     }
     finish(error: nil)
+  }
+
+  private func exercisePrivateClose() async {
+    await check("openTab") {
+      try await self.wait("first committed tab") {
+        self.committed[self.firstTabID.uuidString] == self.firstURL.absoluteString
+      }
+    }
+    await check("privateWindow") {
+      try await self.openHiddenPrivateWindow()
+    }
+    await check("privateWindowClose") {
+      guard let owner = self.host.privateWindowOwners.first else {
+        throw Failure("Private window was not opened.")
+      }
+      let closed = await withCheckedContinuation { continuation in
+        self.runtime.closePrivateWindowID(owner.windowID, contextID: owner.contextID) {
+          continuation.resume(returning: $0)
+        }
+      }
+      guard closed else { throw Failure("Private close with a live tab was rejected.") }
+      try await self.wait("private window retired") {
+        self.host.privateWindowOwners.isEmpty
+          && self.runtime.window(
+            forPrivateWindowID: owner.windowID, contextID: owner.contextID) == nil
+      }
+    }
+    await check("normalTabSurvives") {
+      guard self.runtime.view(forTabID: self.firstTabID.uuidString) != nil else {
+        throw Failure("Regular tab disappeared after private close.")
+      }
+    }
+    finish(error: nil)
+  }
+
+  private func openHiddenPrivateWindow() async throws {
+    host.perform(.newPrivateWindow)
+    try await wait("live private tab in hidden window") {
+      guard let owner = host.privateWindowOwners.first else { return false }
+      return !owner.window.isVisible
+        && runtime.view(
+          forPrivateTabID: owner.store.selectedTabID, windowID: owner.windowID,
+          contextID: owner.contextID) != nil
+    }
   }
 
   private func extensionList(profileID: UUID) async throws -> [[String: Any]] {
@@ -329,6 +390,12 @@ final class ShaarPreviewProbe {
       "visibleWindowEvidence": visibleWindowEvidence,
       "passed": passed, "results": results,
       "diagnostics": [
+        "privateWindowLiveAtQuit": host.privateWindowOwners.contains { owner in
+          !owner.window.isVisible
+            && runtime.view(
+              forPrivateTabID: owner.store.selectedTabID, windowID: owner.windowID,
+              contextID: owner.contextID) != nil
+        },
         "firstNativeWindowID": firstNativeWindowID,
         "firstTabWindowID": runtime.windowID(forTabID: firstTabID.uuidString) ?? "",
         "profileTabWindowID": profileTabID.flatMap {
@@ -357,6 +424,11 @@ final class ShaarPreviewProbe {
   }
 
   private func shutdown() async {
+    if pendingPrivateQuit {
+      markShutdown("product Quit requested with pending navigation and live private window")
+      host.perform(.quit)
+      return
+    }
     if pendingQuitURL != nil || directQuit {
       markShutdown("engine quit requested with live windows")
       runtime.quit()

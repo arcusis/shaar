@@ -297,7 +297,9 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   let chromiumItems = try BrowserImport.read(chromium)
   #expect(chromiumItems.count == 4)
   #expect(
-    chromiumItems.contains { $0.title == "Untitled" && $0.folder == "Repeated / Untitled child" })
+    chromiumItems.contains {
+      $0.title == "Untitled bookmark" && $0.folder == "Repeated / Untitled child"
+    })
   #expect(!chromiumItems.contains { $0.title == "Invalid" })
 
   let emptyChromium = directory.appendingPathComponent("EmptyChrome.json")
@@ -321,8 +323,8 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
     ], format: .xml, options: 0
   ).write(to: safari)
   let safariItems = try BrowserImport.read(safari)
-  #expect(safariItems.map(\.folder) == ["Folder", "Folder / Untitled"])
-  #expect(safariItems[1].title == "Untitled")
+  #expect(safariItems.map(\.folder) == ["Folder", "Folder / Untitled folder"])
+  #expect(safariItems[1].title == "Untitled bookmark")
 
   let emptySafari = directory.appendingPathComponent("EmptySafari.plist")
   try PropertyListSerialization.data(
@@ -345,7 +347,7 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
     ]
   ]).write(to: firefox)
   let firefoxItems = try BrowserImport.read(firefox)
-  #expect(firefoxItems.count == 1 && firefoxItems[0].folder == "Untitled / Folder")
+  #expect(firefoxItems.count == 1 && firefoxItems[0].folder == "Untitled folder / Folder")
 
   let emptyFirefox = directory.appendingPathComponent("EmptyFirefox.json")
   try JSONSerialization.data(withJSONObject: [

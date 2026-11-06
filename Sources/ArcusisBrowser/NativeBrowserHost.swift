@@ -215,6 +215,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     events.onWindowShowRequest = { [weak self] window, active in
       self?.showRequestedWindow(window, active: active)
     }
+    events.onDevToolsOpenURLRequest = { [weak self] payload in
+      self?.openDevToolsRequestedURL(payload)
+    }
     events.onNewTabWillAdopt = { [weak self] tab, profile, opener in
       self?.prepareNewTab(tab, profile: profile, opener: opener)
     }
@@ -564,6 +567,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     profileOnboarding = nil
     events.onWindowRequest = nil
     events.onWindowShowRequest = nil
+    events.onDevToolsOpenURLRequest = nil
     events.onNewTabWillAdopt = nil
     for context in contexts.values {
       stopObserving(context)
@@ -884,6 +888,22 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
   }
 
+  private func openDevToolsRequestedURL(_ payload: [String: Any]) {
+    guard started, !events.runtime.isQuitting,
+      let request = DevToolsOpenURLRequest(payload)
+    else { return }
+    if request.contextID != nil {
+      privateHost?.openDevToolsRequestedURL(request)
+      return
+    }
+    guard let context = contexts.values.first(where: { $0.nativeID == request.windowID }),
+      !context.engine.isClosed, context.engine.liveTabs.contains(request.tabID),
+      events.runtime.windowID(forTabID: request.tabID.uuidString) == request.windowID
+    else { return }
+    _ = context.store.openDevToolsRequestedTab(
+      request.url, sourceTabID: request.tabID, profileID: request.profileID)
+  }
+
   private func showRequestedWindow(_ nativeID: String, active: Bool) {
     // The engine can request visibility during insertion. Present only once its
     // notification has unwound and the application has adopted the page.
@@ -1124,6 +1144,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.newMiniWindow, "New Mini Window", to: file)
     add(.newTab, "New tab", to: file)
     add(.search, "Search or enter address", to: file)
+    add(.downloads, "Downloads", to: file)
     add(.closeWindow, "Close window", to: file)
     let edit = section("Edit")
     for (title, action) in [
@@ -1161,12 +1182,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.addFavorite, "Add to Favorites", to: tabs)
     add(.createFolder, "New Folder", to: tabs)
     add(.reopenClosed, "Reopen last closed tab", to: tabs)
-    let archive = section("Archive")
-    add(.recentlyClosed, "Recently closed…", to: archive)
-    add(.bookmarkPage, "Bookmark this page", to: archive)
-    add(.bookmarks, "Bookmarks…", to: archive)
-    add(.history, "History…", to: archive)
-    add(.downloads, "Downloads", to: archive)
+    let history = section("History")
+    add(.recentlyClosed, "Recently closed…", to: history)
+    add(.history, "History…", to: history)
+    let bookmarks = section("Bookmarks")
+    add(.bookmarkPage, "Bookmark this page", to: bookmarks)
+    add(.bookmarks, "Bookmarks…", to: bookmarks)
     let extensions = section("Extensions")
     add(.extensions, "Manage Extensions…", to: extensions)
     let window = section("Window")

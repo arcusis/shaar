@@ -7,21 +7,25 @@ import BrowserCore
 import SwiftUI
 
 struct CommandPanel: View {
+  static let displayName = "Command+T"
   @Bindable var store: BrowserStore
   let resultsHeight: CGFloat
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.layoutDirection) private var layoutDirection
   @FocusState private var searchIsFocused: Bool
+  @FocusState private var focusedFilter: CommandFilter?
   @State private var movedSelection = false
   @Namespace private var selectionNamespace
 
   var body: some View {
     VStack(spacing: 0) {
-      searchField
-      CommandFilterChips(store: store)
-      Divider()
-      resultsList
-      Divider()
-      footer
+      searchRow
+      if !store.commandSections.results.isEmpty {
+        Divider()
+        resultsList
+        Divider()
+        footer
+      }
     }
     .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 17))
     .clipShape(RoundedRectangle(cornerRadius: 17))
@@ -48,18 +52,53 @@ struct CommandPanel: View {
       movedSelection = true
     }
     .onKeyPress(.upArrow) {
+      if focusedFilter != nil {
+        searchIsFocused = true
+        return .handled
+      }
+      if store.commandSections.results.isEmpty {
+        focusedFilter = .actions
+        return .handled
+      }
       moveSelection(by: -1)
       return .handled
     }
     .onKeyPress(.downArrow) {
+      if focusedFilter != nil {
+        searchIsFocused = true
+        return .handled
+      }
+      if store.commandSections.results.isEmpty {
+        focusedFilter = .tabs
+        return .handled
+      }
       moveSelection(by: 1)
       return .handled
     }
     .onKeyPress(.tab, phases: .down) { press in
-      store.cycleCommandFilter(by: press.modifiers.contains(.shift) ? -1 : 1)
+      if focusedFilter == nil, !press.modifiers.contains(.shift),
+        store.activateCommandProviderKeyword()
+      {
+        return .handled
+      }
+      moveFocus(by: press.modifiers.contains(.shift) ? -1 : 1)
+      return .handled
+    }
+    .onKeyPress(.leftArrow) {
+      guard focusedFilter != nil else { return .ignored }
+      moveFilterFocus(movingRight: false)
+      return .handled
+    }
+    .onKeyPress(.rightArrow) {
+      guard focusedFilter != nil else { return .ignored }
+      moveFilterFocus(movingRight: true)
       return .handled
     }
     .onKeyPress(.return, phases: .down) { press in
+      if let focusedFilter {
+        applyFilter(focusedFilter)
+        return .handled
+      }
       guard press.modifiers.contains(.command) else { return .ignored }
       acceptCommandInNewTab()
       return .handled
@@ -68,27 +107,77 @@ struct CommandPanel: View {
     .accessibilityLabel(ShellL10n.string("Search tabs, spaces, or the web"))
   }
 
-  private var searchField: some View {
-    HStack(spacing: 14) {
+  private var searchRow: some View {
+    HStack(spacing: 12) {
       Image(systemName: "magnifyingglass")
-        .font(.system(size: 21, weight: .light))
+        .font(.system(size: 19, weight: .light))
         .foregroundStyle(.secondary)
       TextField(ShellL10n.string("Search or enter address"), text: $store.commandQuery)
         .textFieldStyle(.plain)
-        .font(.system(size: 21))
+        .font(.system(size: 20))
         .focused($searchIsFocused)
         .onSubmit { acceptCommand() }
         .accessibilityIdentifier("command-search")
-      ShellL10n.text("esc")
-        .font(.system(size: 11))
-        .foregroundStyle(.tertiary)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary))
+      filterButtons
     }
-    .padding(.horizontal, 22)
-    .padding(.top, 20)
-    .padding(.bottom, 14)
+    .padding(.horizontal, 16)
+    .frame(height: BrowserChromeLayout.commandSearchHeight)
+  }
+
+  private var filterButtons: some View {
+    HStack(spacing: 6) {
+      ForEach(CommandFilter.allCases) { filter in
+        filterButton(filter)
+      }
+    }
+  }
+
+  private func filterButton(_ filter: CommandFilter) -> some View {
+    let isSelected = store.commandFilter == filter
+    return Button {
+      applyFilter(filter)
+    } label: {
+      Image(systemName: filter.symbol)
+        .font(.system(size: 14, weight: .medium))
+        .foregroundStyle(isSelected ? Color.white : Color.primary)
+        .frame(width: 36, height: 36)
+        .background(
+          isSelected ? Color.accentColor : Color.primary.opacity(0.07), in: Circle()
+        )
+        .overlay {
+          Circle().strokeBorder(
+            Color.accentColor.opacity(focusedFilter == filter ? 0.8 : 0), lineWidth: 2)
+        }
+        .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .focusable()
+    .focused($focusedFilter, equals: filter)
+    .onKeyPress(.return) {
+      applyFilter(filter)
+      return .handled
+    }
+    .help(filter.title)
+    .accessibilityLabel(filter.title)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+    .accessibilityIdentifier("command-filter-\(filter.rawValue)")
+  }
+
+  private func applyFilter(_ filter: CommandFilter) {
+    store.commandFilter = store.commandFilter == filter ? nil : filter
+    searchIsFocused = true
+  }
+
+  private func moveFocus(by offset: Int) {
+    let next = CommandPanelKeyboard.nextFocus(from: focusedFilter, by: offset)
+    searchIsFocused = next == nil
+    focusedFilter = next
+  }
+
+  private func moveFilterFocus(movingRight: Bool) {
+    guard let current = focusedFilter else { return }
+    focusedFilter = CommandPanelKeyboard.nextFilter(
+      from: current, movingRight: movingRight, layoutDirection: layoutDirection)
   }
 
   private var resultsList: some View {
@@ -98,11 +187,6 @@ struct CommandPanel: View {
     return ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(spacing: 2) {
-          if results.isEmpty {
-            Text(emptyMessage)
-              .foregroundStyle(.secondary)
-              .padding(20)
-          }
           ForEach(IndexedSection.list(sections)) { item in
             if !item.section.title.isEmpty {
               CommandSectionHeader(title: item.section.title)
@@ -122,12 +206,6 @@ struct CommandPanel: View {
         proxy.scrollTo(results[index].id)
       }
     }
-  }
-
-  private var emptyMessage: String {
-    let query = store.commandQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    if query.isEmpty, store.commandFilter == nil { return ShellL10n.string("No suggestions yet") }
-    return ShellL10n.string("No matching results")
   }
 
   private func row(_ result: CommandResult, isSelected: Bool) -> some View {
@@ -151,6 +229,7 @@ struct CommandPanel: View {
 
   private var footer: some View {
     HStack {
+      Text(Self.displayName)
       Label(store.profileName, systemImage: "person.crop.circle")
       Spacer()
       ShellL10n.text("⇥ filter    ↑↓ select    ↩ open")
@@ -265,6 +344,22 @@ struct CommandPanel: View {
         $0.name == endpoint.queryName && !($0.value ?? "").isEmpty
       } == true
     }
+  }
+}
+
+enum CommandPanelKeyboard {
+  static func nextFocus(from current: CommandFilter?, by offset: Int) -> CommandFilter? {
+    CommandFilter.cycled(from: current, by: offset)
+  }
+
+  static func nextFilter(
+    from current: CommandFilter, movingRight: Bool, layoutDirection: LayoutDirection
+  ) -> CommandFilter {
+    let filters = CommandFilter.allCases
+    let index = filters.firstIndex(of: current) ?? 0
+    let movesForward = movingRight != (layoutDirection == .rightToLeft)
+    let offset = movesForward ? 1 : -1
+    return filters[(index + offset + filters.count) % filters.count]
   }
 }
 

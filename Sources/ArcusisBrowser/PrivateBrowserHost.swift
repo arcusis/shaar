@@ -98,6 +98,15 @@ final class PrivateBrowserHost {
     return owner
   }
 
+  func openDevToolsRequestedURL(_ request: DevToolsOpenURLRequest) {
+    guard let contextID = request.contextID,
+      let owner = owner(context: contextID, window: request.windowID),
+      owner.page.ownsLiveTab(request.tabID, profileID: request.profileID)
+    else { return }
+    _ = owner.store.openDevToolsRequestedTab(
+      request.url, sourceTabID: request.tabID, profileID: request.profileID)
+  }
+
   func detach() {
     runtime.onPrivateNavigationFailed = nil
     runtime.onPrivateTabChanged = nil

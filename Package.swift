@@ -79,7 +79,8 @@ let package = Package(
       dependencies: [
         "BrowserCore", "ChromiumBridge", "ShaarEngineABI",
         .product(name: "Sparkle", package: "Sparkle"),
-      ]),
+      ],
+      resources: [.copy("Resources/InspectorAudit")]),
     .executableTarget(
       name: "Shaar", dependencies: ["ArcusisBrowser"],
       linkerSettings: bundleFrameworksLinkerSettings),
@@ -98,8 +99,8 @@ let package = Package(
     .testTarget(
       name: "BrowserAppTests",
       dependencies: [
-        "ArcusisBrowser", "BrowserCore", "BrowserTestSupport", "ChromiumBridge", "ShaarEngineABI",
-        "ShaarEngineC",
+        "ArcusisBrowser", "BrowserCore", "BrowserTestSupport", "ChromiumBridge",
+        "ChromiumBridgeVerification", "ShaarEngineABI", "ShaarEngineC",
       ],
       resources: [.copy("Snapshots/InspectorAI")]),
     .testTarget(

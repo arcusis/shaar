@@ -41,6 +41,9 @@ final class BrowserEngine {
   var onClosed: ((Bool) -> Void)?
   var inspectors: [UUID: InspectorModel] = [:]
   var developerModels: [UUID: DeveloperPageModel] = [:]
+  var developmentPages: [UUID: DevelopmentPage] = [:]
+  var developmentPageURLs: [UUID: URL] = [:]
+  var developmentProbedURLs: [UUID: URL] = [:]
   let downloads: DownloadsModel
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -149,6 +152,9 @@ final class BrowserEngine {
       self.inspectors.removeAll()
       for model in self.developerModels.values { model.close() }
       self.developerModels.removeAll()
+      self.developmentPages.removeAll()
+      self.developmentPageURLs.removeAll()
+      self.developmentProbedURLs.removeAll()
       self.extensionPanel = nil
       self.store?.dismissPageFind()
       self.liveTabs.removeAll()
@@ -186,6 +192,16 @@ final class BrowserEngine {
       if let inspector = self.inspectors[tab] {
         inspector.documentChanged(url: inspector.target.url, committed: true)
       }
+    }
+    callbacks.onAgentBridgeStatus = { [weak self] identity, owner, payload in
+      guard let self, let tab = UUID(uuidString: identity),
+        let profile = UUID(uuidString: owner),
+        self.store?.session.profileID(forTabID: tab) == profile,
+        self.runtime.windowID(forTabID: identity) == self.windowID,
+        let enabled = payload["enabled"] as? Bool,
+        let count = payload["connectionCount"] as? Int
+      else { return }
+      self.developerModels[tab]?.agentBridge.receive(enabled: enabled, connectionCount: count)
     }
     store.library.onLoad = { [weak self] key, limit, completion in
       guard let self, !self.isClosed else {
@@ -403,6 +419,7 @@ final class BrowserEngine {
       if let url = URL(string: address) {
         self.inspectors[id]?.documentChanged(url: url)
         self.developerDocumentChanged(id, url: url)
+        self.updateDevelopmentPage(tabID: id, url: url, loading: loading)
         if let profile = self.store?.session.profileID(forTabID: id),
           self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true
         {
@@ -430,6 +447,9 @@ final class BrowserEngine {
       self.pages[id] = nil
       self.inspectors.removeValue(forKey: id)?.close()
       self.developerModels.removeValue(forKey: id)?.close()
+      self.developmentPages[id] = nil
+      self.developmentPageURLs[id] = nil
+      self.developmentProbedURLs[id] = nil
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
       self.favicons[id] = nil
@@ -619,6 +639,9 @@ final class BrowserEngine {
       pages[removed] = nil
       inspectors.removeValue(forKey: removed)?.close()
       developerModels.removeValue(forKey: removed)?.close()
+      developmentPages[removed] = nil
+      developmentPageURLs[removed] = nil
+      developmentProbedURLs[removed] = nil
       mediaAccess[removed] = nil
       forgetMedia(removed)
       favicons[removed] = nil

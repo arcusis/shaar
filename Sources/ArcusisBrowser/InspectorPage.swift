@@ -11,7 +11,12 @@ struct InspectorPage: View {
   var autofocus = true
   var body: some View {
     InspectorPageLayout(model: engine.inspectors[tabID]) {
-      ChromiumPage(engine: engine, tabID: tabID, autofocus: autofocus)
+      VStack(spacing: 0) {
+        if let bridge = engine.developerModels[tabID]?.agentBridge, bridge.needsBanner {
+          AgentBridgeBanner(model: bridge)
+        }
+        ChromiumPage(engine: engine, tabID: tabID, autofocus: autofocus)
+      }
     }
   }
 }

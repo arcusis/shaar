@@ -23,8 +23,9 @@ enum BrowserChromeLayout {
   static let fullScreenToggleRowHeight: CGFloat = 36
   static let fullScreenToggleLeading: CGFloat = 12
   static let preferredCommandWidth: CGFloat = 580
-  /// Search field, filter chips and footer.
-  static let commandChromeHeight: CGFloat = 146
+  static let commandSearchHeight: CGFloat = 60
+  /// Search row, two separators and footer when results are visible.
+  static let commandChromeHeight: CGFloat = 94
   static let preferredResultsHeight: CGFloat = 396
   static let minimumResultsHeight: CGFloat = 76
   static let resultRowHeight: CGFloat = 38
@@ -57,7 +58,8 @@ enum BrowserChromeLayout {
     let width = min(preferredCommandWidth, webContent.width)
     let resultsHeight = commandResultsHeight(
       resultCount: resultCount, headerCount: headerCount, availableHeight: webContent.height)
-    let height = min(commandChromeHeight + resultsHeight, webContent.height)
+    let chromeHeight = resultCount == 0 ? commandSearchHeight : commandChromeHeight
+    let height = min(chromeHeight + resultsHeight, webContent.height)
 
     return CGRect(
       x: webContent.midX - width / 2,
@@ -70,6 +72,7 @@ enum BrowserChromeLayout {
   static func commandResultsHeight(
     resultCount: Int, headerCount: Int = 0, availableHeight: CGFloat
   ) -> CGFloat {
+    guard resultCount > 0 else { return 0 }
     let availableResultsHeight = max(0, availableHeight - commandChromeHeight)
     let contentHeight =
       CGFloat(resultCount) * resultRowHeight + CGFloat(headerCount) * resultSectionHeaderHeight

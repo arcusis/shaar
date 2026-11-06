@@ -25,6 +25,7 @@ Shaar is an independent project. It is not affiliated with, sponsored, or endors
 - [Bitwarden](https://bitwarden.com/): extension compatibility.
 - [Public Suffix List](https://publicsuffix.org/): public domain-boundary data used for registrable-domain decisions.
 - [Sparkle](https://sparkle-project.org/): software update framework.
+- [React Developer Tools](https://github.com/facebook/react/tree/main/packages/react-devtools-extensions), [Vue DevTools](https://github.com/vuejs/devtools), and [Angular DevTools](https://github.com/angular/angular/tree/main/devtools): MIT-licensed built-in extensions for local development pages; versions and licenses are in `THIRD_PARTY_NOTICES.md`.
 - [Playwright](https://playwright.dev/): Apache-2.0 test-only browser automation for Inspector renderer contracts; not bundled in the app.
 - [React](https://github.com/facebook/react), [Vue](https://github.com/vuejs/core), [Svelte](https://github.com/sveltejs/svelte) and [esbuild](https://github.com/evanw/esbuild): MIT-licensed test-only framework fixtures and their build tool. Pinned versions and upstream licenses are in `ThirdParty/InspectorFixtures`; these fixtures are not bundled in the app.
 

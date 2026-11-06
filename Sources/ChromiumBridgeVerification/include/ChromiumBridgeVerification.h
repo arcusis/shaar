@@ -33,6 +33,9 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeShaarMediaPublicState(NSDicti
 /// Injects a scoped media event into a runtime without creating an engine or window.
 FOUNDATION_EXPORT NSDictionary *ARCProbeShaarMediaEventDispatch(
   NSDictionary *payload, BOOL validOwner);
+/// Injects a DevTools open-URL event and records its validated app callback.
+FOUNDATION_EXPORT NSDictionary *ARCProbeShaarDevToolsURLDispatch(
+  NSDictionary *payload, BOOL validOwner);
 
 /// Test-only audit of a Shaar page view's attachment to its owning hidden window.
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(

@@ -171,6 +171,8 @@ fi
   "$binary_dir" "$app/Contents/Resources"
 cp Resources/Branding/Shaar.icns "$app/Contents/Resources/Shaar.icns"
 cp -R Resources/ExtensionManager "$app/Contents/Resources/ExtensionManager"
+"${PYTHON:-python3}" scripts/fetch-framework-devtools.py \
+  --output "$app/Contents/Resources/FrameworkDevTools"
 mkdir -p "$app/Contents/Resources/Privacy"
 cp Resources/Privacy/tracker-domains.json "$app/Contents/Resources/Privacy/"
 mkdir -p "$app/Contents/Resources/ChromiumEngine"

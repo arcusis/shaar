@@ -44,6 +44,32 @@ struct LibraryDownloadTests {
       LibraryDownloadsView.fileType(for: nil, language: .hebrew) == "קובץ")
   }
 
+  @Test func quickLookSelectionRequiresTheCurrentReadableDownload() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = root.appending(path: "report.pdf")
+    try Data("%PDF-1.4".utf8).write(to: file)
+    let profile = UUID()
+    let model = DownloadsModel()
+    let id = UUID().uuidString.lowercased()
+    model.restore([record(id, filename: "report.pdf", path: file.path)], profileID: profile)
+    let item = try #require(model.libraryItems(in: profile).first)
+
+    #expect(
+      LibraryDownloadQuery.quickLookURL(
+        for: item, profileID: profile, currentProfileID: profile, downloads: model)?.path
+        == file.resolvingSymlinksInPath().path)
+    #expect(
+      LibraryDownloadQuery.quickLookURL(
+        for: item, profileID: profile, currentProfileID: UUID(), downloads: model) == nil)
+
+    try FileManager.default.removeItem(at: file)
+    #expect(
+      LibraryDownloadQuery.quickLookURL(
+        for: item, profileID: profile, currentProfileID: profile, downloads: model) == nil)
+  }
+
   @Test func oldDownloadDatesUseLocalizedYearForms() throws {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(secondsFromGMT: 0)!

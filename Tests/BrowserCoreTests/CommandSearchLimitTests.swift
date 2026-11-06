@@ -49,8 +49,8 @@ import Testing
   }
   let limited = limitedResults(
     for: "docs.example", in: session, bookmarks: bookmarks, history: history)
-  #expect(limited.first?.isOpen == true)
-  #expect(limited.dropFirst().map(\.symbol) == ["star", "star"])
+  #expect(limited.prefix(2).map(\.symbol) == ["star", "star"])
+  #expect(limited.last?.isOpen == true)
 
   let all = CommandSearch.results(
     for: "docs.example", in: session, bookmarks: bookmarks, history: history)
@@ -64,8 +64,8 @@ import Testing
     try visit("https://past.example/\($0)", profile: profile)
   }
   let results = limitedResults(for: "past.example", in: session, history: history)
-  #expect(results.first?.isOpen == true)
-  #expect(results.dropFirst().map(\.symbol) == ["clock", "clock"])
+  #expect(results.prefix(2).map(\.symbol) == ["clock", "clock"])
+  #expect(results.last?.isOpen == true)
 }
 
 private func limitedResults(

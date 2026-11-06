@@ -97,6 +97,7 @@ struct DevToolsDockProbe {
     if !open { return abs(page - host) <= 1 }
     guard state["sameWindow"] as? Bool == true,
       state["sameContainer"] as? Bool == true,
+      state["frontendHitNearTabStrip"] as? Bool == true,
       state["pageAboveFrontend"] as? Bool == true,
       state["frontendCoversContainer"] as? Bool == true,
       state["geometryReady"] as? Bool == true,

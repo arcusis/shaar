@@ -10,6 +10,14 @@ import XCTest
 
 @MainActor
 final class ChromiumPageContainerHandoffTests: XCTestCase {
+  private final class MouseDownView: NSView {
+    var mouseDownCount = 0
+
+    override func mouseDown(with event: NSEvent) {
+      mouseDownCount += 1
+    }
+  }
+
   func testNativeActivationReturnsReparentedPageToLatestContainer() {
     let tab = UUID()
     let page = NSView()
@@ -55,6 +63,43 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     outgoing.dismantle()
     XCTAssertTrue(page.superview === incoming)
     XCTAssertTrue(incoming.pageView === page)
+  }
+
+  func testContainerLayoutKeepsNativeDockClickAreaUncovered() {
+    let tab = UUID()
+    let frame = NSRect(x: 0, y: 0, width: 1000, height: 700)
+    let container = ChromiumPageContainerView(frame: frame)
+    let page = NSView(frame: frame)
+    let frontend = MouseDownView(frame: frame)
+    let window = NSWindow(contentRect: frame, styleMask: [], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = container
+    defer { window.close() }
+    _ = container.select(page, tabID: tab, liveTabs: [tab])
+    container.addSubview(frontend, positioned: .below, relativeTo: page)
+    page.frame = NSRect(x: 0, y: 0, width: 600, height: 700)
+
+    container.layout()
+
+    XCTAssertEqual(page.frame.width, 600)
+    let target = container.hitTest(NSPoint(x: 900, y: 350))
+    XCTAssertTrue(target === frontend)
+    XCTAssertFalse(window.isVisible)
+    let event = NSEvent.mouseEvent(
+      with: .leftMouseDown, location: NSPoint(x: 900, y: 350), modifierFlags: [],
+      timestamp: 0, windowNumber: window.windowNumber, context: nil,
+      eventNumber: 1, clickCount: 1, pressure: 1)
+    XCTAssertNotNil(event)
+    // AppKit does not dispatch a window-system mouse event to a hidden window.
+    // Deliver the synthesized event to the view selected by the real hit test.
+    if let event { target?.mouseDown(with: event) }
+    XCTAssertEqual(frontend.mouseDownCount, 1)
+    XCTAssertFalse(window.isVisible)
+
+    page.frame = NSRect(x: 0, y: 280, width: 1000, height: 420)
+    container.layout()
+    XCTAssertEqual(page.frame.minY, 280)
+    XCTAssertTrue(container.hitTest(NSPoint(x: 500, y: 80)) === frontend)
   }
 
   func testFavoritingASplitTabKeepsTheRestOfTheSplit() throws {

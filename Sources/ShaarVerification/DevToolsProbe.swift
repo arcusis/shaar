@@ -125,6 +125,17 @@ final class DevToolsProbe {
     checks.append("the enabled native Inspect context-menu command opens the built-in inspector")
     try expect(
       !runtime.showDevTools(forTabID: UUID().uuidString), "unknown tabs cannot open DevTools")
+    for (path, framework) in [
+      ("devmode-next", DevelopmentFramework.nextJS),
+      ("devmode-vite", DevelopmentFramework.vite),
+    ] {
+      store.perform(.open(fixture.appending(path: path)))
+      try await wait("Dev Mode detects \(framework.rawValue) on a hidden local fixture") {
+        self.engine.detectedFramework == framework
+          && self.engine.isDevelopmentPage
+          && self.engine.siteControlTarget?.url.path == "/\(path)"
+      }
+    }
     store.perform(.space(returningTo))
     try expect(store.removeSpace(space), "closing the inspected tab removes its Space")
     try await wait("closing the inspected tab releases its page and inspector") {

@@ -11,6 +11,8 @@ private final class RejectedDevToolsRuntime: ARCShaarRuntime {
   var rejects = true
   var frontendOpen = false
   var operations: [UInt] = []
+  var payloads: [[AnyHashable: Any]] = []
+  var targets: [(String, String?, String?)] = []
   var actualFrontend: NSView?
 
   @objc(shaarNativeFrontendViewForTabID:profileID:windowID:)
@@ -26,6 +28,8 @@ private final class RejectedDevToolsRuntime: ARCShaarRuntime {
     payload: [AnyHashable: Any], completion: @escaping ([String: Any]?, NSError?) -> Void
   ) -> Bool {
     operations.append(operation)
+    payloads.append(payload)
+    targets.append((tabID, profileID, windowID))
     if !rejects {
       if operation == UInt(SHAAR_OP_DEVTOOLS_UI_STATE.rawValue) {
         completion(["open": frontendOpen], nil)
@@ -45,6 +49,27 @@ private final class RejectedDevToolsRuntime: ARCShaarRuntime {
 }
 
 @Suite @MainActor struct DevToolsPresentationTests {
+  @Test func agentBridgeAdapterUsesOnlyScopedControlOperations() {
+    let runtime = RejectedDevToolsRuntime()
+    runtime.rejects = false
+    var rejected = false
+    runtime.agentBridgeRequest(
+      UInt(SHAAR_OP_DEVTOOLS_CONTROL_STATUS.rawValue), forTabID: "tab",
+      profileID: "profile", windowID: "window"
+    ) { _, error in rejected = error != nil }
+    #expect(!rejected)
+    #expect(runtime.operations == [UInt(SHAAR_OP_DEVTOOLS_CONTROL_STATUS.rawValue)])
+    #expect(runtime.targets.first?.0 == "tab")
+    #expect(runtime.targets.first?.1 == "profile")
+    #expect(runtime.targets.first?.2 == "window")
+    #expect(runtime.payloads.first?["schemaVersion"] as? Int == 1)
+    runtime.agentBridgeRequest(9999, forTabID: "tab", profileID: "profile", windowID: "window") {
+      _, error in rejected = error != nil
+    }
+    #expect(rejected)
+    #expect(runtime.operations.count == 1)
+  }
+
   @Test func publishedUndockedFrontendKeepsLegacyOpenState() {
     let runtime = RejectedDevToolsRuntime()
     runtime.rejects = false

@@ -76,38 +76,3 @@ struct CommandSectionHeader: View {
       .accessibilityAddTraits(.isHeader)
   }
 }
-
-/// Spotlight-style chips; selecting the active chip again clears the filter.
-struct CommandFilterChips: View {
-  @Bindable var store: BrowserStore
-
-  var body: some View {
-    HStack(spacing: 6) {
-      ForEach(CommandFilter.allCases) { filter in
-        chip(filter)
-      }
-      Spacer(minLength: 0)
-    }
-    .padding(.horizontal, 18)
-    .padding(.bottom, 12)
-  }
-
-  private func chip(_ filter: CommandFilter) -> some View {
-    let isSelected = store.commandFilter == filter
-    return Button {
-      store.commandFilter = isSelected ? nil : filter
-    } label: {
-      Label(filter.title, systemImage: filter.symbol)
-        .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(isSelected ? Color.white : Color.primary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(isSelected ? Color.accentColor : Color.primary.opacity(0.07), in: Capsule())
-        .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-    .focusable(false)
-    .accessibilityAddTraits(isSelected ? .isSelected : [])
-    .accessibilityIdentifier("command-filter-\(filter.rawValue)")
-  }
-}

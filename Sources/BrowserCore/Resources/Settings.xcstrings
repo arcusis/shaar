@@ -1,6 +1,8 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Developer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer"}},"he":{"stringUnit":{"state":"translated","value":"פיתוח"}}}},
+    "Automatically turn on Dev Mode for local development pages": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Automatically turn on Dev Mode for local development pages"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה אוטומטית של מצב פיתוח בדפי פיתוח מקומיים"}}}},
     "Welcome to %@": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"ברוכים הבאים אל %@"}}}},
     "Bring your bookmarks": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הביאו את הסימניות שלכם"}}}},
     "Make %@ your default": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הגדירו את %@ כדפדפן ברירת המחדל"}}}},

@@ -11,6 +11,9 @@ struct InspectorDetailsView: View {
   var body: some View {
     ScrollView {
       VStack(spacing: 0) {
+        if inspector.tab == .accessibility {
+          InspectorAuditView(model: model.audit, inspector: inspector)
+        }
         if inspector.selection?.locked != true {
           InspectorDetailsL10n.text("Click an element to lock its details.").font(.system(size: 12))
             .foregroundStyle(.secondary).padding(24)

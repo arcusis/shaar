@@ -18,6 +18,9 @@ final class BrowserRuntimeEvents {
   var onWindowShowRequest: (@MainActor @Sendable (String, Bool) -> Void)? {
     didSet { runtime.onWindowShowRequest = onWindowShowRequest }
   }
+  var onDevToolsOpenURLRequest: (@MainActor @Sendable ([String: Any]) -> Void)? {
+    didSet { runtime.onDevToolsOpenURLRequest = onDevToolsOpenURLRequest }
+  }
   var onNewTabWillAdopt: ((String, String, String?) -> Void)?
 
   init(runtime: ARCChromiumRuntime) {
@@ -64,6 +67,9 @@ final class BrowserRuntimeEvents {
     }
     runtime.onMediaAccess = { [weak self] id, access in
       self?.tabClient(id)?.onMediaAccess?(id, access)
+    }
+    runtime.onAgentBridgeStatus = { [weak self] id, profile, status in
+      self?.tabClient(id)?.onAgentBridgeStatus?(id, profile, status)
     }
     runtime.onMediaSessionChanged = { [weak self] id, state in
       self?.tabClient(id)?.onMediaSessionChanged?(id, state)

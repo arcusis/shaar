@@ -10,6 +10,14 @@ public enum NavigationInput {
       && (url.port.map { (0...65535).contains($0) } ?? true)
   }
 
+  /// Only engine-requested Node inspector frontends may use Chromium's internal scheme.
+  public static func isDevToolsFrontendURL(_ url: URL) -> Bool {
+    guard url.scheme?.lowercased() == "devtools", url.host()?.lowercased() == "devtools",
+      url.user == nil, url.password == nil, url.port == nil, url.fragment == nil
+    else { return false }
+    return ["/bundled/js_app.html", "/bundled/inspector.html"].contains(url.path())
+  }
+
   /// The input as a web address (`https://…`, `example.com`, `localhost:3000`), or nil when
   /// it is text to search for or uses an unsupported scheme.
   public static func address(for input: String) -> URL? {
@@ -105,6 +113,11 @@ public enum CommandProviderSearch {
       name: "Teams", keyword: "teams", baseURL: "https://teams.microsoft.com/v2/",
       queryName: "search", fragmentPrefix: nil),
   ]
+
+  public static func supports(keyword: String, provider: CommandSearchProvider) -> Bool {
+    let services = provider == .google ? google : microsoft
+    return services.contains { $0.keyword == keyword.lowercased() }
+  }
 
   /// Builds service rows for a query. A service keyword followed by whitespace narrows to that row.
   public static func results(

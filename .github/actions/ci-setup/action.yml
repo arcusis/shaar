@@ -17,6 +17,8 @@ runs:
       uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
       with:
         enable-cache: true
+        python-version: '3.13'
+        cache-python: true
         cache-dependency-glob: scripts/*requirements.txt
     - name: Restore Python environment for locked requirements
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -29,7 +31,7 @@ runs:
       env:
         CI_MODE: ${{ inputs.mode }}
       run: |
-        uv python install 3.13
+        python3 scripts/install-ci-python.py 3.13
         if [[ ! -x .venv/bin/python ]]; then uv venv --python 3.13 .venv; fi
         requirements=(scripts/release-requirements.txt)
         if [[ "$CI_MODE" == shipping ]]; then requirements+=(scripts/sbom-requirements.txt); fi
@@ -74,9 +76,15 @@ runs:
       with:
         path: build/EngineCache/*.tar.xz
         key: engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ThirdParty/ChromiumEngine/pin.json') }}
+    - name: Cache checksum-pinned fast-check archives
+      if: inputs.tools == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: build/ci-tool-archives
+        key: ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci-tools.json') }}
     - name: Install verified fast-check binaries
       if: inputs.tools == 'true'
       shell: bash
       run: |
-        .venv/bin/python scripts/install-ci-tools.py
+        .venv/bin/python scripts/install-ci-tools.py --cache-directory build/ci-tool-archives
         echo "$PWD/build/ci-tools" >> "$GITHUB_PATH"

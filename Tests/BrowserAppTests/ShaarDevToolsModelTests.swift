@@ -9,6 +9,30 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct ShaarDevToolsModelTests {
+  @Test func longSessionRetainsFiftyThousandEntriesPerPanel() {
+    var buffer = ShaarDevToolsEventBuffer()
+    for index in 0..<51_000 {
+      buffer.append(
+        .console(
+          .init(
+            id: UUID(), level: .log, message: "message \(index)", source: nil)))
+      buffer.append(
+        .network(
+          .init(
+            id: UUID(), method: "GET", url: "/item/\(index)", status: 200)))
+    }
+    #expect(buffer.consoleCount == 50_000)
+    #expect(buffer.networkCount == 50_000)
+    #expect(buffer.droppedConsoleCount == 1_000)
+    #expect(buffer.droppedNetworkCount == 1_000)
+    #expect(buffer.events.count == 100_000)
+    if case .console(let first) = buffer.events[0] {
+      #expect(first.message == "message 1000")
+    } else {
+      Issue.record("The oldest retained event should be a console event")
+    }
+  }
+
   @Test func fixtureStreamIsScopedAndInspectorOwnershipIsRestored() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/one")!)

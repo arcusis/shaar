@@ -156,6 +156,60 @@ struct ShaarDevToolsPendingTransport: ShaarDevToolsEventTransport {
   }
 }
 
+struct ShaarDevToolsEventBuffer {
+  private(set) var events: [ShaarDevToolsEvent] = []
+  private(set) var consoleCount = 0
+  private(set) var networkCount = 0
+  private(set) var droppedConsoleCount = 0
+  private(set) var droppedNetworkCount = 0
+
+  private static let limit = 50_000
+  private static let trimCount = 1_000
+
+  mutating func append(_ event: ShaarDevToolsEvent) {
+    events.append(event)
+    switch event {
+    case .console:
+      consoleCount += 1
+      if consoleCount > Self.limit {
+        trim {
+          if case .console = $0 { return true }
+          return false
+        }
+        consoleCount -= Self.trimCount
+        droppedConsoleCount += Self.trimCount
+      }
+    case .network:
+      networkCount += 1
+      if networkCount > Self.limit {
+        trim {
+          if case .network = $0 { return true }
+          return false
+        }
+        networkCount -= Self.trimCount
+        droppedNetworkCount += Self.trimCount
+      }
+    }
+  }
+
+  mutating func clear() {
+    events.removeAll()
+    consoleCount = 0
+    networkCount = 0
+    droppedConsoleCount = 0
+    droppedNetworkCount = 0
+  }
+
+  private mutating func trim(_ matches: (ShaarDevToolsEvent) -> Bool) {
+    var remaining = Self.trimCount
+    events.removeAll { event in
+      guard remaining > 0, matches(event) else { return false }
+      remaining -= 1
+      return true
+    }
+  }
+}
+
 @MainActor @Observable
 final class ShaarDevToolsModel {
   private(set) var target: SiteControlTarget
@@ -188,7 +242,10 @@ final class ShaarDevToolsModel {
   @ObservationIgnored private let layoutDefaults: UserDefaults
   @ObservationIgnored var floatingWindow: ShaarDevToolsFloatingWindow?
   private(set) var streamAvailable = false
-  private(set) var events: [ShaarDevToolsEvent] = []
+  private var eventBuffer = ShaarDevToolsEventBuffer()
+  var events: [ShaarDevToolsEvent] { eventBuffer.events }
+  var droppedConsoleCount: Int { eventBuffer.droppedConsoleCount }
+  var droppedNetworkCount: Int { eventBuffer.droppedNetworkCount }
   private(set) var localEventsBySource: [String: [ShaarConsoleEvent]] = [:]
   private(set) var localAvailableSources: Set<String> = []
   let console = ShaarConsoleModel()
@@ -283,7 +340,7 @@ final class ShaarDevToolsModel {
     streamAvailable = false
     repro.history.stop()
     repro.stopFrames()
-    events.removeAll()
+    eventBuffer.clear()
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
     console.clearEntries()
@@ -309,7 +366,7 @@ final class ShaarDevToolsModel {
     streamAvailable = false
     repro.history.stop()
     repro.stopFrames()
-    events.removeAll()
+    eventBuffer.clear()
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
     console.clearEntries()
@@ -343,9 +400,9 @@ final class ShaarDevToolsModel {
     events + localConsoleEvents.map(ShaarDevToolsEvent.console)
   }
   var consoleCount: Int {
-    events.reduce(localConsoleEvents.count) { $0 + (isConsole($1) ? 1 : 0) }
+    eventBuffer.consoleCount + localConsoleEvents.count
   }
-  var networkCount: Int { events.reduce(0) { $0 + (isConsole($1) ? 0 : 1) } }
+  var networkCount: Int { eventBuffer.networkCount }
   var nativeRecordingFailure: String? {
     (transport as? ShaarDevToolsNativeTransport)?.recordingFailure
   }
@@ -386,11 +443,6 @@ final class ShaarDevToolsModel {
     localTransports[id] = nil
     localAvailableSources.remove(id)
     localEventsBySource[id] = nil
-  }
-
-  private func isConsole(_ event: ShaarDevToolsEvent) -> Bool {
-    if case .console = event { return true }
-    return false
   }
 
   private func startStream() {
@@ -460,14 +512,13 @@ final class ShaarDevToolsModel {
       streamAvailable = false
       repro.history.clear()
       repro.stopFrames()
-      events.removeAll()
+      eventBuffer.clear()
       console.clearEntries()
       network.clearSelection()
     case .event(let event):
       guard streamAvailable else { return }
       repro.history.record(event, for: target)
-      events.append(event)
-      if events.count > 2_000 { events.removeFirst(events.count - 2_000) }
+      eventBuffer.append(event)
     case .maskedFrame(let jpeg):
       guard streamAvailable else { return }
       repro.receiveMaskedFrame(jpeg)

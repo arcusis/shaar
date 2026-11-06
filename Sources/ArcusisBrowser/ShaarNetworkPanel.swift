@@ -9,6 +9,7 @@ struct ShaarNetworkPanel: View {
   @Bindable var model: ShaarNetworkModel
   @Bindable var rules: ShaarNetworkRulesModel
   let events: [ShaarDevToolsEvent]
+  let droppedCount: Int
   let openChromium: () -> Void
   @FocusState private var focusedRequest: String?
 
@@ -87,6 +88,13 @@ struct ShaarNetworkPanel: View {
       ScrollView([.horizontal, .vertical]) {
         LazyVStack(spacing: 0) {
           tableHeader
+          if droppedCount > 0 {
+            Text("\(droppedCount) \(ShellL10n.string("older entries dropped"))")
+              .font(.system(size: 10)).foregroundStyle(.secondary)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(10)
+              .accessibilityIdentifier("shaar.devtools.networkDropped")
+          }
           if rows.isEmpty {
             Text(ShellL10n.string(emptyListMessage))
               .font(.system(size: 11))

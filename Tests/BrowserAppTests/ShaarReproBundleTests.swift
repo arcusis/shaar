@@ -38,7 +38,13 @@ import Testing
           requestHeaders: [
             ShaarNetworkHeader(name: "Authorization", value: "auth-secret"),
             ShaarNetworkHeader(name: "Cookie", value: "cookie-secret"),
+            ShaarNetworkHeader(
+              name: "Referer", value: "https://example.com/form?value=header-form-secret"),
             ShaarNetworkHeader(name: "X-Trace", value: "trace-kept"),
+          ],
+          responseHeaders: [
+            ShaarNetworkHeader(
+              name: "Location", value: "https://example.com/next?value=redirect-form-secret")
           ])
       ],
       environment: ShaarReproEnvironment(
@@ -60,6 +66,8 @@ import Testing
     #expect(dom.contains("Safe text"))
     #expect(!har.contains("auth-secret"))
     #expect(!har.contains("cookie-secret"))
+    #expect(!har.contains("header-form-secret"))
+    #expect(!har.contains("redirect-form-secret"))
     #expect(har.contains("trace-kept"))
   }
 

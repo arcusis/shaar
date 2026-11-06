@@ -5,7 +5,7 @@
 import Foundation
 import Observation
 
-struct ShaarConsoleRow: Identifiable, Equatable {
+struct ShaarConsoleRow: Identifiable, Equatable, Sendable {
   let event: ShaarConsoleEvent
   var count: Int
   var id: UUID { event.id }
@@ -24,10 +24,32 @@ final class ShaarConsoleModel {
   private(set) var expanded: Set<UUID> = []
   private(set) var properties: [UUID: [ShaarConsoleProperty]] = [:]
   private(set) var propertyFailures: [UUID: String] = [:]
+  let projection = ShaarDevToolsListProjection<[ShaarConsoleRow]>()
   @ObservationIgnored private var historyIndex: Int?
   @ObservationIgnored private var revision = 0
+  @ObservationIgnored private var lastEvents: [ShaarDevToolsEvent] = []
 
   func rows(from events: [ShaarDevToolsEvent]) -> [ShaarConsoleRow] {
+    Self.projectRows(
+      events, localEntries: localEntries, level: level, origin: origin, search: search)
+  }
+
+  func scheduleRows(from events: [ShaarDevToolsEvent]) {
+    lastEvents = events
+    let localEntries = localEntries
+    let level = level
+    let origin = origin
+    let search = search
+    projection.schedule {
+      Self.projectRows(
+        events, localEntries: localEntries, level: level, origin: origin, search: search)
+    }
+  }
+
+  nonisolated private static func projectRows(
+    _ events: [ShaarDevToolsEvent], localEntries: [ShaarConsoleEvent],
+    level: ShaarConsoleEvent.Level?, origin: ShaarConsoleEvent.Origin?, search: String
+  ) -> [ShaarConsoleRow] {
     let entries =
       events.compactMap { event -> ShaarConsoleEvent? in
         if case .console(let value) = event { return value }
@@ -35,7 +57,7 @@ final class ShaarConsoleModel {
       } + localEntries
     let orderedEntries = entries.sorted { $0.timestamp < $1.timestamp }
     var result: [ShaarConsoleRow] = []
-    for entry in orderedEntries where matches(entry) {
+    for entry in orderedEntries where matches(entry, level: level, origin: origin, search: search) {
       if let last = result.last, repeatKey(last.event) == repeatKey(entry) {
         result[result.count - 1].count += 1
       } else {
@@ -47,6 +69,8 @@ final class ShaarConsoleModel {
 
   func clearEntries() {
     revision += 1
+    projection.clear()
+    lastEvents = []
     localEntries.removeAll()
     selectedID = nil
     expanded.removeAll()
@@ -70,6 +94,7 @@ final class ShaarConsoleModel {
     if history.count > 100 { history.removeFirst() }
     historyIndex = nil
     localEntries.append(.init(id: UUID(), level: .log, message: "> \(expression)", source: nil))
+    scheduleRows(from: lastEvents)
     busy = true
     defer { busy = false }
     do {
@@ -80,6 +105,7 @@ final class ShaarConsoleModel {
         .init(id: UUID(), level: .error, message: error.localizedDescription, source: nil))
     }
     if localEntries.count > 500 { localEntries.removeFirst(localEntries.count - 500) }
+    scheduleRows(from: lastEvents)
   }
 
   func toggleProperties(for event: ShaarConsoleEvent, inspector: InspectorModel?) async {
@@ -134,7 +160,10 @@ final class ShaarConsoleModel {
     return String(lines.joined(separator: "\n").prefix(16_384))
   }
 
-  private func matches(_ event: ShaarConsoleEvent) -> Bool {
+  nonisolated private static func matches(
+    _ event: ShaarConsoleEvent, level: ShaarConsoleEvent.Level?,
+    origin: ShaarConsoleEvent.Origin?, search: String
+  ) -> Bool {
     guard origin == nil || origin == event.origin else { return false }
     guard level == nil || level == event.level else { return false }
     let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -145,7 +174,7 @@ final class ShaarConsoleModel {
       || event.stack.contains { $0.source.localizedStandardContains(needle) }
   }
 
-  private func repeatKey(_ event: ShaarConsoleEvent) -> String {
+  nonisolated private static func repeatKey(_ event: ShaarConsoleEvent) -> String {
     "\(event.origin.rawValue)\u{0}\(event.level.rawValue)\u{0}\(event.message)\u{0}\(event.source ?? "")"
   }
 }

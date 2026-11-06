@@ -8,7 +8,49 @@ import Testing
 
 @testable import ArcusisBrowser
 
+private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
+  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
+    AsyncStream { continuation in
+      continuation.yield(.streamAvailable)
+      for index in 0..<50_000 {
+        continuation.yield(
+          .event(
+            .console(
+              .init(
+                id: UUID(), level: .log, message: "message \(index)", source: nil))))
+        continuation.yield(
+          .event(
+            .network(
+              .init(
+                id: UUID(), method: "GET", url: "https://example.com/item/\(index)",
+                status: 200, time: Double(index)))))
+      }
+      continuation.finish()
+    }
+  }
+}
+
 @Suite @MainActor struct ShaarDevToolsModelTests {
+  @Test func fixtureStreamIngestsFiftyThousandEntriesPerPanel() async {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let shell = ShaarDevToolsModel(
+      target: target, transport: ShaarScaleFixtureTransport())
+    let inspector = InspectorModel(target: target, engine: nil)
+    let start = ContinuousClock.now
+    shell.open(inspector: inspector)
+    for _ in 0..<1_000 where shell.events.count < 100_000 {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    let elapsed = start.duration(to: .now)
+    print("DevTools 100,000-event fixture stream: \(elapsed)")
+    #expect(shell.consoleCount == 50_000)
+    #expect(shell.networkCount == 50_000)
+    #expect(shell.events.count == 100_000)
+    #expect(elapsed < .seconds(10))
+    shell.close()
+  }
+
   @Test func longSessionRetainsFiftyThousandEntriesPerPanel() {
     var buffer = ShaarDevToolsEventBuffer()
     for index in 0..<51_000 {

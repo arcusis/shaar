@@ -8,6 +8,27 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct ShaarConsoleModelTests {
+  @Test func fiftyThousandEntryFilterProjectsOffMainActor() async {
+    let events: [ShaarDevToolsEvent] = (0..<50_000).map { index in
+      .console(
+        .init(
+          id: UUID(), level: index.isMultiple(of: 2) ? .error : .log,
+          message: "entry \(index)", source: nil))
+    }
+    let model = ShaarConsoleModel()
+    model.scheduleRows(from: events)
+    model.level = .error
+    model.scheduleRows(from: events)
+    let start = ContinuousClock.now
+    for _ in 0..<500 where model.projection.result?.count != 25_000 {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    let elapsed = start.duration(to: .now)
+    print("Console 50,000-entry projection: \(elapsed)")
+    #expect(model.projection.result?.count == 25_000)
+    #expect(elapsed < .seconds(5))
+  }
+
   @Test func levelsSearchAndRepeatsUseOnlyMatchingEntries() {
     let model = ShaarConsoleModel()
     let first = ShaarConsoleEvent(

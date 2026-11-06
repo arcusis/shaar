@@ -71,3 +71,37 @@ import Testing
   #expect(context.evaluateScript("reports.length")?.toInt32() == 3)
   #expect(context.exception == nil)
 }
+
+@Test func shaarNativeMediaStateKeepsVolumeAndLivePiPState() throws {
+  let state = try #require(
+    ARCProbeShaarMediaPublicState([
+      "schemaVersion": 1, "playbackState": "playing", "title": "Song",
+      "supportedActions": [0, 1, 4, 5], "hasVideo": true, "canSeek": true,
+      "tabMuted": false, "silent": false, "pageVolume": 0.4,
+      "pipVideoState": "inPictureInPicture", "pipVideoIsLive": true,
+    ]))
+  let payload = try #require(state as? [String: Any])
+  let parsed = try #require(MediaSessionState(payload: payload))
+  #expect(parsed.isPlaying && parsed.hasVideo && !parsed.silent)
+  #expect(parsed.volume == 0.4)
+  #expect(parsed.actions.contains(.seekBackward))
+  #expect(parsed.actions.contains(.seekForward))
+  #expect(parsed.pictureInPicture?.isLive == true)
+}
+
+@Test func shaarMediaEventsReachOnlyTheirOwnedTab() throws {
+  let event: [String: Any] = [
+    "schemaVersion": 1, "kind": "state_changed",
+    "state": [
+      "schemaVersion": 1, "playbackState": "playing", "title": "Fixture",
+      "supportedActions": [0, 1], "hasVideo": true, "silent": false,
+      "pipVideoState": "inPictureInPicture", "pipVideoIsLive": false,
+    ],
+  ]
+  let owned = ARCProbeShaarMediaEventDispatch(event, true)
+  let foreign = ARCProbeShaarMediaEventDispatch(event, false)
+  #expect(owned["mediaCount"] as? Int == 1)
+  #expect(owned["pipCount"] as? Int == 1)
+  #expect(foreign["mediaCount"] as? Int == 0)
+  #expect(foreign["pipCount"] as? Int == 0)
+}

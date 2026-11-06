@@ -938,8 +938,19 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         MainActor.assumeIsolated {
           guard let self, let context else { return }
           do { try self.workspace.focusWindow(context.id) } catch { self.report(error) }
+          context.engine.handOffPictureInPicture()
         }
       })
+    for name in [
+      NSWindow.didResignKeyNotification, NSWindow.didMiniaturizeNotification,
+      NSWindow.didDeminiaturizeNotification,
+    ] {
+      context.observers.append(
+        center.addObserver(forName: name, object: context.window, queue: .main) {
+          [weak context] _ in
+          MainActor.assumeIsolated { context?.engine.handOffPictureInPicture() }
+        })
+    }
     for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
       context.observers.append(
         center.addObserver(forName: name, object: context.window, queue: .main) {

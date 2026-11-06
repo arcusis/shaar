@@ -19,6 +19,16 @@ struct SidebarMediaPlayer: View {
 
   private var state: MediaSessionState { item.state }
 
+  var canSkipBackward: Bool { state.supports(.seekBackward) }
+  var canSkipForward: Bool { state.supports(.seekForward) }
+
+  func skip(_ action: MediaSessionAction) {
+    guard action == .seekBackward || action == .seekForward,
+      state.supports(action)
+    else { return }
+    onCommand(.perform(action, seconds: 10))
+  }
+
   private var title: String {
     state.title.isEmpty ? item.pageTitle : state.title
   }
@@ -32,12 +42,26 @@ struct SidebarMediaPlayer: View {
             onCommand(.perform(.previousTrack))
           }
         }
+        if canSkipBackward {
+          control(
+            "gobackward.10", label: PanelsL10n.string("Skip Back 10 Seconds"), id: "skip-back"
+          ) {
+            skip(.seekBackward)
+          }
+        }
         if let playPause = state.playPauseAction {
           control(
             playPause == .pause ? "pause.fill" : "play.fill",
             label: PanelsL10n.string(playPause == .pause ? "Pause" : "Play"), id: "play-pause"
           ) {
             onCommand(.perform(playPause))
+          }
+        }
+        if canSkipForward {
+          control(
+            "goforward.10", label: PanelsL10n.string("Skip Forward 10 Seconds"), id: "skip-forward"
+          ) {
+            skip(.seekForward)
           }
         }
         if state.supports(.nextTrack) {

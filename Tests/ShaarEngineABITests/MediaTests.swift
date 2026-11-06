@@ -25,7 +25,7 @@ private actor FakeMediaTransport: ShaarMediaTransport {
 
 @Test func stateDecodesNativeFieldsAndUsesExactScope() async throws {
   let fake = FakeMediaTransport(
-    #"{"schemaVersion":1,"playbackState":"playing","title":"Song","artist":"Artist","album":"Record","artwork":null,"supportedActions":[0,1,3],"canSeek":true,"hasVideo":true,"tabMuted":false,"pageVolume":0.5,"silent":false,"pipVideoState":null,"videoWidth":1920,"videoHeight":1080}"#
+    #"{"schemaVersion":1,"playbackState":"playing","title":"Song","artist":"Artist","album":"Record","artwork":null,"supportedActions":[0,1,3],"canSeek":true,"hasVideo":true,"tabMuted":false,"pageVolume":0.5,"silent":false,"pipVideoState":"inPictureInPicture","pipVideoIsLive":true,"videoWidth":1920,"videoHeight":1080}"#
   )
   let scope = ShaarMediaScope(profileID: "regular", sessionID: "private-1", tabID: "tab-7")
   let state = try await ShaarMediaAdapter(implementation: .shaar, transport: fake).state(
@@ -33,6 +33,7 @@ private actor FakeMediaTransport: ShaarMediaTransport {
   #expect(state.playbackState == .playing)
   #expect(state.supportedActions == [0, 1, 3])
   #expect(state.videoWidth == 1920)
+  #expect(state.pipVideoIsLive == true)
   let calls = await fake.calls
   #expect(calls[0].0 == scope)
   #expect(calls[0].1 == .getState)
@@ -76,13 +77,29 @@ private actor FakeMediaTransport: ShaarMediaTransport {
   #expect(mute["value"] as? Bool == true)
 }
 
+@Test func tenSecondSeekCommandsCarryOffsets() async throws {
+  let fake = FakeMediaTransport("{}")
+  let scope = ShaarMediaScope(profileID: "profile", tabID: "tab")
+  let adapter = ShaarMediaAdapter(implementation: .shaar, transport: fake)
+  try await adapter.control(.seekBackward, scope: scope, value: 10)
+  try await adapter.control(.seekForward, scope: scope, value: 10)
+  let calls = await fake.calls
+  #expect(calls.count == 2)
+  let values = try calls.map { call in
+    try #require(JSONSerialization.jsonObject(with: call.2) as? [String: Any])
+  }
+  #expect(values.map { $0["command"] as? Int } == [4, 5])
+  #expect(values.map { $0["value"] as? Double } == [10, 10])
+}
+
 @Test func eventsCannotCrossProfilePrivateSessionOrTab() throws {
   let fake = FakeMediaTransport("{}")
   let adapter = ShaarMediaAdapter(implementation: .shaar, transport: fake)
   let event = ShaarCopiedEvent(
     sequence: 1, kind: 15, profileID: Data("p".utf8), sessionID: Data("s".utf8),
     windowID: Data(), tabID: Data("t".utf8),
-    payloadJSON: Data(#"{"schemaVersion":1,"kind":"pip_changed","state":"playing"}"#.utf8))
+    payloadJSON: Data(
+      #"{"schemaVersion":1,"kind":"pip_changed","state":"inPictureInPicture"}"#.utf8))
   #expect(
     try adapter.decodeEvent(event, scope: .init(profileID: "p", sessionID: nil, tabID: "t")) == nil)
   #expect(
@@ -90,7 +107,18 @@ private actor FakeMediaTransport: ShaarMediaTransport {
       == nil)
   #expect(
     try adapter.decodeEvent(event, scope: .init(profileID: "p", sessionID: "s", tabID: "t"))
-      == .pictureInPictureChanged("playing"))
+      == .pictureInPictureChanged("inPictureInPicture"))
+}
+
+@Test func invalidPictureInPictureTransitionIsRejected() throws {
+  let adapter = ShaarMediaAdapter(implementation: .shaar, transport: FakeMediaTransport("{}"))
+  let event = ShaarCopiedEvent(
+    sequence: 1, kind: 15, profileID: Data("p".utf8), sessionID: Data(),
+    windowID: Data("w".utf8), tabID: Data("t".utf8),
+    payloadJSON: Data(#"{"schemaVersion":1,"kind":"pip_changed","state":"playing"}"#.utf8))
+  #expect(throws: ShaarMediaAdapterError.malformedResponse) {
+    try adapter.decodeEvent(event, scope: .init(profileID: "p", tabID: "t"))
+  }
 }
 
 @Test func shaarIsTheDefaultImplementationChoice() {

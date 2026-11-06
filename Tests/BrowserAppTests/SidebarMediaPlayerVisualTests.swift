@@ -100,6 +100,24 @@ final class SidebarMediaPlayerVisualTests: XCTestCase {
     }
   }
 
+  func testSeekableSidebarPlayerOffersExactTenSecondControls() {
+    var commands: [MediaCommand] = []
+    let player = SidebarMediaPlayer(
+      item: MiniPlayerItem(
+        tabID: UUID(), pageTitle: "Clip", favicon: nil,
+        state: MediaSessionState(
+          playbackState: .playing,
+          actions: [.play, .pause, .seekBackward, .seekForward], canSeek: true)),
+      onSelect: {}, onCommand: { commands.append($0) })
+    XCTAssertTrue(player.canSkipBackward)
+    XCTAssertTrue(player.canSkipForward)
+    player.skip(.seekBackward)
+    player.skip(.seekForward)
+    XCTAssertEqual(
+      commands,
+      [.perform(.seekBackward, seconds: 10), .perform(.seekForward, seconds: 10)])
+  }
+
   private func player(actions: Set<MediaSessionAction>, muted: Bool) -> SidebarMediaPlayer {
     SidebarMediaPlayer(
       item: MiniPlayerItem(

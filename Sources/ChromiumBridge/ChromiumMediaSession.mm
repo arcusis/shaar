@@ -257,6 +257,7 @@ static NSDictionary<NSString *, id> *ARCMediaSessionStateFromJSON(NSString *json
 
 static const void *ShaarMediaCacheKey = &ShaarMediaCacheKey;
 static const void *ShaarMediaRefreshKey = &ShaarMediaRefreshKey;
+static const void *ShaarMediaPipKey = &ShaarMediaPipKey;
 static NSString *ARCMediaSessionActionName(ARCMediaSessionAction action);
 
 static NSMutableDictionary *ShaarMediaCache(ARCShaarRuntime *runtime, const void *key) {
@@ -282,7 +283,8 @@ static NSString *ShaarMediaActionName(NSNumber *command) {
   }
 }
 
-static NSDictionary *ShaarMediaPublicState(NSDictionary *native) {
+NSDictionary<NSString *, id> *ARCShaarMediaPublicState(NSDictionary<NSString *, id> *native) {
+  if (![native[@"schemaVersion"] isEqual:@1]) return nil;
   NSString *playback = native[@"playbackState"];
   if (![playback isKindOfClass:NSString.class] ||
       ![@[@"none", @"paused", @"playing"] containsObject:playback]) return nil;
@@ -295,18 +297,73 @@ static NSDictionary *ShaarMediaPublicState(NSDictionary *native) {
   }
   NSMutableDictionary *state = [@{
     @"playbackState": playback,
-    @"title": native[@"title"] ?: @"", @"artist": native[@"artist"] ?: @"",
-    @"album": native[@"album"] ?: @"", @"artwork": native[@"artwork"] ?: @"",
-    @"actions": actions, @"hasVideo": native[@"hasVideo"] ?: @NO,
-    @"canSeek": native[@"canSeek"] ?: @NO, @"muted": native[@"tabMuted"] ?: @NO,
-    @"silent": native[@"silent"] ?: @NO, @"volume": native[@"pageVolume"] ?: NSNull.null,
+    @"title": ARCMediaText(native[@"title"]),
+    @"artist": ARCMediaText(native[@"artist"]),
+    @"album": ARCMediaText(native[@"album"]),
+    @"artwork": ARCMediaArtwork(native[@"artwork"]),
+    @"actions": actions, @"hasVideo": @(ARCMediaFlag(native[@"hasVideo"])),
+    @"canSeek": @(ARCMediaFlag(native[@"canSeek"])),
+    @"muted": @(ARCMediaFlag(native[@"tabMuted"])),
+    @"silent": @(![native[@"silent"] isKindOfClass:NSNumber.class] ||
+                  ARCMediaFlag(native[@"silent"]) || ARCMediaFlag(native[@"tabMuted"])),
+    @"volume": ARCMediaVolume(native[@"pageVolume"]),
   } mutableCopy];
   if ([native[@"pipVideoState"] isEqual:@"inPictureInPicture"])
-    state[@"pictureInPicture"] = @{@"playing": @([playback isEqualToString:@"playing"]), @"live": @NO};
+    state[@"pictureInPicture"] = @{
+      @"playing": @([playback isEqualToString:@"playing"]),
+      @"live": @(![native[@"pipVideoIsLive"] isKindOfClass:NSNumber.class] ||
+                 ARCMediaFlag(native[@"pipVideoIsLive"]))};
   return state;
 }
 
+static void ShaarPublishMediaState(ARCShaarRuntime *runtime, NSString *tabID,
+                                   NSDictionary *state) {
+  NSMutableDictionary *cache = ShaarMediaCache(runtime, ShaarMediaCacheKey);
+  NSDictionary *previous = cache[tabID];
+  if (state) cache[tabID] = state;
+  else [cache removeObjectForKey:tabID];
+  if (![previous isEqual:state] && runtime.onMediaSessionChanged)
+    runtime.onMediaSessionChanged(tabID, state);
+}
+
+static void ShaarPublishPictureInPicture(ARCShaarRuntime *runtime, NSString *tabID, BOOL active) {
+  NSMutableDictionary *cache = ShaarMediaCache(runtime, ShaarMediaPipKey);
+  BOOL previous = [cache[tabID] boolValue];
+  if (active) cache[tabID] = @YES;
+  else [cache removeObjectForKey:tabID];
+  if (previous != active && runtime.onPictureInPictureChanged)
+    runtime.onPictureInPictureChanged(tabID, active);
+}
+
 @implementation ARCShaarRuntime (MediaSession)
+
+- (void)receiveShaarMediaEventForTabID:(NSString *)tabID payload:(NSDictionary *)payload {
+  if (!tabID.length || ![payload[@"schemaVersion"] isEqual:@1]) return;
+  NSString *kind = payload[@"kind"];
+  if ([kind isEqualToString:@"state_changed"]) {
+    NSDictionary *native = payload[@"state"];
+    if (![native isKindOfClass:NSDictionary.class]) return;
+    NSDictionary *state = ARCShaarMediaPublicState(native);
+    if (!state) return;
+    ShaarPublishPictureInPicture(self, tabID, state[@"pictureInPicture"] != nil);
+    ShaarPublishMediaState(self, tabID, state);
+    return;
+  }
+  if ([kind isEqualToString:@"pip_changed"]) {
+    NSString *state = payload[@"state"];
+    if (![state isEqualToString:@"inPictureInPicture"] && ![state isEqualToString:@"none"])
+      return;
+    ShaarPublishPictureInPicture(self, tabID, [state isEqualToString:@"inPictureInPicture"]);
+    [ShaarMediaCache(self, ShaarMediaRefreshKey) removeObjectForKey:tabID];
+    [self mediaSessionStateForTabID:tabID];
+  }
+}
+
+- (void)forgetShaarMediaForTabID:(NSString *)tabID {
+  [ShaarMediaCache(self, ShaarMediaCacheKey) removeObjectForKey:tabID];
+  [ShaarMediaCache(self, ShaarMediaRefreshKey) removeObjectForKey:tabID];
+  [ShaarMediaCache(self, ShaarMediaPipKey) removeObjectForKey:tabID];
+}
 
 - (NSDictionary<NSString *, id> *)mediaSessionStateForTabID:(NSString *)tabID {
   NSString *profileID = [self shaarProfileIDForTabID:tabID];
@@ -318,16 +375,9 @@ static NSDictionary *ShaarMediaPublicState(NSDictionary *native) {
     [self shaarSubmit:SHAAR_OP_MEDIA_GET_STATE profileID:profileID tabID:tabID
              payload:@{@"schemaVersion": @1} completion:^(NSDictionary *result, NSError *error) {
       if (error || ![self shaarProfileIDForTabID:tabID]) return;
-      NSDictionary *state = ShaarMediaPublicState(result);
-      NSDictionary *previous = ShaarMediaCache(self, ShaarMediaCacheKey)[tabID];
-      if (state) ShaarMediaCache(self, ShaarMediaCacheKey)[tabID] = state;
-      else [ShaarMediaCache(self, ShaarMediaCacheKey) removeObjectForKey:tabID];
-      if (![previous isEqual:state] && self.onMediaSessionChanged)
-        self.onMediaSessionChanged(tabID, state);
-      BOOL wasPip = previous[@"pictureInPicture"] != nil;
-      BOOL isPip = state[@"pictureInPicture"] != nil;
-      if (wasPip != isPip && self.onPictureInPictureChanged)
-        self.onPictureInPictureChanged(tabID, isPip);
+      NSDictionary *state = ARCShaarMediaPublicState(result);
+      ShaarPublishPictureInPicture(self, tabID, state[@"pictureInPicture"] != nil);
+      ShaarPublishMediaState(self, tabID, state);
       dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         if (![self shaarHasTabID:tabID profileID:profileID selected:YES]) return;
         [self mediaSessionStateForTabID:tabID];
@@ -346,6 +396,11 @@ static NSDictionary *ShaarMediaPublicState(NSDictionary *native) {
   if (action == ARCMediaSessionActionSeekTo) {
     if (!std::isfinite(seconds) || seconds < 0 || seconds > 86400) return NO;
     payload[@"value"] = @(seconds);
+  }
+  if (action == ARCMediaSessionActionSeekBackward ||
+      action == ARCMediaSessionActionSeekForward) {
+    if (!std::isfinite(seconds) || seconds < 0 || seconds > 86400) return NO;
+    if (seconds > 0) payload[@"value"] = @(seconds);
   }
   return [self shaarSubmit:SHAAR_OP_MEDIA_CONTROL profileID:profileID tabID:tabID
                   payload:payload completion:nil];

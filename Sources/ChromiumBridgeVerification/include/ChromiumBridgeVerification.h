@@ -28,6 +28,12 @@ FOUNDATION_EXPORT NSData * _Nullable ARCProbePNGFromDevToolsResult(NSDictionary 
 /// The shipped media reporter, for deterministic JavaScript event-order tests without an engine.
 FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
 
+/// Tests native media state conversion without starting the Chromium engine.
+FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeShaarMediaPublicState(NSDictionary *native);
+/// Injects a scoped media event into a runtime without creating an engine or window.
+FOUNDATION_EXPORT NSDictionary *ARCProbeShaarMediaEventDispatch(
+  NSDictionary *payload, BOOL validOwner);
+
 /// Test-only audit of a Shaar page view's attachment to its owning hidden window.
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
   NSView * _Nullable tabView, NSView * _Nullable hostView, NSWindow * _Nullable window);

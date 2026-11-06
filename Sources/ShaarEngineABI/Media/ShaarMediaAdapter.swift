@@ -61,12 +61,14 @@ public struct ShaarMediaState: Decodable, Equatable, Sendable {
   public let pageVolume: Double?
   public let silent: Bool?
   public let pipVideoState: String?
+  public let pipVideoIsLive: Bool?
   public let videoWidth: UInt32?
   public let videoHeight: UInt32?
 
   enum CodingKeys: String, CodingKey {
     case schemaVersion, playbackState, title, artist, album, artwork, supportedActions
-    case canSeek, hasVideo, tabMuted, pageVolume, silent, pipVideoState, videoWidth, videoHeight
+    case canSeek, hasVideo, tabMuted, pageVolume, silent, pipVideoState, pipVideoIsLive
+    case videoWidth, videoHeight
   }
 }
 
@@ -198,7 +200,10 @@ public struct ShaarMediaAdapter: Sendable {
       else { throw ShaarMediaAdapterError.malformedResponse }
       return .stateChanged(state)
     case "pip_changed":
-      return .pictureInPictureChanged(root["state"] as? String)
+      guard let state = root["state"] as? String,
+        state == "inPictureInPicture" || state == "none"
+      else { throw ShaarMediaAdapterError.malformedResponse }
+      return .pictureInPictureChanged(state)
     case "capture_state_changed":
       guard let capture = root["capture"] as? String else {
         throw ShaarMediaAdapterError.malformedResponse
@@ -227,6 +232,8 @@ public struct ShaarMediaAdapter: Sendable {
       return value.map { $0.isFinite && (0...1).contains($0) } ?? false
     case .seekTo:
       return value.map { $0.isFinite && (0...86_400).contains($0) } ?? false
+    case .seekBackward, .seekForward:
+      return value.map { $0.isFinite && (0...86_400).contains($0) && $0 > 0 } ?? true
     case .pipSkip:
       return value.map {
         $0.isFinite && $0 != 0 && (-86_400...86_400).contains($0)

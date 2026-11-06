@@ -102,6 +102,23 @@ final class AutoPictureInPictureTests: XCTestCase {
     XCTAssertEqual(entered, [page])
   }
 
+  func testBackgroundWindowMakesItsSelectedPageEligibleForAutomaticPiP() {
+    let page = UUID()
+    XCTAssertEqual(
+      BrowserEngine.visiblePagesForAutomaticPictureInPicture(
+        [page], windowVisible: true, key: false, miniaturized: false), [])
+    XCTAssertEqual(
+      BrowserEngine.visiblePagesForAutomaticPictureInPicture(
+        [page], windowVisible: true, key: true, miniaturized: false), [page])
+    XCTAssertEqual(
+      BrowserEngine.visiblePagesForAutomaticPictureInPicture(
+        [page], windowVisible: true, key: true, miniaturized: true), [])
+    XCTAssertEqual(
+      BrowserEngine.visiblePagesForAutomaticPictureInPicture(
+        [page], windowVisible: false, key: false, miniaturized: false), [page],
+      "hidden verification windows keep tab-switch semantics without ordering on screen")
+  }
+
   func testStoreSettingIsPerSiteAndProfile() throws {
     var session = BrowserSession.fresh()
     let video = try XCTUnwrap(session.open(URL(string: "https://www.youtube.com/watch?v=1")!))

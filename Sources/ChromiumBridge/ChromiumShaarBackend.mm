@@ -8,6 +8,7 @@
 #import "ChromiumShaarExtensionsInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
 #import "ChromiumShaarFeatureTransport.h"
+#import "ChromiumMediaSession.h"
 #import "ChromiumShaarActivation.h"
 
 #include <dlfcn.h>
@@ -289,6 +290,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
     [_shaarTabs removeObjectForKey:tabID];
+    [self forgetShaarMediaForTabID:tabID];
     [self stopFindingInTabID:tabID];
     [_shaarTabWindows removeObjectForKey:tabID];
     [_shaarTabProfiles removeObjectForKey:tabID];
@@ -298,6 +300,12 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   if (event->kind == SHAAR_EVENT_DOWNLOAD) {
     [self shaarReceiveDownloadEventForProfileID:
         [self shaarProfileIDForNativeID:String(event->profile_id)] payload:payload];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_MEDIA) {
+    if (_shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
+        [String(event->window_id) isEqualToString:_shaarTabWindows[tabID]])
+      [self receiveShaarMediaEventForTabID:tabID payload:payload];
     return;
   }
   if (event->kind != SHAAR_EVENT_NAVIGATION || !_shaarTabs[tabID]) return;

@@ -41,10 +41,16 @@ final class ShaarSourcesModel {
   var sourceFailure: String?
   var failure: String?
   var search = ""
-  var prettyPrint = false
+  var prettyPrint = false {
+    didSet { if prettyPrint != oldValue { sourcePage = 0 } }
+  }
+  private(set) var sourcePage = 0
+  static let linesPerPage = 500
   @ObservationIgnored private let phase2: ShaarPhase2Model
   @ObservationIgnored private let loadSourceData: @Sendable (URL) async throws -> Data
   @ObservationIgnored private var generation = 0
+  @ObservationIgnored private var contentRevision = 0
+  @ObservationIgnored private var lineCache: (revision: Int, pretty: Bool, lines: [Substring])?
 
   init(
     phase2: ShaarPhase2Model,
@@ -73,9 +79,39 @@ final class ShaarSourcesModel {
 
   var displayedContent: String? {
     guard let content, !binary else { return nil }
-    let limited = String(content.prefix(262_144))
-    guard prettyPrint, isJSON else { return limited }
-    return Self.prettyJSON(limited) ?? limited
+    guard prettyPrint, isJSON else { return content }
+    return Self.prettyJSON(content) ?? content
+  }
+
+  var displayedLines: [Substring]? {
+    if let cache = lineCache, cache.revision == contentRevision,
+      cache.pretty == prettyPrint
+    {
+      return cache.lines
+    }
+    guard let displayedContent else { return nil }
+    let lines = displayedContent.split(separator: "\n", omittingEmptySubsequences: false)
+    lineCache = (contentRevision, prettyPrint, lines)
+    return lines
+  }
+
+  var sourcePageCount: Int {
+    guard let count = displayedLines?.count else { return 0 }
+    return max(1, (count + Self.linesPerPage - 1) / Self.linesPerPage)
+  }
+
+  var visibleLineRange: Range<Int> {
+    guard let count = displayedLines?.count else { return 0..<0 }
+    let start = min(sourcePage * Self.linesPerPage, count)
+    return start..<min(start + Self.linesPerPage, count)
+  }
+
+  func showNextSourcePage() {
+    if sourcePage + 1 < sourcePageCount { sourcePage += 1 }
+  }
+
+  func showPreviousSourcePage() {
+    if sourcePage > 0 { sourcePage -= 1 }
   }
 
   var isJSON: Bool {
@@ -84,6 +120,8 @@ final class ShaarSourcesModel {
 
   func reset() {
     generation += 1
+    contentRevision += 1
+    lineCache = nil
     resources.removeAll()
     selectedURL = nil
     content = nil
@@ -99,6 +137,7 @@ final class ShaarSourcesModel {
     failure = nil
     search = ""
     prettyPrint = false
+    sourcePage = 0
   }
 
   func refresh() async {
@@ -134,7 +173,10 @@ final class ShaarSourcesModel {
   func select(_ resource: ShaarSourceResource) async {
     guard resource.url != selectedURL else { return }
     selectedURL = resource.url
+    sourcePage = 0
     content = nil
+    contentRevision += 1
+    lineCache = nil
     binary = false
     contentTruncated = false
     localFiles = []
@@ -211,7 +253,10 @@ final class ShaarSourcesModel {
     }
     let generation = generation
     contentLoading = true
+    sourcePage = 0
     content = nil
+    contentRevision += 1
+    lineCache = nil
     contentTruncated = false
     defer {
       if generation == self.generation, selectedURL == url { contentLoading = false }
@@ -220,8 +265,9 @@ final class ShaarSourcesModel {
       let reply = try await phase2.execute(.resourceContent(url: url))
       guard generation == self.generation, selectedURL == url else { return }
       content = reply.body
+      contentRevision += 1
       binary = reply.base64Encoded == true
-      contentTruncated = reply.truncated || (reply.body?.count ?? 0) > 262_144
+      contentTruncated = reply.truncated
       failure = nil
     } catch is CancellationError {
       return

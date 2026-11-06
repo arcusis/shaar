@@ -160,8 +160,9 @@ struct ShaarSourcesPanel: View {
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if model.binary {
         emptyContent("Binary resource preview is unavailable")
-      } else if let content = model.displayedContent {
-        codeView(content)
+      } else if let lines = model.displayedLines {
+        codeView(lines)
+        if model.sourcePageCount > 1 { sourcePager }
       } else {
         emptyContent("Select a resource to view its source")
       }
@@ -252,15 +253,12 @@ struct ShaarSourcesPanel: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  private func codeView(_ content: String) -> some View {
+  private func codeView(_ lines: [Substring]) -> some View {
     GeometryReader { geometry in
       ScrollView([.horizontal, .vertical]) {
         LazyVStack(alignment: .leading, spacing: 0) {
-          ForEach(
-            Array(content.split(separator: "\n", omittingEmptySubsequences: false).enumerated()),
-            id: \.offset
-          ) {
-            index, line in
+          ForEach(model.visibleLineRange, id: \.self) { index in
+            let line = lines[index]
             HStack(alignment: .firstTextBaseline, spacing: 13) {
               Text(String(index + 1))
                 .foregroundStyle(.tertiary)
@@ -283,6 +281,38 @@ struct ShaarSourcesPanel: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityIdentifier("shaar.devtools.sourceCode")
   }
+
+  private var sourcePager: some View {
+    HStack(spacing: 12) {
+      Button {
+        model.showPreviousSourcePage()
+      } label: {
+        Image(systemName: "chevron.left")
+      }
+      .disabled(model.sourcePage == 0)
+      .help(ShellL10n.string("Previous lines"))
+      .accessibilityLabel(ShellL10n.string("Previous lines"))
+      Text(
+        "\(model.visibleLineRange.lowerBound + 1)–\(model.visibleLineRange.upperBound) / \(linesCount)"
+      )
+      .font(.system(size: 10, design: .monospaced))
+      .foregroundStyle(.secondary)
+      Button {
+        model.showNextSourcePage()
+      } label: {
+        Image(systemName: "chevron.right")
+      }
+      .disabled(model.sourcePage + 1 == model.sourcePageCount)
+      .help(ShellL10n.string("Next lines"))
+      .accessibilityLabel(ShellL10n.string("Next lines"))
+      Spacer()
+    }
+    .buttonStyle(.plain)
+    .padding(.horizontal, 12)
+    .frame(height: 30)
+  }
+
+  private var linesCount: Int { model.displayedLines?.count ?? 0 }
 }
 
 enum ShaarSourceHighlight {

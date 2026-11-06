@@ -259,6 +259,8 @@
     "App": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"App"}},"he":{"stringUnit":{"state":"translated","value":"יישום"}}}},
     "Perf": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Perf"}},"he":{"stringUnit":{"state":"translated","value":"ביצועים"}}}},
     "Views": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Views"}},"he":{"stringUnit":{"state":"translated","value":"תצוגות"}}}},
+    "Previous lines": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Previous lines"}},"he":{"stringUnit":{"state":"translated","value":"שורות קודמות"}}}},
+    "Next lines": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Next lines"}},"he":{"stringUnit":{"state":"translated","value":"השורות הבאות"}}}},
     "All": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"All"}},"he":{"stringUnit":{"state":"translated","value":"הכול"}}}},
     "Errors": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Errors"}},"he":{"stringUnit":{"state":"translated","value":"שגיאות"}}}},
     "Warnings": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Warnings"}},"he":{"stringUnit":{"state":"translated","value":"אזהרות"}}}},

@@ -9,6 +9,11 @@ import ShaarEngineABI
 
 @MainActor
 struct ShaarPhase2FixtureTransport: ShaarPhase2Transport {
+  static let fiveMiBSource: String = {
+    let line = String(repeating: "x", count: 99) + "\n"
+    return String(repeating: line, count: 52_428) + String(repeating: "x", count: 80)
+  }()
+
   var available = true
   var response: (ShaarDevToolsPhase2Command) throws -> [String: Any]
 

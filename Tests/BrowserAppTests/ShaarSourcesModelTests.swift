@@ -9,6 +9,44 @@ import Testing
 @testable import ShaarEngineABI
 
 @Suite @MainActor struct ShaarSourcesModelTests {
+  @Test func fiveMegabyteSourceFixtureIsFullyDisplayed() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
+    let content = ShaarPhase2FixtureTransport.fiveMiBSource
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return ["items": [["url": "https://example.com/app.js", "type": "Script"]]]
+      case .resourceContent:
+        return ["items": [], "body": content, "base64Encoded": false]
+      default: return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(phase2: phase2)
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    #expect(model.failure == nil)
+    #expect(model.displayedContent?.utf8.count == content.utf8.count)
+    let start = ContinuousClock.now
+    #expect(model.displayedLines?.count == 52_429)
+    #expect(model.displayedLines?.last.map(String.init) == String(repeating: "x", count: 80))
+    #expect(model.visibleLineRange == 0..<500)
+    #expect(model.sourcePageCount == 105)
+    for _ in 0..<104 { model.showNextSourcePage() }
+    #expect(model.visibleLineRange == 52_000..<52_429)
+    model.showNextSourcePage()
+    #expect(model.visibleLineRange == 52_000..<52_429)
+    model.showPreviousSourcePage()
+    #expect(model.visibleLineRange == 51_500..<52_000)
+    let elapsed = start.duration(to: .now)
+    print("Sources 5 MiB line index: \(elapsed)")
+    #expect(elapsed < .seconds(2))
+    #expect(!model.truncated)
+    phase2.close()
+  }
+
   @Test func resourceListContentFilteringAndPrettyJSON() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)

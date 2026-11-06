@@ -29,4 +29,8 @@ extension View {
     return environment(\.locale, Locale(identifier: language.localeIdentifier))
       .environment(\.layoutDirection, language.isRightToLeft ? .rightToLeft : .leftToRight)
   }
+
+  func devToolsDataDirection() -> some View {
+    environment(\.layoutDirection, .leftToRight)
+  }
 }

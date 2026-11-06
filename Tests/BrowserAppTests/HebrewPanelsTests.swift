@@ -87,4 +87,17 @@ struct HebrewPanelsTests {
       BrowserLanguage.resolve(selection: .systemDefault, preferredLanguages: ["iw"]) == .hebrew)
     #expect(BrowserLanguage.hebrew.isRightToLeft)
   }
+
+  @Test func devToolsDynamicFilterLabelsHaveHebrewTranslations() {
+    #expect(
+      BrowserLocalization.string("All sources", table: "Shell", language: .hebrew)
+        == "כל המקורות")
+    for key in [
+      "All", "Errors", "Warnings", "Info", "Logs", "Browser", "Server", "Spotlight",
+      "App", "Perf", "Views", "Status", "Method", "Name",
+    ] {
+      let translated = BrowserLocalization.string(key, table: "Shell", language: .hebrew)
+      #expect(translated != key, "DevTools label is missing Hebrew: \(key)")
+    }
+  }
 }

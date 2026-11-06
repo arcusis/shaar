@@ -103,7 +103,7 @@ struct ShaarSourcesPanel: View {
       HStack(spacing: 7) {
         Image(systemName: symbol(for: resource)).frame(width: 13)
           .foregroundStyle(.secondary)
-        Text(resource.name).lineLimit(1)
+        Text(resource.name).lineLimit(1).devToolsDataDirection()
         Spacer(minLength: 0)
       }
       .font(.system(size: 10))
@@ -278,6 +278,7 @@ struct ShaarSourcesPanel: View {
           minWidth: geometry.size.width, minHeight: geometry.size.height,
           alignment: .topLeading)
       }
+      .devToolsDataDirection()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityIdentifier("shaar.devtools.sourceCode")

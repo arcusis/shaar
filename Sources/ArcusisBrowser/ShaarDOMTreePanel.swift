@@ -86,6 +86,7 @@ struct ShaarDOMTreePanel: View {
             ForEach(model.rows) { row in treeRow(row) }
           }
         }
+        .devToolsDataDirection()
       }
       Divider()
       breadcrumbs
@@ -107,6 +108,7 @@ struct ShaarDOMTreePanel: View {
       TextField(ShellL10n.string("Search text or selector"), text: $model.search)
         .textFieldStyle(.roundedBorder)
         .font(.system(size: 11))
+        .devToolsDataDirection()
         .onSubmit { Task { await model.performSearch() } }
       Button {
         Task { await model.performSearch() }
@@ -294,12 +296,15 @@ struct ShaarDOMTreePanel: View {
       Text(ShellL10n.string(editorTitle(mode))).font(.headline)
       if mode == .attribute {
         TextField(ShellL10n.string("Attribute name"), text: $attributeName)
+          .devToolsDataDirection()
       }
       if mode == .html {
         TextEditor(text: $editorValue).font(.system(size: 11, design: .monospaced))
+          .devToolsDataDirection()
           .frame(height: 180)
       } else {
         TextField(ShellL10n.string("Value"), text: $editorValue)
+          .devToolsDataDirection()
       }
       HStack {
         Spacer()

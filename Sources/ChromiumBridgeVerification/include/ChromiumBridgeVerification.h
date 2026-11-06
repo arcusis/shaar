@@ -66,6 +66,10 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeDevToolsDockAudit(
   NSString * _Nullable contextID);
 
 @interface ARCChromiumRuntime (Verification)
+/// Testing-only DevTools frontend route through a selected Shaar-owned tab.
+- (void)probeDevToolsRouteInTabID:(NSString *)tabID operation:(NSInteger)operation
+                         payload:(NSDictionary *)payload
+                      completion:(void (^)(BOOL))completion;
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (void)inspectorProbePointerInTabID:(NSString *)tabID selector:(NSString *)selector

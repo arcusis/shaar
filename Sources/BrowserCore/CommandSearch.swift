@@ -15,7 +15,8 @@ public enum NavigationInput {
     guard url.scheme?.lowercased() == "devtools", url.host()?.lowercased() == "devtools",
       url.user == nil, url.password == nil, url.port == nil, url.fragment == nil
     else { return false }
-    return ["/bundled/js_app.html", "/bundled/inspector.html"].contains(url.path())
+    return ["/bundled/js_app.html", "/bundled/inspector.html", "/bundled/node_app.html"]
+      .contains(url.path())
   }
 
   /// The input as a web address (`https://…`, `example.com`, `localhost:3000`), or nil when

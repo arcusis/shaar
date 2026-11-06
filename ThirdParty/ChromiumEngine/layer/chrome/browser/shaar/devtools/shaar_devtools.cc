@@ -12,6 +12,7 @@
 #include <limits.h>
 
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
@@ -36,11 +37,13 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/devtools/devtools_ui_bindings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -48,6 +51,8 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
+#include "ui/base/page_transition_types.h"
+#include "url/gurl.h"
 
 namespace shaar::devtools {
 namespace {
@@ -866,6 +871,74 @@ void BindRuntimeServices() {
   shaar::SetDevToolsRuntimeServices(&g_runtime_services);
 }
 
+namespace {
+struct PendingNodeFrontend {
+  uint64_t id;
+  Profile* profile;
+  std::string url;
+  scoped_refptr<content::DevToolsAgentHost> host;
+};
+
+std::vector<PendingNodeFrontend>& PendingNodeFrontends() {
+  static base::NoDestructor<std::vector<PendingNodeFrontend>> pending;
+  return *pending;
+}
+uint64_t next_pending_node_frontend_id = 0;
+}  // namespace
+
+bool RequestNodeFrontend(Profile* profile,
+                         content::WebContents* source,
+                         const GURL& url,
+                         scoped_refptr<content::DevToolsAgentHost> host) {
+  if (!profile || !host || !url.is_valid() ||
+      !url.SchemeIs("devtools"))
+    return false;
+  auto& pending = PendingNodeFrontends();
+  const uint64_t id = ++next_pending_node_frontend_id;
+  pending.push_back({id, profile, url.spec(), std::move(host)});
+  if (shaar::windows_tabs::RouteDevToolsOpenURL(source, profile, url)) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce([](uint64_t expired_id) {
+          std::erase_if(PendingNodeFrontends(),
+                        [expired_id](const PendingNodeFrontend& entry) {
+                          return entry.id == expired_id;
+                        });
+        }, id), base::Seconds(15));
+    return true;
+  }
+  pending.pop_back();
+  return false;
+}
+
+bool HasPendingNodeFrontend(Profile* profile, const GURL& url) {
+  const auto& pending = PendingNodeFrontends();
+  return std::ranges::any_of(pending, [&](const PendingNodeFrontend& entry) {
+    return entry.profile == profile && entry.url == url.spec();
+  });
+}
+
+bool OpenPendingNodeFrontend(content::WebContents* contents,
+                             Profile* profile,
+                             const GURL& url) {
+  if (!contents || !profile)
+    return false;
+  auto& pending = PendingNodeFrontends();
+  auto found = std::ranges::find_if(pending, [&](const PendingNodeFrontend& e) {
+    return e.profile == profile && e.url == url.spec();
+  });
+  if (found == pending.end())
+    return false;
+  content::NavigationController::LoadURLParams params(url);
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+  contents->GetController().LoadURLWithParams(params);
+  DevToolsUIBindings* bindings = DevToolsUIBindings::ForWebContents(contents);
+  if (!bindings)
+    return false;
+  bindings->AttachTo(found->host);
+  pending.erase(found);
+  return true;
+}
+
 bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_request_id request_id,
                           shaar_reply_fn reply,
@@ -1096,6 +1169,59 @@ shaar_error_code HandleDevToolsOperation(
     return HandlePanelOperation(context, engine, scope, window, tab, contents,
                                 identity, operation, args_json, request_id,
                                 reply, reply_context, error);
+  }
+  if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
+      operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    if (!testing || std::strcmp(testing, "1") != 0)
+      return Fail(error, SHAAR_POLICY_BLOCKED,
+                  "DevTools route probe requires testing mode");
+    if (!context->browser_tabs->IsSelectedWebContents(engine, window, tab,
+                                                        contents))
+      return Fail(error, SHAAR_NOT_READY,
+                  "DevTools route probe requires selected tab");
+    const ReplyContext probe_reply{request_id, reply, reply_context};
+    if (operation == SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
+      if (!HasEmptyVersionedSchema(args_json))
+        return Fail(error, SHAAR_INVALID_ARGUMENT,
+                    "invalid frontend attachment probe schema");
+      auto* bindings = DevToolsUIBindings::ForWebContents(contents);
+      const bool attached = bindings && bindings->agent_host();
+      Reply(probe_reply, SHAAR_OK,
+            attached ? R"({"schemaVersion":1,"attached":true})"
+                     : R"({"schemaVersion":1,"attached":false})");
+      return SHAAR_OK;
+    }
+    if (!HasEmptyVersionedSchema(args_json) &&
+        operation == SHAAR_OP_PROBE_NODE_FRONTEND)
+      return Fail(error, SHAAR_INVALID_ARGUMENT,
+                  "invalid Node frontend probe schema");
+    auto* devtools = DevToolsWindow::GetInstanceForInspectedWebContents(contents);
+    if (!devtools)
+      return Fail(error, SHAAR_NOT_READY, "DevTools frontend is not open");
+    if (operation == SHAAR_OP_PROBE_NODE_FRONTEND) {
+      DevToolsWindow::OpenNodeFrontendWindow(
+          Profile::FromBrowserContext(contents->GetBrowserContext()),
+          DevToolsOpenedByAction::kOpenForNodeFromAnotherTarget, contents);
+    } else {
+      auto envelope = base::JSONReader::Read(
+          std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+      const base::DictValue* dict = envelope && envelope->is_dict()
+                                        ? &envelope->GetDict() : nullptr;
+      const std::string* requested = dict ? dict->FindString("url") : nullptr;
+      if (!dict || dict->FindInt("schemaVersion") != 1 || !requested ||
+          *requested != "https://github.com/ChromeDevTools/chrome-devtools-mcp")
+        return Fail(error, SHAAR_INVALID_ARGUMENT,
+                    "invalid DevTools URL probe schema");
+      auto* bindings = DevToolsUIBindings::ForWebContents(
+          devtools->GetDevToolsWebContents());
+      if (!bindings)
+        return Fail(error, SHAAR_NOT_READY,
+                    "DevTools frontend bindings are unavailable");
+      bindings->ShaarProbeOpenInNewTab(*requested);
+    }
+    Reply(probe_reply, SHAAR_OK, R"({"schemaVersion":1,"submitted":true})");
+    return SHAAR_OK;
   }
 
   if (operation == SHAAR_OP_PROBE_CAPTURE_TAB) {

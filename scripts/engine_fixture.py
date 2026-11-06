@@ -1788,6 +1788,7 @@ def main(argv=None):
                 required = {
                     'plain reaches the second origin without a failed page or visible window',
                     'plain cross-site link reached the second site five times',
+                    'fresh profile materializes its first tab in a second hidden regular window',
                     'target blank reaches the second origin without a failed page or visible window',
                     'window.open reaches the second origin without a failed page or visible window',
                     'failed-page Reload recreates a destroyed pinned tab',

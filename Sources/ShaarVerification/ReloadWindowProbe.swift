@@ -43,20 +43,7 @@ final class ReloadWindowProbe {
 
   private func exercise() async throws {
     let originA = fixture.deletingLastPathComponent().appending(path: "cross-site-a")
-    let first = BrowserTab(url: originA)
-    let space = BrowserSpace(
-      profileID: profile.id, name: "Links", symbol: "globe", tint: .ocean,
-      tabs: [first], selectedTabID: first.id)
-    let session = try BrowserSession(
-      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
-    let file = WorkspaceFile(
-      url: root.appending(path: "reload-window-workspace.json"),
-      legacySessionURL: root.appending(path: "reload-window-session.json"))
-    let workspace = try BrowserWorkspaceStore(file: file, initialSession: session)
-    let host = NativeBrowserHost(
-      events: events, workspace: workspace, presentation: .hiddenProbe,
-      usesPrimaryWindow: false)
-    try host.restore()
+    let host = try makeHost(profile: profile, originA: originA, fileStem: "reload-window")
     defer { host.detach() }
     let ownerID = try require(host.contexts.keys.first, "Reload probe has no window")
     checks.append(
@@ -101,11 +88,50 @@ final class ReloadWindowProbe {
         && replacement.store.rendererFailures[retained] == nil
     }
     checks.append("Reload after engine-window closure rehomes the tab without quitting")
+    checks.append(try await exerciseFreshProfileWindow(originA: originA))
     for (name, elementID) in [("target blank", "blank"), ("window.open", "popup")] {
       checks.append(
         try await exerciseLink(
           name, elementID: elementID, ownerID: ownerID, originA: originA, host: host))
     }
+  }
+
+  private func makeHost(
+    profile: BrowserProfile, originA: URL, fileStem: String
+  ) throws -> NativeBrowserHost {
+    let first = BrowserTab(url: originA)
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Links", symbol: "globe", tint: .ocean,
+      tabs: [first], selectedTabID: first.id)
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+    let file = WorkspaceFile(
+      url: root.appending(path: "\(fileStem)-workspace.json"),
+      legacySessionURL: root.appending(path: "\(fileStem)-session.json"))
+    let workspace = try BrowserWorkspaceStore(file: file, initialSession: session)
+    let host = NativeBrowserHost(
+      events: events, workspace: workspace, presentation: .hiddenProbe,
+      usesPrimaryWindow: false)
+    try host.restore()
+    return host
+  }
+
+  private func exerciseFreshProfileWindow(originA: URL) async throws -> String {
+    let profile = BrowserProfile(name: "Fresh reload probe")
+    let host = try makeHost(profile: profile, originA: originA, fileStem: "reload-window-fresh")
+    defer { host.detach() }
+    try await wait("fresh profile first tab") {
+      guard let context = host.contexts.values.first,
+        let tab = context.store.session.selectedPage?.tab.id
+      else { return false }
+      return await document(tab, runtime: runtime)?["href"] as? String == originA.absoluteString
+        && runtime.windowID(forTabID: tab.uuidString) == context.nativeID
+    }
+    try expect(
+      host.contexts.values.allSatisfy { $0.store.rendererFailures.isEmpty && !$0.window.isVisible }
+        && NSApp.windows.allSatisfy { !$0.isVisible },
+      "fresh profile opens its first tab in an owned hidden regular window")
+    return "fresh profile materializes its first tab in a second hidden regular window"
   }
 
   private func report(error: Error?) throws {

@@ -4,10 +4,8 @@
 
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumShaarFeatureTransport.h"
-#import "ChromiumProbeRoot.h"
 #include <cmath>
-#include <cstdlib>
-#include <cstring>
+#include <atomic>
 
 // Runs with a user gesture so Chromium accepts the request. It picks the largest playing
 // video the page allows in picture-in-picture and opens Chromium's own video window.
@@ -31,17 +29,16 @@ static BOOL ARCIsPictureInPictureVideoWindow(NSWindow *window) {
     && (window.collectionBehavior & NSWindowCollectionBehaviorCanJoinAllSpaces) != 0;
 }
 
-static NSWindow *ARCHideProbePictureInPictureWindow(NSWindow *window) {
-  if (!window || !std::getenv("SHAAR_ENGINE_TESTING") ||
-      std::strcmp(std::getenv("SHAAR_ENGINE_TESTING"), "1") != 0)
-    return window;
-  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
-  NSUInteger index = [arguments indexOfObject:@"--probe-data-dir"];
-  if (index == NSNotFound || index + 1 >= arguments.count ||
-      !ARCProbeRootIsOwned([NSURL fileURLWithPath:arguments[index + 1]]))
-    return window;
-  window.alphaValue = 0;
-  window.ignoresMouseEvents = YES;
+static std::atomic<ARCPictureInPictureWindowObserver> gPiPWindowObserver{nullptr};
+
+void ARCSetPictureInPictureWindowObserver(ARCPictureInPictureWindowObserver observer) {
+  gPiPWindowObserver.store(observer, std::memory_order_release);
+}
+
+static NSWindow *ARCObservePictureInPictureWindow(NSWindow *window) {
+  if (window) {
+    if (auto observer = gPiPWindowObserver.load(std::memory_order_acquire)) observer(window);
+  }
   return window;
 }
 
@@ -84,12 +81,12 @@ static NSString *ARCPictureInPictureCommandName(ARCPictureInPictureCommand comma
 
 - (NSWindow *)pictureInPictureVideoWindowForTabID:(NSString *)tabID {
   NSWindow *native = [self shaarPictureInPictureWindowForTabID:tabID];
-  if (native) return ARCHideProbePictureInPictureWindow(native);
+  if (native) return ARCObservePictureInPictureWindow(native);
   NSDictionary *state = [self mediaSessionStateForTabID:tabID];
   if (!state[@"pictureInPicture"]) return nil;
   for (NSWindow *window in NSApp.windows)
     if (ARCIsPictureInPictureVideoWindow(window))
-      return ARCHideProbePictureInPictureWindow(window);
+      return ARCObservePictureInPictureWindow(window);
   return nil;
 }
 

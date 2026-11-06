@@ -52,6 +52,19 @@ def uses_fast_lane(name: str) -> bool:
     return name == "pull_request"
 
 
+def needs_shipping_probe_guard(paths: list[str] | None) -> bool:
+    """Build the shipping executable on PRs that can link probe text into it."""
+    if paths is None:
+        return True
+    return any(
+        path in {"Package.swift", "scripts/bundle-app.sh"}
+        or (path.startswith("Sources/")
+            and not path.startswith(("Sources/ShaarVerification/", "Sources/ChromiumBridgeVerification/"))
+            and path.endswith((".swift", ".m", ".mm", ".c", ".cc", ".cpp", ".h")))
+        for path in paths
+    )
+
+
 def iteration_count(event: dict, name: str) -> int:
     if name == "schedule":
         return 3
@@ -94,9 +107,11 @@ def main() -> None:
             paths = [path for path in result.stdout.decode().split("\0") if path]
     draft = name == "pull_request" and event.get("pull_request", {}).get("draft") is True
     full, website, swift = select_stages(paths, name, uses_fast_lane(name))
+    shipping_guard = name == "pull_request" and not draft and needs_shipping_probe_guard(paths)
     queue_pr = merge_group_pr_number(event, name)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\nqueue_pr={queue_pr}\n")
+        output.write(f"shipping_guard={str(shipping_guard).lower()}\n")
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write(f"### CI selection\n\nFull native pipeline: **{full}**. Draft pull request: **{draft}**. "
                      f"Immutable baseline: `{base}`. "

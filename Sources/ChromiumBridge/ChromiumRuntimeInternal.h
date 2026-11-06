@@ -9,6 +9,11 @@ NSError *ARCBridgeError(NSString *message);
 BOOL ARCIsCanonicalID(NSString *value);
 NSString *ARCValidatedProfileID(NSString *profileID);
 
+// The verification target may observe a PiP window before the app uses it.
+// The shipping bridge never interprets probe arguments or changes window visibility.
+typedef void (*ARCPictureInPictureWindowObserver)(NSWindow *window);
+void ARCSetPictureInPictureWindowObserver(ARCPictureInPictureWindowObserver observer);
+
 @interface ARCShaarRuntime (DevToolsTransport)
 - (BOOL)shaarPrivateDevToolsSubmit:(NSUInteger)operation tabID:(NSString *)tabID
                         windowID:(NSString *)windowID contextID:(NSString *)contextID

@@ -30,6 +30,16 @@ BOOL ProbeCaptureAllowed(void) {
   return ARCProbeRootIsOwned([NSURL fileURLWithPath:arguments[index + 1]]);
 }
 
+void HideOwnedProbePictureInPictureWindow(NSWindow *window) {
+  if (!window || !ProbeCaptureAllowed()) return;
+  window.alphaValue = 0;
+  window.ignoresMouseEvents = YES;
+}
+
+__attribute__((constructor)) void InstallProbePictureInPictureWindowObserver() {
+  ARCSetPictureInPictureWindowObserver(HideOwnedProbePictureInPictureWindow);
+}
+
 NSDictionary *ProbeTable(ARCShaarRuntime *runtime, const char *name) {
   Ivar field = class_getInstanceVariable(runtime.class, name);
   return field ? object_getIvar(runtime, field) : nil;

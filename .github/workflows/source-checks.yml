@@ -42,6 +42,7 @@ jobs:
       full: ${{ steps.plan.outputs.full }}
       website: ${{ steps.plan.outputs.website }}
       swift: ${{ steps.plan.outputs.swift }}
+      shipping_guard: ${{ steps.plan.outputs.shipping_guard }}
       base: ${{ steps.plan.outputs.base }}
       iterations: ${{ steps.plan.outputs.iterations }}
       queue_pr: ${{ steps.plan.outputs.queue_pr }}
@@ -394,6 +395,25 @@ jobs:
         with:
           stage: shaar-engine-simulation
 
+  shipping-probe-guard:
+    name: Shipping executable excludes verification probes
+    needs: plan
+    if: github.event_name == 'pull_request' && needs.plan.outputs.shipping_guard == 'true'
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: shipping
+          products: build/swiftpm/default
+      - name: Build shipping bundle and run assert_no_verification_code
+        env:
+          SHAAR_BUNDLE_SWIFT_JOBS: '4'
+        run: bash scripts/bundle-app.sh --with-engine
+
   shipping:
     name: Shipping bundle
     needs: [plan, fast, python-tests, dependency-review]
@@ -477,7 +497,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, basic-browsing, shaar-engine-simulation, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
+    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, basic-browsing, shaar-engine-simulation, shipping, shipping-probe-guard, codeql, inspector-contracts, website, sanitizers, dead-code]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -490,5 +510,6 @@ jobs:
           CI_FULL: ${{ needs.plan.outputs.full }}
           CI_WEBSITE: ${{ needs.plan.outputs.website }}
           CI_BROWSING: ${{ needs.plan.outputs.full == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+          CI_SHIPPING_GUARD: ${{ needs.plan.outputs.shipping_guard == 'true' && github.event_name == 'pull_request' }}
           CI_NIGHTLY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.deep_checks) }}
         run: python3 scripts/ci-gate.py

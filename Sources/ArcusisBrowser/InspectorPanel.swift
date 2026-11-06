@@ -9,6 +9,7 @@ struct InspectorPanel: View {
   var layout: InspectorLayoutSnapshot? = nil
   @State private var copyButtonFrame = CGRect.zero
   @State private var breadcrumbPosition: Int?
+  @State private var showsAgentBridge = false
   var body: some View {
     GeometryReader { geometry in
       VStack(spacing: 0) {
@@ -102,6 +103,19 @@ struct InspectorPanel: View {
       Image(systemName: "viewfinder").font(.system(size: 12)).foregroundStyle(.secondary)
       Text(InspectorL10n.string("Inspector")).font(.system(size: 12, weight: .semibold))
       Spacer()
+      if let bridge = model.engine?.developerModels[model.target.tabID]?.agentBridge {
+        Button {
+          showsAgentBridge.toggle()
+        } label: {
+          Image(systemName: "network")
+            .font(.system(size: 12))
+            .foregroundStyle(bridge.isConnected ? .orange : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Agent bridge")
+        .accessibilityLabel("Agent bridge")
+        .popover(isPresented: $showsAgentBridge) { AgentBridgeControls(model: bridge) }
+      }
       InspectorIconButton(
         InspectorL10n.string("Pick an element"), symbol: "cursorarrow.rays"
       ) { model.pick() }

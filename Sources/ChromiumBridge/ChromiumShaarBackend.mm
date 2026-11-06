@@ -285,6 +285,18 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     if (self.onDevToolsOpenURLRequest) self.onDevToolsOpenURLRequest(request);
     return;
   }
+  if (event->kind == SHAAR_EVENT_DEVTOOLS && [kind isEqualToString:@"controlStatus"] &&
+      [payload[@"schemaVersion"] isEqual:@1] && !event->session_id.size &&
+      [[NSSet setWithArray:payload.allKeys] isSubsetOfSet:
+          [NSSet setWithArray:@[@"schemaVersion", @"kind", @"enabled", @"connectionCount"]]] &&
+      _shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
+      [String(event->window_id) isEqualToString:_shaarTabWindows[tabID]] &&
+      [payload[@"enabled"] isKindOfClass:NSNumber.class] &&
+      [payload[@"connectionCount"] isKindOfClass:NSNumber.class] &&
+      self.onAgentBridgeStatus) {
+    self.onAgentBridgeStatus(tabID, profileID, payload);
+    return;
+  }
   if (event->kind == SHAAR_EVENT_FIND) {
     NSString *token = _shaarFindTokens[payload[@"requestID"]];
     if (token && _shaarTabs[tabID] && self.onFindResult)

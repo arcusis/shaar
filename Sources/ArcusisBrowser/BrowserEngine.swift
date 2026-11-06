@@ -193,6 +193,16 @@ final class BrowserEngine {
         inspector.documentChanged(url: inspector.target.url, committed: true)
       }
     }
+    callbacks.onAgentBridgeStatus = { [weak self] identity, owner, payload in
+      guard let self, let tab = UUID(uuidString: identity),
+        let profile = UUID(uuidString: owner),
+        self.store?.session.profileID(forTabID: tab) == profile,
+        self.runtime.windowID(forTabID: identity) == self.windowID,
+        let enabled = payload["enabled"] as? Bool,
+        let count = payload["connectionCount"] as? Int
+      else { return }
+      self.developerModels[tab]?.agentBridge.receive(enabled: enabled, connectionCount: count)
+    }
     store.library.onLoad = { [weak self] key, limit, completion in
       guard let self, !self.isClosed else {
         completion(.failure(LibraryDataError.invalidBookmarks))

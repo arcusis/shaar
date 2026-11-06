@@ -146,6 +146,19 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
 
 @implementation ARCShaarRuntime (DevToolsTransport)
 
+- (void)agentBridgeRequest:(NSUInteger)operation forTabID:(NSString *)tabID
+                 profileID:(NSString *)profileID windowID:(NSString *)windowID
+                completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
+  if (operation != SHAAR_OP_DEVTOOLS_CONTROL_ENABLE &&
+      operation != SHAAR_OP_DEVTOOLS_CONTROL_DISABLE &&
+      operation != SHAAR_OP_DEVTOOLS_CONTROL_STATUS) {
+    completion(nil, ShaarDevToolsError(@"This agent bridge operation is unavailable."));
+    return;
+  }
+  [self shaarDevToolsSubmit:operation tabID:tabID profileID:profileID windowID:windowID
+                   payload:@{@"schemaVersion": @1} completion:completion];
+}
+
 - (NSString *)shaarDevToolsProfileIDForTabID:(NSString *)tabID {
   NSString *profileID = ShaarTable(self, "_shaarTabProfiles")[tabID];
   NSString *windowID = ShaarTable(self, "_shaarTabWindows")[tabID];

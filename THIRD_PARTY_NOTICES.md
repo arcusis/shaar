@@ -19,3 +19,11 @@ Chromium framework remain available at `chrome://credits`.
   [Public Suffix pin](ThirdParty/PublicSuffix/pin.json).
 - **License:** MPL-2.0.
 - **License text:** [ThirdParty/PublicSuffix/LICENSE](ThirdParty/PublicSuffix/LICENSE).
+
+## Built-in framework DevTools
+
+Shaar bundles the official Chrome Web Store CRX packages for local development pages. The exact CRX SHA-256 values, extension IDs, and reproducible staging process are in [scripts/fetch-framework-devtools.py](scripts/fetch-framework-devtools.py). The app keeps the original code and assets, pins the packages, removes their update URLs, narrows host and content-script matches to loopback, and adds a Shaar DevTools bootstrap.
+
+- **React Developer Tools 8.0.0:** [React source](https://github.com/facebook/react/tree/1d34f91dfde6bba84d08b683aaba164c7194dacb/packages/react-devtools-extensions), MIT; [license text](ThirdParty/FrameworkDevTools/licenses/react-LICENSE).
+- **Vue.js DevTools 7.7.7:** [Vue DevTools source](https://github.com/vuejs/devtools/tree/v7.7.7), MIT; [license text](ThirdParty/FrameworkDevTools/licenses/vue-LICENSE). Vue DevTools v7 supports Vue 3.
+- **Angular DevTools 1.22.1:** [Angular DevTools source](https://github.com/angular/angular/tree/5ac4cf7b546df2d26c7fe33ac70934c2f26ede84/devtools), MIT; [license text](ThirdParty/FrameworkDevTools/licenses/angular-LICENSE). The bundled Material Symbols font retains its own license at `FrameworkDevTools/angular/third_party/fonts.google.com/material-symbols-outlined/LICENSE`.

@@ -231,12 +231,17 @@ import Foundation
       guard let mobile = shell.viewports.frames.first(where: { $0.preset == .iphone15Pro }) else {
         throw Failure("Mobile viewport missing")
       }
+      let beforeInsets = mobile.pngData
       let insets = ShaarViewportInsets(top: 80, right: 0, bottom: 30, left: 0)
       try await shell.viewports.perform(.setSafeArea(mobile.id, insets))
-      try await self.wait("safe-area action reflected in the viewport model") {
-        shell.viewports.frames.first(where: { $0.id == mobile.id })?.safeArea == insets
+      try await self.wait("safe-area CSS changed the rendered viewport frame") {
+        guard let frame = shell.viewports.frames.first(where: { $0.id == mobile.id }) else {
+          return false
+        }
+        return frame.safeArea == insets && !frame.pngData.isEmpty
+          && frame.pngData != beforeInsets
       }
-      return "Two PNG frames delivered; mobile safe-area command accepted"
+      return "Two PNG frames delivered; the mobile safe-area inset changed rendered pixels"
     }
     await check("masked-repro") {
       do {

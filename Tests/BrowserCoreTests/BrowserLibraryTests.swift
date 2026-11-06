@@ -543,3 +543,28 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
     }, completion: { result = $0 })
   #expect(applied.isEmpty && result == nil)
 }
+
+@Test @MainActor func browserImportBatchHandlesLargeSynchronousImportsWithoutRecursion() {
+  let operations = (0..<10_000).map { ["id": "\($0)"] }
+  var activeCallbacks = 0
+  var maximumCallbackDepth = 0
+  var appliedCount = 0
+  var completed = false
+
+  BrowserImport.apply(
+    operations,
+    using: { _, done in
+      appliedCount += 1
+      activeCallbacks += 1
+      maximumCallbackDepth = max(maximumCallbackDepth, activeCallbacks)
+      done(nil)
+      activeCallbacks -= 1
+    },
+    completion: { error in
+      completed = error == nil
+    })
+
+  #expect(appliedCount == operations.count)
+  #expect(maximumCallbackDepth == 1)
+  #expect(completed)
+}

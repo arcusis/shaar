@@ -130,18 +130,42 @@ public enum BrowserImport {
       ) -> Void,
     completion: @escaping @MainActor (Error?) -> Void
   ) {
-    guard let first = operations.first else {
-      completion(nil)
-      return
-    }
-    applyOperation(first) { error in
-      guard error == nil else {
-        completion(error)
-        return
+    var index = 0
+    var isApplying = false
+
+    func advance() {
+      guard !isApplying else { return }
+      isApplying = true
+      while index < operations.count {
+        let operation = operations[index]
+        index += 1
+        var completedSynchronously = false
+        var synchronousError: Error?
+        applyOperation(operation) { error in
+          if isApplying {
+            completedSynchronously = true
+            synchronousError = error
+          } else if let error {
+            completion(error)
+          } else {
+            advance()
+          }
+        }
+        guard completedSynchronously else {
+          isApplying = false
+          return
+        }
+        if let synchronousError {
+          isApplying = false
+          completion(synchronousError)
+          return
+        }
       }
-      apply(
-        Array(operations.dropFirst()), using: applyOperation, completion: completion)
+      isApplying = false
+      completion(nil)
     }
+
+    advance()
   }
 
   private static func chromium(_ roots: [String: Any]) -> [BrowserImportItem] {

@@ -9,6 +9,52 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor final class ShaarConsoleVisualTests: XCTestCase {
+  func testFileLogTapRendersOffscreenInBothAppearances() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_LOG_TAP_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen server log tap capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1156")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let directory = FileManager.default.temporaryDirectory
+      .appending(path: "shaar-vite-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let log = directory.appending(path: "vite.log")
+    try Data("Vite ready on :5173\nGET /api/items 200\n".utf8).write(to: log)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:5173/")!)
+    for scheme in [ColorScheme.light, .dark] {
+      let suffix = scheme == .dark ? "dark" : "light"
+      let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
+      let inspector = InspectorModel(target: target, engine: nil)
+      let before = ShaarDevToolsModel(target: target)
+      before.section = .console
+      before.open(inspector: inspector)
+      try capture(
+        ShaarDevToolsPanel(model: before, inspector: inspector, openChromium: {}),
+        named: "before-log-tap-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root, pageLabel: "localhost:5173")
+      before.close()
+      let after = ShaarDevToolsModel(target: target)
+      XCTAssertTrue(after.connectLogTap(log))
+      after.section = .console
+      after.open(inspector: inspector)
+      for _ in 0..<100 where after.localConsoleEvents.count < 2 {
+        try await Task.sleep(for: .milliseconds(20))
+      }
+      XCTAssertEqual(after.localConsoleEvents.count, 2)
+      try capture(
+        ShaarDevToolsPanel(model: after, inspector: inspector, openChromium: {}),
+        named: "after-log-tap-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root, pageLabel: "localhost:5173")
+      after.close()
+    }
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   func testNextMCPFeedRendersOffscreenInBothAppearances() async throws {
     guard ProcessInfo.processInfo.environment["SHAAR_NEXT_MCP_CAPTURE"] == "1" else {
       throw XCTSkip("Offscreen Next MCP capture requires explicit opt-in")
@@ -180,11 +226,11 @@ import XCTest
 
   private func capture<V: View>(
     _ panel: V, named name: String, scheme: ColorScheme, appearance: NSAppearance.Name,
-    root: URL
+    root: URL, pageLabel: String = "localhost:3000/dashboard"
   ) throws {
     let view = VStack(spacing: 0) {
       VStack(alignment: .leading, spacing: 8) {
-        Text("localhost:3000/dashboard")
+        Text(pageLabel)
           .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
         Divider()
         Text("Dashboard").font(.system(size: 24, weight: .semibold))

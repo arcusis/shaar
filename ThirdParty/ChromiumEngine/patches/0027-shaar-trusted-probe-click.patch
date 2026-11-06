@@ -1,0 +1,347 @@
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -207,6 +207,10 @@
+   SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL = 1090,
+   SHAAR_OP_PROBE_NODE_FRONTEND = 1091,
+   SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED = 1092,
++  // Testing only: send a native mouse click to a never-shown owned fixture tab.
++  SHAAR_OP_PROBE_TRUSTED_CLICK = 1093,
++  // Testing only: open Node frontend against a local inspector fixture.
++  SHAAR_OP_PROBE_NODE_LIVE = 1094,
+   // END devtools operation IDs.
+ 
+   // BEGIN media
+diff --git a/chrome/browser/shaar/lifecycle/shaar_lifecycle.h b/chrome/browser/shaar/lifecycle/shaar_lifecycle.h
+--- a/chrome/browser/shaar/lifecycle/shaar_lifecycle.h
++++ b/chrome/browser/shaar/lifecycle/shaar_lifecycle.h
+@@ -26,6 +26,8 @@
+ bool EngineIsRunning(shaar_engine* engine);
+ bool EngineIsReady(shaar_engine* engine);
+ bool EngineIsShuttingDown(shaar_engine* engine);
++// Uses the same marked disposable data-root check as lifecycle probes.
++bool HasOwnedProbeRoot(const shaar_engine* engine);
+ std::unique_ptr<ChromeContentBrowserClient> CreateContentBrowserClient();
+ std::vector<std::string> ChromeMainArguments(
+     const std::string& executable_path, const std::string& data_root,
+diff --git a/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc b/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc
+--- a/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc
++++ b/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc
+@@ -317,6 +317,10 @@
+   return g_state.engine == engine && g_state.shutting_down;
+ }
+ 
++bool HasOwnedProbeRoot(const shaar_engine* engine) {
++  return engine && IsMarkedProbeRoot(engine);
++}
++
+ }  // namespace shaar::lifecycle
+ 
+ extern "C" SHAAR_EXPORT shaar_error_code shaar_test_keep_alive_state(
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_page_view_host.h b/chrome/browser/shaar/windows_tabs/shaar_page_view_host.h
+--- a/chrome/browser/shaar/windows_tabs/shaar_page_view_host.h
++++ b/chrome/browser/shaar/windows_tabs/shaar_page_view_host.h
+@@ -27,6 +27,7 @@
+   PageViewHost& operator=(const PageViewHost&) = delete;
+ 
+   NSWindow* window() const { return window_; }
++  bool NeverShown() const;
+   NSView* view() const { return view_; }
+   NSView* selected_view() const { return selected_view_; }
+   bool Attach(NSView* tab_view);
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_page_view_host.mm b/chrome/browser/shaar/windows_tabs/shaar_page_view_host.mm
+--- a/chrome/browser/shaar/windows_tabs/shaar_page_view_host.mm
++++ b/chrome/browser/shaar/windows_tabs/shaar_page_view_host.mm
+@@ -11,6 +11,20 @@
+ #include "chrome/browser/devtools/devtools_window.h"
+ 
+ #include "content/public/browser/web_contents.h"
++
++@interface ShaarPageHostWindow : NSWindow
++@property(nonatomic, readonly) BOOL wasShown;
++@end
++
++@implementation ShaarPageHostWindow {
++  BOOL _wasShown;
++}
++- (BOOL)wasShown { return _wasShown; }
++- (void)orderWindow:(NSWindowOrderingMode)place relativeTo:(NSInteger)otherWin {
++  if (place != NSWindowOut) _wasShown = YES;
++  [super orderWindow:place relativeTo:otherWin];
++}
++@end
+ 
+ namespace shaar::windows_tabs {
+ 
+@@ -42,7 +56,7 @@
+ }
+ 
+ PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
+-  window_ = window ?: [[NSWindow alloc] initWithContentRect:frame
++  window_ = window ?: [[ShaarPageHostWindow alloc] initWithContentRect:frame
+                                         styleMask:(NSWindowStyleMaskTitled |
+                                                    NSWindowStyleMaskClosable |
+                                                    NSWindowStyleMaskResizable |
+@@ -69,6 +83,11 @@
+   deminiaturize_observer_ = [center
+       addObserverForName:NSWindowDidDeminiaturizeNotification
+                  object:window_ queue:nil usingBlock:refresh];
++}
++
++bool PageViewHost::NeverShown() const {
++  return [window_ isKindOfClass:ShaarPageHostWindow.class] &&
++         ![(ShaarPageHostWindow*)window_ wasShown] && !window_.isVisible;
+ }
+ 
+ PageViewHost::~PageViewHost() {
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h b/chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h
+--- a/chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h
++++ b/chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h
+@@ -14,6 +14,9 @@
+ }
+ 
+ namespace shaar::windows_tabs {
++
++// True only for an attached selected tab in an engine host never ordered onscreen.
++bool HasNeverShownPageHost(shaar_window* window, content::WebContents* contents);
+ void ReleasePageHost(shaar_window* window);
+ void ShowSelectedWebContents(content::WebContents* previous,
+                              content::WebContents* selected);
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_page_view_binding.mm b/chrome/browser/shaar/windows_tabs/shaar_page_view_binding.mm
+--- a/chrome/browser/shaar/windows_tabs/shaar_page_view_binding.mm
++++ b/chrome/browser/shaar/windows_tabs/shaar_page_view_binding.mm
+@@ -103,6 +103,13 @@
+ }  // namespace
+ 
+ namespace shaar::windows_tabs {
++bool HasNeverShownPageHost(shaar_window* window,
++                           content::WebContents* contents) {
++  PageViewHost* host = FindHost(window, false);
++  return host && contents && host->NeverShown() &&
++         host->selected_view() == contents->GetNativeView().GetNativeNSView();
++}
++
+ void ShowSelectedWebContents(content::WebContents* previous,
+                              content::WebContents* selected) {
+   if (previous && previous != selected)
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+@@ -14,6 +14,8 @@
+   registry->Register(SHAAR_OP_DEVTOOLS_CALL, SHAAR_OP_DEVTOOLS_CALL,
+                      &shaar::devtools::HandleDevToolsOperation);
+   registry->Register(SHAAR_OP_PROBE_CAPTURE_TAB, SHAAR_OP_PROBE_CAPTURE_TAB,
++                     &shaar::devtools::HandleDevToolsOperation);
++  registry->Register(SHAAR_OP_PROBE_TRUSTED_CLICK, SHAAR_OP_PROBE_NODE_LIVE,
+                      &shaar::devtools::HandleDevToolsOperation);
+   registry->Register(SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL,
+                      SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED,
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.h b/chrome/browser/shaar/devtools/shaar_devtools.h
+--- a/chrome/browser/shaar/devtools/shaar_devtools.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools.h
+@@ -61,6 +61,11 @@
+                            content::WebContents* contents,
+                            shaar_operation operation,
+                            int capability);
++// Strict testing-only click schema and policy. Coordinates are viewport pixels.
++bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y);
++bool ParseNodeProbePort(shaar_bytes args_json, int* port);
++bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
++                       bool never_shown, const GURL& url);
+ void EmitFrontendStateEvent(shaar_engine* engine,
+                             const DevToolsTargetIdentity& identity,
+                             bool open);
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -22,6 +22,7 @@
+ #include <map>
+ #include <set>
+ #include <optional>
++#include <string>
+ #include <string_view>
+ #include <utility>
+ #include <vector>
+@@ -43,12 +44,20 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+ #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
++#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
++#include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "base/values.h"
+ #include "content/browser/renderer_host/render_widget_host_impl.h"
+ #include "content/public/browser/devtools_agent_host.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/render_widget_host_view.h"
++#include "content/public/browser/render_widget_host.h"
++#include "third_party/blink/public/common/input/web_mouse_event.h"
++#include "ui/gfx/geometry/point_f.h"
+ #include "content/public/browser/visibility.h"
+ #include "ui/gfx/codec/png_codec.h"
+ #include "ui/gfx/geometry/size.h"
+@@ -1112,6 +1121,48 @@
+   return IsProtocolPageTargetFor(contents, host.get()) ? host : nullptr;
+ }
+ 
++bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y) {
++  if (!x || !y || !args_json.data || args_json.size > 128)
++    return false;
++  auto value = base::JSONReader::Read(
++      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
++  if (!value || !value->is_dict() ||
++      !ExactKeys(value->GetDict(), {"schemaVersion", "x", "y"}) ||
++      value->GetDict().FindInt("schemaVersion") != 1)
++    return false;
++  auto point_x = value->GetDict().FindInt("x");
++  auto point_y = value->GetDict().FindInt("y");
++  if (!point_x || !point_y || *point_x < 0 || *point_y < 0 ||
++      *point_x >= 8192 || *point_y >= 8192)
++    return false;
++  *x = *point_x;
++  *y = *point_y;
++  return true;
++}
++
++bool ParseNodeProbePort(shaar_bytes args_json, int* port) {
++  if (!port || !args_json.data || args_json.size > 128)
++    return false;
++  auto value = base::JSONReader::Read(
++      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
++  if (!value || !value->is_dict() ||
++      !ExactKeys(value->GetDict(), {"schemaVersion", "nodeInspectPort"}) ||
++      value->GetDict().FindInt("schemaVersion") != 1)
++    return false;
++  auto value_port = value->GetDict().FindInt("nodeInspectPort");
++  if (!value_port || *value_port < 1 || *value_port > 65535)
++    return false;
++  *port = *value_port;
++  return true;
++}
++
++bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
++                       bool never_shown, const GURL& url) {
++  return testing && owned_root && selected && never_shown &&
++         url.SchemeIs("http") &&
++         (url.host() == "127.0.0.1" || url.host() == "localhost");
++}
++
+ void EmitFrontendStateEvent(shaar_engine* engine,
+                             const DevToolsTargetIdentity& identity,
+                             bool open) {
+@@ -1197,6 +1248,65 @@
+     return Fail(error, SHAAR_WRONG_PROFILE,
+                 "DevTools profile identity does not match the requested scope");
+ 
++  if (operation == SHAAR_OP_PROBE_NODE_LIVE) {
++    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
++    const bool selected = context->browser_tabs->IsSelectedWebContents(
++        engine, window, tab, contents);
++    if (!ProbeWindowAllowed(testing && std::strcmp(testing, "1") == 0,
++                           shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
++                           shaar::windows_tabs::HasNeverShownPageHost(window, contents),
++                           contents->GetLastCommittedURL()) || !scope.profile ||
++        scope.private_session)
++      return Fail(error, SHAAR_POLICY_BLOCKED, "Node inspector probe is unavailable");
++    int port = 0;
++    if (!ParseNodeProbePort(args_json, &port))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid Node inspector port");
++    Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
++    base::ListValue locations;
++    locations.Append("127.0.0.1:" + std::to_string(port));
++    profile->GetPrefs()->SetBoolean(prefs::kDevToolsDiscoverTCPTargetsEnabled,
++                                    true);
++    profile->GetPrefs()->SetList(prefs::kDevToolsTCPDiscoveryConfig,
++                                 std::move(locations));
++    DevToolsWindow::OpenNodeFrontendWindow(
++        profile, DevToolsOpenedByAction::kOpenForNodeFromAnotherTarget, contents);
++    Reply({request_id, reply, reply_context}, SHAAR_OK,
++          R"({"schemaVersion":1,"submitted":true})");
++    return SHAAR_OK;
++  }
++  if (operation == SHAAR_OP_PROBE_TRUSTED_CLICK) {
++    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
++    const bool selected = context->browser_tabs->IsSelectedWebContents(
++        engine, window, tab, contents);
++    if (!ProbeWindowAllowed(testing && std::strcmp(testing, "1") == 0,
++                           shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
++                           shaar::windows_tabs::HasNeverShownPageHost(window, contents),
++                           contents->GetLastCommittedURL()) || !scope.profile ||
++        scope.private_session)
++      return Fail(error, SHAAR_POLICY_BLOCKED, "trusted click probe is unavailable");
++    int x = 0;
++    int y = 0;
++    if (!ParseProbeClickArguments(args_json, &x, &y))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid trusted click point");
++    auto* view = contents->GetRenderWidgetHostView();
++    if (!view || !view->GetRenderWidgetHost() ||
++        x >= view->GetViewBounds().width() || y >= view->GetViewBounds().height())
++      return Fail(error, SHAAR_NOT_READY, "trusted click viewport unavailable");
++    auto* widget = view->GetRenderWidgetHost();
++    const gfx::PointF point(x, y);
++    const base::TimeTicks now = base::TimeTicks::Now();
++    widget->ForwardMouseEvent(blink::WebMouseEvent(
++        blink::WebInputEvent::Type::kMouseDown, point, point,
++        blink::WebPointerProperties::Button::kLeft, 1,
++        blink::WebInputEvent::kLeftButtonDown, now));
++    widget->ForwardMouseEvent(blink::WebMouseEvent(
++        blink::WebInputEvent::Type::kMouseUp, point, point,
++        blink::WebPointerProperties::Button::kLeft, 1,
++        blink::WebInputEvent::kNoModifiers, base::TimeTicks::Now()));
++    Reply({request_id, reply, reply_context}, SHAAR_OK,
++          R"({"schemaVersion":1,"submitted":true})");
++    return SHAAR_OK;
++  }
+   if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
+       operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
+     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -83,6 +83,43 @@
+ shaar_bytes Bytes(const std::string& value) {
+   return {value.data(), value.size()};
+ }
++
++TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
++  int x = -1;
++  int y = -1;
++  EXPECT_TRUE(ParseProbeClickArguments(
++      Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &x, &y));
++  EXPECT_EQ(20, x);
++  EXPECT_EQ(30, y);
++  for (const std::string invalid : {
++           R"({"schemaVersion":1,"x":-1,"y":2})",
++           R"({"schemaVersion":1,"x":20,"y":8192})",
++           R"({"schemaVersion":1,"x":20.5,"y":2})",
++           R"({"schemaVersion":1,"x":20,"y":2,"method":"open"})",
++           R"({"schemaVersion":2,"x":20,"y":2})"}) {
++    EXPECT_FALSE(ParseProbeClickArguments(Bytes(invalid), &x, &y));
++  }
++  int port = 0;
++  EXPECT_TRUE(ParseNodeProbePort(
++      Bytes(R"({"schemaVersion":1,"nodeInspectPort":9229})"), &port));
++  EXPECT_EQ(9229, port);
++  EXPECT_FALSE(ParseNodeProbePort(
++      Bytes(R"({"schemaVersion":1,"nodeInspectPort":0})"), &port));
++  EXPECT_FALSE(ParseNodeProbePort(
++      Bytes(R"({"schemaVersion":1,"nodeInspectPort":65536})"), &port));
++  EXPECT_FALSE(ParseNodeProbePort(
++      Bytes(R"({"schemaVersion":1,"nodeInspectPort":9229,"url":"remote"})"),
++      &port));
++  const GURL fixture("http://127.0.0.1:8123/cross-site-a");
++  EXPECT_TRUE(ProbeWindowAllowed(true, true, true, true, fixture));
++  EXPECT_FALSE(ProbeWindowAllowed(false, true, true, true, fixture));
++  EXPECT_FALSE(ProbeWindowAllowed(true, false, true, true, fixture));
++  EXPECT_FALSE(ProbeWindowAllowed(true, true, false, true, fixture));
++  EXPECT_FALSE(ProbeWindowAllowed(true, true, true, false, fixture));
++  EXPECT_FALSE(ProbeWindowAllowed(true, true, true, true,
++                                 GURL("https://example.com/")));
++}
++
+ 
+ class FakeDevToolsRuntime final : public DevToolsRuntimeServices {
+  public:

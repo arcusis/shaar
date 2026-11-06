@@ -92,8 +92,17 @@ final class DevToolsRouteProbe {
     try await wait("closing MCP tab leaves DevTools alive") {
       engine.liveTabs.contains(tab) && dockAudit(identity)?["open"] as? Bool == true
     }
+    var nodePayload: [String: Any] = ["schemaVersion": 1]
+    if let portValue = ProcessInfo.processInfo.environment["SHAAR_NODE_INSPECTOR_PORT"] {
+      guard let port = Int(portValue), (1...65535).contains(port) else {
+        throw Failure("Invalid local Node inspector port")
+      }
+      nodePayload["nodeInspectPort"] = port
+    }
     try expect(
-      await route(tab: identity, operation: 1091, payload: ["schemaVersion": 1]),
+      await route(
+        tab: identity, operation: nodePayload["nodeInspectPort"] == nil ? 1091 : 1094,
+        payload: nodePayload),
       "Node discovery request reaches the engine")
     try await wait("Node discovery opens in an app-owned tab") {
       store.session.selectedPage?.tab.url.path == "/bundled/node_app.html"
@@ -104,6 +113,12 @@ final class DevToolsRouteProbe {
     }
     try await wait("Node frontend tab has a native view") {
       runtime.view(forTabID: nodeTab.uuidString) != nil
+    }
+    if nodePayload["nodeInspectPort"] != nil {
+      try await wait("Node frontend attaches to local inspector target") {
+        await self.nodeFrontendTitle(nodeTab)?.contains("shaar-node-inspect-fixture.js") == true
+      }
+      checks.append("Node frontend attaches to a live local node --inspect target")
     }
     try expect(
       await route(
@@ -127,6 +142,14 @@ final class DevToolsRouteProbe {
 
   private func dockAudit(_ tabID: String) -> [AnyHashable: Any]? {
     ARCProbeDevToolsDockAudit(engine.runtime, tabID, engine.windowID, nil)
+  }
+
+  private func nodeFrontendTitle(_ tabID: UUID) async -> String? {
+    await withCheckedContinuation { continuation in
+      engine.runtime.evaluate(inTabID: tabID.uuidString, script: "document.title") {
+        continuation.resume(returning: $0)
+      }
+    }
   }
 
   private func hiddenWindowCountIs(_ count: Int) -> Bool {
@@ -305,9 +328,9 @@ final class DevToolsRouteProbe {
     try expect(revoked, "agent bridge revokes the grant on navigation")
   }
 
-  private func wait(_ message: String, _ condition: () -> Bool) async throws {
+  private func wait(_ message: String, _ condition: () async -> Bool) async throws {
     for _ in 0..<Int(150 * ProbeTimeout.scale) {
-      if condition() {
+      if await condition() {
         checks.append(message)
         return
       }

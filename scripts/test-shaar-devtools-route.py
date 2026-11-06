@@ -6,21 +6,57 @@
 """Run the hidden DevTools-owned tab route against the locally staged Shaar engine."""
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import re
+import select
 import subprocess
 import tempfile
 import threading
 from http.server import ThreadingHTTPServer
+from urllib.request import urlopen
 
 from engine_fixture import Fixture
+
+
+@contextmanager
+def node_inspector(root: Path):
+    fixture = root / "shaar-node-inspect-fixture.js"
+    fixture.write_text("setInterval(() => {}, 1000);\n")
+    process = subprocess.Popen(
+        ["node", "--inspect=127.0.0.1:0", str(fixture)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE, text=True, start_new_session=True,
+    )
+    try:
+        ready, _, _ = select.select([process.stderr], [], [], 10)
+        line = process.stderr.readline() if ready else ""
+        match = re.search(r"ws://127\.0\.0\.1:(\d+)/", line)
+        if not match:
+            raise RuntimeError(f"Node inspector did not start: {line.strip()}")
+        port = int(match.group(1))
+        with urlopen(f"http://127.0.0.1:{port}/json/list", timeout=5) as response:
+            targets = json.load(response)
+        if not any(fixture.name in target.get("title", "") for target in targets):
+            raise RuntimeError("Node inspector did not publish the fixture target")
+        yield port
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        process.stderr.close()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path)
     parser.add_argument("--receipt", required=True, type=Path)
+    parser.add_argument("--with-node-inspector", action="store_true")
     options = parser.parse_args()
     app = options.app.resolve()
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
@@ -43,13 +79,21 @@ def main() -> None:
             environment = dict(os.environ, HOME=str(root / "home"),
                                CFFIXED_USER_HOME=str(root / "home"),
                                SHAAR_ENGINE_TESTING="1", RUNNER_TEMP=str(root))
-            try:
-                process = subprocess.run(command, env=environment, capture_output=True,
-                                         text=True, timeout=180, check=False)
-            except subprocess.TimeoutExpired as error:
-                options.receipt.write_text(json.dumps({"timeout": True,
-                                                       "stderr": str(error)}) + "\n")
-                raise
+            def run_probe():
+                try:
+                    return subprocess.run(command, env=environment, capture_output=True,
+                                          text=True, timeout=180, check=False)
+                except subprocess.TimeoutExpired as error:
+                    options.receipt.write_text(json.dumps({"timeout": True,
+                                                           "stderr": str(error)}) + "\n")
+                    raise
+
+            if options.with_node_inspector:
+                with node_inspector(root) as port:
+                    environment["SHAAR_NODE_INSPECTOR_PORT"] = str(port)
+                    process = run_probe()
+            else:
+                process = run_probe()
             evidence = json.loads(report.read_text()) if report.exists() else None
             detail_path = root / "initial-devtools-route.json"
             detail = json.loads(detail_path.read_text()) if detail_path.exists() else None

@@ -349,6 +349,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0026-shaar-devtools-dom-session-events.patch",
       "sha256": "8b676da2245e2af85eac4d3606d03adf27c6f8b7e317a569787423a9c9552751"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0027-shaar-trusted-probe-click.patch",
+      "sha256": "aa3982294c2db0dbc67c6f3626bdae6ea8a4eb3321b79e18db2c5b37757a0508"
     }
   ],
   "requiredExports": [

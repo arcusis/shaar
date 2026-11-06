@@ -36,6 +36,7 @@ final class EngineProbe {
   private let mediaSessionOnlyMode: Bool
   private let devtoolsRouteOnlyMode: Bool
   private let measurementTabCount: Int?
+  private let measurementEager: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -77,7 +78,7 @@ final class EngineProbe {
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
     localizationMode: Bool, basicBrowsingMode: Bool, devModeOnly: Bool,
     mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool,
-    measurementTabCount: Int?
+    measurementTabCount: Int?, measurementEager: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -99,6 +100,7 @@ final class EngineProbe {
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
     self.devtoolsRouteOnlyMode = devtoolsRouteOnlyMode
     self.measurementTabCount = measurementTabCount
+    self.measurementEager = measurementEager
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -231,6 +233,10 @@ final class EngineProbe {
         else { return nil }
         return Int(arguments[index + 1])
       }()
+      let measurementEager = arguments.contains("--probe-measure-eager")
+      guard !measurementEager || measurementTabCount != nil else {
+        throw ProbeFailure("Eager measurement requires --probe-measure-tabs.")
+      }
       guard
         measurementTabCount.map({ [1, 10, 30].contains($0) }) ?? !arguments.contains(
           "--probe-measure-tabs")
@@ -316,7 +322,7 @@ final class EngineProbe {
         basicBrowsingMode: basicBrowsingMode, devModeOnly: devModeOnly,
         mediaSessionOnlyMode: mediaSessionOnlyMode,
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
-        measurementTabCount: measurementTabCount)
+        measurementTabCount: measurementTabCount, measurementEager: measurementEager)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -347,7 +353,7 @@ final class EngineProbe {
   private func attachNativeShell() throws {
     browserEngine = try BrowserEngine(
       events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false,
-      lazyPinnedTabs: savedTabCapacityMode)
+      lazyPinnedTabs: savedTabCapacityMode || (measurementTabCount != nil && !measurementEager))
     guard let content = runtime.hostView else { return }
     let host = NSHostingView(rootView: BrowserWindow(store: store))
     host.frame = content.bounds
@@ -554,17 +560,27 @@ final class EngineProbe {
       bootstrapStage = .openingAlpha
       browserEngine?.reconcile()
       if let measurementTabCount {
-        guard browserEngine != nil else { throw ProbeFailure("Measurement engine is missing.") }
+        guard let browserEngine else { throw ProbeFailure("Measurement engine is missing.") }
         let tabIDs = store.session.selectedSpace.tabs.map { $0.id.uuidString }
-        for tabID in tabIDs { try await waitForRestoredTab(tabID) }
-        for tabID in tabIDs {
+        guard let selectedID = store.session.selectedPage?.tab.id.uuidString else {
+          throw ProbeFailure("Measurement selected tab is missing.")
+        }
+        let loadedIDs = measurementEager ? tabIDs : [selectedID]
+        for tabID in loadedIDs { try await waitForRestoredTab(tabID) }
+        for tabID in loadedIDs {
           try await waitUntilMeasurementPage(tabID)
         }
+        guard browserEngine.liveTabs.count == loadedIDs.count,
+          store.session.selectedSpace.tabs.count == measurementTabCount
+        else { throw ProbeFailure("Measurement tab materialization count is incorrect.") }
         bootstrapStage = .ready
         fixtureStage = "measurement-ready"
         let ready =
           [
-            "schema": 1, "phase": phase, "tabs": measurementTabCount,
+            "schema": 2, "phase": phase, "tabs": measurementTabCount,
+            "mode": measurementEager ? "eager" : "lazy",
+            "liveTabs": browserEngine.liveTabs.count,
+            "placeholders": measurementTabCount - browserEngine.liveTabs.count,
             "readyAt": ProcessInfo.processInfo.systemUptime,
           ] as [String: Any]
         try JSONSerialization.data(withJSONObject: ready, options: [.sortedKeys])
@@ -572,7 +588,8 @@ final class EngineProbe {
         let hold = Double(argumentValue("--probe-measure-seconds") ?? "45") ?? 45
         try await Task.sleep(for: .seconds(hold))
         checks.append(
-          "\(measurementTabCount) authored local fixture tabs loaded in a hidden window")
+          "\(browserEngine.liveTabs.count) fixture pages loaded and \(measurementTabCount - browserEngine.liveTabs.count) placeholders in a hidden window"
+        )
         localFixturesPassed = true
         finish(error: nil)
         return

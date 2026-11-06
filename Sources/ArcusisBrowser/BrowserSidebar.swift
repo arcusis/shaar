@@ -776,6 +776,12 @@ struct BrowserSidebar: View {
                 if space.folders.isEmpty { ShellL10n.text("Create a folder first") }
               }
               Button(ShellL10n.string("Separate from Split")) { store.unsplitTab(id) }
+              if let member = space.tabs.first(where: { $0.id == id }) {
+                Button(
+                  ShellL10n.string(
+                    member.keepAlive ? "Stop keeping tab alive" : "Keep tab alive")
+                ) { store.setKeepAlive(!member.keepAlive, for: id) }
+              }
               Button(ShellL10n.string("Close tab")) { store.closeTab(id) }
             })
         },
@@ -940,6 +946,9 @@ struct BrowserSidebar: View {
         .disabled(!store.canAddTabToFavorites(tab.id, in: space.id))
         Divider()
         Button(ShellL10n.string(tab.isPinned ? "Unpin tab" : "Pin tab")) { store.togglePin(tab.id) }
+        Button(ShellL10n.string(tab.keepAlive ? "Stop keeping tab alive" : "Keep tab alive")) {
+          store.setKeepAlive(!tab.keepAlive, for: tab.id)
+        }
         Button(ShellL10n.string("Move up")) { shiftTab(tab, in: space, by: -1) }.disabled(
           boundary.isFirst)
         Button(ShellL10n.string("Move down")) { shiftTab(tab, in: space, by: 1) }.disabled(

@@ -66,7 +66,7 @@ def process_tree(root_pid):
     return [(pid, rows[pid]) for pid in members if pid in rows]
 
 
-def measure_case(executable, port, tab_count, sample_seconds):
+def measure_case(executable, port, tab_count, sample_seconds, eager):
     with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as temporary:
         root = Path(temporary)
         (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
@@ -76,8 +76,10 @@ def measure_case(executable, port, tab_count, sample_seconds):
             "--probe-url", f"http://127.0.0.1:{port}/page-1",
             "--probe-phase", "initial", "--probe-output", str(report),
             "--probe-measure-tabs", str(tab_count), "--probe-measure-seconds",
-            str(sample_seconds + 8),
+            str(max(60, sample_seconds + 30)),
         ]
+        if eager:
+            command.append("--probe-measure-eager")
         started = time.monotonic()
         process = subprocess.Popen(
             command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -97,6 +99,11 @@ def measure_case(executable, port, tab_count, sample_seconds):
             ready = json.loads(report.read_text())
             if ready.get("tabs") != tab_count:
                 raise RuntimeError(f"unexpected readiness report: {ready}")
+            expected_live = tab_count if eager else 1
+            if (ready.get("mode") != ("eager" if eager else "lazy")
+                    or ready.get("liveTabs") != expected_live
+                    or ready.get("placeholders") != tab_count - expected_live):
+                raise RuntimeError(f"unexpected materialization report: {ready}")
             cold_seconds = time.monotonic() - started
             rss_samples, cpu_samples, process_samples = [], [], []
             sample_end = time.monotonic() + sample_seconds
@@ -105,6 +112,8 @@ def measure_case(executable, port, tab_count, sample_seconds):
                 row[2] for _pid, row in process_tree(process.pid)
             )
             while time.monotonic() < sample_end:
+                if process.poll() is not None:
+                    raise RuntimeError(f"probe exited during sampling: {process.returncode}")
                 tree = process_tree(process.pid)
                 now = time.monotonic()
                 rss_samples.append(sum(row[1] for _pid, row in tree) / 1024)
@@ -116,7 +125,9 @@ def measure_case(executable, port, tab_count, sample_seconds):
                 time.sleep(1)
             return {
                 "tabs": tab_count,
-                "coldLaunchToAllPagesReadySeconds": round(cold_seconds, 3),
+                "mode": "eager" if eager else "lazy",
+                "coldLaunchToReadySeconds": round(cold_seconds, 3),
+                "readiness": "all-pages" if eager else "selected-page",
                 "processTreeRSSMiBMean": round(sum(rss_samples) / len(rss_samples), 1),
                 "processTreeRSSMiBMin": round(min(rss_samples), 1),
                 "processTreeRSSMiBMax": round(max(rss_samples), 1),
@@ -141,6 +152,7 @@ def main():
         "--output", type=Path, default=Path("build/performance-baseline.json")
     )
     parser.add_argument("--sample-seconds", type=int, default=15)
+    parser.add_argument("--eager", action="store_true", help="measure the former eager probe mode")
     args = parser.parse_args()
     executable = args.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
@@ -148,13 +160,13 @@ def main():
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FixtureHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        cases = [measure_case(executable, server.server_port, count, args.sample_seconds)
+        cases = [measure_case(executable, server.server_port, count, args.sample_seconds, args.eager)
                  for count in (1, 10, 30)]
     finally:
         server.shutdown()
         server.server_close()
     result = {
-        "schema": 1,
+        "schema": 2,
         "scope": "Hidden verification app; fixed loopback fixture; app and descendant process RSS",
         "appBundleBytes": int(
             subprocess.check_output(["du", "-sk", str(args.app)], text=True).split()[0]

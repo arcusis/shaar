@@ -258,12 +258,17 @@ final class BrowserWorkspaceStore {
 }
 
 extension BrowserWorkspace {
-  /// Favorite and shared pin IDs by profile: the sidebar items whose icons survive a restart.
+  /// Saved page IDs by profile: every placeholder can show its last icon at restart.
   fileprivate var faviconItemIDs: [UUID: Set<UUID>] {
     var itemIDs = Dictionary(grouping: catalog.favorites, by: \.profileID)
       .mapValues { Set($0.map(\.id)) }
     for space in catalog.spaces {
       itemIDs[space.profileID, default: []].formUnion(space.tabs.map(\.id))
+    }
+    for window in windows {
+      for space in window.session.spaces {
+        itemIDs[space.profileID, default: []].formUnion(space.tabs.map(\.id))
+      }
     }
     return itemIDs
   }

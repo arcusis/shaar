@@ -1030,6 +1030,11 @@ final class BrowserStore {
     }
   }
 
+  func setKeepAlive(_ enabled: Bool, for id: UUID) {
+    guard session.setKeepAlive(enabled, for: id) else { return }
+    save()
+  }
+
   @discardableResult
   func moveSpace(_ id: UUID, before target: UUID?) -> Bool {
     guard sheet == nil, session.moveSpace(id, before: target) else { return false }

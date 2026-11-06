@@ -46,7 +46,7 @@ struct TabSuspensionTests {
     let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
     defer { engine.suspensionTask?.cancel() }
     engine.liveTabs = Set([active.id, inactive.id])
-    runtime.evaluationResult = "{\"x\":-240,\"y\":420}"
+    runtime.evaluationResult = "{\"x\":-240,\"y\":420,\"edited\":false}"
 
     let start = Date(timeIntervalSince1970: 1_800_000_000)
     engine.suspendInactiveTabs(now: start)
@@ -55,6 +55,42 @@ struct TabSuspensionTests {
 
     #expect(runtime.evaluatedScripts.last?.contains("scrollTo(-240") == true)
     _ = store
+  }
+
+  @Test func keepAliveAndEditedFormsStayLive() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let kept = BrowserTab(url: URL(string: "https://kept.example")!, keepAlive: true)
+    let edited = BrowserTab(url: URL(string: "https://edited.example")!)
+    let (_, engine, runtime) = try makeEngine(tabs: [active, kept, edited])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = Set([active.id, kept.id, edited.id])
+    runtime.evaluationResult = "{\"x\":0,\"y\":0,\"edited\":true}"
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+    #expect(engine.liveTabs.contains(kept.id))
+    #expect(engine.liveTabs.contains(edited.id))
+    #expect(runtime.discardedTabIDs.isEmpty)
+  }
+
+  @Test func activeDownloadInProfilePreventsSuspension() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let background = BrowserTab(url: URL(string: "https://download.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, background])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = Set([active.id, background.id])
+    engine.downloads.changed(
+      [
+        "id": UUID().uuidString, "filename": "sample.zip", "path": "",
+        "url": "https://download.example/sample.zip",
+        "state": "downloading", "paused": false, "dangerous": false, "offTheRecord": false,
+        "received": 0.0, "total": 100.0, "startTime": 1.0,
+      ], profileID: store.session.selectedSpace.profileID)
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+    #expect(runtime.discardedTabIDs.isEmpty)
+    #expect(engine.liveTabs.contains(background.id))
   }
 
   private func makeEngine(tabs: [BrowserTab]) throws -> (
@@ -77,7 +113,7 @@ struct TabSuspensionTests {
 private final class SuspensionTestRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var evaluatedScripts: [String] = []
   nonisolated(unsafe) var discardedTabIDs: [String] = []
-  nonisolated(unsafe) var evaluationResult = "{\"x\":18,\"y\":420}"
+  nonisolated(unsafe) var evaluationResult = "{\"x\":18,\"y\":420,\"edited\":false}"
 
   override func evaluate(
     inTabID tabID: String, script: String,

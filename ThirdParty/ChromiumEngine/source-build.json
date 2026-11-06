@@ -333,6 +333,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0023-shaar-devtools-viewport-frames.patch",
       "sha256": "3e450f900873179ef8772d007ee51d637bbfd59e41e6386d95ca6ab4d10c810e"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0024-shaar-devtools-network-rules.patch",
+      "sha256": "04838485483549eee0bd38c78d4d2c9f0a169e63a813dce5987d67dbdb9ab125"
     }
   ],
   "requiredExports": [

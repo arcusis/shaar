@@ -1,0 +1,520 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -1123,2 +1123,3 @@
+     case SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY:
++    case SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES:
+     case SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND:
+@@ -1136,3 +1137,5 @@
+   }
+-  const bool panel_operation = operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
++  const bool panel_operation =
++      operation == SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES ||
++      operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
+       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
+@@ -1346,3 +1349,4 @@
+       operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
+-      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND) {
++      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND ||
++      operation == SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES) {
+     if (!PolicyAllowsOperation(context->devtools_runtime, engine, scope,
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+@@ -25,2 +25,5 @@
+                      &shaar::devtools::HandleDevToolsOperation);
++  registry->Register(SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES,
++                     SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES,
++                     &shaar::devtools::HandleDevToolsOperation);
+   registry->Register(SHAAR_OP_DEVTOOLS_PANEL_OPEN,
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -20,3 +20,5 @@
+ #include <utility>
+-
++#include <vector>
++
++#include "base/base64.h"
+ #include "base/containers/span.h"
+@@ -27,2 +29,3 @@
+ #include "base/no_destructor.h"
++#include "base/strings/string_util.h"
+ #include "base/task/sequenced_task_runner.h"
+@@ -52,2 +55,15 @@
+ constexpr size_t kMaxPhase2ReplyBytes = 128 * 1024;
++constexpr size_t kMaxRuleInputBytes = 2 * 1024 * 1024;
++constexpr size_t kMaxRules = 100;
++
++struct NetworkRule {
++  std::string method;
++  std::string url;
++  std::string kind;
++  int status = 200;
++  base::ListValue headers;
++  std::string body_base64;
++  std::string redirect_url;
++  int delay_ms = 0;
++};
+ 
+@@ -101,2 +117,163 @@
+   return true;
++}
++
++bool ValidRuleURL(const std::string& value) {
++  if (value.empty() || value.size() > 4096)
++    return false;
++  const GURL url(value);
++  return url.is_valid() && url.SchemeIsHTTPOrHTTPS() &&
++         !url.has_username() && !url.has_password() && !url.has_ref();
++}
++
++bool ValidHeaderName(std::string_view name) {
++  if (name.empty() || name.size() > 128)
++    return false;
++  constexpr std::string_view punctuation = "!#$%&'*+-.^_`|~";
++  for (unsigned char byte : name) {
++    if ((byte >= '0' && byte <= '9') || (byte >= 'A' && byte <= 'Z') ||
++        (byte >= 'a' && byte <= 'z') || punctuation.find(byte) != punctuation.npos)
++      continue;
++    return false;
++  }
++  return true;
++}
++
++bool ParseNetworkRule(const base::Value& value, NetworkRule* output) {
++  if (!value.is_dict())
++    return false;
++  const auto& row = value.GetDict();
++  if (!HasKeys(row, {"method", "url", "kind", "status", "headers",
++                     "bodyBase64", "redirectURL", "delayMilliseconds"}))
++    return false;
++  const auto* method = row.FindString("method");
++  const auto* url = row.FindString("url");
++  const auto* kind = row.FindString("kind");
++  const auto* headers = row.FindList("headers");
++  const auto* body = row.FindString("bodyBase64");
++  const auto* redirect = row.FindString("redirectURL");
++  auto status = row.FindInt("status");
++  auto delay = row.FindInt("delayMilliseconds");
++  if (!method || !url || !kind || !headers || !body || !redirect ||
++      !status || !delay || !ValidRuleURL(*url) ||
++      *status < 100 || *status > 599 || *delay < 0 || *delay > 30000 ||
++      headers->size() > 32 || body->size() > 1398104)
++    return false;
++  if (*method != "GET" && *method != "POST" && *method != "PUT" &&
++      *method != "PATCH" && *method != "DELETE" && *method != "HEAD" &&
++      *method != "OPTIONS")
++    return false;
++  if (*kind != "mock" && *kind != "redirect" && *kind != "delay" &&
++      *kind != "requestHeaders" && *kind != "responseHeaders")
++    return false;
++  for (const auto& header : *headers) {
++    if (!header.is_dict() || !HasKeys(header.GetDict(), {"name", "value"}))
++      return false;
++    const auto* name = header.GetDict().FindString("name");
++    const auto* content = header.GetDict().FindString("value");
++    if (!name || !content || !ValidHeaderName(*name) ||
++        content->size() > 4096 || content->find('\0') != std::string::npos ||
++        content->find('\r') != std::string::npos ||
++        content->find('\n') != std::string::npos)
++      return false;
++  }
++  if (*kind == "mock") {
++    auto decoded = base::Base64Decode(*body);
++    if (!decoded || decoded->size() > kMaxBodyBytes)
++      return false;
++  } else if (!body->empty()) {
++    return false;
++  }
++  if (*kind == "redirect" ? !ValidRuleURL(*redirect) : !redirect->empty())
++    return false;
++  if (*kind != "delay" && *delay != 0)
++    return false;
++  if ((*kind == "requestHeaders" || *kind == "responseHeaders") &&
++      headers->empty())
++    return false;
++  output->method = *method;
++  output->url = *url;
++  output->kind = *kind;
++  output->status = *status;
++  output->headers = headers->Clone();
++  output->body_base64 = *body;
++  output->redirect_url = *redirect;
++  output->delay_ms = *delay;
++  return true;
++}
++
++base::ListValue MergeHeaders(const base::ListValue& existing,
++                             const base::ListValue& changes) {
++  base::ListValue merged;
++  for (const auto& item : existing) {
++    const auto* name = item.is_dict() ? item.GetDict().FindString("name") : nullptr;
++    if (!name)
++      continue;
++    bool replaced = false;
++    for (const auto& change : changes) {
++      const auto* replacement = change.GetDict().FindString("name");
++      if (replacement && base::EqualsCaseInsensitiveASCII(*name, *replacement)) {
++        replaced = true;
++        break;
++      }
++    }
++    if (!replaced)
++      merged.Append(item.Clone());
++  }
++  for (const auto& item : changes)
++    merged.Append(item.Clone());
++  return merged;
++}
++
++base::ListValue RequestHeaders(const base::DictValue& source) {
++  base::ListValue headers;
++  for (const auto item : source) {
++    if (!item.second.is_string())
++      continue;
++    base::DictValue header;
++    header.Set("name", item.first);
++    header.Set("value", item.second.GetString());
++    headers.Append(std::move(header));
++  }
++  return headers;
++}
++
++std::string FetchURLPattern(std::string_view url) {
++  std::string pattern;
++  for (char character : url) {
++    if (character == '*' || character == '?' || character == '\\')
++      pattern.push_back('\\');
++    pattern.push_back(character);
++  }
++  return pattern;
++}
++
++bool ParseNetworkRules(const base::ListValue& input,
++                       std::vector<NetworkRule>* output) {
++  if (input.size() > kMaxRules)
++    return false;
++  output->reserve(input.size());
++  for (const auto& item : input) {
++    NetworkRule rule;
++    if (!ParseNetworkRule(item, &rule))
++      return false;
++    output->push_back(std::move(rule));
++  }
++  return true;
++}
++
++base::DictValue FetchEnableParams(const std::vector<NetworkRule>& rules) {
++  base::DictValue params;
++  base::ListValue patterns;
++  std::set<std::pair<std::string, std::string>> unique;
++  for (const auto& rule : rules) {
++    const std::string stage = rule.kind == "responseHeaders" ? "Response" : "Request";
++    if (!unique.emplace(rule.url, stage).second)
++      continue;
++    base::DictValue pattern;
++    pattern.Set("urlPattern", FetchURLPattern(rule.url));
++    pattern.Set("requestStage", stage);
++    patterns.Append(std::move(pattern));
++  }
++  params.Set("patterns", std::move(patterns));
++  return params;
+ }
+@@ -1077,2 +1254,7 @@
+     closing_ = true;
++    if (attached_) {
++      ResumePausedRequests();
++      if (!rules_.empty() || pending_rules_)
++        SendCommand("Fetch.disable", base::DictValue());
++    }
+     Leases().erase(contents_);
+@@ -1086,3 +1268,30 @@
+       Reply(entry.second.reply, SHAAR_CANCELLED, {}, "DevTools panel lease closed");
++    if (pending_rules_)
++      Reply(pending_rules_->reply, SHAAR_CANCELLED, {}, "DevTools panel lease closed");
+     delete this;
++  }
++
++  shaar_error_code InstallRules(const base::ListValue& input, ReplyTarget reply,
++                                shaar_error* error) {
++    if (pending_rules_)
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid or pending network rules");
++    std::vector<NetworkRule> next;
++    if (!ParseNetworkRules(input, &next))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid network rule");
++    if (next_command_id_ == INT_MAX)
++      return Fail(error, SHAAR_NOT_READY, "panel command IDs exhausted");
++    ResumePausedRequests();
++    base::DictValue params = next.empty() ? base::DictValue()
++                                          : FetchEnableParams(next);
++    const int command_id = SendCommand(next.empty() ? "Fetch.disable" : "Fetch.enable",
++                                       std::move(params));
++    if (!command_id)
++      return Fail(error, SHAAR_NOT_READY, "network rules command unavailable");
++    pending_rules_ = PendingRules{reply, command_id, std::move(rules_)};
++    rules_ = std::move(next);
++    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE, base::BindOnce(&PanelClient::RulesTimedOut,
++                                  weak_factory_.GetWeakPtr(), command_id),
++        base::Seconds(15));
++    return SHAAR_OK;
+   }
+@@ -1145,2 +1354,6 @@
+     if (message.size() > kMaxInputBytes) {
++      if (!rules_.empty()) {
++        Close();
++        return;
++      }
+       Drop();
+@@ -1151,6 +1364,20 @@
+     auto parsed = base::JSONReader::Read(input, base::JSON_PARSE_RFC);
+-    if (!parsed || !parsed->is_dict())
+-      return;
++    if (!parsed || !parsed->is_dict()) {
++      if (!rules_.empty())
++        Close();
++      return;
++    }
+     const auto& root = parsed->GetDict();
+     if (auto id = root.FindInt("id")) {
++      if (pending_rules_ && pending_rules_->command_id == *id) {
++        ReplyTarget target = pending_rules_->reply;
++        const bool failed = root.FindDict("error") != nullptr;
++        if (failed)
++          rules_ = std::move(pending_rules_->previous);
++        pending_rules_.reset();
++        Reply(target, failed ? SHAAR_CHROMIUM_ERROR : SHAAR_OK,
++              failed ? std::string() : R"({"schemaVersion":1})",
++              failed ? "Fetch configuration failed" : std::string());
++        return;
++      }
+       auto phase2 = pending_phase2_.find(*id);
+@@ -1196,2 +1423,6 @@
+       return;
++    if (*method == "Fetch.requestPaused") {
++      HandlePaused(*params);
++      return;
++    }
+     if (message.size() > kMaxEventInputBytes) {
+@@ -1231,2 +1462,125 @@
+  private:
++  struct PendingRules {
++    ReplyTarget reply;
++    int command_id;
++    std::vector<NetworkRule> previous;
++  };
++
++  int SendCommand(std::string_view method, base::DictValue params) {
++    if (!attached_ || next_command_id_ == INT_MAX)
++      return 0;
++    const int id = next_command_id_++;
++    base::DictValue command;
++    command.Set("id", id);
++    command.Set("method", std::string(method));
++    command.Set("params", std::move(params));
++    std::string json;
++    if (!base::JSONWriter::Write(base::Value(std::move(command)), &json))
++      return 0;
++    host_->DispatchProtocolMessage(this, base::as_byte_span(json));
++    return id;
++  }
++
++  void SendPaused(const std::string& request_id, std::string_view method,
++                  base::DictValue params) {
++    params.Set("requestId", request_id);
++    if (!SendCommand(method, std::move(params))) {
++      Close();
++      return;
++    }
++    paused_.erase(request_id);
++  }
++
++  void ContinuePaused(const std::string& request_id) {
++    auto found = paused_.find(request_id);
++    if (found == paused_.end())
++      return;
++    SendPaused(request_id, found->second ? "Fetch.continueResponse"
++                                           : "Fetch.continueRequest",
++               base::DictValue());
++  }
++
++  void ResumePausedRequests() {
++    auto pending = std::move(paused_);
++    paused_.clear();
++    for (const auto& [request_id, response_stage] : pending) {
++      base::DictValue params;
++      params.Set("requestId", request_id);
++      SendCommand(response_stage ? "Fetch.continueResponse"
++                                 : "Fetch.continueRequest", std::move(params));
++    }
++  }
++
++  void HandlePaused(const base::DictValue& params) {
++    const auto* request_id = params.FindString("requestId");
++    const auto* request = params.FindDict("request");
++    if (!request_id || request_id->empty() || request_id->size() > 256 || !request) {
++      Close();
++      return;
++    }
++    const bool response_stage = params.FindInt("responseStatusCode").has_value() ||
++                                params.FindString("responseErrorReason");
++    paused_[*request_id] = response_stage;
++    const auto* url = request->FindString("url");
++    const auto* method = request->FindString("method");
++    if (!url || !method || !ValidRuleURL(*url)) {
++      ContinuePaused(*request_id);
++      return;
++    }
++    for (const auto& rule : rules_) {
++      if (rule.url != *url || rule.method != *method ||
++          (rule.kind == "responseHeaders") != response_stage)
++        continue;
++      base::DictValue action;
++      if (rule.kind == "delay") {
++        base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++            FROM_HERE, base::BindOnce(&PanelClient::ContinuePaused,
++                                      weak_factory_.GetWeakPtr(), *request_id),
++            base::Milliseconds(rule.delay_ms));
++        return;
++      }
++      if (rule.kind == "mock") {
++        action.Set("responseCode", rule.status);
++        action.Set("body", rule.body_base64);
++        action.Set("responseHeaders", rule.headers.Clone());
++        SendPaused(*request_id, "Fetch.fulfillRequest", std::move(action));
++        return;
++      }
++      if (rule.kind == "redirect") {
++        action.Set("url", rule.redirect_url);
++        SendPaused(*request_id, "Fetch.continueRequest", std::move(action));
++        return;
++      }
++      if (rule.kind == "requestHeaders") {
++        const auto* original = request->FindDict("headers");
++        action.Set("headers", MergeHeaders(original ? RequestHeaders(*original)
++                                                    : base::ListValue(), rule.headers));
++        SendPaused(*request_id, "Fetch.continueRequest", std::move(action));
++        return;
++      }
++      const auto* original = params.FindList("responseHeaders");
++      const auto status = params.FindInt("responseStatusCode");
++      if (!status || !original) {
++        ContinuePaused(*request_id);
++        return;
++      }
++      action.Set("responseCode", *status);
++      action.Set("responseHeaders", MergeHeaders(*original, rule.headers));
++      SendPaused(*request_id, "Fetch.continueResponse", std::move(action));
++      return;
++    }
++    ContinuePaused(*request_id);
++  }
++
++  void RulesTimedOut(int command_id) {
++    if (!pending_rules_ || pending_rules_->command_id != command_id)
++      return;
++    ReplyTarget target = pending_rules_->reply;
++    pending_rules_.reset();
++    rules_.clear();
++    ResumePausedRequests();
++    SendCommand("Fetch.disable", base::DictValue());
++    Reply(target, SHAAR_NOT_READY, {}, "Fetch configuration timed out");
++  }
++
+   struct PendingPhase2 {
+@@ -1347,2 +1701,5 @@
+   std::map<int, PendingPhase2> pending_phase2_;
++  std::optional<PendingRules> pending_rules_;
++  std::vector<NetworkRule> rules_;
++  std::map<std::string, bool> paused_;
+   std::set<std::string> cache_ids_;
+@@ -1356,2 +1713,19 @@
+ }  // namespace
++
++bool BuildNetworkRulesCommandForTesting(std::string_view input,
++                                        std::string* output) {
++  if (!output || input.size() > kMaxRuleInputBytes)
++    return false;
++  auto parsed = base::JSONReader::Read(input, base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_list())
++    return false;
++  std::vector<NetworkRule> rules;
++  if (!ParseNetworkRules(parsed->GetList(), &rules))
++    return false;
++  base::DictValue command;
++  command.Set("method", rules.empty() ? "Fetch.disable" : "Fetch.enable");
++  command.Set("params", rules.empty() ? base::DictValue()
++                                       : FetchEnableParams(rules));
++  return base::JSONWriter::Write(base::Value(std::move(command)), output);
++}
+ 
+@@ -1425,3 +1799,5 @@
+   if (!context || !context->devtools_runtime || !engine || !contents || !reply ||
+-      !args_json.data || args_json.size == 0 || args_json.size > 20 * 1024)
++      !args_json.data || args_json.size == 0 ||
++      args_json.size > (operation == SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES
++                            ? kMaxRuleInputBytes : 20 * 1024))
+     return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid panel request");
+@@ -1497,2 +1873,11 @@
+   }
++  if (operation == SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES) {
++    if (!HasKeys(args, {"schemaVersion", "leaseID", "rules"}))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid network rules schema");
++    const auto* rules = args.FindList("rules");
++    if (!rules || !lease || !lease->Matches(engine, identity) ||
++        lease->lease_id() != *lease_id)
++      return Fail(error, SHAAR_NOT_FOUND, "panel lease not found");
++    return lease->InstallRules(*rules, target, error);
++  }
+   return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown panel operation");
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.h b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+@@ -19,2 +19,4 @@
+                                   std::string* output);
++bool BuildNetworkRulesCommandForTesting(std::string_view rules,
++                                        std::string* output);
+ void ClosePanelLeaseForTab(content::WebContents* contents);
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -807,4 +807,31 @@
+   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND));
++  EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES));
+   EXPECT_EQ(nullptr, registry.Find(SHAAR_OP_MEDIA_GET_STATE));
+   EXPECT_NE(nullptr, registry.FindModule(SHAAR_MODULE_DEVTOOLS));
++}
++
++TEST(ShaarDevToolsPanelTest, NetworkRulesUseOnlyValidatedFetchPatterns) {
++  std::string output;
++  EXPECT_TRUE(BuildNetworkRulesCommandForTesting(
++      R"([{"method":"GET","url":"https://example.test/api?q=1","kind":"mock","status":201,"headers":[],"bodyBase64":"b2s=","redirectURL":"","delayMilliseconds":0},{"method":"GET","url":"https://example.test/api?q=1","kind":"responseHeaders","status":200,"headers":[{"name":"X-Test","value":"yes"}],"bodyBase64":"","redirectURL":"","delayMilliseconds":0}])",
++      &output));
++  EXPECT_NE(std::string::npos, output.find("Fetch.enable"));
++  EXPECT_NE(std::string::npos, output.find("Request"));
++  EXPECT_NE(std::string::npos, output.find("Response"));
++  EXPECT_NE(std::string::npos, output.find("api\\\\?q=1"));
++  EXPECT_TRUE(BuildNetworkRulesCommandForTesting("[]", &output));
++  EXPECT_NE(std::string::npos, output.find("Fetch.disable"));
++}
++
++TEST(ShaarDevToolsPanelTest, NetworkRulesRejectUnboundedOrUnknownActions) {
++  std::string output;
++  EXPECT_FALSE(BuildNetworkRulesCommandForTesting(
++      R"([{"method":"GET","url":"file:///secret","kind":"mock","status":200,"headers":[],"bodyBase64":"","redirectURL":"","delayMilliseconds":0}])",
++      &output));
++  EXPECT_FALSE(BuildNetworkRulesCommandForTesting(
++      R"([{"method":"GET","url":"https://example.test/","kind":"evaluate","status":200,"headers":[],"bodyBase64":"","redirectURL":"","delayMilliseconds":0}])",
++      &output));
++  EXPECT_FALSE(BuildNetworkRulesCommandForTesting(
++      R"([{"method":"GET","url":"https://example.test/","kind":"responseHeaders","status":200,"headers":[{"name":"X-Test","value":"bad\r\nheader"}],"bodyBase64":"","redirectURL":"","delayMilliseconds":0}])",
++      &output));
+ }
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -206,2 +206,3 @@
++  SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES = 1080,
+   // Testing only: exercise the native DevTools URL and Node frontend routes.
+   SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL = 1090,

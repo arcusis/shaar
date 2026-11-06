@@ -96,6 +96,13 @@ bool PageViewHost::Attach(NSView* tab_view) {
   tab_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [view_ addSubview:tab_view];
   selected_view_ = tab_view;
+  tab_view.postsFrameChangedNotifications = YES;
+  page_frame_observer_ = [NSNotificationCenter.defaultCenter
+      addObserverForName:NSViewFrameDidChangeNotification object:tab_view
+      queue:nil usingBlock:^(NSNotification*) {
+        if (devtools_view_)
+          LayoutPages();
+      }];
   LayoutPages();
   SelectedOwners()[identity] = this;
   return true;
@@ -104,6 +111,8 @@ bool PageViewHost::Attach(NSView* tab_view) {
 bool PageViewHost::Detach(NSView* tab_view) {
   if (!tab_view || selected_view_ != tab_view)
     return false;
+  [NSNotificationCenter.defaultCenter removeObserver:page_frame_observer_];
+  page_frame_observer_ = nil;
   [tab_view removeFromSuperview];
   SelectedOwners().erase((__bridge void*)tab_view);
   selected_view_ = nil;
@@ -168,12 +177,24 @@ void PageViewHost::SetDevToolsView(NSView* frontend) {
 }
 
 void PageViewHost::LayoutPages() {
-  NSRect bounds = view_.bounds;
+  if (laying_out_pages_)
+    return;
+  laying_out_pages_ = true;
+  // SwiftUI can borrow the page into its content container below the toolbar.
+  // Dock beside that page, not over the outer window/sidebar. Its layout may
+  // reset the borrowed page frame; the frame observer reapplies this split.
+  NSView* container = selected_view_.superview ?: view_;
+  if (devtools_view_ && devtools_view_.superview != container) {
+    [devtools_view_ removeFromSuperview];
+    [container addSubview:devtools_view_];
+  }
+  NSRect bounds = container.bounds;
   CGFloat side = devtools_view_ ? bounds.size.width * 0.4 : 0;
   if (selected_view_)
     selected_view_.frame = NSMakeRect(0, 0, bounds.size.width - side, bounds.size.height);
   if (devtools_view_)
     devtools_view_.frame = NSMakeRect(bounds.size.width - side, 0, side, bounds.size.height);
+  laying_out_pages_ = false;
 }
 
 bool PageViewHost::Focus(NSView* tab_view) {

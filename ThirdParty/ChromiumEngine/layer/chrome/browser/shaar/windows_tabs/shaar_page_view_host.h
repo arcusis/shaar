@@ -44,6 +44,8 @@ class PageViewHost final {
   __strong NSView* devtools_view_ = nil;
   base::WeakPtr<content::WebContents> devtools_contents_;
   __strong id frame_observer_ = nil;
+  __strong id page_frame_observer_ = nil;
+  bool laying_out_pages_ = false;
   base::WeakPtr<content::WebContents> selected_contents_;
   __strong id occlusion_observer_ = nil;
   __strong id miniaturize_observer_ = nil;

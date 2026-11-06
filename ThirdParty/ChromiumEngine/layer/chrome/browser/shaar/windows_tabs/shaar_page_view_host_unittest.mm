@@ -95,6 +95,31 @@ TEST(ShaarPageViewHostTest, DockedFrontendResizesAndClosesWithoutClosingHost) {
   EXPECT_FALSE(host.window().isVisible);
 }
 
+TEST(ShaarPageViewHostTest, DockFollowsBorrowedPageContainerAndSurvivesAppLayout) {
+  PageViewHost host(NSMakeRect(0, 0, 1000, 700));
+  NSView* page = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSView* frontend = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSView* app = [[NSView alloc] initWithFrame:NSMakeRect(200, 80, 800, 620)];
+  [host.view() addSubview:app];
+  ASSERT_TRUE(host.Attach(page));
+  [app addSubview:page];
+  host.SetDevToolsView(frontend);
+  EXPECT_EQ(frontend.superview, app);
+  EXPECT_EQ(page.frame.size.width, 480);
+  EXPECT_EQ(frontend.frame.origin.x, 480);
+  page.frame = app.bounds;  // Simulate ChromiumPage's SwiftUI layout callback.
+  EXPECT_EQ(page.frame.size.width, 480);
+  EXPECT_EQ(frontend.frame.size.width, 320);
+  app.frame = NSMakeRect(200, 80, 600, 500);
+  page.frame = app.bounds;
+  EXPECT_EQ(page.frame.size.width, 360);
+  EXPECT_EQ(frontend.frame.origin.x, 360);
+  host.SetDevToolsView(nil);
+  EXPECT_EQ(page.frame.size.width, 600);
+  EXPECT_EQ(frontend.superview, nil);
+  EXPECT_FALSE(host.window().isVisible);
+}
+
 TEST(ShaarPageViewHostTest, ReplacingSelectionDetachesOldViewAndResizesNewView) {
   PageViewHost host(NSMakeRect(0, 0, 800, 600));
   NSView* first = [[NSView alloc] initWithFrame:NSZeroRect];

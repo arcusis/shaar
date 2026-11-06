@@ -109,6 +109,7 @@ struct ProfilePrivacySections: View {
             Button(SettingsL10n.string("Reset Permissions…"), role: .destructive) {
               resettingOrigin = site.id
             }
+            .accessibilityLabel(BrowserSettingsAccessibility.resetPermissionsLabel(origin: site.id))
           } label: {
             Text(site.id).textSelection(.enabled)
               .environment(\.layoutDirection, .leftToRight)

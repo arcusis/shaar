@@ -28,6 +28,14 @@ enum BrowserSettingsAccessibility {
     BrowserLocalization.format(
       "Open %@ Settings", table: "Settings", language: language, arguments: [.string(name)])
   }
+
+  static func resetPermissionsLabel(
+    origin: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Reset permissions for %@", table: "Settings", language: language,
+      arguments: [.string(origin)])
+  }
 }
 
 struct BrowserSettingsProfile: Identifiable {

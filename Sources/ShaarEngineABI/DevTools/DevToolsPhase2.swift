@@ -131,7 +131,9 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
   public let truncated: Bool
 
   public static func decode(_ data: Data, command: ShaarDevToolsPhase2Command) -> Self? {
-    guard data.count <= 1_050_624,
+    let bodyLimit = command.id == 16 ? 5 * 1_048_576 : 1_048_576
+    let replyLimit = command.id == 16 ? 32 * 1_048_576 : 1_050_624
+    guard data.count <= replyLimit,
       let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       root["schemaVersion"] as? Int == 1,
       root["commandID"] as? Int == command.id,
@@ -149,7 +151,7 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
       items.append(item)
     }
     let body = root["body"] as? String
-    if root["body"] != nil && (body == nil || body!.utf8.count > 1_048_576) { return nil }
+    if root["body"] != nil && (body == nil || body!.utf8.count > bodyLimit) { return nil }
     let encoded = root["base64Encoded"] as? Bool
     if (body == nil) != (encoded == nil) { return nil }
     if body != nil && command.id != 10 && command.id != 16 { return nil }

@@ -20,6 +20,8 @@ EXCLUDED_UNIT_TEST_SOURCES = {("ShaarVerification", "PrivateProductHostProbe.swi
 UNIT_COVERAGE_EXCLUDES = {
     ("ShaarVerification", "BasicBrowsingProbe.swift"),
     ("ShaarVerification", "ShaarFirstTabProbe.swift"),
+    # This route requires a staged native Shaar engine and hidden host; Swift unit tests cannot run it.
+    ("ShaarVerification", "DevToolsRouteProbe.swift"),
     # The deleted private window and its native-session replacement are covered by the hosted
     # private-window and private-multitab engine shards. Shared BrowserWindow UI stays measured.
     ("ArcusisBrowser", "PrivateBrowserWindow.swift"),

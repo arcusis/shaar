@@ -393,6 +393,16 @@ class CoverageGateTests(unittest.TestCase):
         ]
         self.assertEqual(COVERAGE.module_coverage(report)["ShaarVerification"], (967, 17929))
 
+    def test_native_devtools_route_is_excluded_from_unit_coverage(self):
+        report = self.report()
+        report["data"][0]["files"] += [
+            {"filename": "/checkout/Sources/ShaarVerification/DevToolsRouteProbe.swift",
+             "summary": {"lines": {"covered": 0, "count": 342}}},
+            {"filename": "/checkout/Sources/ShaarVerification/EngineProbe.swift",
+             "summary": {"lines": {"covered": 1220, "count": 19834}}},
+        ]
+        self.assertEqual(COVERAGE.module_coverage(report)["ShaarVerification"], (1220, 19834))
+
     def test_timing_noise_passes_but_real_drop_fails(self):
         base = {"ArcusisBrowser": (22697, 36330)}
         self.assertEqual(COVERAGE.regressions(base, {"ArcusisBrowser": (22694, 36330)}), [])

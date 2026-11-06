@@ -17,6 +17,8 @@ public enum NavigationInput {
     guard !input.isEmpty else { return nil }
     if let url = URL(string: input), isWebURL(url) { return url }
     if hasUnsupportedScheme(input) { return nil }
+    // An email's @ is URL user-info syntax when a scheme is inferred; keep bare email
+    // addresses in the search path while still allowing @ in a URL path.
     let host = String(input.prefix { !"/?#".contains($0) })
     let normalizedHost = host.lowercased()
     guard !input.contains(where: \.isWhitespace), !host.contains("@"),
@@ -104,7 +106,7 @@ public enum CommandProviderSearch {
       queryName: "search", fragmentPrefix: nil),
   ]
 
-  /// Builds service rows for a query. A service keyword followed by a space narrows to that row.
+  /// Builds service rows for a query. A service keyword followed by whitespace narrows to that row.
   public static func results(
     for query: String, provider: CommandSearchProvider?
   ) -> [CommandResult] {
@@ -114,21 +116,23 @@ public enum CommandProviderSearch {
     let services = provider == .google ? google : microsoft
     let lowered = query.lowercased()
     let requestedService = (google + microsoft).first {
-      lowered.hasPrefix($0.keyword + " ")
+      hasKeywordSeparator(lowered, keyword: $0.keyword)
     }
     if let requestedService,
       !services.contains(where: { $0.keyword == requestedService.keyword })
     {
       return []
     }
-    let narrowed = services.first { lowered.hasPrefix($0.keyword + " ") }
+    let narrowed = services.first { hasKeywordSeparator(lowered, keyword: $0.keyword) }
     return services.compactMap { service in
       if let narrowed, narrowed.keyword != service.keyword { return nil }
-      let term =
-        narrowed == nil
-        ? query
-        : String(query.dropFirst(service.keyword.count + 1))
+      let term: String
+      if narrowed == nil {
+        term = query
+      } else {
+        term = String(query.dropFirst(service.keyword.count))
           .trimmingCharacters(in: .whitespacesAndNewlines)
+      }
       guard !term.isEmpty else { return nil }
       guard let url = url(for: service, query: term) else { return nil }
       return CommandResult(
@@ -138,6 +142,11 @@ public enum CommandProviderSearch {
         symbol: "magnifyingglass",
         action: .providerSearch(url))
     }
+  }
+
+  private static func hasKeywordSeparator(_ query: String, keyword: String) -> Bool {
+    guard query.hasPrefix(keyword), query.count > keyword.count else { return false }
+    return query[query.index(query.startIndex, offsetBy: keyword.count)].isWhitespace
   }
 
   /// URL construction is public for focused coverage of service-specific encoding.

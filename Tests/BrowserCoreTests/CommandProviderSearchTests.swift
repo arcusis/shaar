@@ -78,3 +78,10 @@ import Testing
   #expect(CommandProviderSearch.results(for: "budget", provider: .microsoft).count == 3)
   #expect(CommandProviderSearch.results(for: "gmail budget", provider: .microsoft).isEmpty)
 }
+
+@Test func providerKeywordAcceptsPastedWhitespaceSeparator() throws {
+  let rows = CommandProviderSearch.results(for: "gmail\tbudget", provider: .google)
+  #expect(rows.count == 1)
+  #expect(rows.first?.title == "Search Gmail for “budget”")
+  #expect(CommandProviderSearch.results(for: "gmail   budget", provider: .google).count == 1)
+}

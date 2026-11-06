@@ -285,6 +285,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0012-shaar-keychain-prompt-continuation.patch",
       "sha256": "bd233f607e23431141a55ff7c7a45efbb39994a0866f7cda1e01bd4cc2203abb"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0013-shaar-system-quit.patch",
+      "sha256": "5663294999812b4d468ac7747ad01d7877a97be3943a56cab0c082fb5a8dd9d3"
     }
   ],
   "requiredExports": [

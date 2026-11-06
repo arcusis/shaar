@@ -1,0 +1,35 @@
+--- a/chrome/browser/chrome_browser_application_mac.mm
++++ b/chrome/browser/chrome_browser_application_mac.mm
+@@ -16,6 +16,7 @@
+ #include "base/strings/sys_string_conversions.h"
+ #include "base/trace_event/trace_event.h"
+ #import "chrome/browser/app_controller_mac.h"
++#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+ #import "chrome/browser/mac/exception_processor.h"
+ #include "chrome/browser/ui/cocoa/l10n_util.h"
+ #include "chrome/common/chrome_switches.h"
+@@ -316,11 +317,24 @@
+ // NSApplication event loop, so final post- MessageLoop::Run() work is done
+ // before exiting.
+ - (void)terminate:(id)sender {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    // AppController is intentionally absent in embedder mode. Route Dock,
++    // AppleEvent, and system Quit through the same host-aware ABI as the menu.
++    shaar_engine* engine = shaar::lifecycle::ActiveEngine();
++    if (engine && shaar::lifecycle::EngineIsReady(engine)) {
++      shaar_error error{};
++      error.size = sizeof(error);
++      shaar_engine_request_quit(engine, &error);
++    }
++    return;
++  }
+   [AppController.sharedController tryToTerminateApplication];
+   // Return, don't exit. The application is responsible for exiting on its own.
+ }
+ 
+ - (void)cancelTerminate:(id)sender {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder"))
++    return;
+   [AppController.sharedController stopTryingToTerminateApplication];
+ }
+ 

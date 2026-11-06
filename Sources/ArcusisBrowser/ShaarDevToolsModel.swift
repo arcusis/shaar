@@ -161,6 +161,7 @@ final class ShaarDevToolsModel {
     didSet {
       guard isOpen, section != oldValue else { return }
       if section == .viewports { viewports.open() } else { viewports.close() }
+      if section == .elements { dom.open() } else { dom.close() }
     }
   }
   var dock: ShaarDevToolsDock = .bottom
@@ -173,6 +174,7 @@ final class ShaarDevToolsModel {
   let console = ShaarConsoleModel()
   let network = ShaarNetworkModel()
   let rules: ShaarNetworkRulesModel
+  let dom: ShaarDOMTreeModel
   let phase2: ShaarPhase2Model
   let application: ShaarApplicationModel
   let cookies = ShaarCookieModel()
@@ -197,6 +199,7 @@ final class ShaarDevToolsModel {
     viewportsTransport: any ShaarViewportsTransport = ShaarViewportsPendingTransport(),
     localTransports: [any ShaarLocalConsoleTransport] = [],
     rulesTransport: any ShaarNetworkRulesTransport = ShaarNetworkRulesPendingTransport(),
+    domTransport: any ShaarDOMTransport = ShaarDOMPendingTransport(),
     rulesStore: ShaarNetworkRuleStore = ShaarNetworkRuleStore()
   ) {
     self.target = target
@@ -205,6 +208,7 @@ final class ShaarDevToolsModel {
       uniqueKeysWithValues: localTransports.map { ($0.sourceID, $0) })
     rules = ShaarNetworkRulesModel(
       target: target, store: rulesStore, transport: rulesTransport)
+    dom = ShaarDOMTreeModel(target: target, transport: domTransport)
     let phase2 = ShaarPhase2Model(target: target, transport: phase2Transport)
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
@@ -227,6 +231,7 @@ final class ShaarDevToolsModel {
     phase2.open()
     if section == .viewports { viewports.open() }
     rules.resume()
+    if section == .elements { dom.open() }
   }
 
   func close() {
@@ -244,6 +249,7 @@ final class ShaarDevToolsModel {
     rules.close()
     phase2.close()
     viewports.close()
+    dom.close()
     application.reset()
     cookies.reset()
     performance.reset()
@@ -268,6 +274,7 @@ final class ShaarDevToolsModel {
     rules.updateTarget(target, committed: committed)
     phase2.updateTarget(target, committed: committed)
     viewports.updateTarget(target, committed: committed)
+    dom.updateTarget(target, committed: committed)
     application.reset()
     cookies.reset()
     sources.reset()

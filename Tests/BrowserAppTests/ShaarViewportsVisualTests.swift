@@ -28,7 +28,7 @@ import XCTest
       preset: .pixel8, to: imageRoot.appending(path: "shaar-1159-pixel.png"))
     let desktopImage = try makeFrameImage(
       preset: .desktop, to: imageRoot.appending(path: "shaar-1159-desktop.png"))
-    let fixture = ViewportsVisualFixture(frames: [
+    let fixture = ShaarViewportsFixtureTransport(frames: [
       ShaarViewportFrame(
         id: UUID(), preset: .iphone15Pro, url: target.url, pngData: phoneImage,
         safeArea: .init(top: 59, right: 0, bottom: 34, left: 0)),
@@ -93,18 +93,4 @@ import XCTest
     XCTAssertEqual(image.pixelsWide, 1040)
     XCTAssertEqual(image.pixelsHigh, 440)
   }
-}
-
-private struct ViewportsVisualFixture: ShaarViewportsTransport {
-  let frames: [ShaarViewportFrame]
-
-  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarViewportsMessage> {
-    AsyncStream { continuation in
-      continuation.yield(.available)
-      continuation.yield(.frames(frames))
-      continuation.finish()
-    }
-  }
-
-  func perform(_ action: ShaarViewportAction, for target: SiteControlTarget) async throws {}
 }

@@ -1,0 +1,337 @@
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -164,6 +164,9 @@
+   SHAAR_OP_SITE_COOKIES_CLEAR = 706,
+   SHAAR_OP_THIRD_PARTY_COOKIES_GET = 707,
+   SHAAR_OP_THIRD_PARTY_COOKIES_SET = 708,
++  SHAAR_OP_SITE_COOKIE_ITEMS = 709,
++  SHAAR_OP_SITE_COOKIE_SET = 710,
++  SHAAR_OP_SITE_COOKIE_DELETE = 711,
+ 
+   SHAAR_OP_EXTENSION_LIST = 800,
+   SHAAR_OP_EXTENSION_MANAGE = 801,
+--- a/chrome/browser/shaar/site_data/shaar_site_data_lifecycle_adapter.cc
++++ b/chrome/browser/shaar/site_data/shaar_site_data_lifecycle_adapter.cc
+@@ -10,7 +10,7 @@
+   static const shaar::SiteDataModuleHandlers handlers{
+       .submit = &HandleSiteDataOperation};
+   registry->Register(SHAAR_OP_SITE_SETTINGS_GET,
+-                     SHAAR_OP_THIRD_PARTY_COOKIES_SET,
++                     SHAAR_OP_SITE_COOKIE_DELETE,
+                      &HandleSiteDataOperation);
+   registry->RegisterModule(SHAAR_MODULE_SITE_DATA, &handlers);
+ }
+--- a/chrome/browser/shaar/site_data/shaar_site_data_unittest.cc
++++ b/chrome/browser/shaar/site_data/shaar_site_data_unittest.cc
+@@ -23,7 +23,7 @@
+   ShaarModuleRegistry registry;
+   shaar_site_data_register(&registry);
+   EXPECT_EQ(registry.Find(SHAAR_OP_SITE_SETTINGS_GET), &HandleSiteDataOperation);
+-  EXPECT_EQ(registry.Find(SHAAR_OP_THIRD_PARTY_COOKIES_SET),
++  EXPECT_EQ(registry.Find(SHAAR_OP_SITE_COOKIE_DELETE),
+             &HandleSiteDataOperation);
+   EXPECT_NE(registry.FindModule(SHAAR_MODULE_SITE_DATA), nullptr);
+ }
+--- a/chrome/browser/shaar/site_data/shaar_site_data.cc
++++ b/chrome/browser/shaar/site_data/shaar_site_data.cc
+@@ -20,6 +20,7 @@
+ #include "base/functional/bind.h"
+ #include "base/json/json_reader.h"
+ #include "base/json/json_writer.h"
++#include "base/memory/weak_ptr.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
+@@ -41,9 +42,15 @@
+ #include "content/public/browser/browsing_data_remover.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/ssl_status.h"
+ #include "content/public/browser/web_contents.h"
+ #include "net/cert/cert_status_flags.h"
++#include "net/cookies/canonical_cookie.h"
++#include "net/cookies/cookie_options.h"
++#include "net/cookies/cookie_partition_key.h"
++#include "net/cookies/cookie_util.h"
++#include "services/network/public/mojom/cookie_manager.mojom.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+ 
+@@ -268,6 +275,107 @@
+         observer);
+   }
+   return SHAAR_OK;
++}
++
++content::WebContents* SelectedCookieTab(
++    shaar::ShaarEngineContext* context, shaar_engine* engine,
++    shaar_window* window, shaar_tab* tab, Profile* profile,
++    const GURL& origin, shaar_error* error) {
++  if (!window || !tab || !context->browser_tabs) {
++    Fail(error, SHAAR_INVALID_ARGUMENT, "selected tab and window are required");
++    return nullptr;
++  }
++  Browser* browser = context->browser_tabs->FindBrowser(engine, window);
++  content::WebContents* contents =
++      context->browser_tabs->FindWebContents(engine, window, tab);
++  if (!browser || !contents || !browser->tab_strip_model()) {
++    Fail(error, SHAAR_NOT_FOUND, "selected tab is no longer available");
++    return nullptr;
++  }
++  if (browser->tab_strip_model()->GetActiveWebContents() != contents) {
++    Fail(error, SHAAR_CONFLICT, "tab is no longer selected");
++    return nullptr;
++  }
++  if (contents->GetBrowserContext() != profile) {
++    Fail(error, SHAAR_WRONG_PROFILE, "selected tab belongs to another profile");
++    return nullptr;
++  }
++  const GURL current = contents->GetLastCommittedURL();
++  if (!current.SchemeIsHTTPOrHTTPS() ||
++      url::Origin::Create(current) != url::Origin::Create(origin)) {
++    Fail(error, SHAAR_CONFLICT, "selected tab origin has changed");
++    return nullptr;
++  }
++  return contents;
++}
++
++bool CookieIdentityMatches(const net::CanonicalCookie& cookie, const Dict& args) {
++  const std::string* name = args.FindString("name");
++  const std::string* domain = args.FindString("domain");
++  const std::string* path = args.FindString("path");
++  const base::Value* site = args.Find("partitionSite");
++  const base::Value* cross_site = args.Find("partitionCrossSite");
++  auto source_scheme = args.FindInt("sourceScheme");
++  auto source_port = args.FindInt("sourcePort");
++  if (!name || !domain || !path || !site || !cross_site ||
++      !source_scheme || !source_port ||
++      cookie.Name() != *name || cookie.Domain() != *domain ||
++      cookie.Path() != *path ||
++      static_cast<int>(cookie.SourceScheme()) != *source_scheme ||
++      cookie.SourcePort() != *source_port)
++    return false;
++  if (site->is_none() && cross_site->is_none())
++    return !cookie.IsPartitioned();
++  if (!site->is_string() || !cross_site->is_bool() || !cookie.IsPartitioned())
++    return false;
++  auto key = net::CookiePartitionKey::Serialize(cookie.PartitionKey());
++  return key.has_value() && key->TopLevelSite() == site->GetString() &&
++         key->has_cross_site_ancestor() == cross_site->GetBool();
++}
++
++std::string CookieSameSiteName(net::CookieSameSite value) {
++  switch (value) {
++    case net::CookieSameSite::STRICT_MODE: return "Strict";
++    case net::CookieSameSite::LAX_MODE: return "Lax";
++    case net::CookieSameSite::NO_RESTRICTION: return "None";
++    case net::CookieSameSite::UNSPECIFIED: return "Unspecified";
++  }
++  return "Unspecified";
++}
++
++std::optional<net::CookieSameSite> ParseCookieSameSite(std::string_view value) {
++  if (value == "Strict") return net::CookieSameSite::STRICT_MODE;
++  if (value == "Lax") return net::CookieSameSite::LAX_MODE;
++  if (value == "None") return net::CookieSameSite::NO_RESTRICTION;
++  if (value == "Unspecified") return net::CookieSameSite::UNSPECIFIED;
++  return std::nullopt;
++}
++
++std::optional<Dict> CookieItem(const net::CanonicalCookie& cookie) {
++  Dict item;
++  item.Set("name", cookie.Name());
++  item.Set("value", cookie.Value());
++  item.Set("domain", cookie.Domain());
++  item.Set("path", cookie.Path());
++  item.Set("secure", cookie.SecureAttribute());
++  item.Set("httpOnly", cookie.IsHttpOnly());
++  item.Set("sameSite", CookieSameSiteName(cookie.SameSite()));
++  item.Set("sourceScheme", static_cast<int>(cookie.SourceScheme()));
++  item.Set("sourcePort", cookie.SourcePort());
++  item.Set("expiresUnixMs", cookie.IsPersistent()
++      ? base::Value(static_cast<double>(
++            cookie.ExpiryDate().InMillisecondsSinceUnixEpoch()))
++      : base::Value());
++  if (cookie.IsPartitioned()) {
++    auto key = net::CookiePartitionKey::Serialize(cookie.PartitionKey());
++    if (!key.has_value()) return std::nullopt;
++    item.Set("partitionSite", key->TopLevelSite());
++    item.Set("partitionCrossSite", key->has_cross_site_ancestor());
++  } else {
++    item.Set("partitionSite", base::Value());
++    item.Set("partitionCrossSite", base::Value());
++  }
++  return item;
+ }
+ 
+ }  // namespace
+@@ -505,25 +613,153 @@
+     GURL origin;
+     if (!raw_origin || !ValidOrigin(*raw_origin, &origin))
+       return Fail(error, SHAAR_INVALID_ARGUMENT, "origin must be an exact HTTP(S) origin");
+-    if (!window || !tab || !context->browser_tabs)
+-      return Fail(error, SHAAR_INVALID_ARGUMENT, "selected tab and window are required");
+-    Browser* browser = context->browser_tabs->FindBrowser(engine, window);
+-    content::WebContents* contents =
+-        context->browser_tabs->FindWebContents(engine, window, tab);
+-    if (!browser || !contents || !browser->tab_strip_model())
+-      return Fail(error, SHAAR_NOT_FOUND, "selected tab is no longer available");
+-    if (browser->tab_strip_model()->GetActiveWebContents() != contents)
+-      return Fail(error, SHAAR_CONFLICT, "tab is no longer selected");
+-    if (contents->GetBrowserContext() != profile)
+-      return Fail(error, SHAAR_WRONG_PROFILE, "selected tab belongs to another profile");
+-    const GURL current = contents->GetLastCommittedURL();
+-    if (!current.SchemeIsHTTPOrHTTPS() ||
+-        url::Origin::Create(current) != url::Origin::Create(origin))
+-      return Fail(error, SHAAR_CONFLICT, "selected tab origin has changed");
++    if (!SelectedCookieTab(context, engine, window, tab, profile, origin, error))
++      return error ? error->code : SHAAR_INVALID_ARGUMENT;
+     return Clear(profile, &origin, content::BrowsingDataRemover::DATA_TYPE_COOKIES,
+                  base::Time(), engine, profile_id, session_id,
+                  reply, reply_context,
+                  request_id, error);
++  }
++
++  if (operation == SHAAR_OP_SITE_COOKIE_ITEMS ||
++      operation == SHAAR_OP_SITE_COOKIE_SET ||
++      operation == SHAAR_OP_SITE_COOKIE_DELETE) {
++    const bool listing = operation == SHAAR_OP_SITE_COOKIE_ITEMS;
++    const bool setting = operation == SHAAR_OP_SITE_COOKIE_SET;
++    bool valid_fields = false;
++    if (listing) {
++      valid_fields = OnlyKeys(*args, {"schemaVersion", "origin"});
++    } else if (setting) {
++      valid_fields = OnlyKeys(*args, {"schemaVersion", "origin", "name",
++                                      "domain", "path", "partitionSite",
++                                      "partitionCrossSite", "sourceScheme",
++                                      "sourcePort", "value", "secure",
++                                      "httpOnly", "sameSite"});
++    } else {
++      valid_fields = OnlyKeys(*args, {"schemaVersion", "origin", "name",
++                                      "domain", "path", "partitionSite",
++                                      "partitionCrossSite", "sourceScheme",
++                                      "sourcePort"});
++    }
++    if (!valid_fields)
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown cookie fields");
++    const std::string* raw_origin = args->FindString("origin");
++    GURL origin;
++    if (!raw_origin || !ValidOrigin(*raw_origin, &origin))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "origin must be an exact HTTP(S) origin");
++    content::WebContents* contents =
++        SelectedCookieTab(context, engine, window, tab, profile, origin, error);
++    if (!contents) return error ? error->code : SHAAR_INVALID_ARGUMENT;
++    if (setting) {
++      const std::string* value = args->FindString("value");
++      const std::string* same_site = args->FindString("sameSite");
++      if (!value || value->size() > 4096 ||
++          !args->FindBool("secure") || !args->FindBool("httpOnly") ||
++          !same_site || !ParseCookieSameSite(*same_site))
++        return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid cookie edit fields");
++    }
++    auto* manager = profile->GetDefaultStoragePartition()
++                        ->GetCookieManagerForBrowserProcess();
++    if (!manager)
++      return Fail(error, SHAAR_NOT_READY, "cookie manager is unavailable");
++    manager->GetAllCookies(base::BindOnce(
++        [](shaar_operation operation, Dict args, GURL origin,
++           base::WeakPtr<content::WebContents> contents,
++           shaar_reply_fn reply, void* reply_context,
++           shaar_request_id request_id,
++           network::mojom::CookieManager* manager,
++           const std::vector<net::CanonicalCookie>& all) {
++          if (!contents ||
++              url::Origin::Create(contents->GetLastCommittedURL()) !=
++                  url::Origin::Create(origin)) {
++            ReplyLater(reply, reply_context, request_id, SHAAR_CONFLICT);
++            return;
++          }
++          if (operation == SHAAR_OP_SITE_COOKIE_ITEMS) {
++            base::ListValue items;
++            for (const auto& cookie : all) {
++              if (!cookie.IsDomainMatch(origin.host())) continue;
++              auto item = CookieItem(cookie);
++              if (!item || items.size() >= 500) {
++                ReplyLater(reply, reply_context, request_id,
++                           SHAAR_UNSUPPORTED_CAPABILITY);
++                return;
++              }
++              items.Append(std::move(*item));
++            }
++            Dict payload;
++            payload.Set("schemaVersion", 1);
++            payload.Set("cookies", std::move(items));
++            ReturnPayload(reply, reply_context, request_id, std::move(payload));
++            return;
++          }
++          const net::CanonicalCookie* selected = nullptr;
++          for (const auto& cookie : all) {
++            if (cookie.IsDomainMatch(origin.host()) &&
++                CookieIdentityMatches(cookie, args)) {
++              selected = &cookie;
++              break;
++            }
++          }
++          if (!selected) {
++            ReplyLater(reply, reply_context, request_id, SHAAR_NOT_FOUND);
++            return;
++          }
++          if (operation == SHAAR_OP_SITE_COOKIE_DELETE) {
++            manager->DeleteCanonicalCookie(*selected, base::BindOnce(
++                [](shaar_reply_fn reply, void* context, shaar_request_id id,
++                   uint32_t count) {
++                  if (!count) {
++                    ReplyLater(reply, context, id, SHAAR_NOT_FOUND);
++                    return;
++                  }
++                  Dict payload;
++                  payload.Set("schemaVersion", 1);
++                  payload.Set("complete", true);
++                  ReturnPayload(reply, context, id, std::move(payload));
++                }, reply, reply_context, request_id));
++            return;
++          }
++          const std::string& value = *args.FindString("value");
++          const bool secure = *args.FindBool("secure");
++          const bool http_only = *args.FindBool("httpOnly");
++          const auto same_site = ParseCookieSameSite(*args.FindString("sameSite"));
++          net::CookieInclusionStatus status;
++          auto replacement = net::CanonicalCookie::CreateSanitizedCookie(
++              origin, selected->Name(), value, selected->Domain(),
++              selected->Path(), selected->CreationDate(),
++              selected->ExpiryDate(), selected->LastAccessDate(),
++              secure, http_only, *same_site, selected->Priority(),
++              selected->PartitionKey(), &status);
++          if (!replacement) {
++            ReplyLater(reply, reply_context, request_id, SHAAR_INVALID_ARGUMENT);
++            return;
++          }
++          replacement->SetSourceScheme(selected->SourceScheme());
++          replacement->SetSourcePort(selected->SourcePort());
++          net::CookieOptions options;
++          options.set_include_httponly();
++          options.set_same_site_cookie_context(
++              net::CookieOptions::SameSiteCookieContext::MakeInclusive());
++          manager->SetCanonicalCookie(
++              *replacement,
++              net::cookie_util::SimulatedCookieSource(*replacement, "https"),
++              options,
++              base::BindOnce(
++                  [](shaar_reply_fn reply, void* context, shaar_request_id id,
++                     net::CookieAccessResult result) {
++                    if (!net::cookie_util::IsCookieAccessResultInclude(result)) {
++                      ReplyLater(reply, context, id, SHAAR_CHROMIUM_ERROR);
++                      return;
++                    }
++                    Dict payload;
++                    payload.Set("schemaVersion", 1);
++                    payload.Set("complete", true);
++                    ReturnPayload(reply, context, id, std::move(payload));
++                  }, reply, reply_context, request_id));
++        }, operation, std::move(*args), origin, contents->GetWeakPtr(),
++        reply, reply_context, request_id, manager));
++    return SHAAR_OK;
+   }
+ 
+   if (operation == SHAAR_OP_THIRD_PARTY_COOKIES_GET ||

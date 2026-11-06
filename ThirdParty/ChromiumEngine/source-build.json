@@ -309,6 +309,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0018-shaar-devtools-owned-tab-route.patch",
       "sha256": "f23df2ef6c44c2bbf1c19f704d191d158c647e49e6ef49b98e97ca1154cc4164"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0019-shaar-site-cookie-items.patch",
+      "sha256": "df97a10b33a8ebc15fecb84bffc688a8c15e3e60c298495f17eacaa6da917c73"
     }
   ],
   "requiredExports": [

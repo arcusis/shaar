@@ -148,6 +148,48 @@ struct DevToolsPanelTests {
     #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)
   }
 
+  @Test func networkRulesUseFixedActionsAndScopedLease() throws {
+    let fake = FakePanelEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    let mock = ShaarDevToolsNetworkRule(
+      method: "GET", url: "https://example.test/data", kind: .mock,
+      status: 201, headers: [.init(name: "Content-Type", value: "text/plain")],
+      bodyBase64: Data("hello".utf8).base64EncodedString())
+    _ = try adapter.setPanelNetworkRules(
+      [mock], leaseID: 42, scope: privateScope, windowID: "window-a", tabID: "tab-a"
+    ) { _ in }
+    let request = try #require(fake.request)
+    #expect(request.operation == .panelNetworkRules)
+    #expect(request.scope.sessionID == "private-a")
+    let root = try #require(JSONSerialization.jsonObject(with: request.payload) as? [String: Any])
+    #expect(Set(root.keys) == ["schemaVersion", "leaseID", "rules"])
+    #expect(root["leaseID"] as? Int == 42)
+    let rows = try #require(root["rules"] as? [[String: Any]])
+    #expect(rows.count == 1)
+    #expect(rows[0]["kind"] as? String == "mock")
+    #expect(rows[0]["bodyBase64"] as? String == "aGVsbG8=")
+    #expect(rows[0]["bodyFilePath"] == nil)
+    #expect(throws: ShaarEngineError.self) {
+      try adapter.setPanelNetworkRules(
+        [mock], leaseID: 0, scope: regular, windowID: "window-a", tabID: "tab-a"
+      ) { _ in }
+    }
+  }
+
+  @Test func networkRulesRejectUnsafeValuesBeforeSubmit() throws {
+    let fake = FakePanelEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    let unsafe = ShaarDevToolsNetworkRule(
+      method: "GET", url: "file:///private/data", kind: .requestHeaders,
+      headers: [.init(name: "X-Test", value: "bad\r\nvalue")])
+    #expect(throws: ShaarEngineError.self) {
+      try adapter.setPanelNetworkRules(
+        [unsafe], leaseID: 42, scope: regular, windowID: "window-a", tabID: "tab-a"
+      ) { _ in }
+    }
+    #expect(fake.request == nil)
+  }
+
   @Test func phase2FixtureUsesFixedCommandAndScopedLease() throws {
     let fake = FakePanelEngine()
     let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))

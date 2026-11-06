@@ -17,7 +17,7 @@ import Foundation
   let root: URL
   let fixture: URL
   let phase: String
-  private var results: [String: [String: Any]] = [:]
+  private let results = DevToolsPanelResults()
 
   init(engine: BrowserEngine, store: BrowserStore, root: URL, fixture: URL, phase: String) {
     self.engine = engine
@@ -59,18 +59,7 @@ import Foundation
         "console.error('shaar19-live-console'); fetch('/profile-privacy-cache', {cache:'no-store'}).then(r=>r.text())"
       )
       try await self.wait("Console and Network stream events") {
-        shell.events.contains {
-          if case .console(let event) = $0 {
-            return event.message.contains("shaar19-live-console")
-          }
-          return false
-        }
-          && shell.events.contains {
-            if case .network(let event) = $0 {
-              return event.url.contains("/profile-privacy-cache")
-            }
-            return false
-          }
+        DevToolsPanelResults.receivedConsoleAndNetwork(shell.events)
       }
       return "Console error and loopback fetch reached the live app event models"
     }
@@ -313,31 +302,86 @@ import Foundation
       else { throw Failure("Elements attribute edit did not reach the page") }
       return "DOM insertion appeared through the live stream; attribute edit reached the page"
     }
-    try report()
-    guard results.values.allSatisfy({ $0["passed"] as? Bool == true }) else {
-      throw Failure("One or more DevTools panels failed; see \(phase)-devtools-panels.json")
-    }
-    return results.keys.sorted().map { "\($0): \(results[$0]?["detail"] as? String ?? "passed")" }
+    return try results.finish(
+      root: root, phase: phase, engine: engine.runtime.chromiumVersion,
+      hidden: NSApp.windows.allSatisfy { !$0.isVisible })
   }
 
   private func check(_ name: String, _ operation: () async throws -> String) async {
-    do {
-      results[name] = ["passed": true, "detail": try await operation()]
-    } catch {
-      results[name] = ["passed": false, "detail": error.localizedDescription]
-    }
+    await results.check(name, operation)
   }
 
   private func url(_ path: String) -> URL {
+    DevToolsPanelResults.fixtureURL(path, from: fixture)
+  }
+
+  private func wait(
+    _ message: String, attempts: Int = 80, _ condition: () -> Bool
+  ) async throws {
+    try await results.wait(message, attempts: attempts, condition)
+  }
+
+  private struct Failure: LocalizedError {
+    let errorDescription: String?
+    init(_ message: String) { errorDescription = message }
+  }
+}
+
+/// Stores every panel outcome before enforcing the native fixture gate.
+@MainActor final class DevToolsPanelResults {
+  static let requiredPanels: Set<String> = [
+    "console-network", "application-cookie", "network-rules", "viewports", "masked-repro",
+    "elements-live",
+  ]
+
+  private var entries: [String: [String: Any]] = [:]
+
+  func check(_ name: String, _ operation: () async throws -> String) async {
+    do {
+      entries[name] = ["passed": true, "detail": try await operation()]
+    } catch {
+      entries[name] = ["passed": false, "detail": error.localizedDescription]
+    }
+  }
+
+  func finish(root: URL, phase: String, engine: String, hidden: Bool) throws -> [String] {
+    let report: [String: Any] = [
+      "phase": phase, "engine": engine, "hidden": hidden, "results": entries,
+    ]
+    let file = root.appending(path: "\(phase)-devtools-panels.json")
+    try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+      .write(to: file, options: .atomic)
+
+    guard hidden else { throw Failure("DevTools panel probe opened a visible window") }
+    guard Set(entries.keys) == Self.requiredPanels else {
+      throw Failure("DevTools panel probe omitted a required panel; see \(file.lastPathComponent)")
+    }
+    guard entries.values.allSatisfy({ $0["passed"] as? Bool == true }) else {
+      throw Failure("One or more DevTools panels failed; see \(file.lastPathComponent)")
+    }
+    return entries.keys.sorted().map { "\($0): \(entries[$0]?["detail"] as? String ?? "passed")" }
+  }
+
+  static func fixtureURL(_ path: String, from fixture: URL) -> URL {
     var parts = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
     parts.path = path
     parts.query = nil
     return parts.url!
   }
 
-  private func wait(
-    _ message: String, attempts: Int = 80, _ condition: () -> Bool
-  ) async throws {
+  static func receivedConsoleAndNetwork(_ events: [ShaarDevToolsEvent]) -> Bool {
+    let console = events.contains { item in
+      guard case .console(let event) = item else { return false }
+      return event.message.contains("shaar19-live-console")
+    }
+    let network = events.contains { item in
+      guard case .network(let event) = item else { return false }
+      return event.url.contains("/profile-privacy-cache")
+    }
+    return console && network
+  }
+
+  func wait(_ message: String, attempts: Int, _ condition: () -> Bool) async throws {
     for _ in 0..<attempts {
       if condition() { return }
       try await Task.sleep(for: .milliseconds(100))
@@ -345,17 +389,7 @@ import Foundation
     throw Failure("Timed out: \(message)")
   }
 
-  private func report() throws {
-    let value: [String: Any] = [
-      "phase": phase, "engine": engine.runtime.chromiumVersion,
-      "hidden": NSApp.windows.allSatisfy { !$0.isVisible },
-      "results": results,
-    ]
-    try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys])
-      .write(to: root.appending(path: "\(phase)-devtools-panels.json"), options: .atomic)
-  }
-
-  private struct Failure: LocalizedError {
+  struct Failure: LocalizedError {
     let errorDescription: String?
     init(_ message: String) { errorDescription = message }
   }

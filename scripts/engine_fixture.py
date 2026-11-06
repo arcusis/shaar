@@ -492,8 +492,8 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             destination = f'{self.cross_site_origin}/cross-site-b'
             self.html(f'''<!doctype html><meta charset="utf-8"><title>Origin A</title>
 <a id="plain" href="{destination}">Plain link</a>
-<a id="blank" target="_blank" href="{destination}" onclick="document.documentElement.dataset.clicked='blank'">New tab link</a>
-<button id="popup" onclick="document.documentElement.dataset.clicked='popup';window.open('{destination}', '_blank')">Open window</button>'''.encode(),
+<a id="blank" target="_blank" href="{destination}" onclick="document.documentElement.dataset.clicked='blank';document.documentElement.dataset.trusted=String(event.isTrusted)">New tab link</a>
+<button id="popup" onclick="document.documentElement.dataset.clicked='popup';document.documentElement.dataset.trusted=String(event.isTrusted);window.open('{destination}', '_blank')">Open window</button>'''.encode(),
                       csp="default-src 'self'; script-src 'unsafe-inline'")
             return
         if path == '/cross-site-b':

@@ -163,6 +163,12 @@ final class ReloadWindowProbe {
     }
     let destination = try await destinationTab(
       name: name, source: source, prior: prior, host: host, gestureResult: gestureResult)
+    if elementID != "plain" {
+      let clicked = try require(await document(source, runtime: runtime), "No source document")
+      try expect(
+        clicked["clicked"] as? String == elementID && clicked["trusted"] as? String == "true",
+        "\(name) receives a trusted browser click")
+    }
     let page = try require(await document(destination, runtime: runtime), "No destination document")
     let destinationURL = (page["href"] as? String).flatMap(URL.init(string:))
     try expect(
@@ -235,7 +241,7 @@ final class ReloadWindowProbe {
       runtime.evaluate(
         inTabID: id.uuidString,
         script:
-          "({href:location.href,marker:document.getElementById('destination')?.innerText||'',clicked:document.documentElement.dataset.clicked||''})"
+          "({href:location.href,marker:document.getElementById('destination')?.innerText||'',clicked:document.documentElement.dataset.clicked||'',trusted:document.documentElement.dataset.trusted||''})"
       ) { continuation.resume(returning: $0) }
     }
     guard let value, let data = value.data(using: .utf8) else { return nil }

@@ -280,8 +280,8 @@
 +          if (operation == SHAAR_OP_SITE_COOKIE_DELETE) {
 +            manager->DeleteCanonicalCookie(*selected, base::BindOnce(
 +                [](shaar_reply_fn reply, void* context, shaar_request_id id,
-+                   uint32_t count) {
-+                  if (!count) {
++                   bool deleted) {
++                  if (!deleted) {
 +                    ReplyLater(reply, context, id, SHAAR_NOT_FOUND);
 +                    return;
 +                  }

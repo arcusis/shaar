@@ -22,9 +22,9 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.h b/chrome/brows
 +bool HasDOMPanelLeaseForHost(content::DevToolsAgentHost* host);
 +void RouteDOMPanelEventForProtocolHost(content::DevToolsAgentHost* host,
 +                                       std::string_view message);
- void ClosePanelLeaseForTab(content::WebContents* contents);
- void ClosePanelLeasesForEngine(shaar_engine* engine);
- 
+ bool BuildPhase2CommandForTesting(int command_id, std::string_view params,
+                                   std::string_view origin, std::string* output);
+ bool ProjectPhase2EventForTesting(std::string_view message,
 diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
@@ -78,17 +78,17 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
 diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
-@@ -392,8 +392,7 @@
-         R"({"id":-3,"method":"Network.enable"})",
-         R"({"id":-4,"method":"Page.enable"})",
-         R"({"id":-5,"method":"Page.setLifecycleEventsEnabled","params":{"enabled":true}})",
--        R"({"id":-6,"method":"Performance.enable"})",
--        R"({"id":-7,"method":"DOM.enable"})"};
-+        R"({"id":-6,"method":"Performance.enable"})"};
-     for (const char* command : commands)
+@@ -1254,8 +1254,7 @@
+         R"({"id":-7,"method":"DOMStorage.enable"})",
+         R"({"id":-8,"method":"IndexedDB.enable"})",
+         R"({"id":-9,"method":"ServiceWorker.enable"})",
+-        R"({"id":-10,"method":"PerformanceTimeline.enable","params":{"eventTypes":["largest-contentful-paint","layout-shift"]}})",
+-        R"({"id":-11,"method":"DOM.enable"})"};
++        R"({"id":-10,"method":"PerformanceTimeline.enable","params":{"eventTypes":["largest-contentful-paint","layout-shift"]}})"};
+     for (const char* command : commands) {
        host_->DispatchProtocolMessage(this, base::as_byte_span(std::string_view(command)));
-     return true;
-@@ -405,10 +404,22 @@
+     }
+@@ -1268,10 +1267,22 @@
    }
  
    int lease_id() const { return lease_id_; }
@@ -111,22 +111,20 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    }
    const DevToolsTargetIdentity& identity() const { return identity_; }
    bool Matches(shaar_engine* engine, const DevToolsTargetIdentity& identity) const {
-@@ -497,6 +508,10 @@
-     const auto* params = root.FindDict("params");
-     if (!method || !params)
+@@ -1535,6 +1546,9 @@
+       HandleFrame(*params);
        return;
-+    // DOM node IDs belong to this client's CDP session. The Inspector command
-+    // client projects its own DOM events to this lease instead.
+     }
++    // DOM node IDs belong to the Inspector command session.
 +    if (method->rfind("DOM.", 0) == 0)
 +      return;
      if (message.size() > kMaxEventInputBytes) {
        Drop();
        return;
-@@ -633,6 +648,29 @@
- };
+@@ -1949,6 +1963,29 @@
  
  }  // namespace
-+
+ 
 +bool HasDOMPanelLeaseForHost(content::DevToolsAgentHost* host) {
 +  if (!host)
 +    return false;
@@ -149,6 +147,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +  if (found != Leases().end())
 +    found->second->ReceiveDOMEvent(*method, *params);
 +}
- 
- bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
-                                  std::string* output) {
++
+ bool BuildNetworkRulesCommandForTesting(std::string_view input,
+                                         std::string* output) {
+   if (!output || input.size() > kMaxRuleInputBytes)

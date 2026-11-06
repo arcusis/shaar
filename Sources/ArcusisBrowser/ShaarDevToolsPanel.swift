@@ -100,7 +100,7 @@ struct ShaarDevToolsPanel: View {
       }
     case .network:
       if model.streamAvailable {
-        pendingPanel("No network requests yet")
+        ShaarNetworkPanel(model: model.network, events: model.events)
       } else {
         unavailablePanel
       }
@@ -151,9 +151,7 @@ struct ShaarDevToolsPanel: View {
           .foregroundStyle(.secondary)
         Text(
           ShellL10n.string(
-            model.streamAvailable
-              ? "Open Console to evaluate JavaScript"
-              : "Console commands need engine shaar.17")
+            footerMessage)
         )
         .font(.system(size: 11, design: .monospaced))
         .foregroundStyle(.tertiary)
@@ -162,6 +160,12 @@ struct ShaarDevToolsPanel: View {
       .padding(.horizontal, 12)
       .frame(height: 34)
     }
+  }
+
+  private var footerMessage: String {
+    guard model.streamAvailable else { return "Console commands need engine shaar.17" }
+    if model.section == .network { return "Network requests are scoped to this tab" }
+    return "Open Console to evaluate JavaScript"
   }
 
   private func moveSection(_ direction: MoveCommandDirection) {

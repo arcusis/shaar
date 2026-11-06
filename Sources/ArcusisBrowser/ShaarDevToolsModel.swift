@@ -52,10 +52,50 @@ struct ShaarConsoleProperty: Equatable, Sendable {
 }
 
 struct ShaarNetworkEvent: Equatable, Sendable {
+  enum Phase: Sendable { case request, response, data, finished, failed }
   let id: UUID
+  let requestID: String
+  let phase: Phase
   let method: String
   let url: String
   let status: Int?
+  let mimeType: String?
+  let encodedBytes: Int?
+  let time: TimeInterval
+  let failure: String?
+  let requestHeaders: [ShaarNetworkHeader]
+  let responseHeaders: [ShaarNetworkHeader]
+  let payload: String?
+  let responseBody: String?
+
+  init(
+    id: UUID, method: String, url: String, status: Int?,
+    requestID: String? = nil, phase: Phase = .finished,
+    mimeType: String? = nil, encodedBytes: Int? = nil, time: TimeInterval = 0,
+    failure: String? = nil, requestHeaders: [ShaarNetworkHeader] = [],
+    responseHeaders: [ShaarNetworkHeader] = [], payload: String? = nil,
+    responseBody: String? = nil
+  ) {
+    self.id = id
+    self.requestID = requestID ?? id.uuidString
+    self.phase = phase
+    self.method = method
+    self.url = url
+    self.status = status
+    self.mimeType = mimeType
+    self.encodedBytes = encodedBytes
+    self.time = time
+    self.failure = failure
+    self.requestHeaders = requestHeaders
+    self.responseHeaders = responseHeaders
+    self.payload = payload
+    self.responseBody = responseBody
+  }
+}
+
+struct ShaarNetworkHeader: Equatable, Sendable {
+  let name: String
+  let value: String
 }
 
 enum ShaarDevToolsEvent: Equatable, Sendable {
@@ -95,6 +135,7 @@ final class ShaarDevToolsModel {
   private(set) var streamAvailable = false
   private(set) var events: [ShaarDevToolsEvent] = []
   let console = ShaarConsoleModel()
+  let network = ShaarNetworkModel()
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
   @ObservationIgnored private var eventTask: Task<Void, Never>?
   @ObservationIgnored private var streamGeneration = 0
@@ -125,6 +166,7 @@ final class ShaarDevToolsModel {
     streamAvailable = false
     events.removeAll()
     console.clearEntries()
+    network.clearSelection()
     ownedInspector?.close()
     ownedInspector = nil
     isOpen = false
@@ -136,6 +178,7 @@ final class ShaarDevToolsModel {
     streamAvailable = false
     events.removeAll()
     console.clearEntries()
+    network.clearSelection()
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
@@ -170,6 +213,7 @@ final class ShaarDevToolsModel {
       streamAvailable = false
       events.removeAll()
       console.clearEntries()
+      network.clearSelection()
     case .event(let event):
       guard streamAvailable else { return }
       events.append(event)

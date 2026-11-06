@@ -190,6 +190,7 @@ final class PrivateBrowserHost {
 
   static func windowCanPerform(_ command: BrowserMenuCommand, store: BrowserStore) -> Bool {
     return switch command {
+    case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
     case .reopenClosed: store.canReopenClosedTab
     case .splitView: store.canSplitSelectedTab
     case .addFavorite: store.canFavoriteCurrentPage

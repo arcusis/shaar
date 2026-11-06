@@ -163,32 +163,41 @@ struct ShaarDevToolsEventBuffer {
   private(set) var networkCount = 0
   private(set) var droppedConsoleCount = 0
   private(set) var droppedNetworkCount = 0
+  private(set) var retainedBytes = 0
+  private var networkIDs: Set<String> = []
+  private var networkEventCount = 0
 
   private static let limit = 50_000
   private static let trimCount = 1_000
+  private static let networkEventLimit = 250_000
+  private static let byteLimit = 64 * 1_048_576
 
   mutating func append(_ event: ShaarDevToolsEvent) {
+    let bytes = Self.estimatedBytes(event)
+    guard bytes <= Self.byteLimit else {
+      switch event {
+      case .console: droppedConsoleCount += 1
+      case .network: droppedNetworkCount += 1
+      }
+      return
+    }
     events.append(event)
+    retainedBytes += bytes
     switch event {
     case .console:
       consoleCount += 1
-      if consoleCount > Self.limit {
-        trim {
-          if case .console = $0 { return true }
-          return false
-        }
-        consoleCount -= Self.trimCount
-        droppedConsoleCount += Self.trimCount
+      if consoleCount > Self.limit { trimConsole() }
+    case .network(let request):
+      networkEventCount += 1
+      if networkIDs.insert(request.requestID).inserted { networkCount += 1 }
+      if networkCount > Self.limit || networkEventCount > Self.networkEventLimit {
+        trimNetworkRequests()
       }
-    case .network:
-      networkCount += 1
-      if networkCount > Self.limit {
-        trim {
-          if case .network = $0 { return true }
-          return false
-        }
-        networkCount -= Self.trimCount
-        droppedNetworkCount += Self.trimCount
+    }
+    while retainedBytes > Self.byteLimit, !events.isEmpty {
+      switch events[0] {
+      case .console: trimConsole()
+      case .network: trimNetworkRequests()
       }
     }
   }
@@ -199,14 +208,68 @@ struct ShaarDevToolsEventBuffer {
     networkCount = 0
     droppedConsoleCount = 0
     droppedNetworkCount = 0
+    retainedBytes = 0
+    networkIDs.removeAll()
+    networkEventCount = 0
   }
 
-  private mutating func trim(_ matches: (ShaarDevToolsEvent) -> Bool) {
+  private mutating func trimConsole() {
     var remaining = Self.trimCount
+    var removedBytes = 0
     events.removeAll { event in
-      guard remaining > 0, matches(event) else { return false }
+      guard remaining > 0 else { return false }
+      guard case .console = event else { return false }
       remaining -= 1
+      removedBytes += Self.estimatedBytes(event)
       return true
+    }
+    let removed = Self.trimCount - remaining
+    consoleCount -= removed
+    droppedConsoleCount += removed
+    retainedBytes -= removedBytes
+  }
+
+  private mutating func trimNetworkRequests() {
+    var ids: Set<String> = []
+    for case .network(let event) in events {
+      ids.insert(event.requestID)
+      if ids.count == Self.trimCount { break }
+    }
+    guard !ids.isEmpty else { return }
+    var removedBytes = 0
+    var removedEvents = 0
+    events.removeAll { event in
+      guard case .network(let request) = event, ids.contains(request.requestID) else {
+        return false
+      }
+      removedBytes += Self.estimatedBytes(event)
+      removedEvents += 1
+      return true
+    }
+    networkIDs.subtract(ids)
+    networkCount -= ids.count
+    networkEventCount -= removedEvents
+    droppedNetworkCount += ids.count
+    retainedBytes -= removedBytes
+  }
+
+  private static func estimatedBytes(_ event: ShaarDevToolsEvent) -> Int {
+    switch event {
+    case .console(let entry):
+      let frames = entry.stack.reduce(0) { $0 + $1.function.utf8.count + $1.source.utf8.count }
+      let properties = entry.previewProperties.reduce(0) {
+        $0 + $1.name.utf8.count + $1.value.utf8.count
+      }
+      return 128 + entry.message.utf8.count + (entry.source?.utf8.count ?? 0)
+        + (entry.objectID?.utf8.count ?? 0) + frames + properties
+    case .network(let request):
+      let headers = (request.requestHeaders + request.responseHeaders).reduce(0) {
+        $0 + $1.name.utf8.count + $1.value.utf8.count
+      }
+      return 192 + request.requestID.utf8.count + request.method.utf8.count
+        + request.url.utf8.count + (request.mimeType?.utf8.count ?? 0)
+        + (request.failure?.utf8.count ?? 0) + (request.payload?.utf8.count ?? 0)
+        + (request.responseBody?.utf8.count ?? 0) + headers
     }
   }
 }

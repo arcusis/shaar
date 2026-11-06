@@ -100,6 +100,43 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     normalShell.close()
   }
 
+  @Test func networkLimitCountsRequestsAcrossMultiplePhases() {
+    var buffer = ShaarDevToolsEventBuffer()
+    for index in 0..<51_000 {
+      let id = "request-\(index)"
+      for phase in [
+        ShaarNetworkEvent.Phase.request, .response, .data, .finished,
+      ] {
+        buffer.append(
+          .network(
+            .init(
+              id: UUID(), method: "GET", url: "https://example.com/\(index)",
+              status: 200, requestID: id, phase: phase)))
+      }
+    }
+    #expect(buffer.networkCount == 50_000)
+    #expect(buffer.droppedNetworkCount == 1_000)
+    #expect(buffer.events.count == 200_000)
+    if case .network(let first) = buffer.events[0] {
+      #expect(first.requestID == "request-1000")
+    } else {
+      Issue.record("The oldest retained event should begin the next request")
+    }
+  }
+
+  @Test func oversizedHistoryEvictsOlderEntriesWithinByteBudget() {
+    var buffer = ShaarDevToolsEventBuffer()
+    let largeMessage = String(repeating: "x", count: 100_000)
+    for _ in 0..<1_000 {
+      buffer.append(
+        .console(
+          .init(
+            id: UUID(), level: .log, message: largeMessage, source: nil)))
+    }
+    #expect(buffer.retainedBytes <= 64 * 1_048_576)
+    #expect(buffer.droppedConsoleCount > 0)
+  }
+
   @Test func fixtureStreamIsScopedAndInspectorOwnershipIsRestored() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/one")!)

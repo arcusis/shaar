@@ -29,16 +29,19 @@ import XCTest
       let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
       let before = InspectorPanel(model: inspector)
         .frame(width: 1040, height: 500).environment(\.colorScheme, scheme)
-      try capture(before, named: "before-elements-\(suffix)",
-                  appearance: appearance, root: root)
+      try capture(
+        before, named: "before-elements-\(suffix)",
+        appearance: appearance, root: root)
 
       let pending = ShaarDevToolsModel(target: target)
       pending.open(inspector: inspector)
       let unavailable = ShaarDevToolsPanel(
-        model: pending, inspector: inspector, openChromium: {})
-        .frame(width: 1040, height: 500).environment(\.colorScheme, scheme)
-      try capture(unavailable, named: "after-dom-unavailable-\(suffix)",
-                  appearance: appearance, root: root)
+        model: pending, inspector: inspector, openChromium: {}
+      )
+      .frame(width: 1040, height: 500).environment(\.colorScheme, scheme)
+      try capture(
+        unavailable, named: "after-dom-unavailable-\(suffix)",
+        appearance: appearance, root: root)
       pending.close()
 
       let fixture = DOMFixtureTransport()
@@ -50,8 +53,9 @@ import XCTest
       await live.dom.toggleExpanded(5)
       let after = ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {})
         .frame(width: 1040, height: 500).environment(\.colorScheme, scheme)
-      try capture(after, named: "after-dom-tree-\(suffix)",
-                  appearance: appearance, root: root)
+      try capture(
+        after, named: "after-dom-tree-\(suffix)",
+        appearance: appearance, root: root)
       live.close()
     }
     XCTAssertTrue(NSApp.keyWindow === previous)

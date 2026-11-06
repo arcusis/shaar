@@ -92,8 +92,10 @@ private struct ShaarReproMock: View {
               Text("Open bundle…").font(.system(size: 11)).foregroundStyle(Color.accentColor)
             }
             Spacer()
-            Text("Cookies, auth headers and form values are redacted. No upload.")
-              .font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(
+              "Cookies, auth headers and DOM form values are redacted. Video and console may show sensitive text. No upload."
+            )
+            .font(.system(size: 10)).foregroundStyle(.secondary)
           }
           .padding(20).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
           Divider()
@@ -101,7 +103,10 @@ private struct ShaarReproMock: View {
             Text("BUNDLE CONTENTS").font(.system(size: 10, weight: .semibold))
               .foregroundStyle(.secondary)
             ForEach(
-              ["Page video     30 s", "Console        18 entries", "Network        9 requests", "DOM            1 snapshot", "Environment    Shaar · macOS"],
+              [
+                "Page video     30 s", "Console        18 entries", "Network        9 requests",
+                "DOM            1 snapshot", "Environment    Shaar · macOS",
+              ],
               id: \.self
             ) { row in
               Text(row).font(.system(size: 11, design: .monospaced))

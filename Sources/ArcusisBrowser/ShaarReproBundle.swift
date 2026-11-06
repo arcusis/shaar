@@ -1,0 +1,276 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import Foundation
+import Observation
+
+struct ShaarReproDOMNode: Codable, Equatable {
+  let tag: String
+  let text: String
+  let attributes: [String: String]
+  let children: [Self]
+
+  /// Form contents stay out of the archive even when a fixture supplies them.
+  func redacted(depth: Int = 0) -> Self {
+    let form =
+      ["form", "input", "textarea", "select", "option"].contains(tag.lowercased())
+      || attributes["contenteditable"]?.lowercased() == "true"
+    let safeAttributes = attributes.filter { key, _ in
+      !["value", "defaultvalue", "checked", "selected"].contains(key.lowercased())
+        && !key.lowercased().hasPrefix("on")
+    }
+    return Self(
+      tag: String(tag.prefix(64)), text: form ? "[redacted]" : String(text.prefix(4096)),
+      attributes: Dictionary(
+        uniqueKeysWithValues: safeAttributes.prefix(100).map {
+          ($0.key, String($0.value.prefix(4096)))
+        }),
+      children: form || depth >= 32
+        ? []
+        : Array(children.prefix(500)).map {
+          $0.redacted(depth: depth + 1)
+        })
+  }
+}
+
+struct ShaarReproEnvironment: Codable, Equatable, Sendable {
+  let url: String
+  let shaarVersion: String
+  let engineVersion: String
+  let operatingSystem: String
+  let userAgent: String
+  let viewportWidth: Int
+  let viewportHeight: Int
+}
+
+struct ShaarReproManifest: Codable, Sendable {
+  let schemaVersion: Int
+  let durationSeconds: Int
+  let createdAt: String
+  let consoleCount: Int
+  let networkCount: Int
+  let environment: ShaarReproEnvironment
+  let redaction: String
+}
+
+struct ShaarReproCapture {
+  let videoMP4: Data
+  let durationSeconds: Int
+  let dom: ShaarReproDOMNode
+  let console: [ShaarConsoleEvent]
+  let network: [ShaarNetworkEvent]
+  let environment: ShaarReproEnvironment
+}
+
+@MainActor protocol ShaarReproTransport {
+  var available: Bool { get }
+  func capture(for target: SiteControlTarget, seconds: Int) async throws -> ShaarReproCapture
+}
+
+private struct ShaarReproUnavailable: LocalizedError {
+  var errorDescription: String? { ShellL10n.string("Repro capture needs engine support") }
+}
+
+struct ShaarReproPendingTransport: ShaarReproTransport {
+  let available = false
+  func capture(for target: SiteControlTarget, seconds: Int) async throws -> ShaarReproCapture {
+    throw ShaarReproUnavailable()
+  }
+}
+
+@MainActor enum ShaarReproBundle {
+  nonisolated static let seconds = 30
+  static let maxVideoBytes = 48 * 1024 * 1024
+
+  static func files(for capture: ShaarReproCapture, target: SiteControlTarget) throws
+    -> [String: Data]
+  {
+    guard (1...seconds).contains(capture.durationSeconds),
+      capture.videoMP4.count <= maxVideoBytes,
+      capture.videoMP4.count >= 12,
+      capture.videoMP4[4..<8].elementsEqual(Data("ftyp".utf8)),
+      capture.environment.url == target.url.absoluteString
+    else { throw ShaarReproUnavailable() }
+    let options: JSONSerialization.WritingOptions = [.prettyPrinted, .sortedKeys]
+    let console = capture.console.suffix(2_000).map { event in
+      [
+        "level": event.level.rawValue, "message": String(event.message.prefix(4096)),
+        "source": String((event.source ?? "").prefix(1024)),
+      ]
+    }
+    let requests = ShaarNetworkModel().requests(
+      from: capture.network.suffix(2_000).map { .network($0) })
+    let har = har(requests: requests, version: capture.environment.shaarVersion)
+    let manifest = ShaarReproManifest(
+      schemaVersion: 1, durationSeconds: capture.durationSeconds,
+      createdAt: ISO8601DateFormatter().string(from: Date()),
+      consoleCount: console.count, networkCount: requests.count,
+      environment: capture.environment,
+      redaction:
+        "Cookie and authorization headers and DOM form values omitted. Video and console may contain visible sensitive text."
+    )
+    return [
+      "manifest.json": try JSONEncoder().encode(manifest),
+      "console.json": try JSONSerialization.data(withJSONObject: console, options: options),
+      "network.har": try JSONSerialization.data(withJSONObject: har, options: options),
+      "dom.json": try JSONEncoder().encode(capture.dom.redacted()),
+      "page.mp4": capture.videoMP4,
+    ]
+  }
+
+  private static func har(requests: [ShaarNetworkRequest], version: String) -> [String: Any] {
+    let latest =
+      requests.compactMap { request -> Double? in
+        let time = request.completedAt ?? request.startedAt
+        return time.isFinite ? time : nil
+      }.max() ?? 0
+    let now = Date()
+    let entries: [[String: Any]] = requests.map { request in
+      let start = request.startedAt.isFinite ? request.startedAt : latest
+      let date = now.addingTimeInterval(min(0, max(-30, start - latest)))
+      let duration = request.duration.map { min(30_000, $0 * 1_000) } ?? 0
+      let url = String(request.url.prefix(8192))
+      let headers = { (rows: [ShaarNetworkHeader]) in
+        BugReportArchive.filteredHeaders(
+          rows.map { ["name": $0.name, "value": $0.value] }, includeSensitive: false)
+      }
+      return [
+        "startedDateTime": ISO8601DateFormatter().string(from: date),
+        "time": duration,
+        "request": [
+          "method": String(request.method.prefix(32)), "url": url, "httpVersion": "",
+          "headers": headers(request.requestHeaders),
+          "queryString": URLComponents(string: url)?.queryItems?.map {
+            ["name": $0.name, "value": $0.value ?? ""]
+          } ?? [],
+          "cookies": [], "headersSize": -1, "bodySize": -1,
+        ] as [String: Any],
+        "response": [
+          "status": request.status ?? 0, "statusText": "", "httpVersion": "",
+          "headers": headers(request.responseHeaders), "cookies": [],
+          "content": [
+            "size": request.encodedBytes ?? 0,
+            "mimeType": request.mimeType ?? "",
+          ],
+          "redirectURL": "", "headersSize": -1, "bodySize": request.encodedBytes ?? -1,
+        ] as [String: Any],
+        "cache": [:], "timings": ["send": -1, "wait": -1, "receive": -1],
+        "_timingSource": "shaar-devtools-stream",
+      ]
+    }
+    return [
+      "log": [
+        "version": "1.2", "creator": ["name": "Shaar", "version": version],
+        "entries": entries,
+        "_captureScope":
+          "Tab-scoped DevTools events; absolute times are anchored at export. Response bodies are omitted.",
+        "_sensitiveHeadersIncluded": false,
+      ]
+    ]
+  }
+
+  static func save(
+    _ capture: ShaarReproCapture, target: SiteControlTarget, directory: URL
+  ) async throws -> URL {
+    let files = try files(for: capture, target: target)
+    return try await BugReportArchive.save(
+      files: files, directory: directory, name: "Shaar-Repro", fileExtension: "shaarrepro")
+  }
+
+  static func readManifest(at url: URL) async throws -> ShaarReproManifest {
+    try await Task.detached(priority: .utility) {
+      guard url.pathExtension == "shaarrepro",
+        let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
+        size <= 64 * 1024 * 1024
+      else { throw ShaarReproUnavailable() }
+      let process = Process()
+      let pipe = Pipe()
+      process.executableURL = URL(filePath: "/usr/bin/unzip")
+      process.arguments = ["-p", url.path, "manifest.json"]
+      process.standardInput = FileHandle.nullDevice
+      process.standardOutput = pipe
+      process.standardError = FileHandle.nullDevice
+      try process.run()
+      var data = Data()
+      while let chunk = try pipe.fileHandleForReading.read(upToCount: 4096), !chunk.isEmpty {
+        data.append(chunk)
+        if data.count > 65_536 {
+          process.terminate()
+          process.waitUntilExit()
+          throw ShaarReproUnavailable()
+        }
+      }
+      process.waitUntilExit()
+      guard process.terminationStatus == 0 else { throw ShaarReproUnavailable() }
+      let manifest = try JSONDecoder().decode(ShaarReproManifest.self, from: data)
+      guard manifest.schemaVersion == 1,
+        (1...seconds).contains(manifest.durationSeconds),
+        (0...2_000).contains(manifest.consoleCount),
+        (0...2_000).contains(manifest.networkCount),
+        URL(string: manifest.environment.url) != nil
+      else { throw ShaarReproUnavailable() }
+      return manifest
+    }.value
+  }
+}
+
+@MainActor @Observable final class ShaarReproModel {
+  private(set) var target: SiteControlTarget
+  private(set) var busy = false
+  private(set) var savedURL: URL?
+  private(set) var viewerManifest: ShaarReproManifest?
+  var failure: String?
+  @ObservationIgnored private let transport: any ShaarReproTransport
+
+  init(target: SiteControlTarget, transport: any ShaarReproTransport = ShaarReproPendingTransport())
+  {
+    self.target = target
+    self.transport = transport
+  }
+
+  var available: Bool { transport.available }
+
+  func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
+    guard self.target != target || committed else { return }
+    self.target = target
+    savedURL = nil
+    viewerManifest = nil
+    failure = nil
+  }
+
+  func capture(to directory: URL) async -> URL? {
+    guard available, !busy else { return nil }
+    busy = true
+    failure = nil
+    defer { busy = false }
+    let target = target
+    do {
+      let capture = try await transport.capture(for: target, seconds: ShaarReproBundle.seconds)
+      guard self.target == target else { throw CancellationError() }
+      let file = try await ShaarReproBundle.save(capture, target: target, directory: directory)
+      guard self.target == target else {
+        try? FileManager.default.removeItem(at: file)
+        throw CancellationError()
+      }
+      savedURL = file
+      viewerManifest = try await ShaarReproBundle.readManifest(at: file)
+      return file
+    } catch {
+      failure = error.localizedDescription
+      return nil
+    }
+  }
+
+  func open(_ url: URL) async {
+    failure = nil
+    viewerManifest = nil
+    savedURL = nil
+    do {
+      viewerManifest = try await ShaarReproBundle.readManifest(at: url)
+      savedURL = url
+    } catch {
+      failure = error.localizedDescription
+    }
+  }
+}

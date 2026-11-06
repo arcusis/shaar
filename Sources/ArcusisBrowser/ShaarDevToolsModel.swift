@@ -12,6 +12,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case application = "Application"
   case performance = "Performance"
   case sources = "Sources"
+  case repro = "Repro"
 }
 
 enum ShaarDevToolsDock: String, CaseIterable {
@@ -150,6 +151,7 @@ final class ShaarDevToolsModel {
   let application: ShaarApplicationModel
   let performance: ShaarPerformanceModel
   let sources: ShaarSourcesModel
+  let repro: ShaarReproModel
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
   @ObservationIgnored private var eventTask: Task<Void, Never>?
   @ObservationIgnored private var streamGeneration = 0
@@ -159,7 +161,8 @@ final class ShaarDevToolsModel {
     target: SiteControlTarget,
     transport: any ShaarDevToolsEventTransport = ShaarDevToolsPendingTransport(),
     phase2Transport: any ShaarPhase2Transport = ShaarPhase2PendingTransport(),
-    sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load
+    sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load,
+    reproTransport: any ShaarReproTransport = ShaarReproPendingTransport()
   ) {
     self.target = target
     self.transport = transport
@@ -168,6 +171,7 @@ final class ShaarDevToolsModel {
     application = ShaarApplicationModel(phase2: phase2)
     performance = ShaarPerformanceModel(target: target, phase2: phase2)
     sources = ShaarSourcesModel(phase2: phase2, loadSourceData: sourceLoader)
+    repro = ShaarReproModel(target: target, transport: reproTransport)
   }
 
   func open(inspector: InspectorModel) {
@@ -209,6 +213,7 @@ final class ShaarDevToolsModel {
     phase2.updateTarget(target, committed: committed)
     application.reset()
     sources.reset()
+    repro.updateTarget(target, committed: committed)
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil

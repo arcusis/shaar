@@ -117,10 +117,15 @@ enum BugReportArchive {
   }
 
   /// Files and member names are browser-owned constants; no page-controlled paths enter ditto.
-  static func save(files: [String: Data], directory: URL) async throws -> URL {
+  static func save(
+    files: [String: Data], directory: URL, name: String = "Shaar-Bug-Report",
+    fileExtension: String = "zip"
+  ) async throws -> URL {
     try await Task.detached(priority: .utility) {
       let manager = FileManager.default
-      guard files.values.reduce(0, { $0 + $1.count }) <= 64 * 1024 * 1024,
+      guard ["Shaar-Bug-Report", "Shaar-Repro"].contains(name),
+        ["zip", "shaarrepro"].contains(fileExtension),
+        files.values.reduce(0, { $0 + $1.count }) <= 64 * 1024 * 1024,
         files.keys.allSatisfy({ !$0.contains("/") && !$0.contains("..") && !$0.isEmpty })
       else {
         throw DeveloperModeFailure(
@@ -128,8 +133,8 @@ enum BugReportArchive {
       }
       let id = UUID().uuidString
       let staging = manager.temporaryDirectory.appending(path: "shaar-bug-report-" + id)
-      let partial = directory.appending(path: ".Shaar-Bug-Report-" + id + ".zip")
-      let output = directory.appending(path: "Shaar-Bug-Report-" + id + ".zip")
+      let partial = directory.appending(path: "." + name + "-" + id + "." + fileExtension)
+      let output = directory.appending(path: name + "-" + id + "." + fileExtension)
       try manager.createDirectory(at: directory, withIntermediateDirectories: true)
       try manager.createDirectory(
         at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])

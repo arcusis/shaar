@@ -486,6 +486,18 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/devmode-next':
+            self.html(b'<!doctype html><title>Next fixture</title><div id="__next"></div><script src="/_next/static/chunk.js"></script>')
+            return
+        if path == '/devmode-vite':
+            self.html(b'<!doctype html><title>Vite fixture</title><script type="module" src="/@vite/client"></script>')
+            return
+        if path in ('/_next/static/chunk.js', '/@vite/client'):
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/javascript')
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return
         if path == '/stall':
             STALL_RELEASE.wait(STALL_SECONDS)
             self.html(b'<!doctype html><title>Stalled fixture</title>')

@@ -2,12 +2,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import SwiftUI
 
 /// Arc-style address shown centered in the page card's top bar.
 struct PageAddressField: View {
   @Bindable var store: BrowserStore
   var tabID: UUID? = nil
+  @AppStorage(DevelopmentModePreference.key) private var developmentModeEnabled = true
 
   static func displayAddress(for url: URL?) -> String? {
     guard let url, let host = url.host(), !host.isEmpty else { return nil }
@@ -22,6 +24,13 @@ struct PageAddressField: View {
       arguments: [.string(url.absoluteString)])
   }
 
+  private func displayAddress(for url: URL?) -> String {
+    if developmentModeEnabled, let url, DevelopmentPage.detect(url: url).isDevelopmentPage {
+      return url.absoluteString
+    }
+    return Self.displayAddress(for: url) ?? ShellL10n.string("Search or enter address")
+  }
+
   var body: some View {
     let url =
       tabID.flatMap { id in store.session.selectedSpace.tabs.first { $0.id == id }?.url }
@@ -32,7 +41,7 @@ struct PageAddressField: View {
     } label: {
       HStack(spacing: 6) {
         Image(systemName: url == nil ? "magnifyingglass" : "link")
-        Text(Self.displayAddress(for: url) ?? ShellL10n.string("Search or enter address"))
+        Text(displayAddress(for: url))
           .lineLimit(1)
           .truncationMode(.middle)
       }

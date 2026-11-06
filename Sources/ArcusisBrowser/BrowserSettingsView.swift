@@ -304,6 +304,8 @@ struct BrowserSettingsView: View {
     }
   }
 
+  @AppStorage(DevelopmentModePreference.key) private var developmentModeEnabled = true
+
   private var generalContent: some View {
     Form {
       Section(SettingsL10n.string("Startup")) {
@@ -319,6 +321,11 @@ struct BrowserSettingsView: View {
               defaultStatus)
           }
         }
+      }
+      Section(SettingsL10n.string("Developer")) {
+        Toggle(
+          SettingsL10n.string("Automatically turn on Dev Mode for local development pages"),
+          isOn: $developmentModeEnabled)
       }
       Section(SettingsL10n.string("Windows")) {
         Picker(

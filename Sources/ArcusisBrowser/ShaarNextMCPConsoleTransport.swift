@@ -5,6 +5,7 @@
 import Foundation
 
 struct ShaarNextMCPConsoleTransport: ShaarLocalConsoleTransport {
+  let sourceID = "nextMCP"
   let origin: ShaarConsoleEvent.Origin = .server
 
   static func endpoint(for target: SiteControlTarget) -> URL? {
@@ -44,10 +45,10 @@ struct ShaarNextMCPConsoleTransport: ShaarLocalConsoleTransport {
         throw URLError(.cannotParseResponse)
       }
       continuation.yield(.available)
-      var offset: UInt64 = 0
+      var logReader = ShaarLocalLogReader(file: logURL)
       var seenErrors = Set<String>()
       while !Task.isCancelled {
-        for line in try Self.readLogLines(at: logURL, offset: &offset) {
+        for line in try logReader.readLines() {
           continuation.yield(.event(Self.event(line, level: .log)))
         }
         let errors = try await call("get_errors", at: endpoint)
@@ -123,27 +124,6 @@ struct ShaarNextMCPConsoleTransport: ShaarLocalConsoleTransport {
     let file = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
     guard file.path.hasPrefix(root.path + "/") else { return nil }
     return file
-  }
-
-  private static func readLogLines(at file: URL, offset: inout UInt64) throws -> [String] {
-    guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
-      let size = (attributes[.size] as? NSNumber)?.uint64Value
-    else { return [] }
-    if size < offset { offset = 0 }
-    let previousOffset = offset
-    let start = max(offset, size > 128_000 ? size - 128_000 : 0)
-    let handle = try FileHandle(forReadingFrom: file)
-    defer { try? handle.close() }
-    try handle.seek(toOffset: start)
-    let data = try handle.read(upToCount: 128_000) ?? Data()
-    offset = start + UInt64(data.count)
-    var text = String(decoding: data, as: UTF8.self)
-    if start > previousOffset,
-      let newline = text.firstIndex(of: "\n")
-    {
-      text = String(text[text.index(after: newline)...])
-    }
-    return text.split(separator: "\n").suffix(80).map(String.init).filter { !$0.isEmpty }
   }
 
   private static func errorMessages(from text: String) -> [String] {

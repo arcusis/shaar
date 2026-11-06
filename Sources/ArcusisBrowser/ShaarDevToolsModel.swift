@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import Foundation
 import Observation
 
@@ -137,6 +138,7 @@ enum ShaarLocalConsoleMessage {
 
 @MainActor
 protocol ShaarLocalConsoleTransport {
+  var sourceID: String { get }
   var origin: ShaarConsoleEvent.Origin { get }
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarLocalConsoleMessage>
 }
@@ -161,8 +163,8 @@ final class ShaarDevToolsModel {
   var rightWidth: CGFloat = 420
   private(set) var streamAvailable = false
   private(set) var events: [ShaarDevToolsEvent] = []
-  private(set) var localConsoleEvents: [ShaarConsoleEvent] = []
-  private(set) var localConsoleOrigins: Set<ShaarConsoleEvent.Origin> = []
+  private(set) var localEventsBySource: [String: [ShaarConsoleEvent]] = [:]
+  private(set) var localAvailableSources: Set<String> = []
   let console = ShaarConsoleModel()
   let network = ShaarNetworkModel()
   let phase2: ShaarPhase2Model
@@ -173,9 +175,10 @@ final class ShaarDevToolsModel {
   let repro: ShaarReproModel
   let viewports: ShaarViewportsModel
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
-  @ObservationIgnored private let localTransports: [any ShaarLocalConsoleTransport]
+  @ObservationIgnored private var localTransports: [String: any ShaarLocalConsoleTransport]
   @ObservationIgnored private var eventTask: Task<Void, Never>?
-  @ObservationIgnored private var localTasks: [Task<Void, Never>] = []
+  @ObservationIgnored private var localTasks: [String: Task<Void, Never>] = [:]
+  @ObservationIgnored private var localTokens: [String: UUID] = [:]
   @ObservationIgnored private var streamGeneration = 0
   @ObservationIgnored private var ownedInspector: InspectorModel?
 
@@ -190,7 +193,8 @@ final class ShaarDevToolsModel {
   ) {
     self.target = target
     self.transport = transport
-    self.localTransports = localTransports
+    self.localTransports = Dictionary(
+      uniqueKeysWithValues: localTransports.map { ($0.sourceID, $0) })
     let phase2 = ShaarPhase2Model(target: target, transport: phase2Transport)
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
@@ -220,8 +224,8 @@ final class ShaarDevToolsModel {
     cancelLocalTasks()
     streamAvailable = false
     events.removeAll()
-    localConsoleEvents.removeAll()
-    localConsoleOrigins.removeAll()
+    localEventsBySource.removeAll()
+    localAvailableSources.removeAll()
     console.clearEntries()
     network.clearSelection()
     phase2.close()
@@ -237,12 +241,13 @@ final class ShaarDevToolsModel {
 
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
+    if self.target.host != target.host { disconnectLogTap() }
     self.target = target
     performance.updateTarget(target, committed: committed)
     streamAvailable = false
     events.removeAll()
-    localConsoleEvents.removeAll()
-    localConsoleOrigins.removeAll()
+    localEventsBySource.removeAll()
+    localAvailableSources.removeAll()
     console.clearEntries()
     network.clearSelection()
     phase2.updateTarget(target, committed: committed)
@@ -261,7 +266,10 @@ final class ShaarDevToolsModel {
     }
   }
 
-  var consoleAvailable: Bool { streamAvailable || !localConsoleOrigins.isEmpty }
+  var localConsoleEvents: [ShaarConsoleEvent] {
+    localEventsBySource.values.flatMap { $0 }.sorted { $0.timestamp < $1.timestamp }
+  }
+  var consoleAvailable: Bool { streamAvailable || !localAvailableSources.isEmpty }
   var consoleEvents: [ShaarDevToolsEvent] {
     events + localConsoleEvents.map(ShaarDevToolsEvent.console)
   }
@@ -269,6 +277,35 @@ final class ShaarDevToolsModel {
     events.reduce(localConsoleEvents.count) { $0 + (isConsole($1) ? 1 : 0) }
   }
   var networkCount: Int { events.reduce(0) { $0 + (isConsole($1) ? 0 : 1) } }
+
+  var canTapLocalLogs: Bool {
+    DevelopmentModePreference.isEnabled
+      && DevelopmentPage.detect(url: target.url).isDevelopmentPage
+  }
+
+  var hasLogTap: Bool { localTransports["fileLogTap"] != nil }
+
+  @discardableResult
+  func connectLogTap(_ file: URL) -> Bool {
+    guard canTapLocalLogs, file.isFileURL,
+      FileManager.default.fileExists(atPath: file.path)
+    else { return false }
+    disconnectLogTap()
+    let transport = ShaarFileLogTapTransport(file: file.standardizedFileURL)
+    localTransports[transport.sourceID] = transport
+    if isOpen { startLocalStream(transport) }
+    return true
+  }
+
+  func disconnectLogTap() {
+    let id = "fileLogTap"
+    localTasks[id]?.cancel()
+    localTasks[id] = nil
+    localTokens[id] = nil
+    localTransports[id] = nil
+    localAvailableSources.remove(id)
+    localEventsBySource[id] = nil
+  }
 
   private func isConsole(_ event: ShaarDevToolsEvent) -> Bool {
     if case .console = event { return true }
@@ -289,39 +326,46 @@ final class ShaarDevToolsModel {
   }
 
   private func startLocalStreams() {
+    for transport in localTransports.values { startLocalStream(transport) }
+  }
+
+  private func startLocalStream(_ transport: any ShaarLocalConsoleTransport) {
     let target = target
     let generation = streamGeneration
-    for transport in localTransports {
-      let task = Task { [weak self] in
-        for await message in transport.messages(for: target) {
-          guard let self, self.isOpen, self.target == target,
-            self.streamGeneration == generation
-          else { return }
-          self.receiveLocal(message, from: transport.origin)
-        }
+    let id = transport.sourceID
+    let token = UUID()
+    localTokens[id] = token
+    let task = Task { [weak self] in
+      for await message in transport.messages(for: target) {
+        guard let self, self.isOpen, self.target == target,
+          self.streamGeneration == generation, self.localTokens[id] == token
+        else { return }
+        self.receiveLocal(message, from: transport)
       }
-      localTasks.append(task)
     }
+    localTasks[id] = task
   }
 
   private func cancelLocalTasks() {
-    for task in localTasks { task.cancel() }
+    for task in localTasks.values { task.cancel() }
     localTasks.removeAll()
+    localTokens.removeAll()
   }
 
   private func receiveLocal(
-    _ message: ShaarLocalConsoleMessage, from origin: ShaarConsoleEvent.Origin
+    _ message: ShaarLocalConsoleMessage, from transport: any ShaarLocalConsoleTransport
   ) {
+    let id = transport.sourceID
     switch message {
-    case .available: localConsoleOrigins.insert(origin)
+    case .available: localAvailableSources.insert(id)
     case .unavailable:
-      localConsoleOrigins.remove(origin)
-      localConsoleEvents.removeAll { $0.origin == origin }
+      localAvailableSources.remove(id)
+      localEventsBySource[id] = nil
     case .event(let event):
-      guard localConsoleOrigins.contains(origin), event.origin == origin else { return }
-      localConsoleEvents.append(event)
-      if localConsoleEvents.count > 1_000 {
-        localConsoleEvents.removeFirst(localConsoleEvents.count - 1_000)
+      guard localAvailableSources.contains(id), event.origin == transport.origin else { return }
+      localEventsBySource[id, default: []].append(event)
+      if localEventsBySource[id, default: []].count > 500 {
+        localEventsBySource[id]?.removeFirst()
       }
     }
   }

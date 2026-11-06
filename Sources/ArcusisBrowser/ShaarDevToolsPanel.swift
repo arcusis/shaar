@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import SwiftUI
 
 struct ShaarDevToolsPanel: View {
@@ -61,6 +62,14 @@ struct ShaarDevToolsPanel: View {
           Button(ShellL10n.string(dock.rawValue)) { model.dock = dock }
         }
         Divider()
+        if model.canTapLocalLogs {
+          if model.hasLogTap {
+            Button(ShellL10n.string("Disconnect server log")) { model.disconnectLogTap() }
+          } else {
+            Button(ShellL10n.string("Connect server log file…"), action: chooseLogFile)
+          }
+          Divider()
+        }
         Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
       } label: {
         Image(systemName: "ellipsis")
@@ -169,6 +178,10 @@ struct ShaarDevToolsPanel: View {
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
         .controlSize(.small)
         .padding(.top, 3)
+      if model.section == .console && model.canTapLocalLogs {
+        Button(ShellL10n.string("Connect server log file…"), action: chooseLogFile)
+          .controlSize(.small)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .multilineTextAlignment(.center)
@@ -183,6 +196,17 @@ struct ShaarDevToolsPanel: View {
     if model.section == .repro { return "Repro capture needs engine support" }
     if model.section == .viewports { return "Live Viewports need engine support" }
     return "Live console and network need engine shaar.17"
+  }
+
+  private func chooseLogFile() {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = false
+    panel.begin { response in
+      guard response == .OK, let file = panel.url else { return }
+      Task { @MainActor in _ = model.connectLogTap(file) }
+    }
   }
 
   @ViewBuilder private var commandLine: some View {

@@ -180,7 +180,8 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
   [window[@"tabs"] addObject:tabID];
   if (self.onPrivateTabChanged)
     self.onPrivateTabChanged(contextID, windowID, tabID, @"about:blank", @"", NO, NO, NO);
-  [self preparePrivateTabID:tabID windowID:windowID contextID:contextID url:url];
+  if (![url isEqualToString:@"about:blank"])
+    [self preparePrivateTabID:tabID windowID:windowID contextID:contextID url:url];
   return YES;
 }
 
@@ -491,6 +492,10 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
   }
   if (event->kind != SHAAR_EVENT_NAVIGATION ||
       ![self privateTabOwned:tabID windowID:windowID contextID:contextID]) return;
+  NSDictionary *failure = [payload[@"failure"] isKindOfClass:NSDictionary.class]
+      ? payload[@"failure"] : nil;
+  if ([payload[@"phase"] isEqual:@"stopped"] &&
+      [failure[@"descriptionCode"] isEqual:@"cancelled"]) return;
   NSMutableDictionary *tab = state[@"tabs"][tabID];
   NSString *url = [payload[@"url"] isKindOfClass:NSString.class] ? payload[@"url"] : tab[@"url"];
   tab[@"url"] = url ?: @"about:blank";

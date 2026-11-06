@@ -19,6 +19,18 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
+#include "base/functional/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/run_loop.h"
+#include "mojo/public/cpp/system/data_pipe_utils.h"
+#include "net/base/isolation_info.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/public/cpp/url_loader_factory_builder.h"
+#include "services/network/test/test_url_loader_client.h"
+#include "services/network/test/test_url_loader_factory.h"
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar {
@@ -28,6 +40,70 @@ class PrivateSessionRegistryTest : public testing::Test {
  protected:
   content::BrowserTaskEnvironment task_environment_;
 };
+
+// The URLLoader command pipe and URLLoaderClient response pipe are independent.
+// A network loader may close its command pipe before queued response messages
+// have reached this proxy. Only the response pipe can establish completion.
+TEST_F(PrivateSessionRegistryTest, TrackerProxyDrainsResponseAfterLoaderCloses) {
+  TestingProfile profile;
+  Profile* otr = profile.GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  ASSERT_EQ(TrackerProtection().SetRules(&profile, "proxy-test", {"tracker.example"}),
+            SHAAR_OK);
+  base::ScopedClosureRunner remove_rules(base::BindOnce(
+      [](Profile* parent) { TrackerProtection().RemoveProfile(parent); }, &profile));
+  network::TestURLLoaderFactory upstream(/*observe_loader_requests=*/true);
+  network::URLLoaderFactoryBuilder builder;
+  InstallPrivateTrackerFactory(otr, net::IsolationInfo(), builder);
+  auto factory = std::move(builder).Finish(upstream.GetSafeWeakWrapper());
+  network::TestURLLoaderClient client;
+  mojo::Remote<network::mojom::URLLoader> loader;
+  network::ResourceRequest request;
+  request.url = GURL("http://127.0.0.1/private-document");
+  factory->CreateLoaderAndStart(loader.BindNewPipeAndPassReceiver(), 1, 0,
+                               request, client.CreateRemote(),
+                               net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
+  task_environment_.RunUntilIdle();
+  ASSERT_EQ(upstream.pending_requests()->size(), 1u);
+  auto& pending = upstream.pending_requests()->front();
+  pending.test_url_loader.reset();
+  task_environment_.RunUntilIdle();
+  EXPECT_FALSE(client.has_received_completion());
+  const std::string body = "<!doctype html><body>private document ready</body>";
+  upstream.SimulateResponseForPendingRequest(request.url.spec(), body);
+  task_environment_.RunUntilIdle();
+  ASSERT_TRUE(client.has_received_response());
+  ASSERT_TRUE(client.has_received_completion());
+  EXPECT_EQ(client.completion_status().error_code, net::OK);
+  std::string received;
+  EXPECT_TRUE(mojo::BlockingCopyToString(client.response_body_release(), &received));
+  EXPECT_EQ(received, body);
+}
+
+TEST_F(PrivateSessionRegistryTest, TrackerProxyFailsWhenResponsePipeDisconnects) {
+  TestingProfile profile;
+  Profile* otr = profile.GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  ASSERT_EQ(TrackerProtection().SetRules(&profile, "proxy-test", {"tracker.example"}),
+            SHAAR_OK);
+  base::ScopedClosureRunner remove_rules(base::BindOnce(
+      [](Profile* parent) { TrackerProtection().RemoveProfile(parent); }, &profile));
+  network::TestURLLoaderFactory upstream(/*observe_loader_requests=*/true);
+  network::URLLoaderFactoryBuilder builder;
+  InstallPrivateTrackerFactory(otr, net::IsolationInfo(), builder);
+  auto factory = std::move(builder).Finish(upstream.GetSafeWeakWrapper());
+  network::TestURLLoaderClient client;
+  mojo::Remote<network::mojom::URLLoader> loader;
+  network::ResourceRequest request;
+  request.url = GURL("http://127.0.0.1/private-document");
+  factory->CreateLoaderAndStart(loader.BindNewPipeAndPassReceiver(), 1, 0,
+                               request, client.CreateRemote(),
+                               net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
+  task_environment_.RunUntilIdle();
+  ASSERT_EQ(upstream.pending_requests()->size(), 1u);
+  upstream.pending_requests()->front().client.reset();
+  task_environment_.RunUntilIdle();
+  ASSERT_TRUE(client.has_received_completion());
+  EXPECT_EQ(client.completion_status().error_code, net::ERR_ABORTED);
+}
 
 struct CapturedEvent {
   uint64_t sequence;

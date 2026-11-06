@@ -58,6 +58,10 @@ PageViewHost::~PageViewHost() {
 bool PageViewHost::Attach(NSView* tab_view) {
   if (!tab_view || tab_view == view_)
     return false;
+  // Chromium's ViewsHostableDetach hides the NSView before giving up its
+  // compositor. Shaar owns presentation now; clearing this per-view flag does
+  // not order the NSWindow in or change hidden-window renderer visibility.
+  tab_view.hidden = NO;
   if (selected_view_ == tab_view && tab_view.window == window_)
     return true;
   void* identity = (__bridge void*)tab_view;

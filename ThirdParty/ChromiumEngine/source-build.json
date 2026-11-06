@@ -325,6 +325,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0021-shaar-devtools-viewports-lease.patch",
       "sha256": "562e2829639648d53a161c4ee1788b0c3643cb4d454733ac0cfc4a90a4b92feb"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0022-shaar-devtools-dom-tree.patch",
+      "sha256": "39e2a750e35a407ba23d09f0d1d2ec39394ae7694b21d729a95f28378b3695dc"
     }
   ],
   "requiredExports": [

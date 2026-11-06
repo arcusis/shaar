@@ -126,6 +126,15 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .repro:
+      ShaarReproPanel(
+        model: model.repro,
+        directory: inspector?.engine?.runtime.downloadsDirectory(
+          forProfileID: model.target.profileID.uuidString),
+        onSaved: { file in
+          inspector?.engine?.downloads.registerGeneratedFile(
+            file, profileID: model.target.profileID)
+        })
     }
   }
 
@@ -167,6 +176,7 @@ struct ShaarDevToolsPanel: View {
     if model.section == .application { return "Live Application needs engine shaar.17" }
     if model.section == .performance { return "Live Performance needs engine shaar.17" }
     if model.section == .sources { return "Live Sources need engine shaar.17" }
+    if model.section == .repro { return "Repro capture needs engine support" }
     return "Live console and network need engine shaar.17"
   }
 
@@ -207,6 +217,7 @@ struct ShaarDevToolsPanel: View {
         ? "Source resources are scoped to this tab"
         : "Sources need engine shaar.17"
     }
+    if model.section == .repro { return "Repro data is scoped to this tab" }
     guard model.streamAvailable else { return "Console commands need engine shaar.17" }
     if model.section == .network { return "Network requests are scoped to this tab" }
     return "Open Console to evaluate JavaScript"

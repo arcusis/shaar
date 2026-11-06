@@ -5,6 +5,27 @@
 import AppKit
 import SwiftUI
 
+enum ShaarDevToolsAccessibility {
+  static let openHelp = ShellL10n.string(
+    "Open Shaar DevTools with F12 or Option-Command-I. Open Chromium DevTools with Option-Shift-Command-I.")
+  static let closeHelp = ShellL10n.string("Close Shaar DevTools with Escape.")
+
+  static func sectionLabel(_ section: ShaarDevToolsSection) -> String {
+    ShellL10n.string(section.rawValue)
+  }
+
+  static func sectionHelp(_ section: ShaarDevToolsSection) -> String {
+    "\(sectionLabel(section)). "
+      + ShellL10n.string("Use Left and Right Arrow to switch panels.")
+  }
+
+  static func applyMotionPreference(to transaction: inout Transaction, reduceMotion: Bool) {
+    guard reduceMotion else { return }
+    transaction.animation = nil
+    transaction.disablesAnimations = true
+  }
+}
+
 extension ShaarDevToolsSection {
   fileprivate var symbol: String {
     switch self {
@@ -42,6 +63,8 @@ struct ShaarDevToolsPanel: View {
   var cookieStore: (any ShaarCookieStore)? = nil
   var reproDirectory: URL? = nil
   @FocusState private var focusedSection: ShaarDevToolsSection?
+  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     VStack(spacing: 0) {
@@ -52,7 +75,11 @@ struct ShaarDevToolsPanel: View {
       commandLine
     }
     .background(Color(nsColor: .windowBackgroundColor))
-    .onExitCommand { model.close() }
+    .transaction { transaction in
+      ShaarDevToolsAccessibility.applyMotionPreference(
+        to: &transaction, reduceMotion: reduceMotion)
+    }
+    .onExitCommand(perform: handleExitCommand)
     .onChange(of: inspector?.isOpen) { _, open in
       if open == false && model.isOpen { model.close() }
     }
@@ -98,7 +125,7 @@ struct ShaarDevToolsPanel: View {
             .frame(width: 27, height: 28)
         }
         .buttonStyle(.plain)
-        .help(ShellL10n.string("Close DevTools"))
+        .help(ShaarDevToolsAccessibility.closeHelp)
         .accessibilityLabel(ShellL10n.string("Close DevTools"))
       }
       .padding(.horizontal, 7)
@@ -133,19 +160,28 @@ struct ShaarDevToolsPanel: View {
             .lineLimit(1)
         }
       }
-      .foregroundStyle(model.section == section ? .primary : .secondary)
+      .foregroundStyle(.primary)
       .frame(width: showsLabel ? 73 : 33, height: 28)
       .background {
         if model.section == section {
-          RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.08))
+          RoundedRectangle(cornerRadius: 6)
+            .fill(Color.primary.opacity(colorSchemeContrast == .increased ? 0.16 : 0.08))
+        }
+      }
+      .overlay {
+        if focusedSection == section {
+          RoundedRectangle(cornerRadius: 6)
+            .strokeBorder(
+              Color.primary, lineWidth: colorSchemeContrast == .increased ? 2 : 1)
         }
       }
     }
     .buttonStyle(.plain)
     .focusable()
     .focused($focusedSection, equals: section)
-    .help(ShellL10n.string(section.rawValue))
-    .accessibilityLabel(ShellL10n.string(section.rawValue))
+    .help(ShaarDevToolsAccessibility.sectionHelp(section))
+    .accessibilityLabel(ShaarDevToolsAccessibility.sectionLabel(section))
+    .accessibilityValue(model.section == section ? ShellL10n.string("Selected") : "")
     .accessibilityAddTraits(model.section == section ? .isSelected : [])
     .accessibilityIdentifier("shaar.devtools.\(section.rawValue.lowercased())")
   }
@@ -165,12 +201,13 @@ struct ShaarDevToolsPanel: View {
         Divider()
       }
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
+        .help(ShellL10n.string("Open Chromium DevTools with Option-Shift-Command-I"))
     } label: {
       Image(systemName: "ellipsis")
         .frame(width: 27, height: 28)
     }
     .menuStyle(.borderlessButton)
-    .help(ShellL10n.string("DevTools options"))
+    .help(ShellL10n.string("DevTools options") + ". " + ShaarDevToolsAccessibility.openHelp)
     .accessibilityLabel(ShellL10n.string("DevTools options"))
   }
 
@@ -251,13 +288,14 @@ struct ShaarDevToolsPanel: View {
     VStack(spacing: 10) {
       Image(systemName: "bolt.slash")
         .font(.system(size: 22, weight: .ultraLight))
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.primary)
       Text(ShellL10n.string(unavailableMessage))
         .font(.system(size: 12, weight: .medium))
       Text(ShellL10n.string("Use Chromium DevTools until the live stream is available."))
         .font(.system(size: 11))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.primary)
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
+        .help(ShellL10n.string("Open Chromium DevTools with Option-Shift-Command-I"))
         .controlSize(.small)
         .padding(.top, 3)
       if let failure = nativeFailure {
@@ -317,13 +355,13 @@ struct ShaarDevToolsPanel: View {
       HStack(spacing: 8) {
         Text(">")
           .font(.system(size: 12, weight: .medium, design: .monospaced))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.primary)
         Text(
           ShellL10n.string(
             footerMessage)
         )
         .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.primary)
         Spacer()
       }
       .padding(.horizontal, 12)
@@ -382,5 +420,30 @@ struct ShaarDevToolsPanel: View {
     }
     model.section = model.sections[next]
     focusedSection = model.section
+  }
+
+  private func handleExitCommand() {
+    switch model.section {
+    case .elements where !model.dom.search.isEmpty:
+      model.dom.search = ""
+      return
+    case .console where !model.console.search.isEmpty:
+      model.console.search = ""
+      return
+    case .network where !model.network.search.isEmpty:
+      model.network.search = ""
+      return
+    case .application where model.application.area == .cookies && !model.cookies.search.isEmpty:
+      model.cookies.search = ""
+      return
+    case .application where !model.application.search.isEmpty:
+      model.application.search = ""
+      return
+    case .sources where !model.sources.search.isEmpty:
+      model.sources.search = ""
+      return
+    default:
+      model.close()
+    }
   }
 }

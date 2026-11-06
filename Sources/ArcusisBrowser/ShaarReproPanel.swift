@@ -26,14 +26,14 @@ struct ShaarReproPanel: View {
     HStack(spacing: 0) {
       VStack(alignment: .leading, spacing: 13) {
         Text(ShellL10n.string("REPRO BUNDLE"))
-          .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+          .font(.system(size: 10, weight: .semibold)).foregroundStyle(.primary)
         Text(ShellL10n.string("Capture the last 30 seconds"))
           .font(.system(size: 16, weight: .semibold))
         Text(
           ShellL10n.string(
             "Page video, console, network, DOM and environment in one local file.")
         )
-        .font(.system(size: 12)).foregroundStyle(.secondary)
+        .font(.system(size: 12)).foregroundStyle(.primary)
         capability
         HStack(spacing: 12) {
           Button {
@@ -50,7 +50,7 @@ struct ShaarReproPanel: View {
         }
         .controlSize(.small)
         if let failure = model.failure {
-          Text(failure).font(.system(size: 11)).foregroundStyle(.red)
+          Text(failure).font(.system(size: 11)).foregroundStyle(.primary)
         }
         if let contents = model.viewerContents {
           Picker(ShellL10n.string("Bundle viewer"), selection: $viewerTab) {
@@ -68,7 +68,7 @@ struct ShaarReproPanel: View {
             "Cookies, auth headers and DOM form values are redacted. Video and console may show sensitive text. No upload."
           )
         )
-        .font(.system(size: 10)).foregroundStyle(.secondary)
+        .font(.system(size: 10)).foregroundStyle(.primary)
       }
       .padding(20).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       Divider()
@@ -102,10 +102,10 @@ struct ShaarReproPanel: View {
             let row = contents.console[index]
             HStack(alignment: .top, spacing: 8) {
               Text(row.level.uppercased()).frame(width: 60, alignment: .leading)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
               Text(row.message).frame(maxWidth: .infinity, alignment: .leading)
                 .devToolsDataDirection()
-              Text(row.source).foregroundStyle(.secondary).devToolsDataDirection()
+              Text(row.source).foregroundStyle(.primary).devToolsDataDirection()
             }
             .font(.system(size: 10, design: .monospaced))
             .padding(.vertical, 6)
@@ -161,7 +161,7 @@ struct ShaarReproPanel: View {
 
   private func environmentRow(_ name: String, _ value: String) -> some View {
     HStack(alignment: .top, spacing: 8) {
-      Text(ShellL10n.string(name)).foregroundStyle(.secondary)
+      Text(ShellL10n.string(name)).foregroundStyle(.primary)
         .frame(width: 75, alignment: .leading)
       Text(value).textSelection(.enabled).devToolsDataDirection()
     }.font(.system(size: 10, design: .monospaced))
@@ -182,12 +182,12 @@ struct ShaarReproPanel: View {
   private var capability: some View {
     HStack(spacing: 10) {
       Image(systemName: model.recording ? "record.circle" : "record.circle.slash")
-        .foregroundStyle(model.recording ? Color.red : Color.secondary)
+        .foregroundStyle(.primary)
       Text(
         ShellL10n.string(
           model.recording ? "Recording this tab" : "Recording needs engine support"))
       Spacer()
-      Text("30 s").foregroundStyle(.secondary)
+      Text("30 s").foregroundStyle(.primary)
     }
     .font(.system(size: 11)).padding(10)
     .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
@@ -196,7 +196,7 @@ struct ShaarReproPanel: View {
   private var contents: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text(ShellL10n.string("BUNDLE CONTENTS"))
-        .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+        .font(.system(size: 10, weight: .semibold)).foregroundStyle(.primary)
       if let manifest = model.viewerManifest {
         row("Page video", "\(manifest.durationSeconds) s")
         row("Console", "\(manifest.consoleCount) entries")
@@ -209,11 +209,11 @@ struct ShaarReproPanel: View {
         }.buttonStyle(.link).font(.system(size: 11))
         if let url = model.savedURL {
           Text(url.lastPathComponent).font(.system(size: 10))
-            .foregroundStyle(.secondary).lineLimit(2)
+            .foregroundStyle(.primary).lineLimit(2)
         }
       } else {
         Text(ShellL10n.string("Open a local bundle to inspect its summary."))
-          .font(.system(size: 11)).foregroundStyle(.secondary)
+          .font(.system(size: 11)).foregroundStyle(.primary)
       }
       Spacer()
     }
@@ -224,7 +224,7 @@ struct ShaarReproPanel: View {
     HStack {
       Text(ShellL10n.string(label))
       Spacer()
-      Text(value).foregroundStyle(.secondary)
+      Text(value).foregroundStyle(.primary)
     }.font(.system(size: 11, design: .monospaced))
   }
 

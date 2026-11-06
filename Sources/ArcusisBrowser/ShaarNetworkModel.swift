@@ -100,13 +100,16 @@ final class ShaarNetworkModel {
     detailTab = .headers
   }
 
-  func selectAdjacent(in rows: [ShaarNetworkRequest], forward: Bool) {
+  func selectAdjacent(in rows: [ShaarNetworkRequest], forward: Bool, from focusedID: String? = nil) {
     guard !rows.isEmpty else {
       selectedID = nil
       return
     }
-    let index = rows.firstIndex { $0.id == selectedID }
-    let next = forward ? min(rows.count - 1, (index ?? -1) + 1) : max(0, (index ?? 1) - 1)
+    let currentID = focusedID ?? selectedID
+    let index = rows.firstIndex { $0.id == currentID }
+    let next = index.flatMap {
+      ShaarDevToolsNavigation.adjacentIndex($0, count: rows.count, forward: forward)
+    } ?? 0
     selectedID = rows[next].id
   }
 

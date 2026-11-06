@@ -16,6 +16,8 @@ struct ShaarApplicationPanel: View {
   let clearCookies: (() async throws -> Void)?
   let clearSiteData: (() async throws -> Void)?
   @FocusState private var focusedRow: String?
+  @FocusState private var focusedArea: ShaarApplicationArea?
+  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
   @State private var editing = false
   @State private var editorKey = ""
   @State private var editorValue = ""
@@ -93,19 +95,39 @@ struct ShaarApplicationPanel: View {
       Button(ShellL10n.string("Clear site data…")) { confirmation = .clearSiteData }
         .buttonStyle(.plain)
         .font(.system(size: 10))
-        .foregroundStyle(clearSiteData == nil ? .tertiary : .secondary)
+        .foregroundStyle(.primary)
         .disabled(clearSiteData == nil)
         .padding(12)
     }
     .frame(width: 190).frame(maxHeight: .infinity, alignment: .topLeading)
     .background(Color.primary.opacity(0.025))
+    .onMoveCommand(perform: moveArea)
   }
 
   private func groupLabel(_ title: String) -> some View {
     Text(ShellL10n.string(title).uppercased())
       .font(.system(size: 9, weight: .semibold))
-      .foregroundStyle(.tertiary)
+      .foregroundStyle(.primary)
       .padding(.horizontal, 12).padding(.top, 13).padding(.bottom, 6)
+  }
+
+  private func moveArea(_ direction: MoveCommandDirection) {
+    guard focusedArea != nil,
+      let index = ShaarApplicationArea.allCases.firstIndex(of: model.area)
+    else { return }
+    let forward: Bool
+    switch direction {
+    case .left: forward = false
+    case .right: forward = true
+    default: return
+    }
+    guard let next = ShaarDevToolsNavigation.adjacentIndex(
+      index, count: ShaarApplicationArea.allCases.count, forward: forward)
+    else { return }
+    let area = ShaarApplicationArea.allCases[next]
+    editing = false
+    model.selectArea(area)
+    focusedArea = area
   }
 
   private func areaButton(_ area: ShaarApplicationArea) -> some View {
@@ -115,12 +137,27 @@ struct ShaarApplicationPanel: View {
     } label: {
       Label(ShellL10n.string(area.rawValue), systemImage: area.symbol)
         .font(.system(size: 10, weight: model.area == area ? .semibold : .regular))
-        .foregroundStyle(model.area == area ? .primary : .secondary)
+        .foregroundStyle(.primary)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
-        .background(model.area == area ? Color.accentColor.opacity(0.10) : .clear)
+        .background(
+          model.area == area
+            ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.22 : 0.10)
+            : .clear)
     }
     .buttonStyle(.plain)
+    .focusable()
+    .focused($focusedArea, equals: area)
+    .help(ShellL10n.string("Use Left and Right Arrow to move through application areas."))
+    .overlay {
+      if focusedArea == area {
+        RoundedRectangle(cornerRadius: 3)
+          .strokeBorder(
+            Color.primary, lineWidth: colorSchemeContrast == .increased ? 2 : 1)
+      }
+    }
+    .accessibilityLabel(ShellL10n.string(area.rawValue))
+    .accessibilityValue(model.area == area ? ShellL10n.string("Selected") : "")
     .accessibilityAddTraits(model.area == area ? .isSelected : [])
   }
 
@@ -130,7 +167,7 @@ struct ShaarApplicationPanel: View {
       Divider()
       if let failure = model.failure {
         HStack {
-          Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+          Image(systemName: "exclamationmark.triangle").foregroundStyle(.primary)
           Text(failure).lineLimit(2)
           Spacer()
           Button(ShellL10n.string("Retry")) { Task { await model.refresh() } }
@@ -164,11 +201,12 @@ struct ShaarApplicationPanel: View {
         }
         .buttonStyle(.plain)
         .help(ShellL10n.string("Back"))
+        .accessibilityLabel(ShellL10n.string("Back"))
       }
       Text(ShellL10n.string(model.area.rawValue))
         .font(.system(size: 11, weight: .semibold))
       if let path = model.store ?? model.database ?? model.cacheID {
-        Text(path).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+        Text(path).font(.system(size: 10)).foregroundStyle(.primary).lineLimit(1)
           .devToolsDataDirection()
       }
       Spacer(minLength: 4)
@@ -178,6 +216,7 @@ struct ShaarApplicationPanel: View {
           .font(.system(size: 10))
           .frame(width: 150)
           .devToolsDataDirection()
+          .onExitCommand { model.search = "" }
       }
       Button {
         Task {
@@ -188,6 +227,7 @@ struct ShaarApplicationPanel: View {
       }
       .buttonStyle(.plain)
       .help(ShellL10n.string("Refresh application data"))
+      .accessibilityLabel(ShellL10n.string("Refresh application data"))
     }
     .padding(.horizontal, 12)
     .frame(height: 36)
@@ -196,7 +236,7 @@ struct ShaarApplicationPanel: View {
   private var unavailableApplicationContent: some View {
     VStack(spacing: 10) {
       Image(systemName: "bolt.slash")
-        .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.tertiary)
+        .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.primary)
       Text(ShellL10n.string("Live Application is unavailable for this tab"))
         .font(.system(size: 12, weight: .medium))
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
@@ -220,6 +260,7 @@ struct ShaarApplicationPanel: View {
         TextField(ShellL10n.string("Filter cookies"), text: $cookies.search)
           .textFieldStyle(.roundedBorder).frame(width: 180)
           .devToolsDataDirection()
+          .onExitCommand { cookies.search = "" }
         Spacer()
         if clearCookies != nil {
           Button(ShellL10n.string("Clear cookies and reload"), role: .destructive) {
@@ -232,7 +273,7 @@ struct ShaarApplicationPanel: View {
       if let failure = cookies.failure, cookies.cookies.isEmpty {
         VStack(spacing: 9) {
           Image(systemName: "circle.grid.2x2")
-            .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.tertiary)
+            .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.primary)
           Text(failure).font(.system(size: 12, weight: .medium))
           Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
             .controlSize(.small)
@@ -243,7 +284,7 @@ struct ShaarApplicationPanel: View {
       } else {
         if let failure = cookies.failure {
           Text(failure)
-            .font(.system(size: 10)).foregroundStyle(.orange)
+            .font(.system(size: 10)).foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
         }
@@ -262,7 +303,7 @@ struct ShaarApplicationPanel: View {
         Text(ShellL10n.string("Path")).frame(width: 65, alignment: .leading)
         Text(ShellL10n.string("Flags")).frame(width: 180, alignment: .leading)
       }
-      .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+      .font(.system(size: 10, weight: .medium)).foregroundStyle(.primary)
       .padding(.horizontal, 12).frame(height: 29)
       .background(Color.primary.opacity(0.035))
       ScrollView {
@@ -276,6 +317,7 @@ struct ShaarApplicationPanel: View {
           ForEach(cookies.visibleCookies) { cookie in
             Button {
               cookies.selectedID = cookie.id
+              focusedRow = cookie.id
             } label: {
               HStack(spacing: 8) {
                 Text(cookie.name).frame(width: 130, alignment: .leading).lineLimit(1)
@@ -292,12 +334,45 @@ struct ShaarApplicationPanel: View {
               .font(.system(size: 10, design: .monospaced))
               .padding(.horizontal, 12).frame(height: 34)
               .background(
-                cookies.selectedID == cookie.id ? Color.accentColor.opacity(0.10) : .clear)
+                cookies.selectedID == cookie.id
+                  ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.22 : 0.10)
+                  : .clear)
             }
             .buttonStyle(.plain)
+            .overlay {
+              if focusedRow == cookie.id {
+                RoundedRectangle(cornerRadius: 3)
+                  .strokeBorder(
+                    Color.primary, lineWidth: colorSchemeContrast == .increased ? 2 : 1)
+              }
+            }
+            .focusable()
+            .focused($focusedRow, equals: cookie.id)
+            .accessibilityLabel(cookieRowLabel(cookie))
+            .help(ShellL10n.string("Cookie. Use Up and Down Arrow to change selection."))
+            .accessibilityAddTraits(cookies.selectedID == cookie.id ? .isSelected : [])
             .accessibilityIdentifier("shaar.devtools.cookieRow")
             Divider()
           }
+        }
+        .onMoveCommand { direction in
+          guard focusedRow != nil else { return }
+          let rows = cookies.visibleCookies
+          guard !rows.isEmpty else { return }
+          let index = rows.firstIndex { $0.id == focusedRow } ?? 0
+          if direction == .down,
+            let next = ShaarDevToolsNavigation.adjacentIndex(
+              index, count: rows.count, forward: true)
+          {
+            cookies.selectedID = rows[next].id
+          }
+          if direction == .up,
+            let next = ShaarDevToolsNavigation.adjacentIndex(
+              index, count: rows.count, forward: false)
+          {
+            cookies.selectedID = rows[next].id
+          }
+          focusedRow = cookies.selectedID
         }
       }
       if editingCookie { cookieEditor }
@@ -311,6 +386,12 @@ struct ShaarApplicationPanel: View {
     flags.append(ShellL10n.string(cookie.sameSite.rawValue))
     if cookie.partitionSite != nil { flags.append(ShellL10n.string("Partitioned")) }
     return flags.joined(separator: " · ")
+  }
+
+  private func cookieRowLabel(_ cookie: ShaarSiteCookie) -> String {
+    [cookie.name, cookie.value, cookie.domain, cookie.path, cookieFlags(cookie)]
+      .filter { !$0.isEmpty }
+      .joined(separator: ", ")
   }
 
   private var cookieEditor: some View {
@@ -346,12 +427,12 @@ struct ShaarApplicationPanel: View {
         if model.workers.isEmpty { emptyContent("No service workers for this page") }
         ForEach(model.workers) { worker in
           HStack(spacing: 8) {
-            Image(systemName: "gearshape.2").foregroundStyle(.secondary)
+            Image(systemName: "gearshape.2").foregroundStyle(.primary)
             VStack(alignment: .leading, spacing: 4) {
               Text(worker.scopeURL).font(.system(size: 11, design: .monospaced))
                 .devToolsDataDirection()
               Text("\(worker.status) · \(worker.scriptURL)")
-                .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                .font(.system(size: 10, design: .monospaced)).foregroundStyle(.primary)
                 .devToolsDataDirection()
             }
             Spacer()
@@ -378,7 +459,7 @@ struct ShaarApplicationPanel: View {
         if let body = model.body {
           if model.bodyEncoded {
             Text(ShellL10n.string("Binary response is available in Chromium DevTools"))
-              .font(.system(size: 11)).foregroundStyle(.secondary)
+              .font(.system(size: 11)).foregroundStyle(.primary)
             Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
               .controlSize(.small)
           } else {
@@ -404,7 +485,7 @@ struct ShaarApplicationPanel: View {
           Text(ShellL10n.string("Detail")).frame(width: 95, alignment: .leading)
         }
       }
-      .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+      .font(.system(size: 10, weight: .medium)).foregroundStyle(.primary)
       .padding(.horizontal, 12).frame(height: 29)
       .background(Color.primary.opacity(0.035))
       ScrollView {
@@ -430,11 +511,25 @@ struct ShaarApplicationPanel: View {
               }
               .font(.system(size: 10, design: .monospaced))
               .padding(.horizontal, 12).frame(height: 35)
-              .background(model.selectedID == row.id ? Color.accentColor.opacity(0.10) : .clear)
+              .background(
+                model.selectedID == row.id
+                  ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.22 : 0.10)
+                  : .clear)
             }
             .buttonStyle(.plain)
+            .overlay {
+              if focusedRow == row.id {
+                RoundedRectangle(cornerRadius: 3)
+                  .strokeBorder(
+                    Color.primary, lineWidth: colorSchemeContrast == .increased ? 2 : 1)
+              }
+            }
             .focusable()
             .focused($focusedRow, equals: row.id)
+            .accessibilityLabel("\(row.name), \(row.value)")
+            .accessibilityValue(model.selectedID == row.id ? ShellL10n.string("Selected") : "")
+            .accessibilityAddTraits(model.selectedID == row.id ? .isSelected : [])
+            .help(ShellL10n.string("Storage item. Use Up and Down Arrow to change selection."))
             .accessibilityIdentifier("shaar.devtools.applicationRow")
             Divider()
           }
@@ -446,8 +541,8 @@ struct ShaarApplicationPanel: View {
       }
       .onMoveCommand { direction in
         guard focusedRow != nil else { return }
-        if direction == .down { model.selectAdjacent(forward: true) }
-        if direction == .up { model.selectAdjacent(forward: false) }
+        if direction == .down { model.selectAdjacent(forward: true, from: focusedRow) }
+        if direction == .up { model.selectAdjacent(forward: false, from: focusedRow) }
         focusedRow = model.selectedID
       }
       if editing && model.isStorage { storageEditor }
@@ -482,7 +577,7 @@ struct ShaarApplicationPanel: View {
             .integer(model.area == .cookies ? cookies.cookies.count : model.rows.count)
           ])
       )
-      .foregroundStyle(.secondary)
+      .foregroundStyle(.primary)
       Spacer()
       if model.area == .cookies {
         Button(ShellL10n.string("Edit")) { beginCookieEdit() }
@@ -526,7 +621,7 @@ struct ShaarApplicationPanel: View {
 
   private func emptyContent(_ message: String) -> some View {
     Text(ShellL10n.string(message))
-      .font(.system(size: 11)).foregroundStyle(.secondary)
+      .font(.system(size: 11)).foregroundStyle(.primary)
       .frame(maxWidth: .infinity).padding(.top, 65)
   }
 

@@ -217,7 +217,7 @@ struct ShaarPerformancePanel: View {
       Text(ShellL10n.string("This page load"))
         .font(.system(size: 11, weight: .semibold))
       Text(model.path).font(.system(size: 10, design: .monospaced))
-        .foregroundStyle(.secondary).lineLimit(1)
+        .foregroundStyle(.primary).lineLimit(1)
       Spacer()
       if model.loading { ProgressView().controlSize(.mini) }
       Button {
@@ -227,6 +227,7 @@ struct ShaarPerformancePanel: View {
       }
       .buttonStyle(.plain)
       .help(ShellL10n.string("Refresh performance data"))
+      .accessibilityLabel(ShellL10n.string("Refresh performance data"))
     }
     .padding(.horizontal, 13)
     .frame(height: 36)
@@ -234,7 +235,7 @@ struct ShaarPerformancePanel: View {
 
   private func errorBanner(_ failure: String) -> some View {
     HStack(spacing: 8) {
-      Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+      Image(systemName: "exclamationmark.triangle").foregroundStyle(.primary)
       Text(failure).lineLimit(2)
       Spacer()
       Button(ShellL10n.string("Retry")) { Task { await model.refresh() } }
@@ -257,16 +258,16 @@ struct ShaarPerformancePanel: View {
     _ title: String, value: Double?, unit: String, divisor: Double = 1
   ) -> some View {
     VStack(alignment: .leading, spacing: 5) {
-      Text(title).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+      Text(title).font(.system(size: 9, weight: .medium)).foregroundStyle(.primary)
       if let value {
         Text(formatted(value / divisor, unit: unit))
           .font(.system(size: 17, weight: .semibold, design: .rounded))
         Text(ShellL10n.string("Observed this load"))
-          .font(.system(size: 9)).foregroundStyle(.secondary)
+          .font(.system(size: 9)).foregroundStyle(.primary)
       } else {
         Text("—").font(.system(size: 17, weight: .semibold))
         Text(ShellL10n.string("Waiting for data"))
-          .font(.system(size: 9)).foregroundStyle(.tertiary)
+          .font(.system(size: 9)).foregroundStyle(.primary)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -298,7 +299,7 @@ struct ShaarPerformancePanel: View {
             Spacer()
             Text(formatted(task.duration, unit: "ms"))
             Text(formatted(task.start / 1_000, unit: "s"))
-              .foregroundStyle(.secondary)
+              .foregroundStyle(.primary)
           }
           .font(.system(size: 10, design: .monospaced))
           .padding(.horizontal, 13).frame(height: 25)
@@ -384,7 +385,7 @@ struct ShaarPerformancePanel: View {
     HStack {
       Text(ShellL10n.string(name)).lineLimit(1)
       Spacer(minLength: 4)
-      Text(value ?? "—").foregroundStyle(value == nil ? .tertiary : .primary)
+      Text(value ?? "—").foregroundStyle(.primary)
     }
     .font(.system(size: 10, design: .monospaced))
     .padding(.horizontal, 13).frame(height: 25)
@@ -403,7 +404,7 @@ struct ShaarPerformancePanel: View {
 
   private func emptyState(_ message: String) -> some View {
     Text(ShellL10n.string(message))
-      .font(.system(size: 10)).foregroundStyle(.secondary)
+      .font(.system(size: 10)).foregroundStyle(.primary)
       .padding(.horizontal, 13).padding(.vertical, 10)
   }
 

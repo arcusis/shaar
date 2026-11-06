@@ -87,8 +87,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private(set) var firstRunSetup: FirstRunSetupWindow?
   private let firstRunMarker: URL?
   private var pendingURLs: [URL] = []
+  private(set) var pendingFileURLs: [URL] = []
   private var claimedPrimary = false
   private var reopenHandlerInstalled = false
+  private var fileOpenHandlerInstalled = false
   private var started = false
   private var startupFailed = false
   private(set) var restartRequested = false
@@ -256,6 +258,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     for url in pendingURLs { openExternalURL(url) }
     pendingURLs.removeAll()
+    for url in pendingFileURLs { openFileURL(url) }
+    pendingFileURLs.removeAll()
   }
 
   @discardableResult
@@ -587,6 +591,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   func detach() {
+    if fileOpenHandlerInstalled {
+      NSAppleEventManager.shared().removeEventHandler(
+        forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEOpenDocuments))
+      fileOpenHandlerInstalled = false
+    }
     if reopenHandlerInstalled {
       NSAppleEventManager.shared().removeEventHandler(
         forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEReopenApplication))
@@ -764,6 +773,39 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return
     }
     openExternalURL(url)
+  }
+
+  @objc func handleOpenDocuments(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+    for url in IncomingFileOpenPolicy.fileURLs(
+      from: event.paramDescriptor(forKeyword: keyDirectObject))
+    {
+      if started {
+        openFileURL(url)
+      } else {
+        pendingFileURLs.append(url)
+      }
+    }
+  }
+
+  private func openFileURL(_ url: URL) {
+    guard let fileURL = IncomingFileOpenPolicy.readableFileURL(url) else { return }
+    let context: NativeBrowserContext
+    if let existing = activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
+      ?? contexts.values.first
+    {
+      context = existing
+    } else {
+      do {
+        let id = try newWindow()
+        guard let created = contexts[id] else { throw WorkspaceError.invalidState }
+        context = created
+      } catch {
+        report(error)
+        return
+      }
+    }
+    context.store.perform(.open(fileURL))
+    if presentation == .visible { context.window.makeKeyAndOrderFront(nil) }
   }
 
   private func openExternalURL(_ url: URL) {
@@ -1359,6 +1401,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       NSAppleEventManager.shared().setEventHandler(
         host, andSelector: #selector(handleURL(_:reply:)),
         forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+      NSAppleEventManager.shared().setEventHandler(
+        host, andSelector: #selector(handleOpenDocuments(_:reply:)),
+        forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEOpenDocuments))
+      host.fileOpenHandlerInstalled = true
       runtime.onReady = { [weak host] in
         host?.updater = AppUpdater.forMainBundle()
         do {

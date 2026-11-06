@@ -204,7 +204,7 @@ import SwiftUI
         requestStatuses: tools.requests.map(\.status),
         signalNames: tools.signals.map(\.name))
     }
-    try await waitForDetailedContext(ai)
+    try await waitForDetailedContext(ai, inspector: inspector)
     ai.detailed = true
     await ai.copyElement(to: board)
     let detailed = board.string(forType: .string) ?? ""
@@ -260,21 +260,21 @@ import SwiftUI
       && details.technologies.contains { $0.contains("Inspector AI fixture") }
   }
 
-  private func waitForDetailedContext(_ ai: InspectorAICopyModel) async throws {
-    var lastFailure = "context has not been collected"
-    do {
-      try await wait("detailed AI Inspector context collection") {
-        do {
-          let context = try await ai.context(captureDetails: true)
-          if Self.detailedContextReady(context.details) { return true }
-          lastFailure = "context is missing collected styles or Page diagnostics"
-        } catch {
-          lastFailure = error.localizedDescription
-        }
-        return false
-      }
-    } catch {
-      throw InspectorFailure("Detailed AI Inspector context was not ready: \(lastFailure).")
+  private func waitForDetailedContext(_ ai: InspectorAICopyModel, inspector: InspectorModel)
+    async throws
+  {
+    guard let selectionID = inspector.selection?.id else {
+      throw InspectorFailure("Detailed AI Inspector context has no locked selection.")
+    }
+    await inspector.styles.refresh(force: true)
+    try await wait("selected Inspector styles") {
+      inspector.styles.selectedID == selectionID && !inspector.styles.computed.isEmpty
+        && !inspector.styles.rules.isEmpty && !inspector.styles.busy
+    }
+    let context = try await ai.context(captureDetails: true)
+    guard Self.detailedContextReady(context.details) else {
+      throw InspectorFailure(
+        "Detailed AI Inspector context is missing collected styles or Page diagnostics.")
     }
   }
 

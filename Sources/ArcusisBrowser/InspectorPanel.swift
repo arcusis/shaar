@@ -290,6 +290,8 @@ struct InspectorPanel: View {
       InspectorPageToolsView(inspector: model, model: tools)
     } else if model.tab == .notes {
       InspectorNotesView(model: model.aiCopy)
+    } else if model.tab == .accessibility {
+      InspectorDetailsView(inspector: model, model: model.details)
     } else if let selection = model.selection {
       if model.tab == .styles {
         InspectorStylesView(inspector: model, model: model.styles)

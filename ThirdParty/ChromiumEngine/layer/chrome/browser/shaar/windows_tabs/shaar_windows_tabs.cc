@@ -4,6 +4,7 @@
 
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
+#include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -25,6 +26,7 @@ BrowserTabRegistryImpl& Registry() { return g_registry; }
 void BrowserTabRegistryImpl::BeginEngineQuit(shaar_engine* engine) {
   if (engine) {
     shaar::devtools::ClosePanelLeasesForEngine(engine);
+    shaar::devtools::CloseViewportLeasesForEngine(engine);
     quitting_engines_.insert(engine);
   }
 }
@@ -85,6 +87,7 @@ void BrowserTabRegistryImpl::UnbindTab(shaar_engine* engine,
                                        shaar_window* window,
                                        shaar_tab* tab) {
   shaar::devtools::ClosePanelLeaseForTab(FindWebContents(engine, window, tab));
+  shaar::devtools::CloseViewportLeaseForTab(FindWebContents(engine, window, tab));
   std::erase_if(tabs_, [engine, window, tab](const TabEntry& entry) {
     return entry.engine == engine && entry.window == window &&
            entry.handle == tab;

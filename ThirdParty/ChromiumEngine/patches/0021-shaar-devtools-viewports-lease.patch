@@ -1,0 +1,426 @@
+diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
+index 46ae88ec..2afea056 100644
+--- a/chrome/browser/shaar/BUILD.gn
++++ b/chrome/browser/shaar/BUILD.gn
+@@ -90,6 +90,8 @@ source_set("engine") {
+     "devtools/shaar_agent_bridge.h",
+     "devtools/shaar_devtools_panel.cc",
+     "devtools/shaar_devtools_panel.h",
++    "devtools/shaar_devtools_viewports.cc",
++    "devtools/shaar_devtools_viewports.h",
+     "devtools/shaar_devtools_lifecycle_adapter.cc",
+     # END devtools
+     # BEGIN media
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+index 67b02426..95386113 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/shaar/devtools/shaar_devtools.h"
+ #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
+ #include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
++#include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
+ #include "chrome/browser/devtools/devtools_settings.h"
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ 
+@@ -1036,6 +1037,10 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
+     case SHAAR_OP_DEVTOOLS_PANEL_CLOSE:
+     case SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY:
+     case SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND:
++    case SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN:
++    case SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE:
++    case SHAAR_OP_DEVTOOLS_VIEWPORT_ADD:
++    case SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE:
+       break;
+     case SHAAR_OP_DEVTOOLS_UI_SET_DOCK:
+     case SHAAR_OP_DEVTOOLS_CONTROL_ENABLE:
+@@ -1047,7 +1052,11 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
+   const bool panel_operation = operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
+       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
+       operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
+-      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND;
++      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND ||
++      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN ||
++      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE ||
++      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_ADD ||
++      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE;
+   if ((operation == SHAAR_OP_DEVTOOLS_CALL && capability != kInspector &&
+        capability != kDeveloper) ||
+       (panel_operation && capability != kPanel) ||
+@@ -1258,6 +1267,17 @@ shaar_error_code HandleDevToolsOperation(
+                                 identity, operation, args_json, request_id,
+                                 reply, reply_context, error);
+   }
++  if (operation == SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN ||
++      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE ||
++      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_ADD ||
++      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE) {
++    if (!PolicyAllowsOperation(context->devtools_runtime, engine, scope,
++                               contents, operation, kPanel))
++      return Fail(error, SHAAR_POLICY_BLOCKED, "DevTools Viewports is blocked");
++    return HandleViewportOperation(context, engine, scope, window, tab, contents,
++                                   identity, operation, args_json, request_id,
++                                   reply, reply_context, error);
++  }
+   if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
+       operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
+     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+index 11d35b41..de2526b3 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+@@ -26,4 +26,7 @@ extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
+   registry->Register(SHAAR_OP_DEVTOOLS_PANEL_OPEN,
+                      SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND,
+                      &shaar::devtools::HandleDevToolsOperation);
++  registry->Register(SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN,
++                     SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE,
++                     &shaar::devtools::HandleDevToolsOperation);
+ }
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc b/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
+new file mode 100644
+index 00000000..fac85fff
+--- /dev/null
++++ b/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
+@@ -0,0 +1,263 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this
++// file, You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
++
++#include <stddef.h>
++#include <algorithm>
++#include <climits>
++#include <cstring>
++#include <initializer_list>
++#include <map>
++#include <memory>
++#include <string>
++#include <string_view>
++#include <utility>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/json/json_reader.h"
++#include "base/task/sequenced_task_runner.h"
++#include "chrome/browser/shaar/engine/shaar_engine_context.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "url/gurl.h"
++
++namespace shaar::devtools {
++namespace {
++
++struct ReplyTarget {
++  shaar_request_id id;
++  shaar_reply_fn callback;
++  void* context;
++};
++
++shaar_error_code Fail(shaar_error* error, shaar_error_code code,
++                      const char* message) {
++  if (error) {
++    const uint32_t size = error->size;
++    if (size >= offsetof(shaar_error, code) + sizeof(error->code))
++      error->code = code;
++    if (size >= offsetof(shaar_error, platform_code) + sizeof(error->platform_code))
++      error->platform_code = 0;
++    if (size >= offsetof(shaar_error, message) + sizeof(error->message))
++      error->message = {message, std::strlen(message)};
++  }
++  return code;
++}
++
++void Deliver(ReplyTarget target, shaar_error_code code, std::string payload) {
++  shaar_result result{};
++  result.size = sizeof(result);
++  result.request_id = target.id;
++  result.error.size = sizeof(result.error);
++  result.error.code = code;
++  result.payload_json = {payload.data(), payload.size()};
++  target.callback(target.context, &result);
++}
++
++void Reply(ReplyTarget target, std::string payload) {
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&Deliver, target, SHAAR_OK, std::move(payload)));
++}
++
++bool HasKeys(const base::DictValue& args,
++             std::initializer_list<std::string_view> expected) {
++  if (args.size() != expected.size())
++    return false;
++  for (const auto item : args)
++    if (std::find(expected.begin(), expected.end(), item.first) == expected.end())
++      return false;
++  return true;
++}
++
++bool IsPageURL(const GURL& url) {
++  return url.is_valid() &&
++         (url.SchemeIs("http") || url.SchemeIs("https") || url.SchemeIsFile()) &&
++         !url.has_username() && !url.has_password();
++}
++
++bool ValidPreset(std::string_view name, int width, int height) {
++  return (name == "iphone15Pro" && width == 393 && height == 852) ||
++         (name == "pixel8" && width == 412 && height == 915) ||
++         (name == "desktop" && width == 1280 && height == 800);
++}
++
++struct Viewport {
++  int id;
++  std::string preset;
++  std::unique_ptr<content::WebContents> contents;
++};
++
++class ViewportSession final : public content::WebContentsObserver {
++ public:
++  ViewportSession(shaar_engine* engine, content::WebContents* source,
++                  DevToolsTargetIdentity identity, int lease_id)
++      : content::WebContentsObserver(source), engine_(engine), source_(source),
++        identity_(std::move(identity)), lease_id_(lease_id) {}
++
++  bool Matches(shaar_engine* engine, const DevToolsTargetIdentity& identity,
++               int lease_id) const {
++    return engine_ == engine && lease_id_ == lease_id &&
++           identity_.profile_id == identity.profile_id &&
++           identity_.session_id == identity.session_id &&
++           identity_.window_id == identity.window_id &&
++           identity_.tab_id == identity.tab_id;
++  }
++
++  shaar_engine* engine() const { return engine_; }
++  int lease_id() const { return lease_id_; }
++  size_t count() const { return viewports_.size(); }
++
++  int Add(std::string preset, int width, int height) {
++    if (viewports_.size() >= 4 || next_viewport_id_ == INT_MAX ||
++        !ValidPreset(preset, width, height))
++      return 0;
++    const GURL url = source_->GetLastCommittedURL();
++    if (!IsPageURL(url))
++      return 0;
++    auto child = content::WebContents::Create(
++        content::WebContents::CreateParams(source_->GetBrowserContext()));
++    if (!child)
++      return 0;
++    content::NavigationController::LoadURLParams params(url);
++    child->GetController().LoadURLWithParams(params);
++    const int id = next_viewport_id_++;
++    viewports_.push_back({id, std::move(preset), std::move(child)});
++    return id;
++  }
++
++  bool Remove(int viewport_id) {
++    if (viewports_.size() <= 1)
++      return false;
++    const auto old_size = viewports_.size();
++    std::erase_if(viewports_, [viewport_id](const Viewport& viewport) {
++      return viewport.id == viewport_id;
++    });
++    return viewports_.size() != old_size;
++  }
++
++  void WebContentsDestroyed() override { CloseViewportLeaseForTab(source_); }
++  void DidFinishNavigation(content::NavigationHandle* navigation) override {
++    if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame() &&
++        !navigation->IsSameDocument())
++      CloseViewportLeaseForTab(source_);
++  }
++
++ private:
++  shaar_engine* engine_;
++  content::WebContents* source_;
++  DevToolsTargetIdentity identity_;
++  int lease_id_;
++  int next_viewport_id_ = 1;
++  std::vector<Viewport> viewports_;
++};
++
++std::map<content::WebContents*, std::unique_ptr<ViewportSession>>& Leases() {
++  static auto* leases =
++      new std::map<content::WebContents*, std::unique_ptr<ViewportSession>>;
++  return *leases;
++}
++
++int& NextLeaseID() {
++  static int next = 1;
++  return next;
++}
++
++}  // namespace
++
++void CloseViewportLeaseForTab(content::WebContents* contents) {
++  Leases().erase(contents);
++}
++
++void CloseViewportLeasesForEngine(shaar_engine* engine) {
++  for (auto it = Leases().begin(); it != Leases().end();) {
++    if (it->second->engine() == engine)
++      it = Leases().erase(it);
++    else
++      ++it;
++  }
++}
++
++shaar_error_code HandleViewportOperation(
++    ShaarEngineContext* context, shaar_engine* engine, shaar_scope scope,
++    shaar_window* window, shaar_tab* tab, content::WebContents* contents,
++    const DevToolsTargetIdentity& identity, shaar_operation operation,
++    shaar_bytes args_json, shaar_request_id request_id, shaar_reply_fn reply,
++    void* reply_context, shaar_error* error) {
++  (void)scope;
++  if (!context || !context->browser_tabs || !engine || !contents || !reply ||
++      !request_id || !args_json.data || !args_json.size || args_json.size > 1024 ||
++      context->browser_tabs->FindWebContents(engine, window, tab) != contents)
++    return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport owner");
++  auto parsed = base::JSONReader::Read(
++      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_dict() ||
++      parsed->GetDict().FindInt("schemaVersion") != 1)
++    return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport schema");
++  const auto& args = parsed->GetDict();
++  const ReplyTarget target{request_id, reply, reply_context};
++  auto found = Leases().find(contents);
++  ViewportSession* lease = found == Leases().end() ? nullptr : found->second.get();
++  if (operation == SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN) {
++    if (!HasKeys(args, {"schemaVersion"}))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport open schema");
++    if (lease && !lease->Matches(engine, identity, lease->lease_id()))
++      return Fail(error, SHAAR_CONFLICT, "viewport target already leased");
++    if (!lease) {
++      if (NextLeaseID() == INT_MAX || !IsPageURL(contents->GetLastCommittedURL()))
++        return Fail(error, SHAAR_NOT_READY, "viewport target unavailable");
++      const int id = NextLeaseID()++;
++      auto session = std::make_unique<ViewportSession>(engine, contents, identity, id);
++      lease = session.get();
++      Leases().emplace(contents, std::move(session));
++    }
++    Reply(target, "{\"schemaVersion\":1,\"leaseID\":" +
++                      std::to_string(lease->lease_id()) + "}");
++    return SHAAR_OK;
++  }
++  const auto lease_id = args.FindInt("leaseID");
++  if (!lease_id || *lease_id <= 0)
++    return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport lease ID");
++  if (!lease || !lease->Matches(engine, identity, *lease_id))
++    return Fail(error, SHAAR_NOT_FOUND, "viewport lease not found");
++  if (operation == SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE) {
++    if (!HasKeys(args, {"schemaVersion", "leaseID"}))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport close schema");
++    Leases().erase(found);
++    Reply(target, R"({"schemaVersion":1})");
++    return SHAAR_OK;
++  }
++  if (operation == SHAAR_OP_DEVTOOLS_VIEWPORT_ADD) {
++    if (!HasKeys(args, {"schemaVersion", "leaseID", "preset", "width", "height"}))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport add schema");
++    const std::string* preset = args.FindString("preset");
++    const auto width = args.FindInt("width");
++    const auto height = args.FindInt("height");
++    if (!preset || !width || !height || !ValidPreset(*preset, *width, *height))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport preset");
++    if (lease->count() >= 4)
++      return Fail(error, SHAAR_CONFLICT, "viewport limit reached");
++    const int viewport_id = lease->Add(*preset, *width, *height);
++    if (!viewport_id)
++      return Fail(error, SHAAR_NOT_READY, "viewport could not start");
++    Reply(target, "{\"schemaVersion\":1,\"viewportID\":" +
++                      std::to_string(viewport_id) + "}");
++    return SHAAR_OK;
++  }
++  if (operation == SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE) {
++    if (!HasKeys(args, {"schemaVersion", "leaseID", "viewportID"}))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport remove schema");
++    const auto viewport_id = args.FindInt("viewportID");
++    if (!viewport_id || *viewport_id <= 0 || !lease->Remove(*viewport_id))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "viewport cannot be removed");
++    Reply(target, R"({"schemaVersion":1})");
++    return SHAAR_OK;
++  }
++  return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown viewport operation");
++}
++
++}  // namespace shaar::devtools
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_viewports.h b/chrome/browser/shaar/devtools/shaar_devtools_viewports.h
+new file mode 100644
+index 00000000..9ef6ed93
+--- /dev/null
++++ b/chrome/browser/shaar/devtools/shaar_devtools_viewports.h
+@@ -0,0 +1,29 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this
++// file, You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#ifndef CHROME_BROWSER_SHAAR_DEVTOOLS_SHAAR_DEVTOOLS_VIEWPORTS_H_
++#define CHROME_BROWSER_SHAAR_DEVTOOLS_SHAAR_DEVTOOLS_VIEWPORTS_H_
++
++#include "chrome/browser/shaar/engine/shaar_module_registry.h"
++#include "chrome/browser/shaar/public/shaar_engine.h"
++
++namespace content {
++class WebContents;
++}
++
++namespace shaar::devtools {
++
++void CloseViewportLeaseForTab(content::WebContents* contents);
++void CloseViewportLeasesForEngine(shaar_engine* engine);
++
++shaar_error_code HandleViewportOperation(
++    ShaarEngineContext* context, shaar_engine* engine, shaar_scope scope,
++    shaar_window* window, shaar_tab* tab, content::WebContents* contents,
++    const DevToolsTargetIdentity& identity, shaar_operation operation,
++    shaar_bytes args_json, shaar_request_id request_id, shaar_reply_fn reply,
++    void* reply_context, shaar_error* error);
++
++}  // namespace shaar::devtools
++
++#endif  // CHROME_BROWSER_SHAAR_DEVTOOLS_SHAAR_DEVTOOLS_VIEWPORTS_H_
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index 78997b3b..72c99215 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -196,6 +196,10 @@ typedef enum {
+   SHAAR_OP_DEVTOOLS_PANEL_CLOSE = 1010,
+   SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY = 1011,
+   SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND = 1012,
++  SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN = 1013,
++  SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE = 1014,
++  SHAAR_OP_DEVTOOLS_VIEWPORT_ADD = 1015,
++  SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE = 1016,
+   // Testing only: exercise the native DevTools URL and Node frontend routes.
+   SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL = 1090,
+   SHAAR_OP_PROBE_NODE_FRONTEND = 1091,
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
+index 9d129113..cc7ab15e 100644
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ #include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
++#include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
+ 
+ #include <algorithm>
+ #include <unordered_map>
+@@ -25,6 +26,7 @@ BrowserTabRegistryImpl& Registry() { return g_registry; }
+ void BrowserTabRegistryImpl::BeginEngineQuit(shaar_engine* engine) {
+   if (engine) {
+     shaar::devtools::ClosePanelLeasesForEngine(engine);
++    shaar::devtools::CloseViewportLeasesForEngine(engine);
+     quitting_engines_.insert(engine);
+   }
+ }
+@@ -85,6 +87,7 @@ void BrowserTabRegistryImpl::UnbindTab(shaar_engine* engine,
+                                        shaar_window* window,
+                                        shaar_tab* tab) {
+   shaar::devtools::ClosePanelLeaseForTab(FindWebContents(engine, window, tab));
++  shaar::devtools::CloseViewportLeaseForTab(FindWebContents(engine, window, tab));
+   std::erase_if(tabs_, [engine, window, tab](const TabEntry& entry) {
+     return entry.engine == engine && entry.window == window &&
+            entry.handle == tab;

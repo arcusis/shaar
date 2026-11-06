@@ -5,6 +5,7 @@
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
 #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
+#include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
 #include "chrome/browser/devtools/devtools_settings.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
@@ -1036,6 +1037,10 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
     case SHAAR_OP_DEVTOOLS_PANEL_CLOSE:
     case SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY:
     case SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND:
+    case SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN:
+    case SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE:
+    case SHAAR_OP_DEVTOOLS_VIEWPORT_ADD:
+    case SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE:
       break;
     case SHAAR_OP_DEVTOOLS_UI_SET_DOCK:
     case SHAAR_OP_DEVTOOLS_CONTROL_ENABLE:
@@ -1047,7 +1052,11 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
   const bool panel_operation = operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
-      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND;
+      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND ||
+      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN ||
+      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE ||
+      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_ADD ||
+      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE;
   if ((operation == SHAAR_OP_DEVTOOLS_CALL && capability != kInspector &&
        capability != kDeveloper) ||
       (panel_operation && capability != kPanel) ||
@@ -1257,6 +1266,17 @@ shaar_error_code HandleDevToolsOperation(
     return HandlePanelOperation(context, engine, scope, window, tab, contents,
                                 identity, operation, args_json, request_id,
                                 reply, reply_context, error);
+  }
+  if (operation == SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN ||
+      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE ||
+      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_ADD ||
+      operation == SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE) {
+    if (!PolicyAllowsOperation(context->devtools_runtime, engine, scope,
+                               contents, operation, kPanel))
+      return Fail(error, SHAAR_POLICY_BLOCKED, "DevTools Viewports is blocked");
+    return HandleViewportOperation(context, engine, scope, window, tab, contents,
+                                   identity, operation, args_json, request_id,
+                                   reply, reply_context, error);
   }
   if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
       operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {

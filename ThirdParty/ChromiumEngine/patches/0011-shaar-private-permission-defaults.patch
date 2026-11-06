@@ -1,0 +1,26 @@
+--- a/components/content_settings/core/browser/content_settings_pref_provider.cc
++++ b/components/content_settings/core/browser/content_settings_pref_provider.cc
+@@ -238,12 +238,17 @@
+     return false;
+   }
+ 
+-  // Default settings are set using a wildcard pattern for both
+-  // |primary_pattern| and |secondary_pattern|. Don't store default settings in
+-  // the |PrefProvider|. The |PrefProvider| handles settings for specific
+-  // sites/origins defined by the |primary_pattern| and the |secondary_pattern|.
+-  // Default settings are handled by the |DefaultProvider|.
+-  if (primary_pattern == ContentSettingsPattern::Wildcard() &&
++  // DefaultProvider ignores OTR writes. Keep Shaar private-session defaults
++  // in the incognito-only pref map, never in the regular profile's preferences.
++  const bool private_default =
++      off_the_record_ &&
++      (content_type == ContentSettingsType::COOKIES ||
++       content_type == ContentSettingsType::MEDIASTREAM_CAMERA ||
++       content_type == ContentSettingsType::MEDIASTREAM_MIC ||
++       content_type == ContentSettingsType::GEOLOCATION ||
++       content_type == ContentSettingsType::NOTIFICATIONS);
++  if (!private_default &&
++      primary_pattern == ContentSettingsPattern::Wildcard() &&
+       secondary_pattern == ContentSettingsPattern::Wildcard()) {
+     return false;
+   }

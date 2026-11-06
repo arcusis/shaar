@@ -273,6 +273,34 @@ TEST_F(PrivateSessionRegistryTest, GlobalCookiesAndStorageDefaultIsOTROnly) {
   EXPECT_TRUE(registry.Close(session));
 }
 
+TEST_F(PrivateSessionRegistryTest, PrivatePermissionsDenyWithoutPromptOrNormalMutation) {
+  TestingProfile profile;
+  auto* normal = HostContentSettingsMapFactory::GetForProfile(&profile);
+  const GURL site("https://previously-allowed.example.test/");
+  const ContentSettingsType types[] = {
+      ContentSettingsType::MEDIASTREAM_CAMERA,
+      ContentSettingsType::MEDIASTREAM_MIC,
+      ContentSettingsType::GEOLOCATION,
+      ContentSettingsType::NOTIFICATIONS};
+  for (auto type : types) {
+    normal->SetDefaultContentSetting(type, CONTENT_SETTING_ASK);
+    normal->SetContentSettingDefaultScope(site, site, type, CONTENT_SETTING_ALLOW);
+  }
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "private-a", &session), SHAAR_OK);
+  auto* settings = HostContentSettingsMapFactory::GetForProfile(session->otr);
+  for (auto type : types) {
+    EXPECT_EQ(settings->GetContentSetting(GURL("https://new.example.test/"),
+                                           GURL("https://new.example.test/"), type),
+              CONTENT_SETTING_BLOCK);
+    EXPECT_EQ(settings->GetContentSetting(site, site, type), CONTENT_SETTING_BLOCK);
+    EXPECT_EQ(normal->GetDefaultContentSetting(type), CONTENT_SETTING_ASK);
+    EXPECT_EQ(normal->GetContentSetting(site, site, type), CONTENT_SETTING_ALLOW);
+  }
+  EXPECT_TRUE(registry.Close(session));
+}
+
 TEST_F(PrivateSessionRegistryTest, HTTPSOnlyAppliesToOTRProfile) {
   TestingProfile profile;
   profile.GetPrefs()->SetBoolean(prefs::kHttpsOnlyModeEnabled, false);

@@ -45,7 +45,7 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
       let type = fields["nodeType"] as? Int, (1...12).contains(type),
       let name = fields["nodeName"] as? String, !name.isEmpty, name.utf8.count <= 128,
       let value = fields["nodeValue"] as? String, value.utf8.count <= 4_096,
-      (0...10_000).contains(count)
+      (0...20_000).contains(count)
     else { return nil }
     let raw = fields["attributes"] as? [String] ?? []
     guard raw.count <= 64, raw.count.isMultiple(of: 2) else { return nil }
@@ -93,7 +93,7 @@ public struct ShaarDOMSnapshot: Equatable, Sendable {
     _ fields: [String: Any], parentID: Int?, relation: ShaarDOMRelation,
     depth: Int, nodes: inout [ShaarDOMNode], seen: inout Set<Int>
   ) -> Int? {
-    guard depth <= 40, nodes.count < 10_000,
+    guard depth <= 40, nodes.count < 20_000,
       let id = fields["nodeId"] as? Int, id > 0, seen.insert(id).inserted
     else { return nil }
     let children = fields["children"] as? [[String: Any]] ?? []
@@ -226,7 +226,7 @@ public enum ShaarDOMEventRouter {
     if id == 28 {
       guard keys == ["nodeId", "childNodeCount"],
         let node = positive(fields["nodeId"]),
-        let count = fields["childNodeCount"] as? Int, (0...10_000).contains(count)
+        let count = fields["childNodeCount"] as? Int, (0...20_000).contains(count)
       else { return nil }
       return .childCountUpdated(nodeID: node, count: count)
     }

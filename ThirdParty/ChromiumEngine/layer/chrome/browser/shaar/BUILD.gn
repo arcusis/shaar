@@ -181,7 +181,8 @@ test("shaar_lifecycle_unittests") {
 
 test("shaar_private_sessions_unittests") {
   sources = [ "private_sessions/shaar_private_sessions_unittest.cc" ]
-  deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest", "//url" ]
+  deps = [ ":engine", "//chrome/test:test_support", "//services/network:test_support",
+           "//testing/gtest", "//url" ]
 }
 
 test("shaar_profiles_unittests") {
@@ -297,6 +298,7 @@ test("shaar_layer_unittests") {
     "//components/os_crypt/common:keychain_password_mac",
     "//components/os_crypt/async/browser:keychain_key_provider",
     "//net:extras",
+    "//services/network:test_support",
     "//content/test:test_support",
     "//crypto",
     "//mojo/core/embedder",

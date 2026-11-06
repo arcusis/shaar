@@ -132,6 +132,23 @@ TEST(ShaarPageViewHostTest, ReattachesSelectionAfterItsPreviousPresenterDetaches
   EXPECT_EQ(tab.superview, host.view());
 }
 
+TEST(ShaarPageViewHostTest, AttachClearsChromiumDetachHiddenFlagWithoutShowingWindow) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* tab = [[NSView alloc] initWithFrame:NSZeroRect];
+  // WebContentsViewMac::ViewsHostableDetach leaves the borrowed NSView hidden.
+  tab.hidden = YES;
+  ASSERT_TRUE(host.Attach(tab));
+  EXPECT_FALSE(tab.hidden);
+  EXPECT_FALSE(tab.isHiddenOrHasHiddenAncestor);
+  EXPECT_FALSE(host.window().isVisible);
+  // A repeated BrowserView presentation/detach must also be repaired even
+  // when the native view is already in the right Shaar window.
+  tab.hidden = YES;
+  ASSERT_TRUE(host.Attach(tab));
+  EXPECT_FALSE(tab.hidden);
+  EXPECT_FALSE(host.window().isVisible);
+}
+
 TEST(ShaarPageViewHostTest, MovingViewLeavesPreviousHostEmpty) {
   PageViewHost source(NSMakeRect(0, 0, 800, 600));
   PageViewHost destination(NSMakeRect(0, 0, 400, 300));

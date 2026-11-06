@@ -18,6 +18,7 @@ public enum ShaarDevToolsOperation: UInt32, Sendable {
   case panelClose = 1010
   case panelGetResponseBody = 1011
   case panelPhase2Command = 1012
+  case panelNetworkRules = 1013
 }
 
 public enum ShaarDevToolsCapability: UInt32, Sendable {
@@ -352,9 +353,32 @@ public struct ShaarDevToolsAdapter: Sendable {
     }
   }
 
+  public func setPanelNetworkRules(
+    _ rules: [ShaarDevToolsNetworkRule], leaseID: UInt32,
+    scope: ShaarNavigationScope, windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<Void, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    guard leaseID > 0, let rows = rules.networkRuleParameters else {
+      throw ShaarEngineError.invalidEvent("invalid panel network rules")
+    }
+    return try submitPanel(
+      .panelNetworkRules, fields: ["leaseID": leaseID, "rules": rows],
+      scope: scope, windowID: windowID, tabID: tabID, maximumPayloadBytes: 2 * 1_048_576
+    ) { result in
+      completion(
+        result.flatMap { data in
+          guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            Set(object.keys) == ["schemaVersion"], object["schemaVersion"] as? Int == 1
+          else { return .failure(.invalidEvent("invalid network rules reply")) }
+          return .success(())
+        })
+    }
+  }
+
   private func submitPanel(
     _ operation: ShaarDevToolsOperation, fields: [String: Any],
     scope: ShaarNavigationScope, windowID: String, tabID: String,
+    maximumPayloadBytes: Int? = nil,
     completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
   ) throws -> UInt64 {
     guard !scope.profileID.isEmpty, scope.sessionID.map({ !$0.isEmpty }) ?? true,
@@ -363,6 +387,9 @@ public struct ShaarDevToolsAdapter: Sendable {
     var envelope = fields
     envelope["schemaVersion"] = 1
     let payload = try JSONSerialization.data(withJSONObject: envelope, options: [.sortedKeys])
+    if let maximumPayloadBytes, payload.count > maximumPayloadBytes {
+      throw ShaarEngineError.invalidEvent("panel payload too large")
+    }
     return try engine.submit(
       ShaarDevToolsRequest(
         operation: operation, scope: scope, windowID: windowID, tabID: tabID,

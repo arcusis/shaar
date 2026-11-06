@@ -21,6 +21,9 @@
 @end
 
 namespace {
+// The testing-only operation is supplied by patch 0027 in the built engine.
+constexpr NSInteger kProbeNodeLiveOperation = 1094;
+
 BOOL ProbeCaptureAllowed(void) {
   const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
   if (!testing || std::strcmp(testing, "1") != 0) return NO;
@@ -381,6 +384,7 @@ void ARCCompletePrivateQuitDialogCancellation(
   if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed() ||
       (operation != SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
        operation != SHAAR_OP_PROBE_NODE_FRONTEND &&
+       operation != kProbeNodeLiveOperation &&
        operation != SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED)) {
     completion(NO);
     return;

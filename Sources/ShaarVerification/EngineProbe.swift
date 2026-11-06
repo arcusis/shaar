@@ -1255,7 +1255,9 @@ final class EngineProbe {
   }
 
   private var baseTimeoutSeconds: Double {
-    if basicBrowsingMode || devModeOnly || mediaSessionOnlyMode || devtoolsRouteOnlyMode { return 180 }
+    if basicBrowsingMode || devModeOnly || mediaSessionOnlyMode || devtoolsRouteOnlyMode {
+      return 180
+    }
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }

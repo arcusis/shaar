@@ -48,6 +48,18 @@ private struct ShaarPhase2NativeError: LocalizedError {
   let errorDescription: String?
 }
 
+enum ShaarDOMPanelSignal: Sendable {
+  case lease(UInt32)
+  case event(ShaarDOMEvent)
+  case unavailable
+}
+
+private struct ShaarDOMPanelObserver {
+  let token: UUID
+  let target: SiteControlTarget
+  let continuation: AsyncStream<ShaarDOMPanelSignal>.Continuation
+}
+
 @MainActor private final class ShaarPanelSession {
   let target: SiteControlTarget
   var leaseID: UInt32?
@@ -72,6 +84,7 @@ private struct ShaarPhase2NativeError: LocalizedError {
   @ObservationIgnored private var phase2Observers: [
     UUID: (SiteControlTarget, AsyncStream<ShaarPhase2Message>.Continuation)
   ] = [:]
+  @ObservationIgnored private var domObserver: ShaarDOMPanelObserver?
   @ObservationIgnored var onLeaseOpened: (() -> Void)?
 
   var hasActiveLease: Bool {
@@ -163,6 +176,23 @@ private struct ShaarPhase2NativeError: LocalizedError {
     }
   }
 
+  func domSignals(for target: SiteControlTarget) -> AsyncStream<ShaarDOMPanelSignal> {
+    domObserver?.continuation.finish()
+    let token = UUID()
+    return AsyncStream { continuation in
+      domObserver = ShaarDOMPanelObserver(
+        token: token, target: target, continuation: continuation)
+      if let session, session.target == target, let leaseID = session.leaseID {
+        continuation.yield(.lease(leaseID))
+      }
+      continuation.onTermination = { @Sendable [weak self] _ in
+        Task { @MainActor in
+          if self?.domObserver?.token == token { self?.domObserver = nil }
+        }
+      }
+    }
+  }
+
   func receive(
     tabID: String, profileID: String, payload: Data, sequence: UInt64
   ) {
@@ -181,6 +211,16 @@ private struct ShaarPhase2NativeError: LocalizedError {
     {
       session.sequence = sequence
       emitPhase2(.event(phase2), for: session.target)
+      return
+    }
+    if let dom = ShaarDOMEventRouter.decode(
+      event, scope: ShaarNavigationScope(profileID: profileID), windowID: windowID,
+      tabID: tabID, leaseID: leaseID, afterSequence: session.sequence)
+    {
+      session.sequence = sequence
+      if domObserver?.target == session.target {
+        domObserver?.continuation.yield(.event(dom))
+      }
       return
     }
     guard
@@ -224,6 +264,9 @@ private struct ShaarPhase2NativeError: LocalizedError {
       session.leaseID = leaseID
       failure = nil
       phase2Failure = nil
+      if domObserver?.target == session.target {
+        domObserver?.continuation.yield(.lease(leaseID))
+      }
       emit(.streamAvailable, to: session)
       emitPhase2(.available, for: session.target)
       onLeaseOpened?()
@@ -262,6 +305,9 @@ private struct ShaarPhase2NativeError: LocalizedError {
   private func close(_ session: ShaarPanelSession) {
     guard !session.closed else { return }
     session.closed = true
+    if domObserver?.target == session.target {
+      domObserver?.continuation.yield(.unavailable)
+    }
     recordingAvailable = false
     recordingStarting = false
     session.task?.cancel()

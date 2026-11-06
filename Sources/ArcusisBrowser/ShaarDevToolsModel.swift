@@ -211,6 +211,7 @@ final class ShaarDevToolsModel {
       ownedInspector = inspector
     }
     isOpen = true
+    repro.history.start(for: target)
     startStream()
     startLocalStreams()
     phase2.open()
@@ -223,6 +224,7 @@ final class ShaarDevToolsModel {
     eventTask = nil
     cancelLocalTasks()
     streamAvailable = false
+    repro.history.stop()
     events.removeAll()
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
@@ -245,6 +247,7 @@ final class ShaarDevToolsModel {
     self.target = target
     performance.updateTarget(target, committed: committed)
     streamAvailable = false
+    repro.history.stop()
     events.removeAll()
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
@@ -261,6 +264,7 @@ final class ShaarDevToolsModel {
     eventTask = nil
     cancelLocalTasks()
     if isOpen {
+      repro.history.start(for: target)
       startStream()
       startLocalStreams()
     }
@@ -375,11 +379,13 @@ final class ShaarDevToolsModel {
     case .streamAvailable: streamAvailable = true
     case .streamUnavailable:
       streamAvailable = false
+      repro.history.clear()
       events.removeAll()
       console.clearEntries()
       network.clearSelection()
     case .event(let event):
       guard streamAvailable else { return }
+      repro.history.record(event, for: target)
       events.append(event)
       if events.count > 2_000 { events.removeFirst(events.count - 2_000) }
     }

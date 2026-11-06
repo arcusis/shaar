@@ -24,9 +24,12 @@ import Testing
     #expect(shell.streamAvailable)
     #expect(shell.events == fixture)
     #expect(shell.consoleCount == 1 && shell.networkCount == 1)
+    #expect(shell.repro.history.snapshot().console.count == 1)
+    #expect(shell.repro.history.snapshot().network.count == 1)
 
     shell.close()
     #expect(!shell.isOpen && !inspector.isOpen)
+    #expect(shell.repro.history.snapshot().console.isEmpty)
     let next = SiteControlTarget(
       tabID: target.tabID, profileID: target.profileID,
       url: URL(string: "https://example.com/two")!)
@@ -78,5 +81,29 @@ import Testing
     #expect(ShaarDevToolsSizing.bottom(900, available: 1_000) == 700)
     #expect(ShaarDevToolsSizing.right(100, available: 1_000) == 320)
     #expect(ShaarDevToolsSizing.right(900, available: 1_000) == 500)
+  }
+
+  @Test func reproHistoryEvictsOldEventsAndRejectsOtherTabs() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let other = SiteControlTarget(
+      tabID: UUID(), profileID: target.profileID, url: target.url)
+    let history = ShaarReproHistory()
+    let now = Date(timeIntervalSince1970: 1_000)
+    history.start(for: target)
+    history.record(
+      .console(ShaarConsoleEvent(id: UUID(), level: .log, message: "old", source: nil)),
+      for: target, at: now.addingTimeInterval(-31))
+    history.record(
+      .console(ShaarConsoleEvent(id: UUID(), level: .log, message: "current", source: nil)),
+      for: target, at: now)
+    history.record(
+      .network(
+        ShaarNetworkEvent(
+          id: UUID(), method: "GET", url: "https://other.example/", status: 200)),
+      for: other, at: now)
+    let snapshot = history.snapshot(at: now)
+    #expect(snapshot.console.map(\.message) == ["current"])
+    #expect(snapshot.network.isEmpty)
   }
 }

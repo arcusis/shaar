@@ -24,7 +24,7 @@ public enum ShaarDevToolsOperation: UInt32, Sendable {
   case viewportRemove = 1016
   case viewportAction = 1017
   case viewportFrame = 1018
-  case panelNetworkRules = 1019
+  case panelNetworkRules = 1080
 }
 
 public enum ShaarDevToolsCapability: UInt32, Sendable {

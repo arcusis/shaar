@@ -160,7 +160,7 @@ struct DevToolsPanelTests {
     ) { _ in }
     let request = try #require(fake.request)
     #expect(request.operation == .panelNetworkRules)
-    #expect(request.operation.rawValue == 1019)
+    #expect(request.operation.rawValue == 1080)
     #expect(request.scope.sessionID == "private-a")
     let root = try #require(JSONSerialization.jsonObject(with: request.payload) as? [String: Any])
     #expect(Set(root.keys) == ["schemaVersion", "leaseID", "rules"])

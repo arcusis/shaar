@@ -53,6 +53,7 @@ final class ProfileAccountSignIn {
       let content = events.runtime.hostView(forWindowID: id)
     else { throw WorkspaceError.invalidState }
     self.window = window
+    configureSignInWindowForFullScreenHost(window)
     engine = try BrowserEngine(events: events, windowID: id, store: store)
     let hosting = NSHostingView(
       rootView: ProfileAccountSignInView(
@@ -235,6 +236,7 @@ private final class SignInPopup {
       let content = events.runtime.hostView(forWindowID: id)
     else { throw WorkspaceError.invalidState }
     self.window = window
+    configureSignInWindowForFullScreenHost(window)
     engine = try BrowserEngine(events: events, windowID: id, store: store)
     let hosting = NSHostingView(
       rootView: ProfileAccountSignInView(
@@ -247,6 +249,12 @@ private final class SignInPopup {
     window.setContentSize(NSSize(width: 520, height: 680))
     creationGuard.transferToOwner()
   }
+}
+
+/// Keep auth windows in the active full-screen Space instead of creating a new Space.
+@MainActor
+private func configureSignInWindowForFullScreenHost(_ window: NSWindow) {
+  window.collectionBehavior = [.fullScreenAuxiliary]
 }
 
 /// Google answers a plain visit to its account list with a 400 page, so the page stays covered

@@ -42,6 +42,8 @@ final class ProfileOnboardingProbe {
       else { throw Failure("Sign-in host missing") }
       defer { model.cancel() }
       guard !flow.window.isVisible else { throw Failure("Sign-in window became visible") }
+      try requireFullScreenAuxiliary(flow.window, label: "sign-in host")
+      checks.append("\(option.title): sign-in host stays auxiliary to the active full-screen Space")
       try await wait("draft browser tab") {
         self.runtime.windowID(forTabID: tab.uuidString) == flow.engine.windowID
       }
@@ -168,6 +170,10 @@ final class ProfileOnboardingProbe {
     let popupStep = "\(phase) \(flow.provider.title) popup"
     try await wait("\(popupStep) adoption") { popupTab != nil && flow.windowIDs.count == 2 }
     guard let child = popupTab else { throw Failure("Popup tab missing") }
+    guard let popupID = flow.windowIDs.first(where: { $0 != flow.engine.windowID }),
+      let popupWindow = runtime.window(forID: popupID)
+    else { throw Failure("Sign-in popup host missing") }
+    try requireFullScreenAuxiliary(popupWindow, label: "sign-in popup")
     try await wait("\(popupStep) session") {
       let state = await self.value(
         child, "({cookie:document.cookie,opener:!!window.opener,ready:document.readyState})")
@@ -230,6 +236,13 @@ final class ProfileOnboardingProbe {
       })()
       """)
     return state?["armed"] as? Bool == true && state?["origin"] as? String == origin
+  }
+
+  private func requireFullScreenAuxiliary(_ window: NSWindow, label: String) throws {
+    let behavior = window.collectionBehavior
+    guard behavior.contains(.fullScreenAuxiliary), !behavior.contains(.fullScreenPrimary) else {
+      throw Failure("\(label) can open a separate full-screen Space")
+    }
   }
 
   private func verifyProviderPage(

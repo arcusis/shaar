@@ -18,7 +18,24 @@ TEST(ShaarMediaTest, ValidatesValueBoundsAndPresenceByCommand) {
   EXPECT_FALSE(shaar::media::IsValidControl(SHAAR_MEDIA_SEEK_TO, -1, true));
   EXPECT_FALSE(shaar::media::IsValidControl(SHAAR_MEDIA_PLAY, 0, true));
   EXPECT_TRUE(shaar::media::IsValidControl(SHAAR_MEDIA_PLAY, 0, false));
+  EXPECT_TRUE(shaar::media::IsValidControl(SHAAR_MEDIA_SEEK_BACKWARD, 10, true));
+  EXPECT_FALSE(shaar::media::IsValidControl(SHAAR_MEDIA_SEEK_FORWARD, -10, true));
+  EXPECT_TRUE(shaar::media::IsValidControl(SHAAR_MEDIA_PIP_SKIP, -10, true));
   EXPECT_FALSE(shaar::media::IsValidControl(1199, 0, false));
+}
+
+TEST(ShaarMediaTest, ElementControlsSeekTenSecondsAndRequestNativePiP) {
+  const std::u16string seek = shaar::media::ElementActionScriptForTesting(
+      SHAAR_MEDIA_SEEK_BACKWARD, 10);
+  EXPECT_NE(seek.find(u"command=4,value=10"), std::u16string::npos);
+  EXPECT_NE(seek.find(u"best.currentTime+(command===4?-value"),
+            std::u16string::npos);
+  const std::u16string pip = shaar::media::ElementActionScriptForTesting(
+      SHAAR_MEDIA_PIP_ENTER, 0);
+  EXPECT_NE(pip.find(u"requestPictureInPicture()"), std::u16string::npos);
+  EXPECT_NE(pip.find(u"element.disablePictureInPicture"),
+            std::u16string::npos);
+  EXPECT_TRUE(pip.ends_with(u"})()"));
 }
 
 TEST(ShaarMediaTest, MapsOnlySupportedChromiumSessionActions) {

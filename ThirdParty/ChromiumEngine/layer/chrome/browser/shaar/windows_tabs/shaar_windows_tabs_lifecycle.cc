@@ -25,6 +25,7 @@
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/extensions/shaar_extensions.h"
+#include "chrome/browser/shaar/media/shaar_media.h"
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -82,6 +83,7 @@ struct shaar_tab : content::WebContentsObserver,
   std::string window_id;
   std::string tab_id;
   std::unique_ptr<shaar::navigation::NavigationObserver> navigation;
+  shaar::media::MediaTrackerPtr media{nullptr, nullptr};
   base::ScopedObservation<favicon::FaviconDriver,
                           favicon::FaviconDriverObserver>
       favicon_observation{this};
@@ -432,6 +434,9 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
     handle->session_id = session_id;
   }
   handle->navigation = std::make_unique<shaar::navigation::NavigationObserver>(
+      engine, raw_contents, handle->profile_id, handle->session_id,
+      handle->window_id, handle->tab_id);
+  handle->media = shaar::media::CreateMediaTracker(
       engine, raw_contents, handle->profile_id, handle->session_id,
       handle->window_id, handle->tab_id);
   if (auto* driver = favicon::ContentFaviconDriver::FromWebContents(

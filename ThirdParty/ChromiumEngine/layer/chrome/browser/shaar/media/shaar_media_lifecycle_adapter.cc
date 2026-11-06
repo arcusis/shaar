@@ -9,7 +9,7 @@
 extern "C" void shaar_media_register(ShaarModuleRegistry* registry) {
   if (registry) {
     shaar::media::BindRuntimeServices();
-    registry->Register(SHAAR_OP_MEDIA_GET_STATE, SHAAR_OP_MEDIA_CAPTURE_REPLY,
+    registry->Register(SHAAR_OP_MEDIA_GET_STATE, SHAAR_OP_PROBE_MEDIA_GESTURE,
                        &HandleMediaOperation);
     static const ShaarModuleRegistry::Handler handlers =
         &HandleMediaOperation;

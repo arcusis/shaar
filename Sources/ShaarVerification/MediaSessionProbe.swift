@@ -377,9 +377,20 @@ final class MediaSessionProbe {
   }
 
   private func waitForPictureInPicture(_ tab: UUID, open: Bool) async throws {
-    try await waitUntil("picture-in-picture \(open ? "opens" : "closes")") {
-      await self.pictureInPictureOpen(tab) == open
-        && self.engine.autoPictureInPicture.openPages.contains(tab) == open
+    do {
+      try await waitUntil("picture-in-picture \(open ? "opens" : "closes")") {
+        await self.pictureInPictureOpen(tab) == open
+          && self.engine.autoPictureInPicture.openPages.contains(tab) == open
+      }
+    } catch {
+      let page =
+        await evaluate(
+          tab,
+          "({enabled:document.pictureInPictureEnabled,visibility:document.visibilityState,open:document.pictureInPictureElement!==null,videoReady:document.getElementById('video')?.readyState,videoPaused:document.getElementById('video')?.paused,videoSource:!!document.getElementById('video')?.srcObject,videoCurrentSrc:document.getElementById('video')?.currentSrc,videoPipDisabled:document.getElementById('video')?.disablePictureInPicture,pipError:document.documentElement.getAttribute('data-shaar-pip-error')})"
+        ) ?? [:]
+      throw MediaSessionProbeFailure(
+        "Picture-in-picture \(open ? "open" : "close") timed out: page=\(page), reported=\(engine.autoPictureInPicture.openPages.contains(tab))"
+      )
     }
   }
 

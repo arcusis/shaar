@@ -66,7 +66,7 @@ final class PageChromeLayoutTests: XCTestCase {
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100))
         for identifier in identifiers {
-          let expectedCount = layout == "split" && identifier == "browser.chrome.address" ? 0 : 1
+          let expectedCount = layout == "split" ? 0 : 1
           XCTAssertEqual(
             observation.counts[identifier, default: 0], expectedCount,
             "Expected \(expectedCount) \(identifier) controls in \(layout) \(scheme) mode")

@@ -52,7 +52,9 @@ struct BrowserChromeSurface: View {
           store.sidebarIsVisible.toggle()
         }
       }
-      PageNavigationButtons(store: store, engine: engine)
+      if store.selectedSplit == nil {
+        PageNavigationButtons(store: store, engine: engine)
+      }
       if store.isPrivate {
         Label(ShellL10n.string("Private browsing"), systemImage: "eye.slash.fill")
           .font(.system(size: 11, weight: .semibold))

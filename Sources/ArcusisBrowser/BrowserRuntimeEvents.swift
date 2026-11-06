@@ -18,6 +18,9 @@ final class BrowserRuntimeEvents {
   var onWindowShowRequest: (@MainActor @Sendable (String, Bool) -> Void)? {
     didSet { runtime.onWindowShowRequest = onWindowShowRequest }
   }
+  var onDevToolsOpenURLRequest: (@MainActor @Sendable ([String: Any]) -> Void)? {
+    didSet { runtime.onDevToolsOpenURLRequest = onDevToolsOpenURLRequest }
+  }
   var onNewTabWillAdopt: ((String, String, String?) -> Void)?
 
   init(runtime: ARCChromiumRuntime) {

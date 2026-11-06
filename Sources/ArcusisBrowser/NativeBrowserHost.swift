@@ -211,6 +211,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     events.onWindowShowRequest = { [weak self] window, active in
       self?.showRequestedWindow(window, active: active)
     }
+    events.onDevToolsOpenURLRequest = { [weak self] payload in
+      self?.openDevToolsRequestedURL(payload)
+    }
     events.onNewTabWillAdopt = { [weak self] tab, profile, opener in
       self?.prepareNewTab(tab, profile: profile, opener: opener)
     }
@@ -552,6 +555,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     profileOnboarding = nil
     events.onWindowRequest = nil
     events.onWindowShowRequest = nil
+    events.onDevToolsOpenURLRequest = nil
     events.onNewTabWillAdopt = nil
     for context in contexts.values {
       stopObserving(context)
@@ -870,6 +874,22 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       report(error)
       return nil
     }
+  }
+
+  private func openDevToolsRequestedURL(_ payload: [String: Any]) {
+    guard started, !events.runtime.isQuitting,
+      let request = DevToolsOpenURLRequest(payload)
+    else { return }
+    if request.contextID != nil {
+      privateHost?.openDevToolsRequestedURL(request)
+      return
+    }
+    guard let context = contexts.values.first(where: { $0.nativeID == request.windowID }),
+      !context.engine.isClosed, context.engine.liveTabs.contains(request.tabID),
+      events.runtime.windowID(forTabID: request.tabID.uuidString) == request.windowID
+    else { return }
+    _ = context.store.openDevToolsRequestedTab(
+      request.url, sourceTabID: request.tabID, profileID: request.profileID)
   }
 
   private func showRequestedWindow(_ nativeID: String, active: Bool) {

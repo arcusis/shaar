@@ -269,6 +269,22 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   }
   NSString *tabID = String(event->tab_id);
   NSString *profileID = String(event->profile_id).uppercaseString;
+  if (event->kind == SHAAR_EVENT_DEVTOOLS &&
+      [kind isEqualToString:@"openURLRequested"]) {
+    NSString *windowID = String(event->window_id);
+    NSString *requestedProfile = payload[@"profileID"];
+    if ([payload[@"schemaVersion"] intValue] != 1 ||
+        ![payload[@"sourceWindowID"] isEqualToString:windowID] ||
+        ![payload[@"sourceTabID"] isEqualToString:tabID] ||
+        ![requestedProfile isKindOfClass:NSString.class] ||
+        ![requestedProfile.uppercaseString isEqualToString:profileID]) return;
+    NSMutableDictionary *request = [payload mutableCopy];
+    request[@"profileID"] = profileID;
+    NSString *contextID = String(event->session_id).uppercaseString;
+    if (contextID.length) request[@"contextID"] = contextID;
+    if (self.onDevToolsOpenURLRequest) self.onDevToolsOpenURLRequest(request);
+    return;
+  }
   if (event->kind == SHAAR_EVENT_FIND) {
     NSString *token = _shaarFindTokens[payload[@"requestID"]];
     if (token && _shaarTabs[tabID] && self.onFindResult)

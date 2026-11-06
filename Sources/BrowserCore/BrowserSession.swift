@@ -712,7 +712,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
   }
 
   static func isPersistableURL(_ url: URL) -> Bool {
-    NavigationInput.isWebURL(url) || url.absoluteString == "about:blank"
+    NavigationInput.isWebURL(url) || NavigationInput.isDevToolsFrontendURL(url)
+      || url.absoluteString == "about:blank"
   }
 
   public mutating func togglePin(_ tabID: UUID) {

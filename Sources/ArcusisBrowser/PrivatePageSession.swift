@@ -186,6 +186,10 @@ final class PrivatePageSession {
     inspectors.removeAll()
   }
 
+  func ownsLiveTab(_ id: UUID, profileID: UUID) -> Bool {
+    !isClosed && liveTabs.contains(id) && store?.session.profileID(forTabID: id) == profileID
+  }
+
   var inspectorTarget: SiteControlTarget? {
     guard let store, let tab = store.session.selectedPage?.tab else { return nil }
     let target = SiteControlTarget(

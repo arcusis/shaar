@@ -1665,7 +1665,7 @@ def main(argv=None):
     cross_site_server = None
     if options.reload_window:
         cross_site_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
-        Fixture.cross_site_origin = f"http://127.0.0.1:{cross_site_server.server_port}"
+        Fixture.cross_site_origin = f"http://localhost:{cross_site_server.server_port}"
         threading.Thread(target=cross_site_server.serve_forever, daemon=True).start()
     server_port = server.server_port
     if split_phase and options.probe_phase == "initial":
@@ -1787,6 +1787,7 @@ def main(argv=None):
                 checks = report.get('checks') if isinstance(report, dict) else None
                 required = {
                     'plain reaches the second origin without a failed page or visible window',
+                    'plain cross-site link reached the second site five times',
                     'target blank reaches the second origin without a failed page or visible window',
                     'window.open reaches the second origin without a failed page or visible window',
                     'failed-page Reload recreates a destroyed pinned tab',

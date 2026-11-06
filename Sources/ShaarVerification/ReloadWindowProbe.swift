@@ -62,6 +62,11 @@ final class ReloadWindowProbe {
     checks.append(
       try await exerciseLink(
         "plain", elementID: "plain", ownerID: ownerID, originA: originA, host: host))
+    for _ in 2...5 {
+      _ = try await exerciseLink(
+        "plain", elementID: "plain", ownerID: ownerID, originA: originA, host: host)
+    }
+    checks.append("plain cross-site link reached the second site five times")
 
     let owner = try require(host.contexts[ownerID], "Source window closed before reload")
     owner.store.perform(.open(originA))
@@ -133,6 +138,10 @@ final class ReloadWindowProbe {
     let destination = try await destinationTab(
       name: name, source: source, prior: prior, host: host, gestureResult: gestureResult)
     let page = try require(await document(destination, runtime: runtime), "No destination document")
+    let destinationURL = (page["href"] as? String).flatMap(URL.init(string:))
+    try expect(
+      originA.host == "127.0.0.1" && destinationURL?.host == "localhost",
+      "\(name) navigates between distinct loopback sites")
     try expect(
       page["marker"] as? String == "Cross-site destination loaded",
       "\(name) reaches the second origin")

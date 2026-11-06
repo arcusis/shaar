@@ -4,6 +4,19 @@
 
 /// Interprets observations collected by the engine probe; missing evidence never passes.
 enum PrivatePrivacyEvidence {
+  static func permissionPresentation(_ observations: [String: Any]) -> [String: Bool] {
+    [
+      "permissionRendererVisibilityScoped":
+        observations["before"] as? String == "hidden"
+        && observations["during"] as? String == "visible"
+        && observations["completion"] as? String == "visible"
+        && observations["after"] as? String == "hidden",
+      "permissionNativeWindowsHiddenBeforeAndAfter":
+        observations["nativeWindowsHiddenBefore"] as? Bool == true
+        && observations["nativeWindowsHiddenAfter"] as? Bool == true,
+    ]
+  }
+
   static func engineStatus(_ status: [AnyHashable: Any]) -> [String: Bool] {
     [
       "privateEngineProfileIsOffTheRecord": status["offTheRecord"] as? Bool == true,

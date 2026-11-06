@@ -168,6 +168,16 @@ NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(NSString *expr
            @"awaitPromise": @YES};
 }
 
+NSDictionary<NSString *, id> *ARCProbePrivateEvaluationPayload(
+    NSString *expression, BOOL probeVisibleForRenderer) {
+  NSMutableDictionary *payload = [@{@"schemaVersion": @1,
+      @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
+      @"command": @(SHAAR_DEVTOOLS_RUNTIME_EVALUATE),
+      @"params": ARCProbePrivacyEvaluationParameters(expression)} mutableCopy];
+  if (probeVisibleForRenderer) payload[@"probeVisibleForRenderer"] = @YES;
+  return payload;
+}
+
 NSDictionary<NSString *, id> *ARCProbePrivatePrivacyPreferences(
     NSDictionary *status, NSInteger wildcardStatus) {
   NSMutableDictionary *result = [NSMutableDictionary dictionary];
@@ -258,6 +268,7 @@ void ARCCompletePrivateQuitDialogCancellation(
 }
 - (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion { completion(nil); }
 - (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
+        probeVisibleForRenderer:(BOOL)probeVisibleForRenderer
                        completion:(void (^)(NSString *))completion {
   if (![self isKindOfClass:ARCShaarRuntime.class] || !script.length) { completion(nil); return; }
   ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
@@ -269,6 +280,13 @@ void ARCCompletePrivateQuitDialogCancellation(
   NSDictionary *window = state[@"windows"][windowID];
   if (![runtime privateTabOwned:tabID windowID:windowID contextID:contextID] ||
       !context || !window) { completion(nil); return; }
+  if (probeVisibleForRenderer) {
+    NSURLComponents *url = [NSURLComponents componentsWithString:tab[@"url"] ?: @""];
+    NSWindow *native = [runtime windowForPrivateWindowID:windowID contextID:contextID];
+    if (!ProbeCaptureAllowed() || ![window[@"selectedTabID"] isEqual:tabID] ||
+        ![url.scheme isEqual:@"http"] || ![url.host isEqual:@"127.0.0.1"] ||
+        !native || native.isVisible) { completion(nil); return; }
+  }
   shaar_scope scope = {};
   scope.size = sizeof(scope);
   scope.private_session = (shaar_private_session *)
@@ -276,10 +294,7 @@ void ARCCompletePrivateQuitDialogCancellation(
   shaar_window *nativeWindow = (shaar_window *)
       ((NSValue *)window[@"handle"]).pointerValue;
   shaar_tab *nativeTab = (shaar_tab *)((NSValue *)tab[@"handle"]).pointerValue;
-  NSDictionary *payload = @{@"schemaVersion": @1,
-      @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
-      @"command": @(SHAAR_DEVTOOLS_RUNTIME_EVALUATE),
-      @"params": ARCProbePrivacyEvaluationParameters(script)};
+  NSDictionary *payload = ARCProbePrivateEvaluationPayload(script, probeVisibleForRenderer);
   BOOL submitted = ARCPrivateShaarSubmit(runtime, scope, nativeWindow, nativeTab,
       SHAAR_OP_DEVTOOLS_CALL, payload, ^(NSDictionary *reply) {
     NSString *value = ARCProbePrivateEvaluationJSON(reply);
@@ -291,6 +306,16 @@ void ARCCompletePrivateQuitDialogCancellation(
     context[@"probeEvaluationError"] = @"Shaar rejected scoped Runtime.evaluate.";
     completion(nil);
   }
+}
+- (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
+                       completion:(void (^)(NSString *))completion {
+  [self evaluatePrivateProbeTabID:tabID script:script probeVisibleForRenderer:NO
+                      completion:completion];
+}
+- (void)evaluatePrivatePermissionProbeTabID:(NSString *)tabID script:(NSString *)script
+                                completion:(void (^)(NSString *))completion {
+  [self evaluatePrivateProbeTabID:tabID script:script probeVisibleForRenderer:YES
+                      completion:completion];
 }
 - (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion { completion(NO); }
 - (NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID { return nil; }

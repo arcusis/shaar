@@ -43,6 +43,9 @@ FOUNDATION_EXPORT NSArray<NSDictionary *> * _Nullable ARCProbeTracePrivateSelect
 /// Await async privacy scripts before returning a copied JSON value.
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(
   NSString *expression);
+/// Only the dedicated permission fixture requests a scoped renderer visibility lease.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivateEvaluationPayload(
+  NSString *expression, BOOL probeVisibleForRenderer);
 
 /// Preserve native normal/private preference observations and wildcard rejection.
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivatePrivacyPreferences(
@@ -74,6 +77,8 @@ FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivatePrivacyPreference
 - (nullable NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID;
 - (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
                           completion:(void (^)(NSString * _Nullable))completion;
+- (void)evaluatePrivatePermissionProbeTabID:(NSString *)tabID script:(NSString *)script
+                                completion:(void (^)(NSString * _Nullable))completion;
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;
 - (nullable NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID;
 /// The selected owned loopback tab is loaded and attached; does not start a capture.

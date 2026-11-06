@@ -8,6 +8,20 @@ import Testing
 
 @Suite("Private Shaar evaluation reply")
 struct PrivateProbeEvaluationTests {
+  @Test func onlyPermissionEvaluationRequestsRendererVisibility() throws {
+    let script = "navigator.permissions.query({name:'geolocation'})"
+    let ordinary = ARCProbePrivateEvaluationPayload(script, false)
+    #expect(ordinary["probeVisibleForRenderer"] == nil)
+    let permission = ARCProbePrivateEvaluationPayload(script, true)
+    #expect(permission["probeVisibleForRenderer"] as? Bool == true)
+    let params = try #require(permission["params"] as? [String: Any])
+    #expect(params["probeVisibleForRenderer"] == nil)
+    #expect(params["awaitPromise"] as? Bool == true)
+    #expect(params["returnByValue"] as? Bool == true)
+    #expect(params["expression"] as? String == script)
+    #expect(params["userGesture"] == nil)
+  }
+
   @Test func extractsJSONValueFromScopedDevToolsReply() throws {
     let reply: [String: Any] = [
       "schemaVersion": 1,

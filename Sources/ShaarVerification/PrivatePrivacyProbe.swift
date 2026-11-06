@@ -53,20 +53,39 @@ struct PrivatePrivacyProbe {
         normalNetwork["tracker"] as? Bool == true && privateNetwork["tracker"] as? Bool == false
       checks["unlistedHTTPRequestsRemainAllowed"] =
         normalNetwork["otherHTTP"] as? Bool == true && privateNetwork["otherHTTP"] as? Bool == true
+      let before = try await evaluate(tabID, "({visibility:document.visibilityState})")
+      var presentation: [String: Any] = [
+        "before": before["visibility"] ?? NSNull(),
+        "nativeWindowsHiddenBefore": NSApp.windows.allSatisfy { !$0.isVisible },
+      ]
+      observations["permissionPresentation"] = presentation
       let permissions = try await evaluate(
         tabID,
         """
-        (async()=>{let r={};for(const name of ['camera','microphone','geolocation','notifications']){
+        (async()=>{let r={rendererVisibility:document.visibilityState};window.arcusisPrivatePermissionProbe=r;for(const name of ['camera','microphone','geolocation','notifications']){
+          r.stage='query:'+name;
           try {r[name]=(await navigator.permissions.query({name})).state} catch(e) {r[name]=e.name}
         }
         for(const [key,constraints] of [['cameraRequest',{video:true}],['microphoneRequest',{audio:true}]]){
+          r.stage=key;
           try{const stream=await navigator.mediaDevices.getUserMedia(constraints);stream.getTracks().forEach(t=>t.stop());r[key]='granted'}catch(e){r[key]=e.name}
         }
+        r.stage='locationRequest';
         r.locationRequest=await new Promise(resolve=>navigator.geolocation.getCurrentPosition(()=>resolve(0),e=>resolve(e.code),{timeout:2000}));
-        r.notificationRequest=await Notification.requestPermission();return r})()
-        """)
+        r.stage='notificationRequest';
+        r.notificationRequest=await Notification.requestPermission();r.stage='complete';
+        r.rendererVisibilityAtCompletion=document.visibilityState;return r})()
+        """, permissionLease: true)
       observations["permissions"] = permissions
       checks.merge(PrivatePrivacyEvidence.permissions(permissions)) { _, value in value }
+      let after = try await evaluate(tabID, "({visibility:document.visibilityState})")
+      presentation["during"] = permissions["rendererVisibility"] ?? NSNull()
+      presentation["completion"] = permissions["rendererVisibilityAtCompletion"] ?? NSNull()
+      presentation["after"] = after["visibility"] ?? NSNull()
+      presentation["nativeWindowsHiddenAfter"] = NSApp.windows.allSatisfy { !$0.isVisible }
+      observations["permissionPresentation"] = presentation
+      checks.merge(PrivatePrivacyEvidence.permissionPresentation(presentation)) { _, value in value
+      }
       guard
         let model = PrivateSiteControlsModel(
           tabID: tabID, windowID: windowID, contextID: contextID,
@@ -111,6 +130,13 @@ struct PrivatePrivacyProbe {
       }
       return true
     } catch {
+      if let diagnostic = try? await evaluate(
+        tabID,
+        "({permissionProgress:window.arcusisPrivatePermissionProbe ?? null,visibility:document.visibilityState})"
+      ) {
+        observations["permissionFailureDiagnostic"] = diagnostic
+      }
+      observations["nativeWindowsHiddenAfterFailure"] = NSApp.windows.allSatisfy { !$0.isVisible }
       try? report(checks, observations, error: error.localizedDescription)
       throw error
     }
@@ -183,9 +209,19 @@ struct PrivatePrivacyProbe {
       """
   }
 
-  private func evaluate(_ tab: String, _ script: String) async throws -> [String: Any] {
+  private func evaluate(_ tab: String, _ script: String, permissionLease: Bool = false)
+    async throws -> [String: Any]
+  {
     let json: String? = await withCheckedContinuation { continuation in
-      runtime.evaluatePrivacyProbeTabID(tab, script: script) { continuation.resume(returning: $0) }
+      if permissionLease {
+        runtime.evaluatePrivatePermissionProbeTabID(tab, script: script) {
+          continuation.resume(returning: $0)
+        }
+      } else {
+        runtime.evaluatePrivacyProbeTabID(tab, script: script) {
+          continuation.resume(returning: $0)
+        }
+      }
     }
     guard let json, let data = json.data(using: .utf8),
       let result = try JSONSerialization.jsonObject(with: data) as? [String: Any]

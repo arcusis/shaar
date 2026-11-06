@@ -133,7 +133,9 @@ final class BrowserRuntimeRouter {
 
   func owns(_ context: Context, id: String) -> Bool { contexts[context]?[id] != nil }
 
-  func windowClosed(_ id: String, quitting: Bool) {
+  @discardableResult
+  func windowClosed(_ id: String, quitting: Bool) -> Bool {
+    guard !retiredWindows.contains(id) else { return false }
     let client = subscriptions.removeValue(forKey: id)?.client
     retiredWindows.insert(id)
     tabOwners = tabOwners.filter { $0.value != id }
@@ -141,5 +143,6 @@ final class BrowserRuntimeRouter {
       contexts[context] = contexts[context]?.filter { $0.value != id }
     }
     client?.onWindowClosed?(quitting || isQuitting)
+    return true
   }
 }

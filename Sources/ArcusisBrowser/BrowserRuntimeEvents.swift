@@ -28,10 +28,7 @@ final class BrowserRuntimeEvents {
       self?.onQuitCancelled?()
     }
     runtime.onWindowClosed = { [weak self] id, quitting in
-      guard let self else { return }
-      let quitting = quitting || self.router.isQuitting || self.runtime.isQuitting
-      self.router.windowClosed(id, quitting: quitting)
-      self.onWindowClosed?(id, quitting)
+      self?.windowClosed(id, quitting: quitting)
     }
     runtime.onNotice = { [weak self] message in
       for client in self?.router.clients ?? [] { client.onNotice?(message) }
@@ -180,6 +177,12 @@ final class BrowserRuntimeEvents {
         client.onLibraryError?(profile, section, message)
       }
     }
+  }
+
+  func windowClosed(_ id: String, quitting: Bool) {
+    let quitting = quitting || router.isQuitting || runtime.isQuitting
+    guard router.windowClosed(id, quitting: quitting) else { return }
+    onWindowClosed?(id, quitting)
   }
 
   func quit() {

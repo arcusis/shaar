@@ -105,6 +105,7 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarTabProfiles;
   NSMutableDictionary<NSString *, NSString *> *_shaarSelectedTabs;
   NSMutableDictionary<NSString *, id> *_hostResizeObservers;
+  NSMutableDictionary<NSString *, id> *_hostCloseObservers;
   NSMutableDictionary<NSString *, NSValue *> *_hostSizes;
   NSMutableDictionary<NSString *, NSString *> *_shaarFindTokens;
   NSMutableDictionary<NSString *, NSString *> *_shaarFindRequests;
@@ -149,6 +150,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   _shaarTabProfiles = [NSMutableDictionary dictionary];
   _shaarSelectedTabs = [NSMutableDictionary dictionary];
   _hostResizeObservers = [NSMutableDictionary dictionary];
+  _hostCloseObservers = [NSMutableDictionary dictionary];
   _hostSizes = [NSMutableDictionary dictionary];
   _shaarFindTokens = [NSMutableDictionary dictionary];
   _shaarFindRequests = [NSMutableDictionary dictionary];
@@ -208,6 +210,9 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   for (id observer in _hostResizeObservers.allValues)
     [NSNotificationCenter.defaultCenter removeObserver:observer];
   [_hostResizeObservers removeAllObjects];
+  for (id observer in _hostCloseObservers.allValues)
+    [NSNotificationCenter.defaultCenter removeObserver:observer];
+  [_hostCloseObservers removeAllObjects];
   [_hostSizes removeAllObjects];
   [_shaarWindows removeAllObjects];
   [_shaarTabs removeAllObjects];
@@ -402,6 +407,15 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     return NO;
   }
   _shaarWindows[windowID] = [NSValue valueWithPointer:window];
+  NSWindow *nativeWindow = (__bridge NSWindow *)_symbols.window_native_window(window);
+  if (nativeWindow) {
+    __weak ARCShaarRuntime *weakSelf = self;
+    _hostCloseObservers[windowID] = [NSNotificationCenter.defaultCenter
+        addObserverForName:NSWindowWillCloseNotification object:nativeWindow
+                     queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *notification) {
+      [weakSelf finishWindowID:windowID];
+    }];
+  }
   return YES;
 }
 
@@ -410,7 +424,6 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   if (!window) return NO;
   shaar_error error = EmptyError();
   if (_symbols.window_close(window, &error) != SHAAR_OK) return NO;
-  if (!_symbols.window_host_view(window)) [self finishWindowID:windowID];
   return YES;
 }
 
@@ -419,9 +432,18 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   [self closeExtensionPopupForWindowID:windowID];
   id observer = _hostResizeObservers[windowID];
   if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  id closeObserver = _hostCloseObservers[windowID];
+  if (closeObserver) [NSNotificationCenter.defaultCenter removeObserver:closeObserver];
   [_hostResizeObservers removeObjectForKey:windowID];
+  [_hostCloseObservers removeObjectForKey:windowID];
   [_hostSizes removeObjectForKey:windowID];
   [_shaarSelectedTabs removeObjectForKey:windowID];
+  for (NSString *tabID in [_shaarTabWindows.allKeys copy]) {
+    if (![_shaarTabWindows[tabID] isEqualToString:windowID]) continue;
+    [_shaarTabs removeObjectForKey:tabID];
+    [_shaarTabWindows removeObjectForKey:tabID];
+    [_shaarTabProfiles removeObjectForKey:tabID];
+  }
   [_shaarWindows removeObjectForKey:windowID];
   if (self.onWindowClosed) self.onWindowClosed(windowID, _shaarQuitting);
 }

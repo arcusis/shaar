@@ -44,6 +44,21 @@ struct WorkspaceQuitPersistenceTests {
     let loaded = try fixture.file.load()
     #expect(loaded?.windows.isEmpty == true)
   }
+
+  @Test func appKitCloseRetiresWindowBeforeSavedTabCanReload() throws {
+    let fixture = try QuitWorkspaceFixture(additionalWindow: true)
+    defer { fixture.cleanUp() }
+    let context = try #require(fixture.host.contexts.values.first)
+    let tab = try #require(context.store.session.selectedPage?.tab.id)
+
+    context.window.close()
+    context.engine.reconcile()
+
+    #expect(context.engine.isClosed)
+    #expect(fixture.host.contexts[context.id] == nil)
+    #expect(!context.store.reloadCurrentPage())
+    #expect(!fixture.host.events.router.bindTab(tab.uuidString, windowID: context.nativeID))
+  }
 }
 
 @MainActor

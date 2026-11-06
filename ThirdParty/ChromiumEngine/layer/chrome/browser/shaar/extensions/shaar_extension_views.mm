@@ -219,7 +219,7 @@ bool FrameworkDevToolsManifestIsLocal(std::string_view manifest) {
            match == "http://127.0.0.1/*" ||
            match == "https://127.0.0.1/*";
   };
-  const auto allowed_matches = [&](const base::Value::List* matches) {
+  const auto allowed_matches = [&](const base::ListValue* matches) {
     if (!matches || matches->empty())
       return false;
     for (const auto& match : *matches) {

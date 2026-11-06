@@ -190,7 +190,7 @@ final class PrivateBrowserHost {
 
   static func windowCanPerform(_ command: BrowserMenuCommand, store: BrowserStore) -> Bool {
     return switch command {
-    case .closeTab: !store.commandIsOpen && store.session.selectedPage != nil
+    case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
     case .developerTools, .inspector:
       !store.commandIsOpen && store.privatePage?.inspectorTarget != nil
     case .inspectorCopy:

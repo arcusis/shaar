@@ -56,6 +56,10 @@ import Testing
     let checks = [
       "openTab", "paint", "navigate", "backForward", "devTools", "newWindow",
       "privateWindow", "profilesSwitch", "extensions", "downloads",
+      "privateEngineProfileIsOffTheRecord", "privateEngineGlobalCookiesBlocked",
+      "privateEngineHTTPSOnlyEnabled", "privateEngineReferrersDisabled",
+      "privateEngineWebRTCPublicIPOnly", "privateEngineExtensionsDisabled",
+      "privateEngineTrackerRulesLoaded",
     ]
     var results: [String: [String: Any]] = Dictionary(
       uniqueKeysWithValues: checks.map { ($0, ["status": "pass"]) })

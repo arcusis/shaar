@@ -341,6 +341,10 @@ final class ShaarPreviewProbe {
       : [
         "openTab", "paint", "navigate", "backForward", "devTools", "newWindow",
         "privateWindow", "profilesSwitch", "extensions", "downloads",
+        "privateEngineProfileIsOffTheRecord", "privateEngineGlobalCookiesBlocked",
+        "privateEngineHTTPSOnlyEnabled", "privateEngineReferrersDisabled",
+        "privateEngineWebRTCPublicIPOnly", "privateEngineExtensionsDisabled",
+        "privateEngineTrackerRulesLoaded",
       ]
     return Set(results.keys) == required
       && results.values.allSatisfy { $0["status"] as? String == "pass" }

@@ -1192,6 +1192,22 @@
         }
       }
     },
+    "History": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "היסטוריה"
+          }
+        }
+      }
+    },
     "History…": {
       "localizations": {
         "en": {
@@ -2430,6 +2446,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "הצגת האישור"
+          }
+        }
+      }
+    },
+    "Show recent downloads": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show recent downloads"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת הורדות אחרונות"
           }
         }
       }

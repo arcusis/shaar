@@ -52,6 +52,7 @@ rm -rf "$package"
 mkdir -p "$package/stage"
 ditto "$framework" "$package/stage/Chromium Framework.framework"
 staged="$package/stage/Chromium Framework.framework"
+python3 scripts/trim-engine-locales.py "$staged" > "$package/resource-trim.json"
 python3 scripts/rebrand-engine-framework.py "$staged"
 adhoc_sign_test() {
   codesign --force --timestamp=none --sign - "$1"
@@ -77,9 +78,11 @@ jq -n --arg tag "$tag" --arg sha "$archive_sha" --arg sourceSha "$source_sha" \
   --arg signedSha "$(shasum -a 256 "$staged/Versions/Current/Chromium Framework" | cut -d ' ' -f 1)" \
   --arg revision "$(git rev-parse HEAD)" --slurpfile source "$receipt" \
   --slurpfile tests "$tests" --slurpfile firstTab "$first_tab" \
+  --slurpfile resourceTrim "$package/resource-trim.json" \
   '{schemaVersion:1,sourceKind:"shaar",purpose:"test build for #418",releaseTag:$tag,
     sourceRevision:$revision,archiveSha256:$sha,sourceBinarySha256:$sourceSha,
     signedBinarySha256:$signedSha,sourceBuild:$source[0],
-    layerTests:{passed:$tests[0].tests,failed:$tests[0].failures},firstTab:$firstTab[0]}' \
+    layerTests:{passed:$tests[0].tests,failed:$tests[0].failures},firstTab:$firstTab[0],
+    resourceTrim:$resourceTrim[0]}' \
   > "$package/$name.receipt.json"
 printf '%s\n%s\n%s\n' "$archive" "$archive.sha256" "$package/$name.receipt.json"

@@ -149,6 +149,7 @@ final class ShaarDevToolsModel {
   let network = ShaarNetworkModel()
   let phase2: ShaarPhase2Model
   let application: ShaarApplicationModel
+  let cookies = ShaarCookieModel()
   let performance: ShaarPerformanceModel
   let sources: ShaarSourcesModel
   let repro: ShaarReproModel
@@ -195,6 +196,7 @@ final class ShaarDevToolsModel {
     network.clearSelection()
     phase2.close()
     application.reset()
+    cookies.reset()
     performance.reset()
     sources.reset()
     ownedInspector?.close()
@@ -212,6 +214,7 @@ final class ShaarDevToolsModel {
     network.clearSelection()
     phase2.updateTarget(target, committed: committed)
     application.reset()
+    cookies.reset()
     sources.reset()
     repro.updateTarget(target, committed: committed)
     streamGeneration += 1

@@ -2,11 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
+import ShaarEngineABI
 import SwiftUI
 
 struct ShaarApplicationPanel: View {
   @Bindable var model: ShaarApplicationModel
+  @Bindable var cookies: ShaarCookieModel
   let phase2: ShaarPhase2Model
+  let target: SiteControlTarget
+  let cookieStore: (any ShaarCookieStore)?
   let openChromium: () -> Void
   let clearCookies: (() async throws -> Void)?
   let clearSiteData: (() async throws -> Void)?
@@ -14,12 +19,18 @@ struct ShaarApplicationPanel: View {
   @State private var editing = false
   @State private var editorKey = ""
   @State private var editorValue = ""
+  @State private var cookieValue = ""
+  @State private var cookieSecure = false
+  @State private var cookieHttpOnly = false
+  @State private var cookieSameSite = ShaarCookieSameSite.lax
+  @State private var editingCookie = false
   @State private var confirmation: Confirmation?
 
   private enum Confirmation: Equatable {
     case removeStorage(String)
     case clearStorage
     case clearCookies
+    case deleteCookie
     case clearSiteData
     case unregisterWorker(String)
 
@@ -28,6 +39,7 @@ struct ShaarApplicationPanel: View {
       case .removeStorage: "Delete storage item?"
       case .clearStorage: "Clear this storage area?"
       case .clearCookies: "Clear cookies for this page?"
+      case .deleteCookie: "Delete this cookie?"
       case .clearSiteData: "Clear site data?"
       case .unregisterWorker: "Unregister service worker?"
       }
@@ -42,6 +54,13 @@ struct ShaarApplicationPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .task(id: model.selectionKey) { await model.refresh() }
+    .task(id: target) {
+      cookies.configure(store: cookieStore, target: target)
+      if model.area == .cookies { await cookies.refresh() }
+    }
+    .onChange(of: model.area) { _, area in
+      if area == .cookies { Task { await cookies.refresh() } }
+    }
     .onChange(of: phase2.available) { _, available in
       if available { Task { await model.refresh() } } else { model.reset() }
     }
@@ -121,6 +140,8 @@ struct ShaarApplicationPanel: View {
       }
       if model.area == .cookies {
         cookiesContent
+      } else if !phase2.available {
+        unavailableApplicationContent
       } else if model.area == .workers {
         workerContent
       } else if model.cacheEntryURL != nil {
@@ -157,7 +178,10 @@ struct ShaarApplicationPanel: View {
           .frame(width: 150)
       }
       Button {
-        Task { await model.refresh() }
+        Task {
+          if model.area == .cookies { await cookies.refresh() }
+          else { await model.refresh() }
+        }
       } label: {
         Image(systemName: "arrow.clockwise")
       }
@@ -168,26 +192,133 @@ struct ShaarApplicationPanel: View {
     .frame(height: 36)
   }
 
-  private var cookiesContent: some View {
-    VStack(spacing: 9) {
-      Image(systemName: "circle.grid.2x2")
+  private var unavailableApplicationContent: some View {
+    VStack(spacing: 10) {
+      Image(systemName: "bolt.slash")
         .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.tertiary)
-      Text(ShellL10n.string("Cookie inspection needs the site-data read route"))
+      Text(ShellL10n.string("Live Application needs engine shaar.17"))
         .font(.system(size: 12, weight: .medium))
-      Text(ShellL10n.string("Use Chromium DevTools to inspect or edit individual cookies."))
-        .font(.system(size: 11)).foregroundStyle(.secondary)
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
         .controlSize(.small)
-      if clearCookies != nil {
-        Button(ShellL10n.string("Clear cookies and reload"), role: .destructive) {
-          confirmation = .clearCookies
-        }
-        .controlSize(.small)
-      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .multilineTextAlignment(.center)
-    .padding(20)
+    .accessibilityIdentifier("shaar.devtools.streamUnavailable")
+  }
+
+  private var cookiesContent: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 8) {
+        TextField(ShellL10n.string("Filter cookies"), text: $cookies.search)
+          .textFieldStyle(.roundedBorder).frame(width: 180)
+        Spacer()
+        if clearCookies != nil {
+          Button(ShellL10n.string("Clear cookies and reload"), role: .destructive) {
+            confirmation = .clearCookies
+          }
+        }
+      }
+      .font(.system(size: 10)).controlSize(.small).padding(8)
+      Divider()
+      if let failure = cookies.failure, cookies.cookies.isEmpty {
+        VStack(spacing: 9) {
+          Image(systemName: "circle.grid.2x2")
+            .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.tertiary)
+          Text(failure).font(.system(size: 12, weight: .medium))
+          Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
+            .controlSize(.small)
+          Button(ShellL10n.string("Retry")) { Task { await cookies.refresh() } }
+            .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        if let failure = cookies.failure {
+          Text(failure)
+            .font(.system(size: 10)).foregroundStyle(.orange)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+        }
+        cookieTable
+      }
+    }
+    .accessibilityIdentifier("shaar.devtools.cookiesPanel")
+  }
+
+  private var cookieTable: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 8) {
+        Text(ShellL10n.string("Name")).frame(width: 130, alignment: .leading)
+        Text(ShellL10n.string("Value")).frame(maxWidth: .infinity, alignment: .leading)
+        Text(ShellL10n.string("Domain")).frame(width: 130, alignment: .leading)
+        Text(ShellL10n.string("Path")).frame(width: 65, alignment: .leading)
+        Text(ShellL10n.string("Flags")).frame(width: 180, alignment: .leading)
+      }
+      .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+      .padding(.horizontal, 12).frame(height: 29)
+      .background(Color.primary.opacity(0.035))
+      ScrollView {
+        LazyVStack(spacing: 0) {
+          if cookies.loading {
+            ProgressView().controlSize(.small).padding(28)
+          } else if cookies.visibleCookies.isEmpty {
+            emptyContent(cookies.cookies.isEmpty ? "No cookies for this page" : "No matching cookies")
+          }
+          ForEach(cookies.visibleCookies) { cookie in
+            Button { cookies.selectedID = cookie.id } label: {
+              HStack(spacing: 8) {
+                Text(cookie.name).frame(width: 130, alignment: .leading).lineLimit(1)
+                Text(cookie.value).frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
+                Text(cookie.domain).frame(width: 130, alignment: .leading).lineLimit(1)
+                Text(cookie.path).frame(width: 65, alignment: .leading).lineLimit(1)
+                Text(cookieFlags(cookie)).frame(width: 180, alignment: .leading).lineLimit(1)
+              }
+              .font(.system(size: 10, design: .monospaced))
+              .padding(.horizontal, 12).frame(height: 34)
+              .background(cookies.selectedID == cookie.id ? Color.accentColor.opacity(0.10) : .clear)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("shaar.devtools.cookieRow")
+            Divider()
+          }
+        }
+      }
+      if editingCookie { cookieEditor }
+    }
+  }
+
+  private func cookieFlags(_ cookie: ShaarSiteCookie) -> String {
+    var flags: [String] = []
+    if cookie.secure { flags.append(ShellL10n.string("Secure")) }
+    if cookie.httpOnly { flags.append(ShellL10n.string("HTTP only")) }
+    flags.append(ShellL10n.string(cookie.sameSite.rawValue))
+    if cookie.partitionSite != nil { flags.append(ShellL10n.string("Partitioned")) }
+    return flags.joined(separator: " · ")
+  }
+
+  private var cookieEditor: some View {
+    HStack(spacing: 8) {
+      TextField(ShellL10n.string("Value"), text: $cookieValue)
+        .frame(minWidth: 130)
+      Toggle(ShellL10n.string("Secure"), isOn: $cookieSecure)
+      Toggle(ShellL10n.string("HTTP only"), isOn: $cookieHttpOnly)
+      Picker(ShellL10n.string("SameSite"), selection: $cookieSameSite) {
+        ForEach(ShaarCookieSameSite.allCases, id: \.self) { value in
+          Text(ShellL10n.string(value.rawValue)).tag(value)
+        }
+      }
+      .frame(width: 120)
+      Button(ShellL10n.string("Save")) {
+        editingCookie = false
+        Task {
+          await cookies.save(
+            value: cookieValue, secure: cookieSecure, httpOnly: cookieHttpOnly,
+            sameSite: cookieSameSite)
+        }
+      }
+      Button(ShellL10n.string("Cancel")) { editingCookie = false }
+    }
+    .font(.system(size: 10)).textFieldStyle(.roundedBorder)
+    .controlSize(.small).padding(8)
+    .onExitCommand { editingCookie = false }
   }
 
   private var workerContent: some View {
@@ -317,10 +448,19 @@ struct ShaarApplicationPanel: View {
 
   private var footer: some View {
     HStack(spacing: 10) {
-      Text(ShellL10n.format("%d items", arguments: [.integer(model.rows.count)]))
+      Text(ShellL10n.format("%d items", arguments: [
+        .integer(model.area == .cookies ? cookies.cookies.count : model.rows.count)
+      ]))
         .foregroundStyle(.secondary)
       Spacer()
-      if model.isStorage {
+      if model.area == .cookies {
+        Button(ShellL10n.string("Edit")) { beginCookieEdit() }
+          .disabled(cookies.selected == nil || cookies.saving)
+        Button(ShellL10n.string("Delete"), role: .destructive) {
+          confirmation = .deleteCookie
+        }
+        .disabled(cookies.selected == nil || cookies.saving)
+      } else if model.isStorage {
         Button(ShellL10n.string("Add")) { beginEdit(nil) }
         Button(ShellL10n.string("Edit")) {
           beginEdit(model.rows.first { $0.id == model.selectedID })
@@ -383,6 +523,15 @@ struct ShaarApplicationPanel: View {
     editing = true
   }
 
+  private func beginCookieEdit() {
+    guard let cookie = cookies.selected else { return }
+    cookieValue = cookie.value
+    cookieSecure = cookie.secure
+    cookieHttpOnly = cookie.httpOnly
+    cookieSameSite = cookie.sameSite
+    editingCookie = true
+  }
+
   private func perform(_ action: Confirmation?) async {
     guard let action else { return }
     do {
@@ -390,13 +539,17 @@ struct ShaarApplicationPanel: View {
       case .removeStorage(let key): await model.removeStorage(key: key)
       case .clearStorage: await model.clearStorage()
       case .clearCookies: try await clearCookies?()
+      case .deleteCookie: await cookies.deleteSelected()
       case .clearSiteData: try await clearSiteData?()
       case .unregisterWorker(let id):
         if let worker = model.workers.first(where: { $0.id == id }) {
           await model.unregisterWorker(worker)
         }
       }
-      if action == .clearSiteData || action == .clearCookies { await model.refresh() }
+      if action == .clearSiteData || action == .clearCookies {
+        await model.refresh()
+        await cookies.refresh()
+      }
     } catch { model.failure = error.localizedDescription }
   }
 }

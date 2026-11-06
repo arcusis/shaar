@@ -8,6 +8,7 @@ struct ShaarDevToolsPanel: View {
   @Bindable var model: ShaarDevToolsModel
   let inspector: InspectorModel?
   let openChromium: () -> Void
+  var cookieStore: (any ShaarCookieStore)? = nil
   @FocusState private var focusedSection: ShaarDevToolsSection?
 
   var body: some View {
@@ -105,15 +106,12 @@ struct ShaarDevToolsPanel: View {
         unavailablePanel
       }
     case .application:
-      if model.phase2.available {
-        ShaarApplicationPanel(
-          model: model.application, phase2: model.phase2,
-          openChromium: openChromium,
-          clearCookies: siteAction(.clearCookiesAndReload),
-          clearSiteData: siteAction(.clearSiteData))
-      } else {
-        unavailablePanel
-      }
+      ShaarApplicationPanel(
+        model: model.application, cookies: model.cookies, phase2: model.phase2,
+        target: model.target, cookieStore: cookieStore ?? inspector?.engine,
+        openChromium: openChromium,
+        clearCookies: siteAction(.clearCookiesAndReload),
+        clearSiteData: siteAction(.clearSiteData))
     case .performance:
       if model.phase2.available {
         ShaarPerformancePanel(model: model.performance, phase2: model.phase2)
@@ -203,6 +201,7 @@ struct ShaarDevToolsPanel: View {
 
   private var footerMessage: String {
     if model.section == .application {
+      if model.application.area == .cookies { return "Cookies are scoped to this page" }
       return model.phase2.available
         ? "Application data is scoped to this tab"
         : "Application data needs engine shaar.17"

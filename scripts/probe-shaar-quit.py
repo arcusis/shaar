@@ -72,6 +72,10 @@ def run_probe(app, output_dir, mode, number, port, timeout):
         required = {
             "openTab", "navigate", "backForward", "devTools", "newWindow",
             "privateWindow", "profilesSwitch", "extensions", "downloads",
+            "privateEngineProfileIsOffTheRecord", "privateEngineGlobalCookiesBlocked",
+            "privateEngineHTTPSOnlyEnabled", "privateEngineReferrersDisabled",
+            "privateEngineWebRTCPublicIPOnly", "privateEngineExtensionsDisabled",
+            "privateEngineTrackerRulesLoaded",
         }
     passed = (
         return_code == 0

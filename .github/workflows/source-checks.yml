@@ -248,14 +248,19 @@ jobs:
         run: test "$COVERAGE_RESULT" = passed
 
   visuals:
-    name: Hosted sidebar component visuals
+    name: Hosted sidebar component visuals (shard ${{ matrix.shard }})
     needs: plan
     concurrency:
-      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-visuals
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-visuals-${{ matrix.shard }}
       cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: ['1', '2']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -263,13 +268,15 @@ jobs:
       - uses: ./.github/actions/ci-setup
         with:
           mode: visual
-      - name: Run all existing hosted visual filters
-        run: .venv/bin/python scripts/ci-stage.py visual
+      - name: Run assigned hosted visual filters
+        env:
+          VISUAL_SHARD: ${{ matrix.shard }}
+        run: .venv/bin/python scripts/ci-stage.py visual --visual-shard "$VISUAL_SHARD"
       - uses: ./.github/actions/ci-evidence
         if: always()
         with:
-          stage: visual
-          extra-path: build/Verification/sidebar-chrome-ci
+          stage: visual-${{ matrix.shard }}
+          extra-path: ${{ matrix.shard == '1' && 'build/Verification/sidebar-chrome-ci' || '' }}
 
   localization-captures:
     name: English and Hebrew offscreen localization captures

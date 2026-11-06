@@ -49,6 +49,11 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_hosted_visual_shards_run_each_existing_filter_once(self):
+        selected = [name for shard in STAGES.VISUAL_SHARDS.values() for name in shard]
+        self.assertEqual(sorted(selected), sorted(STAGES.VISUAL_FILTERS))
+        self.assertEqual(len(selected), len(set(selected)))
+
     def test_shipping_probe_guard_runs_for_shipping_sources_on_pull_requests(self):
         self.assertTrue(PLAN.needs_shipping_probe_guard(["Sources/ChromiumBridge/ChromiumPictureInPicture.mm"]))
         self.assertTrue(PLAN.needs_shipping_probe_guard(["Sources/ArcusisBrowser/BrowserEngine.swift"]))

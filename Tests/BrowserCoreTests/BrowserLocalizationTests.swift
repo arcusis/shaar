@@ -134,7 +134,39 @@ import Testing
       == "הסגירה תבטל 3 הורדות פעילות.")
 }
 
-@Test func importFailuresExplainProblemsInHebrew() {
+@Test func browserImportPreviewLabelsLocalizeKindsAndPreserveBrowserBrandNames() {
+  for language in [BrowserLanguage.english, .hebrew] {
+    let bookmark = BrowserLocalization.string("Bookmark", table: "Panels", language: language)
+    let history = BrowserLocalization.string("History", table: "Panels", language: language)
+    let source = BrowserLocalization.format(
+      "From %@", table: "Panels", language: language, arguments: [.string("Chrome")])
+    let readableSource = source.replacingOccurrences(of: "\u{2068}", with: "")
+      .replacingOccurrences(of: "\u{2069}", with: "")
+    if language == .english {
+      #expect(bookmark == "Bookmark")
+      #expect(history == "History")
+      #expect(readableSource == "From Chrome")
+    } else {
+      #expect(bookmark == "סימנייה")
+      #expect(history == "היסטוריה")
+      #expect(readableSource == "מ־Chrome")
+    }
+  }
+}
+
+@Test func importFailuresExplainProblemsInEnglishAndHebrew() {
+  #expect(
+    BrowserImport.ImportError.unsupported.description(language: .english)
+      == "Choose a Chrome, Edge, Brave, Arc, Safari, or Firefox profile folder or bookmark export.")
+  #expect(
+    BrowserImport.ImportError.privateProfile.description(language: .english)
+      == "Private browser profiles cannot be imported. Choose a regular profile.")
+  #expect(
+    BrowserImport.ImportError.databaseUnavailable("fixture").description(language: .english)
+      == "The selected browser history database could not be read safely.")
+  #expect(
+    BrowserImport.ImportError.tooManyRows.description(language: .english)
+      == "The selected browser profile contains more data than can be imported at once.")
   #expect(
     BrowserImport.ImportError.unsupported.description(language: .hebrew)
       == "בחרו תיקיית פרופיל או קובץ ייצוא סימניות של Chrome, Edge, Brave, Arc, Safari או Firefox.")

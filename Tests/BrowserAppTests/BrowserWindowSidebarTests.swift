@@ -11,6 +11,7 @@ import Testing
 
 private final class OffscreenKeyEligibleWindow: NSWindow {
   override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { true }
 }
 
 @Suite @MainActor struct BrowserWindowSidebarTests {
@@ -92,7 +93,8 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
     }
     host.layoutSubtreeIfNeeded()
 
-    #expect(window.canBecomeKey && !window.isKeyWindow)
+    #expect(window.canBecomeKey && window.canBecomeMain)
+    #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
     // This is the action wired to the pane + button.
     store.openSplitPane(beside: first, edge: .right)
     let deadline = ContinuousClock.now + .seconds(2)

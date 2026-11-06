@@ -356,7 +356,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0028-shaar-devtools-hidden-panels.patch",
-      "sha256": "d901910b70a667727401b5b689e63204c047cd474dad78038509c85979187d19"
+      "sha256": "9475cde4c99d323119064e37b704cd3776fc9dc3fd6ea83e3806f1f17721cd1e"
     }
   ],
   "requiredExports": [

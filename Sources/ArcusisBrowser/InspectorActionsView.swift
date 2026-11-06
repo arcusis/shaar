@@ -66,8 +66,42 @@ struct InspectorActionsView: View {
 /// Drawn inside the dock, so the same menu can be rendered offscreen without ordering an NSMenu.
 struct InspectorCopyMenu: View {
   @Bindable var model: InspectorModel
+  @AppStorage("inspectorSourceEditor") private var sourceEditor = InspectorSourceEditor.vscode
+    .rawValue
   var body: some View {
     VStack(spacing: 1) {
+      item(
+        "Open source", symbol: "arrow.up.right.square",
+        enabled: model.aiCopy.canCopy && !model.sourceActions.busy
+      ) {
+        model.presentation.copyMenuOpen = false
+        Task { await model.sourceActions.open() }
+      }
+      item(
+        "Copy for agent", symbol: "terminal",
+        enabled: model.aiCopy.canCopy && !model.sourceActions.busy
+      ) {
+        model.presentation.copyMenuOpen = false
+        Task { await model.sourceActions.copyForAgent() }
+      }
+      Menu {
+        ForEach(InspectorSourceEditor.allCases) { editor in
+          Button(editor.label) { sourceEditor = editor.rawValue }
+        }
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "hammer").font(.system(size: 10)).frame(width: 14)
+          Text(
+            InspectorL10n.string("Editor") + ": "
+              + (InspectorSourceEditor(rawValue: sourceEditor)?.label ?? "VS Code")
+          )
+          .font(.system(size: 11))
+          Spacer()
+          Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(.secondary)
+        }.padding(.horizontal, 8).frame(maxWidth: .infinity, alignment: .leading)
+          .frame(height: 27).contentShape(Rectangle())
+      }.buttonStyle(.plain).frame(maxWidth: .infinity)
+      Divider().padding(.vertical, 4).padding(.horizontal, 5)
       item("Copy element", symbol: "doc.on.doc", enabled: model.aiCopy.canCopy) {
         perform(.element)
       }

@@ -93,9 +93,17 @@ struct ShaarDevToolsPanel: View {
         pendingPanel("Inspector is unavailable for this page")
       }
     case .console:
-      pendingPanel("Console events will appear here when the engine stream is available")
+      if model.streamAvailable {
+        ShaarConsolePanel(model: model.console, events: model.events, inspector: inspector)
+      } else {
+        unavailablePanel
+      }
     case .network:
-      pendingPanel("Network requests will appear here when the engine stream is available")
+      if model.streamAvailable {
+        pendingPanel("No network requests yet")
+      } else {
+        unavailablePanel
+      }
     }
   }
 
@@ -113,18 +121,47 @@ struct ShaarDevToolsPanel: View {
     .padding(24)
   }
 
-  private var commandLine: some View {
-    HStack(spacing: 8) {
-      Text(">")
-        .font(.system(size: 12, weight: .medium, design: .monospaced))
+  private var unavailablePanel: some View {
+    VStack(spacing: 10) {
+      Image(systemName: "bolt.slash")
+        .font(.system(size: 22, weight: .ultraLight))
+        .foregroundStyle(.tertiary)
+      Text(ShellL10n.string("Live console and network need engine shaar.17"))
+        .font(.system(size: 12, weight: .medium))
+      Text(ShellL10n.string("Use Chromium DevTools until the live stream is available."))
+        .font(.system(size: 11))
         .foregroundStyle(.secondary)
-      Text(ShellL10n.string("Console command line arrives with the Console panel"))
+      Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
+        .controlSize(.small)
+        .padding(.top, 3)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .multilineTextAlignment(.center)
+    .padding(24)
+    .accessibilityIdentifier("shaar.devtools.streamUnavailable")
+  }
+
+  @ViewBuilder private var commandLine: some View {
+    if model.streamAvailable && model.section == .console {
+      ShaarConsoleCommandLine(model: model.console, inspector: inspector)
+    } else {
+      HStack(spacing: 8) {
+        Text(">")
+          .font(.system(size: 12, weight: .medium, design: .monospaced))
+          .foregroundStyle(.secondary)
+        Text(
+          ShellL10n.string(
+            model.streamAvailable
+              ? "Open Console to evaluate JavaScript"
+              : "Console commands need engine shaar.17")
+        )
         .font(.system(size: 11, design: .monospaced))
         .foregroundStyle(.tertiary)
-      Spacer()
+        Spacer()
+      }
+      .padding(.horizontal, 12)
+      .frame(height: 34)
     }
-    .padding(.horizontal, 12)
-    .frame(height: 34)
   }
 
   private func moveSection(_ direction: MoveCommandDirection) {

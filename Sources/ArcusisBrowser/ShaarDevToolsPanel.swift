@@ -7,7 +7,8 @@ import SwiftUI
 
 enum ShaarDevToolsAccessibility {
   static let openHelp = ShellL10n.string(
-    "Open Shaar DevTools with F12 or Option-Command-I. Open Chromium DevTools with Option-Shift-Command-I.")
+    "Open Shaar DevTools with F12 or Option-Command-I. Open Chromium DevTools with Option-Shift-Command-I."
+  )
   static let closeHelp = ShellL10n.string("Close Shaar DevTools with Escape.")
 
   static func sectionLabel(_ section: ShaarDevToolsSection) -> String {

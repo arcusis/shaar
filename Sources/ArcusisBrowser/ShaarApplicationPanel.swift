@@ -121,8 +121,9 @@ struct ShaarApplicationPanel: View {
     case .right: forward = true
     default: return
     }
-    guard let next = ShaarDevToolsNavigation.adjacentIndex(
-      index, count: ShaarApplicationArea.allCases.count, forward: forward)
+    guard
+      let next = ShaarDevToolsNavigation.adjacentIndex(
+        index, count: ShaarApplicationArea.allCases.count, forward: forward)
     else { return }
     let area = ShaarApplicationArea.allCases[next]
     editing = false

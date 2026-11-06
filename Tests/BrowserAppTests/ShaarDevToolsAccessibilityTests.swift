@@ -93,9 +93,10 @@ import XCTest
       let suffix = scheme == .dark ? "dark" : "light"
       let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
       let page = InspectorPageLayout(
-        model: inspector, shell: model, openChromium: {}, page: { self.samplePage })
-        .frame(width: 1040, height: 680)
-        .environment(\.colorScheme, scheme)
+        model: inspector, shell: model, openChromium: {}, page: { self.samplePage }
+      )
+      .frame(width: 1040, height: 680)
+      .environment(\.colorScheme, scheme)
       try VisualCapture.renderOffscreen(
         page, size: NSSize(width: 1040, height: 680), appearance: appearance,
         to: directory.appending(path: "after-\(suffix).png"))

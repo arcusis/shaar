@@ -106,7 +106,8 @@ struct ShaarViewportsPanel: View {
         .buttonStyle(.plain)
         .accessibilityLabel(
           ShellL10n.format(
-            "Remove %@ viewport", arguments: [.string(ShellL10n.string(frame.preset.title))]))
+            "Remove %@ viewport", arguments: [.string(ShellL10n.string(frame.preset.title))])
+        )
         .disabled(model.frames.count == 1)
       }
       .padding(.horizontal, 9).frame(height: 30)

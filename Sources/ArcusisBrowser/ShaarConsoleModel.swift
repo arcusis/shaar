@@ -82,9 +82,10 @@ final class ShaarConsoleModel {
     guard !rows.isEmpty else { return }
     let currentID = focusedID ?? selectedID
     let current = rows.firstIndex { $0.id == currentID }
-    let next = current.flatMap {
-      ShaarDevToolsNavigation.adjacentIndex($0, count: rows.count, forward: forward)
-    } ?? 0
+    let next =
+      current.flatMap {
+        ShaarDevToolsNavigation.adjacentIndex($0, count: rows.count, forward: forward)
+      } ?? 0
     selectedID = rows[next].id
   }
 

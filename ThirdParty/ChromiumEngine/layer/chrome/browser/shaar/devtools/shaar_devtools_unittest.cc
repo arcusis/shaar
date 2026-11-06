@@ -802,6 +802,7 @@ TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_UI_SHOW));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CONTROL_STATUS));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_OPEN));
+  EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_CLOSE));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND));
@@ -823,6 +824,9 @@ TEST(ShaarDevToolsPanelTest, ProjectsOnlyNamedFieldsFromAllowlistedEvents) {
   EXPECT_EQ(std::string::npos, output.find("headers"));
   EXPECT_FALSE(ProjectPanelEventForTesting(
       R"({"method":"Runtime.evaluate","params":{"expression":"secret"}})",
+      42, &output));
+  EXPECT_FALSE(ProjectPanelEventForTesting(
+      R"({"method":"Page.screencastFrame","params":{"data":"raw"}})",
       42, &output));
   EXPECT_FALSE(ProjectPanelEventForTesting(
       R"({"method":"Network.requestWillBeSent","params":{}})",

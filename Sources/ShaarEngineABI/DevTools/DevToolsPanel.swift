@@ -18,6 +18,12 @@ public enum ShaarDevToolsPanelEventID: Int, CaseIterable, Sendable {
   case pageLifecycle = 9
   case performanceMetrics = 10
   case eventsDropped = 11
+  case screencastFrame = 29
+}
+
+public struct ShaarDevToolsPanelFrame: Equatable, Sendable {
+  public let jpeg: Data
+  public let sessionID: Int
 }
 
 public struct ShaarDevToolsPanelMetric: Equatable, Sendable {
@@ -39,6 +45,7 @@ public struct ShaarDevToolsPanelData: Equatable, Sendable {
   public let name: String?
   public let metrics: [ShaarDevToolsPanelMetric]?
   public let droppedCount: UInt32?
+  public let frame: ShaarDevToolsPanelFrame?
   public let truncated: Bool
 }
 
@@ -77,13 +84,14 @@ public enum ShaarDevToolsPanelEventRouter {
       event.sessionID == Data((scope.sessionID ?? "").utf8),
       event.windowID == Data(windowID.utf8),
       event.tabID == Data(tabID.utf8),
-      event.payloadJSON.count <= 32_768,
+      event.payloadJSON.count <= 384 * 1024,
       let root = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       Set(root.keys) == ["schemaVersion", "kind", "eventID", "leaseID", "data"],
       root["schemaVersion"] as? Int == 1,
       root["kind"] as? String == "panelEvent",
       let rawID = root["eventID"] as? Int,
       let id = ShaarDevToolsPanelEventID(rawValue: rawID),
+      id == .screencastFrame || event.payloadJSON.count <= 32_768,
       root["leaseID"] as? UInt32 == leaseID,
       let fields = root["data"] as? [String: Any],
       let payload = decodeData(fields, for: id)
@@ -95,6 +103,25 @@ public enum ShaarDevToolsPanelEventRouter {
   private static func decodeData(
     _ fields: [String: Any], for id: ShaarDevToolsPanelEventID
   ) -> ShaarDevToolsPanelData? {
+    if id == .screencastFrame {
+      guard
+        Set(fields.keys) == [
+          "jpegBase64", "sessionID", "masked", "truncated",
+        ], fields["masked"] as? Bool == true,
+        fields["truncated"] as? Bool == false,
+        let text = fields["jpegBase64"] as? String, text.utf8.count <= 350_000,
+        let jpeg = Data(base64Encoded: text), jpeg.count <= 256 * 1024,
+        jpeg.count >= 4, jpeg.starts(with: [0xFF, 0xD8]),
+        jpeg.suffix(2).elementsEqual([0xFF, 0xD9]),
+        let sessionID = fields["sessionID"] as? Int, sessionID > 0
+      else { return nil }
+      return ShaarDevToolsPanelData(
+        text: nil, level: nil, requestID: nil, url: nil, method: nil,
+        status: nil, mimeType: nil, encodedBytes: nil, name: nil,
+        metrics: nil, droppedCount: nil,
+        frame: ShaarDevToolsPanelFrame(jpeg: jpeg, sessionID: sessionID),
+        truncated: false)
+    }
     if id == .eventsDropped {
       guard Set(fields.keys) == ["count"],
         let count = fields["count"] as? Int,
@@ -103,7 +130,7 @@ public enum ShaarDevToolsPanelEventRouter {
       return ShaarDevToolsPanelData(
         text: nil, level: nil, requestID: nil, url: nil, method: nil,
         status: nil, mimeType: nil, encodedBytes: nil, name: nil,
-        metrics: nil, droppedCount: value, truncated: false)
+        metrics: nil, droppedCount: value, frame: nil, truncated: false)
     }
     guard let truncated = fields["truncated"] as? Bool,
       Set(fields.keys).isSubset(of: allowedKeys(for: id)),
@@ -148,7 +175,7 @@ public enum ShaarDevToolsPanelEventRouter {
       method: fields["method"] as? String, status: status,
       mimeType: fields["mimeType"] as? String, encodedBytes: encodedBytes,
       name: fields["name"] as? String, metrics: metrics,
-      droppedCount: nil, truncated: truncated)
+      droppedCount: nil, frame: nil, truncated: truncated)
   }
 
   private static func allowedKeys(for id: ShaarDevToolsPanelEventID) -> Set<String> {
@@ -163,6 +190,7 @@ public enum ShaarDevToolsPanelEventRouter {
     case .pageLifecycle: fields.insert("name")
     case .performanceMetrics: fields.insert("metrics")
     case .eventsDropped: break
+    case .screencastFrame: break
     }
     return fields
   }

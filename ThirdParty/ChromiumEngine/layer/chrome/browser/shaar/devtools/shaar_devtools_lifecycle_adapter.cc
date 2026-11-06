@@ -26,6 +26,9 @@ extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
   registry->Register(SHAAR_OP_DEVTOOLS_PANEL_OPEN,
                      SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND,
                      &shaar::devtools::HandleDevToolsOperation);
+  registry->Register(SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST,
+                     SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST,
+                     &shaar::devtools::HandleDevToolsOperation);
   registry->Register(SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN,
                      SHAAR_OP_DEVTOOLS_VIEWPORT_FRAME,
                      &shaar::devtools::HandleDevToolsOperation);

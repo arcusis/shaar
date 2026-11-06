@@ -39,6 +39,8 @@ constexpr size_t kMaxInputBytes = 1200 * 1024;
 constexpr size_t kMaxEventInputBytes = 256 * 1024;
 constexpr size_t kMaxFieldBytes = 4 * 1024;
 constexpr size_t kMaxEventBytes = 32 * 1024;
+constexpr size_t kMaxFrameBytes = 384 * 1024;
+constexpr size_t kMaxFrameBase64Bytes = 340 * 1024;
 constexpr size_t kMaxBodyBytes = 1024 * 1024;
 constexpr size_t kMaxQueuedEvents = 256;
 constexpr size_t kMaxQueuedBytes = 2 * 1024 * 1024;
@@ -50,6 +52,34 @@ struct ReplyTarget {
   shaar_reply_fn callback;
   void* context;
 };
+
+constexpr char kReproMaskCSS[] =
+    "input,textarea,select,option,[contenteditable],[contenteditable] *"
+    "{color:transparent!important;-webkit-text-security:disc!important;"
+    "text-shadow:none!important}input::placeholder,textarea::placeholder"
+    "{color:transparent!important}";
+
+std::string MaskExpression(bool install) {
+  std::string quoted;
+  base::JSONWriter::Write(base::Value(std::string(kReproMaskCSS)), &quoted);
+  if (install) {
+    return "(() => { let s=document.getElementById('shaar-repro-mask');"
+           "if(!s){s=document.createElement('style');s.id='shaar-repro-mask';"
+           "document.documentElement.appendChild(s)}s.textContent=" + quoted +
+           ";return new Promise(resolve=>requestAnimationFrame(()=>"
+           "requestAnimationFrame(()=>resolve(!!s.sheet))))})()";
+  }
+  return "(() => {const s=document.getElementById('shaar-repro-mask');"
+         "if(!s||!s.isConnected||!s.sheet||s.textContent!==" + quoted +
+         ")return false;const all=document.querySelectorAll('*');"
+         "if(all.length>2000)return false;for(const e of all){"
+         "if(e.localName.includes('-'))return false;"
+         "if(!e.matches('input,textarea,select,option,[contenteditable],"
+         "[contenteditable] *'))continue;"
+         "const c=getComputedStyle(e).color;"
+         "if(c!=='rgba(0, 0, 0, 0)'&&c!=='transparent')return false;}"
+         "return true})()";
+}
 
 shaar_error_code Fail(shaar_error* error, shaar_error_code code,
                       const char* message) {
@@ -259,6 +289,8 @@ bool Project(std::string_view method, const base::DictValue& params,
 
 bool EncodeProjectedEvent(Projection projection, int lease_id,
                           std::string* output) {
+  const size_t limit = projection.id == SHAAR_DEVTOOLS_PANEL_SCREENCAST_FRAME
+                           ? kMaxFrameBytes : kMaxEventBytes;
   base::DictValue envelope;
   envelope.Set("schemaVersion", 1);
   envelope.Set("kind", "panelEvent");
@@ -266,7 +298,7 @@ bool EncodeProjectedEvent(Projection projection, int lease_id,
   envelope.Set("leaseID", lease_id);
   envelope.Set("data", std::move(projection.data));
   return base::JSONWriter::Write(base::Value(std::move(envelope)), output) &&
-         output->size() <= kMaxEventBytes;
+         output->size() <= limit;
 }
 
 class PanelClient;
@@ -330,6 +362,7 @@ class PanelClient final : public content::DevToolsAgentHostClient,
     if (closing_)
       return;
     closing_ = true;
+    StopScreencast();
     Leases().erase(contents_);
     auto pending = std::move(pending_bodies_);
     queue_.clear();
@@ -366,6 +399,44 @@ class PanelClient final : public content::DevToolsAgentHostClient,
     return SHAAR_OK;
   }
 
+  shaar_error_code ControlScreencast(int command, int session,
+                                    ReplyTarget reply, shaar_error* error) {
+    if (command == SHAAR_DEVTOOLS_SCREENCAST_START) {
+      if (recording_ || pending_start_)
+        return Fail(error, SHAAR_CONFLICT, "screencast already started");
+      pending_start_ = std::make_unique<ReplyTarget>(reply);
+      recording_ = true;
+      base::DictValue params;
+      params.Set("expression", MaskExpression(true));
+      params.Set("returnByValue", true);
+      params.Set("awaitPromise", true);
+      mask_setup_id_ = SendCommand("Runtime.evaluate", std::move(params));
+      if (mask_setup_id_ != 0) {
+        base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+            FROM_HERE, base::BindOnce(&PanelClient::MaskStartTimedOut,
+                                      weak_factory_.GetWeakPtr(), mask_setup_id_),
+            base::Seconds(3));
+        return SHAAR_OK;
+      }
+      pending_start_.reset();
+      recording_ = false;
+      return Fail(error, SHAAR_NOT_READY, "screencast command unavailable");
+    }
+    if (command == SHAAR_DEVTOOLS_SCREENCAST_STOP) {
+      StopScreencast();
+      Reply(reply, SHAAR_OK, R"({"schemaVersion":1})");
+      return SHAAR_OK;
+    }
+    if (command == SHAAR_DEVTOOLS_SCREENCAST_ACK && session > 0 &&
+        session == awaiting_ack_) {
+      SendAck(session);
+      awaiting_ack_ = 0;
+      Reply(reply, SHAAR_OK, R"({"schemaVersion":1})");
+      return SHAAR_OK;
+    }
+    return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid screencast command");
+  }
+
   void DispatchProtocolMessage(content::DevToolsAgentHost*,
                                base::span<const uint8_t> message) override {
     if (closing_)
@@ -381,6 +452,40 @@ class PanelClient final : public content::DevToolsAgentHostClient,
       return;
     const auto& root = parsed->GetDict();
     if (auto id = root.FindInt("id")) {
+      if (*id == mask_setup_id_) {
+        mask_setup_id_ = 0;
+        if (!BooleanResult(root)) {
+          FailStart();
+          return;
+        }
+        mask_ready_ = true;
+        base::DictValue params;
+        params.Set("format", "jpeg");
+        params.Set("quality", 40);
+        params.Set("maxWidth", 1280);
+        params.Set("maxHeight", 720);
+        params.Set("everyNthFrame", 12);
+        params.Set("maxFramesInFlight", 1);
+        start_command_id_ = SendCommand("Page.startScreencast", std::move(params));
+        if (!start_command_id_)
+          FailStart();
+        return;
+      }
+      if (*id == start_command_id_) {
+        start_command_id_ = 0;
+        if (root.FindDict("error")) {
+          FailStart();
+        } else if (pending_start_) {
+          Reply(*pending_start_, SHAAR_OK, R"({"schemaVersion":1})");
+          pending_start_.reset();
+        }
+        return;
+      }
+      if (*id == frame_mask_id_) {
+        frame_mask_id_ = 0;
+        ConfirmFrame(BooleanResult(root));
+        return;
+      }
       auto found = pending_bodies_.find(*id);
       if (found == pending_bodies_.end())
         return;
@@ -405,6 +510,10 @@ class PanelClient final : public content::DevToolsAgentHostClient,
     const auto* params = root.FindDict("params");
     if (!method || !params)
       return;
+    if (*method == "Page.screencastFrame") {
+      HandleFrame(*params);
+      return;
+    }
     if (message.size() > kMaxEventInputBytes) {
       Drop();
       return;
@@ -438,6 +547,138 @@ class PanelClient final : public content::DevToolsAgentHostClient,
   }
 
  private:
+  void MaskStartTimedOut(int command_id) {
+    if (mask_setup_id_ == command_id)
+      FailStart();
+  }
+
+  struct PendingFrame {
+    std::string jpeg_base64;
+    int session_id;
+  };
+
+  static bool BooleanResult(const base::DictValue& root) {
+    if (root.FindDict("error"))
+      return false;
+    const auto* result = root.FindDict("result");
+    const auto* value = result ? result->FindDict("result") : nullptr;
+    return value && value->FindBool("value") == true;
+  }
+
+  int SendCommand(std::string_view method, base::DictValue params) {
+    if (next_command_id_ == INT_MAX)
+      return 0;
+    const int id = next_command_id_++;
+    base::DictValue command;
+    command.Set("id", id);
+    command.Set("method", std::string(method));
+    command.Set("params", std::move(params));
+    std::string json;
+    if (!base::JSONWriter::Write(base::Value(std::move(command)), &json))
+      return 0;
+    host_->DispatchProtocolMessage(this, base::as_byte_span(json));
+    return id;
+  }
+
+  void SendAck(int session_id) {
+    base::DictValue params;
+    params.Set("sessionId", session_id);
+    SendCommand("Page.screencastFrameAck", std::move(params));
+  }
+
+  void StopScreencast() {
+    if (!recording_)
+      return;
+    recording_ = false;
+    mask_ready_ = false;
+    pending_frame_.reset();
+    mask_setup_id_ = 0;
+    start_command_id_ = 0;
+    frame_mask_id_ = 0;
+    awaiting_ack_ = 0;
+    if (pending_start_) {
+      Reply(*pending_start_, SHAAR_CANCELLED, {}, "screencast stopped");
+      pending_start_.reset();
+    }
+    SendCommand("Page.stopScreencast", base::DictValue());
+    base::DictValue params;
+    params.Set("expression",
+               "document.getElementById('shaar-repro-mask')?.remove()");
+    SendCommand("Runtime.evaluate", std::move(params));
+  }
+
+  void FailStart() {
+    auto pending = std::move(pending_start_);
+    pending_start_.reset();
+    StopScreencast();
+    if (pending)
+      Reply(*pending, SHAAR_NOT_READY, {}, "screencast mask unavailable");
+  }
+
+  void HandleFrame(const base::DictValue& params) {
+    const auto session = params.FindInt("sessionId");
+    if (!session || *session <= 0)
+      return;
+    if (!recording_ || !mask_ready_ || pending_start_ || pending_frame_ ||
+        awaiting_ack_ || frame_mask_id_ ||
+        (!last_frame_time_.is_null() &&
+         base::TimeTicks::Now() - last_frame_time_ < base::Milliseconds(200))) {
+      SendAck(*session);
+      return;
+    }
+    const auto* data = params.FindString("data");
+    if (!data || data->empty() || data->size() > kMaxFrameBase64Bytes) {
+      SendAck(*session);
+      return;
+    }
+    pending_frame_ = std::make_unique<PendingFrame>(PendingFrame{*data, *session});
+    base::DictValue check;
+    check.Set("expression", MaskExpression(false));
+    check.Set("returnByValue", true);
+    frame_mask_id_ = SendCommand("Runtime.evaluate", std::move(check));
+    if (!frame_mask_id_) {
+      SendAck(*session);
+      pending_frame_.reset();
+      StopScreencast();
+    } else {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE, base::BindOnce(&PanelClient::FrameMaskTimedOut,
+                                    weak_factory_.GetWeakPtr(), frame_mask_id_),
+          base::Seconds(1));
+    }
+  }
+
+  void FrameMaskTimedOut(int command_id) {
+    if (frame_mask_id_ != command_id)
+      return;
+    frame_mask_id_ = 0;
+    ConfirmFrame(false);
+  }
+
+  void ConfirmFrame(bool mask_confirmed) {
+    if (!pending_frame_)
+      return;
+    PendingFrame frame = std::move(*pending_frame_);
+    pending_frame_.reset();
+    if (!recording_ || !mask_confirmed) {
+      SendAck(frame.session_id);
+      StopScreencast();
+      return;
+    }
+    Projection projection{};
+    projection.id = SHAAR_DEVTOOLS_PANEL_SCREENCAST_FRAME;
+    projection.data.Set("jpegBase64", std::move(frame.jpeg_base64));
+    projection.data.Set("sessionID", frame.session_id);
+    projection.data.Set("masked", true);
+    projection.data.Set("truncated", false);
+    if (Enqueue(std::move(projection))) {
+      awaiting_ack_ = frame.session_id;
+      last_frame_time_ = base::TimeTicks::Now();
+    } else {
+      SendAck(frame.session_id);
+    }
+  }
+
   void BodyTimedOut(int command_id) {
     auto found = pending_bodies_.find(command_id);
     if (found == pending_bodies_.end())
@@ -462,17 +703,18 @@ class PanelClient final : public content::DevToolsAgentHostClient,
       ++dropped_;
   }
 
-  void Enqueue(Projection projection) {
+  bool Enqueue(Projection projection) {
     std::string payload;
     if (!EncodeProjectedEvent(std::move(projection), lease_id_, &payload) ||
         queue_.size() == kMaxQueuedEvents ||
         queued_bytes_ + payload.size() > kMaxQueuedBytes) {
       Drop();
-      return;
+      return false;
     }
     queued_bytes_ += payload.size();
     queue_.push_back(std::move(payload));
     ScheduleFlush();
+    return true;
   }
 
   void ScheduleFlush() {
@@ -537,6 +779,15 @@ class PanelClient final : public content::DevToolsAgentHostClient,
   std::set<std::string> known_requests_;
   std::deque<std::string> request_order_;
   std::map<int, ReplyTarget> pending_bodies_;
+  std::unique_ptr<ReplyTarget> pending_start_;
+  std::unique_ptr<PendingFrame> pending_frame_;
+  int mask_setup_id_ = 0;
+  int start_command_id_ = 0;
+  int frame_mask_id_ = 0;
+  int awaiting_ack_ = 0;
+  bool recording_ = false;
+  bool mask_ready_ = false;
+  base::TimeTicks last_frame_time_;
   base::WeakPtrFactory<PanelClient> weak_factory_{this};
 };
 
@@ -637,6 +888,23 @@ shaar_error_code HandlePanelOperation(
         lease->lease_id() != *lease_id)
       return Fail(error, SHAAR_NOT_FOUND, "panel lease not found");
     return lease->GetBody(*id, target, error);
+  }
+  if (operation == SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST) {
+    const auto command = args.FindInt("commandID");
+    if (!command || *command < SHAAR_DEVTOOLS_SCREENCAST_START ||
+        *command > SHAAR_DEVTOOLS_SCREENCAST_ACK)
+      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid screencast command ID");
+    const auto session = args.FindInt("sessionID");
+    if ((*command == SHAAR_DEVTOOLS_SCREENCAST_ACK &&
+         (!session || *session <= 0 ||
+          !HasKeys(args, {"schemaVersion", "leaseID", "commandID", "sessionID"}))) ||
+        (*command != SHAAR_DEVTOOLS_SCREENCAST_ACK &&
+         !HasKeys(args, {"schemaVersion", "leaseID", "commandID"})))
+      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid screencast schema");
+    if (!lease || !lease->Matches(engine, identity) ||
+        lease->lease_id() != *lease_id)
+      return Fail(error, SHAAR_NOT_FOUND, "panel lease not found");
+    return lease->ControlScreencast(*command, session.value_or(0), target, error);
   }
   return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown panel operation");
 }

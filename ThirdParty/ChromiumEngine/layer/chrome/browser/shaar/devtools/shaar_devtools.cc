@@ -1037,6 +1037,7 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
     case SHAAR_OP_DEVTOOLS_PANEL_CLOSE:
     case SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY:
     case SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND:
+    case SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST:
     case SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN:
     case SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE:
     case SHAAR_OP_DEVTOOLS_VIEWPORT_ADD:
@@ -1055,6 +1056,7 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND ||
+      operation == SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST ||
       operation == SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN ||
       operation == SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE ||
       operation == SHAAR_OP_DEVTOOLS_VIEWPORT_ADD ||
@@ -1262,6 +1264,7 @@ shaar_error_code HandleDevToolsOperation(
 
   if (operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
+      operation == SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND) {
     if (!PolicyAllowsOperation(context->devtools_runtime, engine, scope,

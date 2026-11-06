@@ -24,7 +24,24 @@ public enum ShaarDevToolsOperation: UInt32, Sendable {
   case viewportRemove = 1016
   case viewportAction = 1017
   case viewportFrame = 1018
+  case panelScreencast = 1019
   case panelNetworkRules = 1080
+}
+
+public enum ShaarDevToolsScreencastCommand: Sendable {
+  case start
+  case stop
+  case ack(sessionID: Int)
+
+  var fields: [String: Any]? {
+    switch self {
+    case .start: return ["commandID": 1]
+    case .stop: return ["commandID": 2]
+    case .ack(let sessionID):
+      guard sessionID > 0 else { return nil }
+      return ["commandID": 3, "sessionID": sessionID]
+    }
+  }
 }
 
 public enum ShaarDevToolsCapability: UInt32, Sendable {
@@ -351,6 +368,19 @@ public struct ShaarDevToolsAdapter: Sendable {
           return .success(body)
         })
     }
+  }
+
+  public func screencastCommand(
+    _ command: ShaarDevToolsScreencastCommand, leaseID: UInt32,
+    scope: ShaarNavigationScope, windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    guard leaseID > 0, let fields = command.fields else {
+      throw ShaarEngineError.invalidEvent("invalid panel screencast command")
+    }
+    return try submitPanel(
+      .panelScreencast, fields: fields.merging(["leaseID": leaseID]) { value, _ in value },
+      scope: scope, windowID: windowID, tabID: tabID, completion: completion)
   }
 
   public func phase2Command(

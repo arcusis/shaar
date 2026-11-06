@@ -105,9 +105,10 @@ struct ShaarDevToolsPanel: View {
     switch model.section {
     case .elements:
       if let inspector, inspector.isOpen {
-        InspectorPanel(model: inspector)
+        ShaarDOMTreePanel(
+          model: model.dom, inspector: inspector, openChromium: openChromium)
       } else {
-        pendingPanel("Inspector is unavailable for this page")
+        unavailablePanel
       }
     case .console:
       if model.consoleAvailable {
@@ -160,20 +161,6 @@ struct ShaarDevToolsPanel: View {
     }
   }
 
-  private func pendingPanel(_ message: String) -> some View {
-    VStack(spacing: 9) {
-      Image(systemName: "waveform.path")
-        .font(.system(size: 22, weight: .ultraLight))
-        .foregroundStyle(.tertiary)
-      Text(ShellL10n.string(message))
-        .font(.system(size: 12))
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(24)
-  }
-
   private var unavailablePanel: some View {
     VStack(spacing: 10) {
       Image(systemName: "bolt.slash")
@@ -199,6 +186,7 @@ struct ShaarDevToolsPanel: View {
   }
 
   private var unavailableMessage: String {
+    if model.section == .elements { return "Live DOM tree needs a newer Shaar engine" }
     if model.section == .application { return "Live Application needs engine shaar.17" }
     if model.section == .performance { return "Live Performance needs engine shaar.17" }
     if model.section == .sources { return "Live Sources need engine shaar.17" }
@@ -240,6 +228,9 @@ struct ShaarDevToolsPanel: View {
   }
 
   private var footerMessage: String {
+    if model.section == .elements {
+      return model.dom.available ? "DOM tree is scoped to this tab" : "DOM tree needs engine support"
+    }
     if model.section == .application {
       if model.application.area == .cookies { return "Cookies are scoped to this page" }
       return model.phase2.available

@@ -44,6 +44,10 @@ FOUNDATION_EXPORT NSArray<NSDictionary *> * _Nullable ARCProbeTracePrivateSelect
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(
   NSString *expression);
 
+/// Preserve native normal/private preference observations and wildcard rejection.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivatePrivacyPreferences(
+  NSDictionary *status, NSInteger wildcardStatus);
+
 @interface ARCChromiumRuntime (Verification)
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;

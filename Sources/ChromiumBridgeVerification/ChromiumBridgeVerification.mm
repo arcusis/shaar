@@ -168,6 +168,28 @@ NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(NSString *expr
            @"awaitPromise": @YES};
 }
 
+NSDictionary<NSString *, id> *ARCProbePrivatePrivacyPreferences(
+    NSDictionary *status, NSInteger wildcardStatus) {
+  NSMutableDictionary *result = [NSMutableDictionary dictionary];
+  for (NSString *key in @[@"credentials_enable_service", @"autofill.profile_enabled",
+                          @"autofill.credit_card_enabled"]) {
+    NSMutableDictionary *pair = [NSMutableDictionary dictionary];
+    id normal = status[[key stringByAppendingString:@"Normal"]];
+    id privateValue = status[[key stringByAppendingString:@"Private"]];
+    if (normal) pair[@"normal"] = normal;
+    if (privateValue) pair[@"private"] = privateValue;
+    result[key] = pair;
+  }
+  if (wildcardStatus == SHAAR_INVALID_ARGUMENT) {
+    result[@"wildcardCookieSetting"] = @{
+        @"error": @"origin must be an http(s) origin",
+        @"nativeStatus": @(wildcardStatus)};
+  } else {
+    result[@"wildcardCookieSetting"] = @{@"nativeStatus": @(wildcardStatus)};
+  }
+  return result;
+}
+
 template <typename T> static T ShaarProbeField(ARCShaarRuntime *runtime, const char *name) {
   T value = {};
   Ivar field = class_getInstanceVariable(ARCShaarRuntime.class, name);
@@ -262,6 +284,7 @@ void ARCCompletePrivateQuitDialogCancellation(
       SHAAR_OP_DEVTOOLS_CALL, payload, ^(NSDictionary *reply) {
     NSString *value = ARCProbePrivateEvaluationJSON(reply);
     context[@"probeEvaluationError"] = value ? @"" : [reply description];
+    if (!value) NSLog(@"Private privacy evaluation failed: %@", reply);
     completion(value);
   });
   if (!submitted) {
@@ -271,7 +294,27 @@ void ARCCompletePrivateQuitDialogCancellation(
 }
 - (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion { completion(NO); }
 - (NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID { return nil; }
-- (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID { return nil; }
+- (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed()) return nil;
+  auto policy = reinterpret_cast<decltype(&shaar_private_session_privacy_status)>(
+      dlsym(RTLD_DEFAULT, "shaar_private_session_privacy_status"));
+  auto cookie = reinterpret_cast<decltype(&shaar_private_session_cookie_setting)>(
+      dlsym(RTLD_DEFAULT, "shaar_private_session_cookie_setting"));
+  NSDictionary *context = PrivateContext((ARCShaarRuntime *)self, contextID);
+  shaar_private_session *session = (shaar_private_session *)[context[@"session"] pointerValue];
+  if (!policy || !cookie || !session) return nil;
+  char buffer[4096] = {};
+  shaar_error error = ARCPrivateShaarEmptyError();
+  if (policy(session, buffer, sizeof(buffer), &error) != SHAAR_OK) return nil;
+  const char *end = static_cast<const char *>(memchr(buffer, '\0', sizeof(buffer)));
+  NSData *data = end ? [NSData dataWithBytes:buffer length:end - buffer] : nil;
+  NSDictionary *status = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+  if (![status isKindOfClass:NSDictionary.class]) return nil;
+  int allowed = 0;
+  error = ARCPrivateShaarEmptyError();
+  shaar_error_code wildcardStatus = cookie(session, {"*", 1}, 1, 1, &allowed, &error);
+  return ARCProbePrivatePrivacyPreferences(status, wildcardStatus);
+}
 - (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
                           completion:(void (^)(NSString *))completion {
   if (![self isKindOfClass:ARCShaarRuntime.class] || !script.length) {
@@ -294,9 +337,15 @@ void ARCCompletePrivateQuitDialogCancellation(
                 capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
                  profileID:profileID windowID:windowID
                 completion:^(NSDictionary *reply, NSError *error) {
-    if (error) { completion(nil); return; }
-    completion(ARCProbePrivateEvaluationJSON(
-        @{@"schemaVersion": @1, @"result": reply ?: @{}}));
+    if (error) {
+      NSLog(@"Normal privacy evaluation failed: %@", error);
+      completion(nil);
+      return;
+    }
+    NSString *value = ARCProbePrivateEvaluationJSON(
+        @{@"schemaVersion": @1, @"result": reply ?: @{}});
+    if (!value) NSLog(@"Normal privacy evaluation returned no value: %@", reply);
+    completion(value);
   }];
 }
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID { return NO; }

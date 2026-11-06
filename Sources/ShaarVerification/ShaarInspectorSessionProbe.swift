@@ -18,6 +18,22 @@ struct ShaarInspectorSessionProbe {
   let profileID: UUID
   let fixture: URL
 
+  static func privatePresentationReady(_ audit: [AnyHashable: Any], tabID: String) -> Bool {
+    guard audit["allWindowsHidden"] as? Bool == true,
+      let states = audit["documentStates"] as? [[String: Any]],
+      let selected = states.first(where: { $0["tabID"] as? String == tabID }),
+      selected["nativeStateSupported"] as? Bool == true,
+      selected["selectedNativeTab"] as? Bool == true,
+      selected["displayedNativeWebContents"] as? Bool == true,
+      let view = selected["nativeViewHierarchy"] as? [String: Any]
+    else { return false }
+    return view["hasWindow"] as? Bool == true
+      && view["inExpectedWindow"] as? Bool == true
+      && view["hidden"] as? Bool == false
+      && view["hiddenOrHasHiddenAncestor"] as? Bool == false
+      && view["windowVisible"] as? Bool == false
+  }
+
   func run(record: (String) -> Void) async throws {
     guard let target = engine.siteControlTarget else {
       throw InspectorFailure("Normal Inspector target is missing.")
@@ -71,6 +87,16 @@ struct ShaarInspectorSessionProbe {
     do {
       try await checkSession(model)
       record("privateSequentialDOMCSS")
+      guard let audit = runtime.privateProbeAudit(forContextID: owner.contextID),
+        Self.privatePresentationReady(audit, tabID: privateTarget.tabID.uuidString)
+      else {
+        throw InspectorFailure(
+          "Selected private Inspector view is not displayed in its hidden window.")
+      }
+      let bytes = try JSONSerialization.data(withJSONObject: audit, options: [.sortedKeys])
+      FileHandle.standardError.write(
+        Data("Private native success audit: ".utf8) + bytes + Data("\n".utf8))
+      record("privateSelectedViewDisplayed")
     } catch {
       if let audit = runtime.privateProbeAudit(forContextID: owner.contextID) {
         let bytes = try JSONSerialization.data(withJSONObject: audit, options: [.sortedKeys])

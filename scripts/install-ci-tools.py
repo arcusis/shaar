@@ -16,11 +16,14 @@ import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
+from typing import Optional
+
+
+MAX_ARCHIVE_BYTES = 100_000_001
 
 
 def binary_from_archive(payload: bytes, name: str, digest: str) -> bytes:
-    if hashlib.sha256(payload).hexdigest() != digest:
-        raise ValueError(f"Checksum mismatch for {name}")
+    verify_archive(payload, digest, name)
     if zipfile.is_zipfile(io.BytesIO(payload)):
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
             members = [item for item in archive.infolist() if Path(item.filename).name == name]
@@ -32,6 +35,42 @@ def binary_from_archive(payload: bytes, name: str, digest: str) -> bytes:
         if len(members) != 1 or not members[0].isfile() or members[0].size > 100_000_000:
             raise ValueError(f"Invalid binary member for {name}")
         return archive.extractfile(members[0]).read()
+
+
+def verify_archive(payload: bytes, digest: str, name: str) -> None:
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise ValueError(f"Checksum mismatch for {name}")
+
+
+def read_verified_cached_archive(cache_path: Path, digest: str) -> Optional[bytes]:
+    if not cache_path.is_file():
+        return None
+    if cache_path.stat().st_size > MAX_ARCHIVE_BYTES:
+        cache_path.unlink()
+        return None
+    cached = cache_path.read_bytes()
+    try:
+        verify_archive(cached, digest, cache_path.name)
+    except ValueError:
+        cache_path.unlink()
+        return None
+    return cached
+
+
+def archive_payload(pin: dict, cache_directory: Optional[Path] = None) -> bytes:
+    digest = pin["sha256"]
+    cache_path = cache_directory / f"{digest}.archive" if cache_directory else None
+    if cache_path:
+        cached = read_verified_cached_archive(cache_path, digest)
+        if cached is not None:
+            return cached
+
+    payload = download(pin["url"])
+    verify_archive(payload, digest, pin["url"])
+    if cache_path:
+        cache_directory.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(payload)
+    return payload
 
 
 DOWNLOAD_ATTEMPTS = 5
@@ -46,7 +85,7 @@ def download(url: str, sleep=time.sleep) -> bytes:
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
             with urllib.request.urlopen(url, timeout=60) as response:
-                return response.read(100_000_001)
+                return response.read(MAX_ARCHIVE_BYTES)
         except urllib.error.HTTPError as error:
             if error.code not in RETRYABLE_STATUS or attempt == DOWNLOAD_ATTEMPTS:
                 raise
@@ -60,6 +99,7 @@ def download(url: str, sleep=time.sleep) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--destination", type=Path, default=Path("build/ci-tools"))
+    parser.add_argument("--cache-directory", type=Path)
     parser.add_argument("--include-periphery", action="store_true")
     options = parser.parse_args()
     manifest = json.loads(Path(__file__).with_name("ci-tools.json").read_text())
@@ -69,7 +109,7 @@ def main() -> None:
         if name == "periphery" and not options.include_periphery:
             continue
         pin = platforms[host]
-        payload = download(pin["url"])
+        payload = archive_payload(pin, options.cache_directory)
         for member in (name, *pin.get("companions", [])):
             binary = binary_from_archive(payload, member, pin["sha256"])
             destination = options.destination / member

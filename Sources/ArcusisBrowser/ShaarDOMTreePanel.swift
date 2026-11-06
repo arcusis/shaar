@@ -108,15 +108,21 @@ struct ShaarDOMTreePanel: View {
         .textFieldStyle(.roundedBorder)
         .font(.system(size: 11))
         .onSubmit { Task { await model.performSearch() } }
-      Button { Task { await model.performSearch() } } label: {
+      Button {
+        Task { await model.performSearch() }
+      } label: {
         Image(systemName: "magnifyingglass")
       }
       .help(ShellL10n.string("Find in DOM"))
-      Button { Task { await model.loadDocument() } } label: {
+      Button {
+        Task { await model.loadDocument() }
+      } label: {
         Image(systemName: "arrow.clockwise")
       }
       .help(ShellL10n.string("Refresh DOM tree"))
-      Button { Task { await model.undo() } } label: {
+      Button {
+        Task { await model.undo() }
+      } label: {
         Image(systemName: "arrow.uturn.backward")
       }
       .disabled(!model.canUndo)
@@ -260,7 +266,8 @@ struct ShaarDOMTreePanel: View {
   }
 
   private func classControls(_ node: ShaarDOMNode) -> some View {
-    let classes = node.attributes.first { $0.name == "class" }?
+    let classes =
+      node.attributes.first { $0.name == "class" }?
       .value.split(whereSeparator: \.isWhitespace).map(String.init) ?? []
     return ScrollView(.horizontal) {
       HStack(spacing: 5) {
@@ -333,7 +340,9 @@ struct ShaarDOMTreePanel: View {
     case .left:
       if model.expanded.contains(rows[index].id) {
         Task { await model.toggleExpanded(rows[index].id) }
-      } else if let parent = rows[index].node.parentID { model.select(parent) }
+      } else if let parent = rows[index].node.parentID {
+        model.select(parent)
+      }
     case .right:
       if !model.expanded.contains(rows[index].id) {
         Task { await model.toggleExpanded(rows[index].id) }
@@ -363,7 +372,8 @@ extension InspectorModel {
       "Runtime.callFunctionOn",
       params: [
         "objectId": objectID,
-        "functionDeclaration": "function() { return window.top.__shaarInspectorV2?.select(this) === true; }",
+        "functionDeclaration":
+          "function() { return window.top.__shaarInspectorV2?.select(this) === true; }",
         "returnByValue": true,
       ])
     await refresh()

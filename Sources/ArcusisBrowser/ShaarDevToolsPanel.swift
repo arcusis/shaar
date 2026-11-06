@@ -229,7 +229,8 @@ struct ShaarDevToolsPanel: View {
 
   private var footerMessage: String {
     if model.section == .elements {
-      return model.dom.available ? "DOM tree is scoped to this tab" : "DOM tree needs engine support"
+      return model.dom.available
+        ? "DOM tree is scoped to this tab" : "DOM tree needs engine support"
     }
     if model.section == .application {
       if model.application.area == .cookies { return "Cookies are scoped to this page" }

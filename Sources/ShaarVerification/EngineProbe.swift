@@ -32,6 +32,7 @@ final class EngineProbe {
   private let sessionRecoveryMode: Bool
   private let localizationMode: Bool
   private let basicBrowsingMode: Bool
+  private let reloadWindowMode: Bool
   private let devModeOnly: Bool
   private let mediaSessionOnlyMode: Bool
   private let devtoolsRouteOnlyMode: Bool
@@ -76,7 +77,7 @@ final class EngineProbe {
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
-    localizationMode: Bool, basicBrowsingMode: Bool, devModeOnly: Bool,
+    localizationMode: Bool, basicBrowsingMode: Bool, reloadWindowMode: Bool, devModeOnly: Bool,
     mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool,
     measurementTabCount: Int?, measurementEager: Bool
   ) throws {
@@ -96,6 +97,7 @@ final class EngineProbe {
     self.sessionRecoveryMode = sessionRecoveryMode
     self.localizationMode = localizationMode
     self.basicBrowsingMode = basicBrowsingMode
+    self.reloadWindowMode = reloadWindowMode
     self.devModeOnly = devModeOnly
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
     self.devtoolsRouteOnlyMode = devtoolsRouteOnlyMode
@@ -224,6 +226,7 @@ final class EngineProbe {
       let quitPendingNavigation = arguments.contains("--probe-quit-pending-navigation")
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let basicBrowsingMode = arguments.contains("--probe-basic-browsing")
+      let reloadWindowMode = arguments.contains("--probe-reload-window")
       let devModeOnly = arguments.contains("--probe-dev-mode-only")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
       let devtoolsRouteOnlyMode = arguments.contains("--probe-devtools-route-only")
@@ -261,6 +264,7 @@ final class EngineProbe {
         "--probe-quit-exit",
         "--probe-localization",
         "--probe-basic-browsing",
+        "--probe-reload-window",
         "--probe-dev-mode-only",
         "--probe-media-session-only",
         "--probe-devtools-route-only",
@@ -285,6 +289,9 @@ final class EngineProbe {
             where: arguments.contains),
         !basicBrowsingMode
           || !conflictingFlags.filter({ $0 != "--probe-basic-browsing" }).contains(
+            where: arguments.contains),
+        !reloadWindowMode
+          || !conflictingFlags.filter({ $0 != "--probe-reload-window" }).contains(
             where: arguments.contains),
         !devModeOnly
           || !conflictingFlags.filter({ $0 != "--probe-dev-mode-only" }).contains(
@@ -319,7 +326,8 @@ final class EngineProbe {
         privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
         quitPendingNavigation: quitPendingNavigation,
         sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode,
-        basicBrowsingMode: basicBrowsingMode, devModeOnly: devModeOnly,
+        basicBrowsingMode: basicBrowsingMode, reloadWindowMode: reloadWindowMode,
+        devModeOnly: devModeOnly,
         mediaSessionOnlyMode: mediaSessionOnlyMode,
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
         measurementTabCount: measurementTabCount, measurementEager: measurementEager)
@@ -657,6 +665,20 @@ final class EngineProbe {
         guard let browserEngine else { throw ProbeFailure("Basic browsing engine is missing.") }
         checks += try await BasicBrowsingProbe(
           runtime: runtime, engine: browserEngine, store: store, fixture: fixture
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      if reloadWindowMode {
+        guard let browserEngine,
+          let profile = store.session.profiles.first(where: {
+            $0.id == store.session.selectedSpace.profileID
+          })
+        else { throw ProbeFailure("Reload probe engine or profile is missing.") }
+        checks += try await ReloadWindowProbe(
+          runtime: runtime, events: browserEngine.events, root: root, fixture: fixture,
+          profile: profile
         ).run()
         localFixturesPassed = true
         finish(error: nil)
@@ -1234,7 +1256,9 @@ final class EngineProbe {
       writeReport()
       return
     }
-    if basicBrowsingMode || devModeOnly || mediaSessionOnlyMode || devtoolsRouteOnlyMode {
+    if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
+      || devtoolsRouteOnlyMode
+    {
       let engineClosed = browserEngine?.isClosed == true
       let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
       let routerClientCount = browserEngine?.events.router.clients.count ?? -1
@@ -1272,7 +1296,9 @@ final class EngineProbe {
   }
 
   private var baseTimeoutSeconds: Double {
-    if basicBrowsingMode || devModeOnly || mediaSessionOnlyMode || devtoolsRouteOnlyMode {
+    if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
+      || devtoolsRouteOnlyMode
+    {
       return 180
     }
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
@@ -1284,6 +1310,7 @@ final class EngineProbe {
 
   private var probeMode: String {
     if basicBrowsingMode { return "basic-browsing" }
+    if reloadWindowMode { return "reload-window" }
     if devModeOnly { return DevelopmentModeProbe.mode }
     if mediaSessionOnlyMode { return "media-session-only" }
     if devtoolsRouteOnlyMode { return "devtools-route-only" }
@@ -1297,6 +1324,10 @@ final class EngineProbe {
   }
 
   private var reportScope: String {
+    if reloadWindowMode {
+      return
+        "Owned hidden windows, two authored loopback origins, and failed-page Reload. No desktop input or existing user profile is used."
+    }
     if basicBrowsingMode {
       return
         "Owned hidden normal window, unauthenticated Google search results, and authored loopback tabs. No existing browser profile or account is opened."
@@ -1352,6 +1383,7 @@ final class EngineProbe {
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
       "probeMode": probeMode,
+      "reloadWindowOnly": reloadWindowMode,
       "devModeOnly": devModeOnly,
       "savedTabCapacityOnly": savedTabCapacityMode,
       "savedTabCapacityProbe": savedTabCapacityMode,

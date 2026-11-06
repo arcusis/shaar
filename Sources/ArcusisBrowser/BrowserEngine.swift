@@ -51,6 +51,7 @@ final class BrowserEngine {
   let pictureInPictureControls = PictureInPictureControls()
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
+  var onNativeWindowLost: (() -> Void)?
   var inspectors: [UUID: InspectorModel] = [:]
   var shaarDevTools: [UUID: ShaarDevToolsModel] = [:]
   var developerModels: [UUID: DeveloperPageModel] = [:]
@@ -632,6 +633,7 @@ final class BrowserEngine {
   private func reloadPage(_ tab: UUID, profile: UUID, mode: PageReloadMode) -> Bool {
     guard !isClosed, !runtime.isQuitting, store?.session.profileID(forTabID: tab) == profile
     else { return false }
+    guard ensureLiveWindow() else { return false }
     if liveTabs.contains(tab) {
       return runtime.reloadTabID(
         tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode)
@@ -647,6 +649,7 @@ final class BrowserEngine {
   func reconcile() {
     guard !isClosed, !runtime.isQuitting, !reconciling, !receivingNativeSelection, let store
     else { return }
+    guard ensureLiveWindow() else { return }
     reconciling = true
     defer { reconciling = false }
     let session = store.session
@@ -710,6 +713,7 @@ final class BrowserEngine {
             tab.id.uuidString, profileID: space.profileID.uuidString, windowID: windowID,
             url: tab.url.absoluteString)
         } catch {
+          if recoverMissingWindow() { return }
           events.router.forgetTab(tab.id.uuidString, windowID: windowID)
           liveTabs.remove(tab.id)
           failedTabs.insert(tab.id)
@@ -740,6 +744,7 @@ final class BrowserEngine {
           page.tab.id.uuidString, profileID: favorite.profileID.uuidString, windowID: windowID,
           url: page.tab.url.absoluteString)
       } catch {
+        if recoverMissingWindow() { return }
         events.router.forgetTab(page.tab.id.uuidString, windowID: windowID)
         liveTabs.remove(page.tab.id)
         failedTabs.insert(page.tab.id)
@@ -778,6 +783,29 @@ final class BrowserEngine {
       runtime.clearActiveTab(inWindowID: windowID)
     }
     refreshExtensions()
+  }
+
+  private func ensureLiveWindow() -> Bool {
+    guard runtime.isWindowOpenID(windowID) else {
+      nativeWindowLost()
+      return false
+    }
+    return true
+  }
+
+  private func recoverMissingWindow() -> Bool {
+    guard !runtime.isWindowOpenID(windowID) else { return false }
+    nativeWindowLost()
+    return true
+  }
+
+  private func nativeWindowLost() {
+    if let onNativeWindowLost {
+      onNativeWindowLost()
+    } else {
+      runtime.retireClosedWindowID(windowID)
+      events.windowClosed(windowID, quitting: false)
+    }
   }
 
   private func restoreSelectedPageAfterActivation(_ selected: UUID) {

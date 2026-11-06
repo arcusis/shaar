@@ -68,6 +68,59 @@ struct DevToolsRequestedTabTests {
     )
     #expect(ARCProbeShaarDevToolsURLDispatch(request, false).isEmpty)
   }
+
+  @Test func failedPageReloadRehomesRetiredEngineWindow() throws {
+    let fixture = try DevToolsWindowFixture()
+    defer { fixture.cleanUp() }
+    let original = try #require(fixture.host.contexts.values.first)
+    let tab = try #require(original.store.session.selectedPage?.tab.id)
+    let profile = original.store.session.selectedSpace.profileID
+    original.store.nativeRendererGone(tab, profileID: profile, status: "renderer_gone", exitCode: 0)
+    let failure = try #require(original.store.rendererFailures[tab])
+    fixture.runtime.closedWindows.insert(original.nativeID)
+
+    #expect(!original.store.reloadFailedPage(failure.id))
+    let replacement = try #require(fixture.host.contexts[original.id])
+    #expect(replacement.nativeID != original.nativeID)
+    #expect(replacement.store === original.store)
+    #expect(replacement.store.session.selectedPage?.tab.id == tab)
+    #expect(fixture.host.workspace.workspace.window(original.id) != nil)
+    #expect(fixture.host.contexts.count == 1)
+    #expect(!replacement.window.isVisible)
+  }
+
+  @Test func closedEventRehomesFailedPageBeforeReload() throws {
+    let fixture = try DevToolsWindowFixture()
+    defer { fixture.cleanUp() }
+    let original = try #require(fixture.host.contexts.values.first)
+    let tab = try #require(original.store.session.selectedPage?.tab.id)
+    let profile = original.store.session.selectedSpace.profileID
+    original.store.nativeRendererGone(tab, profileID: profile, status: "renderer_gone", exitCode: 0)
+
+    fixture.runtime.onWindowClosed?(original.nativeID, false)
+
+    let replacement = try #require(fixture.host.contexts[original.id])
+    #expect(replacement.nativeID != original.nativeID)
+    #expect(replacement.store === original.store)
+    #expect(replacement.store.session.selectedPage?.tab.id == tab)
+    #expect(fixture.host.workspace.workspace.window(original.id) != nil)
+    #expect(fixture.host.contexts.count == 1)
+    #expect(!replacement.window.isVisible)
+  }
+
+  @Test func userClosedFailedPageWindowStaysClosed() throws {
+    let fixture = try DevToolsWindowFixture()
+    defer { fixture.cleanUp() }
+    let original = try #require(fixture.host.contexts.values.first)
+    let tab = try #require(original.store.session.selectedPage?.tab.id)
+    let profile = original.store.session.selectedSpace.profileID
+    original.store.nativeRendererGone(tab, profileID: profile, status: "renderer_gone", exitCode: 0)
+
+    original.window.close()
+
+    #expect(fixture.host.contexts[original.id] == nil)
+    #expect(fixture.host.workspace.workspace.window(original.id) == nil)
+  }
 }
 
 @MainActor
@@ -99,6 +152,16 @@ private final class DevToolsWindowFixture {
 private final class DevToolsWindowRuntime: ARCShaarRuntime, @unchecked Sendable {
   var windows: [String: NSWindow] = [:]
   var tabWindows: [String: String] = [:]
+  var closedWindows: Set<String> = []
+
+  override func isWindowOpenID(_ windowID: String) -> Bool {
+    windows[windowID] != nil && !closedWindows.contains(windowID)
+  }
+
+  override func retireClosedWindowID(_ windowID: String) {
+    closedWindows.insert(windowID)
+    MainActor.assumeIsolated { onWindowClosed?(windowID, false) }
+  }
 
   override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {}
   override func createWindowID(_ windowID: String) throws {

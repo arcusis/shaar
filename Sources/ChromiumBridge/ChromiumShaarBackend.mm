@@ -24,6 +24,11 @@ NSError *ShaarError(NSString *message) {
                          userInfo:@{NSLocalizedDescriptionKey: message}];
 }
 
+NSError *ShaarStatusError(NSString *message, shaar_error_code status) {
+  return [NSError errorWithDomain:@"org.arcusis.shaar.engine" code:status
+                         userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
 shaar_bytes Bytes(NSString *value) {
   const char *text = value.UTF8String;
   return {text, text ? std::strlen(text) : 0};
@@ -457,9 +462,17 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   return YES;
 }
 
+- (BOOL)isWindowOpenID:(NSString *)windowID {
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  return window && _symbols.window_native_window(window) != nullptr;
+}
+
+- (void)retireClosedWindowID:(NSString *)windowID {
+  [self finishWindowID:windowID];
+}
+
 - (void)finishWindowID:(NSString *)windowID {
   if (!_shaarWindows[windowID]) return;
-  [self closeExtensionPopupForWindowID:windowID];
   id observer = _hostResizeObservers[windowID];
   if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
   id closeObserver = _hostCloseObservers[windowID];
@@ -475,6 +488,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     [_shaarTabProfiles removeObjectForKey:tabID];
   }
   [_shaarWindows removeObjectForKey:windowID];
+  [self closeExtensionPopupForWindowID:windowID];
   if (self.onWindowClosed) self.onWindowClosed(windowID, _shaarQuitting);
 }
 
@@ -512,6 +526,10 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID
                url:(NSString *)url error:(NSError **)error {
+  if (![self isWindowOpenID:windowID]) {
+    if (error) *error = ShaarStatusError(@"Shaar window is closed.", SHAAR_NOT_FOUND);
+    return NO;
+  }
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
   if (!window || !profile || _shaarTabs[tabID]) {
@@ -531,7 +549,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
               (int)status, (int)nativeError.code, profileID.UTF8String,
               windowID.UTF8String);
     }
-    if (error) *error = ShaarError(@"Shaar could not open the tab.");
+    if (error) *error = ShaarStatusError(@"Shaar could not open the tab.", status);
     return NO;
   }
   _shaarTabs[tabID] = [NSValue valueWithPointer:tab];

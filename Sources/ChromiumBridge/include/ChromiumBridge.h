@@ -61,6 +61,8 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError * _Nullable))completion;
 - (BOOL)createWindowID:(NSString *)windowID error:(NSError **)error;
 - (BOOL)closeWindowID:(NSString *)windowID;
+- (BOOL)isWindowOpenID:(NSString *)windowID;
+- (void)retireClosedWindowID:(NSString *)windowID;
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID
                url:(NSString *)url error:(NSError **)error;
 - (BOOL)navigateTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID

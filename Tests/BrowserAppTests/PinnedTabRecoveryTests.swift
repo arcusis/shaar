@@ -113,6 +113,49 @@ struct PinnedTabRecoveryTests {
     #expect(runtime.opened.isEmpty)
   }
 
+  @Test func reloadNeverReopensTabInRetiredNativeWindow() async throws {
+    let (store, tab) = try makeStore()
+    let runtime = PinRecoveryRuntime()
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false)
+    defer { engine.suspensionTask?.cancel() }
+    store.library.onLoad = nil
+    engine.reconcile()
+    for _ in 0..<100 where runtime.opened.isEmpty {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    runtime.destroy(tab.id)
+    let failure = try #require(store.rendererFailures[tab.id])
+    runtime.windowOpen = false
+    var lost = 0
+    engine.onNativeWindowLost = { lost += 1 }
+
+    #expect(!store.reloadFailedPage(failure.id))
+    #expect(lost == 1)
+    #expect(runtime.opened == [tab.id.uuidString])
+    #expect(store.session.selectedPage?.tab == tab)
+  }
+
+  @Test func notFoundDuringOpenDoesNotRehomeLiveWindow() async throws {
+    let (store, tab) = try makeStore()
+    let runtime = PinRecoveryRuntime()
+    runtime.openReturnsNotFound = true
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false)
+    defer { engine.suspensionTask?.cancel() }
+    store.library.onLoad = nil
+    var lost = 0
+    engine.onNativeWindowLost = { lost += 1 }
+    engine.reconcile()
+    for _ in 0..<100 where runtime.opened.isEmpty {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(engine.notice != nil)
+    #expect(!engine.liveTabs.contains(tab.id))
+    #expect(lost == 0)
+    #expect(runtime.opened == [tab.id.uuidString])
+  }
+
   @Test func destroyedNativePinIsRetainedOnDiskAndReloadRecreatesIt() async throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -169,6 +212,10 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var owners: [String: String] = [:]
   nonisolated(unsafe) var failOpen = false
   nonisolated(unsafe) var closeDuringOpen = false
+  nonisolated(unsafe) var windowOpen = true
+  nonisolated(unsafe) var openReturnsNotFound = false
+
+  override func isWindowOpenID(_ windowID: String) -> Bool { windowOpen }
 
   override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {
     completion(nil)
@@ -177,6 +224,9 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime {
   override func openTabID(_ tabID: String, profileID: String, windowID: String, url: String) throws
   {
     opened.append(tabID)
+    if openReturnsNotFound {
+      throw NSError(domain: "org.arcusis.shaar.engine", code: 4)
+    }
     if failOpen {
       if closeDuringOpen { onTabClosed?(tabID) }
       throw CocoaError(.coderInvalidValue)

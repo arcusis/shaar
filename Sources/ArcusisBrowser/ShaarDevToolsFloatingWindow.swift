@@ -24,7 +24,8 @@ final class ShaarDevToolsFloatingWindow: NSObject, NSWindowDelegate {
     window.delegate = self
     window.contentView = NSHostingView(
       rootView: ShaarDevToolsPanel(
-        model: model, inspector: inspector, openChromium: openChromium))
+        model: model, inspector: inspector, openChromium: openChromium
+      ).shellLocalization())
     window.center()
   }
 

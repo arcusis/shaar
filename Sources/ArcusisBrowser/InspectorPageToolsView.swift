@@ -98,6 +98,7 @@ struct InspectorPageToolsView: View {
           Text(signal.version ?? InspectorToolsL10n.string("Version unavailable"))
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+            .environment(\.layoutDirection, .leftToRight)
         }.padding(.vertical, 5)
       }
     }
@@ -204,6 +205,7 @@ struct InspectorPageToolsView: View {
               Text(row.method == "UNKNOWN" ? "—" : row.method).foregroundStyle(.secondary)
               Text(URL(string: row.url)?.lastPathComponent.nonEmpty ?? row.url).lineLimit(1)
                 .truncationMode(.middle)
+                .environment(\.layoutDirection, .leftToRight)
               Spacer(minLength: 0)
               Text(row.status > 0 ? String(row.status) : "—").foregroundStyle(
                 row.status >= 400 ? Color.red : .secondary)

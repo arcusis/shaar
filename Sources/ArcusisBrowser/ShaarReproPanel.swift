@@ -104,7 +104,8 @@ struct ShaarReproPanel: View {
               Text(row.level.uppercased()).frame(width: 60, alignment: .leading)
                 .foregroundStyle(.secondary)
               Text(row.message).frame(maxWidth: .infinity, alignment: .leading)
-              Text(row.source).foregroundStyle(.secondary)
+                .devToolsDataDirection()
+              Text(row.source).foregroundStyle(.secondary).devToolsDataDirection()
             }
             .font(.system(size: 10, design: .monospaced))
             .padding(.vertical, 6)
@@ -122,6 +123,7 @@ struct ShaarReproPanel: View {
               Text(row.request.method).frame(width: 48, alignment: .leading)
               Text(row.request.url).lineLimit(1).truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .devToolsDataDirection()
               Text(String(row.response.status))
             }
             .font(.system(size: 10, design: .monospaced))
@@ -133,7 +135,7 @@ struct ShaarReproPanel: View {
       .accessibilityIdentifier("shaar.devtools.reproNetwork")
     case .dom:
       ScrollView {
-        Text(Self.domText(contents.dom))
+        Text(Self.domText(contents.dom)).devToolsDataDirection()
           .font(.system(size: 10, design: .monospaced))
           .textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -161,7 +163,7 @@ struct ShaarReproPanel: View {
     HStack(alignment: .top, spacing: 8) {
       Text(ShellL10n.string(name)).foregroundStyle(.secondary)
         .frame(width: 75, alignment: .leading)
-      Text(value).textSelection(.enabled)
+      Text(value).textSelection(.enabled).devToolsDataDirection()
     }.font(.system(size: 10, design: .monospaced))
   }
 

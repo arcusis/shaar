@@ -51,6 +51,7 @@ struct ShaarViewportsPanel: View {
         .font(.system(size: 10, weight: .semibold))
       TextField(ShellL10n.string("Page URL"), text: $address)
         .textFieldStyle(.roundedBorder)
+        .devToolsDataDirection()
         .font(.system(size: 10, design: .monospaced))
         .frame(maxWidth: 380)
         .onSubmit(navigate)

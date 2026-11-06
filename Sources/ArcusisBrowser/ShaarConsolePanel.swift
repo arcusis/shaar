@@ -122,6 +122,7 @@ struct ShaarConsolePanel: View {
                 .font(.system(size: 11, design: .monospaced))
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .devToolsDataDirection()
               if row.count > 1 {
                 Text("\(row.count)")
                   .font(.system(size: 10, design: .monospaced))
@@ -164,6 +165,7 @@ struct ShaarConsolePanel: View {
           Text(row.event.message)
             .font(.system(size: 11, design: .monospaced))
             .textSelection(.enabled)
+            .devToolsDataDirection()
           Text(ShellL10n.string(row.event.origin.rawValue))
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(.secondary)
@@ -273,6 +275,7 @@ struct ShaarConsoleCommandLine: View {
       TextField(ShellL10n.string("Evaluate JavaScript in this tab"), text: $model.command)
         .textFieldStyle(.plain)
         .font(.system(size: 11, design: .monospaced))
+        .devToolsDataDirection()
         .focused($focused)
         .onSubmit(runCommand)
         .onMoveCommand { direction in

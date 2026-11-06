@@ -169,6 +169,7 @@ struct ShaarApplicationPanel: View {
         .font(.system(size: 11, weight: .semibold))
       if let path = model.store ?? model.database ?? model.cacheID {
         Text(path).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+          .devToolsDataDirection()
       }
       Spacer(minLength: 4)
       if model.area != .cookies && model.area != .workers {
@@ -176,6 +177,7 @@ struct ShaarApplicationPanel: View {
           .textFieldStyle(.roundedBorder)
           .font(.system(size: 10))
           .frame(width: 150)
+          .devToolsDataDirection()
       }
       Button {
         Task {
@@ -217,6 +219,7 @@ struct ShaarApplicationPanel: View {
       HStack(spacing: 8) {
         TextField(ShellL10n.string("Filter cookies"), text: $cookies.search)
           .textFieldStyle(.roundedBorder).frame(width: 180)
+          .devToolsDataDirection()
         Spacer()
         if clearCookies != nil {
           Button(ShellL10n.string("Clear cookies and reload"), role: .destructive) {
@@ -276,10 +279,15 @@ struct ShaarApplicationPanel: View {
             } label: {
               HStack(spacing: 8) {
                 Text(cookie.name).frame(width: 130, alignment: .leading).lineLimit(1)
+                  .devToolsDataDirection()
                 Text(cookie.value).frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
+                  .devToolsDataDirection()
                 Text(cookie.domain).frame(width: 130, alignment: .leading).lineLimit(1)
+                  .devToolsDataDirection()
                 Text(cookie.path).frame(width: 65, alignment: .leading).lineLimit(1)
+                  .devToolsDataDirection()
                 Text(cookieFlags(cookie)).frame(width: 180, alignment: .leading).lineLimit(1)
+                  .devToolsDataDirection()
               }
               .font(.system(size: 10, design: .monospaced))
               .padding(.horizontal, 12).frame(height: 34)
@@ -341,8 +349,10 @@ struct ShaarApplicationPanel: View {
             Image(systemName: "gearshape.2").foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 4) {
               Text(worker.scopeURL).font(.system(size: 11, design: .monospaced))
+                .devToolsDataDirection()
               Text("\(worker.status) · \(worker.scriptURL)")
                 .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                .devToolsDataDirection()
             }
             Spacer()
             Button(ShellL10n.string("Update")) {
@@ -374,6 +384,7 @@ struct ShaarApplicationPanel: View {
           } else {
             Text(String(body.prefix(32_768)))
               .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+              .devToolsDataDirection()
           }
         } else {
           emptyContent("No cached response is available")
@@ -409,9 +420,12 @@ struct ShaarApplicationPanel: View {
             } label: {
               HStack(spacing: 8) {
                 Text(row.name).frame(width: 210, alignment: .leading).lineLimit(1)
+                  .devToolsDataDirection()
                 Text(row.value).frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
+                  .devToolsDataDirection()
                 if model.area == .indexedDB || model.area == .cache {
                   Text(row.detail).frame(width: 95, alignment: .leading).lineLimit(1)
+                    .devToolsDataDirection()
                 }
               }
               .font(.system(size: 10, design: .monospaced))
@@ -443,7 +457,9 @@ struct ShaarApplicationPanel: View {
   private var storageEditor: some View {
     HStack(spacing: 8) {
       TextField(ShellL10n.string("Key"), text: $editorKey).frame(width: 180)
+        .devToolsDataDirection()
       TextField(ShellL10n.string("Value"), text: $editorValue)
+        .devToolsDataDirection()
       Button(ShellL10n.string("Save")) {
         editing = false
         Task { await model.saveStorage(key: editorKey, value: editorValue) }

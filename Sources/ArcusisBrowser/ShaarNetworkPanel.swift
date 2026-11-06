@@ -123,6 +123,7 @@ struct ShaarNetworkPanel: View {
         }
         .frame(width: 700)
         .frame(minHeight: geometry.size.height, alignment: .top)
+        .devToolsDataDirection()
       }
       .onMoveCommand { direction in
         guard focusedRequest != nil else { return }
@@ -204,6 +205,7 @@ struct ShaarNetworkPanel: View {
           Text(selected.name)
             .font(.system(size: 11, weight: .semibold))
             .lineLimit(1)
+            .devToolsDataDirection()
           Spacer(minLength: 4)
           Button {
             rules.create(from: selected)
@@ -262,6 +264,7 @@ struct ShaarNetworkPanel: View {
           detailContent(selected)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
+            .devToolsDataDirection()
         }
       }
     } else {
@@ -375,6 +378,7 @@ struct ShaarNetworkPanel: View {
         .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
       Text(value).font(.system(size: 10, design: .monospaced))
         .textSelection(.enabled)
+        .devToolsDataDirection()
     }
   }
 

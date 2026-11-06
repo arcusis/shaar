@@ -1,6 +1,8 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Developer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer"}},"he":{"stringUnit":{"state":"translated","value":"פיתוח"}}}},
+    "Automatically turn on Dev Mode for local development pages": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Automatically turn on Dev Mode for local development pages"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה אוטומטית של מצב פיתוח בדפי פיתוח מקומיים"}}}},
     "Private Windows": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"חלונות פרטיים"}}}},
     "Cookies and site storage": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובצי Cookie ואחסון אתרים"}}}},
     "Trackers": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"עוקבים"}}}},

@@ -5,6 +5,7 @@
 #import "include/ChromiumBridgeVerification.h"
 #import "../ChromiumBridge/ChromiumProbeRoot.h"
 #import "../ChromiumBridge/ChromiumRuntimeInternal.h"
+#import "../ChromiumBridge/ChromiumMediaSession.h"
 #import "../ChromiumBridge/ChromiumShaarPrivateSupport.h"
 #import <objc/runtime.h>
 
@@ -13,6 +14,10 @@
 #include <dlfcn.h>
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
+
+@interface ARCShaarRuntime (MediaEventProbe)
+- (void)receiveEvent:(const shaar_event *)event;
+@end
 
 namespace {
 BOOL ProbeCaptureAllowed(void) {
@@ -89,6 +94,42 @@ bool PrivateTabState(ARCShaarRuntime *runtime, NSString *tabID,
 }
 
 }  // namespace
+
+NSDictionary *ARCProbeShaarMediaPublicState(NSDictionary *native) {
+  return ARCShaarMediaPublicState(native);
+}
+
+NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validOwner) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  NSMutableArray *media = [NSMutableArray array];
+  NSMutableArray *pip = [NSMutableArray array];
+  runtime.onMediaSessionChanged = ^(NSString *tabID, NSDictionary *state) {
+    [media addObject:state ?: NSNull.null];
+  };
+  runtime.onPictureInPictureChanged = ^(NSString *tabID, BOOL active) {
+    [pip addObject:@(active)];
+  };
+  NSString *tabID = @"OWNED-TAB";
+  NSString *profileID = @"OWNED-PROFILE";
+  NSString *windowID = @"OWNED-WINDOW";
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabs"),
+                 [@{tabID: [NSValue valueWithPointer:(void *)1]} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabProfiles"),
+                 [@{tabID: profileID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
+                 [@{tabID: windowID} mutableCopy]);
+  NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  NSString *eventWindow = validOwner ? windowID : @"FOREIGN-WINDOW";
+  shaar_event event = {};
+  event.size = sizeof(event);
+  event.kind = SHAAR_EVENT_MEDIA;
+  event.profile_id = {profileID.UTF8String, profileID.length};
+  event.window_id = {eventWindow.UTF8String, eventWindow.length};
+  event.tab_id = {tabID.UTF8String, tabID.length};
+  event.payload_json = {(const char *)data.bytes, data.length};
+  [runtime receiveEvent:&event];
+  return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count)};
+}
 
 NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
     NSString *tabID, NSString *windowID, NSString *contextID) {

@@ -23,4 +23,14 @@ FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
 /// Joins page scripts that each take `post` and return a message receiver into one script.
 FOUNDATION_EXPORT NSString *ARCComposedPageScript(NSArray<NSString *> *scripts);
 
+/// Reduces one versioned native Shaar media state to the app's media model payload.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> * _Nullable ARCShaarMediaPublicState(
+  NSDictionary<NSString *, id> *native);
+
+@class ARCShaarRuntime;
+@interface ARCShaarRuntime (MediaEvents)
+- (void)receiveShaarMediaEventForTabID:(NSString *)tabID payload:(NSDictionary *)payload;
+- (void)forgetShaarMediaForTabID:(NSString *)tabID;
+@end
+
 NS_ASSUME_NONNULL_END

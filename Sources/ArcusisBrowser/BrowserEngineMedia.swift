@@ -41,9 +41,23 @@ extension BrowserEngine {
   /// return. Runs before native selection changes.
   func handOffPictureInPicture() {
     guard !isClosed, let store else { return }
+    let window = runtime.window(forID: windowID)
+    let visible = Self.visiblePagesForAutomaticPictureInPicture(
+      store.visiblePageIDs.intersection(liveTabs),
+      windowVisible: window?.isVisible ?? false,
+      key: window?.isKeyWindow ?? false,
+      miniaturized: window?.isMiniaturized ?? false)
     autoPictureInPicture.visiblePagesChanged(
-      to: store.visiblePageIDs.intersection(liveTabs), sessions: store.media.sessions,
+      to: visible, sessions: store.media.sessions,
       allowed: { store.automaticPictureInPictureAllowed(forTab: $0) })
+  }
+
+  static func visiblePagesForAutomaticPictureInPicture(
+    _ selected: Set<UUID>, windowVisible: Bool, key: Bool, miniaturized: Bool
+  ) -> Set<UUID> {
+    if miniaturized { return [] }
+    if windowVisible && !key { return [] }
+    return selected
   }
 
   func receivePictureInPicture(_ identity: String, active: Bool) {

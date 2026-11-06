@@ -19,6 +19,7 @@ const diagnosticsSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowse
 const diagnosticsScript = diagnosticsSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
 const aiSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorAICopyScript.swift'), 'utf8');
 const aiScript = aiSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
+const sourceScript = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorSourceScript.swift'), 'utf8').match(/static let install = #"""([\s\S]*?)"""#/)[1];
 const output = path.join(root, 'build/Verification/inspector-contracts.json');
 fs.rmSync(output, { force: true });
 let server, browser;
@@ -156,6 +157,10 @@ async function serve() {
   assert.equal(component.tree.framework, 'React');
   assert.equal(component.data.name, 'ReactCounter');
   await page.evaluate(aiScript);
+  await page.evaluate(sourceScript);
+  const reactSource = await page.evaluate(() => __shaarInspectorSource.resolve());
+  assert.match(reactSource.source, /ReactCounter\.jsx:8:3/);
+  assert.equal(reactSource.component, 'ReactCounter');
   const reactContext = await page.evaluate(() => __shaarInspectorCopy.context(__shaarInspectorV2.read().selection.id));
   assert(reactContext.components.some(name=>name.includes('ReactCounter')));
 
@@ -176,6 +181,9 @@ async function serve() {
   assert.equal(component.tree.framework, 'Vue');
   assert.equal(component.data.name, 'VueCounter');
   const vueContext = await page.evaluate(() => __shaarInspectorCopy.context(__shaarInspectorV2.read().selection.id));
+  const vueSource = await page.evaluate(() => __shaarInspectorSource.resolve());
+  assert.equal(vueSource.source, '/inspector-source/vue.js');
+  assert.equal(vueSource.component, 'VueCounter');
   assert(vueContext.components.some(name=>name.includes('VueCounter')));
 
   assert.equal(JSON.parse(component.data.state).data.count, 3);
@@ -213,6 +221,23 @@ async function serve() {
   assert.match((await page.evaluate(() => globalThis.__shaarInspectorDetails.accessibility())).warnings.join(' '), /no alt/);
   await pick('#hidden-focus');
   assert.match((await page.evaluate(() => globalThis.__shaarInspectorDetails.accessibility())).warnings.join(' '), /hidden from the accessibility tree/);
+  let duplicateSource = false;
+  await page.route('**/source-map-fixture.js*', route => {
+    if (route.request().url().endsWith('.map')) {
+      const sources = duplicateSource ? ['/src/Mapped.tsx', '/src/Other.tsx'] : ['/src/Mapped.tsx'];
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({version:3,sources,sourcesContent:sources.map(() => '<button id="mapped">Mapped</button>'),names:[],mappings:''}) });
+    }
+    return route.fulfill({ contentType: 'application/javascript', body: 'window.mappedLoaded=true;\n//# sourceMappingURL=source-map-fixture.js.map' });
+  });
+  await page.evaluate(() => {
+    const button = document.createElement('button'); button.id = 'mapped'; button.textContent = 'Mapped'; document.body.append(button);
+    const script = document.createElement('script'); script.src = '/source-map-fixture.js'; document.body.append(script);
+  });
+  await page.waitForFunction(() => window.mappedLoaded);
+  await pick('#mapped');
+  assert.equal((await page.evaluate(() => __shaarInspectorSource.resolve())).source, '/src/Mapped.tsx:1');
+  duplicateSource = true;
+  assert.equal((await page.evaluate(() => __shaarInspectorSource.resolve())).source, '', 'Ambiguous source map must not guess');
   await page.keyboard.press('Escape');
   assert.equal((await state()).closed, true);
 
@@ -271,6 +296,8 @@ async function serve() {
 
   await page.goto(new URL('/inspector-ai?token=private-query#private-fragment', url).href);
   await page.evaluate(script);
+  await page.evaluate(detailsScript);
+  await page.evaluate(sourceScript);
   await page.locator('#ai-save').click({ force: true });
   await page.keyboard.press('ArrowUp');
   await page.evaluate(aiScript);
@@ -291,6 +318,15 @@ async function serve() {
   assert.match(ai.context.text, /Public nearby context/);
   assert.match(ai.context.domPath, /html:nth-of-type/);
   assert.equal(ai.context.accessibleName, '', 'A section must not inherit its entire text as an accessible name');
+  await page.locator('#ai-card').evaluate(node => {
+    node.setAttribute('data-source-file', '/src/AccountCard.tsx');
+    node.setAttribute('data-source-line', '41');
+  });
+  assert.equal((await page.evaluate(() => __shaarInspectorSource.resolve())).source, '/src/AccountCard.tsx:41');
+  await page.locator('#ai-card').evaluate(node => {
+    node.removeAttribute('data-source-file');
+    node.removeAttribute('data-source-line');
+  });
   assert.equal(await page.evaluate(() => {
     const p=__shaarInspectorV2;p.highlightEdge('padding',1);
     const edge=p.edgeHighlight();if(!edge.painted||edge.active.region!=='padding'||edge.active.index!==1)throw Error('Requested spacing edge was not highlighted');
@@ -341,9 +377,10 @@ async function serve() {
     styleSourceSHA256: require('node:crypto').createHash('sha256').update(styleSource).digest('hex'),
     detailsSourceSHA256: require('node:crypto').createHash('sha256').update(detailsSource).digest('hex'),
     aiSourceSHA256: require('node:crypto').createHash('sha256').update(aiSource).digest('hex'),
+    sourceScriptSHA256: require('node:crypto').createHash('sha256').update(sourceScript).digest('hex'),
     diagnosticsSourceSHA256: require('node:crypto').createHash('sha256').update(diagnosticsSource).digest('hex'),
     frameworks: JSON.parse(fs.readFileSync(path.join(root, 'ThirdParty/InspectorFixtures/pin.json'), 'utf8')),
-    checks: ['hover regions', 'lock interception', 'arrow navigation', 'breadcrumb', 'unique CSS/XPath/JS/Playwright', 'CSS edit and exact undo', 'CSS validation', 'Option measurement and release', 'conflicting page edit preserves page changes', 'alpha precision', 'gradient limit', 'same-origin iframe', 'iframe reload listeners', 'Escape cleanup', 'Page mode passes input', 'Actual runtime technology markers', 'Bounded console without getters', 'fetch and XHR recording', 'Local/session storage CRUD', 'Collector restoration', 'AI context and form privacy', 'Private screenshot mask restoration', 'React Vue Svelte AI context'],
+    checks: ['hover regions', 'lock interception', 'arrow navigation', 'breadcrumb', 'unique CSS/XPath/JS/Playwright', 'CSS edit and exact undo', 'CSS validation', 'Option measurement and release', 'conflicting page edit preserves page changes', 'alpha precision', 'gradient limit', 'same-origin iframe', 'iframe reload listeners', 'Escape cleanup', 'Page mode passes input', 'Actual runtime technology markers', 'Bounded console without getters', 'fetch and XHR recording', 'Local/session storage CRUD', 'Collector restoration', 'AI context and form privacy', 'Private screenshot mask restoration', 'React Vue Svelte AI context', 'React Vue source actions', 'source attribute and unique source map'],
   }, null, 2));
   console.log('Passed Inspector renderer contracts.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

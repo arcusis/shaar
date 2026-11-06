@@ -37,6 +37,7 @@ final class InspectorModel {
   @ObservationIgnored lazy var styles = InspectorStylesModel(inspector: self)
   @ObservationIgnored lazy var details = InspectorDetailsModel(inspector: self)
   @ObservationIgnored lazy var aiCopy = InspectorAICopyModel(inspector: self)
+  @ObservationIgnored lazy var sourceActions = InspectorSourceActions(inspector: self)
   var documentGeneration: Int { generation }
   var isOpen: Bool { mode != .closed }
   @ObservationIgnored weak var engine: BrowserEngine?
@@ -82,6 +83,7 @@ final class InspectorModel {
   func close() {
     presentation.dismiss()
     aiCopy.cancel()
+    sourceActions.cancel()
     generation += 1
     pollTask?.cancel()
     pollTask = nil
@@ -111,6 +113,7 @@ final class InspectorModel {
     if next != target || committed {
       presentation.dismiss()
       aiCopy.cancel()
+      sourceActions.cancel()
       generation += 1
       styles.reset()
       details.reset()

@@ -33,7 +33,9 @@ struct InspectorPanel: View {
           } action: {
             layout?.contentFrame = $0
           }
-        if let failure = model.failure ?? model.aiCopy.failure {
+        if let failure = model.failure ?? model.aiCopy.failure ?? model.sourceActions.failure
+          ?? model.sourceActions.location
+        {
           Divider()
           Text(failure).font(.system(size: 11)).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading).padding(12)
@@ -68,7 +70,7 @@ struct InspectorPanel: View {
                   12, min(copyButtonFrame.minX, geometry.size.width - width - 12)
                 ),
                 y: min(
-                  copyButtonFrame.maxY + 6, max(6, geometry.size.height - 158))
+                  copyButtonFrame.maxY + 6, max(6, geometry.size.height - 264))
               )
               .onGeometryChange(for: CGRect.self) {
                 $0.frame(in: .named("InspectorPanel"))

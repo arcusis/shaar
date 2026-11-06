@@ -31,6 +31,7 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/extensions/shaar_extensions.h"
+#include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -639,6 +640,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
           profile->native->GetPath());
   if (!attributes || attributes->IsEphemeral())
     return Fail(SHAAR_CONFLICT, "profile is unavailable for deletion", error);
+  shaar::agent_bridge::RevokeForProfile(profile->engine, profile);
   profile->deleting = true;
   const std::string deleting = "{\"kind\":\"deleting\",\"schemaVersion\":1}";
   shaar::EmitEvent(profile->engine, SHAAR_EVENT_PROFILE,

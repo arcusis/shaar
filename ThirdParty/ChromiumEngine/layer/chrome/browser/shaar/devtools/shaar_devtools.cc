@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
+#include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/devtools/devtools_settings.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
@@ -1074,6 +1075,17 @@ shaar_error_code HandleDevToolsOperation(
                                                                   scope.profile))
     return Fail(error, SHAAR_WRONG_PROFILE,
                 "DevTools profile identity does not match the requested scope");
+
+  if (operation == SHAAR_OP_DEVTOOLS_CONTROL_ENABLE ||
+      operation == SHAAR_OP_DEVTOOLS_CONTROL_DISABLE ||
+      operation == SHAAR_OP_DEVTOOLS_CONTROL_STATUS) {
+    if (!HasEmptyVersionedSchema(args_json))
+      return Fail(error, SHAAR_INVALID_ARGUMENT,
+                  "invalid agent bridge operation schema");
+    return agent_bridge::HandleOperation(
+        engine, scope, window, tab, contents, identity, operation, request_id,
+        reply, reply_context, error);
+  }
 
   if (operation == SHAAR_OP_PROBE_CAPTURE_TAB) {
     if (!HasEmptyVersionedSchema(args_json))

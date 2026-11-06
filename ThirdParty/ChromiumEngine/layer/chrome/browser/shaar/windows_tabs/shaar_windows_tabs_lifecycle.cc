@@ -22,6 +22,7 @@
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/extensions/shaar_extensions.h"
+#include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -50,6 +51,7 @@ struct shaar_tab : content::WebContentsObserver {
       : content::WebContentsObserver(contents), serial(serial) {}
   void WebContentsDestroyed() override {
     // Drop the WebContents pointer before a queued view update can request it.
+    shaar::agent_bridge::RevokeForTab(engine, this);
     shaar::windows_tabs::Registry().UnbindTab(engine, window, this);
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&CleanupTab, serial));
@@ -128,6 +130,7 @@ void FinalizeWindow(shaar_window* window) {
     if (handle->window == window)
       return;
   shaar_engine* engine = window->engine;
+  shaar::agent_bridge::RevokeForWindow(engine, window);
   shaar::extensions_host::ClosePopupsForWindow(engine, window);
   const std::string window_id = window->id;
   const std::string profile_id = window->profile_id;

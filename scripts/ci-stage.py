@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from ci_support import Commands, ROOT
@@ -64,12 +65,49 @@ def test_commands(checks: Commands, *, cwd: Path = ROOT, scratch: str = ".build"
     if checks.run("build", ["swift", "build", "--build-tests", *flags], cwd=cwd):
         return 1
     coverage_path = prepare_coverage(cwd, scratch)
+    # SwiftUI focus in a hidden window needs its own AppKit process; both invocations still count.
+    isolated_focus = "BrowserWindowSidebarTests.openingPaneCommandMakesSearchFieldFirstResponderOffscreen"
     status = run_swift_tests(checks, "tests", ["swift", "test", "--skip-build", *flags,
+                             "--skip", isolated_focus,
                              "--xunit-output", str(checks.directory / "swift.xml")], cwd=cwd)
     if status:
         return status
+    preserve_test_reports(checks.directory)
+    first_profile = checks.directory / "other-tests.profdata"
+    shutil.copyfile(coverage_path.parent / "default.profdata", first_profile)
+    status = run_swift_tests(checks, "isolated-focus", ["swift", "test", "--skip-build", *flags,
+                             "--filter", isolated_focus,
+                             "--xunit-output", str(checks.directory / "swift.xml")], cwd=cwd)
+    if status:
+        return status
+    require_isolated_focus_result(checks.directory, isolated_focus)
+    merge_test_coverage(coverage_path, first_profile)
     shutil.copyfile(coverage_path, checks.directory / "coverage.json")
     return checks.run("resolved-pins", ["git", "diff", "--exit-code", "--", "Package.resolved"])
+
+
+def preserve_test_reports(directory: Path) -> None:
+    for report in (*directory.glob("swift*-swift-testing.xml"), directory / "xctest.xml"):
+        report.rename(directory / f"suite-{report.name}")
+
+
+def require_isolated_focus_result(directory: Path, name: str) -> None:
+    report = ET.parse(directory / "swift-swift-testing.xml")
+    cases = list(report.iter("testcase"))
+    if len(cases) != 1 or cases[0].get("name") != f"{name.split('.')[-1]}()":
+        raise RuntimeError("Isolated offscreen focus test did not run exactly once")
+
+
+def merge_test_coverage(coverage_path: Path, first_profile: Path) -> None:
+    second_profile = coverage_path.parent / "default.profdata"
+    merged_profile = coverage_path.parent / "combined.profdata"
+    executable = (coverage_path.parent.parent / "ArcusisBrowserPackageTests.xctest" /
+                  "Contents" / "MacOS" / "ArcusisBrowserPackageTests")
+    subprocess.run(["xcrun", "llvm-profdata", "merge", "-sparse", str(first_profile),
+                    str(second_profile), "-o", str(merged_profile)], check=True)
+    with coverage_path.open("w") as output:
+        subprocess.run(["xcrun", "llvm-cov", "export", "-instr-profile", str(merged_profile),
+                        str(executable)], stdout=output, check=True)
 
 
 def check_base_coverage(checks: Commands) -> None:

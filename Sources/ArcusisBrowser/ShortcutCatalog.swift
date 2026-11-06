@@ -81,9 +81,10 @@ struct ShortcutCatalog {
     }
   }
 
-  /// macOS leaves these standard items without shortcuts; web pages keep those keys.
+  /// These menu actions intentionally have no shortcut; web pages keep those keys.
   static let unassignedTitles: Set<String> = [
     "About \(ProductIdentity.name)", "Check for Updates…", "Show All", "Bring All to Front",
+    "Share Page…",
   ]
 
   static func shortcut(for command: BrowserMenuCommand) -> (
@@ -102,7 +103,10 @@ struct ShortcutCatalog {
     case .reload: ("r", .command)
     case .hardReload: ("r", [.command, .shift])
     case .developerTools: ("i", [.command, .option])
+    case .chromiumDeveloperTools: ("i", [.command, .option, .shift])
     case .inspector: ("c", [.command, .option])
+    case .inspectorSource: ("o", [.command, .option])
+    case .inspectorAgentCopy: ("a", [.command, .option, .shift])
     case .inspectorCopy: ("c", [.command, .shift])
     case .newSpace: ("S", [.command, .shift])
     case .editSpace: ("s", [.command, .option])
@@ -174,6 +178,16 @@ struct ShortcutCatalog {
           englishTitle: englishTitle?.isEmpty == false ? englishTitle : nil)
       }
     }
+  }
+}
+
+enum ShaarDevToolsShortcut {
+  static func isF12(_ event: NSEvent) -> Bool {
+    isF12(keyCode: event.keyCode, modifiers: event.modifierFlags)
+  }
+
+  static func isF12(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+    keyCode == 111 && modifiers.intersection([.command, .option, .control, .shift]).isEmpty
   }
 }
 

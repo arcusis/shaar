@@ -152,8 +152,10 @@ final class InspectorStylesModel {
         inspector.selection?.id == selection.id
       else { return }
       let properties = Array(Set(nextRules.flatMap(\.declarations).map(\.name))).sorted()
-      let inactiveHints = (try? await inspector.evaluate(
-        InspectorInactiveCSSScript.expression(properties: properties))) as? [String: String] ?? [:]
+      let inactiveHints =
+        (try? await inspector.evaluate(
+          InspectorInactiveCSSRules.expression(properties: properties))) as? [String: String]
+        ?? [:]
       try receive(
         rules: nextRules, computed: nextComputed, inactiveHints: inactiveHints,
         selectionID: selection.id, generation: generation)

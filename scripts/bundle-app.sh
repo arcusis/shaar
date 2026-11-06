@@ -246,6 +246,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>$bundle_identifier</string>
   <key>CFBundleName</key><string>$bundle_name</string>
   <key>CFBundleDisplayName</key><string>$bundle_name</string>
+  <key>NSUserActivityTypes</key><array><string>NSUserActivityTypeBrowsingWeb</string></array>
   <key>ShaarDataFolderName</key><string>$data_folder_name</string>
   <key>ShaarCacheFolderName</key><string>$cache_folder_name</string>
   <key>CFBundleURLTypes</key><array><dict>

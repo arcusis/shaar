@@ -13,10 +13,10 @@ enum BrowserMenuCommand: String, CaseIterable {
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
-    developerTools
+    developerTools, chromiumDeveloperTools
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
-  case checkForUpdates, inspector, inspectorCopy
+  case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
 }
 
 /// AppKit otherwise falls back from unbound Command-N to the private-window menu item.
@@ -243,7 +243,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
       (focused.flatMap { contexts[$0] } ?? contexts.values.first)?.window.makeKeyAndOrderFront(nil)
-      if let firstRunMarker, let context = focused.flatMap({ contexts[$0] }) ?? contexts.values.first {
+      if let firstRunMarker,
+        let context = focused.flatMap({ contexts[$0] }) ?? contexts.values.first
+      {
         let setup = FirstRunSetupWindow(
           store: context.store, marker: firstRunMarker,
           location: FirstRunLocation(application: Bundle.main.bundleURL))
@@ -367,13 +369,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
     case .reload, .hardReload:
       return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
-    case .developerTools:
+    case .developerTools, .chromiumDeveloperTools:
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
     case .inspector:
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
     case .inspectorCopy:
       guard let target = context.engine.siteControlTarget else { return false }
       return context.engine.inspectors[target.tabID]?.aiCopy.canCopy == true
+    case .inspectorSource, .inspectorAgentCopy:
+      guard let target = context.engine.siteControlTarget else { return false }
+      guard let inspector = context.engine.inspectors[target.tabID] else { return false }
+      return inspector.aiCopy.canCopy && !inspector.sourceActions.busy
     case .splitView: return store.canSplitSelectedTab
     case .nextSpace, .previousSpace: return store.canCycleSpace
     case .reopenClosed: return store.canReopenClosedTab
@@ -543,12 +549,25 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
     case .developerTools: context.engine.toggleDeveloperTools()
+    case .chromiumDeveloperTools: context.engine.toggleChromiumDeveloperTools()
     case .inspector: context.engine.toggleInspector()
     case .inspectorCopy:
       if let target = context.engine.siteControlTarget,
         let inspector = context.engine.inspectors[target.tabID]
       {
         Task { await inspector.aiCopy.copyElement() }
+      }
+    case .inspectorSource:
+      if let target = context.engine.siteControlTarget,
+        let inspector = context.engine.inspectors[target.tabID]
+      {
+        Task { await inspector.sourceActions.open() }
+      }
+    case .inspectorAgentCopy:
+      if let target = context.engine.siteControlTarget,
+        let inspector = context.engine.inspectors[target.tabID]
+      {
+        Task { await inspector.sourceActions.copyForAgent() }
       }
     case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
@@ -1180,8 +1199,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.sidebar, "Toggle sidebar", to: view)
     add(.reload, "Reload", to: view)
     add(.hardReload, "Hard Reload", to: view)
-    add(.developerTools, "Developer Tools", to: view)
+    add(.developerTools, "Shaar DevTools", to: view)
+    add(.chromiumDeveloperTools, "Open Chromium DevTools", to: view)
     add(.inspector, "Inspect Element", to: view)
+    add(.inspectorSource, "Open source", to: view)
+    add(.inspectorAgentCopy, "Copy for agent", to: view)
     add(.inspectorCopy, "Copy for AI", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)
@@ -1289,7 +1311,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       main.items.first(where: { $0.submenu?.identifier?.rawValue == "Help" })?.submenu
     NSApp.mainMenu = main
     shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      guard let self, let menu = self.menu, NSApp.mainMenu === menu,
+      guard let self, let menu = self.menu, NSApp.mainMenu === menu else { return event }
+      if ShaarDevToolsShortcut.isF12(event), self.canPerform(.developerTools) {
+        self.perform(.developerTools)
+        return nil
+      }
+      guard
         ShortcutPageRouting.route(event, menu: menu, responder: event.window?.firstResponder)
       else { return event }
       return nil

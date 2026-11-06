@@ -12,9 +12,14 @@ import Testing
   #expect(ARCReservedBrowserShortcut("i", [.command, .option]))
   #expect(ARCReservedBrowserShortcut("I", [.command, .option, .capsLock]))
   #expect(!ARCReservedBrowserShortcut("i", .command))
-  #expect(!ARCReservedBrowserShortcut("i", [.command, .option, .shift]))
+  #expect(ARCReservedBrowserShortcut("i", [.command, .option, .shift]))
   #expect(!ARCReservedBrowserShortcut("i", [.command, .option, .control]))
   #expect(ShortcutCatalog.displayKeys(for: .developerTools) == "⌥⌘I")
+  #expect(ShortcutCatalog.displayKeys(for: .chromiumDeveloperTools) == "⌥⇧⌘I")
+  #expect(ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: []))
+  #expect(ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: [.function]))
+  #expect(!ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: [.command]))
+  #expect(!ShaarDevToolsShortcut.isF12(keyCode: 110, modifiers: []))
   #expect(
     NSImage(
       systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: nil)

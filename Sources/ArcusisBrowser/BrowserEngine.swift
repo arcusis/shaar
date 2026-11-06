@@ -40,6 +40,7 @@ final class BrowserEngine {
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
   var inspectors: [UUID: InspectorModel] = [:]
+  var shaarDevTools: [UUID: ShaarDevToolsModel] = [:]
   var developerModels: [UUID: DeveloperPageModel] = [:]
   var developmentPages: [UUID: DevelopmentPage] = [:]
   var developmentPageURLs: [UUID: URL] = [:]
@@ -148,7 +149,9 @@ final class BrowserEngine {
       }
       self.isClosed = true
       self.suspensionTask?.cancel()
-      for model in self.inspectors.values { model.close() }
+      for model in self.shaarDevTools.values { model.close() }
+      self.shaarDevTools.removeAll()
+      for model in self.inspectors.values where model.isOpen { model.close() }
       self.inspectors.removeAll()
       for model in self.developerModels.values { model.close() }
       self.developerModels.removeAll()
@@ -191,6 +194,9 @@ final class BrowserEngine {
       }
       if let inspector = self.inspectors[tab] {
         inspector.documentChanged(url: inspector.target.url, committed: true)
+      }
+      if let shell = self.shaarDevTools[tab] {
+        shell.updateTarget(shell.target, committed: true)
       }
     }
     callbacks.onAgentBridgeStatus = { [weak self] identity, owner, payload in
@@ -418,6 +424,10 @@ final class BrowserEngine {
       self.store?.nativePageLoading(id, loading: loading)
       if let url = URL(string: address) {
         self.inspectors[id]?.documentChanged(url: url)
+        if let profile = self.store?.session.profileID(forTabID: id) {
+          self.shaarDevTools[id]?.updateTarget(
+            SiteControlTarget(tabID: id, profileID: profile, url: url))
+        }
         self.developerDocumentChanged(id, url: url)
         self.updateDevelopmentPage(tabID: id, url: url, loading: loading)
         if let profile = self.store?.session.profileID(forTabID: id),
@@ -445,7 +455,10 @@ final class BrowserEngine {
       guard self.liveTabs.contains(id) || self.pages[id] != nil else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
-      self.inspectors.removeValue(forKey: id)?.close()
+      self.shaarDevTools.removeValue(forKey: id)?.close()
+      if let inspector = self.inspectors.removeValue(forKey: id), inspector.isOpen {
+        inspector.close()
+      }
       self.developerModels.removeValue(forKey: id)?.close()
       self.developmentPages[id] = nil
       self.developmentPageURLs[id] = nil
@@ -591,7 +604,8 @@ final class BrowserEngine {
       guard liveTabs.remove(id) != nil else { continue }
       events.router.forgetTab(id.uuidString, windowID: windowID)
       pages[id] = nil
-      inspectors.removeValue(forKey: id)?.close()
+      shaarDevTools.removeValue(forKey: id)?.close()
+      if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }
       developerModels.removeValue(forKey: id)?.close()
       mediaAccess[id] = nil
       forgetMedia(id)
@@ -637,7 +651,10 @@ final class BrowserEngine {
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
-      inspectors.removeValue(forKey: removed)?.close()
+      shaarDevTools.removeValue(forKey: removed)?.close()
+      if let inspector = inspectors.removeValue(forKey: removed), inspector.isOpen {
+        inspector.close()
+      }
       developerModels.removeValue(forKey: removed)?.close()
       developmentPages[removed] = nil
       developmentPageURLs[removed] = nil

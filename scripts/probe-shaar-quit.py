@@ -8,6 +8,7 @@
 import argparse
 import http.server
 import json
+import os
 import pathlib
 import subprocess
 import tempfile
@@ -16,6 +17,16 @@ import threading
 
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/paint":
+            payload = (b'<!doctype html><html><head><title>Paint fixture</title>'
+                       b'<style>html,body{margin:0;width:100%;height:100%;'
+                       b'background:#1678c6}</style></head><body></body></html>')
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path == "/stall":
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
@@ -43,12 +54,16 @@ def run_probe(app, output_dir, mode, number, port, timeout):
     root = output_dir / f"{mode}-{number}"
     root.mkdir(parents=True)
     report_path = root / "report.json"
+    data_root = pathlib.Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
+    marker = data_root / ".arcusis-probe"
+    marker.write_text("arcusis-engine-probe-v1\n")
+    marker.chmod(0o600)
     args = [
         str(app / "Contents/MacOS/ShaarVerification"),
         "--probe-shaar-preview",
         "--shaar-engine-backend=shaar",
         "--probe-output", str(report_path),
-        "--probe-data-dir", str(root / "data"),
+        "--probe-data-dir", str(data_root),
         "--probe-framework", str(app / "Contents/Frameworks/Chromium Framework.framework"),
     ]
     if mode in ("pending", "pending-private"):
@@ -59,9 +74,11 @@ def run_probe(app, output_dir, mode, number, port, timeout):
         args.append("--probe-private-close-live")
     else:
         args += ["--probe-direct-quit", "--probe-download-url",
-                 f"http://127.0.0.1:{port}/download/preview.txt"]
+                 f"http://127.0.0.1:{port}/download/preview.txt",
+                 "--probe-paint-url", f"http://127.0.0.1:{port}/paint"]
     try:
-        result = subprocess.run(args, capture_output=True, timeout=timeout, check=False)
+        result = subprocess.run(args, capture_output=True, timeout=timeout, check=False,
+                                env=dict(os.environ, SHAAR_ENGINE_TESTING="1"))
         return_code = result.returncode
         stderr = result.stderr
     except subprocess.TimeoutExpired as error:
@@ -78,7 +95,7 @@ def run_probe(app, output_dir, mode, number, port, timeout):
         required = {"openTab", "privateWindow", "privateWindowClose", "normalTabSurvives"}
     else:
         required = {
-            "openTab", "navigate", "backForward", "devTools", "newWindow",
+            "openTab", "paint", "navigate", "backForward", "devTools", "newWindow",
             "privateWindow", "profilesSwitch", "extensions", "downloads",
             "privateEngineProfileIsOffTheRecord", "privateEngineGlobalCookiesBlocked",
             "privateEngineHTTPSOnlyEnabled", "privateEngineReferrersDisabled",
@@ -106,7 +123,7 @@ def main():
     parser.add_argument("--app", type=pathlib.Path,
                         default=pathlib.Path("build/Shaar Verification.app"))
     parser.add_argument("--runs", type=int, default=6)
-    parser.add_argument("--timeout", type=int, default=30)
+    parser.add_argument("--timeout", type=int, default=90)
     parser.add_argument("--output-dir", type=pathlib.Path)
     parser.add_argument("--mode", action="append",
                         choices=("pending", "private-live", "pending-private",

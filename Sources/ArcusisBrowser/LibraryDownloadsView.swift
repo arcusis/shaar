@@ -7,8 +7,8 @@ import BrowserCore
 import Observation
 import QuickLookThumbnailing
 import SwiftUI
-import _QuickLook_SwiftUI
 import UniformTypeIdentifiers
+import _QuickLook_SwiftUI
 
 struct LibraryDownloadsView: View {
   let store: BrowserStore

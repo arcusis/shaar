@@ -11,12 +11,13 @@ struct InspectorAuditView: View {
   private let impacts = ["critical", "serious", "moderate", "minor", "unknown"]
 
   var body: some View {
-    InspectorSection(InspectorDetailsL10n.string("axe-core audit")) {
+    InspectorSection(InspectorDetailsL10n.string("Accessibility audit")) {
       VStack(alignment: .leading, spacing: 8) {
         scopePicker
         runControls
         failureText
         reportContent
+        emptyText
       }
     }
     .onChange(of: inspector.selection?.id) { model.selectionChanged() }
@@ -40,12 +41,16 @@ struct InspectorAuditView: View {
     HStack(spacing: 6) {
       Button(action: model.run) {
         if model.busy {
-          ProgressView().controlSize(.small)
+          ProgressView(InspectorDetailsL10n.string("Auditing…")).controlSize(.small)
         } else {
           Label(InspectorDetailsL10n.string("Run audit"), systemImage: "checkmark.shield")
         }
       }
       .disabled(model.busy || (model.scope == .selected && inspector.selection?.locked != true))
+      .help(
+        model.scope == .selected && inspector.selection?.locked != true
+          ? InspectorDetailsL10n.string("Lock an element before auditing this selection.")
+          : InspectorDetailsL10n.string("Run audit"))
       if let report = model.report {
         Text(
           InspectorDetailsL10n.format(
@@ -61,8 +66,9 @@ struct InspectorAuditView: View {
 
   @ViewBuilder private var failureText: some View {
     if let failure = model.failure {
-      Text(InspectorDetailsL10n.string(failure)).font(.system(size: 10))
-        .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+      Label(InspectorDetailsL10n.string(failure), systemImage: "exclamationmark.triangle")
+        .font(.system(size: 10)).foregroundStyle(.orange)
+        .fixedSize(horizontal: false, vertical: true)
     }
   }
 
@@ -86,9 +92,20 @@ struct InspectorAuditView: View {
           .font(.system(size: 10)).foregroundStyle(.secondary)
       }
       if report.violations == 0 {
-        Text(InspectorDetailsL10n.string("No axe-core violations found."))
-          .font(.system(size: 11)).foregroundStyle(.secondary)
+        Label(
+          InspectorDetailsL10n.string("No axe-core violations found."),
+          systemImage: "checkmark.circle"
+        )
+        .font(.system(size: 11)).foregroundStyle(.green)
       }
+    }
+  }
+
+  @ViewBuilder private var emptyText: some View {
+    if model.report == nil, model.failure == nil, !model.busy {
+      Text(InspectorDetailsL10n.string("Run an audit to find accessibility issues on this page."))
+        .font(.system(size: 11)).foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
   }
 }

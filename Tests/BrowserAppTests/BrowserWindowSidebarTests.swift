@@ -11,6 +11,7 @@ import Testing
 
 private final class OffscreenKeyEligibleWindow: NSWindow {
   override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { true }
 }
 
 @Suite @MainActor struct BrowserWindowSidebarTests {
@@ -92,13 +93,15 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
     }
     host.layoutSubtreeIfNeeded()
 
-    #expect(window.canBecomeKey && !window.isKeyWindow)
+    #expect(window.canBecomeKey && window.canBecomeMain)
+    #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
     // This is the action wired to the pane + button.
     store.openSplitPane(beside: first, edge: .right)
-    let deadline = ContinuousClock.now + .seconds(2)
-    while ContinuousClock.now < deadline, !(window.firstResponder is NSTextView) {
+    // A delayed hosted sleep must not consume the entire focus readiness window.
+    for _ in 0..<40 {
+      if window.firstResponder is NSTextView { break }
       host.layoutSubtreeIfNeeded()
-      try await Task.sleep(for: .milliseconds(16))
+      try await Task.sleep(for: .milliseconds(50))
     }
 
     #expect(store.commandIsOpen)

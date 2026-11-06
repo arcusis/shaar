@@ -25,6 +25,7 @@ final class PrivatePageSession {
   let windowID: String
   private(set) var pages: [UUID: PageState] = [:]
   var inspectors: [UUID: InspectorModel] = [:]
+  var shaarDevTools: [UUID: ShaarDevToolsModel] = [:]
   private(set) var isClosed = false
   private(set) var failure: String?
   private(set) var pendingHTTP: URL?
@@ -153,6 +154,11 @@ final class PrivatePageSession {
     if let parsed = URL(string: url) {
       inspectors[id]?.documentChanged(
         url: parsed, committed: loading && pages[id]?.loading == false)
+      if let profile = store?.session.profileID(forTabID: id) {
+        shaarDevTools[id]?.updateTarget(
+          SiteControlTarget(tabID: id, profileID: profile, url: parsed),
+          committed: loading && pages[id]?.loading == false)
+      }
     }
     if loading, store?.pageFind?.tabID == id { store?.dismissPageFind() }
     pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
@@ -171,7 +177,8 @@ final class PrivatePageSession {
 
   func tabClosed(_ id: UUID) {
     guard liveTabs.remove(id) != nil else { return }
-    inspectors.removeValue(forKey: id)?.close()
+    shaarDevTools.removeValue(forKey: id)?.close()
+    if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }
     pages[id] = nil
     if store?.pageFind?.tabID == id { store?.dismissPageFind() }
     store?.nativeTabClosed(id)
@@ -182,7 +189,9 @@ final class PrivatePageSession {
 
   func retireInspectors() {
     isClosed = true
-    for model in inspectors.values { model.close() }
+    for model in shaarDevTools.values { model.close() }
+    shaarDevTools.removeAll()
+    for model in inspectors.values where model.isOpen { model.close() }
     inspectors.removeAll()
   }
 
@@ -213,6 +222,29 @@ final class PrivatePageSession {
   }
 
   func toggleDeveloperTools() {
+    guard let target = inspectorTarget else { return }
+    if let shell = shaarDevTools[target.tabID], shell.isOpen {
+      shell.close()
+      return
+    }
+    let shell = shaarDevTools[target.tabID] ?? ShaarDevToolsModel(target: target)
+    let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, privateSession: self)
+    shaarDevTools[target.tabID] = shell
+    inspectors[target.tabID] = inspector
+    shell.updateTarget(target)
+    shell.open(inspector: inspector)
+  }
+
+  func openChromiumDeveloperTools(for tabID: UUID) {
+    guard !isClosed, liveTabs.contains(tabID) else { return }
+    runtime.toggleDevTools(
+      forPrivateTabID: tabID.uuidString, windowID: windowID, contextID: contextID
+    ) { [weak self] error in
+      if let error { self?.failure = error.localizedDescription }
+    }
+  }
+
+  func toggleChromiumDeveloperTools() {
     guard let target = inspectorTarget else { return }
     runtime.toggleDevTools(
       forPrivateTabID: target.tabID.uuidString,

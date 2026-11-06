@@ -200,9 +200,9 @@ final class PrivateBrowserHost {
   static func windowCanPerform(_ command: BrowserMenuCommand, store: BrowserStore) -> Bool {
     return switch command {
     case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
-    case .developerTools, .inspector:
+    case .developerTools, .chromiumDeveloperTools, .inspector:
       !store.commandIsOpen && store.privatePage?.inspectorTarget != nil
-    case .inspectorCopy:
+    case .inspectorCopy, .inspectorSource, .inspectorAgentCopy:
       store.session.selectedPage.flatMap { store.privatePage?.inspectors[$0.tab.id] }?
         .aiCopy.canCopy == true
     case .reopenClosed: store.canReopenClosedTab
@@ -223,12 +223,25 @@ final class PrivateBrowserHost {
     let store = owner.store
     switch command {
     case .developerTools: owner.page.toggleDeveloperTools()
+    case .chromiumDeveloperTools: owner.page.toggleChromiumDeveloperTools()
     case .inspector: owner.page.toggleInspector()
     case .inspectorCopy:
       if let target = owner.page.inspectorTarget,
         let inspector = owner.page.inspectors[target.tabID]
       {
         Task { await inspector.aiCopy.copyElement() }
+      }
+    case .inspectorSource:
+      if let target = owner.page.inspectorTarget,
+        let inspector = owner.page.inspectors[target.tabID]
+      {
+        Task { await inspector.sourceActions.open() }
+      }
+    case .inspectorAgentCopy:
+      if let target = owner.page.inspectorTarget,
+        let inspector = owner.page.inspectors[target.tabID]
+      {
+        Task { await inspector.sourceActions.copyForAgent() }
       }
     case .newTab: store.showCommand()
     case .search: store.showAddressEditor()

@@ -42,6 +42,26 @@ struct ShaarReproEnvironment: Codable, Equatable, Sendable {
   let userAgent: String
   let viewportWidth: Int
   let viewportHeight: Int
+
+  func redacted() -> Self {
+    Self(
+      url: ShaarReproRedaction.url(url), shaarVersion: shaarVersion,
+      engineVersion: engineVersion, operatingSystem: operatingSystem,
+      userAgent: userAgent, viewportWidth: viewportWidth, viewportHeight: viewportHeight)
+  }
+}
+
+private enum ShaarReproRedaction {
+  static func url(_ raw: String) -> String {
+    guard var components = URLComponents(string: raw) else { return "[redacted URL]" }
+    components.user = nil
+    components.password = nil
+    components.fragment = nil
+    components.queryItems = components.queryItems?.map { item in
+      URLQueryItem(name: item.name, value: item.value.map { _ in "[redacted]" })
+    }
+    return components.string ?? "[redacted URL]"
+  }
 }
 
 struct ShaarReproManifest: Codable, Sendable {
@@ -138,9 +158,9 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
       schemaVersion: 1, durationSeconds: capture.durationSeconds,
       createdAt: ISO8601DateFormatter().string(from: Date()),
       consoleCount: console.count, networkCount: requests.count,
-      environment: capture.environment,
+      environment: capture.environment.redacted(),
       redaction:
-        "Cookie and authorization headers and DOM form values omitted. Video and console may contain visible sensitive text."
+        "Cookie and authorization headers, URL query values and credentials, and DOM form values omitted. Video and console may contain visible sensitive text."
     )
     return [
       "manifest.json": try JSONEncoder().encode(manifest),
@@ -162,7 +182,7 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
       let start = request.startedAt.isFinite ? request.startedAt : latest
       let date = now.addingTimeInterval(min(0, max(-30, start - latest)))
       let duration = request.duration.map { min(30_000, $0 * 1_000) } ?? 0
-      let url = String(request.url.prefix(8192))
+      let url = ShaarReproRedaction.url(String(request.url.prefix(8192)))
       let headers = { (rows: [ShaarNetworkHeader]) in
         BugReportArchive.filteredHeaders(
           rows.map { ["name": $0.name, "value": $0.value] }, includeSensitive: false)

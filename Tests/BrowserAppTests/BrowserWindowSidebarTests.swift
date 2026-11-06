@@ -9,6 +9,10 @@ import Testing
 
 @testable import ArcusisBrowser
 
+private final class OffscreenKeyEligibleWindow: NSWindow {
+  override var canBecomeKey: Bool { true }
+}
+
 @Suite @MainActor struct BrowserWindowSidebarTests {
   @Test func compactScreenDoesNotRequireOversizedBrowserContent() {
     let store = BrowserStore(sessionFile: nil)
@@ -77,7 +81,7 @@ import Testing
     let store = BrowserStore(session: session)
     let size = NSSize(width: 900, height: 600)
     let host = NSHostingView(rootView: BrowserWindow(store: store))
-    let window = NSWindow(
+    let window = OffscreenKeyEligibleWindow(
       contentRect: NSRect(origin: .zero, size: size),
       styleMask: .borderless, backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
@@ -88,6 +92,7 @@ import Testing
     }
     host.layoutSubtreeIfNeeded()
 
+    #expect(window.canBecomeKey && !window.isKeyWindow)
     // This is the action wired to the pane + button.
     store.openSplitPane(beside: first, edge: .right)
     let deadline = ContinuousClock.now + .seconds(2)

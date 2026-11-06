@@ -266,8 +266,22 @@ import Foundation
     }
     await check("elements-live") {
       shell.section = .elements
-      try await self.wait("live DOM tree document") {
-        shell.dom.available && shell.dom.rootID != nil && !shell.dom.loading
+      do {
+        try await self.wait("live DOM tree document") {
+          shell.dom.available && shell.dom.rootID != nil && !shell.dom.loading
+        }
+      } catch {
+        let connection = InspectorConnection(engine: self.engine)
+        let command: String
+        do {
+          _ = try await connection.call("DOM.markUndoableState", params: [:], target: target)
+          command = "markUndo succeeded"
+        } catch {
+          command = "markUndo failed: \(error.localizedDescription)"
+        }
+        throw Failure(
+          "Live DOM unavailable: available=\(shell.dom.available), root=\(String(describing: shell.dom.rootID)), loading=\(shell.dom.loading), modelError=\(shell.dom.failure ?? "none"), \(command)"
+        )
       }
       _ = try await inspector.evaluate(
         "(()=>{const node=document.createElement('span');node.id='shaar-live-element';node.textContent='LiveDOMProbe';document.body.appendChild(node);return true})()"

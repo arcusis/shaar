@@ -33,6 +33,31 @@ import Testing
     }
   }
 
+  @Test func webKitComparisonIsScopedToNormalTabsAndSelectedSection() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let privateShell = ShaarDevToolsModel(target: target)
+    #expect(!privateShell.sections.contains(.comparison))
+    privateShell.section = .comparison
+    #expect(privateShell.section == .elements)
+
+    let inspector = InspectorModel(target: target, engine: nil)
+    let normalShell = ShaarDevToolsModel(target: target, allowsWebKitComparison: true)
+    #expect(normalShell.sections.contains(.comparison))
+    normalShell.open(inspector: inspector)
+    #expect(!normalShell.comparison.isOpen)
+    normalShell.section = .comparison
+    #expect(normalShell.comparison.isOpen)
+    let next = SiteControlTarget(
+      tabID: target.tabID, profileID: target.profileID,
+      url: URL(string: "https://example.com/next")!)
+    normalShell.updateTarget(next)
+    #expect(normalShell.comparison.target == next && normalShell.comparison.isOpen)
+    normalShell.section = .console
+    #expect(!normalShell.comparison.isOpen)
+    normalShell.close()
+  }
+
   @Test func fixtureStreamIsScopedAndInspectorOwnershipIsRestored() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/one")!)

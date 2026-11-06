@@ -57,12 +57,14 @@ extension BrowserEngine {
             runtime: shaar, windowID: windowID, contextID: nil)),
         localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()],
         rulesTransport: ShaarNetworkRulesNativeTransport(panel: panel),
-        domTransport: ShaarDOMLiveTransport(engine: self, panel: panel))
+        domTransport: ShaarDOMLiveTransport(engine: self, panel: panel),
+        allowsWebKitComparison: store?.isPrivate != true)
       panel.onLeaseOpened = { [weak shell] in shell?.rules.resume() }
     } else {
       shell = ShaarDevToolsModel(
         target: target,
-        localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()])
+        localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()],
+        allowsWebKitComparison: store?.isPrivate != true)
     }
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector

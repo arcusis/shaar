@@ -93,8 +93,8 @@ struct ShaarDevToolsPanel: View {
         pendingPanel("Inspector is unavailable for this page")
       }
     case .console:
-      if model.streamAvailable {
-        ShaarConsolePanel(model: model.console, events: model.events, inspector: inspector)
+      if model.consoleAvailable {
+        ShaarConsolePanel(model: model.console, events: model.consoleEvents, inspector: inspector)
       } else {
         unavailablePanel
       }

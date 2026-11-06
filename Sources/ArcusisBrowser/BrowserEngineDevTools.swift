@@ -39,7 +39,9 @@ extension BrowserEngine {
   @discardableResult
   func showDeveloperTools(for target: SiteControlTarget) -> Bool {
     guard siteControlTarget == target else { return false }
-    let shell = shaarDevTools[target.tabID] ?? ShaarDevToolsModel(target: target)
+    let shell =
+      shaarDevTools[target.tabID]
+      ?? ShaarDevToolsModel(target: target, localTransports: [ShaarNextMCPConsoleTransport()])
     let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, engine: self)
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector

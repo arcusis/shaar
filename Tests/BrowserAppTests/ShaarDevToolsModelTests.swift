@@ -60,6 +60,20 @@ import Testing
     shell.close()
   }
 
+  @Test func viewportTransportRunsOnlyWhileItsSectionIsSelected() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    let shell = ShaarDevToolsModel(target: target)
+    shell.open(inspector: inspector)
+    #expect(!shell.viewports.isOpen)
+    shell.section = .viewports
+    #expect(shell.viewports.isOpen)
+    shell.section = .console
+    #expect(!shell.viewports.isOpen)
+    shell.close()
+  }
+
   @Test func losingStreamCapabilityClearsLiveEvents() async {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)

@@ -227,7 +227,17 @@ final class PrivatePageSession {
       shell.close()
       return
     }
-    let shell = shaarDevTools[target.tabID] ?? ShaarDevToolsModel(target: target)
+    let viewportsTransport: any ShaarViewportsTransport
+    if let shaar = runtime as? ARCShaarRuntime {
+      viewportsTransport = ShaarViewportsNativeTransport(
+        requester: ShaarViewportRuntimeRequester(
+          runtime: shaar, windowID: windowID, contextID: contextID))
+    } else {
+      viewportsTransport = ShaarViewportsPendingTransport()
+    }
+    let shell =
+      shaarDevTools[target.tabID]
+      ?? ShaarDevToolsModel(target: target, viewportsTransport: viewportsTransport)
     let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, privateSession: self)
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector

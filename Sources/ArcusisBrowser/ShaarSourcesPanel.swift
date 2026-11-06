@@ -130,7 +130,8 @@ struct ShaarSourcesPanel: View {
     }
     .accessibilityLabel("\(resource.name), \(resource.type)")
     .accessibilityValue(
-      model.selectedURL == resource.url ? ShellL10n.string("Selected") : "")
+      model.selectedURL == resource.url ? ShellL10n.string("Selected") : ""
+    )
     .accessibilityAddTraits(model.selectedURL == resource.url ? .isSelected : [])
     .accessibilityIdentifier("shaar.devtools.sourceRow")
   }

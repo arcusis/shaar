@@ -188,7 +188,8 @@ struct ShaarConsolePanel: View {
           }
           .accessibilityLabel(accessibleRowLabel(row))
           .accessibilityValue(
-            model.selectedID == row.id ? ShellL10n.string("Selected") : "")
+            model.selectedID == row.id ? ShellL10n.string("Selected") : ""
+          )
           .accessibilityAddTraits(model.selectedID == row.id ? .isSelected : [])
           .help(ShellL10n.string("Console entry. Use Up and Down Arrow to change selection."))
           .accessibilityIdentifier("shaar.devtools.consoleEntry")
@@ -334,8 +335,8 @@ struct ShaarConsolePanel: View {
   }
 }
 
-private extension ShaarConsoleEvent.Level {
-  var accessibilityName: String {
+extension ShaarConsoleEvent.Level {
+  fileprivate var accessibilityName: String {
     switch self {
     case .log: "Log"
     case .info: "Info"
@@ -369,7 +370,9 @@ struct ShaarConsoleCommandLine: View {
           }
         }
         .disabled(model.busy || inspector == nil)
-        .help(ShellL10n.string("Press Return to evaluate. Up and Down Arrow recall command history."))
+        .help(
+          ShellL10n.string("Press Return to evaluate. Up and Down Arrow recall command history.")
+        )
         .accessibilityIdentifier("shaar.devtools.consoleCommand")
       if model.busy { ProgressView().controlSize(.mini) }
     }

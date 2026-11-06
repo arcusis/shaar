@@ -69,7 +69,8 @@ struct ShaarNetworkPanel: View {
         .focused($focusedFilter, equals: filter)
         .help(ShellL10n.string(filter.accessibilityName))
         .accessibilityHint(
-          ShellL10n.string("Use Left and Right Arrow to move through network filters."))
+          ShellL10n.string("Use Left and Right Arrow to move through network filters.")
+        )
         .accessibilityLabel(ShellL10n.string(filter.accessibilityName))
         .accessibilityAddTraits(selected ? .isSelected : [])
       }
@@ -114,8 +115,9 @@ struct ShaarNetworkPanel: View {
     case .right: forward = true
     default: return
     }
-    guard let next = ShaarDevToolsNavigation.adjacentIndex(
-      index, count: ShaarNetworkFilter.allCases.count, forward: forward)
+    guard
+      let next = ShaarDevToolsNavigation.adjacentIndex(
+        index, count: ShaarNetworkFilter.allCases.count, forward: forward)
     else { return }
     self.focusedFilter = ShaarNetworkFilter.allCases[next]
   }
@@ -130,8 +132,9 @@ struct ShaarNetworkPanel: View {
     case .right: forward = true
     default: return
     }
-    guard let next = ShaarDevToolsNavigation.adjacentIndex(
-      index, count: ShaarNetworkModel.DetailTab.allCases.count, forward: forward)
+    guard
+      let next = ShaarDevToolsNavigation.adjacentIndex(
+        index, count: ShaarNetworkModel.DetailTab.allCases.count, forward: forward)
     else { return }
     self.focusedDetailTab = ShaarNetworkModel.DetailTab.allCases[next]
   }
@@ -255,7 +258,8 @@ struct ShaarNetworkPanel: View {
     .background(
       model.selectedID == row.id
         ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.22 : 0.10)
-        : .clear)
+        : .clear
+    )
     .overlay {
       if focusedRequest == row.id {
         RoundedRectangle(cornerRadius: 3)
@@ -341,7 +345,8 @@ struct ShaarNetworkPanel: View {
             .focused($focusedDetailTab, equals: tab)
             .help(ShellL10n.string("Use Left and Right Arrow to move through request details."))
             .accessibilityValue(
-              model.detailTab == tab ? ShellL10n.string("Selected") : "")
+              model.detailTab == tab ? ShellL10n.string("Selected") : ""
+            )
             .accessibilityAddTraits(model.detailTab == tab ? .isSelected : [])
           }
           Spacer(minLength: 0)
@@ -494,8 +499,8 @@ struct ShaarNetworkPanel: View {
   }
 }
 
-private extension ShaarNetworkFilter {
-  var accessibilityName: String {
+extension ShaarNetworkFilter {
+  fileprivate var accessibilityName: String {
     switch self {
     case .all: "All requests"
     case .fetch: "Fetch and XHR"

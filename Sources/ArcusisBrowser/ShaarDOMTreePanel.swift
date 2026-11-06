@@ -193,7 +193,8 @@ struct ShaarDOMTreePanel: View {
     .background(
       model.selectedID == row.id
         ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.22 : 0.12)
-        : .clear)
+        : .clear
+    )
     .overlay {
       if focusedNode == row.id {
         RoundedRectangle(cornerRadius: 3)
@@ -363,7 +364,8 @@ struct ShaarDOMTreePanel: View {
   private func moveSelection(_ direction: MoveCommandDirection) {
     let rows = model.rows
     guard focusedNode != nil, !rows.isEmpty else { return }
-    let index = rows.firstIndex { $0.id == focusedNode }
+    let index =
+      rows.firstIndex { $0.id == focusedNode }
       ?? rows.firstIndex { $0.id == model.selectedID }
       ?? 0
     switch direction {

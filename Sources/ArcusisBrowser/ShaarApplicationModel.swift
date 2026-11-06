@@ -86,9 +86,10 @@ final class ShaarApplicationModel {
     }
     let currentID = focusedID ?? selectedID
     let index = visible.firstIndex { $0.id == currentID }
-    let next = index.flatMap {
-      ShaarDevToolsNavigation.adjacentIndex($0, count: visible.count, forward: forward)
-    } ?? 0
+    let next =
+      index.flatMap {
+        ShaarDevToolsNavigation.adjacentIndex($0, count: visible.count, forward: forward)
+      } ?? 0
     selectedID = visible[next].id
   }
 

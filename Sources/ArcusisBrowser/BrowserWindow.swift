@@ -293,6 +293,9 @@ struct BrowserWindow: View {
     )
     .background(Color(nsColor: .textBackgroundColor))
     .clipShape(RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius))
+    .onDrop(of: BrowserExternalDrop.typeIdentifiers, isTargeted: nil, perform: { providers in
+      BrowserExternalDrop.receive(providers) { store.perform(.open($0)) }
+    })
     .overlay(
       RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius)
         .strokeBorder(.black.opacity(0.07))

@@ -212,6 +212,8 @@ final class PrivateBrowserHost {
     case .reload, .hardReload: store.canReloadCurrentPage
     case .find: store.canFindCurrentPage
     case .findNext, .findPrevious: store.pageFind?.canMove == true
+    case .sharePage:
+      !store.commandIsOpen && NativeBrowserHost.shareURL(for: store) != nil
     default: true
     }
   }
@@ -245,6 +247,10 @@ final class PrivateBrowserHost {
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: _ = store.reloadCurrentPage()
     case .hardReload: _ = store.reloadCurrentPage(.bypassingCache)
+    case .sharePage:
+      if let url = NativeBrowserHost.shareURL(for: store) {
+        NativeBrowserHost.presentSharePicker(for: url, in: owner.window)
+      }
     case .find: store.showPageFind()
     case .findNext: store.movePageFind(forward: true)
     case .findPrevious: store.movePageFind(forward: false)

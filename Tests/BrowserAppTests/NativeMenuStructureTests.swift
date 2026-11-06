@@ -56,6 +56,7 @@ import Testing
   }
   #expect(item(.newPrivateWindow)?.menu?.title == "File")
   #expect(item(.closeWindow)?.menu?.title == "File")
+  #expect(item(.sharePage)?.menu?.title == "File")
   #expect(item(.find)?.menu?.title == "Edit")
   #expect(item(.reload)?.menu?.title == "View")
   #expect(item(.hardReload)?.menu?.title == "View")
@@ -77,6 +78,15 @@ import Testing
   #expect(item(.help)?.menu?.title == "Help")
   #expect(item(.checkForUpdates)?.menu?.title == "Shaar")
   #expect(item(.checkForUpdates)?.title == "Check for Updates…")
+}
+
+@Test @MainActor func sharePageMenuUsesOnlyASelectedWebPage() {
+  let store = BrowserStore()
+  #expect(NativeBrowserHost.shareURL(for: store) == nil)
+
+  let url = URL(string: "https://share.example/page")!
+  store.perform(.open(url))
+  #expect(NativeBrowserHost.shareURL(for: store) == url)
 }
 
 @Test @MainActor func nativeMenuRetainsKeyEquivalentsAndEditResponderChain() {

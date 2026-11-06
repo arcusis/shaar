@@ -16,11 +16,14 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/json/json_writer.h"
+#include "base/values.h"
 #include "base/location.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/shaar/devtools/shaar_devtools.h"
 #include "chrome/browser/shaar/extensions/shaar_extensions.h"
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
@@ -33,8 +36,10 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "url/gurl.h"
 
 struct shaar_window {
+  uint64_t generation;
   shaar_engine* engine;
   shaar_window_kind kind;
   shaar_private_session* private_session;
@@ -71,7 +76,29 @@ namespace {
 
 std::unordered_map<shaar_window*, std::unique_ptr<shaar_window>> windows;
 std::unordered_map<shaar_tab*, std::unique_ptr<shaar_tab>> tab_handles;
+// Keep retired addresses unavailable for the lifetime of the engine. The ABI
+// passes opaque pointers without a generation token, so allocator reuse would
+// otherwise allow a stale pointer to name a different live window or tab.
+std::vector<std::unique_ptr<shaar_window>> retired_windows;
+std::vector<std::unique_ptr<shaar_tab>> retired_tabs;
+uint64_t next_window_generation = 0;
 uint64_t next_tab_serial = 0;
+
+bool LiveWindow(shaar_window* window) {
+  auto found = windows.find(window);
+  return found != windows.end() && found->second->generation != 0 &&
+         found->second->generation == window->generation &&
+         shaar::windows_tabs::Registry().FindWindowOwner(window) ==
+             found->second->engine;
+}
+
+bool LiveTab(shaar_tab* tab) {
+  auto found = tab_handles.find(tab);
+  return found != tab_handles.end() && found->second->serial != 0 &&
+         found->second->serial == tab->serial &&
+         shaar::windows_tabs::Registry().FindTabWindow(tab) ==
+             found->second->window;
+}
 
 void FinalizeWindow(shaar_window* window);
 
@@ -134,6 +161,7 @@ void FinalizeWindow(shaar_window* window) {
   const std::string session_id = window->session_id;
   shaar_private_session *private_session = window->private_session;
   shaar::windows_tabs::Registry().UnbindWindow(engine, window);
+  retired_windows.push_back(std::move(found->second));
   windows.erase(found);
   static constexpr char kClosed[] = R"({"kind":"closed","schemaVersion":1})";
   if (!profile_id.empty()) {
@@ -250,6 +278,58 @@ namespace shaar::windows_tabs {
 void StopObservingLifecycle() {
   Observer().StopObserving();
 }
+
+bool RouteDevToolsOpenURL(content::WebContents* source,
+                          Profile* profile,
+                          const GURL& url) {
+  if (!pthread_main_np() || !profile || !url.is_valid() ||
+      url.spec().size() > 8192 ||
+      !(url.SchemeIsHTTPOrHTTPS() ||
+        (url.SchemeIs("devtools") && url.host() == "devtools" &&
+         (url.path() == "/bundled/js_app.html" ||
+          url.path() == "/bundled/inspector.html" ||
+          url.path() == "/bundled/node_app.html"))))
+    return false;
+  shaar_tab* selected = nullptr;
+  for (const auto& [tab, handle] : tab_handles) {
+    if (!LiveTab(tab) || !LiveWindow(handle->window))
+      continue;
+    content::WebContents* contents = Registry().FindWebContents(
+        handle->engine, handle->window, tab);
+    if (!contents || (profile && contents->GetBrowserContext() != profile))
+      continue;
+    if (source) {
+      if (contents != source)
+        continue;
+    } else if (!Registry().IsSelectedWebContents(handle->engine,
+                                                handle->window, tab, contents)) {
+      continue;
+    }
+    if (selected)
+      return false;
+    selected = tab;
+  }
+  if (!selected)
+    return false;
+  base::DictValue payload;
+  payload.Set("schemaVersion", 1);
+  payload.Set("kind", "openURLRequested");
+  payload.Set("sourceWindowID", selected->window_id);
+  payload.Set("sourceTabID", selected->tab_id);
+  payload.Set("profileID", selected->profile_id);
+  payload.Set("url", url.spec());
+  payload.Set("disposition", "newForegroundTab");
+  std::string body;
+  if (!base::JSONWriter::Write(base::Value(std::move(payload)), &body))
+    return false;
+  shaar::EmitEvent(selected->engine, SHAAR_EVENT_DEVTOOLS,
+                   {selected->profile_id.data(), selected->profile_id.size()},
+                   {selected->session_id.data(), selected->session_id.size()},
+                   {selected->window_id.data(), selected->window_id.size()},
+                   {selected->tab_id.data(), selected->tab_id.size()},
+                   {body.data(), body.size()});
+  return true;
+}
 }  // namespace shaar::windows_tabs
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
@@ -286,6 +366,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
   }
 
   auto handle = std::make_unique<shaar_window>();
+  handle->generation = ++next_window_generation;
   handle->engine = engine;
   handle->kind = kind;
   handle->private_session = private_session;
@@ -321,7 +402,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_close(
   if (!pthread_main_np() || !window)
     return Result(SHAAR_INVALID_ARGUMENT, error);
   auto found = windows.find(window);
-  if (found == windows.end())
+  if (found == windows.end() || !LiveWindow(window))
     return Result(SHAAR_NOT_FOUND, error);
   shaar_engine* engine = window->engine;
   auto& registry = shaar::windows_tabs::Registry();
@@ -357,13 +438,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
       !ValidURL(url) || (foreground != 0 && foreground != 1))
     return Result(SHAAR_INVALID_ARGUMENT, error);
   std::string target;
-  if (url.size) {
-    const shaar_error_code validation = shaar::navigation::ValidateURL(
-        std::string(url.data, url.size), &target);
-    if (validation != SHAAR_OK)
-      return Result(validation, error);
-  }
-  if (!windows.contains(window))
+  if (!LiveWindow(window))
     return Result(SHAAR_NOT_FOUND, error);
   shaar_engine* engine = window->engine;
   if (shaar::windows_tabs::Registry().EngineQuitRequested(engine))
@@ -372,6 +447,20 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
   Profile* profile = ResolveScope(engine, window, scope, &status);
   if (!profile)
     return Result(status, error);
+  bool pending_node_frontend = false;
+  if (url.size) {
+    const GURL requested(std::string(url.data, url.size));
+    pending_node_frontend = requested.SchemeIs("devtools") &&
+        shaar::devtools::HasPendingNodeFrontend(profile, requested);
+    if (pending_node_frontend) {
+      target = requested.spec();
+    } else {
+      const shaar_error_code validation = shaar::navigation::ValidateURL(
+          std::string(url.data, url.size), &target);
+      if (validation != SHAAR_OK)
+        return Result(validation, error);
+    }
+  }
   auto& registry = shaar::windows_tabs::Registry();
   auto* state = registry.FindWindowState(engine, window);
   if (!state || state->closing)
@@ -424,8 +513,21 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
   if (window->profile_id.empty())
     window->profile_id = tab_handles.at(raw)->profile_id;
   *out = raw;
-  if (url.size)
-    shaar::navigation::Navigate(raw_contents, target, false);
+  if (url.size) {
+    if (pending_node_frontend) {
+      if (!shaar::devtools::OpenPendingNodeFrontend(raw_contents, profile,
+                                                    GURL(target))) {
+        const int index = browser->GetTabStripModel()->GetIndexOfWebContents(
+            raw_contents);
+        if (index >= 0)
+          browser->GetTabStripModel()->CloseWebContentsAt(index, 0);
+        *out = nullptr;
+        return Result(SHAAR_CHROMIUM_ERROR, error);
+      }
+    } else {
+      shaar::navigation::Navigate(raw_contents, target, false);
+    }
+  }
   return Result(SHAAR_OK, error);
 }
 
@@ -434,7 +536,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_close(
   if (!pthread_main_np() || !tab)
     return Result(SHAAR_INVALID_ARGUMENT, error);
   auto found = tab_handles.find(tab);
-  if (found == tab_handles.end())
+  if (found == tab_handles.end() || !LiveTab(tab))
     return Result(SHAAR_NOT_FOUND, error);
   auto& registry = shaar::windows_tabs::Registry();
   content::WebContents* contents =
@@ -465,6 +567,8 @@ void CleanupTab(uint64_t serial) {
   const std::string tab_id = tab->tab_id;
   shaar_engine* engine = tab->engine;
   shaar_window* window = tab->window;
+  tab->navigation.reset();
+  retired_tabs.push_back(std::move(found->second));
   tab_handles.erase(found);
   static constexpr char kClosed[] = R"({"kind":"closed","schemaVersion":1})";
   shaar::EmitEvent(engine, SHAAR_EVENT_TAB,

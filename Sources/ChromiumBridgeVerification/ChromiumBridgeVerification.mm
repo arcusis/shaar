@@ -364,6 +364,33 @@ void ARCCompletePrivateQuitDialogCancellation(
 }
 
 @implementation ARCChromiumRuntime (Verification)
+- (void)probeDevToolsRouteInTabID:(NSString *)tabID operation:(NSInteger)operation
+                         payload:(NSDictionary *)payload
+                      completion:(void (^)(BOOL))completion {
+  if (!completion) return;
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed() ||
+      (operation != SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
+       operation != SHAAR_OP_PROBE_NODE_FRONTEND &&
+       operation != SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED)) {
+    completion(NO);
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSString *profileID = [runtime shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [runtime windowIDForTabID:tabID];
+  if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID
+                            windowID:windowID]) {
+    completion(NO);
+    return;
+  }
+  if (![runtime shaarDevToolsSubmit:(shaar_operation)operation tabID:tabID
+                         profileID:profileID windowID:windowID payload:payload
+                        completion:^(NSDictionary *reply, NSError *error) {
+                          NSString *key = operation == SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED
+                            ? @"attached" : @"submitted";
+                          completion(!error && [reply[key] boolValue]);
+                        }]) completion(NO);
+}
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (^)(NSError *))completion {
   completion(ProbeUnsupported());
 }

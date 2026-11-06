@@ -83,6 +83,19 @@ struct ShaarNetworkRule: Codable, Equatable, Identifiable, Sendable {
     }
   }
 
+  func normalizedForAction() -> Self {
+    var rule = self
+    if kind != .mock {
+      rule.status = 200
+      rule.bodyText = ""
+      rule.bodyFilePath = nil
+    }
+    if kind != .redirect { rule.redirectURL = "" }
+    if kind != .delay { rule.delayMilliseconds = 0 }
+    if kind == .redirect || kind == .delay { rule.headers = [] }
+    return rule
+  }
+
   func bodyData() throws -> Data {
     guard let bodyFilePath, !bodyFilePath.isEmpty else { return Data(bodyText.utf8) }
     let file = URL(fileURLWithPath: bodyFilePath)
@@ -269,12 +282,13 @@ final class ShaarNetworkRulesModel {
 
   func saveDraft() async throws {
     guard let project, let draft else { throw ShaarNetworkRuleError.invalidMatch }
-    try draft.validate()
+    let rule = draft.normalizedForAction()
+    try rule.validate()
     var updated = rules
-    if let index = updated.firstIndex(where: { $0.id == draft.id }) {
-      updated[index] = draft
+    if let index = updated.firstIndex(where: { $0.id == rule.id }) {
+      updated[index] = rule
     } else {
-      updated.append(draft)
+      updated.append(rule)
     }
     try store.save(updated, for: project)
     rules = updated

@@ -53,4 +53,21 @@ final class SettingsOpenSpaceTests: XCTestCase {
     XCTAssertTrue(host.contexts.isEmpty)
     XCTAssertNotNil(host.lastError)
   }
+
+  func testHiddenProbeSettingsSpaceSelectionDoesNotOrderWindowFront() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = WorkspaceFile(
+      url: root.appending(path: "workspace.json"),
+      legacySessionURL: root.appending(path: "session.json"))
+    let workspace = try BrowserWorkspaceStore(file: file)
+    let requestedSpaceID = try XCTUnwrap(workspace.workspace.catalog.spaces.last?.id)
+    let host = NativeBrowserHost(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), workspace: workspace,
+      presentation: .hiddenProbe, keyWindow: { nil }, screens: { [] })
+    host.openSpaceFromSettings(requestedSpaceID)
+
+    XCTAssertTrue(NativeBrowserHost.settingsSpaceSelectionShouldPresentWindow(in: .visible))
+    XCTAssertFalse(NativeBrowserHost.settingsSpaceSelectionShouldPresentWindow(in: .hiddenProbe))
+  }
 }

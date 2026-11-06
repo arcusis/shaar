@@ -79,6 +79,22 @@ struct PrivateParityTests {
     #expect(PrivateBrowserHost.windowCanPerform(.addFavorite, store: store))
   }
 
+  @Test func closeTabMenuIsDisabledWhileCommandBarOwnsSelectedPage() throws {
+    let store = try makeStore()
+    #expect(PrivateBrowserHost.windowCanPerform(.closeTab, store: store))
+    store.showCommand()
+    #expect(!PrivateBrowserHost.windowCanPerform(.closeTab, store: store))
+    store.dismissCommand()
+    #expect(PrivateBrowserHost.windowCanPerform(.closeTab, store: store))
+  }
+
+  @Test func spaceCyclingMenuIsDisabledForSingleSpaceWindow() throws {
+    let store = try makeStore()
+    #expect(!store.canCycleSpace)
+    #expect(!PrivateBrowserHost.windowCanPerform(.nextSpace, store: store))
+    #expect(!PrivateBrowserHost.windowCanPerform(.previousSpace, store: store))
+  }
+
   @Test func privateTabsFoldersAndSplitsNeverEnterWorkspaceFile() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

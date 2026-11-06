@@ -173,6 +173,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     menusEnabled && store?.session.selectedPage != nil
   }
 
+  static func settingsSpaceSelectionShouldPresentWindow(in presentation: Presentation) -> Bool {
+    presentation == .visible
+  }
+
   private var miniWindowTarget: NativeBrowserContext? {
     activeContext ?? workspace.workspace.focusedWindowID.flatMap { contexts[$0] }
       ?? contexts.values.first
@@ -294,7 +298,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       }
     }
     context.store.perform(.space(spaceID))
-    context.window.makeKeyAndOrderFront(nil)
+    if Self.settingsSpaceSelectionShouldPresentWindow(in: presentation) {
+      context.window.makeKeyAndOrderFront(nil)
+    }
   }
 
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
@@ -340,6 +346,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let store = context.store
     guard store.sheet == nil, context.window.attachedSheet == nil else { return false }
     switch command {
+    case .closeTab:
+      return !store.commandIsOpen || store.session.selectedPage == nil
     case .find: return store.canFindCurrentPage
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
     case .reload, .hardReload:

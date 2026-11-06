@@ -937,9 +937,23 @@ final class PrivateProductHostProbe {
     let observed = store.tabs.first(where: { $0.id == tabID })?.url ?? "missing tab"
     let nativeFailure = store.privatePage?.failure ?? "none"
     let pipeline = runtime.privateNavigationProbeAudit(forTabID: tabID) ?? [:]
+    let nativeDocument = nativeNavigationSnapshot(tabID: tabID, contextID: store.contextID)
     throw PrivateWindowFailure(
-      "Private product navigation callback timed out: expected \(value), observed \(observed), selected tab \(store.selectedTabID), native failure \(nativeFailure), pipeline \(pipeline)."
+      "Private product navigation callback timed out: expected \(value), observed \(observed), selected tab \(store.selectedTabID), native failure \(nativeFailure), pipeline \(pipeline), native document \(nativeDocument)."
     )
+  }
+
+  private func nativeNavigationSnapshot(tabID: String, contextID: String) -> String {
+    guard
+      let audit = runtime.privateProbeAudit(forContextID: contextID),
+      let documents = audit["documentStates"] as? [[AnyHashable: Any]],
+      let document = documents.first(where: { $0["tabID"] as? String == tabID })
+    else { return "unavailable" }
+    let url = document["url"] as? String ?? "unknown"
+    let requested = document["requestedURL"] as? String ?? "unknown"
+    let phase = document["phase"] as? String ?? "unknown"
+    let loading = document["loading"] as? Bool ?? false
+    return "url=\(url), requested=\(requested), phase=\(phase), loading=\(loading)"
   }
 
   private func capturePrivateWindow(

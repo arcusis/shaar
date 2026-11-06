@@ -45,10 +45,12 @@ import Testing
     #expect(console.message == "ready")
     transport.receive(
       tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
-      payload: try event(29, data: [
-        "jpegBase64": Data([0xff, 0xd8, 0xff, 0xd9]).base64EncodedString(),
-        "sessionID": 3, "masked": true, "truncated": false,
-      ]), sequence: 2)
+      payload: try event(
+        29,
+        data: [
+          "jpegBase64": Data([0xff, 0xd8, 0xff, 0xd9]).base64EncodedString(),
+          "sessionID": 3, "masked": true, "truncated": false,
+        ]), sequence: 2)
     #expect(await iterator.next() == .maskedFrame(Data([0xff, 0xd8, 0xff, 0xd9])))
     for _ in 0..<20 where requester.operations.filter({ $0 == .panelScreencast }).count < 2 {
       await Task.yield()

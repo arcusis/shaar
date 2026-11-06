@@ -92,9 +92,10 @@ private enum ShaarPanelError: Error { case unavailable }
       sequence: sequence, kind: 14, profileID: Data(profileID.utf8),
       sessionID: Data(), windowID: Data(windowID.utf8),
       tabID: Data(tabID.utf8), payloadJSON: payload)
-    guard let projected = ShaarDevToolsPanelEventRouter.decode(
-      event, scope: ShaarNavigationScope(profileID: profileID), windowID: windowID,
-      tabID: tabID, leaseID: leaseID, afterSequence: session.sequence)
+    guard
+      let projected = ShaarDevToolsPanelEventRouter.decode(
+        event, scope: ShaarNavigationScope(profileID: profileID), windowID: windowID,
+        tabID: tabID, leaseID: leaseID, afterSequence: session.sequence)
     else { return }
     session.sequence = sequence
     if projected.id == .eventsDropped {
@@ -183,8 +184,9 @@ private enum ShaarPanelError: Error { case unavailable }
       case "info": level = .info
       default: level = .log
       }
-      return .console(ShaarConsoleEvent(
-        id: UUID(), level: level, message: text, source: nil))
+      return .console(
+        ShaarConsoleEvent(
+          id: UUID(), level: level, message: text, source: nil))
     case .requestWillBeSent, .responseReceived, .loadingFinished,
       .loadingFailed, .dataReceived:
       guard let requestID = data.requestID else { return nil }
@@ -196,11 +198,12 @@ private enum ShaarPanelError: Error { case unavailable }
       case .loadingFailed: phase = .failed
       default: phase = .data
       }
-      return .network(ShaarNetworkEvent(
-        id: UUID(), method: data.method ?? "", url: data.url ?? "",
-        status: data.status.map(Int.init), requestID: requestID, phase: phase,
-        mimeType: data.mimeType, encodedBytes: data.encodedBytes.map(Int.init),
-        time: Date().timeIntervalSince1970, failure: phase == .failed ? data.text : nil))
+      return .network(
+        ShaarNetworkEvent(
+          id: UUID(), method: data.method ?? "", url: data.url ?? "",
+          status: data.status.map(Int.init), requestID: requestID, phase: phase,
+          mimeType: data.mimeType, encodedBytes: data.encodedBytes.map(Int.init),
+          time: Date().timeIntervalSince1970, failure: phase == .failed ? data.text : nil))
     case .pageLifecycle, .performanceMetrics, .eventsDropped, .screencastFrame:
       return nil
     }

@@ -164,16 +164,18 @@ public enum BrowserImport {
     _ nodes: [[String: Any]], path: [String]?, into result: inout [BrowserImportItem]
   ) {
     for node in nodes {
-      let title = node["Title"] as? String ?? "Untitled"
       if let address = node["URLString"] as? String, valid(address) {
         result.append(
           .init(
-            id: UUID(), kind: .bookmark, title: title, address: address,
+            id: UUID(), kind: .bookmark,
+            title: importTitle(node["Title"] as? String, fallback: "Untitled bookmark"),
+            address: address,
             folder: path?.joined(separator: " / "), folderComponents: path))
       } else {
         walkSafari(
           node["Children"] as? [[String: Any]] ?? [],
-          path: (path ?? []) + [title], into: &result)
+          path: (path ?? [])
+            + [importTitle(node["Title"] as? String, fallback: "Untitled folder")], into: &result)
       }
     }
   }
@@ -207,7 +209,8 @@ public enum BrowserImport {
 
     for match in expression.matches(in: html, range: range) {
       if let headingRange = Range(match.range(at: 1), in: html) {
-        pendingFolder = htmlText(String(html[headingRange]))
+        pendingFolder = importTitle(
+          htmlText(String(html[headingRange])), fallback: "Untitled folder")
         continue
       }
       let addressRange =
@@ -217,7 +220,8 @@ public enum BrowserImport {
       if let addressRange, let titleRange = Range(match.range(at: 5), in: html) {
         let address = htmlText(String(html[addressRange]))
         guard valid(address) else { continue }
-        let title = htmlText(String(html[titleRange]))
+        let title = importTitle(
+          htmlText(String(html[titleRange])), fallback: "Untitled bookmark")
         let folder = folderStack.isEmpty ? nil : folderStack.joined(separator: " / ")
         result.append(
           BrowserImportItem(
@@ -283,18 +287,29 @@ public enum BrowserImport {
     _ nodes: [[String: Any]], path: [String]?, into result: inout [BrowserImportItem]
   ) {
     for node in nodes {
-      let title = node["name"] as? String ?? node["title"] as? String ?? "Untitled"
+      let rawTitle = node["name"] as? String ?? node["title"] as? String
       let address = node["url"] as? String ?? node["uri"] as? String
       if let address, valid(address) {
         result.append(
           .init(
-            id: UUID(), kind: .bookmark, title: title, address: address,
+            id: UUID(), kind: .bookmark,
+            title: importTitle(rawTitle, fallback: "Untitled bookmark"), address: address,
             folder: path?.joined(separator: " / "), folderComponents: path))
       } else if let children = node["children"] as? [[String: Any]] ?? node["c"] as? [[String: Any]]
       {
-        walk(children, path: (path ?? []) + [title], into: &result)
+        walk(
+          children,
+          path: (path ?? []) + [importTitle(rawTitle, fallback: "Untitled folder")],
+          into: &result)
       }
     }
+  }
+
+  private static func importTitle(_ value: String?, fallback: String) -> String {
+    guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return BrowserLocalization.string(fallback)
+    }
+    return value
   }
 
   private static func valid(_ value: String) -> Bool {

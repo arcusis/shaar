@@ -41,9 +41,7 @@ final class ExtensionProbe {
     let extensionA = try runtime.loadProbeExtension(at: fixtureURL, profileID: profileA.uuidString)
     try await checkExtensionManager(profileA)
     store.perform(.space(spaces[0].id))
-    engine.refreshExtensions()
-    try expect(
-      engine.extensions.contains { $0.id == extensionA }, "profile A lists its loaded MV3 fixture")
+    try await waitForLoadedExtension(extensionA)
     store.perform(.space(spaces[1].id))
     engine.refreshExtensions()
     try expect(
@@ -238,6 +236,17 @@ final class ExtensionProbe {
       tabsAfter == tabsBefore
         && tabsAfter.map { runtime.nativeTabID(forID: $0.uuidString) } == nativeBefore,
       "hidden extension manager page adds no tabs to the session or native windows")
+  }
+
+  private func waitForLoadedExtension(_ extensionID: String) async throws {
+    for _ in 0..<50 {
+      engine.refreshExtensions()
+      if engine.extensions.contains(where: { $0.id == extensionID }) { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    try expect(
+      engine.extensions.contains { $0.id == extensionID },
+      "profile A lists its loaded MV3 fixture")
   }
 
   private func manage(

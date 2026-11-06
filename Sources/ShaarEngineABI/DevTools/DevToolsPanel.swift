@@ -113,15 +113,20 @@ public enum ShaarDevToolsPanelEventRouter {
       validString(fields["mimeType"]), validString(fields["name"])
     else { return nil }
     let requestID = fields["requestID"] as? String
-    if [.requestWillBeSent, .responseReceived, .loadingFinished,
-        .loadingFailed, .dataReceived].contains(id) && (requestID?.isEmpty ?? true) {
+    if [
+      .requestWillBeSent, .responseReceived, .loadingFinished,
+      .loadingFailed, .dataReceived,
+    ].contains(id) && (requestID?.isEmpty ?? true) {
       return nil
     }
     let status = fields["status"] as? Double
     let encodedBytes = fields["encodedBytes"] as? Double
     if fields["status"] != nil && (status == nil || !status!.isFinite) { return nil }
-    if fields["encodedBytes"] != nil &&
-      (encodedBytes == nil || !encodedBytes!.isFinite || encodedBytes! < 0) { return nil }
+    if fields["encodedBytes"] != nil
+      && (encodedBytes == nil || !encodedBytes!.isFinite || encodedBytes! < 0)
+    {
+      return nil
+    }
     let metrics: [ShaarDevToolsPanelMetric]?
     if let rawMetrics = fields["metrics"] {
       guard let entries = rawMetrics as? [[String: Any]], entries.count <= 32 else { return nil }

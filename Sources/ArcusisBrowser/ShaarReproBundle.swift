@@ -13,9 +13,11 @@ struct ShaarReproDOMNode: Codable, Equatable, Sendable {
 
   /// Form contents stay out of the archive even when a fixture supplies them.
   func redacted(depth: Int = 0) -> Self {
+    let editability = attributes["contenteditable"]?.lowercased()
+    let editable = editability.map { ["", "true", "plaintext-only"].contains($0) } ?? false
     let form =
       ["form", "input", "textarea", "select", "option"].contains(tag.lowercased())
-      || attributes["contenteditable"]?.lowercased() == "true"
+      || editable
     let safeAttributes = attributes.filter { key, _ in
       !form && !["value", "defaultvalue", "checked", "selected"].contains(key.lowercased())
         && !key.lowercased().hasPrefix("on")

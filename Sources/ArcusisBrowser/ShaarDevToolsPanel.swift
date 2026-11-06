@@ -5,6 +5,34 @@
 import AppKit
 import SwiftUI
 
+extension ShaarDevToolsSection {
+  fileprivate var symbol: String {
+    switch self {
+    case .elements: "square.dashed.inset.filled"
+    case .console: "terminal"
+    case .network: "network"
+    case .application: "externaldrive"
+    case .performance: "speedometer"
+    case .sources: "curlybraces"
+    case .repro: "record.circle"
+    case .viewports: "rectangle.on.rectangle"
+    }
+  }
+
+  fileprivate var shortLabel: String {
+    switch self {
+    case .elements: "Elements"
+    case .console: "Console"
+    case .network: "Network"
+    case .application: "App"
+    case .performance: "Perf"
+    case .sources: "Sources"
+    case .repro: "Repro"
+    case .viewports: "Views"
+    }
+  }
+}
+
 struct ShaarDevToolsPanel: View {
   @Bindable var model: ShaarDevToolsModel
   let inspector: InspectorModel?
@@ -37,69 +65,111 @@ struct ShaarDevToolsPanel: View {
   }
 
   private var toolbar: some View {
-    HStack(spacing: 4) {
-      Image(systemName: "chevron.left.forwardslash.chevron.right")
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(.secondary)
-        .frame(width: 28)
-      ForEach(ShaarDevToolsSection.allCases, id: \.self) { section in
-        Button {
-          model.section = section
-          focusedSection = section
-        } label: {
-          Text(ShellL10n.string(section.rawValue))
-            .font(.system(size: 11, weight: model.section == section ? .semibold : .regular))
-            .foregroundStyle(model.section == section ? .primary : .secondary)
-            .padding(.horizontal, 11)
-            .frame(height: 29)
-            .background {
-              if model.section == section {
-                RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.08))
-              }
+    GeometryReader { geometry in
+      let showsLabels = geometry.size.width >= 700
+      let visible = visibleSections(width: geometry.size.width, showsLabels: showsLabels)
+      HStack(spacing: 3) {
+        ForEach(visible, id: \.self) { section in
+          sectionButton(section, showsLabel: showsLabels)
+        }
+        if visible.count < ShaarDevToolsSection.allCases.count {
+          Menu {
+            ForEach(ShaarDevToolsSection.allCases.filter { !visible.contains($0) }, id: \.self) {
+              section in
+              Button(ShellL10n.string(section.rawValue)) { model.section = section }
             }
+          } label: {
+            Image(systemName: "chevron.down")
+              .frame(width: 27, height: 28)
+          }
+          .menuStyle(.borderlessButton)
+          .help(ShellL10n.string("More panels"))
+          .accessibilityLabel(ShellL10n.string("More panels"))
+        }
+        Spacer(minLength: 0)
+        optionsMenu
+        Button {
+          model.close()
+        } label: {
+          Image(systemName: "xmark")
+            .font(.system(size: 10, weight: .semibold))
+            .frame(width: 27, height: 28)
         }
         .buttonStyle(.plain)
-        .focusable()
-        .focused($focusedSection, equals: section)
-        .accessibilityAddTraits(model.section == section ? .isSelected : [])
-        .accessibilityIdentifier("shaar.devtools.\(section.rawValue.lowercased())")
+        .help(ShellL10n.string("Close DevTools"))
+        .accessibilityLabel(ShellL10n.string("Close DevTools"))
       }
-      Spacer(minLength: 8)
-      Menu {
-        ForEach(ShaarDevToolsDock.allCases, id: \.self) { dock in
-          Button(ShellL10n.string(dock.rawValue)) { model.dock = dock }
-        }
-        Divider()
-        if model.canTapLocalLogs {
-          if model.hasLogTap {
-            Button(ShellL10n.string("Disconnect server log")) { model.disconnectLogTap() }
-          } else {
-            Button(ShellL10n.string("Connect server log file…"), action: chooseLogFile)
-          }
-          Divider()
-        }
-        Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
-      } label: {
-        Image(systemName: "ellipsis")
-          .frame(width: 28, height: 28)
-      }
-      .menuStyle(.borderlessButton)
-      .help(ShellL10n.string("DevTools options"))
-      .accessibilityLabel(ShellL10n.string("DevTools options"))
-      Button {
-        model.close()
-      } label: {
-        Image(systemName: "xmark")
-          .font(.system(size: 10, weight: .semibold))
-          .frame(width: 28, height: 28)
-      }
-      .buttonStyle(.plain)
-      .help(ShellL10n.string("Close DevTools"))
-      .accessibilityLabel(ShellL10n.string("Close DevTools"))
+      .padding(.horizontal, 7)
     }
-    .padding(.horizontal, 7)
     .frame(height: 36)
     .onMoveCommand(perform: moveSection)
+  }
+
+  private func visibleSections(width: CGFloat, showsLabels: Bool) -> [ShaarDevToolsSection] {
+    let tabWidth: CGFloat = showsLabels ? 73 : 33
+    let room = max(0, width - 82)
+    let all = ShaarDevToolsSection.allCases
+    let fit = min(all.count, max(1, Int(room / tabWidth)))
+    if fit == all.count { return all }
+    let count = max(1, Int((room - 30) / tabWidth))
+    let first = Array(all.prefix(count))
+    if first.contains(model.section) { return first }
+    return Array(first.dropLast()) + [model.section]
+  }
+
+  private func sectionButton(_ section: ShaarDevToolsSection, showsLabel: Bool) -> some View {
+    Button {
+      model.section = section
+      focusedSection = section
+    } label: {
+      HStack(spacing: 5) {
+        Image(systemName: section.symbol)
+          .font(.system(size: 12, weight: .medium))
+        if showsLabel {
+          Text(ShellL10n.string(section.shortLabel))
+            .font(.system(size: 10, weight: .medium))
+            .lineLimit(1)
+        }
+      }
+      .foregroundStyle(model.section == section ? .primary : .secondary)
+      .frame(width: showsLabel ? 73 : 33, height: 28)
+      .background {
+        if model.section == section {
+          RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.08))
+        }
+      }
+    }
+    .buttonStyle(.plain)
+    .focusable()
+    .focused($focusedSection, equals: section)
+    .help(ShellL10n.string(section.rawValue))
+    .accessibilityLabel(ShellL10n.string(section.rawValue))
+    .accessibilityAddTraits(model.section == section ? .isSelected : [])
+    .accessibilityIdentifier("shaar.devtools.\(section.rawValue.lowercased())")
+  }
+
+  private var optionsMenu: some View {
+    Menu {
+      ForEach(ShaarDevToolsDock.allCases, id: \.self) { dock in
+        Button(ShellL10n.string(dock.rawValue)) { model.dock = dock }
+      }
+      Divider()
+      if model.canTapLocalLogs {
+        if model.hasLogTap {
+          Button(ShellL10n.string("Disconnect server log")) { model.disconnectLogTap() }
+        } else {
+          Button(ShellL10n.string("Connect server log file…"), action: chooseLogFile)
+        }
+        Divider()
+      }
+      Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
+    } label: {
+      Image(systemName: "ellipsis")
+        .frame(width: 27, height: 28)
+    }
+    .menuStyle(.borderlessButton)
+    .help(ShellL10n.string("DevTools options"))
+    .accessibilityLabel(ShellL10n.string("DevTools options"))
   }
 
   @ViewBuilder private var content: some View {

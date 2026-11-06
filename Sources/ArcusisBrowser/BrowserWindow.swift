@@ -32,6 +32,10 @@ struct BrowserWindow: View {
     reduceMotion || accessibilityOverrides.reduceMotion == true
   }
 
+  private var handoffURL: URL? {
+    BrowserHandoff.webURL(store.session.selectedPage?.tab.url)
+  }
+
   var body: some View {
     ZStack(alignment: .top) {
       SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
@@ -98,6 +102,13 @@ struct BrowserWindow: View {
       value: SpaceChromeTint(space: store.session.selectedSpace)
     )
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: sidebarVisibility)
+    .userActivity(BrowserHandoff.activityType, isActive: handoffURL != nil) { activity in
+      BrowserHandoff.update(
+        activity, for: handoffURL, title: store.session.selectedPage?.tab.title)
+    }
+    .onContinueUserActivity(BrowserHandoff.activityType) { activity in
+      BrowserHandoff.continueBrowsing(activity) { store.perform(.open($0)) }
+    }
     .onAppear { sidebarVisibility.setPinned(store.sidebarIsVisible) }
     .onChange(of: store.sidebarIsVisible) { _, pinned in
       sidebarVisibility.setPinned(pinned)

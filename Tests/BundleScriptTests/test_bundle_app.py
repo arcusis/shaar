@@ -224,6 +224,15 @@ class BundleAppTests(unittest.TestCase):
         with (self.root / app_path / "Contents" / "Info.plist").open("rb") as plist_file:
             return plistlib.load(plist_file)
 
+    def test_bundle_advertises_web_browsing_handoff(self):
+        result = self._run()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self._info_plist("build/Shaar Shell.app")["NSUserActivityTypes"],
+            ["NSUserActivityTypeBrowsingWeb"],
+        )
+
     def test_every_bundle_embeds_sparkle_without_update_feed(self):
         for args, app_path in (((), "build/Shaar Shell.app"), (("--with-engine",), "build/Shaar.app")):
             with self.subTest(args=args):

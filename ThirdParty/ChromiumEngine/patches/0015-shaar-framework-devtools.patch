@@ -1,0 +1,228 @@
+diff --git a/chrome/browser/shaar/extensions/shaar_extension_views.mm b/chrome/browser/shaar/extensions/shaar_extension_views.mm
+index fbdec99d..692bc9ba 100644
+--- a/chrome/browser/shaar/extensions/shaar_extension_views.mm
++++ b/chrome/browser/shaar/extensions/shaar_extension_views.mm
+@@ -16,6 +16,7 @@
+ 
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
++#include "base/json/json_reader.h"
+ #include "base/uuid.h"
+ #include "chrome/browser/extensions/component_loader.h"
+ #include "chrome/browser/extensions/extension_view.h"
+@@ -34,6 +35,15 @@
+ namespace {
+ 
+ constexpr char kManagerID[] = "bphhlegomeaogfihjcipdbcfbgkcfafp";
++struct FrameworkDevToolsBundle {
++  const char* name;
++  const char* id;
++};
++constexpr FrameworkDevToolsBundle kFrameworkDevTools[] = {
++    {"react", "fmkadmapgofadopljbjfkapdkoienihi"},
++    {"vue", "nhdogjmejiglipccpnnnanhbledajbpd"},
++    {"angular", "ienfalfjdbdpebioblfackkekamfmbnh"},
++};
+ thread_local std::string g_probe_extension_id;
+ 
+ shaar_error_code ProbeFailure(shaar_error_code code, const char* message,
+@@ -177,6 +187,107 @@ bool RegisterBundledManager(Profile* profile) {
+              base::FilePath::FromUTF8Unsafe(path.UTF8String)) == kManagerID;
+ }
+ 
++std::string_view FrameworkDevToolsID(std::string_view name) {
++  for (const auto& bundle : kFrameworkDevTools) {
++    if (name == bundle.name)
++      return bundle.id;
++  }
++  return {};
++}
++
++bool ValidFrameworkDevToolsPath(const base::FilePath& root,
++                                const base::FilePath& requested) {
++  const base::FilePath canonical_root = base::MakeAbsoluteFilePath(root);
++  const base::FilePath canonical_path = base::MakeAbsoluteFilePath(requested);
++  return !canonical_root.empty() && !canonical_path.empty() &&
++         !base::IsLink(requested) &&
++         canonical_path.DirName() == canonical_root &&
++         FrameworkDevToolsID(canonical_path.BaseName().AsUTF8()).size() &&
++         base::DirectoryExists(canonical_path);
++}
++
++bool FrameworkDevToolsManifestIsLocal(std::string_view manifest) {
++  auto parsed = base::JSONReader::Read(manifest, base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_dict())
++    return false;
++  const auto allowed_match = [](const base::Value& value) {
++    if (!value.is_string())
++      return false;
++    const std::string& match = value.GetString();
++    return match == "http://localhost/*" ||
++           match == "https://localhost/*" ||
++           match == "http://127.0.0.1/*" ||
++           match == "https://127.0.0.1/*";
++  };
++  const auto allowed_matches = [&](const base::Value::List* matches) {
++    if (!matches || matches->empty())
++      return false;
++    for (const auto& match : *matches) {
++      if (!allowed_match(match))
++        return false;
++    }
++    return true;
++  };
++  const auto& dict = parsed->GetDict();
++  if (!allowed_matches(dict.FindList("host_permissions")) ||
++      dict.contains("optional_host_permissions"))
++    return false;
++  for (const char* field : {"content_scripts", "web_accessible_resources"}) {
++    const auto* entries = dict.FindList(field);
++    if (!entries)
++      return false;
++    for (const auto& entry : *entries) {
++      if (!entry.is_dict() ||
++          !allowed_matches(entry.GetDict().FindList("matches")))
++        return false;
++    }
++  }
++  return true;
++}
++
++bool RegisterBundledFrameworkDevTools(Profile* profile, std::string* failure) {
++  if (failure)
++    failure->clear();
++  if (!profile || profile->IsOffTheRecord()) {
++    if (failure)
++      *failure = "regularProfileRequired";
++    return false;
++  }
++  NSString* resources = [[NSBundle mainBundle] resourcePath];
++  auto* loader = extensions::ComponentLoader::Get(profile);
++  if (!resources || !loader) {
++    if (failure)
++      *failure = "bundleOrLoaderUnavailable";
++    return false;
++  }
++  const base::FilePath root =
++      base::FilePath::FromUTF8Unsafe(resources.UTF8String)
++          .Append("FrameworkDevTools");
++  for (const auto& bundle : kFrameworkDevTools) {
++    const base::FilePath path = root.Append(bundle.name);
++    if (!ValidFrameworkDevToolsPath(root, path)) {
++      if (failure)
++        *failure = std::string(bundle.name) + "MissingOrUnsafe";
++      return false;
++    }
++    std::string manifest;
++    if (!base::ReadFileToString(path.Append("manifest.json"), &manifest) ||
++        !FrameworkDevToolsManifestIsLocal(manifest)) {
++      if (failure)
++        *failure = std::string(bundle.name) + "ManifestUnsafe";
++      return false;
++    }
++    if (loader->Exists(bundle.id))
++      continue;
++    if (loader->AddOrReplace(path) != bundle.id) {
++      if (failure)
++        *failure = std::string(bundle.name) + "IdentityMismatch";
++      return false;
++    }
++  }
++  return true;
++}
++
+ void ClosePopupsForWindow(shaar_engine* engine, shaar_window* window) {
+   for (auto it = Popups().begin(); it != Popups().end();) {
+     if (it->second.engine == engine && it->second.window == window)
+diff --git a/chrome/browser/shaar/extensions/shaar_extensions.h b/chrome/browser/shaar/extensions/shaar_extensions.h
+index 9a1227de..b3ccda50 100644
+--- a/chrome/browser/shaar/extensions/shaar_extensions.h
++++ b/chrome/browser/shaar/extensions/shaar_extensions.h
+@@ -60,6 +60,11 @@ std::optional<std::string> OpenPopup(shaar_engine*,
+                                      const GURL&);
+ bool ClosePopup(shaar_engine*, shaar_profile*, std::string_view);
+ bool RegisterBundledManager(Profile*);
++std::string_view FrameworkDevToolsID(std::string_view name);
++bool FrameworkDevToolsManifestIsLocal(std::string_view manifest);
++bool ValidFrameworkDevToolsPath(const base::FilePath& root,
++                                const base::FilePath& requested);
++bool RegisterBundledFrameworkDevTools(Profile*, std::string* failure);
+ void ClosePopupsForWindow(shaar_engine*, shaar_window*);
+ void ClosePopupsForTab(shaar_engine*, shaar_tab*);
+ void ClosePopupsForBrowser(shaar_engine*, Browser*);
+diff --git a/chrome/browser/shaar/extensions/shaar_extensions_unittest.cc b/chrome/browser/shaar/extensions/shaar_extensions_unittest.cc
+index 1bf6012f..53b934cc 100644
+--- a/chrome/browser/shaar/extensions/shaar_extensions_unittest.cc
++++ b/chrome/browser/shaar/extensions/shaar_extensions_unittest.cc
+@@ -24,6 +24,42 @@ TEST(ShaarExtensionsModuleTest, ComponentExtensionsStayInternal) {
+       ManifestLocation::kInternal));
+ }
+ 
++TEST(ShaarExtensionsModuleTest, FrameworkDevToolsHavePinnedIdentities) {
++  EXPECT_EQ(shaar::extensions_host::FrameworkDevToolsID("react"),
++            "fmkadmapgofadopljbjfkapdkoienihi");
++  EXPECT_EQ(shaar::extensions_host::FrameworkDevToolsID("vue"),
++            "nhdogjmejiglipccpnnnanhbledajbpd");
++  EXPECT_EQ(shaar::extensions_host::FrameworkDevToolsID("angular"),
++            "ienfalfjdbdpebioblfackkekamfmbnh");
++  EXPECT_TRUE(shaar::extensions_host::FrameworkDevToolsID("other").empty());
++}
++
++TEST(ShaarExtensionsModuleTest, FrameworkDevToolsPathCannotEscapeBundle) {
++  base::ScopedTempDir bundle;
++  ASSERT_TRUE(bundle.CreateUniqueTempDir());
++  const base::FilePath root = bundle.GetPath().Append("FrameworkDevTools");
++  ASSERT_TRUE(base::CreateDirectory(root.Append("react")));
++  EXPECT_TRUE(shaar::extensions_host::ValidFrameworkDevToolsPath(
++      root, root.Append("react")));
++  EXPECT_FALSE(shaar::extensions_host::ValidFrameworkDevToolsPath(
++      root, root.Append("../foreign")));
++  EXPECT_FALSE(shaar::extensions_host::ValidFrameworkDevToolsPath(
++      root, root.Append("missing")));
++  ASSERT_TRUE(base::CreateSymbolicLink(root.Append("react"),
++                                       root.Append("linked")));
++  EXPECT_FALSE(shaar::extensions_host::ValidFrameworkDevToolsPath(
++      root, root.Append("linked")));
++}
++
++TEST(ShaarExtensionsModuleTest, FrameworkDevToolsManifestRejectsRemoteHosts) {
++  const std::string local = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["http://127.0.0.1/*"]}]})";
++  const std::string remote = R"({"host_permissions":["https://example.com/*"],"content_scripts":[{"matches":["http://localhost/*"]}]})";
++  const std::string remote_script = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["<all_urls>"]}]})";
++  EXPECT_TRUE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(local));
++  EXPECT_FALSE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(remote));
++  EXPECT_FALSE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(remote_script));
++}
++
+ class EmptyProfileServices final : public shaar::ProfileServices {
+  public:
+   Profile* ResolveProfile(shaar_engine*, shaar_profile*) override {
+diff --git a/chrome/browser/shaar/profiles/shaar_profiles.cc b/chrome/browser/shaar/profiles/shaar_profiles.cc
+index a6eafec1..acf8d2d9 100644
+--- a/chrome/browser/shaar/profiles/shaar_profiles.cc
++++ b/chrome/browser/shaar/profiles/shaar_profiles.cc
+@@ -30,6 +30,7 @@
+ #include "chrome/browser/profiles/profile_metrics.h"
+ #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+ #include "chrome/browser/shaar/engine/shaar_engine_context.h"
++#include "chrome/browser/shaar/extensions/shaar_extensions.h"
+ #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "components/content_settings/core/browser/cookie_settings.h"
+@@ -194,6 +195,16 @@ void OnProfileReady(shaar_profile* handle,
+   }
+   handle->native = profile;
+   handle->ready = true;
++  std::string framework_failure;
++  if (!shaar::extensions_host::RegisterBundledFrameworkDevTools(
++          profile, &framework_failure)) {
++    const std::string framework_payload =
++        "{\"kind\":\"frameworkDevToolsUnavailable\",\"schemaVersion\":1,\"reason\":\"" +
++        framework_failure + "\"}";
++    shaar::EmitEvent(handle->engine, SHAAR_EVENT_EXTENSION,
++                     {handle->id.data(), handle->id.size()}, {}, {}, {},
++                     {framework_payload.data(), framework_payload.size()});
++  }
+   const std::string payload = "{\"kind\":\"loaded\",\"schemaVersion\":1}";
+   shaar::EmitEvent(handle->engine, SHAAR_EVENT_PROFILE,
+                    {handle->id.data(), handle->id.size()}, {}, {},

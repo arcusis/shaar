@@ -102,9 +102,12 @@ def _engine_shard_assignments(iterations: int) -> dict[str, list[tuple[str, int]
 def shard_modes(shard: str, iterations: int) -> list[tuple[str, range]]:
     if shard not in engine_shards(iterations):
         raise ValueError(f"Unknown engine shard: {shard}")
+    assigned = _engine_shard_assignments(iterations)[shard]
+    # A baseline failure must not prevent this shard from proving Dev Mode.
+    assigned.sort(key=lambda item: item[0] != "dev-mode")
     return [
         (mode, range(index, index + 1))
-        for mode, index in _engine_shard_assignments(iterations)[shard]
+        for mode, index in assigned
     ]
 
 

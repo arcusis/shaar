@@ -243,7 +243,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
       (focused.flatMap { contexts[$0] } ?? contexts.values.first)?.window.makeKeyAndOrderFront(nil)
-      if let firstRunMarker, let context = focused.flatMap({ contexts[$0] }) ?? contexts.values.first {
+      if let firstRunMarker,
+        let context = focused.flatMap({ contexts[$0] }) ?? contexts.values.first
+      {
         let setup = FirstRunSetupWindow(
           store: context.store, marker: firstRunMarker,
           location: FirstRunLocation(application: Bundle.main.bundleURL))

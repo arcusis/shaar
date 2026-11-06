@@ -353,6 +353,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0027-shaar-trusted-probe-click.patch",
       "sha256": "aa3982294c2db0dbc67c6f3626bdae6ea8a4eb3321b79e18db2c5b37757a0508"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0028-shaar-devtools-hidden-panels.patch",
+      "sha256": "d901910b70a667727401b5b689e63204c047cd474dad78038509c85979187d19"
     }
   ],
   "requiredExports": [

@@ -517,6 +517,14 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             STALL_RELEASE.wait(STALL_SECONDS)
             self.html(b'<!doctype html><title>Stalled fixture</title>')
             return
+        if path == '/inspector-echo-header':
+            body = self.headers.get('X-Shaar-Probe', '').encode('ascii')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == '/profile-privacy-cache':
             body = str(time.time_ns()).encode('ascii')
             self.send_response(200)
@@ -538,7 +546,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">
 <title>Page tools fixture</title><style>body{font:18px Arial;padding:32px;background:white;color:#172033}button{padding:14px}#shift{padding:20px;background:#eef2ff}</style>
-<h1>Measure the real page.</h1><button id="performance-input" onclick="window.clicked=(window.clicked||0)+1;const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div>
+<h1>Measure the real page.</h1><button id="performance-input" onclick="window.clicked=(window.clicked||0)+1;const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div><input id="private-fixture" type="password" value="password-private-fixture">
 <script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');</script></html>""", csp=PAGE_CSP + "; connect-src 'self'", cookie='inspector-http-only=original; Path=/; HttpOnly; SameSite=Lax')
             return
         if path == '/inspector-slow':

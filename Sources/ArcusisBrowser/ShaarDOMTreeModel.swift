@@ -33,7 +33,8 @@ enum ShaarDOMMessage {
 
 @MainActor protocol ShaarDOMTransport {
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDOMMessage>
-  func execute(_ command: ShaarDOMCommand, for target: SiteControlTarget) async throws -> [String: Any]
+  func execute(_ command: ShaarDOMCommand, for target: SiteControlTarget) async throws -> [String:
+    Any]
 }
 
 private struct ShaarDOMUnavailable: LocalizedError {
@@ -53,7 +54,9 @@ struct ShaarDOMPendingTransport: ShaarDOMTransport {
     }
   }
 
-  func execute(_ command: ShaarDOMCommand, for target: SiteControlTarget) async throws -> [String: Any] {
+  func execute(_ command: ShaarDOMCommand, for target: SiteControlTarget) async throws -> [String:
+    Any]
+  {
     throw ShaarDOMUnavailable()
   }
 }
@@ -222,8 +225,7 @@ final class ShaarDOMTreeModel {
     }
     expanded.insert(id)
     if node.childrenIDs.isEmpty && node.childCount > 0 {
-      do { _ = try await execute(.children(id)) }
-      catch { failure = error.localizedDescription }
+      do { _ = try await execute(.children(id)) } catch { failure = error.localizedDescription }
     }
   }
 
@@ -268,7 +270,8 @@ final class ShaarDOMTreeModel {
 
   func setAttribute(_ name: String, value: String) async {
     guard let id = selectedID, !name.isEmpty, name.utf8.count <= 256,
-      value.utf8.count <= 16_384 else { return }
+      value.utf8.count <= 16_384
+    else { return }
     await mutate(.setAttribute(id, name, value))
   }
 
@@ -300,10 +303,14 @@ final class ShaarDOMTreeModel {
 
   func toggleClass(_ className: String) async {
     guard let selected, !className.isEmpty else { return }
-    var names = selected.attributes.first { $0.name == "class" }?
+    var names =
+      selected.attributes.first { $0.name == "class" }?
       .value.split(whereSeparator: \.isWhitespace).map(String.init) ?? []
-    if names.contains(className) { names.removeAll { $0 == className } }
-    else { names.append(className) }
+    if names.contains(className) {
+      names.removeAll { $0 == className }
+    } else {
+      names.append(className)
+    }
     await setAttribute("class", value: names.joined(separator: " "))
   }
 
@@ -352,10 +359,16 @@ final class ShaarDOMTreeModel {
     case .documentUpdated:
       await loadDocument()
     case .childInserted(let parent, let previous, let node):
-      guard var parentNode = nodes[parent] else { await loadDocument(); return }
+      guard var parentNode = nodes[parent] else {
+        await loadDocument()
+        return
+      }
       var children = parentNode.childrenIDs
-      if let index = children.firstIndex(of: previous) { children.insert(node.id, at: index + 1) }
-      else { children.insert(node.id, at: 0) }
+      if let index = children.firstIndex(of: previous) {
+        children.insert(node.id, at: index + 1)
+      } else {
+        children.insert(node.id, at: 0)
+      }
       parentNode = parentNode.replacing(childCount: children.count, childrenIDs: children)
       nodes[parent] = parentNode
       nodes[node.id] = node
@@ -367,7 +380,10 @@ final class ShaarDOMTreeModel {
       }
       if selectedID == nodeID { selectedID = nil }
     case .childrenSet(let parent, let children):
-      guard let parentNode = nodes[parent] else { await loadDocument(); return }
+      guard let parentNode = nodes[parent] else {
+        await loadDocument()
+        return
+      }
       let special = parentNode.childrenIDs.filter { nodes[$0]?.relation != .child }
       for id in parentNode.childrenIDs where nodes[id]?.relation == .child {
         removeDescendants(of: id)

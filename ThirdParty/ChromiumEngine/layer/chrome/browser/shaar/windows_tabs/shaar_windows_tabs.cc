@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+#include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -22,8 +23,10 @@ BrowserTabRegistryImpl g_registry;
 BrowserTabRegistryImpl& Registry() { return g_registry; }
 
 void BrowserTabRegistryImpl::BeginEngineQuit(shaar_engine* engine) {
-  if (engine)
+  if (engine) {
+    shaar::devtools::ClosePanelLeasesForEngine(engine);
     quitting_engines_.insert(engine);
+  }
 }
 
 void BrowserTabRegistryImpl::CancelEngineQuit(shaar_engine* engine) {
@@ -81,6 +84,7 @@ bool BrowserTabRegistryImpl::ReserveTab(shaar_engine* engine,
 void BrowserTabRegistryImpl::UnbindTab(shaar_engine* engine,
                                        shaar_window* window,
                                        shaar_tab* tab) {
+  shaar::devtools::ClosePanelLeaseForTab(FindWebContents(engine, window, tab));
   std::erase_if(tabs_, [engine, window, tab](const TabEntry& entry) {
     return entry.engine == engine && entry.window == window &&
            entry.handle == tab;

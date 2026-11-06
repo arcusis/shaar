@@ -4,6 +4,7 @@
 
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
 #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
+#include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
 #include "chrome/browser/devtools/devtools_settings.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
@@ -60,6 +61,7 @@ namespace {
 constexpr size_t kMaxArgumentsBytes = 1024 * 1024;
 constexpr int kInspector = 1;
 constexpr int kDeveloper = 2;
+constexpr int kPanel = 3;
 constexpr base::TimeDelta kProbeCaptureTimeout = base::Seconds(12);
 
 class RuntimeServices final : public DevToolsRuntimeServices {
@@ -112,7 +114,7 @@ public:
          operation == SHAAR_OP_DEVTOOLS_CONTROL_DISABLE))
       return false;
     return operation != SHAAR_OP_DEVTOOLS_CALL || capability == kInspector ||
-           capability == kDeveloper;
+           capability == kDeveloper || capability == kPanel;
   }
 };
 
@@ -1008,6 +1010,9 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
     case SHAAR_OP_DEVTOOLS_UI_SHOW:
     case SHAAR_OP_DEVTOOLS_UI_CLOSE:
     case SHAAR_OP_DEVTOOLS_UI_STATE:
+    case SHAAR_OP_DEVTOOLS_PANEL_OPEN:
+    case SHAAR_OP_DEVTOOLS_PANEL_CLOSE:
+    case SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY:
       break;
     case SHAAR_OP_DEVTOOLS_UI_SET_DOCK:
     case SHAAR_OP_DEVTOOLS_CONTROL_ENABLE:
@@ -1016,9 +1021,13 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
     default:
       return false;
   }
+  const bool panel_operation = operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
+      operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
+      operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY;
   if ((operation == SHAAR_OP_DEVTOOLS_CALL && capability != kInspector &&
        capability != kDeveloper) ||
-      (operation != SHAAR_OP_DEVTOOLS_CALL && capability != 0))
+      (panel_operation && capability != kPanel) ||
+      (!panel_operation && operation != SHAAR_OP_DEVTOOLS_CALL && capability != 0))
     return false;
   return runtime->IsOperationAllowed(engine, scope, contents, operation,
                                      capability);
@@ -1212,6 +1221,17 @@ shaar_error_code HandleDevToolsOperation(
     return agent_bridge::HandleOperation(
         engine, scope, window, tab, contents, identity, operation, request_id,
         reply, reply_context, error);
+  }
+
+  if (operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
+      operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
+      operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY) {
+    if (!PolicyAllowsOperation(context->devtools_runtime, engine, scope,
+                               contents, operation, kPanel))
+      return Fail(error, SHAAR_POLICY_BLOCKED, "DevTools panel is blocked");
+    return HandlePanelOperation(context, engine, scope, window, tab, contents,
+                                identity, operation, args_json, request_id,
+                                reply, reply_context, error);
   }
 
   if (operation == SHAAR_OP_PROBE_CAPTURE_TAB) {

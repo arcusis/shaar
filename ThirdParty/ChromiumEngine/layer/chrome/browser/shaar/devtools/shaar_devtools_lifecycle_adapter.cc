@@ -23,4 +23,7 @@ extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
   registry->Register(SHAAR_OP_DEVTOOLS_UI_SET_DOCK,
                      SHAAR_OP_DEVTOOLS_CONTROL_STATUS,
                      &shaar::devtools::HandleDevToolsOperation);
+  registry->Register(SHAAR_OP_DEVTOOLS_PANEL_OPEN,
+                     SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY,
+                     &shaar::devtools::HandleDevToolsOperation);
 }

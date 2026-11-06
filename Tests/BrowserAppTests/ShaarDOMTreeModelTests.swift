@@ -14,30 +14,45 @@ import Testing
   var document: [String: Any] = [
     "root": [
       "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
-      "children": [[
-        "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
-        "children": [[
-          "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
-          "children": [[
-            "nodeId": 4, "nodeType": 1, "nodeName": "MAIN", "nodeValue": "",
-            "attributes": ["class", "dashboard", "id", "app"],
-            "children": [[
-              "nodeId": 5, "nodeType": 1, "nodeName": "H1", "nodeValue": "",
-              "children": [[
-                "nodeId": 6, "nodeType": 3, "nodeName": "#text", "nodeValue": "Dashboard",
-              ]],
-            ]],
-            "shadowRoots": [[
-              "nodeId": 7, "nodeType": 11, "nodeName": "#document-fragment", "nodeValue": "",
-              "children": [[
-                "nodeId": 8, "nodeType": 1, "nodeName": "BUTTON", "nodeValue": "",
-                "attributes": ["class", "primary"],
-              ]],
-            ]],
-          ]],
-        ]],
-      ]],
-    ],
+      "children": [
+        [
+          "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+          "children": [
+            [
+              "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+              "children": [
+                [
+                  "nodeId": 4, "nodeType": 1, "nodeName": "MAIN", "nodeValue": "",
+                  "attributes": ["class", "dashboard", "id", "app"],
+                  "children": [
+                    [
+                      "nodeId": 5, "nodeType": 1, "nodeName": "H1", "nodeValue": "",
+                      "children": [
+                        [
+                          "nodeId": 6, "nodeType": 3, "nodeName": "#text", "nodeValue": "Dashboard",
+                        ]
+                      ],
+                    ]
+                  ],
+                  "shadowRoots": [
+                    [
+                      "nodeId": 7, "nodeType": 11, "nodeName": "#document-fragment",
+                      "nodeValue": "",
+                      "children": [
+                        [
+                          "nodeId": 8, "nodeType": 1, "nodeName": "BUTTON", "nodeValue": "",
+                          "attributes": ["class", "primary"],
+                        ]
+                      ],
+                    ]
+                  ],
+                ]
+              ],
+            ]
+          ],
+        ]
+      ],
+    ]
   ]
 
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDOMMessage> {
@@ -47,7 +62,9 @@ import Testing
     }
   }
 
-  func execute(_ command: ShaarDOMCommand, for target: SiteControlTarget) async throws -> [String: Any] {
+  func execute(_ command: ShaarDOMCommand, for target: SiteControlTarget) async throws -> [String:
+    Any]
+  {
     commands.append(command)
     switch command {
     case .document: return document
@@ -65,7 +82,8 @@ import Testing
       sessionID: Data(), windowID: Data("window-a".utf8),
       tabID: Data("tab-a".utf8), payloadJSON: Data(mutation.utf8))
     if let decoded = ShaarDOMEventRouter.decode(
-      event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7) {
+      event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7)
+    {
       continuation?.yield(.event(decoded))
     }
   }
@@ -120,15 +138,24 @@ import Testing
     let model = ShaarDOMTreeModel(target: target(), transport: fixture)
     model.open()
     for _ in 0..<20 where model.rootID == nil { await Task.yield() }
-    fixture.send(#"{"schemaVersion":1,"kind":"panelEvent","eventID":23,"leaseID":7,"data":{"nodeId":4,"name":"data-live","value":"yes","truncated":false}}"#)
-    for _ in 0..<20 where model.nodes[4]?.attributes.contains(where: { $0.name == "data-live" }) != true {
+    fixture.send(
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":23,"leaseID":7,"data":{"nodeId":4,"name":"data-live","value":"yes","truncated":false}}"#
+    )
+    for _ in 0..<20
+    where model.nodes[4]?.attributes.contains(where: { $0.name == "data-live" }) != true {
       await Task.yield()
     }
-    #expect(model.nodes[4]?.attributes.contains(where: { $0.name == "data-live" && $0.value == "yes" }) == true)
-    fixture.send(#"{"schemaVersion":1,"kind":"panelEvent","eventID":22,"leaseID":7,"data":{"parentNodeId":4,"nodeId":5,"truncated":false}}"#, sequence: 3)
+    #expect(
+      model.nodes[4]?.attributes.contains(where: { $0.name == "data-live" && $0.value == "yes" })
+        == true)
+    fixture.send(
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":22,"leaseID":7,"data":{"parentNodeId":4,"nodeId":5,"truncated":false}}"#,
+      sequence: 3)
     for _ in 0..<20 where model.nodes[5] != nil { await Task.yield() }
     #expect(model.nodes[5] == nil && model.nodes[6] == nil)
-    fixture.send(#"{"schemaVersion":1,"kind":"panelEvent","eventID":25,"leaseID":7,"data":{"parentNodeId":4,"nodes":[{"nodeId":9,"nodeType":1,"nodeName":"P","nodeValue":""}],"truncated":false}}"#, sequence: 4)
+    fixture.send(
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":25,"leaseID":7,"data":{"parentNodeId":4,"nodes":[{"nodeId":9,"nodeType":1,"nodeName":"P","nodeValue":""}],"truncated":false}}"#,
+      sequence: 4)
     for _ in 0..<20 where model.nodes[9] == nil { await Task.yield() }
     #expect(model.nodes[4]?.childrenIDs == [9, 7])
     #expect(model.nodes[7]?.relation == .shadowRoot)

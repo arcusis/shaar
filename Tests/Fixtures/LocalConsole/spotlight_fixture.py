@@ -39,7 +39,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         )
         self.wfile.write(message.encode())
         self.wfile.flush()
-        time.sleep(30)
+        try:
+            while True:
+                self.wfile.write(b": keepalive\n\n")
+                self.wfile.flush()
+                time.sleep(1)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def log_message(self, format, *args):
         pass

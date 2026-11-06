@@ -1,6 +1,9 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Accessibility audit": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Accessibility audit"}},"he":{"stringUnit":{"state":"translated","value":"בדיקת נגישות"}}}},
+    "Auditing…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Auditing…"}},"he":{"stringUnit":{"state":"translated","value":"בודק נגישות…"}}}},
+    "Run an audit to find accessibility issues on this page.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Run an audit to find accessibility issues on this page."}},"he":{"stringUnit":{"state":"translated","value":"הרצת בדיקה תמצא בעיות נגישות בדף הזה."}}}},
     "Click an element to lock its details.": {
       "localizations": {
         "en": {

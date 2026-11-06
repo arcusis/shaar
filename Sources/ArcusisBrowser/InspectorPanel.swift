@@ -106,16 +106,17 @@ struct InspectorPanel: View {
       Text(InspectorL10n.string("Inspector")).font(.system(size: 12, weight: .semibold))
       Spacer()
       if let bridge = model.engine?.developerModels[model.target.tabID]?.agentBridge {
+        let presentation = AgentBridgePresentation(model: bridge)
         Button {
           showsAgentBridge.toggle()
         } label: {
-          Image(systemName: "network")
+          Image(systemName: presentation.symbol)
             .font(.system(size: 12))
-            .foregroundStyle(bridge.isConnected ? .orange : .secondary)
+            .foregroundStyle(presentation.tint)
         }
         .buttonStyle(.plain)
-        .help("Agent bridge")
-        .accessibilityLabel("Agent bridge")
+        .help(presentation.title)
+        .accessibilityLabel(presentation.title)
         .popover(isPresented: $showsAgentBridge) { AgentBridgeControls(model: bridge) }
       }
       InspectorIconButton(

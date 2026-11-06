@@ -2,6 +2,8 @@
   "sourceLanguage": "en",
   "strings": {
     "Share Page…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Share Page…"}},"he":{"stringUnit":{"state":"translated","value":"שיתוף העמוד…"}}}},
+    "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
+    "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},
     "Developer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer"}},"he":{"stringUnit":{"state":"translated","value":"פיתוח"}}}},
     "Automatically turn on Dev Mode for local development pages": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Automatically turn on Dev Mode for local development pages"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה אוטומטית של מצב פיתוח בדפי פיתוח מקומיים"}}}},
     "Welcome to %@": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"ברוכים הבאים אל %@"}}}},

@@ -4,8 +4,30 @@
 
 import SwiftUI
 
+@MainActor struct AgentBridgePresentation {
+  let model: AgentBridgeModel
+
+  var title: String {
+    if model.revocationUnconfirmed { return "Agent disconnect not confirmed" }
+    if model.isConnected { return "Agent connected to this tab" }
+    if model.status.enabled { return "Waiting for agent" }
+    return "Agent bridge is off for this tab"
+  }
+
+  var symbol: String {
+    if model.revocationUnconfirmed { return "exclamationmark.triangle.fill" }
+    return "network"
+  }
+
+  var tint: Color {
+    model.needsBanner ? .orange : .secondary
+  }
+}
+
 struct AgentBridgeControls: View {
   @Bindable var model: AgentBridgeModel
+
+  private var presentation: AgentBridgePresentation { .init(model: model) }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -16,8 +38,9 @@ struct AgentBridgeControls: View {
       .font(.caption).foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
       if model.status.enabled || model.revocationUnconfirmed {
-        Label(statusTitle, systemImage: model.isConnected ? "circle.fill" : "circle.dotted")
-          .foregroundStyle(model.isConnected ? .orange : .secondary)
+        Label(presentation.title, systemImage: presentation.symbol)
+          .font(.system(size: 11, weight: .medium))
+          .foregroundStyle(presentation.tint)
         if let port = model.status.port {
           Text("Local port \(port) · \(model.status.connectionCount) connection(s)")
             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -41,9 +64,10 @@ struct AgentBridgeControls: View {
         Button("Enable for this tab") { model.enable() }
           .disabled(model.busy)
       }
-      if model.busy { ProgressView().controlSize(.small) }
+      if model.busy { ProgressView("Updating agent bridge…").controlSize(.small) }
       if let failure = model.failure {
-        Text(failure).font(.caption).foregroundStyle(.secondary)
+        Label(failure, systemImage: "exclamationmark.triangle")
+          .font(.caption).foregroundStyle(.orange)
           .fixedSize(horizontal: false, vertical: true)
       }
       Text(
@@ -58,25 +82,17 @@ struct AgentBridgeControls: View {
     .background(Color(nsColor: .windowBackgroundColor))
     .onAppear { model.refresh() }
   }
-
-  private var statusTitle: String {
-    if model.revocationUnconfirmed { return "Disconnect not confirmed" }
-    if model.isConnected { return "Agent connected" }
-    return "Waiting for agent"
-  }
 }
 
 struct AgentBridgeBanner: View {
   @Bindable var model: AgentBridgeModel
 
+  private var presentation: AgentBridgePresentation { .init(model: model) }
+
   var body: some View {
     HStack(spacing: 8) {
-      Image(systemName: "network")
-      Text(
-        model.revocationUnconfirmed
-          ? "Agent disconnect not confirmed" : "Agent connected to this tab"
-      )
-      .fontWeight(.medium)
+      Image(systemName: presentation.symbol).foregroundStyle(presentation.tint)
+      Text(presentation.title).fontWeight(.medium)
       Text("\(model.status.connectionCount)")
         .foregroundStyle(.secondary)
       Spacer()

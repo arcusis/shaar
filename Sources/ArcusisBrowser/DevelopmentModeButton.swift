@@ -75,9 +75,10 @@ struct DevelopmentModeLabel: View {
       if let port = page.port { Text(verbatim: ":\(port)") }
     }
     .font(.system(size: 11, weight: .semibold))
-    .foregroundStyle(Color.accentColor)
+    .foregroundStyle(.primary)
     .padding(.horizontal, 7)
     .frame(height: 28)
-    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.primary.opacity(0.12)))
   }
 }

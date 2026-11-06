@@ -356,6 +356,24 @@ class PipelineGateTests(unittest.TestCase):
 
 
 class CoverageGateTests(unittest.TestCase):
+    def test_parallel_coverage_reports_require_matching_toolchain_and_revision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "build/ci/unit"
+            baseline = root / "build/ci/coverage-base"
+            candidate.mkdir(parents=True)
+            baseline.mkdir(parents=True)
+            metadata = {"toolchain": "swift-toolchain", "revision": "a" * 40}
+            (candidate / "metadata.json").write_text(json.dumps(metadata))
+            (baseline / "metadata.json").write_text(json.dumps(metadata))
+            checks = SimpleNamespace(run=lambda *_: 0)
+            with patch.object(STAGES, "ROOT", root), patch.dict(os.environ, GITHUB_SHA="a" * 40):
+                STAGES.compare_coverage(checks)
+                for changed in ({"toolchain": "other"}, {"revision": "b" * 40}):
+                    (baseline / "metadata.json").write_text(json.dumps(metadata | changed))
+                    with self.assertRaises(ValueError):
+                        STAGES.compare_coverage(checks)
+
     def test_cached_profiles_are_removed_only_inside_expected_scratch_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

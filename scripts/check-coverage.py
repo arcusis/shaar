@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Compare source-module line coverage against an immutable base built by the same job."""
+"""Compare source-module line coverage against an immutable base built with the same toolchain."""
 
 import argparse
 import json

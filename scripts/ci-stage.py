@@ -142,13 +142,10 @@ def merge_test_coverage(coverage_path: Path, first_profile: Path) -> None:
                         str(executable)], stdout=output, check=True)
 
 
-def check_base_coverage(checks: Commands) -> None:
+def build_base_coverage(checks: Commands) -> None:
     base_sha = os.environ.get("CI_BASE_SHA", "")
     if not re.fullmatch(r"[0-9a-f]{40}", base_sha):
         raise ValueError("Coverage baseline requires an immutable 40-character CI_BASE_SHA")
-    candidate_metadata = json.loads((ROOT / "build/ci/unit/metadata.json").read_text())
-    if candidate_metadata.get("toolchain") != os.environ["CI_TOOLCHAIN_ID"]:
-        raise ValueError("Coverage baseline and candidate toolchains differ")
     base = ROOT / "build/ci/base-source"
     base.mkdir(parents=True, exist_ok=False)
     archive = checks.directory / "base-source.tar"
@@ -157,13 +154,24 @@ def check_base_coverage(checks: Commands) -> None:
     with tarfile.open(archive) as source:
         source.extractall(base, filter="data")
     archive.unlink()
-    baseline = Commands("coverage-base")
-    if test_commands(baseline, cwd=base, scratch=str(ROOT / "build/swiftpm/coverage-base")):
+    if test_commands(checks, cwd=base, scratch=str(ROOT / "build/swiftpm/coverage-base")):
         raise RuntimeError("Baseline coverage build/tests failed")
-    baseline.finish()
+
+
+def compare_coverage(checks: Commands) -> None:
+    candidate = ROOT / "build/ci/unit"
+    baseline = ROOT / "build/ci/coverage-base"
+    candidate_metadata = json.loads((candidate / "metadata.json").read_text())
+    baseline_metadata = json.loads((baseline / "metadata.json").read_text())
+    if (not candidate_metadata.get("toolchain")
+            or candidate_metadata["toolchain"] != baseline_metadata.get("toolchain")):
+        raise ValueError("Coverage baseline and candidate toolchains differ")
+    revision = os.environ.get("GITHUB_SHA")
+    if not revision or candidate_metadata.get("revision") != revision or baseline_metadata.get("revision") != revision:
+        raise ValueError("Coverage reports came from different CI revisions")
     checks.run("coverage-no-regression", [sys.executable, "scripts/check-coverage.py",
-               "--base", str(baseline.directory / "coverage.json"),
-               "--candidate", str(ROOT / "build/ci/unit/coverage.json")])
+               "--base", str(baseline / "coverage.json"),
+               "--candidate", str(candidate / "coverage.json")])
 
 
 def run_engine(checks: Commands, mode: str, iterations: int) -> None:
@@ -278,7 +286,7 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("unit", "coverage", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "shipping", "sanitize", "dead-code"))
+    parser.add_argument("stage", choices=("unit", "coverage-base", "coverage-compare", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "shipping", "sanitize", "dead-code"))
     parser.add_argument("--shard", choices=engine_shards(10), default="baseline-1")
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
     parser.add_argument("--iterations", type=int, choices=range(1, 11), default=1)
@@ -294,8 +302,10 @@ def main() -> int:
             if not test_commands(checks):
                 checks.run("sidebar-dnd-restart", [sys.executable, "scripts/sidebar-dnd-probe.py",
                            "--skip-build", "--enable-code-coverage"])
-        elif options.stage == "coverage":
-            check_base_coverage(checks)
+        elif options.stage == "coverage-base":
+            build_base_coverage(checks)
+        elif options.stage == "coverage-compare":
+            compare_coverage(checks)
         elif options.stage == "engine":
             run_engine(checks, options.mode, options.iterations)
         elif options.stage == "engine-build":

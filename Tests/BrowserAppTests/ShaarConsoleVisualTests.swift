@@ -9,6 +9,48 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor final class ShaarConsoleVisualTests: XCTestCase {
+  func testSpotlightFeedRendersOffscreenInBothAppearances() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_SPOTLIGHT_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen Spotlight capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let server = try LocalConsoleFixtureServer(script: "spotlight_fixture.py")
+    defer { server.stop() }
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1156")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:5173/")!)
+    for scheme in [ColorScheme.light, .dark] {
+      let suffix = scheme == .dark ? "dark" : "light"
+      let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
+      let inspector = InspectorModel(target: target, engine: nil)
+      let before = ShaarDevToolsModel(target: target)
+      before.section = .console
+      before.open(inspector: inspector)
+      try capture(
+        ShaarDevToolsPanel(model: before, inspector: inspector, openChromium: {}),
+        named: "before-spotlight-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root, pageLabel: "localhost:5173")
+      before.close()
+      let after = ShaarDevToolsModel(
+        target: target, localTransports: [ShaarSpotlightConsoleTransport(port: server.port)])
+      after.section = .console
+      after.open(inspector: inspector)
+      for _ in 0..<100 where after.localConsoleEvents.count < 2 {
+        try await Task.sleep(for: .milliseconds(20))
+      }
+      XCTAssertEqual(after.localConsoleEvents.count, 2)
+      try capture(
+        ShaarDevToolsPanel(model: after, inspector: inspector, openChromium: {}),
+        named: "after-spotlight-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root, pageLabel: "localhost:5173")
+      after.close()
+    }
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   func testFileLogTapRendersOffscreenInBothAppearances() async throws {
     guard ProcessInfo.processInfo.environment["SHAAR_LOG_TAP_CAPTURE"] == "1" else {
       throw XCTSkip("Offscreen server log tap capture requires explicit opt-in")

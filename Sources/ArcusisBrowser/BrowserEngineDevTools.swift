@@ -51,7 +51,7 @@ extension BrowserEngine {
       shaarDevTools[target.tabID]
       ?? ShaarDevToolsModel(
         target: target, viewportsTransport: viewportsTransport,
-        localTransports: [ShaarNextMCPConsoleTransport()])
+        localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()])
     let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, engine: self)
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector

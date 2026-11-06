@@ -20,7 +20,8 @@ enum BrowserExternalDrop {
     _ providers: [NSItemProvider], open: @escaping @MainActor (URL) -> Void
   ) -> Bool {
     guard let provider = providers.first(where: { canReceive([$0]) }) else { return false }
-    let type = provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+    let type =
+      provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
       ? UTType.fileURL.identifier
       : UTType.url.identifier
 

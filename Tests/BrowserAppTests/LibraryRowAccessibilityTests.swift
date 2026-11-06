@@ -15,3 +15,17 @@ import Testing
   #expect(LibraryBookmarkAccessibility.folderState(collapsed: false, language: .hebrew) == "מורחב")
   #expect(LibraryBookmarkAccessibility.folderState(collapsed: true, language: .hebrew) == "מכווץ")
 }
+
+@Test func historyRemovalNamesAddressWhenTitlesMatch() {
+  let first = LibraryHistoryAccessibility.removeLabel(
+    title: "Home", address: "https://first.test", language: .english)
+  let second = LibraryHistoryAccessibility.removeLabel(
+    title: "Home", address: "https://second.test", language: .english)
+  #expect(first == "Remove Home at https://first.test from history")
+  #expect(second == "Remove Home at https://second.test from history")
+  #expect(first != second)
+  #expect(
+    LibraryHistoryAccessibility.removeLabel(
+      title: "Home", address: "https://first.test", language: .hebrew)
+      == "הסרת \u{2068}Home\u{2069} בכתובת \u{2068}https://first.test\u{2069} מההיסטוריה")
+}

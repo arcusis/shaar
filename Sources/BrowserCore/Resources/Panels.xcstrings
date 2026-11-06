@@ -2562,6 +2562,16 @@
         }
       }
     },
+    "Remove %@ at %@ from history": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הסרת %@ בכתובת %@ מההיסטוריה"
+          }
+        }
+      }
+    },
     "Remove %@ from history": {
       "localizations": {
         "he": {

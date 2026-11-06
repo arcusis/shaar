@@ -21,6 +21,16 @@ enum LibraryPanelSearch {
   }
 }
 
+enum LibraryHistoryAccessibility {
+  static func removeLabel(
+    title: String, address: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Remove %@ at %@ from history", table: "Panels", language: language,
+      arguments: [.string(title), .string(address)])
+  }
+}
+
 struct LibraryPanel: View {
   let store: BrowserStore
   let profileID: UUID
@@ -313,7 +323,8 @@ struct LibraryPanel: View {
       } label: {
         Image(systemName: "trash")
       }.buttonStyle(.borderless).help(PanelsL10n.string("Remove all visits to this address"))
-        .accessibilityLabel(PanelsL10n.format("Remove %@ from history", .string(item.title)))
+        .accessibilityLabel(
+          LibraryHistoryAccessibility.removeLabel(title: item.title, address: item.address))
         .disabled(!ownsContext || busy)
     }.padding(.vertical, 10)
   }

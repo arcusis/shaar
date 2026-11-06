@@ -32,6 +32,7 @@ final class EngineProbe {
   private let sessionRecoveryMode: Bool
   private let localizationMode: Bool
   private let basicBrowsingMode: Bool
+  private let mediaSessionOnlyMode: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -71,7 +72,7 @@ final class EngineProbe {
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
-    localizationMode: Bool, basicBrowsingMode: Bool
+    localizationMode: Bool, basicBrowsingMode: Bool, mediaSessionOnlyMode: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -89,6 +90,7 @@ final class EngineProbe {
     self.sessionRecoveryMode = sessionRecoveryMode
     self.localizationMode = localizationMode
     self.basicBrowsingMode = basicBrowsingMode
+    self.mediaSessionOnlyMode = mediaSessionOnlyMode
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -196,6 +198,7 @@ final class EngineProbe {
       let quitPendingNavigation = arguments.contains("--probe-quit-pending-navigation")
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let basicBrowsingMode = arguments.contains("--probe-basic-browsing")
+      let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
       guard localizationMode == arguments.contains("--probe-localization") else {
         throw ProbeFailure("Localization mode dispatch mismatch.")
       }
@@ -216,6 +219,7 @@ final class EngineProbe {
         "--probe-quit-exit",
         "--probe-localization",
         "--probe-basic-browsing",
+        "--probe-media-session-only",
       ]
       guard externalAppConsentMode == noLaunchGuard,
         !externalAppConsentMode || !conflictingFlags.contains(where: arguments.contains),
@@ -236,6 +240,9 @@ final class EngineProbe {
             where: arguments.contains),
         !basicBrowsingMode
           || !conflictingFlags.filter({ $0 != "--probe-basic-browsing" }).contains(
+            where: arguments.contains),
+        !mediaSessionOnlyMode
+          || !conflictingFlags.filter({ $0 != "--probe-media-session-only" }).contains(
             where: arguments.contains),
         !localizationMode
           || !conflictingFlags.filter({ $0 != "--probe-localization" }).contains(
@@ -258,7 +265,7 @@ final class EngineProbe {
         privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
         quitPendingNavigation: quitPendingNavigation,
         sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode,
-        basicBrowsingMode: basicBrowsingMode)
+        basicBrowsingMode: basicBrowsingMode, mediaSessionOnlyMode: mediaSessionOnlyMode)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -508,6 +515,23 @@ final class EngineProbe {
         guard let browserEngine else { throw ProbeFailure("Basic browsing engine is missing.") }
         checks += try await BasicBrowsingProbe(
           runtime: runtime, engine: browserEngine, store: store, fixture: fixture
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      if mediaSessionOnlyMode {
+        guard let browserEngine else { throw ProbeFailure("Media session engine is missing.") }
+        bootstrapStage = .ready
+        fixtureStage = "MediaSession"
+        try expect(
+          NSApp.windows.allSatisfy {
+            !$0.isVisible || ($0.alphaValue == 0 && $0.ignoresMouseEvents)
+          },
+          "media fixture starts with no visible or interactive window")
+        checks += try await MediaSessionProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
+          phase: phase
         ).run()
         localFixturesPassed = true
         finish(error: nil)
@@ -1031,7 +1055,7 @@ final class EngineProbe {
       writeReport()
       return
     }
-    if basicBrowsingMode {
+    if basicBrowsingMode || mediaSessionOnlyMode {
       let engineClosed = browserEngine?.isClosed == true
       let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
       let routerClientCount = browserEngine?.events.router.clients.count ?? -1
@@ -1069,7 +1093,7 @@ final class EngineProbe {
   }
 
   private var baseTimeoutSeconds: Double {
-    if basicBrowsingMode { return 180 }
+    if basicBrowsingMode || mediaSessionOnlyMode { return 180 }
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
@@ -1079,6 +1103,7 @@ final class EngineProbe {
 
   private var probeMode: String {
     if basicBrowsingMode { return "basic-browsing" }
+    if mediaSessionOnlyMode { return "media-session-only" }
     if localizationMode { return "localization-only" }
     if privateWindowMode { return PrivateWindowProbe.mode }
     if privateMultiTabMode { return "private-multitab-owned-engine-fixture" }
@@ -1092,6 +1117,10 @@ final class EngineProbe {
     if basicBrowsingMode {
       return
         "Owned hidden normal window, unauthenticated Google search results, and authored loopback tabs. No existing browser profile or account is opened."
+    }
+    if mediaSessionOnlyMode {
+      return
+        "Owned hidden normal window and authored loopback media. No user profile, external media site, or audible output is opened."
     }
     if localizationMode {
       return

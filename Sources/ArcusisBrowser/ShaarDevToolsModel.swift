@@ -350,6 +350,7 @@ final class ShaarDevToolsModel {
     target: SiteControlTarget,
     transport: any ShaarDevToolsEventTransport = ShaarDevToolsPendingTransport(),
     phase2Transport: any ShaarPhase2Transport = ShaarPhase2PendingTransport(),
+    sourceInspectorContent: ShaarSourcesModel.InspectorContent? = nil,
     sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load,
     reproTransport: any ShaarReproTransport = ShaarReproPendingTransport(),
     viewportsTransport: any ShaarViewportsTransport = ShaarViewportsPendingTransport(),
@@ -383,7 +384,9 @@ final class ShaarDevToolsModel {
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
     performance = ShaarPerformanceModel(target: target, phase2: phase2)
-    sources = ShaarSourcesModel(phase2: phase2, loadSourceData: sourceLoader)
+    sources = ShaarSourcesModel(
+      phase2: phase2, inspectorContent: sourceInspectorContent,
+      loadSourceData: sourceLoader)
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
   }

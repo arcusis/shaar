@@ -27,6 +27,10 @@ struct ShaarSourceResource: Identifiable, Equatable {
 
 @MainActor @Observable
 final class ShaarSourcesModel {
+  typealias InspectorContent =
+    @MainActor (String, SiteControlTarget) async throws -> (
+      body: String, base64Encoded: Bool
+    )
   private(set) var resources: [ShaarSourceResource] = []
   private(set) var selectedURL: String?
   private(set) var content: String?
@@ -47,6 +51,7 @@ final class ShaarSourcesModel {
   private(set) var sourcePage = 0
   static let linesPerPage = 500
   @ObservationIgnored private let phase2: ShaarPhase2Model
+  @ObservationIgnored private let inspectorContent: InspectorContent?
   @ObservationIgnored private let loadSourceData: @Sendable (URL) async throws -> Data
   @ObservationIgnored private var generation = 0
   @ObservationIgnored private var contentRevision = 0
@@ -54,9 +59,11 @@ final class ShaarSourcesModel {
 
   init(
     phase2: ShaarPhase2Model,
+    inspectorContent: InspectorContent? = nil,
     loadSourceData: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load
   ) {
     self.phase2 = phase2
+    self.inspectorContent = inspectorContent
     self.loadSourceData = loadSourceData
   }
 
@@ -262,7 +269,23 @@ final class ShaarSourcesModel {
       if generation == self.generation, selectedURL == url { contentLoading = false }
     }
     do {
-      let reply = try await phase2.execute(.resourceContent(url: url))
+      let reply: ShaarDevToolsPhase2Reply
+      do {
+        reply = try await phase2.execute(.resourceContent(url: url))
+      } catch {
+        guard !(error is CancellationError), let inspectorContent,
+          let resourceURL = URL(string: url),
+          DevelopmentSourceResolver.sameOrigin(resourceURL, phase2.target.url)
+        else { throw error }
+        let fallback = try await inspectorContent(url, phase2.target)
+        guard generation == self.generation, selectedURL == url else { return }
+        content = fallback.body
+        contentRevision += 1
+        binary = fallback.base64Encoded
+        contentTruncated = false
+        failure = nil
+        return
+      }
       guard generation == self.generation, selectedURL == url else { return }
       content = reply.body
       contentRevision += 1

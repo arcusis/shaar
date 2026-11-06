@@ -352,8 +352,8 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
   var recording: Bool { transport.available }
 
   var available: Bool {
-    recording && (!transport.requiresMaskedFrames ||
-      (hasMaskedFrames && !frames.snapshot().isEmpty))
+    recording
+      && (!transport.requiresMaskedFrames || (hasMaskedFrames && !frames.snapshot().isEmpty))
   }
 
   func startFrames(for target: SiteControlTarget) {
@@ -388,9 +388,7 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
     do {
       let captured = try await transport.capture(for: target, seconds: ShaarReproBundle.seconds)
       let recentFrames = frames.snapshot()
-      if transport.requiresMaskedFrames &&
-        (!transport.available || recentFrames.isEmpty)
-      {
+      if transport.requiresMaskedFrames && (!transport.available || recentFrames.isEmpty) {
         throw ShaarReproUnavailable()
       }
       let video = recentFrames.isEmpty ? captured.videoMP4 : try await frames.encode()

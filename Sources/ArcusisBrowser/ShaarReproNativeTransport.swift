@@ -35,7 +35,8 @@ import Foundation
     else { throw ShaarReproNativeError.unavailable }
     let environment = ShaarReproEnvironment(
       url: target.url.absoluteString,
-      shaarVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      shaarVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        ?? "unknown",
       engineVersion: runtime.chromiumVersion,
       operatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
       userAgent: userAgent,

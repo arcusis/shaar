@@ -147,8 +147,9 @@ struct ShaarDevToolsPanel: View {
     case .repro:
       ShaarReproPanel(
         model: model.repro,
-        directory: reproDirectory ?? inspector?.engine?.runtime.downloadsDirectory(
-          forProfileID: model.target.profileID.uuidString),
+        directory: reproDirectory
+          ?? inspector?.engine?.runtime.downloadsDirectory(
+            forProfileID: model.target.profileID.uuidString),
         onSaved: { file in
           inspector?.engine?.downloads.registerGeneratedFile(
             file, profileID: model.target.profileID)

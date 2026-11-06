@@ -80,8 +80,9 @@ import XCTest
     let suffix = scheme == .dark ? "dark" : "light"
     let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
     let view = ShaarDevToolsPanel(
-      model: shell, inspector: inspector, openChromium: {}, reproDirectory: directory)
-      .frame(width: 1040, height: 420).environment(\.colorScheme, scheme)
+      model: shell, inspector: inspector, openChromium: {}, reproDirectory: directory
+    )
+    .frame(width: 1040, height: 420).environment(\.colorScheme, scheme)
     let image = try VisualCapture.renderOffscreen(
       view, size: NSSize(width: 1040, height: 420), appearance: appearance,
       to: root.appending(path: "\(label)-\(suffix).png"))

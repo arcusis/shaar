@@ -86,6 +86,8 @@ source_set("engine") {
     # BEGIN devtools
     "devtools/shaar_devtools.cc",
     "devtools/shaar_devtools.h",
+    "devtools/shaar_agent_bridge.cc",
+    "devtools/shaar_agent_bridge.h",
     "devtools/shaar_devtools_lifecycle_adapter.cc",
     # END devtools
     # BEGIN media

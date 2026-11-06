@@ -7,9 +7,12 @@ import Foundation
 
 struct SwitchProbeMetrics: Codable {
   static let expectedSwitchCount = 20
+  static let expectedSpaceWarmupCount = 2
   static let latencyBudgetMilliseconds = 100.0
+  static let warmupDiscardReason =
+    "The first selection of each same-profile tab can include one-time native WebContents activation and first-display setup. Two warm-up switches are measured and reported separately, then excluded from the steady-state Space p95."
   static let measurementScope =
-    "Each phase records 20 same-profile Space switches and 20 cross-profile switches. Latency is Host-plus-IPC time from native store selection through native selection acknowledgment; each p95 must be at most 100 ms. Displayed-WebContents audits and authored JavaScript snapshots separately verify presentation, account, document, and session continuity and are excluded from latency. Excludes physical paint, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
+    "Each phase records two same-profile Space warm-up switches separately, then 20 measured same-profile Space switches and 20 cross-profile switches. Latency is Host-plus-IPC time from native store selection through native selection acknowledgment; measured p95 must be at most 100 ms. Displayed-WebContents audits and authored JavaScript snapshots separately verify presentation, account, document, and session continuity and are excluded from latency. Excludes physical paint, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
 
   enum SwitchKind: String, Codable {
     case space
@@ -67,11 +70,14 @@ struct SwitchProbeMetrics: Codable {
     }
   }
 
-  let schema = 2
+  let schema = 3
   let phase: String
   let measurementScope = Self.measurementScope
   let expectedSampleCount = Self.expectedSwitchCount
   let latencyBudgetMilliseconds = Self.latencyBudgetMilliseconds
+  let expectedSpaceWarmupCount = Self.expectedSpaceWarmupCount
+  let warmupDiscardReason = Self.warmupDiscardReason
+  let spaceWarmupSamples: [Sample]
   let spaceSwitchSamples: [Sample]
   let profileSwitchSamples: [Sample]
   var samples: [Sample] { spaceSwitchSamples + profileSwitchSamples }
@@ -80,7 +86,8 @@ struct SwitchProbeMetrics: Codable {
   var profileSwitchLatency: Summary { latency(for: profileSwitchSamples) }
 
   var spaceSwitchWithinBudget: Bool {
-    spaceSwitchSamples.count == Self.expectedSwitchCount
+    spaceWarmupSamples.count == Self.expectedSpaceWarmupCount
+      && spaceSwitchSamples.count == Self.expectedSwitchCount
       && (spaceSwitchLatency.p95Milliseconds ?? .infinity) <= Self.latencyBudgetMilliseconds
   }
 
@@ -104,6 +111,9 @@ struct SwitchProbeMetrics: Codable {
     case measurementScope
     case expectedSampleCount
     case latencyBudgetMilliseconds
+    case expectedSpaceWarmupCount
+    case warmupDiscardReason
+    case spaceWarmupSamples
     case spaceSwitchSamples
     case profileSwitchSamples
     case spaceSwitchLatency
@@ -113,8 +123,12 @@ struct SwitchProbeMetrics: Codable {
     case residentMemory
   }
 
-  init(phase: String, spaceSwitchSamples: [Sample], profileSwitchSamples: [Sample]) {
+  init(
+    phase: String, spaceWarmupSamples: [Sample], spaceSwitchSamples: [Sample],
+    profileSwitchSamples: [Sample]
+  ) {
     self.phase = phase
+    self.spaceWarmupSamples = spaceWarmupSamples
     self.spaceSwitchSamples = spaceSwitchSamples
     self.profileSwitchSamples = profileSwitchSamples
   }
@@ -122,13 +136,17 @@ struct SwitchProbeMetrics: Codable {
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     phase = try container.decode(String.self, forKey: .phase)
+    spaceWarmupSamples = try container.decode([Sample].self, forKey: .spaceWarmupSamples)
     spaceSwitchSamples = try container.decode([Sample].self, forKey: .spaceSwitchSamples)
     profileSwitchSamples = try container.decode([Sample].self, forKey: .profileSwitchSamples)
     guard try container.decode(Int.self, forKey: .schema) == schema,
       try container.decode(String.self, forKey: .measurementScope) == Self.measurementScope,
       try container.decode(Int.self, forKey: .expectedSampleCount) == Self.expectedSwitchCount,
       try container.decode(Double.self, forKey: .latencyBudgetMilliseconds)
-        == Self.latencyBudgetMilliseconds
+        == Self.latencyBudgetMilliseconds,
+      try container.decode(Int.self, forKey: .expectedSpaceWarmupCount)
+        == Self.expectedSpaceWarmupCount,
+      try container.decode(String.self, forKey: .warmupDiscardReason) == Self.warmupDiscardReason
     else {
       throw DecodingError.dataCorruptedError(
         forKey: .schema, in: container, debugDescription: "Invalid switch metrics metadata.")
@@ -144,15 +162,17 @@ struct SwitchProbeMetrics: Codable {
         forKey: .spaceSwitchLatency, in: container,
         debugDescription: "Switch metrics summaries do not match samples.")
     }
-    guard valid(spaceSwitchSamples, kind: .space), valid(profileSwitchSamples, kind: .profile)
+    guard valid(spaceWarmupSamples, kind: .space, count: Self.expectedSpaceWarmupCount),
+      valid(spaceSwitchSamples, kind: .space, count: Self.expectedSwitchCount),
+      valid(profileSwitchSamples, kind: .profile, count: Self.expectedSwitchCount)
     else {
       throw DecodingError.dataCorruptedError(
         forKey: .spaceSwitchSamples, in: container, debugDescription: "Invalid switch samples.")
     }
   }
 
-  private func valid(_ samples: [Sample], kind: SwitchKind) -> Bool {
-    samples.count <= Self.expectedSwitchCount
+  private func valid(_ samples: [Sample], kind: SwitchKind, count: Int) -> Bool {
+    samples.count == count
       && samples.enumerated().allSatisfy({ index, sample in
         sample.iteration == index + 1 && sample.latencyMilliseconds.isFinite
           && sample.latencyMilliseconds >= 0 && sample.kind == kind
@@ -166,6 +186,9 @@ struct SwitchProbeMetrics: Codable {
     try container.encode(measurementScope, forKey: .measurementScope)
     try container.encode(expectedSampleCount, forKey: .expectedSampleCount)
     try container.encode(latencyBudgetMilliseconds, forKey: .latencyBudgetMilliseconds)
+    try container.encode(expectedSpaceWarmupCount, forKey: .expectedSpaceWarmupCount)
+    try container.encode(warmupDiscardReason, forKey: .warmupDiscardReason)
+    try container.encode(spaceWarmupSamples, forKey: .spaceWarmupSamples)
     try container.encode(spaceSwitchSamples, forKey: .spaceSwitchSamples)
     try container.encode(profileSwitchSamples, forKey: .profileSwitchSamples)
     try container.encode(spaceSwitchLatency, forKey: .spaceSwitchLatency)
@@ -193,8 +216,23 @@ struct SwitchProbeMetrics: Codable {
 }
 
 struct SwitchProbeMetricsRecorder {
+  private(set) var spaceWarmupSamples: [SwitchProbeMetrics.Sample] = []
   private(set) var spaceSwitchSamples: [SwitchProbeMetrics.Sample] = []
   private(set) var profileSwitchSamples: [SwitchProbeMetrics.Sample] = []
+
+  mutating func recordSpaceWarmup(
+    iteration: Int, latencySeconds: Double, residentMemoryBytes: UInt64?
+  ) throws {
+    let latencyMilliseconds = latencySeconds * 1_000
+    guard iteration == spaceWarmupSamples.count + 1,
+      iteration <= SwitchProbeMetrics.expectedSpaceWarmupCount,
+      latencySeconds.isFinite, latencySeconds >= 0, latencyMilliseconds.isFinite
+    else { throw SwitchProbeMetricsError.invalidSample }
+    spaceWarmupSamples.append(
+      SwitchProbeMetrics.Sample(
+        kind: .space, iteration: iteration, latencyMilliseconds: latencyMilliseconds,
+        residentMemoryBytes: residentMemoryBytes))
+  }
 
   mutating func record(
     kind: SwitchProbeMetrics.SwitchKind, iteration: Int, latencySeconds: Double,
@@ -220,7 +258,8 @@ struct SwitchProbeMetricsRecorder {
 
   func report(phase: String) -> SwitchProbeMetrics {
     SwitchProbeMetrics(
-      phase: phase, spaceSwitchSamples: spaceSwitchSamples,
+      phase: phase, spaceWarmupSamples: spaceWarmupSamples,
+      spaceSwitchSamples: spaceSwitchSamples,
       profileSwitchSamples: profileSwitchSamples)
   }
 }

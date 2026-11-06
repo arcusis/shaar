@@ -10,6 +10,7 @@ import Testing
 @Suite struct SwitchProbeMetricsTests {
   @Test func twentySamplesRoundTripSummariesAndAccounting() throws {
     var recorder = SwitchProbeMetricsRecorder()
+    try recordSpaceWarmups(&recorder, latencies: [0.301, 0.966])
     for iteration in 1...SwitchProbeMetrics.expectedSwitchCount {
       try recorder.record(
         kind: .space,
@@ -28,6 +29,9 @@ import Testing
     let profileLatencyJSON = try #require(object["profileSwitchLatency"] as? [String: Any])
     let memoryJSON = try #require(object["residentMemory"] as? [String: Any])
     #expect(object["expectedSampleCount"] as? Int == 20)
+    #expect(object["expectedSpaceWarmupCount"] as? Int == 2)
+    #expect(object["warmupDiscardReason"] as? String == SwitchProbeMetrics.warmupDiscardReason)
+    #expect((object["spaceWarmupSamples"] as? [Any])?.count == 2)
     #expect(object["latencyBudgetMilliseconds"] as? Double == 100)
     #expect((object["spaceSwitchSamples"] as? [Any])?.count == 20)
     #expect((object["profileSwitchSamples"] as? [Any])?.count == 20)
@@ -45,6 +49,8 @@ import Testing
 
     let decoded = try JSONDecoder().decode(SwitchProbeMetrics.self, from: data)
     #expect(decoded.phase == "initial")
+    #expect(decoded.schema == 3)
+    #expect(decoded.spaceWarmupSamples.map(\.latencyMilliseconds) == [301, 966])
     #expect(decoded.spaceSwitchSamples.count == SwitchProbeMetrics.expectedSwitchCount)
     #expect(decoded.profileSwitchSamples.count == SwitchProbeMetrics.expectedSwitchCount)
     #expect(decoded.spaceSwitchLatency == report.spaceSwitchLatency)
@@ -59,6 +65,7 @@ import Testing
 
   @Test func missingMemorySamplesRoundTripWithExplicitZeroCount() throws {
     var recorder = SwitchProbeMetricsRecorder()
+    try recordSpaceWarmups(&recorder, latencies: [0.01, 0.02])
     for iteration in 1...SwitchProbeMetrics.expectedSwitchCount {
       try recorder.record(
         kind: .space,
@@ -73,6 +80,7 @@ import Testing
     let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
     let memoryJSON = try #require(object["residentMemory"] as? [String: Any])
     #expect(object["expectedSampleCount"] as? Int == 20)
+    #expect((object["spaceWarmupSamples"] as? [Any])?.count == 2)
     #expect((object["spaceSwitchSamples"] as? [Any])?.count == 20)
     #expect((object["profileSwitchSamples"] as? [Any])?.count == 20)
     #expect(memoryJSON["count"] as? Int == 0)
@@ -125,6 +133,7 @@ import Testing
 
   @Test func budgetRequiresCompleteSamplesAndRejectsSlowP95() throws {
     var recorder = SwitchProbeMetricsRecorder()
+    try recordSpaceWarmups(&recorder, latencies: [0.3, 0.9])
     for iteration in 1...SwitchProbeMetrics.expectedSwitchCount {
       try recorder.record(
         kind: .space, iteration: iteration, latencySeconds: 0.099,
@@ -140,5 +149,14 @@ import Testing
     let incomplete = SwitchProbeMetricsRecorder().report(phase: "restart")
     #expect(!incomplete.spaceSwitchWithinBudget)
     #expect(!incomplete.profileSwitchWithinBudget)
+  }
+
+  private func recordSpaceWarmups(
+    _ recorder: inout SwitchProbeMetricsRecorder, latencies: [Double]
+  ) throws {
+    for (index, latency) in latencies.enumerated() {
+      try recorder.recordSpaceWarmup(
+        iteration: index + 1, latencySeconds: latency, residentMemoryBytes: nil)
+    }
   }
 }

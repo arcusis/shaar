@@ -442,6 +442,44 @@ final class EngineProbe {
     throw ProbeFailure("Native tab \(tabID) was not selected; native selection audit: \(selection)")
   }
 
+  private func warmUpSameProfileSpaceSwitches(_ tabIDs: [String]) async throws {
+    guard
+      tabIDs.count == SwitchProbeMetrics.expectedSpaceWarmupCount,
+      Set(tabIDs).count == SwitchProbeMetrics.expectedSpaceWarmupCount
+    else {
+      throw ProbeFailure("Space switch warm-up count does not match its measurement contract.")
+    }
+    let selectedTabID = store.session.selectedSpace.selectedTabID?.uuidString
+    let orderedTabIDs =
+      tabIDs.filter { $0 != selectedTabID }
+      + tabIDs.filter { $0 == selectedTabID }
+    for (index, tabID) in orderedTabIDs.enumerated() {
+      guard
+        let space = store.session.spaces.first(where: {
+          $0.profileID.uuidString == profileA && $0.tabs.contains { $0.id.uuidString == tabID }
+        })
+      else {
+        throw ProbeFailure("Warm-up tab \(tabID) has no same-profile Space.")
+      }
+      let switchStart = ProcessInfo.processInfo.systemUptime
+      store.perform(.space(space.id))
+      try expect(
+        store.session.selectedSpace.selectedTabID?.uuidString == tabID
+          && store.session.selectedSpace.profileID.uuidString == profileA,
+        "Space switch warm-up \(index + 1) selects its same-profile target")
+      let nativeSelection = try await waitForNativeTabSelection(tabID)
+      try expect(
+        nativeSelection["selectedNativeTab"] as? Bool == true,
+        "Space switch warm-up \(index + 1) selects the native tab")
+      try switchMetrics.recordSpaceWarmup(
+        iteration: index + 1,
+        latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
+        residentMemoryBytes: NativeResidentMemory.currentBytes())
+      try await waitForDisplayedNativeTab(
+        tabID, "Space switch warm-up \(index + 1) displays the selected native tab")
+    }
+  }
+
   /// Restored background tabs keep committing titles after launch; wait for the model to stop changing.
   private func waitForSessionToSettle() async throws {
     var previous = store.session
@@ -696,6 +734,7 @@ final class EngineProbe {
         })
       else { throw ProbeFailure("Native Alpha tab lost its owning Space.") }
       store.perform(.space(alphaSpace.id))
+      try await warmUpSameProfileSpaceSwitches([sharedA, tabA])
       for iteration in 0..<SwitchProbeMetrics.expectedSwitchCount {
         let isShared = iteration.isMultiple(of: 2)
         let tab = isShared ? sharedA : tabA

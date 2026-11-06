@@ -106,6 +106,11 @@ public enum CommandProviderSearch {
       queryName: "search", fragmentPrefix: nil),
   ]
 
+  public static func supports(keyword: String, provider: CommandSearchProvider) -> Bool {
+    let services = provider == .google ? google : microsoft
+    return services.contains { $0.keyword == keyword.lowercased() }
+  }
+
   /// Builds service rows for a query. A service keyword followed by whitespace narrows to that row.
   public static func results(
     for query: String, provider: CommandSearchProvider?

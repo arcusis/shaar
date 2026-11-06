@@ -53,12 +53,23 @@ final class BrowserStore {
   private(set) var sidebarNotice: String?
   var commandIsOpen = false
   var commandQuery = "" {
-    didSet { resetCommandSelection() }
+    didSet {
+      if let keyword = commandProviderKeyword,
+        !commandQuery.lowercased().hasPrefix(keyword + " ")
+      {
+        commandProviderKeyword = nil
+      }
+      resetCommandSelection()
+    }
   }
+  private(set) var commandProviderKeyword: String?
   var commandEditsCurrentURL = false
   private(set) var commandSelectedRow = CommandSelection()
   var commandFilter: CommandFilter? {
-    didSet { resetCommandSelection() }
+    didSet {
+      if commandFilter != .actions { commandProviderKeyword = nil }
+      resetCommandSelection()
+    }
   }
   var sidebarIsVisible = true
   private(set) var pageFind: PageFindState?
@@ -220,13 +231,7 @@ final class BrowserStore {
       bookmarks: library.bookmarks[profile]?.items ?? [], history: library.history[profile] ?? [],
       commands: launcherActions?.available() ?? [],
       searchEngine: preferences.searchEngine(for: profile),
-      providerSearch: (isPrivate ? nil : preferences.accounts(for: profile).first).flatMap {
-        switch $0.provider {
-        case .google: .google
-        case .microsoft: .microsoft
-        case .apple: nil
-        }
-      })
+      providerSearch: commandProviderKeyword == nil ? nil : commandSearchProvider)
     return CommandSectionsKey(
       query: commandQuery, filter: commandFilter, session: session, sources: sources)
   }
@@ -249,6 +254,7 @@ final class BrowserStore {
     dismissPageFind()
     commandEditsCurrentURL = false
     commandQuery = ""
+    commandProviderKeyword = nil
     commandFilter = nil
     pendingSplitPlacement = nil
     commandIsOpen = true
@@ -446,6 +452,29 @@ final class BrowserStore {
 
   func cycleCommandFilter(by offset: Int) {
     commandFilter = CommandFilter.cycled(from: commandFilter, by: offset)
+  }
+
+  private var commandSearchProvider: CommandSearchProvider? {
+    guard !isPrivate,
+      let account = preferences.accounts(for: session.selectedSpace.profileID).first
+    else { return nil }
+    switch account.provider {
+    case .google: return .google
+    case .microsoft: return .microsoft
+    case .apple: return nil
+    }
+  }
+
+  @discardableResult
+  func activateCommandProviderKeyword() -> Bool {
+    let keyword = commandQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard let provider = commandSearchProvider,
+      CommandProviderSearch.supports(keyword: keyword, provider: provider)
+    else { return false }
+    commandProviderKeyword = keyword
+    commandFilter = .actions
+    commandQuery = keyword + " "
+    return true
   }
 
   func acceptCommand() {

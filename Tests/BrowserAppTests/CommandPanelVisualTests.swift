@@ -35,6 +35,53 @@ final class CommandPanelVisualTests: XCTestCase {
     let size: NSSize
   }
 
+  func testEmptySearchRowInLightDarkAndRTL() async throws {
+    let root = try SidebarVisualCaptureSupport.prepare()
+    let size = NSSize(width: 760, height: 520)
+    for scheme in [ColorScheme.light, .dark] {
+      for direction in [LayoutDirection.leftToRight, .rightToLeft] {
+        let store = BrowserStore()
+        store.commandFilter = .history
+        XCTAssertTrue(store.commandSections.results.isEmpty)
+        let measurements = Measurements()
+        let view = ZStack {
+          Color(nsColor: .windowBackgroundColor)
+          CommandPanel(store: store, resultsHeight: 0)
+            .environment(\.colorScheme, scheme)
+            .environment(\.layoutDirection, direction)
+            .frame(width: 580)
+            .fixedSize(horizontal: false, vertical: true)
+            .background {
+              GeometryReader { geometry in
+                Color.clear.preference(
+                  key: CommandPanelBoundsKey.self, value: geometry.frame(in: .global))
+              }
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .onPreferenceChange(CommandPanelBoundsKey.self) { measurements.panel = $0 }
+        let mounted = try MountedChromeSidebar(
+          view: view, size: size, appearance: scheme == .dark ? .darkAqua : .aqua)
+        defer { mounted.close() }
+        let hasBounds = await mounted.waitUntil({ !measurements.panel.isEmpty })
+        XCTAssertTrue(hasBounds)
+        let name =
+          "command-empty-\(scheme == .dark ? "dark" : "light")-\(direction == .rightToLeft ? "rtl" : "ltr").png"
+        let image = root.appendingPathComponent(name)
+        _ = try await mounted.capture(to: image)
+        XCTAssertEqual(
+          measurements.panel.height, BrowserChromeLayout.commandSearchHeight, accuracy: 0.5)
+        try SidebarVisualCaptureSupport.record(
+          root: root,
+          entry: [
+            "check": "empty-command-search-row", "file": name, "status": "passed",
+            "height": Double(measurements.panel.height),
+            "componentOnly": true, "physicalInput": false, "visualAcceptance": false,
+          ])
+      }
+    }
+  }
+
   func testHostedPanelInSyntheticPageViewports() async throws {
     let root = try SidebarVisualCaptureSupport.prepare()
     var failures: [String] = []
@@ -98,8 +145,7 @@ final class CommandPanelVisualTests: XCTestCase {
     XCTAssertTrue(failures.isEmpty, "Command panel capture failures: \(failures)")
   }
 
-  /// Words text recognition reads reliably on every runner. The action still proves a result row
-  /// is visible when Vision misreads the short title "Notes" as "Nates".
+  /// The selected web-search action is stable when result titles vary across renderers.
   private func textTokens(longQuery: Bool) -> (query: String, result: String) {
     longQuery ? ("research", "Open in") : ("Atlas", "Search Web")
   }

@@ -217,8 +217,7 @@ final class ShaarDevToolsModel {
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
-    localTasks.forEach { $0.cancel() }
-    localTasks.removeAll()
+    cancelLocalTasks()
     streamAvailable = false
     events.removeAll()
     localConsoleEvents.removeAll()
@@ -255,8 +254,7 @@ final class ShaarDevToolsModel {
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
-    localTasks.forEach { $0.cancel() }
-    localTasks.removeAll()
+    cancelLocalTasks()
     if isOpen {
       startStream()
       startLocalStreams()
@@ -306,6 +304,11 @@ final class ShaarDevToolsModel {
     }
   }
 
+  private func cancelLocalTasks() {
+    for task in localTasks { task.cancel() }
+    localTasks.removeAll()
+  }
+
   private func receiveLocal(
     _ message: ShaarLocalConsoleMessage, from origin: ShaarConsoleEvent.Origin
   ) {
@@ -340,7 +343,7 @@ final class ShaarDevToolsModel {
 
   isolated deinit {
     eventTask?.cancel()
-    localTasks.forEach { $0.cancel() }
+    cancelLocalTasks()
   }
 }
 

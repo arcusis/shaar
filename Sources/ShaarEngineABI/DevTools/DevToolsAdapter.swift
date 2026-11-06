@@ -72,11 +72,28 @@ public enum ShaarDevToolsCommand: UInt32, CaseIterable, Sendable {
   case networkSetCookie = 42
   case networkDeleteCookies = 43
   case emulationSetSafeAreaInsetsOverride = 44
+  case domRequestChildNodes = 45
+  case domSetAttributeValue = 46
+  case domRemoveAttribute = 47
+  case domSetNodeValue = 48
+  case domRemoveNode = 49
+  case domSetOuterHTML = 50
+  case domMoveTo = 51
+  case domMarkUndoableState = 52
+  case domUndo = 53
+  case domPerformSearch = 54
+  case domGetSearchResults = 55
+  case domDiscardSearchResults = 56
+  case overlayHighlightNode = 57
+  case overlayHideHighlight = 58
+  case domResolveNode = 59
+  case runtimeCallFunctionOn = 60
+  case domGetOuterHTML = 61
 
   fileprivate func permits(_ capability: ShaarDevToolsCapability) -> Bool {
     switch capability {
     case .inspector:
-      return rawValue <= 25
+      return rawValue <= 25 || (45...61).contains(rawValue)
     case .developer:
       return rawValue <= 4 || (15...18).contains(rawValue) || (26...40).contains(rawValue)
         || self == .emulationSetSafeAreaInsetsOverride

@@ -22,6 +22,7 @@ ENGINE_SHARD_COUNT = 4
 # still assigned to exactly one shard.
 ENGINE_PROBE_WEIGHTS_SECONDS = {
     "baseline": 484,
+    "dev-mode": 55,
     "private-multitab": 54,
     "private-window": 489,
     "quit-exit": 52,
@@ -76,6 +77,7 @@ def _engine_shard_assignments(iterations: int) -> dict[str, list[tuple[str, int]
     loads = {shard: 0 for shard in shards}
     repetitions = {
         "baseline": iterations,
+        "dev-mode": iterations,
         "private-multitab": iterations,
         "private-window": max(3, iterations),
         "quit-exit": max(3, iterations),

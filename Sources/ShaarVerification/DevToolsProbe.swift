@@ -129,7 +129,7 @@ final class DevToolsProbe {
       ("devmode-next", DevelopmentFramework.nextJS),
       ("devmode-vite", DevelopmentFramework.vite),
     ] {
-      store.perform(.open(fixture.appending(path: path)))
+      store.perform(.open(DevelopmentModeProbe.fixtureURL(fixture, path: path)))
       try await wait("Dev Mode detects \(framework.rawValue) on a hidden local fixture") {
         self.engine.detectedFramework == framework
           && self.engine.isDevelopmentPage

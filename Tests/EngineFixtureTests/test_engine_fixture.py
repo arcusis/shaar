@@ -12,7 +12,9 @@ from pathlib import Path
 import plistlib
 import signal
 import tempfile
+import threading
 import unittest
+import urllib.request
 import uuid
 from unittest.mock import Mock, patch
 
@@ -159,6 +161,54 @@ class SplitProbePhaseArgumentTests(unittest.TestCase):
                 '--probe-phase', phase, '--probe-root', '/tmp/arcusis-engine-probe-ci-test'])
             self.assertEqual(options.probe_phase, phase)
             self.assertEqual(options.probe_root, '/tmp/arcusis-engine-probe-ci-test')
+
+
+class DevelopmentModeRunnerTests(unittest.TestCase):
+    def test_local_framework_resources_are_allowed_by_fixture_csp(self):
+        server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        for path, marker in (('/devmode-next', b'/_next/'),
+                             ('/devmode-vite', b'/@vite/client')):
+            with self.subTest(path=path):
+                with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}{path}') as response:
+                    body = response.read()
+                    self.assertIn("script-src 'self'", response.headers['Content-Security-Policy'])
+                    self.assertIn(marker, body)
+
+    def test_dev_mode_is_an_exclusive_hidden_probe(self):
+        options = fixture.argument_parser().parse_args(['--dev-mode'])
+        self.assertTrue(options.dev_mode)
+        arguments = fixture.build_engine_probe_arguments(
+            '/tmp/ShaarVerification', Path('/tmp/probe'),
+            'http://127.0.0.1:43123/account', 'initial',
+            include_bitwarden=False, onboarding_control=False, abrupt=False,
+            saved_tab_capacity=False, dev_mode=True)
+        self.assertIn('--probe-dev-mode-only', arguments)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            fixture.argument_parser().parse_args(['--dev-mode', '--private-window'])
+
+    def test_dev_mode_report_requires_both_native_framework_detections(self):
+        report = dict(phase='initial', passed=True, probeMode='dev-mode-only',
+                      devModeOnly=True, localFixturesPassed=True, error=None,
+                      checks=['Dev Mode detects Next.js', 'Dev Mode detects Vite'])
+        detections = [dict(framework=name, path=path, host='127.0.0.1', port=43123,
+                           nativeSelected=True,
+                           nativeDisplayed=True, windowHidden=True, documentReady=True)
+                      for name, path in (('Next.js', '/devmode-next'),
+                                         ('Vite', '/devmode-vite'))]
+        evidence = dict(phase='initial', mode='dev-mode-only', passed=True,
+                        detections=detections, error=None)
+        fixture.validate_dev_mode_report(report, evidence, 'initial', 0)
+        with self.assertRaises(RuntimeError):
+            fixture.validate_dev_mode_report(report, dict(evidence, detections=detections[:1]),
+                                             'initial', 0)
+        with self.assertRaises(RuntimeError):
+            fixture.validate_dev_mode_report(
+                report, dict(evidence, detections=[dict(detections[0], nativeDisplayed=False),
+                                                   detections[1]]), 'initial', 0)
 
 
 class VerificationBundleIdentityTests(unittest.TestCase):

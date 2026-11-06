@@ -487,10 +487,12 @@ class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == '/devmode-next':
-            self.html(b'<!doctype html><title>Next fixture</title><div id="__next"></div><script src="/_next/static/chunk.js"></script>')
+            self.html(b'<!doctype html><title>Next fixture</title><div id="__next"></div><script src="/_next/static/chunk.js"></script>',
+                      csp=PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self' 'unsafe-inline'"))
             return
         if path == '/devmode-vite':
-            self.html(b'<!doctype html><title>Vite fixture</title><script type="module" src="/@vite/client"></script>')
+            self.html(b'<!doctype html><title>Vite fixture</title><script type="module" src="/@vite/client"></script>',
+                      csp=PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self' 'unsafe-inline'"))
             return
         if path in ('/_next/static/chunk.js', '/@vite/client'):
             self.send_response(200)
@@ -815,6 +817,8 @@ def argument_parser():
                       help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
     mode.add_argument("--basic-browsing", action="store_true",
                       help="Run the normal-window address/search/tab/close/reopen/quit smoke")
+    mode.add_argument("--dev-mode", action="store_true",
+                      help="Prove Next.js and Vite detection on hidden local fixture tabs")
     parser.add_argument("--probe-phase", choices=("initial", "restart"),
                         help="Run one half of a baseline or private-window probe using a transferred profile")
     parser.add_argument("--probe-root", help="Marked temporary root used by a split probe phase")
@@ -826,7 +830,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  external_app_consent=False, private_window=False,
                                  private_window_run_id=None, quit_exit=False,
                                  quit_pending_navigation=False, session_recovery=False,
-                                 private_multitab=False, basic_browsing=False):
+                                 private_multitab=False, basic_browsing=False,
+                                 dev_mode=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -857,7 +862,32 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
         arguments.append('--probe-session-recovery')
     if basic_browsing:
         arguments.append('--probe-basic-browsing')
+    if dev_mode:
+        arguments.append('--probe-dev-mode-only')
     return arguments
+
+
+def validate_dev_mode_report(report, evidence, phase, exit_code):
+    expected = [('Next.js', '/devmode-next'), ('Vite', '/devmode-vite')]
+    if (exit_code != 0 or not isinstance(report, dict) or not isinstance(evidence, dict)
+            or report.get('phase') != phase or report.get('probeMode') != 'dev-mode-only'
+            or report.get('devModeOnly') is not True or report.get('passed') is not True
+            or report.get('localFixturesPassed') is not True or report.get('error') is not None
+            or evidence.get('phase') != phase or evidence.get('mode') != 'dev-mode-only'
+            or evidence.get('passed') is not True or evidence.get('error') is not None):
+        raise RuntimeError('Dev Mode report has failed or mismatched mode, phase, or process exit')
+    detections = evidence.get('detections')
+    if not isinstance(detections, list) or len(detections) != len(expected):
+        raise RuntimeError('Dev Mode report must contain both framework detections')
+    for item, (framework, path) in zip(detections, expected):
+        if (not isinstance(item, dict) or item.get('framework') != framework
+                or item.get('path') != path or item.get('host') != '127.0.0.1'
+                or type(item.get('port')) is not int or not 1 <= item['port'] <= 65535
+                or item.get('nativeSelected') is not True
+                or item.get('nativeDisplayed') is not True
+                or item.get('windowHidden') is not True
+                or item.get('documentReady') is not True):
+            raise RuntimeError(f'Dev Mode {framework} detection lacks native page evidence')
 
 
 def ensure_private_failure_reports(root, phase, run_id, exit_code):
@@ -1543,6 +1573,7 @@ def main(argv=None):
     if split_phase and (options.bitwarden or options.bitwarden_onboarding_control or options.abrupt_restart
                         or options.abrupt_control or options.saved_tab_capacity or options.external_app_consent
                         or options.quit_exit or options.session_recovery or options.basic_browsing
+                        or options.dev_mode
                         or not options.probe_root):
         raise ValueError("Split probe phases require only the baseline or private-window mode and a probe root")
     include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
@@ -1566,6 +1597,8 @@ def main(argv=None):
         print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
     if options.basic_browsing:
         print('BASIC BROWSING: hidden normal window, authored pages, real renderer captures, clean quit', flush=True)
+    if options.dev_mode:
+        print('DEV MODE: hidden local Next.js and Vite fixture pages; no desktop window', flush=True)
     app = VERIFICATION_APP.resolve()
     require_verification_bundle_identity(app)
     root = Path(options.probe_root) if split_phase else Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
@@ -1625,7 +1658,7 @@ def main(argv=None):
     failures = []
     try:
         phases = ((options.probe_phase,) if split_phase else
-                  ("initial",) if options.basic_browsing else ("initial", "restart"))
+                  ("initial",) if options.basic_browsing or options.dev_mode else ("initial", "restart"))
         for phase in phases:
             if options.private_window and phase == 'restart' and failures:
                 print('SKIPPED restart: initial fixture failed; no valid seeded restart baseline', flush=True)
@@ -1642,7 +1675,7 @@ def main(argv=None):
                 quit_pending_navigation=options.quit_pending_navigation,
                 session_recovery=options.session_recovery,
                 private_multitab=options.private_multitab,
-                basic_browsing=options.basic_browsing)
+                basic_browsing=options.basic_browsing, dev_mode=options.dev_mode)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 print(f"Probe PID: {process.pid}", flush=True)
@@ -1722,6 +1755,13 @@ def main(argv=None):
                         or not isinstance(checks, list) or not required.issubset(checks)
                         or any(not isinstance(check, str) or not check for check in checks)):
                     raise RuntimeError('Basic browsing report has wrong phase, mode, or check evidence')
+            elif options.dev_mode:
+                evidence_path = root / f'{phase}-dev-mode.json'
+                try:
+                    evidence = json.loads(evidence_path.read_text())
+                except (OSError, ValueError) as error:
+                    raise RuntimeError(f'Dev Mode evidence is missing or invalid: {evidence_path}') from error
+                validate_dev_mode_report(report, evidence, phase, code)
             elif options.private_window:
                 try:
                     validate_private_window_report(root, phase, report, code)

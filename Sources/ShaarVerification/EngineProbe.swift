@@ -32,6 +32,7 @@ final class EngineProbe {
   private let sessionRecoveryMode: Bool
   private let localizationMode: Bool
   private let basicBrowsingMode: Bool
+  private let devModeOnly: Bool
   private let mediaSessionOnlyMode: Bool
   private let devtoolsRouteOnlyMode: Bool
   private let measurementTabCount: Int?
@@ -74,8 +75,8 @@ final class EngineProbe {
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
-    localizationMode: Bool, basicBrowsingMode: Bool, mediaSessionOnlyMode: Bool,
-    devtoolsRouteOnlyMode: Bool,
+    localizationMode: Bool, basicBrowsingMode: Bool, devModeOnly: Bool,
+    mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool,
     measurementTabCount: Int?
   ) throws {
     self.root = root
@@ -94,6 +95,7 @@ final class EngineProbe {
     self.sessionRecoveryMode = sessionRecoveryMode
     self.localizationMode = localizationMode
     self.basicBrowsingMode = basicBrowsingMode
+    self.devModeOnly = devModeOnly
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
     self.devtoolsRouteOnlyMode = devtoolsRouteOnlyMode
     self.measurementTabCount = measurementTabCount
@@ -220,6 +222,7 @@ final class EngineProbe {
       let quitPendingNavigation = arguments.contains("--probe-quit-pending-navigation")
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let basicBrowsingMode = arguments.contains("--probe-basic-browsing")
+      let devModeOnly = arguments.contains("--probe-dev-mode-only")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
       let devtoolsRouteOnlyMode = arguments.contains("--probe-devtools-route-only")
       let measurementTabCount: Int? = {
@@ -252,6 +255,7 @@ final class EngineProbe {
         "--probe-quit-exit",
         "--probe-localization",
         "--probe-basic-browsing",
+        "--probe-dev-mode-only",
         "--probe-media-session-only",
         "--probe-devtools-route-only",
         "--probe-measure-tabs",
@@ -275,6 +279,9 @@ final class EngineProbe {
             where: arguments.contains),
         !basicBrowsingMode
           || !conflictingFlags.filter({ $0 != "--probe-basic-browsing" }).contains(
+            where: arguments.contains),
+        !devModeOnly
+          || !conflictingFlags.filter({ $0 != "--probe-dev-mode-only" }).contains(
             where: arguments.contains),
         !mediaSessionOnlyMode
           || !conflictingFlags.filter({ $0 != "--probe-media-session-only" }).contains(
@@ -306,7 +313,8 @@ final class EngineProbe {
         privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
         quitPendingNavigation: quitPendingNavigation,
         sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode,
-        basicBrowsingMode: basicBrowsingMode, mediaSessionOnlyMode: mediaSessionOnlyMode,
+        basicBrowsingMode: basicBrowsingMode, devModeOnly: devModeOnly,
+        mediaSessionOnlyMode: mediaSessionOnlyMode,
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
         measurementTabCount: measurementTabCount)
       probe.runtime.onReady = { [weak probe] in
@@ -588,6 +596,17 @@ final class EngineProbe {
       let firstA = try await snapshot(tabA)
       bootstrapStage = .readingBeta
       let firstB = try await snapshot(tabB)
+      if devModeOnly {
+        guard let browserEngine else { throw ProbeFailure("Dev Mode engine is missing.") }
+        bootstrapStage = .ready
+        fixtureStage = "DevMode"
+        checks += try await DevelopmentModeProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       if privateMultiTabMode {
         guard let browserEngine else { throw ProbeFailure("Private multitab engine is missing.") }
         bootstrapStage = .ready
@@ -864,7 +883,8 @@ final class EngineProbe {
         "profile identities survive session restore")
       try expect(
         store.storageNotice == nil && browserEngine?.notice == nil,
-        "native shell and engine report no storage errors")
+        "native shell and engine report no storage errors; sessionNotice=\(store.storageNotice ?? "none"), engineNotice=\(browserEngine?.notice ?? "none")"
+      )
       store.perform(.space(store.session.spaces[0].id))
       try await Task.sleep(for: .milliseconds(200))
       let picture: Data? = await withCheckedContinuation { continuation in
@@ -1197,7 +1217,7 @@ final class EngineProbe {
       writeReport()
       return
     }
-    if basicBrowsingMode || mediaSessionOnlyMode || devtoolsRouteOnlyMode {
+    if basicBrowsingMode || devModeOnly || mediaSessionOnlyMode || devtoolsRouteOnlyMode {
       let engineClosed = browserEngine?.isClosed == true
       let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
       let routerClientCount = browserEngine?.events.router.clients.count ?? -1
@@ -1235,7 +1255,7 @@ final class EngineProbe {
   }
 
   private var baseTimeoutSeconds: Double {
-    if basicBrowsingMode || mediaSessionOnlyMode || devtoolsRouteOnlyMode { return 180 }
+    if basicBrowsingMode || devModeOnly || mediaSessionOnlyMode || devtoolsRouteOnlyMode { return 180 }
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
@@ -1245,6 +1265,7 @@ final class EngineProbe {
 
   private var probeMode: String {
     if basicBrowsingMode { return "basic-browsing" }
+    if devModeOnly { return DevelopmentModeProbe.mode }
     if mediaSessionOnlyMode { return "media-session-only" }
     if devtoolsRouteOnlyMode { return "devtools-route-only" }
     if localizationMode { return "localization-only" }
@@ -1260,6 +1281,10 @@ final class EngineProbe {
     if basicBrowsingMode {
       return
         "Owned hidden normal window, unauthenticated Google search results, and authored loopback tabs. No existing browser profile or account is opened."
+    }
+    if devModeOnly {
+      return
+        "Owned hidden normal window and authored loopback Next.js/Vite fixtures. No existing profile or external origin."
     }
     if mediaSessionOnlyMode {
       return
@@ -1308,6 +1333,7 @@ final class EngineProbe {
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
       "probeMode": probeMode,
+      "devModeOnly": devModeOnly,
       "savedTabCapacityOnly": savedTabCapacityMode,
       "savedTabCapacityProbe": savedTabCapacityMode,
       "savedTabCapacityRunID": capacityRunID,

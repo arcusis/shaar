@@ -139,6 +139,33 @@ import Testing
     #expect((entries[0]["request"] as? [String: Any])?["method"] as? String == "GET")
     #expect((entries[0]["response"] as? [String: Any])?["status"] as? Int == 200)
   }
+
+  @Test func queryFormValuesAreAbsentFromEveryStructuredMember() throws {
+    let page = URL(
+      string: "https://user:password@example.com/page?email=person%40example.com#secret")!
+    let target = SiteControlTarget(tabID: UUID(), profileID: UUID(), url: page)
+    let base = fixture()
+    let environment = ShaarReproEnvironment(
+      url: page.absoluteString, shaarVersion: "test", engineVersion: "fixture",
+      operatingSystem: "macOS", userAgent: "Fixture/1", viewportWidth: 1040,
+      viewportHeight: 620)
+    let capture = ShaarReproCapture(
+      videoMP4: base.videoMP4, durationSeconds: base.durationSeconds,
+      dom: base.dom, console: base.console,
+      network: [
+        ShaarNetworkEvent(
+          id: UUID(), method: "GET", url: "https://example.com/search?name=form-secret",
+          status: 200)
+      ], environment: environment)
+    let files = try ShaarReproBundle.files(for: capture, target: target)
+    let text = files.filter { $0.key != "page.mp4" }
+      .values.map { String(decoding: $0, as: UTF8.self) }.joined()
+    #expect(!text.contains("person%40example.com"))
+    #expect(!text.contains("form-secret"))
+    #expect(!text.contains("password"))
+    #expect(!text.contains("#secret"))
+    #expect(text.contains("[redacted]"))
+  }
 }
 
 private struct ShaarReproFixtureTransport: ShaarReproTransport {

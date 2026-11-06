@@ -6,9 +6,28 @@ import BrowserCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum LibraryBookmarkAccessibility {
+  static func folderState(
+    collapsed: Bool, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.string(
+      collapsed ? "Collapsed" : "Expanded", table: "Panels", language: language)
+  }
+}
+
 enum LibraryPanelSearch {
   static func matches(_ text: String, query: String) -> Bool {
     query.isEmpty || text.localizedStandardContains(query)
+  }
+}
+
+enum LibraryHistoryAccessibility {
+  static func removeLabel(
+    title: String, address: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Remove %@ at %@ from history", table: "Panels", language: language,
+      arguments: [.string(title), .string(address)])
   }
 }
 
@@ -249,6 +268,10 @@ struct LibraryPanel: View {
         ? PanelsL10n.string("This address cannot be opened here. Use Edit to change it.")
         : item.path
     )
+    .accessibilityValue(
+      LibraryBookmarkAccessibility.folderState(collapsed: collapsed.contains(item.id)),
+      isEnabled: item.isFolder
+    )
     .contextMenu {
       if item.isFolder {
         Button(PanelsL10n.string("New folder inside…")) { add(folder: true, parent: item.id) }
@@ -300,7 +323,8 @@ struct LibraryPanel: View {
       } label: {
         Image(systemName: "trash")
       }.buttonStyle(.borderless).help(PanelsL10n.string("Remove all visits to this address"))
-        .accessibilityLabel(PanelsL10n.format("Remove %@ from history", .string(item.title)))
+        .accessibilityLabel(
+          LibraryHistoryAccessibility.removeLabel(title: item.title, address: item.address))
         .disabled(!ownsContext || busy)
     }.padding(.vertical, 10)
   }

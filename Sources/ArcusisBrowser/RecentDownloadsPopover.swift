@@ -59,23 +59,11 @@ struct RecentDownloadsPopover: View {
     .padding(.top, 36)
     .padding(.bottom, 6)
     .frame(width: 212, alignment: .leading)
-    .background { fadingBackdrop }
+    .background(backdrop)
     .onAppear { revealed = true }
     .onExitCommand(perform: dismiss)
     .accessibilityElement(children: .contain)
     .accessibilityLabel(PanelsL10n.string("Recent downloads for current profile"))
-  }
-
-  /// Tabs above the list fade out behind it, as in Arc.
-  private var fadingBackdrop: some View {
-    LinearGradient(
-      stops: [
-        .init(color: backdrop.opacity(0), location: 0),
-        .init(color: backdrop, location: 0.16),
-      ],
-      startPoint: .top, endPoint: .bottom
-    )
-    .padding(.horizontal, -14)
   }
 
   private func revealAnimation(stepsFromFooter: Int) -> Animation {

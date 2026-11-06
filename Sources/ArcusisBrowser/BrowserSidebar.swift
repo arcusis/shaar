@@ -28,7 +28,6 @@ struct BrowserSidebar: View {
   @State private var hoveredTabID: UUID?
   @State private var newTabIsHovered = false
   @State private var recentDownloads: RecentDownloadsPresentation
-  @State private var recentDownloadsCloseTask: Task<Void, Never>?
   @State private var folderDraft: SidebarFolderDraft?
   @State private var clearSpaceID: UUID?
   @State private var tidyInProgress = false
@@ -530,8 +529,8 @@ struct BrowserSidebar: View {
     let downloads = store.engine?.downloads
     let epoch = recentDownloads.epoch
     let isActive = store.isPrivate ? store.libraryDrawerSection == .spaces : recentDownloads.isOpen
-    let controlLabel = store.isPrivate ? ShellL10n.string("Spaces") : ShellL10n.string("Library")
-    return Button(action: toggleLibraryDrawerFromButton) {
+    let controlLabel = store.isPrivate ? ShellL10n.string("Spaces") : ShellL10n.string("Downloads")
+    return Button(action: toggleRecentDownloadsFromButton) {
       Image(systemName: store.isPrivate ? "square.grid.2x2" : "archivebox")
         .font(.system(size: 16))
         .foregroundStyle(Color.primary.opacity(isActive ? 0.9 : 0.55))
@@ -549,16 +548,9 @@ struct BrowserSidebar: View {
       }
     }
     .accessibilityLabel(controlLabel)
-    .accessibilityHint(
-      store.isPrivate ? "" : ShellL10n.string("Open Library; hover to see recent downloads")
-    )
+    .accessibilityHint(store.isPrivate ? "" : ShellL10n.string("Show recent downloads"))
     .help(controlLabel)
     .buttonStyle(.plain)
-    .onHover {
-      if !store.isPrivate {
-        recentDownloadsHoverChanged(.anchor, inside: $0, profileID: profileID, epoch: epoch)
-      }
-    }
     .overlay(alignment: .bottomLeading) {
       Group {
         if recentDownloads.isOpen || previewRecentDownloads != nil,
@@ -580,15 +572,11 @@ struct BrowserSidebar: View {
             dismiss: {
               guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch
               else { return }
-              recentDownloadsCloseTask?.cancel()
               recentDownloads.dismiss(profileID: profileID, epoch: epoch)
             },
             backdrop: SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
           )
           .offset(y: -40)
-          .onHover {
-            recentDownloadsHoverChanged(.card, inside: $0, profileID: profileID, epoch: epoch)
-          }
           .transition(.opacity)
         }
       }
@@ -605,11 +593,9 @@ struct BrowserSidebar: View {
     }
     .onExitCommand {
       guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch else { return }
-      recentDownloadsCloseTask?.cancel()
       recentDownloads.dismiss(profileID: profileID, epoch: epoch)
     }
     .onChange(of: profileID) { _, newProfileID in
-      recentDownloadsCloseTask?.cancel()
       var transaction = Transaction(animation: nil)
       transaction.disablesAnimations = true
       withTransaction(transaction) {
@@ -738,37 +724,17 @@ struct BrowserSidebar: View {
     store.session.selectedSpace.profileID == profileID
   }
 
-  private func recentDownloadsHoverChanged(
-    _ target: RecentDownloadsPresentation.HoverTarget, inside: Bool, profileID: UUID, epoch: UInt64
-  ) {
-    guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch else { return }
-    recentDownloadsCloseTask?.cancel()
-    guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else {
-      closeRecentDownloadsPreview()
+  private func toggleRecentDownloadsFromButton() {
+    guard !store.isPrivate else {
+      _ = store.toggleLibraryDrawer()
       return
     }
-    guard
-      let token = recentDownloads.hover(
-        target, inside: inside, profileID: profileID, epoch: epoch)
-    else { return }
-    recentDownloadsCloseTask = Task { @MainActor in
-      do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
-      guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch else { return }
-      guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else {
-        closeRecentDownloadsPreview()
-        return
-      }
-      recentDownloads.finishHoverLeave(token: token, profileID: profileID, epoch: epoch)
-    }
-  }
-
-  private func toggleLibraryDrawerFromButton() {
-    closeRecentDownloadsPreview()
-    _ = store.toggleLibraryDrawer()
+    guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else { return }
+    recentDownloads.toggle(
+      profileID: store.session.selectedSpace.profileID, epoch: recentDownloads.epoch)
   }
 
   private func closeRecentDownloadsPreview() {
-    recentDownloadsCloseTask?.cancel()
     recentDownloads.dismiss(
       profileID: store.session.selectedSpace.profileID, epoch: recentDownloads.epoch)
   }

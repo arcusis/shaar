@@ -707,6 +707,11 @@ class ProbeSoakTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             shard_modes("engine-5", 1)
 
+        for shard in engine_shards(1):
+            modes = [mode for mode, _ in shard_modes(shard, 1)]
+            if "dev-mode" in modes:
+                self.assertEqual(modes[0], "dev-mode")
+
         assignments = _engine_shard_assignments(1)
         estimated_loads = {
             shard: sum(ENGINE_PROBE_WEIGHTS_SECONDS[mode] for mode, _ in probes)
@@ -721,6 +726,7 @@ class ProbeSoakTests(unittest.TestCase):
             STAGES.run_engine(checks, "all", 2)
         names = [call.args[0] for call in checks.run.call_args_list]
         self.assertEqual(names, ["verification-build", "baseline-1", "baseline-2",
+                                 "dev-mode-1", "dev-mode-2",
                                  "private-multitab-1", "private-multitab-2",
                                  "private-window-1", "private-window-2", "private-window-3",
                                  "quit-exit-1", "quit-exit-2", "quit-exit-3",

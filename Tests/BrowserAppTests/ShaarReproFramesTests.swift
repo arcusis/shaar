@@ -59,18 +59,20 @@ import Testing
     shell.open(inspector: inspector)
     for _ in 0..<20 where shell.repro.frames.snapshot().isEmpty { await Task.yield() }
     #expect(shell.repro.frames.snapshot().count == 1)
-    shell.updateTarget(SiteControlTarget(
-      tabID: UUID(), profileID: target.profileID, url: target.url))
+    shell.updateTarget(
+      SiteControlTarget(
+        tabID: UUID(), profileID: target.profileID, url: target.url))
     #expect(shell.repro.frames.snapshot().isEmpty)
     shell.close()
   }
 
   private func fixtureJPEG() throws -> Data {
-    let bitmap = try #require(NSBitmapImageRep(
-      bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16,
-      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
-      isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
-      bitsPerPixel: 0))
+    let bitmap = try #require(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16,
+        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+        isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+        bitsPerPixel: 0))
     return try #require(bitmap.representation(using: .jpeg, properties: [:]))
   }
 }

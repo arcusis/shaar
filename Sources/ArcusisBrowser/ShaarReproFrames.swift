@@ -125,7 +125,8 @@ private enum ShaarReproFrameError: Error {
         try await Task.sleep(for: .milliseconds(10))
       }
       let buffer = try pixelBuffer(current)
-      let time = CMTime(seconds: max(0, frame.receivedAt.timeIntervalSince(start)), preferredTimescale: 600)
+      let time = CMTime(
+        seconds: max(0, frame.receivedAt.timeIntervalSince(start)), preferredTimescale: 600)
       guard adaptor.append(buffer, withPresentationTime: time) else {
         throw writer.error ?? ShaarReproFrameError.encoding
       }
@@ -144,16 +145,19 @@ private enum ShaarReproFrameError: Error {
     var buffer: CVPixelBuffer?
     let status = CVPixelBufferCreate(
       kCFAllocatorDefault, image.width, image.height, kCVPixelFormatType_32ARGB,
-      [kCVPixelBufferCGImageCompatibilityKey: true,
-       kCVPixelBufferCGBitmapContextCompatibilityKey: true] as CFDictionary, &buffer)
+      [
+        kCVPixelBufferCGImageCompatibilityKey: true,
+        kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+      ] as CFDictionary, &buffer)
     guard status == kCVReturnSuccess, let buffer else { throw ShaarReproFrameError.encoding }
     CVPixelBufferLockBaseAddress(buffer, [])
     defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
-    guard let context = CGContext(
-      data: CVPixelBufferGetBaseAddress(buffer), width: image.width, height: image.height,
-      bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
-      space: CGColorSpaceCreateDeviceRGB(),
-      bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue)
+    guard
+      let context = CGContext(
+        data: CVPixelBufferGetBaseAddress(buffer), width: image.width, height: image.height,
+        bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue)
     else { throw ShaarReproFrameError.encoding }
     context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
     return buffer

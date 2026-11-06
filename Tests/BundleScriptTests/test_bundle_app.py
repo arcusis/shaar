@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import json
 import os
 import plistlib
 import shutil
@@ -41,14 +42,17 @@ class BundleAppTests(unittest.TestCase):
         for name in ("release-config.sh", "release_feed.py", "engine-signing.sh"):
             shutil.copy2(REPO / "scripts" / name, self.root / "scripts" / name)
         shutil.copy2(REPO / "scripts" / "stage-browser-resources.py", self.root / "scripts")
+        shutil.copy2(REPO / "scripts" / "fetch-framework-devtools.py", self.root / "scripts")
         shutil.copy2(REPO / "scripts" / "rebrand-engine-framework.py", self.root / "scripts")
         shutil.copytree(REPO / "ThirdParty" / "PublicSuffix", self.root / "ThirdParty" / "PublicSuffix")
+        shutil.copytree(REPO / "ThirdParty" / "FrameworkDevTools", self.root / "ThirdParty" / "FrameworkDevTools")
         shutil.copytree(REPO / "ThirdParty" / "ChromiumEngine" / "notices",
                         self.root / "ThirdParty" / "ChromiumEngine" / "notices")
         icon = self.root / "Resources" / "Branding" / "Shaar.icns"
         icon.parent.mkdir(parents=True)
         shutil.copy2(ICON, icon)
         shutil.copytree(REPO / "Resources" / "ExtensionManager", self.root / "Resources" / "ExtensionManager")
+        shutil.copytree(REPO / "Resources" / "FrameworkDevTools", self.root / "Resources" / "FrameworkDevTools")
         shutil.copytree(REPO / "Resources" / "Localizations", self.root / "Resources" / "Localizations")
         shutil.copytree(REPO / "Resources" / "Privacy", self.root / "Resources" / "Privacy")
         catalog_dir = self.root / "Sources" / "BrowserCore" / "Resources"
@@ -203,6 +207,18 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual((contents / "Resources" / "Shaar.icns").read_bytes(), ICON.read_bytes())
         manager = contents / "Resources" / "ExtensionManager" / "manifest.json"
         self.assertEqual(manager.read_bytes(), (REPO / "Resources" / "ExtensionManager" / "manifest.json").read_bytes())
+        framework_tools = contents / "Resources" / "FrameworkDevTools"
+        pages = {
+            "react": "main.html", "vue": "pages/devtools-background.html",
+            "angular": "devtools.html",
+        }
+        for name, page in pages.items():
+            manifest = json.loads((framework_tools / name / "manifest.json").read_text())
+            self.assertEqual(manifest["devtools_page"], page)
+            self.assertNotIn("<all_urls>", manifest["host_permissions"])
+            self.assertIn("shaar-devtools.js", (framework_tools / name / page).read_text())
+            self.assertTrue((framework_tools / name / page).with_name("shaar-devtools.js").is_file())
+            self.assertTrue((framework_tools / "licenses" / f"{name}-LICENSE").is_file())
 
     def _info_plist(self, app_path):
         with (self.root / app_path / "Contents" / "Info.plist").open("rb") as plist_file:

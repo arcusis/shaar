@@ -1,0 +1,14 @@
+--- a/chrome/browser/devtools/devtools_window.cc
++++ b/chrome/browser/devtools/devtools_window.cc
+@@ -1409,6 +1409,11 @@
+   }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
++  // Shaar's backing Browser is hidden. Docking there creates an invisible
++  // frontend and can steal the inspected tab's native compositor back.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder"))
++    can_dock = false;
++
+   // Create WebContents with devtools.
+   GURL url(GetDevToolsURL(profile, frontend_type, frontend_url, can_dock, panel,
+                           has_other_clients, browser_connection));

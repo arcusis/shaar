@@ -15,6 +15,8 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "content/public/browser/network_service_util.h"
+#include "content/browser/network_service_instance_impl.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_client.h"
 #include "mojo/core/embedder/embedder.h"
@@ -26,13 +28,23 @@
 namespace shaar {
 namespace {
 
+// Match Chromium's UnitTestTestSuite cleanup: a BrowserTaskEnvironment destroys
+// its in-process service, but the cached Mojo remote otherwise survives into
+// the next test and can reference the previous DNS notifier.
+class NetworkServiceReset final : public testing::EmptyTestEventListener {
+ public:
+  void OnTestEnd(const testing::TestInfo&) override {
+    content::ResetNetworkServiceForTesting();
+  }
+};
+
 class ShaarTestSuite final : public content::ContentTestSuiteBase {
  public:
   ShaarTestSuite(int argc, char** argv) : ContentTestSuiteBase(argc, argv) {}
 
  protected:
   void Initialize() override {
-    content::ForceInProcessNetworkService();
+    content::ForceCreateNetworkServiceDirectlyForTesting();
     content::ContentTestSuiteBase::Initialize();
     base::test::AllowCheckIsTestForTesting();
     mojo::core::Init();
@@ -57,6 +69,7 @@ class ShaarTestSuite final : public content::ContentTestSuiteBase {
         apps::AppServiceProxyFactory::GetInstance()->SetPublisherHostFactory(
             std::make_unique<apps::PublisherHostFactoryImpl>());
     TestingBrowserProcess::CreateInstance();
+    testing::UnitTest::GetInstance()->listeners().Append(new NetworkServiceReset());
   }
 
   void Shutdown() override {

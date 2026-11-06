@@ -799,7 +799,10 @@ void ARCCompletePrivateQuitDialogCancellation(
   NSDictionary *tab = ARCPrivateShaarState(self)[@"tabs"][tabID];
   if (!tab) return nil;
   return @{@"stage": tab[@"navigationStage"] ?: @"none",
-           @"generation": tab[@"requestGeneration"] ?: @0};
+           @"generation": tab[@"requestGeneration"] ?: @0,
+           @"requestedURL": tab[@"requestedURL"] ?: @"none",
+           @"observedURL": tab[@"url"] ?: @"none",
+           @"lastEventPhase": tab[@"navigationPhase"] ?: @"none"};
 }
 - (NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID
                                  error:(NSError **)error {

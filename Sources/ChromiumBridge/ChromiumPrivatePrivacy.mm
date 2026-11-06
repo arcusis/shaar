@@ -215,6 +215,7 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
   NSMutableDictionary *tab = state[@"tabs"][tabID];
   NSUInteger generation = [tab[@"requestGeneration"] unsignedIntegerValue] + 1;
   tab[@"requestGeneration"] = @(generation);
+  tab[@"requestedURL"] = url;
   tab[@"navigationStage"] = @"cookie-setting";
   NSString *origin = ARCPrivateOrigin(url);
   if (origin) {

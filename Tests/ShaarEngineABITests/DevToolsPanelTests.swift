@@ -104,6 +104,30 @@ struct DevToolsPanelTests {
         tabID: "tab-a", leaseID: 42)?.data.droppedCount == 3)
   }
 
+  @Test func screencastFramesRequireMaskAndExactTabLease() {
+    let jpeg = Data([0xFF, 0xD8, 0xFF, 0xD9]).base64EncodedString()
+    let payload =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":29,"leaseID":42,"data":{"jpegBase64":"\#(jpeg)","sessionID":7,"masked":true,"truncated":false}}"#
+    let safe = event(payload, scope: privateScope)
+    let decoded = ShaarDevToolsPanelEventRouter.decode(
+      safe, scope: privateScope, windowID: "window-a", tabID: "tab-a", leaseID: 42)
+    #expect(decoded?.id == .screencastFrame)
+    #expect(decoded?.data.frame?.jpeg == Data([0xFF, 0xD8, 0xFF, 0xD9]))
+    for unsafe in [
+      payload.replacingOccurrences(of: #""masked":true"#, with: #""masked":false"#),
+      payload.replacingOccurrences(of: #""masked":true"#, with: #""masked":true,"headers":{}"#),
+      payload.replacingOccurrences(of: #""sessionID":7"#, with: #""sessionID":0"#),
+    ] {
+      #expect(
+        ShaarDevToolsPanelEventRouter.decode(
+          event(unsafe, scope: privateScope), scope: privateScope,
+          windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+    }
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        safe, scope: privateScope, windowID: "window-a", tabID: "another-tab", leaseID: 42) == nil)
+  }
+
   @Test func adapterSubmitsVersionedLeaseOperations() throws {
     let fake = FakePanelEngine()
     let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
@@ -129,6 +153,35 @@ struct DevToolsPanelTests {
     #expect(throws: ShaarEngineError.self) {
       try adapter.closePanel(
         leaseID: 0, scope: regular,
+        windowID: "window-a", tabID: "tab-a"
+      ) { _ in }
+    }
+  }
+
+  @Test func screencastCommandsUseFixedIDsAndScopedLease() throws {
+    let fake = FakePanelEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    _ = try adapter.screencastCommand(
+      .start, leaseID: 42, scope: privateScope,
+      windowID: "window-a", tabID: "tab-a"
+    ) { _ in }
+    let start = try #require(fake.request)
+    #expect(start.operation == .panelScreencast)
+    #expect(start.scope.sessionID == "private-a")
+    let startJSON = try #require(
+      JSONSerialization.jsonObject(with: start.payload) as? [String: Any])
+    #expect(startJSON["commandID"] as? Int == 1)
+    _ = try adapter.screencastCommand(
+      .ack(sessionID: 7), leaseID: 42, scope: privateScope,
+      windowID: "window-a", tabID: "tab-a"
+    ) { _ in }
+    let ack = try #require(fake.request)
+    let ackJSON = try #require(JSONSerialization.jsonObject(with: ack.payload) as? [String: Any])
+    #expect(ackJSON["commandID"] as? Int == 3)
+    #expect(ackJSON["sessionID"] as? Int == 7)
+    #expect(throws: ShaarEngineError.self) {
+      try adapter.screencastCommand(
+        .ack(sessionID: 0), leaseID: 42, scope: regular,
         windowID: "window-a", tabID: "tab-a"
       ) { _ in }
     }

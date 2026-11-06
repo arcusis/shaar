@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "2afcdcbc46c811b40d7788a533bfd9314e64d0260442a7f7ddfa34dc65e303df",
+    "sha256": "49bf76742e328f04d62c9f45acfd61ad14b5bb96f7ef077567c0df6f88a77164",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "5f73aeb2a2e2f7a4a75f2605d877612407cac5a2606159e99a9e3658bdc362f9",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -58,12 +58,12 @@
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_unittest.cc": "01301adddd0c3f0a5226efcfaf5a080df3a0423e94a9392e401a8327487bd377",
       "chrome/browser/shaar/devtools/shaar_agent_bridge.cc": "3d511dc53a49c68c5357892cb4edc1fda57a30fdd1212907669f0a1f07911a9b",
       "chrome/browser/shaar/devtools/shaar_agent_bridge.h": "5afbf3d57001d0c1dd3ab08068b9bbb18a3cecce326b7c0d25ba2852d5675600",
-      "chrome/browser/shaar/devtools/shaar_devtools.cc": "e33f2c334256e3469c90ddec355ed794a9adff0a12562d7feb6e7f39f9299914",
+      "chrome/browser/shaar/devtools/shaar_devtools.cc": "6584348ac62f094e600e7d90c63745aa4a5007fbf3950a84ad3bcb685d4235ec",
       "chrome/browser/shaar/devtools/shaar_devtools.h": "f5fc00b3d9e29ee45f0d8f02619456edbb269215d386707f8c404f120a4a4fe5",
-      "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "0979d8fb671534558433c1ee72910b179497f8a990029c1ea69d2e9bc2835c1b",
-      "chrome/browser/shaar/devtools/shaar_devtools_panel.cc": "2a160dba7827c84e5c5aefe466aeed2e3c157b545c51536b937b7de1954d235e",
+      "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "ff21e109d6644d87a4dd60eb42ea12e3f2002911aa9365c469dda5ffe3552f36",
+      "chrome/browser/shaar/devtools/shaar_devtools_panel.cc": "466af013526186278e16380c4f1b9984ab2f7cf5a656cce330aa644a254e8d4f",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.h": "d926559cb85df4b6f8259275198b3faf1b2c2d77bff8ea3fdf6b065a59dbf9f2",
-      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "d647c1be03f8ccb8f7ad164f02d693c4266a55f7ba9f86d045e9c54037302509",
+      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "5f9fd7f3637f650a71f9244b33a32814e76c6b3126346e89adf7902b869d0d86",
       "chrome/browser/shaar/devtools/shaar_devtools_viewports.cc": "962917acc421f701cf23590454637ee5a6a97c8a7927c9afaf38b36fd5003341",
       "chrome/browser/shaar/devtools/shaar_devtools_viewports.h": "cf85d27c8520d63b230bdce4ca850bc28250743d624d1aa19d64969f5d1a2e4c",
       "chrome/browser/shaar/downloads/shaar_downloads.cc": "77b53ecd80858cf1d7c6d1baebd4189a3ab4250bd18cc11019025cb74ceb84e1",
@@ -111,7 +111,7 @@
       "chrome/browser/shaar/profiles/shaar_profiles.cc": "fdcc18f0e846c10f5e48a5230bd77fb036eafc572fb702e9a4d13145a9bff5cc",
       "chrome/browser/shaar/profiles/shaar_profiles.h": "91358bd6b07df96e48393d6c9d125b17c9ae4cfb6d29000b3d0c106c6ba1817f",
       "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc": "1af5ec0d7bdf1a3c7ee8708f3f8e890028289a49ae833222ad402d87ccbca078",
-      "chrome/browser/shaar/public/shaar_engine.h": "ebbb66489a7a97c94c6f9df12d88a3622ab0eb12f330bece355701b50ac30f5b",
+      "chrome/browser/shaar/public/shaar_engine.h": "86e39d73bc57fc91b6366842443a670b4296c9add98525d4ab636c901faa1af6",
       "chrome/browser/shaar/shaar_engine.exports": "ca5dd73785bae1f489161ad02f2232e2fbcb5389d375984ee721519cc2477b2d",
       "chrome/browser/shaar/site_data/shaar_site_data.cc": "6decb114e315ee08e663f2fac15acaf8722d879f8bc11ff8544b18b82035399e",
       "chrome/browser/shaar/site_data/shaar_site_data.h": "a5af588331f905aa00048ab9fa02140334206943e9c1250e5bb50b241f3f89ed",
@@ -337,6 +337,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0024-shaar-devtools-network-rules.patch",
       "sha256": "04838485483549eee0bd38c78d4d2c9f0a169e63a813dce5987d67dbdb9ab125"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0025-shaar-devtools-repro-screencast.patch",
+      "sha256": "5df98a03edd6442fa8b09c2759061ad42492b85fb573b168bd781654960668f8"
     }
   ],
   "requiredExports": [

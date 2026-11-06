@@ -811,11 +811,13 @@ final class BrowserEngine {
         loadedProfiles.insert(profile)
         store?.library.refresh(profile, section: .bookmarks)
         store?.library.refresh(profile, section: .history)
-        // One snapshot restores records after startup; events keep them current afterwards.
         Task { [weak self] in
-          try? await Task.sleep(for: .milliseconds(300))
-          guard let self, !self.isClosed, !Task.isCancelled else { return }
-          self.runtime.refreshDownloads(forProfileID: profile.uuidString)
+          // Download history initializes asynchronously and can return an empty early list.
+          for delay in [300, 700, 2000] {
+            try? await Task.sleep(for: .milliseconds(delay))
+            guard let self, !self.isClosed else { return }
+            self.runtime.refreshDownloads(forProfileID: profile.uuidString)
+          }
         }
       } catch {
         failedProfiles.insert(profile)

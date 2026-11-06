@@ -324,7 +324,8 @@ struct LibraryPanel: View {
         Image(systemName: "trash")
       }.buttonStyle(.borderless).help(PanelsL10n.string("Remove all visits to this address"))
         .accessibilityLabel(
-          LibraryHistoryAccessibility.removeLabel(title: item.title, address: item.address))
+          LibraryHistoryAccessibility.removeLabel(title: item.title, address: item.address)
+        )
         .disabled(!ownsContext || busy)
     }.padding(.vertical, 10)
   }

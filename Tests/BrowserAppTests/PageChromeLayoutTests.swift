@@ -32,7 +32,7 @@ final class PageChromeLayoutTests: XCTestCase {
     XCTAssertEqual(BrowserChromeLayout.pageCardRadius, 10)
   }
 
-  func testSplitWindowHasOneAddressAndNavigationGroupInLightAndDark() async throws {
+  func testSplitWindowUsesPaneAddressesAndOneGlobalNavigationGroup() async throws {
     var session = BrowserSession.fresh()
     let first = try XCTUnwrap(session.open(URL(string: "https://first.example")!))
     let second = try XCTUnwrap(session.open(URL(string: "https://second.example")!))
@@ -66,10 +66,43 @@ final class PageChromeLayoutTests: XCTestCase {
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100))
         for identifier in identifiers {
+          let expectedCount = layout == "split" && identifier == "browser.chrome.address" ? 0 : 1
           XCTAssertEqual(
-            observation.counts[identifier, default: 0], 1,
-            "Expected one \(identifier) control in \(layout) \(scheme) mode")
+            observation.counts[identifier, default: 0], expectedCount,
+            "Expected \(expectedCount) \(identifier) controls in \(layout) \(scheme) mode")
         }
+      }
+    }
+  }
+
+  func testSplitPaneToolbarsEachHaveAnAddressAndNavigationGroup() async throws {
+    var session = BrowserSession.fresh()
+    let first = try XCTUnwrap(session.open(URL(string: "https://first.example")!))
+    let second = try XCTUnwrap(session.open(URL(string: "https://second.example")!))
+    XCTAssertTrue(session.splitTabs(first, second, in: session.selectedSpaceID))
+    let store = BrowserStore(session: session)
+
+    for tabID in [first, second] {
+      let observation = BrowserChromeControlCountObservation()
+      let host = NSHostingView(
+        rootView: SplitPaneToolbar(store: store, tabID: tabID)
+          .onPreferenceChange(BrowserChromeControlCountPreferenceKey.self) {
+            observation.counts = $0
+          })
+      let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 450, height: 50),
+        styleMask: .borderless, backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false
+      window.contentView = host
+      defer { window.close() }
+
+      host.layoutSubtreeIfNeeded()
+      try await Task.sleep(for: .milliseconds(100))
+      for identifier in [
+        "browser.chrome.address", "browser.chrome.back", "browser.chrome.forward",
+        "browser.chrome.reload",
+      ] {
+        XCTAssertEqual(observation.counts[identifier, default: 0], 1)
       }
     }
   }

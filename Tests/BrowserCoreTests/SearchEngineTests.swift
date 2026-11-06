@@ -67,7 +67,9 @@ import Testing
 @Test func capitalizedLocalhostNavigates() {
   #expect(NavigationInput.address(for: "LOCALHOST")?.host()?.lowercased() == "localhost")
   #expect(NavigationInput.address(for: "LOCALHOST:3000")?.port == 3000)
-  #expect(NavigationInput.address(for: "LOCALHOST:3000/path")?.absoluteString == "https://LOCALHOST:3000/path")
+  #expect(
+    NavigationInput.address(for: "LOCALHOST:3000/path")?.absoluteString
+      == "https://LOCALHOST:3000/path")
 }
 
 @Test func navigationRejectsOutOfRangeWebPorts() {

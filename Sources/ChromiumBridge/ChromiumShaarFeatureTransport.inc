@@ -65,6 +65,10 @@
       }, context, &error);
   if (status == SHAAR_OK) return YES;
   if (context) CFBridgingRelease(context);
+  if (_shaarTesting) {
+    fprintf(stderr, "Shaar feature submit rejected: operation=%d status=%d native=%d\n",
+            (int)operation, (int)status, (int)error.code);
+  }
   if (completion) completion(nil, ShaarError(@"Shaar rejected the feature operation."));
   return NO;
 }

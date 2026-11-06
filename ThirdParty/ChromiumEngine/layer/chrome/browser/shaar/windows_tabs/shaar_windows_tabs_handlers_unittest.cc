@@ -264,6 +264,34 @@ TEST(ShaarWindowsTabsHandlersTest, RegularWindowABIReservesAndClosesHandle) {
   EXPECT_EQ(shaar_window_close(window, &error), SHAAR_NOT_FOUND);
 }
 
+TEST(ShaarWindowsTabsHandlersTest, ClosedWindowHandleCannotNameNewWindow) {
+  shaar_engine engine_storage;
+  auto* engine = &engine_storage;
+  shaar_error error = {.size = sizeof(shaar_error)};
+  shaar_window* stale = nullptr;
+  static constexpr char kFirst[] = "retired-window";
+  static constexpr char kSecond[] = "replacement-window";
+  static constexpr char kTab[] = "late-tab";
+  ASSERT_EQ(shaar_window_open(engine, SHAAR_WINDOW_REGULAR, nullptr,
+                              {kFirst, sizeof(kFirst) - 1}, &stale, &error),
+            SHAAR_OK);
+  ASSERT_EQ(shaar_window_close(stale, &error), SHAAR_OK);
+  shaar_window* replacement = nullptr;
+  ASSERT_EQ(shaar_window_open(engine, SHAAR_WINDOW_REGULAR, nullptr,
+                              {kSecond, sizeof(kSecond) - 1}, &replacement,
+                              &error),
+            SHAAR_OK);
+  ASSERT_NE(stale, replacement);
+  shaar_tab* tab = nullptr;
+  shaar_scope scope = {.size = sizeof(shaar_scope)};
+  EXPECT_EQ(shaar_tab_open(scope, stale, {kTab, sizeof(kTab) - 1}, {}, 1,
+                           &tab, &error),
+            SHAAR_NOT_FOUND);
+  EXPECT_EQ(tab, nullptr);
+  EXPECT_EQ(shaar_window_close(stale, &error), SHAAR_NOT_FOUND);
+  EXPECT_EQ(shaar_window_close(replacement, &error), SHAAR_OK);
+}
+
 TEST(ShaarWindowsTabsHandlersTest, QuitRejectsLateWindowAndTabOpen) {
   shaar_engine engine_storage;
   auto* engine = &engine_storage;

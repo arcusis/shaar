@@ -15,6 +15,8 @@
 
 class TabStripModel;
 class Browser;
+class GURL;
+class Profile;
 namespace content {
 class WebContents;
 }
@@ -24,6 +26,11 @@ namespace shaar::windows_tabs {
 bool HasHiddenNativeWindow(content::WebContents* contents);
 void UpdateDockedDevTools(content::WebContents* inspected,
                           content::WebContents* frontend);
+// Routes a DevTools frontend request through the active Shaar-owned tab.
+// A missing or ambiguous source is rejected, never shown in Chrome's Browser.
+bool RouteDevToolsOpenURL(content::WebContents* source,
+                          Profile* profile,
+                          const GURL& url);
 
 class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
  public:

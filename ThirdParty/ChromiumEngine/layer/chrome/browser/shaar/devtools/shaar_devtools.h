@@ -21,6 +21,8 @@ namespace content {
 class DevToolsAgentHost;
 class WebContents;
 }
+class GURL;
+class Profile;
 
 namespace shaar::devtools {
 
@@ -29,6 +31,16 @@ struct ModuleHandlers {
 };
 
 void BindRuntimeServices();
+
+// Retain a Node agent host until the app opens the requested owned tab, then
+// attach the frontend bindings to that host. No Chromium Browser is created.
+bool RequestNodeFrontend(Profile* profile,
+                         const GURL& url,
+                         scoped_refptr<content::DevToolsAgentHost> host);
+bool HasPendingNodeFrontend(Profile* profile, const GURL& url);
+bool OpenPendingNodeFrontend(content::WebContents* contents,
+                             Profile* profile,
+                             const GURL& url);
 
 // Keeps the native window hidden while temporarily showing the page to the
 // renderer for capture. The guard restores the previous page visibility.

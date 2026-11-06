@@ -11,6 +11,7 @@
 #include <limits.h>
 
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
@@ -35,11 +36,13 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/devtools/devtools_ui_bindings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -47,6 +50,8 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
+#include "ui/base/page_transition_types.h"
+#include "url/gurl.h"
 
 namespace shaar::devtools {
 namespace {
@@ -862,6 +867,62 @@ base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents
 
 void BindRuntimeServices() {
   shaar::SetDevToolsRuntimeServices(&g_runtime_services);
+}
+
+namespace {
+struct PendingNodeFrontend {
+  Profile* profile;
+  std::string url;
+  scoped_refptr<content::DevToolsAgentHost> host;
+};
+
+std::vector<PendingNodeFrontend>& PendingNodeFrontends() {
+  static base::NoDestructor<std::vector<PendingNodeFrontend>> pending;
+  return *pending;
+}
+}  // namespace
+
+bool RequestNodeFrontend(Profile* profile,
+                         const GURL& url,
+                         scoped_refptr<content::DevToolsAgentHost> host) {
+  if (!profile || !host || !url.is_valid() ||
+      !url.SchemeIs("devtools"))
+    return false;
+  auto& pending = PendingNodeFrontends();
+  pending.push_back({profile, url.spec(), std::move(host)});
+  if (shaar::windows_tabs::RouteDevToolsOpenURL(nullptr, profile, url))
+    return true;
+  pending.pop_back();
+  return false;
+}
+
+bool HasPendingNodeFrontend(Profile* profile, const GURL& url) {
+  const auto& pending = PendingNodeFrontends();
+  return std::ranges::any_of(pending, [&](const PendingNodeFrontend& entry) {
+    return entry.profile == profile && entry.url == url.spec();
+  });
+}
+
+bool OpenPendingNodeFrontend(content::WebContents* contents,
+                             Profile* profile,
+                             const GURL& url) {
+  if (!contents || !profile)
+    return false;
+  auto& pending = PendingNodeFrontends();
+  auto found = std::ranges::find_if(pending, [&](const PendingNodeFrontend& e) {
+    return e.profile == profile && e.url == url.spec();
+  });
+  if (found == pending.end())
+    return false;
+  content::NavigationController::LoadURLParams params(url);
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+  contents->GetController().LoadURLWithParams(params);
+  DevToolsUIBindings* bindings = DevToolsUIBindings::ForWebContents(contents);
+  if (!bindings)
+    return false;
+  bindings->AttachTo(found->host);
+  pending.erase(found);
+  return true;
 }
 
 bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,

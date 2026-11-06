@@ -229,6 +229,7 @@ struct PageFindTests {
 
     #expect(store.pageFind == nil)
     #expect(runtime.focusedTabID == tabID.uuidString)
+    #expect(runtime.stoppedTabID == tabID.uuidString)
     #expect(window.firstResponder === runtime.pageView)
     withExtendedLifetime(page) {}
   }
@@ -245,6 +246,11 @@ private final class PrivateFindPageView: NSView {
 private final class PrivateFindFocusRuntime: ARCChromiumRuntime {
   var pageView: PrivateFindPageView!
   var focusedTabID: String?
+  var stoppedTabID: String?
+
+  override func stopFinding(inPrivateTabID tabID: String, windowID: String, contextID: String) {
+    stoppedTabID = tabID
+  }
 
   override func view(forPrivateTabID tabID: String, windowID: String, contextID: String) -> NSView?
   {

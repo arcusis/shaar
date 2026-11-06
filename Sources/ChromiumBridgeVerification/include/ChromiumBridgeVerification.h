@@ -4,6 +4,7 @@
 
 #import "../../ChromiumBridge/include/ChromiumBridge.h"
 #import "../../ChromiumBridge/ChromiumLocalState.h"
+#import "../../ChromiumBridge/ChromiumShaarActivation.h"
 
 NS_ASSUME_NONNULL_BEGIN
 

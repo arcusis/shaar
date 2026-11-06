@@ -35,6 +35,7 @@ final class QuitExitProbe {
   private var host: NativeBrowserHost?
   private var sampler: Timer?
   private var checks: [String] = []
+  private var sessionsBeforeQuit: [UUID: BrowserSession] = [:]
 
   init(
     runtime: ARCChromiumRuntime, primary: BrowserEngine, store: BrowserStore, root: URL,
@@ -86,6 +87,8 @@ final class QuitExitProbe {
     guard let host, let item = host.menuItem(for: .quit), let action = item.action,
       host.canPerform(.quit)
     else { throw QuitProbeFailure("The host has no enabled Quit menu command.") }
+    sessionsBeforeQuit = Dictionary(
+      uniqueKeysWithValues: host.workspace.workspace.windows.map { ($0.id, $0.session) })
     try writeCheckpoint()
     record("quit-requested")
     sampler = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
@@ -102,14 +105,23 @@ final class QuitExitProbe {
   /// Whether the shutdown guard, not Chromium's own stop, ended the event loop.
   var stoppedEventLoop: Bool { runtime.probeQuitStoppedEventLoop }
 
-  func auditAfterQuit() -> [String] {
+  func auditAfterQuit() throws -> [String] {
     // The keep-alive registry is gone once the engine loop has ended; stop sampling it.
     sampler?.invalidate()
     sampler = nil
-    guard let host else { return [] }
+    guard let host else { throw QuitProbeFailure("Quit host is unavailable.") }
     let closed = host.contexts.isEmpty
-    host.detach()
-    return closed ? ["Quit closes every hidden host window before the engine loop ends"] : []
+    defer { host.detach() }
+    guard closed else { throw QuitProbeFailure("Quit left a hidden host window open.") }
+    try host.workspace.flushSaves()
+    guard let saved = try file.load(), !sessionsBeforeQuit.isEmpty,
+      Dictionary(uniqueKeysWithValues: saved.windows.map { ($0.id, $0.session) })
+        == sessionsBeforeQuit
+    else { throw QuitProbeFailure("Quit changed the saved windows or tab sessions.") }
+    return [
+      "Quit closes every hidden host window before the engine loop ends",
+      "Quit retains every saved window and its ordinary tabs without archiving them",
+    ]
   }
 
   private func expect(_ condition: Bool, _ name: String) throws {

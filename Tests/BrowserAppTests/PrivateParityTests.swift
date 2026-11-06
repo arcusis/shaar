@@ -11,6 +11,20 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@MainActor
+private final class PrivateParityRuntime: ARCChromiumRuntime {
+  var status: [AnyHashable: Any] = [:]
+  var statusRequests: [String] = []
+
+  override func privatePrivacyStatus(
+    forContextID contextID: String,
+    completion: @escaping @MainActor @Sendable ([AnyHashable: Any]) -> Void
+  ) {
+    statusRequests.append(contextID)
+    completion(status)
+  }
+}
+
 @Suite @MainActor
 struct PrivateParityTests {
   private func makeStore(source: UUID = UUID()) throws -> BrowserStore {
@@ -146,7 +160,7 @@ struct PrivateParityTests {
     let store = try makeStore()
     let first = try #require(store.session.selectedPage?.tab.id)
     let page = PrivatePageSession(
-      runtime: ARCChromiumRuntime(), contextID: UUID().uuidString,
+      runtime: PrivateParityRuntime(), contextID: UUID().uuidString,
       windowID: UUID().uuidString, firstTabID: first, store: store)
     store.navigate("http://example.com/secret")
     #expect(page.pendingHTTP?.host() == "example.com")
@@ -160,7 +174,7 @@ struct PrivateParityTests {
     let store = try makeStore()
     let first = try #require(store.session.selectedPage?.tab.id)
     let page = PrivatePageSession(
-      runtime: ARCChromiumRuntime(), contextID: UUID().uuidString,
+      runtime: PrivateParityRuntime(), contextID: UUID().uuidString,
       windowID: UUID().uuidString, firstTabID: first, store: store)
     store.openTab()
     store.splitSelectedTab()
@@ -176,11 +190,12 @@ struct PrivateParityTests {
     withExtendedLifetime(page) {}
   }
 
-  @Test func privateStartPageShowsEngineControlsOnlyAfterStatusReadback() throws {
+  @Test func privateStartPageShowsEngineControlsOnlyAfterStatusReadback() async throws {
     let store = try makeStore()
     let first = try #require(store.session.selectedPage?.tab.id)
+    let runtime = PrivateParityRuntime()
     let page = PrivatePageSession(
-      runtime: ARCChromiumRuntime(), contextID: UUID().uuidString,
+      runtime: runtime, contextID: UUID().uuidString,
       windowID: UUID().uuidString, firstTabID: first, store: store)
     #expect(store.showsStartPage)
     #expect(!PrivateProtectionStatus([:]).allEnabled)
@@ -193,6 +208,7 @@ struct PrivateParityTests {
       "trackerDomainCount": 1, "trackerRulesRevision": "test",
     ]
     let status = PrivateProtectionStatus(policy)
+    runtime.status = policy
     #expect(status.allEnabled)
     for key in policy.keys {
       var incomplete = policy
@@ -206,6 +222,10 @@ struct PrivateParityTests {
     hosting.frame = NSRect(x: 0, y: 0, width: 800, height: 700)
     hosting.layoutSubtreeIfNeeded()
     #expect(hosting.fittingSize.height > 0)
+    for _ in 0..<100 where runtime.statusRequests.isEmpty {
+      await Task.yield()
+    }
+    #expect(runtime.statusRequests == [page.contextID])
     withExtendedLifetime(page) {}
   }
 

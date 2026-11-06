@@ -362,31 +362,10 @@ final class ShaarPreviewProbe {
       runtime.quit()
       return
     }
-    markShutdown("private close begin")
-    for owner in privateHost?.ownedWindows ?? [] {
-      await withCheckedContinuation { continuation in
-        runtime.closePrivateTabID(
-          owner.store.selectedTabID, windowID: owner.windowID, contextID: owner.contextID
-        ) { _ in continuation.resume() }
-      }
-      markShutdown("private tab close complete")
-      await withCheckedContinuation { continuation in
-        runtime.closePrivateWindowID(owner.windowID, contextID: owner.contextID) { _ in
-          continuation.resume()
-        }
-      }
-    }
-    markShutdown("private close complete")
-    privateHost?.detach()
-    let windowIDs = host.contexts.values.map(\.nativeID)
-    for windowID in windowIDs { _ = runtime.closeWindowID(windowID) }
-    markShutdown("regular close requested")
-    for _ in 0..<100 {
-      if windowIDs.allSatisfy({ runtime.window(forID: $0) == nil }) { break }
-      try? await Task.sleep(for: .milliseconds(100))
-    }
-    markShutdown("engine quit requested")
-    runtime.quit()
+    // Use the product Quit path. Closing each window first deletes its saved
+    // session and makes a successful verification exit leave windows: [].
+    markShutdown("host quit requested with live windows")
+    host.perform(.quit)
   }
 
   private func markShutdown(_ stage: String) {

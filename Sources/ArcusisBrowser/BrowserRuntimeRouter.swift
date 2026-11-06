@@ -64,9 +64,10 @@ final class BrowserRuntimeRouter {
   private var retiredWindows: Set<String> = []
   private var tabOwners: [String: String] = [:]
   private var contexts: [Context: [String: String]] = [:]
-  private var isQuitting = false
+  private(set) var isQuitting = false
 
   func prepareForQuit() { isQuitting = true }
+  func cancelQuit() { isQuitting = false }
 
   func register(_ client: BrowserRuntimeClient) throws {
     guard subscriptions[client.windowID] == nil, !retiredWindows.contains(client.windowID) else {
@@ -139,6 +140,6 @@ final class BrowserRuntimeRouter {
     for context in Context.allCases {
       contexts[context] = contexts[context]?.filter { $0.value != id }
     }
-    client?.onWindowClosed?(quitting)
+    client?.onWindowClosed?(quitting || isQuitting)
   }
 }

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace shaar::windows_tabs {
 namespace {
@@ -282,6 +283,8 @@ TEST(ShaarWindowsTabsHandlersTest, ClosedWindowHandleCannotNameNewWindow) {
                               &error),
             SHAAR_OK);
   ASSERT_NE(stale, replacement);
+  EXPECT_EQ(shaar_window_host_view(stale), nullptr);
+  EXPECT_EQ(shaar_window_native_window(stale), nullptr);
   shaar_tab* tab = nullptr;
   shaar_scope scope = {.size = sizeof(shaar_scope)};
   EXPECT_EQ(shaar_tab_open(scope, stale, {kTab, sizeof(kTab) - 1}, {}, 1,
@@ -290,6 +293,20 @@ TEST(ShaarWindowsTabsHandlersTest, ClosedWindowHandleCannotNameNewWindow) {
   EXPECT_EQ(tab, nullptr);
   EXPECT_EQ(shaar_window_close(stale, &error), SHAAR_NOT_FOUND);
   EXPECT_EQ(shaar_window_close(replacement, &error), SHAAR_OK);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, DevToolsRouteRejectsUnownedAndUnsafeURLs) {
+  auto* profile = reinterpret_cast<Profile*>(1);
+  EXPECT_FALSE(RouteDevToolsOpenURL(
+      nullptr, profile, GURL("https://example.com/learn-more")));
+  EXPECT_FALSE(RouteDevToolsOpenURL(nullptr, profile,
+                                   GURL("javascript:alert(1)")));
+  EXPECT_FALSE(RouteDevToolsOpenURL(nullptr, profile,
+                                   GURL("file:///private/document")));
+  EXPECT_FALSE(RouteDevToolsOpenURL(
+      nullptr, profile, GURL("devtools://devtools/bundled/other.html")));
+  EXPECT_FALSE(RouteDevToolsOpenURL(
+      nullptr, profile, GURL("https://example.com/" + std::string(8192, 'a'))));
 }
 
 TEST(ShaarWindowsTabsHandlersTest, QuitRejectsLateWindowAndTabOpen) {

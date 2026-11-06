@@ -308,7 +308,8 @@ void StopObservingLifecycle() {
 bool RouteDevToolsOpenURL(content::WebContents* source,
                           Profile* profile,
                           const GURL& url) {
-  if (!pthread_main_np() || !url.is_valid() || url.spec().size() > 8192 ||
+  if (!pthread_main_np() || !profile || !url.is_valid() ||
+      url.spec().size() > 8192 ||
       !(url.SchemeIsHTTPOrHTTPS() ||
         (url.SchemeIs("devtools") && url.host() == "devtools" &&
          (url.path() == "/bundled/js_app.html" ||
@@ -548,8 +549,14 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
   if (url.size) {
     if (pending_node_frontend) {
       if (!shaar::devtools::OpenPendingNodeFrontend(raw_contents, profile,
-                                                    GURL(target)))
+                                                    GURL(target))) {
+        const int index = browser->GetTabStripModel()->GetIndexOfWebContents(
+            raw_contents);
+        if (index >= 0)
+          browser->GetTabStripModel()->CloseWebContentsAt(index, 0);
+        *out = nullptr;
         return Result(SHAAR_CHROMIUM_ERROR, error);
+      }
     } else {
       shaar::navigation::Navigate(raw_contents, target, false);
     }

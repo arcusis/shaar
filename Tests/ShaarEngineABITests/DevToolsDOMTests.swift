@@ -30,6 +30,27 @@ private final class DOMSubmitting: ShaarDevToolsSubmitting, @unchecked Sendable 
 struct DevToolsDOMTests {
   private let scope = ShaarNavigationScope(profileID: "profile-a")
 
+  @Test func documentAcceptsBoundedLongInlineStyle() throws {
+    func document(_ style: String) -> [String: Any] {
+      [
+        "root": [
+          "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+          "children": [
+            [
+              "nodeId": 2, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
+              "attributes": ["style", style],
+            ]
+          ],
+        ]
+      ]
+    }
+
+    let style = String(repeating: "color:rgb(1,2,3);", count: 450)
+    let snapshot = try #require(ShaarDOMSnapshot.decode(document(style)))
+    #expect(snapshot.nodes.first { $0.id == 2 }?.attributes.first?.value == style)
+    #expect(ShaarDOMSnapshot.decode(document(String(repeating: "x", count: 16_385))) == nil)
+  }
+
   @Test func nestedDocumentDecodesShadowRootsAndSameOriginFrameDocument() throws {
     let payload =
       try JSONSerialization.jsonObject(

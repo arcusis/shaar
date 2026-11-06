@@ -99,12 +99,14 @@ def copy_swift_test_crash_reports(directory: Path, started: float) -> None:
 
 def test_commands(checks: Commands, *, cwd: Path = ROOT, scratch: str = ".build") -> int:
     flags = ["--scratch-path", scratch, "--jobs", "2", "--force-resolved-versions", "--enable-code-coverage"]
+    # Keep wall-clock scale assertions independent of other Swift Testing cases.
+    test_flags = [*flags, "--no-parallel"]
     if checks.run("build", ["swift", "build", "--build-tests", *flags], cwd=cwd):
         return 1
     coverage_path = prepare_coverage(cwd, scratch)
     # SwiftUI focus in a hidden window needs its own AppKit process; both invocations still count.
     isolated_focus = "BrowserWindowSidebarTests.openingPaneCommandMakesSearchFieldFirstResponderOffscreen"
-    status = run_swift_tests(checks, "tests", ["swift", "test", "--skip-build", *flags,
+    status = run_swift_tests(checks, "tests", ["swift", "test", "--skip-build", *test_flags,
                              "--skip", isolated_focus,
                              "--xunit-output", str(checks.directory / "swift.xml")], cwd=cwd)
     if status:
@@ -112,7 +114,7 @@ def test_commands(checks: Commands, *, cwd: Path = ROOT, scratch: str = ".build"
     preserve_test_reports(checks.directory)
     first_profile = checks.directory / "other-tests.profdata"
     shutil.copyfile(coverage_path.parent / "default.profdata", first_profile)
-    status = run_swift_tests(checks, "isolated-focus", ["swift", "test", "--skip-build", *flags,
+    status = run_swift_tests(checks, "isolated-focus", ["swift", "test", "--skip-build", *test_flags,
                              "--filter", isolated_focus,
                              "--xunit-output", str(checks.directory / "swift.xml")], cwd=cwd)
     if status:

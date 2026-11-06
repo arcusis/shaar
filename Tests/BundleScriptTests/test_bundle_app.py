@@ -233,6 +233,21 @@ class BundleAppTests(unittest.TestCase):
             ["NSUserActivityTypeBrowsingWeb"],
         )
 
+    def test_bundle_registers_web_documents_as_an_alternate_handler(self):
+        result = self._run()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plist = self._info_plist("build/Shaar Shell.app")
+        self.assertEqual(
+            plist["CFBundleURLTypes"][0]["CFBundleURLSchemes"], ["http", "https"]
+        )
+        web_document = plist["CFBundleDocumentTypes"][0]
+        self.assertEqual(web_document["LSHandlerRank"], "Alternate")
+        self.assertEqual(
+            web_document["LSItemContentTypes"],
+            ["public.html", "public.xhtml", "com.apple.web-internet-location"],
+        )
+
     def test_every_bundle_embeds_sparkle_without_update_feed(self):
         for args, app_path in (((), "build/Shaar Shell.app"), (("--with-engine",), "build/Shaar.app")):
             with self.subTest(args=args):

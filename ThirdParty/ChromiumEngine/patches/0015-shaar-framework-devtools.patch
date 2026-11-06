@@ -45,7 +45,7 @@ index fbdec99d..692bc9ba 100644
 +  return !canonical_root.empty() && !canonical_path.empty() &&
 +         !base::IsLink(requested) &&
 +         canonical_path.DirName() == canonical_root &&
-+         FrameworkDevToolsID(canonical_path.BaseName().AsUTF8()).size() &&
++         FrameworkDevToolsID(canonical_path.BaseName().AsUTF8Unsafe()).size() &&
 +         base::DirectoryExists(canonical_path);
 +}
 +

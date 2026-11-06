@@ -52,7 +52,7 @@ TEST(ShaarExtensionsModuleTest, FrameworkDevToolsPathCannotEscapeBundle) {
 }
 
 TEST(ShaarExtensionsModuleTest, FrameworkDevToolsManifestRejectsRemoteHosts) {
-  const std::string local = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["http://127.0.0.1/*"]}]})";
+  const std::string local = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["http://127.0.0.1/*"]}],"web_accessible_resources":[{"matches":["https://localhost/*"]}]})";
   const std::string remote = R"({"host_permissions":["https://example.com/*"],"content_scripts":[{"matches":["http://localhost/*"]}]})";
   const std::string remote_script = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["<all_urls>"]}]})";
   EXPECT_TRUE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(local));

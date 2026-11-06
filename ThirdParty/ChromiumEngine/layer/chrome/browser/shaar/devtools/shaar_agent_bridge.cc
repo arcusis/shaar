@@ -519,6 +519,7 @@ class AgentClient final : public ShaarAgentBridgeClient {
         return Deny(*id, "cross-site navigation revokes the grant", reply,
                     false);
     }
+    pending_responses_[*id] = *session;
     return true;
   }
 
@@ -531,9 +532,14 @@ class AgentClient final : public ShaarAgentBridgeClient {
     const base::DictValue& event = parsed->GetDict();
     const std::string* session = event.FindString("sessionId");
     if (session) {
-      const std::string* method = event.FindString("method");
-      return sessions_.contains(*session) &&
-             (!method || !method->starts_with("Target."));
+      const auto id = event.FindInt("id");
+      if (!id || event.contains("method"))
+        return false;
+      const auto pending = pending_responses_.find(*id);
+      if (pending == pending_responses_.end() || pending->second != *session)
+        return false;
+      pending_responses_.erase(pending);
+      return sessions_.contains(*session);
     }
     const auto id = event.FindInt("id");
     if (!id || !pending_attach_.erase(*id))
@@ -618,6 +624,7 @@ class AgentClient final : public ShaarAgentBridgeClient {
   content::DevToolsAgentHost* host_;
   std::set<int> pending_attach_;
   std::set<std::string> sessions_;
+  std::map<int, std::string> pending_responses_;
   bool close_ = false;
 };
 

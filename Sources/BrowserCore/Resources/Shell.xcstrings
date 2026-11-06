@@ -1,6 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Open DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open DevTools"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי המפתחים"}}}},
+    "Open Inspector": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Inspector"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי הבדיקה"}}}},
+    "Clear Site Data": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Clear Site Data"}},"he":{"stringUnit":{"state":"translated","value":"ניקוי נתוני האתר"}}}},
+    "Development page actions": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Development page actions"}},"he":{"stringUnit":{"state":"translated","value":"פעולות לדף פיתוח"}}}},
+    "Clear site data for this page?": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Clear site data for this page?"}},"he":{"stringUnit":{"state":"translated","value":"לנקות את נתוני האתר עבור דף זה?"}}}},
+    "Dev Mode": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Dev Mode"}},"he":{"stringUnit":{"state":"translated","value":"מצב מפתחים"}}}},
     "Current address: %@. Search or enter address": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הכתובת הנוכחית: %@. חיפוש או הזנת כתובת"}}}},
     "Favorites can move only between spaces sharing a profile.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"אפשר להעביר מועדפים רק בין מרחבים שמשתמשים באותו פרופיל."}}}},
     "Split stacks can move only between spaces sharing a profile.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"אפשר להעביר קבוצות של תצוגה מפוצלת רק בין מרחבים שמשתמשים באותו פרופיל."}}}},

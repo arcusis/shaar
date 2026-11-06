@@ -59,6 +59,19 @@ struct WorkspaceQuitPersistenceTests {
     #expect(!context.store.reloadCurrentPage())
     #expect(!fixture.host.events.router.bindTab(tab.uuidString, windowID: context.nativeID))
   }
+
+  @Test func closedReplacementWindowStopsRecoveryWithoutReenteringAttach() throws {
+    let fixture = try QuitWorkspaceFixture()
+    defer { fixture.cleanUp() }
+    let context = try #require(fixture.host.contexts.values.first)
+    fixture.runtime.reportsWindowsOpen = false
+
+    context.engine.reconcile()
+
+    #expect(fixture.host.contexts[context.id] == nil)
+    #expect(fixture.host.lastError != nil)
+    #expect(fixture.runtime.createdWindowIDs.count == 2)
+  }
 }
 
 @MainActor
@@ -107,6 +120,8 @@ private final class QuitWorkspaceFixture {
 private final class WorkspaceQuitRuntime: ARCShaarRuntime, @unchecked Sendable {
   var windows: [String: NSWindow] = [:]
   var tabWindows: [String: String] = [:]
+  var createdWindowIDs: [String] = []
+  var reportsWindowsOpen = true
   var cancelQuit = false
   nonisolated(unsafe) var quittingForTest = false
   override var isQuitting: Bool { quittingForTest }
@@ -118,7 +133,11 @@ private final class WorkspaceQuitRuntime: ARCShaarRuntime, @unchecked Sendable {
         styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
       window.isReleasedWhenClosed = false
       windows[windowID] = window
+      createdWindowIDs.append(windowID)
     }
+  }
+  override func isWindowOpenID(_ windowID: String) -> Bool {
+    reportsWindowsOpen && windows[windowID] != nil
   }
   override func window(forID windowID: String) -> NSWindow? { windows[windowID] }
   override func hostView(forWindowID windowID: String) -> NSView? {

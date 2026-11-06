@@ -1,0 +1,188 @@
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -88,8 +88,8 @@
+     return "(() => { let s=document.getElementById('shaar-repro-mask');"
+            "if(!s){s=document.createElement('style');s.id='shaar-repro-mask';"
+            "document.documentElement.appendChild(s)}s.textContent=" + quoted +
+-           ";return new Promise(resolve=>requestAnimationFrame(()=>"
+-           "requestAnimationFrame(()=>resolve(!!s.sheet))))})()";
++           ";const field=document.querySelector('input,textarea,select');"
++           "if(field)getComputedStyle(field).color;return !!s.sheet})()";
+   }
+   return "(() => {const s=document.getElementById('shaar-repro-mask');"
+          "if(!s||!s.isConnected||!s.sheet||s.textContent!==" + quoted +
+@@ -1328,12 +1328,17 @@
+     ResumePausedRequests();
+     base::DictValue params = next.empty() ? base::DictValue()
+                                           : FetchEnableParams(next);
+-    const int command_id = SendCommand(next.empty() ? "Fetch.disable" : "Fetch.enable",
+-                                       std::move(params));
+-    if (!command_id)
+-      return Fail(error, SHAAR_NOT_READY, "network rules command unavailable");
++    const int command_id = next_command_id_;
+     pending_rules_ = PendingRules{reply, command_id, std::move(rules_)};
+     rules_ = std::move(next);
++    if (!SendCommand(rules_.empty() ? "Fetch.disable" : "Fetch.enable",
++                     std::move(params))) {
++      if (pending_rules_) {
++        rules_ = std::move(pending_rules_->previous);
++        pending_rules_.reset();
++      }
++      return Fail(error, SHAAR_NOT_READY, "network rules command unavailable");
++    }
+     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+         FROM_HERE, base::BindOnce(&PanelClient::RulesTimedOut,
+                                   weak_factory_.GetWeakPtr(), command_id),
+@@ -1397,22 +1402,28 @@
+     if (command == SHAAR_DEVTOOLS_SCREENCAST_START) {
+       if (recording_ || pending_start_)
+         return Fail(error, SHAAR_CONFLICT, "screencast already started");
++      capture_lease_ = StartHiddenProbeCapture(contents_);
++      if (!capture_lease_)
++        return Fail(error, SHAAR_NOT_READY, "screencast capture unavailable");
+       pending_start_ = std::make_unique<ReplyTarget>(reply);
+       recording_ = true;
+       base::DictValue params;
+       params.Set("expression", MaskExpression(true));
+       params.Set("returnByValue", true);
+       params.Set("awaitPromise", true);
+-      mask_setup_id_ = SendCommand("Runtime.evaluate", std::move(params));
+-      if (mask_setup_id_ != 0) {
++      const int command_id = next_command_id_;
++      mask_setup_id_ = command_id;
++      if (SendCommand("Runtime.evaluate", std::move(params)) == command_id) {
+         base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+             FROM_HERE, base::BindOnce(&PanelClient::MaskStartTimedOut,
+-                                      weak_factory_.GetWeakPtr(), mask_setup_id_),
++                                      weak_factory_.GetWeakPtr(), command_id),
+             base::Seconds(3));
+         return SHAAR_OK;
+       }
++      mask_setup_id_ = 0;
+       pending_start_.reset();
+       recording_ = false;
++      capture_lease_.RunAndReset();
+       return Fail(error, SHAAR_NOT_READY, "screencast command unavailable");
+     }
+     if (command == SHAAR_DEVTOOLS_SCREENCAST_STOP) {
+@@ -1464,11 +1475,14 @@
+         params.Set("quality", 40);
+         params.Set("maxWidth", 1280);
+         params.Set("maxHeight", 720);
+-        params.Set("everyNthFrame", 12);
++        params.Set("everyNthFrame", 1);
+         params.Set("maxFramesInFlight", 1);
+-        start_command_id_ = SendCommand("Page.startScreencast", std::move(params));
+-        if (!start_command_id_)
++        const int command_id = next_command_id_;
++        start_command_id_ = command_id;
++        if (SendCommand("Page.startScreencast", std::move(params)) != command_id) {
++          start_command_id_ = 0;
+           FailStart();
++        }
+         return;
+       }
+       if (*id == start_command_id_) {
+@@ -1765,6 +1779,7 @@
+     params.Set("expression",
+                "document.getElementById('shaar-repro-mask')?.remove()");
+     SendCommand("Runtime.evaluate", std::move(params));
++    capture_lease_.RunAndReset();
+   }
+ 
+   void FailStart() {
+@@ -1795,15 +1810,17 @@
+     base::DictValue check;
+     check.Set("expression", MaskExpression(false));
+     check.Set("returnByValue", true);
+-    frame_mask_id_ = SendCommand("Runtime.evaluate", std::move(check));
+-    if (!frame_mask_id_) {
++    const int command_id = next_command_id_;
++    frame_mask_id_ = command_id;
++    if (SendCommand("Runtime.evaluate", std::move(check)) != command_id) {
++      frame_mask_id_ = 0;
+       SendAck(*session);
+       pending_frame_.reset();
+       StopScreencast();
+     } else {
+       base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+           FROM_HERE, base::BindOnce(&PanelClient::FrameMaskTimedOut,
+-                                    weak_factory_.GetWeakPtr(), frame_mask_id_),
++                                    weak_factory_.GetWeakPtr(), command_id),
+           base::Seconds(1));
+     }
+   }
+@@ -1956,6 +1973,7 @@
+   int frame_mask_id_ = 0;
+   int awaiting_ack_ = 0;
+   bool recording_ = false;
++  base::ScopedClosureRunner capture_lease_;
+   bool mask_ready_ = false;
+   base::TimeTicks last_frame_time_;
+   base::WeakPtrFactory<PanelClient> weak_factory_{this};
+--- a/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
+@@ -154,10 +154,17 @@
+   }
+ 
+   bool Attach() {
+-    host_ = ProtocolAgentHostFor(contents_.get());
+-    if (!host_ || !host_->AttachClient(this))
++    if (attached_)
++      return true;
++    // Chromium reports a detached viewport child as an "other" target. The
++    // lease owns this WebContents, so match the host by identity instead.
++    host_ = content::DevToolsAgentHost::GetOrCreateFor(contents_.get());
++    if (!host_ || host_->GetWebContents() != contents_.get() ||
++        !host_->AttachClient(this))
+       return false;
+     attached_ = true;
++    if (auto* view = contents_->GetRenderWidgetHostView())
++      view->SetSize(gfx::Size(width_, height_));
+     base::DictValue metrics;
+     metrics.Set("width", width_);
+     metrics.Set("height", height_);
+@@ -208,11 +215,16 @@
+   }
+ 
+   bool Capture(ReplyTarget reply) {
+-    if (pending_capture_ || !attached_ || !contents_->GetRenderWidgetHostView())
++    if (pending_capture_)
+       return false;
+     capture_lease_ = StartHiddenProbeCapture(contents_.get());
+     if (!capture_lease_)
+       return false;
++    if (!Attach() || !contents_->GetRenderWidgetHostView()) {
++      capture_lease_.RunAndReset();
++      return false;
++    }
++    contents_->GetRenderWidgetHostView()->SetSize(gfx::Size(width_, height_));
+     base::DictValue params;
+     params.Set("format", "png");
+     params.Set("captureBeyondViewport", false);
+@@ -352,8 +364,6 @@
+     const int id = next_viewport_id_++;
+     auto viewport = std::make_unique<Viewport>(this, id, std::move(preset),
+                                                 width, height, std::move(child));
+-    if (!viewport->Attach())
+-      return 0;
+     viewport->Navigate(url);
+     viewports_.push_back(std::move(viewport));
+     return id;
+@@ -444,9 +454,13 @@
+ };
+ 
+ void Viewport::DidFinishNavigation(content::NavigationHandle* navigation) {
+-  if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame() &&
+-      !navigation->IsSameDocument())
+-    session_->ChildNavigated(id_, navigation->GetURL());
++  if (!navigation->HasCommitted() || !navigation->IsInPrimaryMainFrame() ||
++      navigation->IsSameDocument())
++    return;
++  // A fresh WebContents has only a tab target. Runtime, Page, and Emulation
++  // need its page target, which appears after the first navigation commits.
++  Attach();
++  session_->ChildNavigated(id_, navigation->GetURL());
+ }
+ 
+ std::map<content::WebContents*, std::unique_ptr<ViewportSession>>& Leases() {

@@ -36,6 +36,7 @@ final class EngineProbe {
   private let devModeOnly: Bool
   private let mediaSessionOnlyMode: Bool
   private let devtoolsRouteOnlyMode: Bool
+  private let devtoolsPanelsOnlyMode: Bool
   private let measurementTabCount: Int?
   private let measurementEager: Bool
   private let expectedAfterTermination: BrowserSession?
@@ -78,7 +79,7 @@ final class EngineProbe {
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
     localizationMode: Bool, basicBrowsingMode: Bool, reloadWindowMode: Bool, devModeOnly: Bool,
-    mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool,
+    mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool, devtoolsPanelsOnlyMode: Bool,
     measurementTabCount: Int?, measurementEager: Bool
   ) throws {
     self.root = root
@@ -101,6 +102,7 @@ final class EngineProbe {
     self.devModeOnly = devModeOnly
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
     self.devtoolsRouteOnlyMode = devtoolsRouteOnlyMode
+    self.devtoolsPanelsOnlyMode = devtoolsPanelsOnlyMode
     self.measurementTabCount = measurementTabCount
     self.measurementEager = measurementEager
     expectedAfterTermination =
@@ -230,6 +232,7 @@ final class EngineProbe {
       let devModeOnly = arguments.contains("--probe-dev-mode-only")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
       let devtoolsRouteOnlyMode = arguments.contains("--probe-devtools-route-only")
+      let devtoolsPanelsOnlyMode = arguments.contains("--probe-devtools-panels-only")
       let measurementTabCount: Int? = {
         guard let index = arguments.firstIndex(of: "--probe-measure-tabs"),
           arguments.indices.contains(index + 1)
@@ -268,6 +271,7 @@ final class EngineProbe {
         "--probe-dev-mode-only",
         "--probe-media-session-only",
         "--probe-devtools-route-only",
+        "--probe-devtools-panels-only",
         "--probe-measure-tabs",
       ]
       guard externalAppConsentMode == noLaunchGuard,
@@ -302,6 +306,9 @@ final class EngineProbe {
         !devtoolsRouteOnlyMode
           || !conflictingFlags.filter({ $0 != "--probe-devtools-route-only" }).contains(
             where: arguments.contains),
+        !devtoolsPanelsOnlyMode
+          || !conflictingFlags.filter({ $0 != "--probe-devtools-panels-only" }).contains(
+            where: arguments.contains),
         measurementTabCount == nil
           || !conflictingFlags.filter({ $0 != "--probe-measure-tabs" }).contains(
             where: arguments.contains),
@@ -330,6 +337,7 @@ final class EngineProbe {
         devModeOnly: devModeOnly,
         mediaSessionOnlyMode: mediaSessionOnlyMode,
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
+        devtoolsPanelsOnlyMode: devtoolsPanelsOnlyMode,
         measurementTabCount: measurementTabCount, measurementEager: measurementEager)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
@@ -711,6 +719,18 @@ final class EngineProbe {
         checks += try await DevToolsRouteProbe(
           engine: browserEngine, store: store, root: root, fixture: fixture,
           phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      if devtoolsPanelsOnlyMode {
+        guard let browserEngine else { throw ProbeFailure("DevTools panel engine is missing.") }
+        bootstrapStage = .ready
+        fixtureStage = "DevToolsPanels"
+        try expect(NSApp.windows.allSatisfy { !$0.isVisible }, "DevTools panel windows stay hidden")
+        checks += try await DevToolsPanelsProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
         localFixturesPassed = true
         finish(error: nil)
@@ -1257,7 +1277,7 @@ final class EngineProbe {
       return
     }
     if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
-      || devtoolsRouteOnlyMode
+      || devtoolsRouteOnlyMode || devtoolsPanelsOnlyMode
     {
       let engineClosed = browserEngine?.isClosed == true
       let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
@@ -1313,6 +1333,7 @@ final class EngineProbe {
     if reloadWindowMode { return "reload-window" }
     if devModeOnly { return DevelopmentModeProbe.mode }
     if mediaSessionOnlyMode { return "media-session-only" }
+    if devtoolsPanelsOnlyMode { return "devtools-panels-only" }
     if devtoolsRouteOnlyMode { return "devtools-route-only" }
     if localizationMode { return "localization-only" }
     if privateWindowMode { return PrivateWindowProbe.mode }

@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
-                browsing: bool = False) -> list[str]:
+                browsing: bool = False, shipping_guard: bool = False) -> list[str]:
     expected = {"plan", "fast", "dependency-review", "codeql"}
     native = {
         "python-tests", "build", "coverage", "visuals", "localization",
@@ -23,9 +23,12 @@ def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
         expected.add("basic-browsing")
     if website:
         expected.add("website")
+    if shipping_guard:
+        expected.add("shipping-probe-guard")
     if nightly:
         expected |= {"sanitizers", "dead-code"}
-    optional = (native | {"basic-browsing", "sanitizers", "dead-code", "website"}) - expected
+    optional = (native | {"basic-browsing", "sanitizers", "dead-code", "website",
+                          "shipping-probe-guard"}) - expected
     errors = [f"{name}: {needs.get(name, {}).get('result', 'missing')}"
               for name in sorted(expected) if needs.get(name, {}).get("result") != "success"]
     errors += [f"{name}: {item.get('result', 'missing')}"
@@ -38,7 +41,8 @@ def main() -> int:
     needs = json.loads(os.environ["CI_NEEDS"])
     errors = gate_errors(needs, os.environ["CI_FULL"] == "true", os.environ["CI_NIGHTLY"] == "true",
                          os.environ.get("CI_WEBSITE") == "true",
-                         os.environ.get("CI_BROWSING") == "true")
+                         os.environ.get("CI_BROWSING") == "true",
+                         os.environ.get("CI_SHIPPING_GUARD") == "true")
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write("### CI required\n\n| Stage | Result |\n| --- | --- |\n")
         for name, item in sorted(needs.items()):

@@ -49,6 +49,22 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_shipping_probe_guard_runs_for_shipping_sources_on_pull_requests(self):
+        self.assertTrue(PLAN.needs_shipping_probe_guard(["Sources/ChromiumBridge/ChromiumPictureInPicture.mm"]))
+        self.assertTrue(PLAN.needs_shipping_probe_guard(["Sources/ArcusisBrowser/BrowserEngine.swift"]))
+        self.assertTrue(PLAN.needs_shipping_probe_guard(["Package.swift"]))
+        self.assertFalse(PLAN.needs_shipping_probe_guard(["Sources/ChromiumBridgeVerification/ChromiumBridgeVerification.mm"]))
+        self.assertFalse(PLAN.needs_shipping_probe_guard(["Notebook/Engine_Shaar_Layer_Design.md"]))
+        workflow = (ROOT / ".github" / "workflows" / "source-checks.yml").read_text()
+        self.assertIn("shipping-probe-guard:\n", workflow)
+        self.assertIn("bash scripts/bundle-app.sh --with-engine", workflow)
+        self.assertIn("CI_SHIPPING_GUARD:", workflow)
+        needs = self.results(native="skipped")
+        needs["basic-browsing"]["result"] = "skipped"
+        needs["shipping-probe-guard"] = {"result": "failure"}
+        self.assertIn("shipping-probe-guard: failure",
+                      GATE.gate_errors(needs, False, False, shipping_guard=True))
+
     def test_codeql_permissions_are_read_only_by_default_and_scoped_to_analysis(self):
         workflow = (ROOT / ".github" / "workflows" / "ci-codeql.yml").read_text()
         defaults = workflow.split("jobs:", 1)[0]

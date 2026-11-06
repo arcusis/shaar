@@ -356,6 +356,11 @@ jobs:
         with:
           mode: shaar-engine-verification
           products: build/swiftpm/verification
+      - name: Cache SHA-256 pinned Shaar test framework archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: build/ShaarEngineTestCache/*.tar.xz
+          key: shaar-test-engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ThirdParty/ChromiumEngine/ci-test-pin.json') }}
       - name: Fetch SHA-256 pinned Shaar test framework
         env:
           GH_TOKEN: ${{ github.token }}

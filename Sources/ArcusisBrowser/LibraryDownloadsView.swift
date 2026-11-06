@@ -7,6 +7,7 @@ import BrowserCore
 import Observation
 import QuickLookThumbnailing
 import SwiftUI
+import _QuickLook_SwiftUI
 import UniformTypeIdentifiers
 
 struct LibraryDownloadsView: View {
@@ -19,6 +20,7 @@ struct LibraryDownloadsView: View {
   @State private var typeFilter: LibraryDownloadTypeFilter = .all
   @State private var hoveredID: String?
   @State private var mediaKind: LibraryMediaKind?
+  @State private var quickLookURL: URL?
   @State private var thumbnails = LibraryThumbnailLoader()
   @FocusState private var searchIsFocused: Bool
 
@@ -119,6 +121,7 @@ struct LibraryDownloadsView: View {
     .padding(16)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor))
+    .quickLookPreview($quickLookURL)
     .onAppear { searchIsFocused = true }
     .onChange(of: currentProfileID) { _, _ in thumbnails.clear() }
   }
@@ -194,6 +197,8 @@ struct LibraryDownloadsView: View {
       }.frame(maxWidth: .infinity, alignment: .leading)
       Menu {
         if item.canOpen {
+          Button(PanelsL10n.string("Quick Look")) { preview(item) }
+            .disabled(!canUseFileActions)
           Button(PanelsL10n.string("Show in Finder")) { open(item, inFinder: true) }.disabled(
             !canUseFileActions)
           Button(PanelsL10n.string("Open")) { open(item, inFinder: false) }.disabled(
@@ -249,6 +254,15 @@ struct LibraryDownloadsView: View {
     } else {
       store.engine?.revealDownload(item.id, profileID: profileID, open: !inFinder)
     }
+  }
+
+  private func preview(_ item: BrowserDownload) {
+    guard canUseFileActions, let downloads,
+      let url = LibraryDownloadQuery.quickLookURL(
+        for: item, profileID: profileID, currentProfileID: currentProfileID,
+        downloads: downloads)
+    else { return }
+    quickLookURL = url
   }
 
   private func dragProvider(_ item: BrowserDownload) -> NSItemProvider {

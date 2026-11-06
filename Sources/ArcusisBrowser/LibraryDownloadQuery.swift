@@ -64,6 +64,19 @@ struct LibraryDownloadDateGroup: Identifiable {
 
 @MainActor
 enum LibraryDownloadQuery {
+  static func quickLookURL(
+    for item: BrowserDownload,
+    profileID: UUID,
+    currentProfileID: UUID,
+    downloads: DownloadsModel
+  ) -> URL? {
+    guard profileID == currentProfileID, item.profileID == profileID, item.canOpen,
+      downloads.libraryItem(id: item.id, profileID: profileID) == item
+    else { return nil }
+    return downloads.fileForDrag(
+      id: item.id, profileID: profileID, selectedProfileID: currentProfileID)
+  }
+
   static func mediaFile(
     for item: BrowserDownload,
     profileID: UUID,

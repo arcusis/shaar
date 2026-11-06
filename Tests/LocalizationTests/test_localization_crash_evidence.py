@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -24,6 +25,36 @@ with patch.object(sys, "path", [str(ROOT / "scripts"), *sys.path]):
 
 
 class LocalizationCrashEvidenceTests(unittest.TestCase):
+    def test_failed_probe_keeps_owned_crashpad_dump(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile = root / "profile"
+            profile.mkdir()
+            (profile / FIXTURE.MARKER).write_text(
+                "arcusis-localization-probe-v1\n", encoding="utf-8"
+            )
+            crashpad = profile / "Chromium" / "Crashpad" / "completed"
+            crashpad.mkdir(parents=True)
+            (crashpad / "owned.dmp").write_bytes(b"owned crash")
+            outside = root / "outside.dmp"
+            outside.write_bytes(b"other process")
+            (crashpad / "outside.dmp").symlink_to(outside)
+            completed = subprocess.CompletedProcess([], -11, "", "")
+            with (
+                patch.object(FIXTURE.engine_fixture, "crash_reports_for", return_value=[]),
+                patch.object(FIXTURE.engine_fixture, "wait_until", return_value=0),
+            ):
+                FIXTURE.record_failed_probe(
+                    "english-restart", profile / "probe.json", completed,
+                    4242, time.time() - 1, root / "artifact",
+                )
+            artifact = root / "artifact"
+            receipt = json.loads((artifact / "english-restart-failure.json").read_text())
+            self.assertEqual(receipt["crashpadDumps"], ["owned.dmp"])
+            self.assertEqual(
+                (artifact / "english-restart-crashpad-1.dmp").read_bytes(), b"owned crash"
+            )
+
     def test_backtrace_setting_reaches_only_the_verification_child(self):
         with patch.dict(FIXTURE.os.environ, {
             "PATH": "/usr/bin", "SWIFT_BACKTRACE": "enable=no",

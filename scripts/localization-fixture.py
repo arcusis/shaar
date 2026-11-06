@@ -59,6 +59,31 @@ def run_engine_probe(arguments, environment):
     return completed, process.pid, started
 
 
+def crashpad_dumps_for(profile_root, since):
+    marker = profile_root / MARKER
+    try:
+        if marker.read_text(encoding="utf-8") != "arcusis-localization-probe-v1\n":
+            return []
+        database = (profile_root / "Chromium" / "Crashpad").resolve(strict=True)
+        if not database.is_relative_to(profile_root.resolve(strict=True)):
+            return []
+    except OSError:
+        return []
+    candidates = []
+    for state in ("pending", "completed"):
+        for path in (database / state).glob("*.dmp"):
+            try:
+                source = path.resolve(strict=True)
+                details = source.stat()
+            except OSError:
+                continue
+            if not source.is_relative_to(database) or not (0 < details.st_size <= 20_000_000):
+                continue
+            if details.st_mtime >= since:
+                candidates.append((details.st_mtime, source))
+    return [path for _, path in sorted(candidates, reverse=True)[:4]]
+
+
 def record_failed_probe(case_name, output, completed, pid, started, artifact):
     artifact.mkdir(parents=True, exist_ok=True)
     stderr = redact(completed.stderr)
@@ -75,6 +100,14 @@ def record_failed_probe(case_name, output, completed, pid, started, artifact):
             shutil.copyfile(source, artifact / f"{case_name}-crash-{index + 1}.ips")
         except OSError:
             continue
+    crashpad_dumps = []
+    if completed.returncode < 0:
+        for index, source in enumerate(crashpad_dumps_for(output.parent, started), start=1):
+            try:
+                shutil.copyfile(source, artifact / f"{case_name}-crashpad-{index}.dmp")
+                crashpad_dumps.append(source.name)
+            except OSError:
+                continue
     if output.exists():
         shutil.copyfile(output, artifact / f"{case_name}-probe.json")
     (artifact / f"{case_name}-stderr.log").write_text(
@@ -83,6 +116,7 @@ def record_failed_probe(case_name, output, completed, pid, started, artifact):
     receipt = {
         "case": case_name, "pid": pid, "exitCode": completed.returncode,
         "probeReportWritten": output.exists(), "crashReports": reports,
+        "crashpadDumps": crashpad_dumps,
         "stderrTail": stderr[-4000:],
     }
     (artifact / f"{case_name}-failure.json").write_text(

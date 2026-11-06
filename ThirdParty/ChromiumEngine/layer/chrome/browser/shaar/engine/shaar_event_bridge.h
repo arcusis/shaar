@@ -24,6 +24,11 @@ struct shaar_engine {
 
 namespace shaar {
 
+// Opaque ABI handles are checked by address before any field is read. Retired
+// allocations remain reserved so a stale address cannot alias a new engine.
+bool EngineIsLive(const shaar_engine* engine);
+void RetireEngine(shaar_engine* engine);
+
 // Called by future Chromium module owners on the UI thread after mutation.
 // All slices are borrowed until the callback returns. No second sink exists.
 shaar_error_code EmitEvent(shaar_engine* engine,

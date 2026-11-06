@@ -51,7 +51,7 @@ shaar_error_code EmitEvent(shaar_engine* engine,
   const bool release_requested = engine->release_requested;
   engine->emitting = false;
   if (release_requested)
-    delete engine;
+    RetireEngine(engine);
   return SHAAR_OK;
 }
 

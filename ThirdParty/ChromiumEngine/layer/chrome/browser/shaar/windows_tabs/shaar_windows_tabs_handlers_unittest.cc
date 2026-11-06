@@ -7,6 +7,7 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 
 #include <string>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -30,6 +31,22 @@ struct CapturedTabActivation {
   bool accepted = false;
   bool called = false;
 };
+
+using EngineHandle = std::unique_ptr<shaar_engine, decltype(&shaar_engine_release)>;
+
+EngineHandle MakeEngineHandle() {
+  static constexpr char kDataRoot[] = ".";
+  shaar_config config = {};
+  config.size = sizeof(config);
+  config.requested_major = SHAAR_ENGINE_ABI_MAJOR;
+  config.requested_minor = SHAAR_ENGINE_ABI_MINOR;
+  config.data_root = {kDataRoot, sizeof(kDataRoot) - 1};
+  config.on_event = [](void*, const shaar_event*) {};
+  shaar_engine* engine = nullptr;
+  shaar_error error = {.size = sizeof(shaar_error)};
+  EXPECT_EQ(shaar_engine_create(&config, &engine, &error), SHAAR_OK);
+  return EngineHandle(engine, shaar_engine_release);
+}
 
 shaar_error_code CaptureWindowRequest(void* context,
                                       shaar_request_id request_id,
@@ -250,8 +267,9 @@ TEST(ShaarWindowsTabsHandlersTest, MixedProfileWindowsCloseIndependently) {
 }
 
 TEST(ShaarWindowsTabsHandlersTest, RegularWindowABIReservesAndClosesHandle) {
-  shaar_engine engine_storage;
-  auto* engine = &engine_storage;
+  EngineHandle engine_storage = MakeEngineHandle();
+  auto* engine = engine_storage.get();
+  ASSERT_NE(engine, nullptr);
   static constexpr char kID[] = "window-api";
   shaar_window* window = nullptr;
   shaar_error error = {.size = sizeof(shaar_error)};
@@ -266,8 +284,9 @@ TEST(ShaarWindowsTabsHandlersTest, RegularWindowABIReservesAndClosesHandle) {
 }
 
 TEST(ShaarWindowsTabsHandlersTest, ClosedWindowHandleCannotNameNewWindow) {
-  shaar_engine engine_storage;
-  auto* engine = &engine_storage;
+  EngineHandle engine_storage = MakeEngineHandle();
+  auto* engine = engine_storage.get();
+  ASSERT_NE(engine, nullptr);
   shaar_error error = {.size = sizeof(shaar_error)};
   shaar_window* stale = nullptr;
   static constexpr char kFirst[] = "retired-window";
@@ -291,8 +310,28 @@ TEST(ShaarWindowsTabsHandlersTest, ClosedWindowHandleCannotNameNewWindow) {
                            &tab, &error),
             SHAAR_NOT_FOUND);
   EXPECT_EQ(tab, nullptr);
+  auto* poisoned = reinterpret_cast<shaar_window*>(0xefefefefefeff157ULL);
+  EXPECT_EQ(shaar_tab_open(scope, poisoned, {kTab, sizeof(kTab) - 1}, {}, 1,
+                           &tab, &error),
+            SHAAR_NOT_FOUND);
+  EXPECT_EQ(tab, nullptr);
   EXPECT_EQ(shaar_window_close(stale, &error), SHAAR_NOT_FOUND);
   EXPECT_EQ(shaar_window_close(replacement, &error), SHAAR_OK);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, ReleasedEngineCannotOpenWindow) {
+  EngineHandle engine_storage = MakeEngineHandle();
+  shaar_engine* stale = engine_storage.get();
+  ASSERT_NE(stale, nullptr);
+  engine_storage.reset();
+  static constexpr char kID[] = "late-window";
+  shaar_window* window = nullptr;
+  shaar_error error = {.size = sizeof(shaar_error)};
+  EXPECT_EQ(shaar_window_open(stale, SHAAR_WINDOW_REGULAR, nullptr,
+                              {kID, sizeof(kID) - 1}, &window, &error),
+            SHAAR_NOT_FOUND);
+  EXPECT_EQ(window, nullptr);
+  EXPECT_EQ(error.code, SHAAR_NOT_FOUND);
 }
 
 TEST(ShaarWindowsTabsHandlersTest, DevToolsRouteRejectsUnownedAndUnsafeURLs) {
@@ -310,8 +349,9 @@ TEST(ShaarWindowsTabsHandlersTest, DevToolsRouteRejectsUnownedAndUnsafeURLs) {
 }
 
 TEST(ShaarWindowsTabsHandlersTest, QuitRejectsLateWindowAndTabOpen) {
-  shaar_engine engine_storage;
-  auto* engine = &engine_storage;
+  EngineHandle engine_storage = MakeEngineHandle();
+  auto* engine = engine_storage.get();
+  ASSERT_NE(engine, nullptr);
   static constexpr char kFirst[] = "quit-window";
   static constexpr char kSecond[] = "late-window";
   static constexpr char kTab[] = "late-tab";

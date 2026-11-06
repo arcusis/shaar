@@ -200,7 +200,7 @@ final class PrivateBrowserHost {
   static func windowCanPerform(_ command: BrowserMenuCommand, store: BrowserStore) -> Bool {
     return switch command {
     case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
-    case .developerTools, .inspector:
+    case .developerTools, .chromiumDeveloperTools, .inspector:
       !store.commandIsOpen && store.privatePage?.inspectorTarget != nil
     case .inspectorCopy, .inspectorSource, .inspectorAgentCopy:
       store.session.selectedPage.flatMap { store.privatePage?.inspectors[$0.tab.id] }?
@@ -223,6 +223,7 @@ final class PrivateBrowserHost {
     let store = owner.store
     switch command {
     case .developerTools: owner.page.toggleDeveloperTools()
+    case .chromiumDeveloperTools: owner.page.toggleChromiumDeveloperTools()
     case .inspector: owner.page.toggleInspector()
     case .inspectorCopy:
       if let target = owner.page.inspectorTarget,

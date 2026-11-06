@@ -443,6 +443,12 @@ final class BrowserEngine {
         self.liveTabs.contains(id), let profile = UUID(uuidString: owner),
         self.store?.session.profileID(forTabID: id) == profile
       else { return }
+      // Reconciliation requests activation, whose acknowledgment comes back here.
+      // An already-selected tab must not start another reconcile/activate cycle.
+      if self.store?.session.selectedPage?.tab.id == id {
+        self.restoreSelectedPageAfterActivation(id)
+        return
+      }
       self.receivingNativeSelection = true
       if self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true {
         _ = self.store?.nativeFavoriteActivated(id, profileID: profile)
@@ -686,20 +692,23 @@ final class BrowserEngine {
       runtime.activateTabID(selected.uuidString)
       // Chromium can move the active WebContents to its own BrowserView while
       // processing native activation. Restore the page after that queued call.
-      DispatchQueue.main.async { [weak self] in
-        guard let self, !self.isClosed,
-          self.store?.session.selectedPage?.tab.id == selected,
-          self.runtime.windowID(forTabID: selected.uuidString) == self.windowID,
-          let view = self.runtime.view(forTabID: selected.uuidString),
-          let window = self.runtime.window(forID: self.windowID)
-        else { return }
-        _ = ChromiumPageContainerView.restoreSelectedPage(
-          view, tabID: selected, in: window)
-      }
+      restoreSelectedPageAfterActivation(selected)
     } else {
       runtime.clearActiveTab(inWindowID: windowID)
     }
     refreshExtensions()
+  }
+
+  private func restoreSelectedPageAfterActivation(_ selected: UUID) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.isClosed,
+        self.store?.session.selectedPage?.tab.id == selected,
+        self.runtime.windowID(forTabID: selected.uuidString) == self.windowID,
+        let view = self.runtime.view(forTabID: selected.uuidString),
+        let window = self.runtime.window(forID: self.windowID)
+      else { return }
+      _ = ChromiumPageContainerView.restoreSelectedPage(view, tabID: selected, in: window)
+    }
   }
 
   private func finishLoadingProfile(_ profile: UUID, error: Error?) async {

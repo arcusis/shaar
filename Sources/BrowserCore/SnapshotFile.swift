@@ -43,10 +43,16 @@ public struct SnapshotFile<Value: ValidatedSnapshot>: Sendable {
   public func loadPrimary() throws -> Value? { try Self.read(url) }
 
   public func save(_ value: Value) throws {
+    try save(value, syncDirectory: DurableFileWriter.flushDirectory)
+  }
+
+  /// Inject only the final durability boundary; validation and atomic replacement stay real.
+  func save(_ value: Value, syncDirectory: (URL) throws -> Void) throws {
     try value.validate()
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    try DurableFileWriter.replace(url, with: encoder.encode(value), backup: backupURL)
+    try DurableFileWriter.replace(
+      url, with: encoder.encode(value), backup: backupURL, syncDirectory: syncDirectory)
   }
 
   private static func read(_ url: URL) throws -> Value? {
@@ -59,7 +65,10 @@ public struct SnapshotFile<Value: ValidatedSnapshot>: Sendable {
 
 /// POSIX file replacement with full device flushes. Owner-only permissions are set at creation.
 enum DurableFileWriter {
-  static func replace(_ url: URL, with data: Data, backup: URL) throws {
+  static func replace(
+    _ url: URL, with data: Data, backup: URL,
+    syncDirectory: (URL) throws -> Void = flushDirectory
+  ) throws {
     let directory = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(
       at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -74,7 +83,7 @@ enum DurableFileWriter {
       unlink(temporary.path)
       throw error
     }
-    try flushDirectory(directory)
+    try syncDirectory(directory)
   }
 
   static func move(_ source: URL, to destination: URL) throws {
@@ -136,7 +145,7 @@ enum DurableFileWriter {
     guard Darwin.rename(source.path, destination.path) == 0 else { throw posixError() }
   }
 
-  private static func flushDirectory(_ directory: URL) throws {
+  static func flushDirectory(_ directory: URL) throws {
     let descriptor = open(directory.path, O_RDONLY | O_CLOEXEC)
     guard descriptor >= 0 else { throw posixError() }
     defer { close(descriptor) }

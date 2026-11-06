@@ -7,6 +7,7 @@
 #import "ChromiumLocalState.h"
 #import "ChromiumShaarExtensionsInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
+#import "ChromiumShaarFeatureTransport.h"
 
 #include <dlfcn.h>
 #include <cstdlib>
@@ -483,10 +484,19 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     ARCShaarRuntime *owner = weakSelf;
     if (!owner || !owner->_shaarEngine || !owner->_shaarTabs[tabID] ||
         ![owner->_shaarSelectedTabs[windowID] isEqualToString:tabID]) return;
-    if (![owner submitTabID:tabID operation:SHAAR_OP_WINDOW_ACTIVATE_TAB
-                    payload:@{@"schemaVersion": @1, @"tabID": tabID}]) return;
-    if (owner.onTabActivated)
-      owner.onTabActivated(tabID, owner->_shaarTabProfiles[tabID]);
+    [owner shaarSubmit:SHAAR_OP_WINDOW_ACTIVATE_TAB
+            profileID:owner->_shaarTabProfiles[tabID] tabID:tabID
+              payload:@{@"schemaVersion": @1, @"tabID": tabID}
+           completion:^(NSDictionary *, NSError *error) {
+      ARCShaarRuntime *current = weakSelf;
+      // Wait for the native completion task, after Chromium's tab-strip update
+      // unwinds. Swift can then restore the page once rather than cycling
+      // reconcile/activate to repair presentation.
+      if (error || !current || !current->_shaarTabs[tabID] ||
+          ![current->_shaarSelectedTabs[windowID] isEqualToString:tabID]) return;
+      if (current.onTabActivated)
+        current.onTabActivated(tabID, current->_shaarTabProfiles[tabID]);
+    }];
   });
 }
 

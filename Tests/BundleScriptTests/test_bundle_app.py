@@ -43,6 +43,8 @@ class BundleAppTests(unittest.TestCase):
         shutil.copy2(REPO / "scripts" / "stage-browser-resources.py", self.root / "scripts")
         shutil.copy2(REPO / "scripts" / "rebrand-engine-framework.py", self.root / "scripts")
         shutil.copytree(REPO / "ThirdParty" / "PublicSuffix", self.root / "ThirdParty" / "PublicSuffix")
+        shutil.copytree(REPO / "ThirdParty" / "ChromiumEngine" / "notices",
+                        self.root / "ThirdParty" / "ChromiumEngine" / "notices")
         icon = self.root / "Resources" / "Branding" / "Shaar.icns"
         icon.parent.mkdir(parents=True)
         shutil.copy2(ICON, icon)
@@ -357,6 +359,10 @@ class BundleAppTests(unittest.TestCase):
         self.assertTrue(
             (self.root / "build/Shaar.app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Libraries/libengine.dylib").is_file()
         )
+        notices = self.root / "build/Shaar.app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Resources/ThirdPartyNotices"
+        for name in ("cocoa-display-LICENSE", "cocoa-display-NOTICE"):
+            self.assertEqual((notices / name).read_bytes(),
+                             (REPO / "ThirdParty/ChromiumEngine/notices" / name).read_bytes())
         self.assertIn("codesign --verify --deep --strict", self._log())
 
     def test_debug_configuration_uses_debug_build_and_is_not_release_ready(self):

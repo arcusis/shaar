@@ -51,6 +51,28 @@ NSDictionary *PrivateTab(ARCShaarRuntime *runtime, NSString *tabID) {
   return ARCPrivateShaarState(runtime)[@"tabs"][tabID];
 }
 
+NSDictionary *ProbeViewHierarchy(NSView *view, NSWindow *expectedWindow) {
+  NSMutableArray *ancestors = [NSMutableArray array];
+  for (NSView *ancestor = view; ancestor; ancestor = ancestor.superview) {
+    [ancestors addObject:@{
+        @"class": NSStringFromClass(ancestor.class),
+        @"address": [NSString stringWithFormat:@"%p", ancestor],
+        @"hidden": @(ancestor.isHidden),
+        @"hiddenOrHasHiddenAncestor": @(ancestor.isHiddenOrHasHiddenAncestor),
+        @"frame": NSStringFromRect(ancestor.frame),
+        @"bounds": NSStringFromRect(ancestor.bounds),
+        @"windowNumber": @(ancestor.window ? ancestor.window.windowNumber : -1)}];
+  }
+  return @{@"exists": @(view != nil),
+      @"hasWindow": @(view.window != nil),
+      @"inExpectedWindow": @(expectedWindow && view.window == expectedWindow),
+      @"expectedWindowNumber": @(expectedWindow ? expectedWindow.windowNumber : -1),
+      @"windowVisible": @(view.window.isVisible),
+      @"hidden": @(view.isHidden),
+      @"hiddenOrHasHiddenAncestor": @(view.isHiddenOrHasHiddenAncestor),
+      @"ancestors": ancestors};
+}
+
 bool PrivateTabState(ARCShaarRuntime *runtime, NSString *tabID,
                      NSString *windowID, NSString *contextID,
                      shaar_tab_probe_state *state) {
@@ -335,11 +357,16 @@ void ARCCompletePrivateQuitDialogCancellation(
     NSURLComponents *parts = [NSURLComponents componentsWithString:url];
     BOOL loopback = [parts.scheme isEqualToString:@"http"] &&
         [parts.host isEqualToString:@"127.0.0.1"];
+    NSView *nativeView = [runtime viewForPrivateTabID:tabID
+        windowID:tab[@"windowID"] contextID:contextID];
+    NSWindow *nativeWindow = [runtime windowForPrivateWindowID:tab[@"windowID"]
+        contextID:contextID];
     [documentStates addObject:@{@"tabID": tabID, @"url": url ?: @"", @"requestedURL": requestedURL ?: @"",
         @"loading": @(loading), @"phase": tab[@"navigationPhase"] ?: @"unknown",
         @"nativeStateSupported": @(nativeReady),
         @"selectedNativeTab": @(nativeReady && nativeState.selected_native_tab),
         @"displayedNativeWebContents": @(nativeReady && nativeState.displayed_native_web_contents),
+        @"nativeViewHierarchy": ProbeViewHierarchy(nativeView, nativeWindow),
         @"failure": tab[@"navigationFailure"] ?: [NSNull null]}];
     allTabsLoaded &= loaded;
     allTabsLoopback &= loopback;

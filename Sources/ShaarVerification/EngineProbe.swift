@@ -33,6 +33,7 @@ final class EngineProbe {
   private let localizationMode: Bool
   private let basicBrowsingMode: Bool
   private let mediaSessionOnlyMode: Bool
+  private let measurementTabCount: Int?
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -72,7 +73,8 @@ final class EngineProbe {
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
-    localizationMode: Bool, basicBrowsingMode: Bool, mediaSessionOnlyMode: Bool
+    localizationMode: Bool, basicBrowsingMode: Bool, mediaSessionOnlyMode: Bool,
+    measurementTabCount: Int?
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -91,6 +93,7 @@ final class EngineProbe {
     self.localizationMode = localizationMode
     self.basicBrowsingMode = basicBrowsingMode
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
+    self.measurementTabCount = measurementTabCount
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -111,6 +114,22 @@ final class EngineProbe {
       let capacity = try SavedTabCapacityFixture.open(root: root, fixture: fixture, phase: phase)
       savedTabCapacityFixture = capacity
       store = capacity.store
+    } else if let measurementTabCount {
+      savedTabCapacityFixture = nil
+      let profile = BrowserProfile(id: UUID(uuidString: profileA)!, name: "Measurement")
+      let tabs = (0..<measurementTabCount).map { index in
+        BrowserTab(
+          id: UUID(uuidString: String(format: "00000000-0000-4000-8000-%012d", index + 1))!,
+          url: fixture.appending(path: "page-\(index + 1)"))
+      }
+      let space = BrowserSpace(
+        id: UUID(uuidString: "8a5d95c1-fce4-4c1c-8b4c-29df43143f27")!,
+        profileID: profile.id, name: "Measurement", symbol: "speedometer", tint: .ocean,
+        tabs: tabs)
+      let session = try BrowserSession(
+        profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+      store = BrowserStore(
+        sessionFile: SessionFile(url: root.appending(path: "session.json")), session: session)
     } else {
       savedTabCapacityFixture = nil
       let profiles = [
@@ -199,6 +218,16 @@ final class EngineProbe {
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let basicBrowsingMode = arguments.contains("--probe-basic-browsing")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
+      let measurementTabCount: Int? = {
+        guard let index = arguments.firstIndex(of: "--probe-measure-tabs"),
+          arguments.indices.contains(index + 1)
+        else { return nil }
+        return Int(arguments[index + 1])
+      }()
+      guard
+        measurementTabCount.map({ [1, 10, 30].contains($0) }) ?? !arguments.contains(
+          "--probe-measure-tabs")
+      else { throw ProbeFailure("Measurement tab count must be 1, 10, or 30.") }
       guard localizationMode == arguments.contains("--probe-localization") else {
         throw ProbeFailure("Localization mode dispatch mismatch.")
       }
@@ -220,6 +249,7 @@ final class EngineProbe {
         "--probe-localization",
         "--probe-basic-browsing",
         "--probe-media-session-only",
+        "--probe-measure-tabs",
       ]
       guard externalAppConsentMode == noLaunchGuard,
         !externalAppConsentMode || !conflictingFlags.contains(where: arguments.contains),
@@ -244,6 +274,9 @@ final class EngineProbe {
         !mediaSessionOnlyMode
           || !conflictingFlags.filter({ $0 != "--probe-media-session-only" }).contains(
             where: arguments.contains),
+        measurementTabCount == nil
+          || !conflictingFlags.filter({ $0 != "--probe-measure-tabs" }).contains(
+            where: arguments.contains),
         !localizationMode
           || !conflictingFlags.filter({ $0 != "--probe-localization" }).contains(
             where: arguments.contains)
@@ -265,7 +298,8 @@ final class EngineProbe {
         privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
         quitPendingNavigation: quitPendingNavigation,
         sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode,
-        basicBrowsingMode: basicBrowsingMode, mediaSessionOnlyMode: mediaSessionOnlyMode)
+        basicBrowsingMode: basicBrowsingMode, mediaSessionOnlyMode: mediaSessionOnlyMode,
+        measurementTabCount: measurementTabCount)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -461,9 +495,34 @@ final class EngineProbe {
       bootstrapStage = .loadingAlpha
       try await load(profileA)
       bootstrapStage = .loadingBeta
-      try await load(profileB)
+      if measurementTabCount == nil { try await load(profileB) }
       bootstrapStage = .openingAlpha
       browserEngine?.reconcile()
+      if let measurementTabCount {
+        guard browserEngine != nil else { throw ProbeFailure("Measurement engine is missing.") }
+        let tabIDs = store.session.selectedSpace.tabs.map { $0.id.uuidString }
+        for tabID in tabIDs { try await waitForRestoredTab(tabID) }
+        for tabID in tabIDs {
+          try await waitUntilMeasurementPage(tabID)
+        }
+        bootstrapStage = .ready
+        fixtureStage = "measurement-ready"
+        let ready =
+          [
+            "schema": 1, "phase": phase, "tabs": measurementTabCount,
+            "readyAt": ProcessInfo.processInfo.systemUptime,
+          ] as [String: Any]
+        try JSONSerialization.data(withJSONObject: ready, options: [.sortedKeys])
+          .write(to: output, options: .atomic)
+        let hold = Double(argumentValue("--probe-measure-seconds") ?? "45") ?? 45
+        try await Task.sleep(for: .seconds(hold))
+        checks.append(
+          "\(measurementTabCount) authored local fixture tabs loaded in a hidden window")
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      try await load(profileB)
       try await waitForRestoredTab(tabA)
       bootstrapStage = .openingBeta
       try await waitForRestoredTab(tabB)
@@ -870,6 +929,26 @@ final class EngineProbe {
       try await Task.sleep(for: .seconds(2))
       finish(error: nil)
     } catch { finish(error: error) }
+  }
+
+  private func waitUntilMeasurementPage(_ tabID: String) async throws {
+    let deadline = ProcessInfo.processInfo.systemUptime + 60
+    while ProcessInfo.processInfo.systemUptime < deadline {
+      if let value = try? await evaluate(tabID, "document.readyState"),
+        let state = value as? String, state == "complete"
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw ProbeFailure("Measurement fixture did not finish loading in \(tabID).")
+  }
+
+  private func argumentValue(_ name: String) -> String? {
+    guard let index = CommandLine.arguments.firstIndex(of: name),
+      CommandLine.arguments.indices.contains(index + 1)
+    else { return nil }
+    return CommandLine.arguments[index + 1]
   }
 
   private func renderShell(name: String) throws {

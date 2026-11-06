@@ -85,7 +85,13 @@ const NSArray<NSString *> *ShaarMethods() {
       @"Emulation.setUserAgentOverride", @"Emulation.setEmulatedMedia", @"Performance.enable",
       @"Performance.getMetrics", @"Page.addScriptToEvaluateOnNewDocument",
       @"Page.removeScriptToEvaluateOnNewDocument", @"Network.getCookies", @"Network.setCookie",
-      @"Network.deleteCookies"];
+      @"Network.deleteCookies", @"Emulation.setSafeAreaInsetsOverride",
+      @"DOM.requestChildNodes", @"DOM.setAttributeValue", @"DOM.removeAttribute",
+      @"DOM.setNodeValue", @"DOM.removeNode", @"DOM.setOuterHTML", @"DOM.moveTo",
+      @"DOM.markUndoableState", @"DOM.undo", @"DOM.performSearch",
+      @"DOM.getSearchResults", @"DOM.discardSearchResults", @"Overlay.highlightNode",
+      @"Overlay.hideHighlight", @"DOM.resolveNode", @"Runtime.callFunctionOn",
+      @"DOM.getOuterHTML"];
   });
   return methods;
 }

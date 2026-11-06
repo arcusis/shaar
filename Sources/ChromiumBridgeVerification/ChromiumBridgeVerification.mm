@@ -191,6 +191,22 @@ NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
                &measured, &geometryError) == SHAAR_OK;
   double gap = geometryReady ? std::abs(measured.frontend_placeholder_right -
                                        measured.inspected_page_right) : -1;
+  NSView *container = page.superview;
+  NSPoint dockPoint = NSZeroPoint;
+  BOOL hasDockPoint = NO;
+  if (dock && container && dock.superview == container) {
+    NSRect bounds = container.bounds;
+    if (NSMaxX(page.frame) < NSMaxX(bounds) - 24) {
+      dockPoint = NSMakePoint(NSMaxX(bounds) - 24, NSMaxY(bounds) - 18);
+      hasDockPoint = YES;
+    } else if (NSMinY(page.frame) > NSMinY(bounds) + 18) {
+      dockPoint = NSMakePoint(NSMaxX(bounds) - 24, NSMinY(page.frame) - 18);
+      hasDockPoint = YES;
+    }
+  }
+  NSView *hit = hasDockPoint
+      ? [container hitTest:[container convertPoint:dockPoint toView:container.superview]] : nil;
+  BOOL frontendHit = hit && (hit == dock || [hit isDescendantOf:dock]);
   BOOL hidden = YES;
   for (NSWindow *window in NSApp.windows) hidden &= !window.isVisible;
   return @{@"open": @(dock != nil), @"sameWindow": @(page.window && dock.window == page.window),
@@ -204,6 +220,9 @@ NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
       @"inspectedPageRight": @(measured.inspected_page_right),
       @"frontendCoversContainer": @(dock && page.superview &&
           std::abs(NSWidth(dock.frame) - NSWidth(page.superview.bounds)) <= 1),
+      @"frontendHitNearTabStrip": @(frontendHit),
+      @"tabStripHitView": hit ? NSStringFromClass(hit.class) : @"none",
+      @"tabStripHitPoint": hasDockPoint ? NSStringFromPoint(dockPoint) : @"none",
       @"allWindowsHidden": @(hidden), @"pageWidth": @(page.frame.size.width),
       @"pageHeight": @(page.frame.size.height), @"hostWidth": @(host.bounds.size.width),
       @"frontendWidth": @(dock.frame.size.width), @"frontendHeight": @(dock.frame.size.height),

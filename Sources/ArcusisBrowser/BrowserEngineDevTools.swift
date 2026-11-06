@@ -50,6 +50,11 @@ extension BrowserEngine {
       shell = ShaarDevToolsModel(
         target: target, transport: panel,
         phase2Transport: ShaarPhase2NativeTransport(panel: panel),
+        sourceInspectorContent: { [weak inspector] url, target in
+          guard let inspector else { throw CancellationError() }
+          return try await ShaarInspectorSourceLoader.load(
+            url: url, target: target, inspector: inspector)
+        },
         reproTransport: ShaarReproNativeTransport(
           runtime: shaar, panel: panel, inspector: inspector),
         viewportsTransport: ShaarViewportsNativeTransport(

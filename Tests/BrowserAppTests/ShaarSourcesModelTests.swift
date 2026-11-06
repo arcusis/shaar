@@ -47,6 +47,60 @@ import Testing
     phase2.close()
   }
 
+  @Test func inspectorContentRecoversFromNativeReplyLimit() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
+    let url = "https://example.com/app.js"
+    let content = ShaarPhase2FixtureTransport.fiveMiBSource
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return ["items": [["url": url, "type": "Script"]]]
+      case .resourceContent:
+        throw InspectorFailure("native reply exceeds limit")
+      default:
+        return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(
+      phase2: phase2,
+      inspectorContent: { selectedURL, selectedTarget in
+        #expect(selectedURL == url)
+        #expect(selectedTarget == target)
+        return (content, false)
+      })
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    #expect(model.displayedContent?.utf8.count == content.utf8.count)
+    #expect(model.displayedLines?.count == 52_429)
+    #expect(!model.truncated)
+    #expect(model.failure == nil)
+    phase2.close()
+  }
+
+  @Test func inspectorFrameLookupUsesTheMatchingResourceFrame() {
+    let tree: [String: Any] = [
+      "frameTree": [
+        "frame": ["id": "root"],
+        "resources": [["url": "https://example.com/other.js"]],
+        "childFrames": [
+          [
+            "frame": ["id": "child"],
+            "resources": [["url": "https://example.com/app.js"]],
+          ]
+        ],
+      ]
+    ]
+    #expect(
+      ShaarInspectorSourceLoader.frameID(for: "https://example.com/app.js", in: tree)
+        == "child")
+    #expect(
+      ShaarInspectorSourceLoader.frameID(for: "https://example.com/missing.js", in: tree)
+        == nil)
+  }
+
   @Test func resourceListContentFilteringAndPrettyJSON() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
@@ -128,12 +182,14 @@ import Testing
       }
     }
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
-    let model = ShaarSourcesModel(phase2: phase2) { url in
-      if url.path.hasSuffix("com.chrome.devtools.json") {
-        return Data(#"{"workspace":{"root":"\#(root.path)"}}"#.utf8)
-      }
-      return Data(#"{"version":3,"sources":["webpack://_N_E/./src/app.ts"]}"#.utf8)
-    }
+    let model = ShaarSourcesModel(
+      phase2: phase2,
+      loadSourceData: { url in
+        if url.path.hasSuffix("com.chrome.devtools.json") {
+          return Data(#"{"workspace":{"root":"\#(root.path)"}}"#.utf8)
+        }
+        return Data(#"{"version":3,"sources":["webpack://_N_E/./src/app.ts"]}"#.utf8)
+      })
     phase2.open()
     for _ in 0..<20 where !phase2.available { await Task.yield() }
     await model.refresh()

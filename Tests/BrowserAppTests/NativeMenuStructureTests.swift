@@ -40,7 +40,7 @@ import Testing
   let groups = menu.items.compactMap(\.submenu)
   #expect(
     groups.map(\.title) == [
-      "Shaar", "File", "Edit", "View", "Spaces", "Tabs", "Archive",
+      "Shaar", "File", "Edit", "View", "Spaces", "Tabs", "History", "Bookmarks",
       "Extensions", "Window", "Help",
     ])
 
@@ -67,7 +67,11 @@ import Testing
   #expect(item(.developerTools)?.keyEquivalentModifierMask == [.command, .option])
   #expect(item(.newSpace)?.menu?.title == "Spaces")
   #expect(item(.closeTab)?.menu?.title == "Tabs")
-  #expect(item(.bookmarks)?.menu?.title == "Archive")
+  #expect(item(.bookmarks)?.menu?.title == "Bookmarks")
+  #expect(item(.bookmarkPage)?.menu?.title == "Bookmarks")
+  #expect(item(.history)?.menu?.title == "History")
+  #expect(item(.recentlyClosed)?.menu?.title == "History")
+  #expect(item(.downloads)?.menu?.title == "File")
   #expect(item(.extensions)?.menu?.title == "Extensions")
   #expect(item(.minimizeWindow)?.menu?.title == "Window")
   #expect(item(.help)?.menu?.title == "Help")

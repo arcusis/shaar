@@ -10,9 +10,10 @@ import Testing
 @Suite @MainActor struct ShaarReproDOMSnapshotTests {
   @Test func acceptsBoundedRedactedTree() throws {
     let root = ShaarReproDOMNode(
-      tag: "body", text: "Safe text", attributes: [:], children: [
+      tag: "body", text: "Safe text", attributes: [:],
+      children: [
         ShaarReproDOMNode(
-          tag: "form", text: "[redacted]", attributes: [:], children: []),
+          tag: "form", text: "[redacted]", attributes: [:], children: [])
       ])
     #expect(try ShaarReproDOMSnapshot.decode(JSONEncoder().encode(root)) == root)
     #expect(ShaarReproDOMSnapshot.expression.contains("element.isContentEditable"))

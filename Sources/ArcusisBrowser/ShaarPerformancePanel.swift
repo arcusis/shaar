@@ -2,11 +2,24 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import SwiftUI
 
 struct ShaarPerformancePanel: View {
   @Bindable var model: ShaarPerformanceModel
   let phase2: ShaarPhase2Model
+  var developer: DeveloperPageModel? = nil
+  @State private var importingProject = false
+  @State private var scopedProject: URL?
+  @State private var hasProjectScope = false
+  @State private var projectLoaded = false
+  @State private var budgetError: String?
+  @State private var lcpLimit = "2500"
+  @State private var inpLimit = "200"
+  @State private var clsLimit = "0.1"
+  @State private var javascriptLimit = "500000"
+  @State private var requestLimit = "30"
+  @State private var enabledPerformanceHere = false
 
   var body: some View {
     ScrollView {
@@ -14,6 +27,7 @@ struct ShaarPerformancePanel: View {
         header
         if let failure = model.failure { errorBanner(failure) }
         vitalCards
+        budgetSection
         Divider()
         ViewThatFits(in: .horizontal) {
           HStack(alignment: .top, spacing: 0) {
@@ -30,13 +44,172 @@ struct ShaarPerformancePanel: View {
       }
     }
     .task {
+      if let developer, !developer.performanceEnabled {
+        developer.setPerformanceEnabled(true)
+        enabledPerformanceHere = true
+      }
       while !Task.isCancelled && phase2.available {
         await model.refresh()
+        if let developer {
+          try? await developer.refreshPerformance()
+          if let snapshot = developer.performanceSnapshot { model.updatePageSnapshot(snapshot) }
+        }
         try? await Task.sleep(for: .seconds(5))
       }
     }
     .onChange(of: phase2.events) { _, events in model.receive(events) }
+    .onChange(of: model.path) { _, _ in loadBudgetDraft() }
+    .fileImporter(isPresented: $importingProject, allowedContentTypes: [.folder]) { result in
+      guard case .success(let url) = result else { return }
+      if hasProjectScope { scopedProject?.stopAccessingSecurityScopedResource() }
+      hasProjectScope = url.startAccessingSecurityScopedResource()
+      scopedProject = url
+      projectLoaded = false
+      do {
+        try model.loadBudgets(from: url)
+        loadBudgetDraft()
+        projectLoaded = true
+        budgetError = nil
+      } catch {
+        budgetError = error.localizedDescription
+      }
+    }
+    .onDisappear {
+      if enabledPerformanceHere { developer?.setPerformanceEnabled(false) }
+      if hasProjectScope { scopedProject?.stopAccessingSecurityScopedResource() }
+      hasProjectScope = false
+      scopedProject = nil
+    }
     .accessibilityIdentifier("shaar.devtools.performancePanel")
+  }
+
+  private var budgetSection: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        sectionHeader("Route budgets")
+        Spacer()
+        Button("Open project…") { importingProject = true }
+          .buttonStyle(.plain)
+        Button("Export report…", action: exportReport)
+          .buttonStyle(.plain)
+      }
+      .padding(.horizontal, 13)
+      if let result = model.budgetResult {
+        HStack(spacing: 6) {
+          Text(result.route).font(.system(size: 10, design: .monospaced))
+          Text(
+            "\(result.passed) passed · \(result.failed) over · \(result.unavailable) unavailable"
+          )
+          .font(.system(size: 10, weight: .medium))
+          .foregroundStyle(result.failed > 0 ? .red : .secondary)
+        }
+        .padding(.horizontal, 13)
+        ForEach(result.metrics) { metric in
+          HStack {
+            Text(metric.name).frame(width: 95, alignment: .leading)
+            Text(metric.actual.map { formatted($0, unit: metric.unit) } ?? "Unavailable")
+            Spacer()
+            Text(metric.limit.map { "≤ \(formatted($0, unit: metric.unit))" } ?? "—")
+            Text(metric.status.rawValue.uppercased())
+              .foregroundStyle(
+                metric.status == .over ? .red : metric.status == .pass ? .green : .secondary
+              )
+              .frame(width: 90, alignment: .trailing)
+          }
+          .font(.system(size: 10, design: .monospaced))
+          .padding(.horizontal, 13).frame(height: 22)
+        }
+      } else {
+        emptyState("No budget is configured for this route")
+      }
+      if scopedProject != nil {
+        HStack(spacing: 7) {
+          limitField("LCP ms", text: $lcpLimit)
+          limitField("INP ms", text: $inpLimit)
+          limitField("CLS", text: $clsLimit)
+          limitField("JS bytes", text: $javascriptLimit)
+          limitField("Requests", text: $requestLimit)
+          Button("Save route") { saveRouteBudget() }
+            .buttonStyle(.bordered)
+            .disabled(!projectLoaded)
+        }
+        .padding(.horizontal, 13)
+      }
+      if let budgetError {
+        Text(budgetError).font(.system(size: 10)).foregroundStyle(.red).padding(.horizontal, 13)
+      }
+    }
+    .padding(.vertical, 8)
+  }
+
+  private func limitField(_ title: String, text: Binding<String>) -> some View {
+    TextField(title, text: text)
+      .textFieldStyle(.roundedBorder)
+      .frame(minWidth: 70, maxWidth: 100)
+      .help(title)
+  }
+
+  private func loadBudgetDraft() {
+    guard let budget = model.budgetConfiguration.routes.first(where: { $0.route == model.path })
+    else {
+      lcpLimit = "2500"
+      inpLimit = "200"
+      clsLimit = "0.1"
+      javascriptLimit = "500000"
+      requestLimit = "30"
+      return
+    }
+    lcpLimit = budget.lcpMilliseconds.map { String($0) } ?? ""
+    inpLimit = budget.inpMilliseconds.map { String($0) } ?? ""
+    clsLimit = budget.cls.map { String($0) } ?? ""
+    javascriptLimit = budget.javascriptBytes.map { String($0) } ?? ""
+    requestLimit = budget.requestCount.map { String($0) } ?? ""
+  }
+
+  private func saveRouteBudget() {
+    guard let scopedProject,
+      let lcp = Double(lcpLimit), let inp = Double(inpLimit), let cls = Double(clsLimit),
+      let javascript = Int(javascriptLimit), let requests = Int(requestLimit)
+    else {
+      budgetError = "Enter valid non-negative values for all five limits."
+      return
+    }
+    var routes = model.budgetConfiguration.routes.filter { $0.route != model.path }
+    routes.append(
+      ShaarRouteBudget(
+        route: model.path, lcpMilliseconds: lcp, inpMilliseconds: inp, cls: cls,
+        javascriptBytes: javascript, requestCount: requests))
+    model.budgetConfiguration.routes = routes.sorted { $0.route < $1.route }
+    do {
+      try model.saveBudgets(to: scopedProject)
+      budgetError = nil
+    } catch {
+      budgetError = error.localizedDescription
+    }
+  }
+
+  private func exportReport() {
+    guard let result = model.budgetResult else {
+      budgetError = "Load a route budget and refresh the live performance data first."
+      return
+    }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    guard let data = try? encoder.encode(ShaarPerformanceBudgetReport(result: result)) else {
+      budgetError = "The performance report could not be encoded."
+      return
+    }
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue =
+      "shaar-performance-\(model.path.replacingOccurrences(of: "/", with: "-")).json"
+    panel.allowedContentTypes = [.json]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      try data.write(to: url, options: .atomic)
+      budgetError = nil
+    } catch {
+      budgetError = error.localizedDescription
+    }
   }
 
   private var header: some View {
@@ -235,7 +408,10 @@ struct ShaarPerformancePanel: View {
   }
 
   private func formatted(_ value: Double, unit: String) -> String {
-    let digits = unit == "ms" ? 0 : 2
+    if unit == "requests" {
+      return value == 1 ? "1 request" : "\(Int(value)) requests"
+    }
+    let digits = ["ms", "bytes"].contains(unit) ? 0 : 2
     return String(format: "%.*f %@", digits, value, unit)
       .trimmingCharacters(in: .whitespaces)
   }

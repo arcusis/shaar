@@ -37,7 +37,8 @@ struct DevelopmentModeButton: View {
           NSPasteboard.general.setString(target.url.absoluteString, forType: .string)
         }
       } label: {
-        DevelopmentModeLabel(page: page)
+        DevelopmentModeLabel(
+          page: page, budget: ShaarPerformanceBudgetStatusRegistry.shared.result(for: target.tabID))
       }
       .menuStyle(.borderlessButton)
       .fixedSize()
@@ -70,12 +71,20 @@ struct DevelopmentModeButton: View {
 
 struct DevelopmentModeLabel: View {
   let page: DevelopmentPage
+  var budget: ShaarPerformanceBudgetResult? = nil
 
   var body: some View {
     HStack(spacing: 3) {
       Image(systemName: "chevron.left.forwardslash.chevron.right")
       Text(page.detectedFramework?.rawValue ?? ShellL10n.string("Dev Mode"))
       if let port = page.port { Text(verbatim: ":\(port)") }
+      if let budget {
+        Image(systemName: budget.badgeSymbol)
+          .foregroundStyle(budget.badgeColor)
+          .help(
+            "Route budget: \(budget.passed) passed, \(budget.failed) over, \(budget.unavailable) unavailable"
+          )
+      }
     }
     .font(.system(size: 11, weight: .semibold))
     .foregroundStyle(.primary)
@@ -83,5 +92,19 @@ struct DevelopmentModeLabel: View {
     .frame(height: 28)
     .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.primary.opacity(0.12)))
+  }
+}
+
+extension ShaarPerformanceBudgetResult {
+  fileprivate var badgeSymbol: String {
+    if failed > 0 { return "exclamationmark.circle.fill" }
+    if unavailable > 0 { return "questionmark.circle.fill" }
+    return "checkmark.circle.fill"
+  }
+
+  fileprivate var badgeColor: Color {
+    if failed > 0 { return .red }
+    if unavailable > 0 { return .secondary }
+    return .green
   }
 }

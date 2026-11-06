@@ -38,6 +38,11 @@ final class ShaarPerformanceModel {
   private(set) var counters: [String: Int] = [:]
   private(set) var tasks: [ShaarPerformanceTask] = []
   private(set) var resourceTypes: [String: Int] = [:]
+  private(set) var javascriptBytes: Int?
+  private(set) var pageRequestCount: Int?
+  var budgetConfiguration = ShaarPerformanceBudgetConfiguration(routes: []) {
+    didSet { publishBudgetStatus() }
+  }
   private(set) var resourcesTruncated = false
   private(set) var samples: [ShaarPerformanceSample] = []
   private(set) var routes: [ShaarPerformanceRoute] = []
@@ -55,6 +60,38 @@ final class ShaarPerformanceModel {
   var taskMilliseconds: Double { tasks.reduce(0) { $0 + $1.duration } }
   var latestSample: ShaarPerformanceSample? { samples.last }
   var resourceCount: Int { resourceTypes.values.reduce(0, +) }
+  var budgetResult: ShaarPerformanceBudgetResult? {
+    guard let budget = budgetConfiguration.routes.first(where: { $0.route == path }) else {
+      return nil
+    }
+    return budget.evaluate(
+      lcpMilliseconds: lcpMilliseconds, inpMilliseconds: inpMilliseconds,
+      cls: samples.isEmpty ? nil : cls,
+      javascriptBytes: javascriptBytes,
+      requestCount: pageRequestCount ?? (resourcesTruncated ? nil : resourceCount))
+  }
+
+  func loadBudgets(from project: URL) throws {
+    budgetConfiguration = try ShaarPerformanceBudgetStore().load(from: project)
+  }
+
+  func publishBudgetStatus() {
+    ShaarPerformanceBudgetStatusRegistry.shared.set(budgetResult, for: phase2.target.tabID)
+  }
+
+  func updatePageSnapshot(_ snapshot: PagePerformanceSnapshot) {
+    if let bytes = snapshot.javascriptBytes {
+      javascriptBytes = bytes >= Double(Int.max) ? Int.max : Int(bytes)
+    } else {
+      javascriptBytes = nil
+    }
+    pageRequestCount = snapshot.requests
+    publishBudgetStatus()
+  }
+
+  func saveBudgets(to project: URL) throws {
+    try ShaarPerformanceBudgetStore().save(budgetConfiguration, to: project)
+  }
 
   func updateTarget(_ target: SiteControlTarget, committed: Bool) {
     guard Self.path(for: target.url) != path || committed else { return }
@@ -67,11 +104,13 @@ final class ShaarPerformanceModel {
     }
     path = Self.path(for: target.url)
     clearPage()
+    publishBudgetStatus()
   }
 
   func reset() {
     clearPage()
     routes.removeAll()
+    publishBudgetStatus()
   }
 
   func refresh() async {
@@ -114,6 +153,7 @@ final class ShaarPerformanceModel {
           busySeconds: metrics["TaskDuration"]))
       if samples.count > 60 { samples.removeFirst(samples.count - 60) }
       failure = nil
+      publishBudgetStatus()
     } catch is CancellationError {
       return
     } catch {
@@ -134,6 +174,7 @@ final class ShaarPerformanceModel {
         cls += event.number["value"] ?? 0
       }
     }
+    publishBudgetStatus()
   }
 
   private func receiveVitals(_ items: [ShaarDevToolsPhase2Item]) {
@@ -165,6 +206,8 @@ final class ShaarPerformanceModel {
     counters.removeAll()
     tasks.removeAll()
     resourceTypes.removeAll()
+    javascriptBytes = nil
+    pageRequestCount = nil
     resourcesTruncated = false
     samples.removeAll()
     loading = false
@@ -172,8 +215,6 @@ final class ShaarPerformanceModel {
   }
 
   private static func path(for url: URL) -> String {
-    let path = url.path.isEmpty ? "/" : url.path
-    guard let query = url.query, !query.isEmpty else { return path }
-    return "\(path)?\(query)"
+    url.path.isEmpty ? "/" : url.path
   }
 }

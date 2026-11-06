@@ -19,7 +19,11 @@ import Testing
 
 @Test func performanceSnapshotKeepsMissingMetricsUnavailable() {
   let value = PagePerformanceSnapshot(
-    page: ["cls": 0.2, "lcp": -1, "bytes": Double.infinity], engineMetrics: [])
+    page: [
+      "cls": 0.2, "lcp": -1, "bytes": Double.infinity, "javascriptBytes": 128_000.0,
+    ], engineMetrics: [])
   #expect(value.lcp == nil && value.inp == nil && value.heapBytes == nil)
   #expect(value.clsQuality == .needsImprovement && value.transferredBytes == 0)
+  #expect(value.javascriptBytes == 128_000)
+  #expect(PagePerformanceSnapshot(page: [:], engineMetrics: []).javascriptBytes == nil)
 }

@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import { release, repository, type SitePage, screens } from "../content";
+import { commandInterfaceName, release, repository, type SitePage, screens } from "../content";
 import { escapeHtml } from "../html";
 import { ShaarDemo } from "./demo";
 import { Landscape, SkyControl } from "./landscape";
@@ -58,7 +58,7 @@ const steps: Step[] = [
   {
     id: "step-launcher",
     screen: "launcher",
-    title: "Command-T finds tabs, pages and commands",
+    title: `${commandInterfaceName} finds tabs, pages and commands`,
     body: "Type to search open tabs, history, bookmarks and browser actions. Arrow keys pick a result and Return opens it.",
     keys: ["⌘", "T"],
   },
@@ -93,7 +93,7 @@ function Story(): string {
     )
     .join("");
   return `<section class="story" id="spaces" aria-labelledby="story-title">
-    <header class="section-head"><h2 id="story-title">Tabs, accounts and pages, each in its place</h2><p>Spaces hold your tabs, profiles hold your accounts, and Command-T finds any page.</p></header>
+    <header class="section-head"><h2 id="story-title">Tabs, accounts and pages, each in its place</h2><p>Spaces hold your tabs, profiles hold your accounts, and ${commandInterfaceName} finds any page.</p></header>
     <div class="story-grid" data-active="0"><div class="story-steps">${steps.map(StepCopy).join("")}</div><div class="story-stage" aria-hidden="true"><div class="story-sticky">${shots}</div></div></div>
   </section>`;
 }
@@ -116,8 +116,7 @@ export function HomePage(): string {
   const page: SitePage = {
     path: "/",
     title: "Shaar · Your gateway to the web",
-    description:
-      "Shaar is a Mac browser built on Chromium with Spaces, separate profiles and a Command-T launcher. Free and open source, in public beta.",
+    description: `Shaar is a Mac browser built on Chromium with Spaces, separate profiles and ${commandInterfaceName} search. Free and open source, in public beta.`,
     heading: "",
     body: "",
   };

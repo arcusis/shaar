@@ -7,7 +7,14 @@ import BrowserCore
 import SwiftUI
 
 struct CommandPanel: View {
-  static let displayName = "Command+T"
+  static let displayName = "Nativ"
+  static var localizedDisplayName: String { ShellL10n.string(displayName) }
+  static var searchPrompt: String {
+    "\(localizedDisplayName) · \(ShellL10n.string("Search or enter address"))"
+  }
+  static var accessibilityDescription: String {
+    "\(localizedDisplayName). \(ShellL10n.string("Search tabs, spaces, or the web"))"
+  }
   @Bindable var store: BrowserStore
   let resultsHeight: CGFloat
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -104,7 +111,7 @@ struct CommandPanel: View {
       return .handled
     }
     .onExitCommand { store.dismissCommand() }
-    .accessibilityLabel(ShellL10n.string("Search tabs, spaces, or the web"))
+    .accessibilityLabel(Self.accessibilityDescription)
   }
 
   private var searchRow: some View {
@@ -112,7 +119,7 @@ struct CommandPanel: View {
       Image(systemName: "magnifyingglass")
         .font(.system(size: 19, weight: .light))
         .foregroundStyle(.secondary)
-      TextField(ShellL10n.string("Search or enter address"), text: $store.commandQuery)
+      TextField(Self.searchPrompt, text: $store.commandQuery)
         .textFieldStyle(.plain)
         .font(.system(size: 20))
         .focused($searchIsFocused)
@@ -229,7 +236,7 @@ struct CommandPanel: View {
 
   private var footer: some View {
     HStack {
-      Text(Self.displayName)
+      Text(Self.localizedDisplayName)
       Label(store.profileName, systemImage: "person.crop.circle")
       Spacer()
       ShellL10n.text("⇥ filter    ↑↓ select    ↩ open")

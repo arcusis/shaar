@@ -1,4 +1,4 @@
-# Command+T layout
+# Nativ (Command+T) layout
 
 These are offscreen component captures from `CommandPanelSurfaceTests` at a
 760 × 520 synthetic viewport. The before and after images use the same fixture,

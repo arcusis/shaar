@@ -366,7 +366,7 @@ private struct BrowserApplication: App {
       SpaceCommands(store: store)
       CommandGroup(replacing: .newItem) {
         Button(ShellL10n.string("New tab")) { store.showCommand() }.keyboardShortcut("t")
-        Button(ShellL10n.string("Search or enter address")) {
+        Button(CommandPanel.searchPrompt) {
           store.showCommand()
           store.commandEditsCurrentURL = true
           store.commandQuery = store.session.selectedPage?.tab.url.absoluteString ?? ""

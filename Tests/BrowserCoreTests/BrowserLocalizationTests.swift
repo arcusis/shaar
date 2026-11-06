@@ -59,6 +59,11 @@ import Testing
   #expect(restored.spaces.map(\.name) == ["Personal", "Work"])
 }
 
+@Test func nativHasItsHebrewDisplayName() {
+  #expect(BrowserLocalization.string("Nativ", table: "Shell", language: .english) == "Nativ")
+  #expect(BrowserLocalization.string("Nativ", table: "Shell", language: .hebrew) == "נתיב")
+}
+
 @Test func languageResolverHonorsOverridesAliasesAndUnsupportedPreferences() {
   #expect(
     BrowserLanguage.resolve(selection: .systemDefault, preferredLanguages: ["he-IL", "en-US"])

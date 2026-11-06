@@ -18,17 +18,18 @@ struct PageAddressField: View {
   }
 
   static func accessibilityLabel(for url: URL?) -> String {
-    guard let url else { return ShellL10n.string("Search or enter address") }
-    return ShellL10n.format(
+    guard let url else { return CommandPanel.searchPrompt }
+    let address = ShellL10n.format(
       "Current address: %@. Search or enter address",
       arguments: [.string(url.absoluteString)])
+    return "\(CommandPanel.localizedDisplayName). \(address)"
   }
 
   private func displayAddress(for url: URL?) -> String {
     if developmentModeEnabled, let url, DevelopmentPage.detect(url: url).isDevelopmentPage {
       return url.absoluteString
     }
-    return Self.displayAddress(for: url) ?? ShellL10n.string("Search or enter address")
+    return Self.displayAddress(for: url) ?? CommandPanel.searchPrompt
   }
 
   var body: some View {
@@ -53,6 +54,6 @@ struct PageAddressField: View {
     }
     .accessibilityLabel(Self.accessibilityLabel(for: url))
     .browserChromeControl("browser.chrome.address")
-    .help(url?.absoluteString ?? ShellL10n.string("Search or enter address"))
+    .help(url?.absoluteString ?? CommandPanel.searchPrompt)
   }
 }

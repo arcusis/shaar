@@ -1180,7 +1180,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.newPrivateWindow, "New Private Window", to: file)
     add(.newMiniWindow, "New Mini Window", to: file)
     add(.newTab, "New tab", to: file)
-    add(.search, "Search or enter address", to: file)
+    add(.search, CommandPanel.searchPrompt, to: file)
     add(.sharePage, "Share Page…", to: file)
     add(.downloads, "Downloads", to: file)
     add(.closeWindow, "Close window", to: file)

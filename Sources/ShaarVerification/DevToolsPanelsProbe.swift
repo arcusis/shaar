@@ -283,6 +283,13 @@ import Foundation
           "Live DOM unavailable: available=\(shell.dom.available), root=\(String(describing: shell.dom.rootID)), loading=\(shell.dom.loading), modelError=\(shell.dom.failure ?? "none"), \(command)"
         )
       }
+      guard let body = shell.dom.nodes.values.first(where: { $0.name == "BODY" }) else {
+        throw Failure("Live DOM document did not include BODY")
+      }
+      await shell.dom.toggleExpanded(body.id)
+      try await self.wait("BODY children requested") {
+        shell.dom.nodes[body.id]?.childrenIDs.isEmpty == false
+      }
       _ = try await inspector.evaluate(
         "(()=>{const node=document.createElement('span');node.id='shaar-live-element';node.textContent='LiveDOMProbe';document.body.appendChild(node);return true})()"
       )

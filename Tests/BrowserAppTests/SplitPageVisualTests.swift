@@ -101,16 +101,15 @@ final class SplitPageVisualTests: XCTestCase {
     ]
     let panes = SplitPageView(
       split: split, focusedID: store.session.selectedSpace.selectedTabID,
-      onFocus: { _ in }, onWeightsChange: { _, _ in }
-    ) { id in
-      SplitPaneToolbar(store: store, tabID: id)
-    } pane: { id in
-      let index = ids.firstIndex(of: id) ?? 0
-      ZStack {
-        colors[index]
-        Text("Page \(index + 1)").foregroundStyle(.black)
-      }
-    }
+      onFocus: { _ in }, onWeightsChange: { _, _ in },
+      header: { id in SplitPaneToolbar(store: store, tabID: id) },
+      pane: { id in
+        let index = ids.firstIndex(of: id) ?? 0
+        ZStack {
+          colors[index]
+          Text("Page \(index + 1)").foregroundStyle(.black)
+        }
+      })
     let root = try SidebarVisualCaptureSupport.prepare()
     let size = NSSize(width: 900, height: 560)
     let before = VStack(spacing: 0) {

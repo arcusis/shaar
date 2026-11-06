@@ -66,7 +66,8 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_reply_fn reply,
                           void* reply_context,
                           const std::string& request_json,
-                          std::string main_frame_id = {});
+                          std::string main_frame_id = {},
+                          base::ScopedClosureRunner visibility_lease = {});
 
 // Closes a synthetic target that does not emit AgentHostClosed in tests.
 void CloseProtocolSessionForTesting(content::DevToolsAgentHost* host);

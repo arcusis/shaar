@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/containers/span.h"
+#include "base/scoped_environment_variable_override.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -630,6 +631,87 @@ TEST_F(ShaarPrivateDevToolsPageTargetTest,
 
   capture.RunAndReset();
   EXPECT_EQ(content::Visibility::OCCLUDED, web_contents()->GetVisibility());
+}
+
+
+TEST(ShaarDevToolsTest, RendererVisibilityProbeIsExplicitTestingOnlyAndNotForwarded) {
+  const std::string envelope = R"({"schemaVersion":1,"capability":2,"command":1,"probeVisibleForRenderer":true,"params":{"expression":"document.visibilityState","awaitPromise":true,"returnByValue":true}})";
+  std::string encoded, reason;
+  {
+    base::ScopedEnvironmentVariableOverride env("SHAAR_ENGINE_TESTING", "0");
+    EXPECT_EQ(SHAAR_POLICY_BLOCKED,
+              EncodeProtocolRequest(Bytes(envelope), 44, &encoded, &reason));
+  }
+  base::ScopedEnvironmentVariableOverride env("SHAAR_ENGINE_TESTING", "1");
+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(Bytes(envelope), 44, &encoded, &reason));
+  EXPECT_EQ(std::string::npos, encoded.find("probeVisibleForRenderer"));
+  auto value = base::JSONReader::Read(envelope, base::JSON_PARSE_RFC);
+  value->GetDict().Set("capability", 1);
+  std::string invalid;
+  base::JSONWriter::Write(*value, &invalid);
+  EXPECT_EQ(SHAAR_INVALID_ARGUMENT,
+            EncodeProtocolRequest(Bytes(invalid), 44, &encoded, &reason));
+  value->GetDict().Set("capability", 2);
+  value->GetDict().FindDict("params")->Set("awaitPromise", false);
+  base::JSONWriter::Write(*value, &invalid);
+  EXPECT_EQ(SHAAR_INVALID_ARGUMENT,
+            EncodeProtocolRequest(Bytes(invalid), 44, &encoded, &reason));
+}
+
+TEST(ShaarDevToolsTest, ProtocolReleasesVisibilityLeaseBeforeSuccessAndErrorReply) {
+  base::test::TaskEnvironment tasks;
+  for (const std::string response : {
+           R"({"id":44,"result":{}})",
+           R"({"id":44,"error":{"message":"failed"}})"}) {
+    auto host = base::MakeRefCounted<ReplyingAgentHost>(response);
+    bool restored = false;
+    bool replied = false;
+    std::pair<bool*, bool*> flags(&restored, &replied);
+    ASSERT_TRUE(StartProtocolRequest(
+        host, 44, [](void* context, const shaar_result*) {
+          auto* flags = static_cast<std::pair<bool*, bool*>*>(context);
+          EXPECT_TRUE(*flags->first);
+          *flags->second = true;
+        }, &flags, R"({"id":44,"method":"Runtime.evaluate"})", {},
+        base::ScopedClosureRunner(base::BindOnce([](bool* flag) { *flag = true; }, &restored))));
+    EXPECT_FALSE(restored);
+    tasks.RunUntilIdle();
+    EXPECT_TRUE(replied);
+    CloseProtocolSessionForTesting(host.get());
+  }
+}
+
+TEST(ShaarDevToolsTest, ProtocolReleasesVisibilityLeaseOnTimeoutAndClose) {
+  base::test::TaskEnvironment tasks(base::test::TaskEnvironment::TimeSource::MOCK_TIME);
+  for (bool timeout : {false, true}) {
+    auto host = base::MakeRefCounted<content::MockDevToolsAgentHost>();
+    bool restored = false;
+    CapturedReply captured;
+    ASSERT_TRUE(StartProtocolRequest(host, 44, &CaptureReply, &captured,
+        R"({"id":44,"method":"Runtime.evaluate"})", {},
+        base::ScopedClosureRunner(base::BindOnce([](bool* flag) { *flag = true; }, &restored))));
+    if (timeout)
+      tasks.FastForwardBy(base::Seconds(16));
+    else
+      CloseProtocolSessionForTesting(host.get());
+    EXPECT_TRUE(restored);
+    tasks.RunUntilIdle();
+    EXPECT_EQ(timeout ? SHAAR_NOT_READY : SHAAR_NOT_FOUND, captured.code);
+    if (timeout)
+      CloseProtocolSessionForTesting(host.get());
+  }
+}
+
+TEST_F(ShaarPrivateDevToolsPageTargetTest, RendererVisibilityRejectsOverlappingLease) {
+  web_contents()->WasHidden();
+  auto first = StartHiddenProbeCapture(web_contents());
+  ASSERT_TRUE(first);
+  auto second = StartHiddenProbeCapture(web_contents());
+  EXPECT_FALSE(second);
+  first.RunAndReset();
+  EXPECT_EQ(content::Visibility::HIDDEN, web_contents()->GetVisibility());
+  EXPECT_TRUE(StartHiddenProbeCapture(web_contents()));
+  EXPECT_EQ(content::Visibility::HIDDEN, web_contents()->GetVisibility());
 }
 
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {

@@ -21,6 +21,8 @@ class WebContents;
 
 namespace shaar::windows_tabs {
 
+bool HasHiddenNativeWindow(content::WebContents* contents);
+
 class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
  public:
   struct WindowState {

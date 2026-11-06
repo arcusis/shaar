@@ -30,6 +30,7 @@ TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
   for (const char* option : {"--disable-renderer-backgrounding",
                              "--disable-backgrounding-occluded-windows",
                              "--disable-background-timer-throttling",
+                             "--use-fake-device-for-media-stream",
                              "--host-resolver-rules=MAP trackertest.org 127.0.0.1"}) {
     EXPECT_EQ(std::find(production.begin(), production.end(), option),
               production.end());

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -14,6 +15,7 @@
 #include <initializer_list>
 #include <deque>
 #include <map>
+#include <set>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -235,6 +237,10 @@ class ProbeCaptureRequest final
     // window that has never been ordered in. The scoped lease restores the
     // original page visibility on success, failure, and timeout.
     capturer_ = StartHiddenProbeCapture(contents);
+    if (!capturer_) {
+      Finish({}, "renderer visibility probe already active");
+      return;
+    }
     // Visibility observers may replace the renderer view or close the tab.
     auto* live_contents = contents_.get();
     if (!live_contents) {
@@ -581,12 +587,15 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
   }
 
   bool Submit(ReplyContext request, const std::string& json,
-              std::string main_frame_id) {
+              std::string main_frame_id, base::ScopedClosureRunner visibility_lease) {
     auto parsed = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
     if (!parsed || !parsed->is_dict() ||
         parsed->GetDict().FindInt("id") != static_cast<int>(request.request_id))
       return false;
-    pending_.push_back({request, json, std::move(main_frame_id)});
+    if (visibility_lease && !pending_.empty())
+      return false;
+    pending_.push_back({request, json, std::move(main_frame_id),
+                        std::move(visibility_lease)});
     if (!active_)
       StartNext();
     return true;
@@ -659,9 +668,15 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
   }
 
   void Close() {
+    if (closing_)
+      return;
+    closing_ = true;
     ProtocolClients().erase(host_.get());
-    for (const auto& pending : pending_)
-      Reply(pending.request, SHAAR_NOT_FOUND, {}, "DevTools target closed");
+    auto pending = std::move(pending_);
+    for (auto& request : pending) {
+      request.visibility_lease.RunAndReset();
+      Reply(request.request, SHAAR_NOT_FOUND, {}, "DevTools target closed");
+    }
     delete this;
   }
 
@@ -670,6 +685,7 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
     ReplyContext request;
     std::string json;
     std::string main_frame_id;
+    base::ScopedClosureRunner visibility_lease;
   };
 
   void StartNext() {
@@ -723,10 +739,15 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
   void Finish(shaar_error_code code, std::string payload, std::string message) {
     timer_.Stop();
     const ReplyContext request = pending_.front().request;
+    auto lease = std::move(pending_.front().visibility_lease);
     pending_.pop_front();
     active_ = false;
     awaiting_context_ = false;
+    auto weak = weak_factory_.GetWeakPtr();
+    lease.RunAndReset();
     Reply(request, code, std::move(payload), std::move(message));
+    if (!weak)
+      return;
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&ProtocolClient::StartNext,
                                   weak_factory_.GetWeakPtr()));
@@ -736,6 +757,7 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
   std::deque<Pending> pending_;
   std::map<std::string, int> contexts_;
   base::OneShotTimer timer_;
+  bool closing_ = false;
   bool active_ = false;
   bool awaiting_context_ = false;
   bool attached_ = false;
@@ -760,7 +782,9 @@ shaar_error_code DecodeOperation(shaar_operation operation,
   }
   const auto& root = parsed->GetDict();
   if (operation != SHAAR_OP_DEVTOOLS_CALL ||
-      !ExactKeys(root, {"schemaVersion", "capability", "command", "params"}) ||
+      !(ExactKeys(root, {"schemaVersion", "capability", "command", "params"}) ||
+        ExactKeys(root, {"schemaVersion", "capability", "command", "params",
+                         "probeVisibleForRenderer"})) ||
       root.FindInt("schemaVersion") != 1 ||
       !root.FindInt("capability") || !root.FindInt("command") ||
       !root.FindDict("params")) {
@@ -787,6 +811,20 @@ shaar_error_code DecodeOperation(shaar_operation operation,
     *reason = "DevTools command is missing required parameters";
     return SHAAR_INVALID_ARGUMENT;
   }
+  if (root.contains("probeVisibleForRenderer")) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    if (!testing || std::strcmp(testing, "1") != 0) {
+      *reason = "renderer visibility probe requires testing mode";
+      return SHAAR_POLICY_BLOCKED;
+    }
+    if (root.FindBool("probeVisibleForRenderer") != true ||
+        cap != kDeveloper || id != SHAAR_DEVTOOLS_RUNTIME_EVALUATE ||
+        root.FindDict("params")->FindBool("awaitPromise") != true ||
+        root.FindDict("params")->FindBool("returnByValue") != true) {
+      *reason = "invalid renderer visibility probe";
+      return SHAAR_INVALID_ARGUMENT;
+    }
+  }
   *params = root.FindDict("params")->Clone();
   return SHAAR_OK;
 }
@@ -794,6 +832,9 @@ shaar_error_code DecodeOperation(shaar_operation operation,
 }  // namespace
 
 base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents) {
+  static base::NoDestructor<std::set<content::WebContents*>> leased;
+  if (!leased->insert(contents).second)
+    return {};
   const content::Visibility original_visibility = contents->GetVisibility();
   auto weak_contents = contents->GetWeakPtr();
   auto capturer = contents->IncrementCapturerCount(
@@ -804,15 +845,18 @@ base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents
   if (weak_contents)
     weak_contents->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
   return base::ScopedClosureRunner(base::BindOnce(
-      [](base::WeakPtr<content::WebContents> weak_contents,
+      [](std::set<content::WebContents*>* leased, content::WebContents* key,
+         base::WeakPtr<content::WebContents> weak_contents,
          content::Visibility visibility,
          base::ScopedClosureRunner capturer) {
         if (weak_contents && visibility != content::Visibility::VISIBLE &&
             weak_contents->GetVisibility() == content::Visibility::VISIBLE)
           weak_contents->UpdateWebContentsVisibility(visibility);
         capturer.RunAndReset();
+        leased->erase(key);
       },
-      std::move(weak_contents), original_visibility, std::move(capturer)));
+      leased.get(), contents, std::move(weak_contents), original_visibility,
+      std::move(capturer)));
 }
 
 void BindRuntimeServices() {
@@ -824,7 +868,8 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_reply_fn reply,
                           void* reply_context,
                           const std::string& request_json,
-                          std::string main_frame_id) {
+                          std::string main_frame_id,
+                          base::ScopedClosureRunner visibility_lease) {
   if (!host)
     return false;
   auto it = ProtocolClients().find(host.get());
@@ -838,7 +883,7 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
     ProtocolClients()[host.get()] = client;
   }
   return client->Submit({request_id, reply, reply_context}, request_json,
-                         std::move(main_frame_id));
+                         std::move(main_frame_id), std::move(visibility_lease));
 }
 
 void CloseProtocolSessionForTesting(content::DevToolsAgentHost* host) {
@@ -1080,9 +1125,32 @@ shaar_error_code HandleDevToolsOperation(
                     "DevTools main frame is unavailable");
       main_frame_id = frame->GetDevToolsFrameToken().ToString();
     }
+    base::ScopedClosureRunner visibility_lease;
+    auto envelope = base::JSONReader::Read(
+        std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+    if (envelope->GetDict().contains("probeVisibleForRenderer")) {
+      const auto& url = contents->GetLastCommittedURL();
+      if (!scope.private_session || !url.SchemeIs("http") ||
+          url.host() != "127.0.0.1" ||
+          !context->browser_tabs->IsSelectedWebContents(engine, window, tab, contents) ||
+          !windows_tabs::HasHiddenNativeWindow(contents))
+        return Fail(error, SHAAR_POLICY_BLOCKED, "visibility probe requires selected hidden private loopback tab");
+      auto weak_contents = contents->GetWeakPtr();
+      visibility_lease = StartHiddenProbeCapture(contents);
+      if (!visibility_lease)
+        return Fail(error, SHAAR_NOT_READY, "renderer visibility probe already active");
+      if (!weak_contents ||
+          context->browser_tabs->FindWebContents(engine, window, tab) != weak_contents.get() ||
+          !context->browser_tabs->IsSelectedWebContents(engine, window, tab, weak_contents.get()) ||
+          !windows_tabs::HasHiddenNativeWindow(weak_contents.get()) ||
+          !weak_contents->GetPrimaryMainFrame() ||
+          weak_contents->GetPrimaryMainFrame()->GetDevToolsFrameToken().ToString() != main_frame_id)
+        return Fail(error, SHAAR_NOT_READY, "visibility probe target changed");
+    }
     if (!StartProtocolRequest(std::move(host), request_id, reply,
                               reply_context, protocol_request,
-                              std::move(main_frame_id))) {
+                              std::move(main_frame_id),
+                              std::move(visibility_lease))) {
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol attach was denied");
     }
     return SHAAR_OK;

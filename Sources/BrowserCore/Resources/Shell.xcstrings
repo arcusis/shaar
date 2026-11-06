@@ -1,6 +1,7 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Show recent downloads": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הצגת הורדות אחרונות"}}}},
     "Current address: %@. Search or enter address": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הכתובת הנוכחית: %@. חיפוש או הזנת כתובת"}}}},
     "Favorites can move only between spaces sharing a profile.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"אפשר להעביר מועדפים רק בין מרחבים שמשתמשים באותו פרופיל."}}}},
     "Split stacks can move only between spaces sharing a profile.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"אפשר להעביר קבוצות של תצוגה מפוצלת רק בין מרחבים שמשתמשים באותו פרופיל."}}}},

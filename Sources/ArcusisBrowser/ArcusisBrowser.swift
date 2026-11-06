@@ -26,7 +26,10 @@ public enum BrowserLaunch {
           showRecentDownloads: arguments.contains("--recent-downloads"),
           showSettings: arguments.contains("--settings"),
           showSettingsProfiles: arguments.contains("--settings-profiles"),
-          showSettingsProfileEditor: arguments.contains("--settings-profile-editor"))
+          showSettingsProfileEditor: arguments.contains("--settings-profile-editor"),
+          firstRunStep: value(after: "--first-run-step", in: arguments)
+            .flatMap(Int.init).flatMap(FirstRunStep.init(rawValue:)),
+          firstRunFromDiskImage: arguments.contains("--first-run-from-dmg"))
       } catch {
         FileHandle.standardError.write(Data("Preview failed: \(error.localizedDescription)\n".utf8))
         exit(1)
@@ -60,8 +63,15 @@ public enum BrowserLaunch {
     to url: URL, showCommand: Bool, commandQuery: String?, commandFilter: CommandFilter?,
     compact: Bool, hideSidebar: Bool, showSpaceEditor: Bool,
     showExtensionConsent: Bool, showRecentDownloads: Bool, showSettings: Bool,
-    showSettingsProfiles: Bool, showSettingsProfileEditor: Bool
+    showSettingsProfiles: Bool, showSettingsProfileEditor: Bool,
+    firstRunStep: FirstRunStep?, firstRunFromDiskImage: Bool
   ) throws {
+    if let firstRunStep {
+      try renderFirstRunPreview(
+        to: url, step: firstRunStep,
+        location: firstRunFromDiskImage ? .diskImage : .installed)
+      return
+    }
     if showSettings || showSettingsProfileEditor {
       try renderSettingsPreview(
         to: url, compact: compact, withProfiles: showSettingsProfiles,
@@ -184,6 +194,19 @@ public enum BrowserLaunch {
     .background(Color(nsColor: .windowBackgroundColor))
     .environment(\.colorScheme, dark ? .dark : .light)
     .shellLocalization()
+    try renderOffscreen(view, to: url, size: size)
+  }
+
+  @MainActor private static func renderFirstRunPreview(
+    to url: URL, step: FirstRunStep, location: FirstRunLocation
+  ) throws {
+    NSApplication.shared.setActivationPolicy(.prohibited)
+    let size = NSSize(width: 760, height: 500)
+    let view = FirstRunSetupView(
+      store: BrowserStore.preview(showCommand: false), location: location,
+      initialStep: step, onFinish: {})
+      .frame(width: size.width, height: size.height)
+      .settingsLocalization()
     try renderOffscreen(view, to: url, size: size)
   }
 

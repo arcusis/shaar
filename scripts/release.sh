@@ -191,12 +191,7 @@ if $notarize; then
 fi
 
 echo '==> Creating DMG'
-staging="$out/dmg"
-mkdir -p "$staging"
-ditto "$app" "$staging/Shaar.app"
-ln -s /Applications "$staging/Applications"
-hdiutil create -volname "Shaar $SHAAR_BUNDLE_VERSION" -srcfolder "$staging" -ov -format UDZO "$dmg"
-rm -rf "$staging"
+scripts/create-branded-dmg.sh "$app" "$dmg"
 codesign --force --timestamp --sign "$sign_identity" "$dmg"
 if $notarize; then
   notarize_and_staple "$dmg" "$dmg"

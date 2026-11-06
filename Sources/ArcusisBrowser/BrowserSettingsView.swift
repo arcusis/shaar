@@ -355,22 +355,13 @@ struct BrowserSettingsView: View {
   /// LaunchServices stores the default browser by bundle identifier, so compare that rather than
   /// the path; development builds can exist at several paths with the same identifier.
   private func refreshDefaultStatus() {
-    let identifier = Bundle.main.bundleIdentifier
-    defaultStatus = ["http", "https"].allSatisfy { scheme in
-      guard let identifier, let url = URL(string: "\(scheme)://example.com"),
-        let current = NSWorkspace.shared.urlForApplication(toOpen: url)
-      else { return false }
-      return Bundle(url: current)?.bundleIdentifier == identifier
-    }
+    defaultStatus = DefaultBrowserService.isDefault()
   }
 
   private func setDefaultBrowser() {
     Task {
       do {
-        try await NSWorkspace.shared.setDefaultApplication(
-          at: Bundle.main.bundleURL, toOpenURLsWithScheme: "http")
-        try await NSWorkspace.shared.setDefaultApplication(
-          at: Bundle.main.bundleURL, toOpenURLsWithScheme: "https")
+        try await DefaultBrowserService.makeDefault()
         defaultError = nil
       } catch { defaultError = error.localizedDescription }
       refreshDefaultStatus()

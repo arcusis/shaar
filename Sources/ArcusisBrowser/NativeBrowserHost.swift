@@ -84,6 +84,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private var miniWindows: [String: MiniBrowserController] = [:]
   private(set) var accountSignIns: [String: ProfileAccountSignIn] = [:]
   private(set) var profileOnboarding: ProfileOnboardingWindow?
+  private(set) var firstRunSetup: FirstRunSetupWindow?
+  private let firstRunMarker: URL?
   private var pendingURLs: [URL] = []
   private var claimedPrimary = false
   private var reopenHandlerInstalled = false
@@ -105,6 +107,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
     sharedExtensions: SharedExtensionSettingsModel? = nil,
     presentation: Presentation = .visible, usesPrimaryWindow: Bool = true,
+    firstRunMarker: URL? = nil,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
     screens: @escaping () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) }
   ) {
@@ -112,6 +115,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     self.workspace = workspace
     self.preferences = preferences
     self.sharedExtensions = sharedExtensions
+    self.firstRunMarker = firstRunMarker
     if let shaar = events.runtime as? ARCShaarRuntime {
       downloadDirectoryApplier = Self.makeDownloadDirectoryApplier(runtime: shaar)
     } else {
@@ -236,6 +240,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
       (focused.flatMap { contexts[$0] } ?? contexts.values.first)?.window.makeKeyAndOrderFront(nil)
+      if let firstRunMarker, let context = focused.flatMap({ contexts[$0] }) ?? contexts.values.first {
+        let setup = FirstRunSetupWindow(
+          store: context.store, marker: firstRunMarker,
+          location: FirstRunLocation(application: Bundle.main.bundleURL))
+        setup.onClose = { [weak self] in self?.firstRunSetup = nil }
+        firstRunSetup = setup
+        setup.show()
+      }
     }
     for url in pendingURLs { openExternalURL(url) }
     pendingURLs.removeAll()
@@ -1260,6 +1272,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     do {
       let directory = URL.applicationSupportDirectory.appending(
         path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
+      let firstRunMarker = try FirstRunState.pendingMarker(in: directory)
       let lock = try WorkspaceProcessLock(directory: directory)
       let workspace = try BrowserWorkspaceStore(
         file: WorkspaceFile(
@@ -1275,7 +1288,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
-        preferences: preferences)
+        preferences: preferences, firstRunMarker: firstRunMarker)
       NSAppleEventManager.shared().setEventHandler(
         host, andSelector: #selector(handleURL(_:reply:)),
         forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))

@@ -91,7 +91,7 @@ import Testing
   #expect(sections.map(\.title) == ["Favorites & Pinned", "Recently Closed", "Most Visited"])
 }
 
-@Test func typedQueryKeepsHitsThenActionsThenOpenWithinTenRows() throws {
+@Test func typedQueryKeepsSearchFirstThenHitsAndActionsWithinTenRows() throws {
   let fixture = try LauncherFixture()
   var sources = fixture.sources
   sources.commands = (0..<5).map {
@@ -101,12 +101,12 @@ import Testing
   let sections = CommandLauncher.sections(
     for: "open", filter: nil, in: fixture.session, sources: sources)
 
-  #expect(sections.map(\.id) == ["top-hits", "actions", "open"])
-  #expect(sections[1].results.count == CommandLauncher.searchActionLimit)
+  #expect(sections.map(\.id) == ["open", "top-hits", "actions"])
+  #expect(sections[2].results.count == CommandLauncher.searchActionLimit)
   #expect(sections.results.count <= 10)
-  #expect(sections.results.last?.isOpen == true)
+  #expect(sections.results.first?.isOpen == true)
   #expect(sections.headerCount == 1)
-  #expect(sections[0].results.first?.action == .tab(space: fixture.spaceID, tab: fixture.openTabID))
+  #expect(sections[1].results.first?.action == .tab(space: fixture.spaceID, tab: fixture.openTabID))
 }
 
 @Test func typedQueryRanksLikeCommandSearchWithoutActions() throws {

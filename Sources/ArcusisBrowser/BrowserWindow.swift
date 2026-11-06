@@ -151,6 +151,7 @@ struct BrowserWindow: View {
     .onChange(of: store.commandIsOpen) { _, isOpen in
       if isOpen {
         store.engine?.extensionPanel = nil
+        pageIsFocused = false
       }
       if !isOpen && store.pageFind == nil {
         if let privatePage = store.privatePage, let id = store.session.selectedPage?.tab.id {

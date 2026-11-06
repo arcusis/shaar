@@ -99,31 +99,45 @@ final class SplitPageVisualTests: XCTestCase {
       Color(red: 0.90, green: 0.94, blue: 0.99), Color(red: 0.96, green: 0.92, blue: 0.86),
       Color(red: 0.90, green: 0.97, blue: 0.91),
     ]
-    let view = VStack(spacing: 0) {
+    let panes = SplitPageView(
+      split: split, focusedID: store.session.selectedSpace.selectedTabID,
+      onFocus: { _ in }, onWeightsChange: { _, _ in }
+    ) { id in
+      SplitPaneToolbar(store: store, tabID: id)
+    } pane: { id in
+      let index = ids.firstIndex(of: id) ?? 0
+      ZStack {
+        colors[index]
+        Text("Page \(index + 1)").foregroundStyle(.black)
+      }
+    }
+    let root = try SidebarVisualCaptureSupport.prepare()
+    let size = NSSize(width: 900, height: 560)
+    let before = VStack(spacing: 0) {
       HStack {
-        Spacer()
+        PageNavigationButtons(store: store, engine: nil)
         SplitLayoutControls(store: store, split: split)
         Spacer()
       }
       .frame(height: 34)
-      SplitPageView(
-        split: split, focusedID: store.session.selectedSpace.selectedTabID,
-        onFocus: { _ in }, onWeightsChange: { _, _ in }
-      ) { id in
-        SplitPaneToolbar(store: store, tabID: id)
-      } pane: { id in
-        let index = ids.firstIndex(of: id) ?? 0
-        ZStack {
-          colors[index]
-          Text("Page \(index + 1)").foregroundStyle(.black)
-        }
-      }
+      panes
     }
-    let mounted = try MountedChromeSidebar(
-      view: view, size: NSSize(width: 900, height: 560), appearance: .aqua)
-    defer { mounted.close() }
-    _ = try await mounted.capture(
-      to: URL(fileURLWithPath: "/tmp/split-page-view.png"),
+    let beforeMount = try MountedChromeSidebar(
+      view: before, size: size, appearance: .aqua)
+    defer { beforeMount.close() }
+    _ = try await beforeMount.capture(
+      to: root.appendingPathComponent("split-pane-navigation-before.png"),
+      requiredText: ["Page 1", "Page 2", "Page 3"])
+
+    let after = VStack(spacing: 0) {
+      BrowserChromeSurface(store: store, engine: nil)
+      panes
+    }
+    let afterMount = try MountedChromeSidebar(
+      view: after, size: size, appearance: .aqua)
+    defer { afterMount.close() }
+    _ = try await afterMount.capture(
+      to: root.appendingPathComponent("split-pane-navigation.png"),
       requiredText: ["Page 1", "Page 2", "Page 3"])
   }
 

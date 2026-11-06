@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import SwiftUI
 import Testing
 
@@ -63,5 +64,40 @@ import Testing
     let repinned = try await rendered()
     #expect(repinned != hidden)
     #expect(store.sidebarIsVisible)
+  }
+
+  @Test func openingPaneCommandMakesSearchFieldFirstResponderOffscreen() async throws {
+    var session = BrowserSession.fresh()
+    let firstResult = session.open(URL(string: "https://first.example")!)
+    let secondResult = session.open(URL(string: "https://second.example")!)
+    let first = try #require(firstResult)
+    let second = try #require(secondResult)
+    let didSplit = session.splitTabs(first, second, in: session.selectedSpaceID)
+    #expect(didSplit)
+    let store = BrowserStore(session: session)
+    let size = NSSize(width: 900, height: 600)
+    let host = NSHostingView(rootView: BrowserWindow(store: store))
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size),
+      styleMask: .borderless, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = host
+    defer {
+      window.contentView = nil
+      window.close()
+    }
+    host.layoutSubtreeIfNeeded()
+
+    // This is the action wired to the pane + button.
+    store.openSplitPane(beside: first, edge: .right)
+    let deadline = ContinuousClock.now + .seconds(2)
+    while ContinuousClock.now < deadline, !(window.firstResponder is NSTextView) {
+      host.layoutSubtreeIfNeeded()
+      try await Task.sleep(for: .milliseconds(16))
+    }
+
+    #expect(store.commandIsOpen)
+    #expect(window.firstResponder is NSTextView)
+    #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
   }
 }

@@ -910,6 +910,17 @@ final class BrowserStore {
   }
 
   @discardableResult
+  func openDevToolsRequestedTab(_ url: URL, sourceTabID: UUID, profileID: UUID) -> Bool {
+    guard session.profileID(forTabID: sourceTabID) == profileID,
+      NavigationInput.isWebURL(url) || NavigationInput.isDevToolsFrontendURL(url),
+      session.insertNativeTab(
+        BrowserTab(url: url), profileID: profileID, openerID: sourceTabID, foreground: true) != nil
+    else { return false }
+    save()
+    return true
+  }
+
+  @discardableResult
   func requestInstallation(_ request: ExtensionInstallRequest) -> Bool {
     enqueueConsent(.extensionInstall(request))
   }

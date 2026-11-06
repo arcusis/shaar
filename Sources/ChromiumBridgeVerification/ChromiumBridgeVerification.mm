@@ -132,6 +132,25 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
   return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count)};
 }
 
+NSDictionary *ARCProbeShaarDevToolsURLDispatch(NSDictionary *payload, BOOL validOwner) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  __block NSDictionary *received = nil;
+  runtime.onDevToolsOpenURLRequest = ^(NSDictionary *request) { received = request; };
+  NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  NSString *windowID = validOwner ? payload[@"sourceWindowID"] : @"FOREIGN-WINDOW";
+  NSString *tabID = payload[@"sourceTabID"];
+  NSString *profileID = payload[@"profileID"];
+  shaar_event event = {};
+  event.size = sizeof(event);
+  event.kind = SHAAR_EVENT_DEVTOOLS;
+  event.window_id = {windowID.UTF8String, windowID.length};
+  event.tab_id = {tabID.UTF8String, tabID.length};
+  event.profile_id = {profileID.UTF8String, profileID.length};
+  event.payload_json = {(const char *)data.bytes, data.length};
+  [runtime receiveEvent:&event];
+  return received ?: @{};
+}
+
 NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
     NSString *tabID, NSString *windowID, NSString *contextID) {
   if (!ProbeCaptureAllowed() || ![baseRuntime isKindOfClass:ARCShaarRuntime.class]) return nil;

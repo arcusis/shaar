@@ -276,6 +276,15 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   }
   NSString *tabID = String(event->tab_id);
   NSString *profileID = String(event->profile_id).uppercaseString;
+  if (event->kind == SHAAR_EVENT_DEVTOOLS && [kind isEqualToString:@"panelEvent"] &&
+      !event->session_id.size && [payload[@"schemaVersion"] isEqual:@1] &&
+      _shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
+      [String(event->window_id) isEqualToString:_shaarTabWindows[tabID]] &&
+      self.onDevToolsPanelEvent) {
+    self.onDevToolsPanelEvent(tabID, profileID, String(event->window_id), data,
+                              event->sequence);
+    return;
+  }
   if (event->kind == SHAAR_EVENT_DEVTOOLS &&
       [kind isEqualToString:@"openURLRequested"]) {
     NSString *windowID = String(event->window_id);

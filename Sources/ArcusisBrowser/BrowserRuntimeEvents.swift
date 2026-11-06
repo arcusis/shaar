@@ -71,6 +71,12 @@ final class BrowserRuntimeEvents {
     runtime.onAgentBridgeStatus = { [weak self] id, profile, status in
       self?.tabClient(id)?.onAgentBridgeStatus?(id, profile, status)
     }
+    runtime.onDevToolsPanelEvent = { [weak self] id, profile, window, payload, sequence in
+      guard let self, self.runtime.windowID(forTabID: id) == window,
+        let client = self.tabClient(id), client.windowID == window
+      else { return }
+      client.onDevToolsPanelEvent?(id, profile, payload, sequence)
+    }
     runtime.onMediaSessionChanged = { [weak self] id, state in
       self?.tabClient(id)?.onMediaSessionChanged?(id, state)
     }

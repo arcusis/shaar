@@ -152,6 +152,20 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
 
 @implementation ARCShaarRuntime (DevToolsTransport)
 
+- (void)panelRequest:(NSUInteger)operation tabID:(NSString *)tabID
+         profileID:(NSString *)profileID windowID:(NSString *)windowID
+           payload:(NSDictionary<NSString *, id> *)payload
+        completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
+  if (operation != SHAAR_OP_DEVTOOLS_PANEL_OPEN &&
+      operation != SHAAR_OP_DEVTOOLS_PANEL_CLOSE &&
+      operation != SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST) {
+    completion(nil, ShaarDevToolsError(@"This panel operation is unavailable."));
+    return;
+  }
+  [self shaarDevToolsSubmit:operation tabID:tabID profileID:profileID
+                  windowID:windowID payload:payload completion:completion];
+}
+
 - (void)viewportRequest:(NSUInteger)operation tabID:(NSString *)tabID
               profileID:(NSString *)profileID windowID:(NSString *)windowID
               contextID:(NSString *)contextID payload:(NSDictionary<NSString *, id> *)payload

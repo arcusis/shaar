@@ -222,6 +222,15 @@ final class BrowserEngine {
       else { return }
       self.developerModels[tab]?.agentBridge.receive(enabled: enabled, connectionCount: count)
     }
+    callbacks.onDevToolsPanelEvent = { [weak self] identity, owner, payload, sequence in
+      guard let self, let tab = UUID(uuidString: identity),
+        let profile = UUID(uuidString: owner),
+        self.store?.session.profileID(forTabID: tab) == profile,
+        self.runtime.windowID(forTabID: identity) == self.windowID
+      else { return }
+      self.shaarDevTools[tab]?.receiveNativePanelEvent(
+        tabID: identity, profileID: owner, payload: payload, sequence: sequence)
+    }
     store.library.onLoad = { [weak self] key, limit, completion in
       guard let self, !self.isClosed else {
         completion(.failure(LibraryDataError.invalidBookmarks))

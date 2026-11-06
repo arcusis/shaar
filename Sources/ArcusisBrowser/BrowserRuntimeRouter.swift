@@ -23,6 +23,7 @@ final class BrowserRuntimeClient {
   var onExternalAppDismissed: ((String) -> Void)?
   var onMediaAccess: ((String, [String: NSNumber]) -> Void)?
   var onAgentBridgeStatus: ((String, String, [String: Any]) -> Void)?
+  var onDevToolsPanelEvent: ((String, String, Data, UInt64) -> Void)?
   var onMediaSessionChanged: ((String, [String: Any]?) -> Void)?
   var onPictureInPictureChanged: ((String, Bool) -> Void)?
   var onTabActivationRequest: ((String, String) -> Void)?

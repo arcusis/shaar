@@ -123,6 +123,9 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (^onAgentBridgeStatus)(NSString *tabID, NSString *profileID,
                                                       NSDictionary<NSString *, id> *status);
+/// Raw scoped panel event; the app validates its lease and projected fields.
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDevToolsPanelEvent)(NSString *tabID,
+    NSString *profileID, NSString *windowID, NSData *payload, uint64_t sequence);
 /// A tab's validated Media Session state changed; `state` is nil when the tab has no media.
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onMediaSessionChanged)(NSString *tabID,
     NSDictionary<NSString *, id> * _Nullable state);
@@ -221,6 +224,12 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 
 /// Shaar C ABI implementation of the core profile/window/tab/navigation backend.
 @interface ARCShaarRuntime : ARCChromiumRuntime <ARCBrowserCoreBackend>
+/// The panel lease and fixed screencast commands only.
+- (void)panelRequest:(NSUInteger)operation tabID:(NSString *)tabID
+         profileID:(NSString *)profileID windowID:(NSString *)windowID
+           payload:(NSDictionary<NSString *, id> *)payload
+        completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable,
+                                                NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 /// Scoped Viewports lease, input, and frame operations. A missing engine operation reports an error.
 - (void)viewportRequest:(NSUInteger)operation tabID:(NSString *)tabID
               profileID:(NSString *)profileID windowID:(NSString *)windowID

@@ -416,6 +416,13 @@ final class ShaarDevToolsModel {
     }
   }
 
+  func receiveNativePanelEvent(
+    tabID: String, profileID: String, payload: Data, sequence: UInt64
+  ) {
+    (transport as? ShaarDevToolsNativeTransport)?.receive(
+      tabID: tabID, profileID: profileID, payload: payload, sequence: sequence)
+  }
+
   isolated deinit {
     eventTask?.cancel()
     cancelLocalTasks()

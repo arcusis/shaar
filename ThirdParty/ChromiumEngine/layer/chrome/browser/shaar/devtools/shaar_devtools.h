@@ -35,6 +35,7 @@ void BindRuntimeServices();
 // Retain a Node agent host until the app opens the requested owned tab, then
 // attach the frontend bindings to that host. No Chromium Browser is created.
 bool RequestNodeFrontend(Profile* profile,
+                         content::WebContents* source,
                          const GURL& url,
                          scoped_refptr<content::DevToolsAgentHost> host);
 bool HasPendingNodeFrontend(Profile* profile, const GURL& url);

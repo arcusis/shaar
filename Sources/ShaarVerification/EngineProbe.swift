@@ -33,6 +33,7 @@ final class EngineProbe {
   private let localizationMode: Bool
   private let basicBrowsingMode: Bool
   private let mediaSessionOnlyMode: Bool
+  private let devtoolsRouteOnlyMode: Bool
   private let measurementTabCount: Int?
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
@@ -74,6 +75,7 @@ final class EngineProbe {
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
     localizationMode: Bool, basicBrowsingMode: Bool, mediaSessionOnlyMode: Bool,
+    devtoolsRouteOnlyMode: Bool,
     measurementTabCount: Int?
   ) throws {
     self.root = root
@@ -93,6 +95,7 @@ final class EngineProbe {
     self.localizationMode = localizationMode
     self.basicBrowsingMode = basicBrowsingMode
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
+    self.devtoolsRouteOnlyMode = devtoolsRouteOnlyMode
     self.measurementTabCount = measurementTabCount
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
@@ -218,6 +221,7 @@ final class EngineProbe {
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let basicBrowsingMode = arguments.contains("--probe-basic-browsing")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
+      let devtoolsRouteOnlyMode = arguments.contains("--probe-devtools-route-only")
       let measurementTabCount: Int? = {
         guard let index = arguments.firstIndex(of: "--probe-measure-tabs"),
           arguments.indices.contains(index + 1)
@@ -249,6 +253,7 @@ final class EngineProbe {
         "--probe-localization",
         "--probe-basic-browsing",
         "--probe-media-session-only",
+        "--probe-devtools-route-only",
         "--probe-measure-tabs",
       ]
       guard externalAppConsentMode == noLaunchGuard,
@@ -273,6 +278,9 @@ final class EngineProbe {
             where: arguments.contains),
         !mediaSessionOnlyMode
           || !conflictingFlags.filter({ $0 != "--probe-media-session-only" }).contains(
+            where: arguments.contains),
+        !devtoolsRouteOnlyMode
+          || !conflictingFlags.filter({ $0 != "--probe-devtools-route-only" }).contains(
             where: arguments.contains),
         measurementTabCount == nil
           || !conflictingFlags.filter({ $0 != "--probe-measure-tabs" }).contains(
@@ -299,6 +307,7 @@ final class EngineProbe {
         quitPendingNavigation: quitPendingNavigation,
         sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode,
         basicBrowsingMode: basicBrowsingMode, mediaSessionOnlyMode: mediaSessionOnlyMode,
+        devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
         measurementTabCount: measurementTabCount)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
@@ -590,6 +599,21 @@ final class EngineProbe {
           "media fixture starts with no visible or interactive window")
         checks += try await MediaSessionProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
+          phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      if devtoolsRouteOnlyMode {
+        guard let browserEngine else { throw ProbeFailure("DevTools route engine is missing.") }
+        bootstrapStage = .ready
+        fixtureStage = "DevToolsRoute"
+        try expect(
+          NSApp.windows.allSatisfy { !$0.isVisible },
+          "DevTools route starts with hidden windows")
+        checks += try await DevToolsRouteProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture,
           phase: phase
         ).run()
         localFixturesPassed = true
@@ -1134,7 +1158,7 @@ final class EngineProbe {
       writeReport()
       return
     }
-    if basicBrowsingMode || mediaSessionOnlyMode {
+    if basicBrowsingMode || mediaSessionOnlyMode || devtoolsRouteOnlyMode {
       let engineClosed = browserEngine?.isClosed == true
       let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
       let routerClientCount = browserEngine?.events.router.clients.count ?? -1
@@ -1172,7 +1196,7 @@ final class EngineProbe {
   }
 
   private var baseTimeoutSeconds: Double {
-    if basicBrowsingMode || mediaSessionOnlyMode { return 180 }
+    if basicBrowsingMode || mediaSessionOnlyMode || devtoolsRouteOnlyMode { return 180 }
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
@@ -1183,6 +1207,7 @@ final class EngineProbe {
   private var probeMode: String {
     if basicBrowsingMode { return "basic-browsing" }
     if mediaSessionOnlyMode { return "media-session-only" }
+    if devtoolsRouteOnlyMode { return "devtools-route-only" }
     if localizationMode { return "localization-only" }
     if privateWindowMode { return PrivateWindowProbe.mode }
     if privateMultiTabMode { return "private-multitab-owned-engine-fixture" }
@@ -1200,6 +1225,10 @@ final class EngineProbe {
     if mediaSessionOnlyMode {
       return
         "Owned hidden normal window and authored loopback media. No user profile, external media site, or audible output is opened."
+    }
+    if devtoolsRouteOnlyMode {
+      return
+        "Owned hidden normal window, DevTools frontend URL routing, and Node discovery attachment."
     }
     if localizationMode {
       return

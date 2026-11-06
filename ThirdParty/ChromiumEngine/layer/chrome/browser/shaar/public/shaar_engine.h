@@ -190,6 +190,10 @@ typedef enum {
   SHAAR_OP_DEVTOOLS_CONTROL_STATUS = 1007,
   // Testing only: capture the selected owned tab without showing its window.
   SHAAR_OP_PROBE_CAPTURE_TAB = 1008,
+  // Testing only: exercise the native DevTools URL and Node frontend routes.
+  SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL = 1090,
+  SHAAR_OP_PROBE_NODE_FRONTEND = 1091,
+  SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED = 1092,
   // END devtools operation IDs.
 
   // BEGIN media

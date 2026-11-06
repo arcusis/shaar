@@ -9,7 +9,17 @@
  #include "chrome/browser/ui/tabs/tab_enums.h"
  #include "components/sessions/core/session_id.h"
  #include "extensions/buildflags/buildflags.h"
-@@ -805,6 +807,13 @@
+@@ -407,7 +409,8 @@
+ 
+ void DevToolsWindow::OpenNodeFrontend() {
+   DevToolsWindow::OpenNodeFrontendWindow(
+-      profile_, DevToolsOpenedByAction::kOpenForNodeFromAnotherTarget);
++      profile_, DevToolsOpenedByAction::kOpenForNodeFromAnotherTarget,
++      GetInspectedWebContents());
+ }
+ 
+ // DevToolsWindow::Throttle ------------------------------------------
+@@ -805,6 +808,13 @@
  
    std::string type = agent_host->GetType();
    if (type == "node") {
@@ -17,27 +27,30 @@
 +      const GURL url(GetDevToolsURL(profile, kFrontendV8, std::string(),
 +                                   false, std::string(),
 +                                   agent_host->IsAttached(), false));
-+      shaar::devtools::RequestNodeFrontend(profile, url, agent_host);
++      shaar::devtools::RequestNodeFrontend(profile, nullptr, url, agent_host);
 +      return;
 +    }
      // Direct node targets will always open using ToT front-end.
      window = Create(profile, nullptr, kFrontendV8, std::string(), false,
                      std::string(), std::string(), agent_host->IsAttached(),
-@@ -836,6 +845,13 @@
+@@ -835,7 +845,15 @@
+ // static
  DevToolsWindow* DevToolsWindow::OpenNodeFrontendWindow(
      Profile* profile,
-     DevToolsOpenedByAction opened_by) {
+-    DevToolsOpenedByAction opened_by) {
++    DevToolsOpenedByAction opened_by,
++    content::WebContents* source) {
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
 +    const GURL url(GetDevToolsURL(profile, kFrontendNode, std::string(),
 +                                 false, std::string(), false, false));
 +    shaar::devtools::RequestNodeFrontend(
-+        profile, url, DevToolsAgentHost::CreateForDiscovery());
++        profile, source, url, DevToolsAgentHost::CreateForDiscovery());
 +    return nullptr;
 +  }
    for (DevToolsWindow* window : GetDevToolsWindowInstances()) {
      if (window->frontend_type_ == kFrontendNode) {
        window->ActivateWindow();
-@@ -1552,6 +1568,12 @@
+@@ -1552,6 +1570,12 @@
      base::OnceCallback<void(content::NavigationHandle&)>
          navigation_handle_callback) {
    DCHECK(source == main_web_contents_);
@@ -50,7 +63,7 @@
    if (!params.url.SchemeIs(content::kChromeDevToolsScheme)) {
      // TODO(https://crbug.com/40275094): Plumb the `navigation_handle_callback`.
      return OpenURLFromInspectedTab(params);
-@@ -1616,6 +1638,13 @@
+@@ -1616,6 +1640,13 @@
    }
  
    WebContents* inspected_web_contents = GetInspectedWebContents();
@@ -64,7 +77,7 @@
    if (inspected_web_contents) {
      inspected_web_contents->GetDelegate()->AddNewContents(
          source, std::move(new_contents), target_url, disposition,
-@@ -1891,6 +1920,11 @@
+@@ -1891,6 +1922,11 @@
            child_id, fixed_url)) {
      fixed_url = GURL(url::kAboutBlankURL);
    }
@@ -76,6 +89,18 @@
    content::OpenURLParams params =
        content::OpenURLParams::CreateBrowserInitiated(
            fixed_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+--- a/chrome/browser/devtools/devtools_window.h
++++ b/chrome/browser/devtools/devtools_window.h
+@@ -197,7 +197,8 @@
+   // Node frontend is always undocked.
+   static DevToolsWindow* OpenNodeFrontendWindow(
+       Profile* profile,
+-      DevToolsOpenedByAction opened_by);
++      DevToolsOpenedByAction opened_by,
++      content::WebContents* source = nullptr);
+ 
+   static void InspectElement(content::RenderFrameHost* inspected_frame_host,
+                              int x,
 --- a/chrome/browser/devtools/devtools_ui_bindings.cc
 +++ b/chrome/browser/devtools/devtools_ui_bindings.cc
 @@ -3,6 +3,7 @@
@@ -129,3 +154,27 @@
    delegate_->OpenInNewTab(gurl.spec());
  }
  
+--- a/chrome/browser/ui/webui/inspect/inspect_ui.cc
++++ b/chrome/browser/ui/webui/inspect/inspect_ui.cc
+@@ -512,8 +512,8 @@
+   if (!profile) {
+     return;
+   }
+-  DevToolsWindow::OpenNodeFrontendWindow(profile,
+-                                         DevToolsOpenedByAction::kInspectLink);
++  DevToolsWindow::OpenNodeFrontendWindow(
++      profile, DevToolsOpenedByAction::kInspectLink, web_ui()->GetWebContents());
+ }
+ 
+ void InspectMessageHandler::HandleLaunchUIDevToolsCommand(
+--- a/chrome/browser/devtools/devtools_ui_bindings.h
++++ b/chrome/browser/devtools/devtools_ui_bindings.h
+@@ -137,6 +137,8 @@
+   content::WebContents* web_contents() { return web_contents_; }
+   Profile* profile() { return profile_; }
+   content::DevToolsAgentHost* agent_host() { return agent_host_.get(); }
++  // Shaar's testing-only route probe uses the same validated frontend method.
++  void ShaarProbeOpenInNewTab(const std::string& url) { OpenInNewTab(url); }
+ 
+   // Takes ownership over the |delegate|.
+   void SetDelegate(Delegate* delegate);

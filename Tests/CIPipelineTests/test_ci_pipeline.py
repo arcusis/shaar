@@ -35,6 +35,7 @@ PLAN = load_script("ci-plan")
 GATE = load_script("ci-gate")
 COVERAGE = load_script("check-coverage")
 INSTALL = load_script("install-ci-tools")
+PYTHON_INSTALL = load_script("install-ci-python")
 EVIDENCE = load_script("ci-evidence")
 STAGES = load_script("ci-stage")
 PINS = load_script("ci-checks")
@@ -484,6 +485,70 @@ class SupplyChainTests(unittest.TestCase):
                 INSTALL.main()
             self.assertEqual((Path(directory) / "periphery").read_bytes(), b"executable")
             self.assertEqual((Path(directory) / "libIndexStore.dylib").read_bytes(), b"runtime library")
+
+    def test_installer_reuses_only_checksum_verified_archive_cache(self):
+        payload = self.archive()
+        digest = hashlib.sha256(payload).hexdigest()
+        pin = {"url": "https://example.invalid/tool", "sha256": digest}
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory)
+            with patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(payload)) as fetch:
+                self.assertEqual(INSTALL.archive_payload(pin, cache), payload)
+                self.assertEqual(INSTALL.archive_payload(pin, cache), payload)
+                fetch.assert_called_once()
+
+            (cache / f"{digest}.archive").write_bytes(b"corrupt cached payload")
+            with patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(payload)) as fetch:
+                self.assertEqual(INSTALL.archive_payload(pin, cache), payload)
+                fetch.assert_called_once()
+
+            (cache / f"{digest}.archive").unlink()
+            with patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(b"wrong")):
+                with self.assertRaisesRegex(ValueError, "Checksum mismatch"):
+                    INSTALL.archive_payload(pin, cache)
+            self.assertFalse((cache / f"{digest}.archive").exists())
+
+    def test_managed_python_install_retries_only_transient_download_failures(self):
+        calls = []
+        sleeps = []
+
+        def run(command, **kwargs):
+            calls.append(command)
+            result = SimpleNamespace(returncode=1, stdout="", stderr="operation timed out")
+            if len(calls) == 2:
+                result = SimpleNamespace(returncode=0, stdout="installed\n", stderr="")
+            return result
+
+        self.assertEqual(PYTHON_INSTALL.install_python("3.13", run, sleeps.append), 0)
+        self.assertEqual(calls, [["uv", "python", "install", "3.13"]] * 2)
+        self.assertEqual(sleeps, [5])
+
+        permanent = SimpleNamespace(returncode=2, stdout="", stderr="checksum mismatch")
+        self.assertEqual(
+            PYTHON_INSTALL.install_python("3.13", lambda *args, **kwargs: permanent, sleeps.append), 2
+        )
+        self.assertEqual(sleeps, [5])
+
+    def test_managed_python_install_retries_are_bounded(self):
+        calls = []
+        sleeps = []
+        failure = SimpleNamespace(returncode=1, stdout="", stderr="operation timed out")
+
+        def run(command, **kwargs):
+            calls.append(command)
+            return failure
+
+        self.assertEqual(PYTHON_INSTALL.install_python("3.13", run, sleeps.append), 1)
+        self.assertEqual(len(calls), PYTHON_INSTALL.INSTALL_ATTEMPTS)
+        self.assertEqual(sleeps, [5, 15])
+
+    def test_ci_setup_pins_and_caches_managed_python_and_tool_archives(self):
+        setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
+        self.assertIn("python-version: '3.13'", setup)
+        self.assertIn("cache-python: true", setup)
+        self.assertIn("python3 scripts/install-ci-python.py 3.13", setup)
+        self.assertIn("ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}", setup)
+        self.assertIn("scripts/install-ci-tools.py --cache-directory build/ci-tool-archives", setup)
 
     def test_installer_retries_transient_download_failures_only(self):
         def http_error(code):

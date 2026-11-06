@@ -53,10 +53,12 @@ final class ShaarPreviewProbe {
     return url
   }
 
-  static func paintTarget(arguments: [String], pendingQuit: Bool) throws -> URL? {
-    guard !pendingQuit else { return nil }
-    guard let index = arguments.firstIndex(of: "--probe-paint-url"),
-      arguments.indices.contains(index + 1),
+  static func paintTarget(arguments: [String], required: Bool) throws -> URL? {
+    guard let index = arguments.firstIndex(of: "--probe-paint-url") else {
+      if required { throw Failure("Paint check requires an authored loopback /paint URL.") }
+      return nil
+    }
+    guard arguments.indices.contains(index + 1),
       let url = URL(string: arguments[index + 1]),
       url.scheme == "http", url.host() == "127.0.0.1", url.path() == "/paint"
     else { throw Failure("Paint check requires an authored loopback /paint URL.") }
@@ -82,7 +84,8 @@ final class ShaarPreviewProbe {
       throw Failure("Private close and pending Quit are separate probes.")
     }
     firstURL =
-      try Self.paintTarget(arguments: arguments, pendingQuit: pendingQuitURL != nil)
+      try Self.paintTarget(
+        arguments: arguments, required: arguments.contains("--probe-direct-quit"))
       ?? URL(string: "https://example.com/")!
     directQuit = arguments.contains("--probe-direct-quit")
     let framework = URL(filePath: try value("--probe-framework"))
@@ -334,11 +337,19 @@ final class ShaarPreviewProbe {
     throw Failure("Page committed, but its renderer capture did not paint fixture blue #1678C6.")
   }
 
-  static func reportPasses(_ results: [String: [String: Any]], pendingQuit: Bool = false) -> Bool {
-    let required: Set<String> =
-      pendingQuit
-      ? ["openTab", "pendingNavigation"]
-      : [
+  static func reportPasses(
+    _ results: [String: [String: Any]], pendingQuit: Bool = false,
+    pendingPrivateQuit: Bool = false, privateCloseLive: Bool = false
+  ) -> Bool {
+    let required: Set<String>
+    if privateCloseLive {
+      required = ["openTab", "privateWindow", "privateWindowClose", "normalTabSurvives"]
+    } else if pendingQuit {
+      required = pendingPrivateQuit
+        ? ["openTab", "privateWindow", "pendingNavigation"]
+        : ["openTab", "pendingNavigation"]
+    } else {
+      required = [
         "openTab", "paint", "navigate", "backForward", "devTools", "newWindow",
         "privateWindow", "profilesSwitch", "extensions", "downloads",
         "privateEngineProfileIsOffTheRecord", "privateEngineGlobalCookiesBlocked",
@@ -346,6 +357,7 @@ final class ShaarPreviewProbe {
         "privateEngineWebRTCPublicIPOnly", "privateEngineExtensionsDisabled",
         "privateEngineTrackerRulesLoaded",
       ]
+    }
     return Set(results.keys) == required
       && results.values.allSatisfy { $0["status"] as? String == "pass" }
   }
@@ -456,7 +468,9 @@ final class ShaarPreviewProbe {
     if !auditVisibleWindows() {
       results["headless"] = ["status": "fail", "detail": "A probe window became visible."]
     }
-    passed = Self.reportPasses(results, pendingQuit: pendingQuitURL != nil)
+    passed = Self.reportPasses(
+      results, pendingQuit: pendingQuitURL != nil,
+      pendingPrivateQuit: pendingPrivateQuit, privateCloseLive: privateCloseLive)
     let report: [String: Any] = [
       "schemaVersion": 1, "probeMode": "shaar-preview", "backend": "shaar",
       "allWindowsHidden": NSApp.windows.allSatisfy { !$0.isVisible },

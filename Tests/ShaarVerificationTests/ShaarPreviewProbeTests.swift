@@ -33,6 +33,17 @@ import Testing
       ])) == nil)
   }
 
+  @Test func paintURLIsRequiredOnlyForTheFullPreviewRun() throws {
+    #expect(try ShaarPreviewProbe.paintTarget(arguments: [], required: false) == nil)
+    var rejectedMissingURL = false
+    do {
+      _ = try ShaarPreviewProbe.paintTarget(arguments: [], required: true)
+    } catch {
+      rejectedMissingURL = true
+    }
+    #expect(rejectedMissingURL)
+  }
+
   @Test func blankRendererCaptureCannotPassPaintCheck() {
     let bitmap = NSBitmapImageRep(
       bitmapDataPlanes: nil, pixelsWide: 100, pixelsHigh: 100,
@@ -68,5 +79,21 @@ import Testing
     #expect(!ShaarPreviewProbe.reportPasses(results))
     results["paint"] = ["status": "fail"]
     #expect(!ShaarPreviewProbe.reportPasses(results))
+
+    let pending = Dictionary(
+      uniqueKeysWithValues: ["openTab", "pendingNavigation"].map { ($0, ["status": "pass"]) })
+    #expect(ShaarPreviewProbe.reportPasses(pending, pendingQuit: true))
+    let pendingPrivate = Dictionary(
+      uniqueKeysWithValues: ["openTab", "privateWindow", "pendingNavigation"].map {
+        ($0, ["status": "pass"])
+      })
+    #expect(
+      ShaarPreviewProbe.reportPasses(
+        pendingPrivate, pendingQuit: true, pendingPrivateQuit: true))
+    let privateClose = Dictionary(
+      uniqueKeysWithValues: [
+        "openTab", "privateWindow", "privateWindowClose", "normalTabSurvives",
+      ].map { ($0, ["status": "pass"]) })
+    #expect(ShaarPreviewProbe.reportPasses(privateClose, privateCloseLive: true))
   }
 }

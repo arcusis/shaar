@@ -183,16 +183,12 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
       let date = now.addingTimeInterval(min(0, max(-30, start - latest)))
       let duration = request.duration.map { min(30_000, $0 * 1_000) } ?? 0
       let url = ShaarReproRedaction.url(String(request.url.prefix(8192)))
-      let headers = { (rows: [ShaarNetworkHeader]) in
-        BugReportArchive.filteredHeaders(
-          rows.map { ["name": $0.name, "value": $0.value] }, includeSensitive: false)
-      }
       return [
         "startedDateTime": ISO8601DateFormatter().string(from: date),
         "time": duration,
         "request": [
           "method": String(request.method.prefix(32)), "url": url, "httpVersion": "",
-          "headers": headers(request.requestHeaders),
+          "headers": redactedHeaders(request.requestHeaders),
           "queryString": URLComponents(string: url)?.queryItems?.map {
             ["name": $0.name, "value": $0.value ?? ""]
           } ?? [],
@@ -200,7 +196,7 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
         ] as [String: Any],
         "response": [
           "status": request.status ?? 0, "statusText": "", "httpVersion": "",
-          "headers": headers(request.responseHeaders), "cookies": [],
+          "headers": redactedHeaders(request.responseHeaders), "cookies": [],
           "content": [
             "size": request.encodedBytes ?? 0,
             "mimeType": request.mimeType ?? "",
@@ -220,6 +216,22 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
         "_sensitiveHeadersIncluded": false,
       ]
     ]
+  }
+
+  private static func redactedHeaders(_ rows: [ShaarNetworkHeader]) -> [[String: String]] {
+    let urlHeaders: Set<String> = [
+      "referer", "referrer", "location", "content-location", "refresh", "link",
+    ]
+    return BugReportArchive.filteredHeaders(
+      rows.map { ["name": $0.name, "value": $0.value] }, includeSensitive: false
+    ).map { row in
+      guard let name = row["name"],
+        urlHeaders.contains(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+      else { return row }
+      var redacted = row
+      redacted["value"] = "[redacted]"
+      return redacted
+    }
   }
 
   static func save(

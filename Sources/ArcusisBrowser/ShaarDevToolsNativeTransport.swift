@@ -81,9 +81,8 @@ private struct ShaarDOMPanelObserver {
   @ObservationIgnored private let requester: any ShaarPanelRequesting
   @ObservationIgnored private let windowID: String
   @ObservationIgnored private var session: ShaarPanelSession?
-  @ObservationIgnored private var phase2Observers: [
-    UUID: (SiteControlTarget, AsyncStream<ShaarPhase2Message>.Continuation)
-  ] = [:]
+  @ObservationIgnored private var phase2Observers:
+    [UUID: (SiteControlTarget, AsyncStream<ShaarPhase2Message>.Continuation)] = [:]
   @ObservationIgnored private var domObserver: ShaarDOMPanelObserver?
   @ObservationIgnored var onLeaseOpened: (() -> Void)?
 

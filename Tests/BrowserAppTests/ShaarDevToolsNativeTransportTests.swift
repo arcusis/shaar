@@ -121,7 +121,8 @@ import Testing
     panel.receive(
       tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
       payload: try event(
-        12, data: [
+        12,
+        data: [
           "isLocalStorage": true, "key": "theme", "value": "dark", "truncated": false,
         ]), sequence: 1)
     guard case .event(let event)? = await phase2Iterator.next() else {

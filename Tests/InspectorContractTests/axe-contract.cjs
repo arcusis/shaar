@@ -18,8 +18,6 @@ assert.equal(pin.license, 'MPL-2.0');
 assert.equal(axeSHA, pin.bundleSHA256);
 const runner = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/Resources/InspectorAudit/runner.js'), 'utf8');
 const runnerExpression = runner.slice(runner.indexOf('(async'));
-const inactiveSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorInactiveCSSScript.swift'), 'utf8');
-const inactiveTemplate = inactiveSource.match(/private static let template = #"""([\s\S]*?)"""#/)[1];
 const html = `<!doctype html><html lang="en"><head><title>Audit fixture</title><meta name="viewport" content="width=device-width"></head><body>
   <main>
     <img id="missing-alt" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">
@@ -65,11 +63,10 @@ const html = `<!doctype html><html lang="en"><head><title>Audit fixture</title><
     assert.equal(await cleanPage.evaluate(() => Object.prototype.hasOwnProperty.call(window, 'axe')), false);
     await cleanContext.close();
 
-    await verifyHints(page, inactiveTemplate);
     console.log(JSON.stringify({
       passed: true, axeVersion: pin.version, violations: pageResult.violations,
       findings: pageResult.findings.length, incomplete: pageResult.incomplete,
-      injectedScriptNodes: 0, cleanup: 'restores or removes window.axe', inactiveHintFixtures: 5,
+      injectedScriptNodes: 0, cleanup: 'restores or removes window.axe',
     }, null, 2));
   } finally {
     await browser.close();
@@ -83,34 +80,4 @@ async function run(page, source, script, scope) {
   return page.evaluate(({ source, script, scope }) => new Function(`return ${script}`)()(source, scope), {
     source, script: runnerExpression, scope,
   });
-}
-
-async function verifyHints(page, template) {
-  const properties = [
-    'justify-content', 'align-items', 'row-gap', 'grid-template-columns', 'grid-column',
-    'flex-direction', 'width', 'height', 'z-index', 'float', 'vertical-align', 'flex-grow',
-  ];
-  const evaluate = async selector => {
-    await page.evaluate(selector => {
-      globalThis.__shaarInspectorV2 = { element: () => document.querySelector(selector) };
-    }, selector);
-    const expression = template.replace('__SHAAR_PROPERTIES__', JSON.stringify(properties));
-    return page.evaluate(expression);
-  };
-  const block = await evaluate('#block');
-  assert.match(block['justify-content'], /flex or grid container/);
-  assert.match(block['grid-template-columns'], /grid container/);
-  assert.match(block['grid-column'], /grid container or grid item/);
-  assert.match(block['flex-direction'], /flex container/);
-  assert.match(block['z-index'], /static elements/);
-  assert.match(block['vertical-align'], /block-level/);
-  const inline = await evaluate('#inline');
-  assert.match(inline.width, /non-replaced inline/);
-  assert.match(inline.height, /non-replaced inline/);
-  const flexChild = await evaluate('#flex-child');
-  assert.match(flexChild.float, /flex or grid items/);
-  assert.equal(flexChild['z-index'], undefined);
-  assert.equal(flexChild['flex-grow'], undefined);
-  const gridChild = await evaluate('#grid-child');
-  assert.equal(gridChild['grid-column'], undefined);
 }

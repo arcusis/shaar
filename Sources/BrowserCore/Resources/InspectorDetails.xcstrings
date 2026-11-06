@@ -1487,22 +1487,6 @@
         }
       }
     },
-    "Requires a grid container or grid item.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Requires a grid container or grid item."
-          }
-        },
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "נדרש מכל מסוג grid או פריט ברשת."
-          }
-        }
-      }
-    },
     "Requires a flex container.": {
       "localizations": {
         "en": {
@@ -1515,54 +1499,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "נדרש מכל מסוג flex."
-          }
-        }
-      }
-    },
-    "Requires a flex container or flex item.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Requires a flex container or flex item."
-          }
-        },
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "נדרש מכל מסוג flex או פריט גמיש."
-          }
-        }
-      }
-    },
-    "Does not apply to non-replaced inline elements.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Does not apply to non-replaced inline elements."
-          }
-        },
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "לא חל על אלמנטים מוטבעים שאינם מוחלפים."
-          }
-        }
-      }
-    },
-    "Does not apply to static elements outside flex or grid layouts.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Does not apply to static elements outside flex or grid layouts."
-          }
-        },
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "לא חל על אלמנטים במיקום static מחוץ לפריסת flex או grid."
           }
         }
       }
@@ -1611,6 +1547,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "לא פעיל"
+          }
+        }
+      }
+    },
+    "Requires a flex, grid, or multi-column container.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires a flex, grid, or multi-column container."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נדרש מכל מסוג flex, grid או רב־עמודות."
+          }
+        }
+      }
+    },
+    "Requires a flex item.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires a flex item."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נדרש פריט flex."
+          }
+        }
+      }
+    },
+    "Requires a grid item.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires a grid item."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נדרש פריט grid."
+          }
+        }
+      }
+    },
+    "Does not affect non-replaced inline elements.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Does not affect non-replaced inline elements."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אינו משפיע על אלמנטים מוטבעים שאינם מוחלפים."
+          }
+        }
+      }
+    },
+    "Requires positioning or a flex/grid item.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires positioning or a flex/grid item."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נדרש מיקום שאינו static או פריט flex/grid."
+          }
+        }
+      }
+    },
+    "Does not apply to statically positioned elements.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Does not apply to statically positioned elements."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא חל על אלמנטים במיקום static."
+          }
+        }
+      }
+    },
+    "Requires overflow: hidden and white-space: nowrap.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires overflow: hidden and white-space: nowrap."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נדרשים overflow: hidden וגם white-space: nowrap."
           }
         }
       }

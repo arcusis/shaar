@@ -154,7 +154,7 @@ final class InspectorStylesModel {
       let properties = Array(Set(nextRules.flatMap(\.declarations).map(\.name))).sorted()
       let inactiveHints =
         (try? await inspector.evaluate(
-          InspectorInactiveCSSScript.expression(properties: properties))) as? [String: String]
+          InspectorInactiveCSSRules.expression(properties: properties))) as? [String: String]
         ?? [:]
       try receive(
         rules: nextRules, computed: nextComputed, inactiveHints: inactiveHints,

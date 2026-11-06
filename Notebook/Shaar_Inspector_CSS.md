@@ -6,6 +6,8 @@ The DevTools bridge drops `CSS.styleSheetAdded` events, including stylesheet hea
 
 **Element overrides** applies a property/value to the locked element's inline style, with optional `!important`. Selecting a matched declaration fills the editor. Empty values remove an override. Chromium validates CSS values before applying them. Undo retains up to 50 edits and restores the exact prior inline attribute, including shorthand declarations and absence of the attribute. If the page changes that attribute afterward, undo refuses to overwrite those changes. Edits remain until reload; closing Inspector clears undo history.
 
+Matched declarations with no effect on the selected element display an **Inactive** hint and a short reason. The rule table covers flex/grid container and item mismatches, non-replaced inline sizing and vertical margins, static positioning, block-level `vertical-align`, `text-overflow` prerequisites, and floats on flex/grid items. It evaluates computed display/layout state, so valid uses such as `z-index` on a flex item and `gap` in a multi-column container stay unmarked.
+
 **Copy CSS** exports a computed snapshot of layout, box edges, colors and typography. **Tailwind** exports those values as theme-independent arbitrary-property utilities; this is a snapshot, not a reconstruction of the page's authoring configuration. The computed property disclosure supports filtering and per-value copying.
 
 Flex and grid containers expose native toggles backed by Chromium's `Overlay.setShowFlexOverlays` and `Overlay.setShowGridOverlays`. Grid overlays use the engine's actual tracks and labels rather than approximated child rectangles. Changing the inspected element or closing the dock clears its overlay.
@@ -22,6 +24,7 @@ Opt-in public captures select real MDN and W3C headings and render the **CSS** t
 
 - MDN: [light](Assets/Shaar_Inspector_CSS/mdn-light.png), [dark](Assets/Shaar_Inspector_CSS/mdn-dark.png).
 - W3C: [light](Assets/Shaar_Inspector_CSS/wcag-light.png), [dark](Assets/Shaar_Inspector_CSS/wcag-dark.png).
+- Inactive CSS hints: [before light](Assets/Shaar_Inspector_CSS/mdn-light.png) / [dark](Assets/Shaar_Inspector_CSS/mdn-dark.png); [after light](Assets/Shaar_Inspector_Inactive_CSS/css-light.png) / [dark](Assets/Shaar_Inspector_Inactive_CSS/css-dark.png).
 
 References: [CDP CSS](https://chromedevtools.github.io/devtools-protocol/tot/CSS/), [CDP Overlay](https://chromedevtools.github.io/devtools-protocol/tot/Overlay/), [CDP captureScreenshot](https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-captureScreenshot), [Tailwind arbitrary properties](https://tailwindcss.com/docs/adding-custom-styles#arbitrary-properties).
 

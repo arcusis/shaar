@@ -246,6 +246,14 @@ struct ShaarDevToolsPanel: View {
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
         .controlSize(.small)
         .padding(.top, 3)
+      if let failure = nativeFailure {
+        DisclosureGroup(ShellL10n.string("Technical details")) {
+          Text(failure)
+            .font(.system(size: 10, design: .monospaced))
+            .textSelection(.enabled)
+        }
+        .frame(maxWidth: 360)
+      }
       if model.section == .console && model.canTapLocalLogs {
         Button(ShellL10n.string("Connect server log file…"), action: chooseLogFile)
           .controlSize(.small)
@@ -258,13 +266,22 @@ struct ShaarDevToolsPanel: View {
   }
 
   private var unavailableMessage: String {
-    if model.section == .elements { return "Live DOM tree needs a newer Shaar engine" }
-    if model.section == .application { return "Live Application needs engine shaar.17" }
-    if model.section == .performance { return "Live Performance needs engine shaar.17" }
-    if model.section == .sources { return "Live Sources need engine shaar.17" }
+    if model.section == .elements { return "Live DOM tree is unavailable for this tab" }
+    if model.section == .application { return "Live Application is unavailable for this tab" }
+    if model.section == .performance { return "Live Performance is unavailable for this tab" }
+    if model.section == .sources { return "Live Sources are unavailable for this tab" }
     if model.section == .repro { return "Repro capture needs engine support" }
     if model.section == .viewports { return "Live Viewports need engine support" }
-    return "Live console and network need engine shaar.17"
+    return "Live console and network are unavailable for this tab"
+  }
+
+  private var nativeFailure: String? {
+    switch model.section {
+    case .application, .performance, .sources:
+      return model.nativePhase2Failure ?? model.nativeStreamFailure
+    default:
+      return model.nativeStreamFailure
+    }
   }
 
   private func chooseLogFile() {
@@ -308,17 +325,17 @@ struct ShaarDevToolsPanel: View {
       if model.application.area == .cookies { return "Cookies are scoped to this page" }
       return model.phase2.available
         ? "Application data is scoped to this tab"
-        : "Application data needs engine shaar.17"
+        : "Application data is unavailable for this tab"
     }
     if model.section == .performance {
       return model.phase2.available
         ? "Performance data is scoped to this tab"
-        : "Performance data needs engine shaar.17"
+        : "Performance data is unavailable for this tab"
     }
     if model.section == .sources {
       return model.phase2.available
         ? "Source resources are scoped to this tab"
-        : "Sources need engine shaar.17"
+        : "Sources are unavailable for this tab"
     }
     if model.section == .repro { return "Repro data is scoped to this tab" }
     if model.section == .viewports {
@@ -326,7 +343,7 @@ struct ShaarDevToolsPanel: View {
         ? "Viewports are scoped to this tab"
         : "Viewports need engine support"
     }
-    guard model.streamAvailable else { return "Console commands need engine shaar.17" }
+    guard model.streamAvailable else { return "Console commands are unavailable for this tab" }
     if model.section == .network { return "Network requests are scoped to this tab" }
     return "Open Console to evaluate JavaScript"
   }

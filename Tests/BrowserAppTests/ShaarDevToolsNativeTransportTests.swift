@@ -11,6 +11,7 @@ import Testing
 @MainActor private final class PanelRequesterFixture: ShaarPanelRequesting {
   var operations: [ShaarDevToolsOperation] = []
   var failOpen = false
+  var supportsPhase2 = false
 
   func request(
     _ operation: ShaarDevToolsOperation, target: SiteControlTarget, payload: [String: Any]
@@ -18,6 +19,13 @@ import Testing
     operations.append(operation)
     if failOpen && operation == .panelOpen { throw CancellationError() }
     if operation == .panelOpen { return ["schemaVersion": 1, "leaseID": 7] }
+    if operation == .panelPhase2Command {
+      if !supportsPhase2 { throw CancellationError() }
+      return [
+        "schemaVersion": 1, "commandID": payload["commandID"] as? Int ?? 0,
+        "items": [], "truncated": false,
+      ]
+    }
     return ["schemaVersion": 1]
   }
 }
@@ -65,6 +73,63 @@ import Testing
       requester: requester, windowID: UUID().uuidString)
     var iterator = transport.messages(for: target).makeAsyncIterator()
     #expect(await iterator.next() == .streamUnavailable)
+  }
+
+  @Test func phase2BecomesAvailableOnlyAfterNativeCommandSucceeds() async throws {
+    let requester = PanelRequesterFixture()
+    requester.supportsPhase2 = true
+    let panel = ShaarDevToolsNativeTransport(requester: requester, windowID: UUID().uuidString)
+    var panelIterator = panel.messages(for: target).makeAsyncIterator()
+    #expect(await panelIterator.next() == .streamAvailable)
+    let phase2 = ShaarPhase2NativeTransport(panel: panel)
+    var phase2Iterator = phase2.messages(for: target).makeAsyncIterator()
+    guard case .available? = await phase2Iterator.next() else {
+      Issue.record("Phase 2 command probe did not enable the panel")
+      return
+    }
+    let reply = try await phase2.execute(.resourceTree, for: target)
+    #expect(reply.commandID == 15)
+    #expect(requester.operations.filter({ $0 == .panelPhase2Command }).count == 2)
+  }
+
+  @Test func phase2StaysUnavailableWhenNativeOperationIsRejected() async {
+    let requester = PanelRequesterFixture()
+    let panel = ShaarDevToolsNativeTransport(requester: requester, windowID: UUID().uuidString)
+    var panelIterator = panel.messages(for: target).makeAsyncIterator()
+    #expect(await panelIterator.next() == .streamAvailable)
+    var phase2Iterator = ShaarPhase2NativeTransport(panel: panel)
+      .messages(for: target).makeAsyncIterator()
+    guard case .unavailable? = await phase2Iterator.next() else {
+      Issue.record("Unsupported phase 2 was shown as live")
+      return
+    }
+    #expect(panel.phase2Failure != nil)
+  }
+
+  @Test func phase2EventsReachTheSharedLeaseStream() async throws {
+    let requester = PanelRequesterFixture()
+    requester.supportsPhase2 = true
+    let panel = ShaarDevToolsNativeTransport(requester: requester, windowID: UUID().uuidString)
+    var panelIterator = panel.messages(for: target).makeAsyncIterator()
+    #expect(await panelIterator.next() == .streamAvailable)
+    var phase2Iterator = ShaarPhase2NativeTransport(panel: panel)
+      .messages(for: target).makeAsyncIterator()
+    guard case .available? = await phase2Iterator.next() else {
+      Issue.record("Phase 2 was unavailable")
+      return
+    }
+    panel.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(
+        12, data: [
+          "isLocalStorage": true, "key": "theme", "value": "dark", "truncated": false,
+        ]), sequence: 1)
+    guard case .event(let event)? = await phase2Iterator.next() else {
+      Issue.record("Missing scoped phase 2 event")
+      return
+    }
+    #expect(event.id == .storageAdded)
+    #expect(event.text["key"] == "theme")
   }
 
   private func event(_ id: Int, data: [String: Any]) throws -> Data {

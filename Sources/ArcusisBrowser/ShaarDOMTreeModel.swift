@@ -38,7 +38,7 @@ enum ShaarDOMMessage {
 }
 
 private struct ShaarDOMUnavailable: LocalizedError {
-  var errorDescription: String? { ShellL10n.string("Live DOM tree needs a newer Shaar engine") }
+  var errorDescription: String? { ShellL10n.string("Live DOM tree is unavailable for this tab") }
 }
 
 private struct ShaarDOMFailure: LocalizedError {

@@ -146,7 +146,7 @@ protocol ShaarLocalConsoleTransport {
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarLocalConsoleMessage>
 }
 
-/// Production stays unavailable until shaar.17 reports its live panel capability.
+/// A pending transport reports unavailable when no native panel is connected.
 struct ShaarDevToolsPendingTransport: ShaarDevToolsEventTransport {
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
     AsyncStream { continuation in
@@ -348,6 +348,12 @@ final class ShaarDevToolsModel {
   var networkCount: Int { events.reduce(0) { $0 + (isConsole($1) ? 0 : 1) } }
   var nativeRecordingFailure: String? {
     (transport as? ShaarDevToolsNativeTransport)?.recordingFailure
+  }
+  var nativeStreamFailure: String? {
+    (transport as? ShaarDevToolsNativeTransport)?.failure
+  }
+  var nativePhase2Failure: String? {
+    (transport as? ShaarDevToolsNativeTransport)?.phase2Failure
   }
   var nativeRecordingStarting: Bool {
     (transport as? ShaarDevToolsNativeTransport)?.recordingStarting ?? false

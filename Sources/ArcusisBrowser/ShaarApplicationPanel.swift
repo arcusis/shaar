@@ -195,10 +195,18 @@ struct ShaarApplicationPanel: View {
     VStack(spacing: 10) {
       Image(systemName: "bolt.slash")
         .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.tertiary)
-      Text(ShellL10n.string("Live Application needs engine shaar.17"))
+      Text(ShellL10n.string("Live Application is unavailable for this tab"))
         .font(.system(size: 12, weight: .medium))
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
         .controlSize(.small)
+      if let failure = phase2.nativeFailure {
+        DisclosureGroup(ShellL10n.string("Technical details")) {
+          Text(failure)
+            .font(.system(size: 10, design: .monospaced))
+            .textSelection(.enabled)
+        }
+        .frame(maxWidth: 360)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityIdentifier("shaar.devtools.streamUnavailable")

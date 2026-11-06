@@ -113,7 +113,7 @@ final class ShaarCookieModel {
 
   func refresh() async {
     guard let store, let target else {
-      failure = ShellL10n.string("Individual cookies need a newer Shaar engine")
+      failure = ShellL10n.string("Individual cookies are unavailable for this site")
       return
     }
     let revision = revision
@@ -127,7 +127,7 @@ final class ShaarCookieModel {
       failure = nil
     } catch {
       if revision == self.revision {
-        failure = ShellL10n.string("Individual cookies need a newer Shaar engine")
+        failure = ShellL10n.string("Individual cookies are unavailable for this site")
       }
     }
   }

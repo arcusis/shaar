@@ -60,6 +60,11 @@ std::optional<std::string> OpenPopup(shaar_engine*,
                                      const GURL&);
 bool ClosePopup(shaar_engine*, shaar_profile*, std::string_view);
 bool RegisterBundledManager(Profile*);
+std::string_view FrameworkDevToolsID(std::string_view name);
+bool FrameworkDevToolsManifestIsLocal(std::string_view manifest);
+bool ValidFrameworkDevToolsPath(const base::FilePath& root,
+                                const base::FilePath& requested);
+bool RegisterBundledFrameworkDevTools(Profile*, std::string* failure);
 void ClosePopupsForWindow(shaar_engine*, shaar_window*);
 void ClosePopupsForTab(shaar_engine*, shaar_tab*);
 void ClosePopupsForBrowser(shaar_engine*, Browser*);

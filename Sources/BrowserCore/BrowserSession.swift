@@ -357,7 +357,6 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       closedTabs.allSatisfy({ entry in
         spacesByID[entry.spaceID]?.profileID == entry.profileID && entry.index >= 0
           && Self.isPersistableURL(entry.tab.url)
-          && (entry.tab.folderID == nil || entry.tab.isPinned)
       })
     else { throw SessionError.invalidState }
     for space in spaces {

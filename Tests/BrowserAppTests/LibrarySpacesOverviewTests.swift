@@ -78,6 +78,28 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     }
   }
 
+  func testSearchForTodayTabKeepsItsFolderContext() throws {
+    let profile = BrowserProfile(name: "Daily")
+    let parent = BrowserFolder(name: "Projects", isPinned: false)
+    let child = BrowserFolder(name: "Notes", parentID: parent.id, isPinned: false)
+    let tab = BrowserTab(
+      url: URL(string: "https://example.com/needle")!, title: "Needle page",
+      isPinned: false, folderID: child.id)
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Work", symbol: "tray", tint: .ocean,
+      tabs: [tab], selectedTabID: tab.id, folders: [parent, child])
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+    let expected = ["folder-\(parent.id)", "folder-\(child.id)", "tab-\(tab.id)"]
+    XCTAssertEqual(
+      LibrarySpacesOverviewModel.cards(in: session, query: "Needle").first?.items.map(\.id),
+      expected)
+    XCTAssertEqual(
+      LibrarySpacesOverviewModel.cards(in: session, query: "Projects").first?.items.map(\.id),
+      expected)
+  }
+
   func testSearchRetainsNestedFolderContextForMatchingTabOrParentFolder() throws {
     let profile = BrowserProfile(name: "Daily")
     let parent = BrowserFolder(name: "Research")

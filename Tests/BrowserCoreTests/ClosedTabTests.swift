@@ -88,6 +88,26 @@ import Testing
   try session.validate()
 }
 
+@Test func closingTodayFolderTabKeepsRecoverySessionLoadable() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let tabID = session.open(URL(string: "https://today.example/page")!)!
+  let folderID = session.addFolder(name: "Later", in: spaceID, section: .today)!
+  let moved = session.moveTab(tabID, from: spaceID, to: spaceID, folderID: folderID)
+  #expect(moved)
+
+  session.closeTab(tabID)
+  try session.validate()
+  let data = try JSONEncoder().encode(session)
+  var restored = try JSONDecoder().decode(BrowserSession.self, from: data)
+  #expect(restored.recentlyClosedTabs(in: spaceID).first?.tab.folderID == folderID)
+  #expect(restored.recentlyClosedTabs(in: spaceID).first?.tab.isPinned == false)
+
+  let removed = restored.removeFolder(folderID, in: spaceID)
+  #expect(removed)
+  try restored.validate()
+}
+
 @Test func recoveryCapAndClearAffectOnlyTheirOwningSpace() throws {
   var session = BrowserSession.fresh()
   let space = session.selectedSpaceID

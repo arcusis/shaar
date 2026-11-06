@@ -132,6 +132,38 @@ import Testing
     #expect(event.text["key"] == "theme")
   }
 
+  @Test func domEventsShareLeaseWithoutInterruptingConsole() async throws {
+    let requester = PanelRequesterFixture()
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    var dom = transport.domSignals(for: target).makeAsyncIterator()
+    var shell = transport.messages(for: target).makeAsyncIterator()
+    #expect(await shell.next() == .streamAvailable)
+    guard case .lease(7) = await dom.next() else {
+      Issue.record("DOM observer did not receive the shared lease")
+      return
+    }
+    transport.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(20, data: ["truncated": false]), sequence: 1)
+    guard case .event(let mutationEvent) = await dom.next(),
+      mutationEvent.mutation == .documentUpdated
+    else {
+      Issue.record("DOM observer did not receive a scoped mutation")
+      return
+    }
+    transport.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(1, data: ["text": "still live", "level": "info", "truncated": false]),
+      sequence: 2)
+    guard case .event(.console(let console)) = await shell.next() else {
+      Issue.record("DOM observation interrupted Console")
+      return
+    }
+    #expect(console.message == "still live")
+    #expect(!requester.operations.contains(.panelClose))
+  }
+
   private func event(_ id: Int, data: [String: Any]) throws -> Data {
     try JSONSerialization.data(withJSONObject: [
       "schemaVersion": 1, "kind": "panelEvent", "leaseID": 7,

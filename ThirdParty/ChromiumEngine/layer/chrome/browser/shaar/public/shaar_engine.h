@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 5u
+#define SHAAR_ENGINE_ABI_MINOR 6u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -391,6 +391,12 @@ typedef struct {
 SHAAR_EXPORT shaar_error_code shaar_tab_get_probe_state(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
     shaar_tab_probe_state *out, shaar_error *error);
+/* Borrowed PNG bytes remain valid until the next favicon query on this tab or
+ * its close. The caller copies them before returning to its own event loop.
+ * The scope must own the live tab in the supplied window. */
+SHAAR_EXPORT shaar_error_code shaar_tab_favicon_png(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_bytes *out_png, shaar_error *error);
 /* Borrowed until POPUP_CLOSE or its owning tab or window closes. */
 SHAAR_EXPORT void *shaar_extension_popup_view(
     shaar_engine *, shaar_window *, shaar_bytes popup_id);

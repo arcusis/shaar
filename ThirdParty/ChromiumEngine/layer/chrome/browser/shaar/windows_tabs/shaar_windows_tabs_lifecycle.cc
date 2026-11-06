@@ -17,8 +17,11 @@
 
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
+#include "components/favicon/content/content_favicon_driver.h"
+#include "components/favicon/core/favicon_driver_observer.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/extensions/shaar_extensions.h"
@@ -33,6 +36,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/gfx/image/image.h"
 
 struct shaar_window {
   shaar_engine* engine;
@@ -45,14 +49,27 @@ struct shaar_window {
 
 void CleanupTab(uint64_t serial);
 
-struct shaar_tab : content::WebContentsObserver {
+struct shaar_tab : content::WebContentsObserver,
+                   favicon::FaviconDriverObserver {
   shaar_tab(content::WebContents* contents, uint64_t serial)
       : content::WebContentsObserver(contents), serial(serial) {}
   void WebContentsDestroyed() override {
+    favicon_observation.Reset();
     // Drop the WebContents pointer before a queued view update can request it.
     shaar::windows_tabs::Registry().UnbindTab(engine, window, this);
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&CleanupTab, serial));
+  }
+  void OnFaviconUpdated(favicon::FaviconDriver* driver,
+                        NotificationIconType icon_type,
+                        const GURL& icon_url,
+                        bool icon_url_changed,
+                        const gfx::Image& image) override {
+    if (icon_type != NON_TOUCH_16_DIP)
+      return;
+    favicon_png.clear();
+    if (navigation)
+      navigation->EmitInitialState();
   }
   const uint64_t serial;
   shaar_engine* engine;
@@ -65,6 +82,10 @@ struct shaar_tab : content::WebContentsObserver {
   std::string window_id;
   std::string tab_id;
   std::unique_ptr<shaar::navigation::NavigationObserver> navigation;
+  base::ScopedObservation<favicon::FaviconDriver,
+                          favicon::FaviconDriverObserver>
+      favicon_observation{this};
+  std::string favicon_png;
 };
 
 namespace {
@@ -413,6 +434,10 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
   handle->navigation = std::make_unique<shaar::navigation::NavigationObserver>(
       engine, raw_contents, handle->profile_id, handle->session_id,
       handle->window_id, handle->tab_id);
+  if (auto* driver = favicon::ContentFaviconDriver::FromWebContents(
+          raw_contents)) {
+    handle->favicon_observation.Observe(driver);
+  }
   auto* raw = handle.get();
   if (!registry.ReserveTab(engine, window, raw,
                            std::string(tab_id.data, tab_id.size)))
@@ -447,6 +472,44 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_close(
   if (index < 0)
     return Result(SHAAR_NOT_FOUND, error);
   model->CloseWebContentsAt(index, 0);
+  return Result(SHAAR_OK, error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_favicon_png(
+    shaar_engine* engine, shaar_scope scope, shaar_window* window,
+    shaar_tab* tab, shaar_bytes* out_png, shaar_error* error) {
+  if (out_png)
+    *out_png = {};
+  if (!pthread_main_np() || !engine || !window || !tab || !out_png ||
+      scope.size < sizeof(scope) ||
+      static_cast<bool>(scope.profile) ==
+          static_cast<bool>(scope.private_session)) {
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  }
+  auto found = tab_handles.find(tab);
+  if (found == tab_handles.end() || !windows.contains(window) ||
+      tab->engine != engine || tab->window != window) {
+    return Result(SHAAR_NOT_FOUND, error);
+  }
+  if (tab->profile != scope.profile ||
+      tab->private_session != scope.private_session) {
+    return Result(scope.private_session ? SHAAR_WRONG_SESSION
+                                        : SHAAR_WRONG_PROFILE, error);
+  }
+  content::WebContents* contents =
+      shaar::windows_tabs::Registry().FindWebContents(engine, window, tab);
+  if (!contents)
+    return Result(SHAAR_NOT_FOUND, error);
+  auto* driver = favicon::ContentFaviconDriver::FromWebContents(contents);
+  if (!driver || !driver->FaviconIsValid())
+    return Result(SHAAR_NOT_FOUND, error);
+  scoped_refptr<base::RefCountedMemory> png =
+      driver->GetFavicon().As1xPNGBytes();
+  if (!png || png->size() == 0 || png->size() > 256 * 1024)
+    return Result(SHAAR_NOT_FOUND, error);
+  tab->favicon_png.assign(reinterpret_cast<const char*>(png->data()),
+                          png->size());
+  *out_png = {tab->favicon_png.data(), tab->favicon_png.size()};
   return Result(SHAAR_OK, error);
 }
 

@@ -19,6 +19,7 @@ enum ShaarNetworkRuleError: LocalizedError {
   case invalidAction
   case invalidHeaders
   case invalidBody
+  case invalidProject
   case unavailable
 
   var errorDescription: String? {
@@ -27,6 +28,7 @@ enum ShaarNetworkRuleError: LocalizedError {
     case .invalidAction: "Check the rule action and its values."
     case .invalidHeaders: "Header names and values must be valid and bounded."
     case .invalidBody: "The response body must be a regular file or text up to 1 MB."
+    case .invalidProject: "Choose an existing project folder."
     case .unavailable: "Network rules need engine support."
     }
   }
@@ -216,6 +218,7 @@ struct ShaarNetworkRulesPendingTransport: ShaarNetworkRulesTransport {
 @MainActor @Observable
 final class ShaarNetworkRulesModel {
   private(set) var target: SiteControlTarget
+  private(set) var projectRoot: String?
   private(set) var rules: [ShaarNetworkRule] = []
   private(set) var activeCount = 0
   var draft: ShaarNetworkRule?
@@ -224,10 +227,16 @@ final class ShaarNetworkRulesModel {
   @ObservationIgnored private let store: ShaarNetworkRuleStore
   @ObservationIgnored private let transport: any ShaarNetworkRulesTransport
   @ObservationIgnored private var generation = 0
+  @ObservationIgnored private var pendingApply: Task<Void, Error>?
 
   var available: Bool { transport.available }
   var project: String? {
-    target.origin.map { "\(target.profileID.uuidString)|\($0)" }
+    if let projectRoot { return "\(target.profileID.uuidString)|folder:\(projectRoot)" }
+    return target.origin.map { "\(target.profileID.uuidString)|origin:\($0)" }
+  }
+  var projectLabel: String {
+    if let projectRoot { return URL(fileURLWithPath: projectRoot).lastPathComponent }
+    return target.origin ?? "No project"
   }
 
   init(
@@ -291,7 +300,7 @@ final class ShaarNetworkRulesModel {
     let enabled = rules.filter(\.enabled)
     guard enabled.count <= 32 else { throw ShaarNetworkRuleError.invalidAction }
     let resolved = try enabled.map(ShaarResolvedNetworkRule.init)
-    try await transport.apply(resolved, to: target)
+    try await send(resolved, to: target)
     guard self.generation == generation, self.target == target else { return }
     activeCount = enabled.count
     failure = nil
@@ -306,14 +315,57 @@ final class ShaarNetworkRulesModel {
     }
   }
 
-  func updateTarget(_ target: SiteControlTarget) {
-    guard self.target != target else { return }
+  func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
+    guard self.target != target || committed else { return }
+    let changed = self.target != target
     self.target = target
+    if changed || committed { projectRoot = nil }
     generation += 1
     activeCount = 0
     draft = nil
     showingRules = false
+    if changed || committed { load() }
+  }
+
+  func useProjectRoot(_ candidate: String?) async throws {
+    let root = try Self.canonicalProjectRoot(candidate)
+    guard root != projectRoot else { return }
+    let currentTarget = target
+    generation += 1
+    let generation = generation
+    if available { try await send([], to: currentTarget) }
+    guard target == currentTarget, self.generation == generation else { return }
+    projectRoot = root
+    activeCount = 0
+    draft = nil
     load()
+    if available { try await activate() }
+  }
+
+  private func send(_ rules: [ShaarResolvedNetworkRule], to target: SiteControlTarget) async throws
+  {
+    let previous = pendingApply
+    let transport = transport
+    let task = Task {
+      _ = try? await previous?.value
+      try await transport.apply(rules, to: target)
+    }
+    pendingApply = task
+    try await task.value
+  }
+
+  private static func canonicalProjectRoot(_ candidate: String?) throws -> String? {
+    guard let candidate else { return nil }
+    guard candidate.hasPrefix("/"), candidate.utf8.count <= 1_024 else {
+      throw ShaarNetworkRuleError.invalidProject
+    }
+    let folder = URL(fileURLWithPath: candidate).resolvingSymlinksInPath().standardizedFileURL
+    var isDirectory: ObjCBool = false
+    guard folder.path != "/",
+      FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory),
+      isDirectory.boolValue
+    else { throw ShaarNetworkRuleError.invalidProject }
+    return folder.path
   }
 
   func close() {

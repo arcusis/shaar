@@ -35,6 +35,15 @@ struct ShaarNetworkRulesEditor: View {
       }
       .padding(.horizontal, 12).frame(height: 34)
       Divider()
+      HStack(spacing: 4) {
+        Text(ShellL10n.string(model.projectRoot == nil ? "Site" : "Project"))
+          .foregroundStyle(.secondary)
+        Text(model.projectLabel).lineLimit(1).truncationMode(.middle)
+        Spacer(minLength: 0)
+      }
+      .font(.system(size: 10))
+      .padding(.horizontal, 12).frame(height: 26)
+      Divider()
       if !model.available {
         unavailable
       } else if model.draft != nil {

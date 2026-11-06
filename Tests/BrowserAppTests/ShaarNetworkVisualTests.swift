@@ -129,6 +129,19 @@ import XCTest
         ShaarDevToolsPanel(model: withRules, inspector: inspector, openChromium: {}),
         named: "after-network-rules-\(suffix)", scheme: scheme,
         appearance: appearance, root: rulesEvidence)
+      let projectFolder = rulesRoot.appending(path: "local-dashboard")
+      try FileManager.default.createDirectory(
+        at: projectFolder, withIntermediateDirectories: true)
+      try await withRules.rules.useProjectRoot(projectFolder.path)
+      withRules.rules.create(from: request)
+      withRules.rules.draft?.enabled = true
+      withRules.rules.draft?.bodyText = "{\"orders\":[],\"source\":\"local fixture\"}"
+      try await withRules.rules.saveDraft()
+      withRules.rules.edit(try XCTUnwrap(withRules.rules.rules.first))
+      try capture(
+        ShaarDevToolsPanel(model: withRules, inspector: inspector, openChromium: {}),
+        named: "project-network-rules-\(suffix)", scheme: scheme,
+        appearance: appearance, root: rulesEvidence)
       withRules.close()
 
       let unavailableRules = ShaarDevToolsModel(

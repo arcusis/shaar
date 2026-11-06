@@ -61,6 +61,9 @@ jobs:
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           category: /language:${{ matrix.language }}
+          # Merge-queue refs can disappear before GitHub accepts the SARIF
+          # upload. PR and scheduled runs publish the same analysis on stable refs.
+          upload: ${{ github.event_name == 'merge_group' && 'never' || 'always' }}
           wait-for-processing: true
       - name: Require extraction of every tracked Swift source
         if: matrix.language == 'swift'

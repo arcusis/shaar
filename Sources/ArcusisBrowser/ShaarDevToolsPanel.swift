@@ -94,6 +94,7 @@ struct ShaarDevToolsPanel: View {
       }
     }
     .accessibilityIdentifier("shaar.devtools.shell")
+    .overlay(alignment: .top) { commandMenuOverlay }
   }
 
   private var toolbar: some View {
@@ -119,6 +120,7 @@ struct ShaarDevToolsPanel: View {
           .accessibilityLabel(ShellL10n.string("More panels"))
         }
         Spacer(minLength: 0)
+        commandMenuButton
         optionsMenu
         Button {
           model.close()
@@ -139,7 +141,7 @@ struct ShaarDevToolsPanel: View {
 
   private func visibleSections(width: CGFloat, showsLabels: Bool) -> [ShaarDevToolsSection] {
     let tabWidth: CGFloat = showsLabels ? 73 : 33
-    let room = max(0, width - 82)
+    let room = max(0, width - 112)
     let all = model.sections
     let fit = min(all.count, max(1, Int(room / tabWidth)))
     if fit == all.count { return all }
@@ -187,6 +189,32 @@ struct ShaarDevToolsPanel: View {
     .accessibilityValue(model.section == section ? ShellL10n.string("Selected") : "")
     .accessibilityAddTraits(model.section == section ? .isSelected : [])
     .accessibilityIdentifier("shaar.devtools.\(section.rawValue.lowercased())")
+  }
+
+  private var commandMenuButton: some View {
+    Button(action: model.toggleCommandMenu) {
+      Image(systemName: "magnifyingglass")
+        .font(.system(size: 12, weight: .medium))
+        .frame(width: 27, height: 28)
+    }
+    .buttonStyle(.plain)
+    .help(ShellL10n.string("Open the command menu. Command-Shift-P."))
+    .accessibilityLabel(ShellL10n.string("Command menu"))
+    .accessibilityIdentifier("shaar.devtools.commandMenuButton")
+  }
+
+  @ViewBuilder private var commandMenuOverlay: some View {
+    if model.commandMenuOpen {
+      ZStack(alignment: .top) {
+        Color.clear
+          .contentShape(Rectangle())
+          .onTapGesture(perform: model.closeCommandMenu)
+          .accessibilityIdentifier("shaar.devtools.commandMenuDismiss")
+        ShaarDevToolsCommandMenu(model: model)
+          .padding(.top, 44)
+          .padding(.horizontal, 16)
+      }
+    }
   }
 
   private var optionsMenu: some View {
@@ -438,6 +466,10 @@ struct ShaarDevToolsPanel: View {
   }
 
   private func handleExitCommand() {
+    if model.commandMenuOpen {
+      model.closeCommandMenu()
+      return
+    }
     switch model.section {
     case .elements where !model.dom.search.isEmpty:
       model.dom.search = ""

@@ -1,6 +1,11 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Command menu": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Command menu"}},"he":{"stringUnit":{"state":"translated","value":"תפריט פקודות"}}}},
+    "Search DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Search DevTools"}},"he":{"stringUnit":{"state":"translated","value":"חיפוש בכלי הפיתוח"}}}},
+    "No matching commands": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No matching commands"}},"he":{"stringUnit":{"state":"translated","value":"אין פקודות תואמות"}}}},
+    "Open the command menu. Command-Shift-P.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open the command menu. Command-Shift-P."}},"he":{"stringUnit":{"state":"translated","value":"פתיחת תפריט הפקודות. Command-Shift-P."}}}},
+    "Type to search panels, dock positions, console, network, sources, and elements.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Type to search panels, dock positions, console, network, sources, and elements."}},"he":{"stringUnit":{"state":"translated","value":"הקלידו כדי לחפש בחלוניות, בעיגון, במסוף, ברשת, במקורות ובאלמנטים."}}}},
     "Comparison": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Comparison"}},"he":{"stringUnit":{"state":"translated","value":"השוואה"}}}},
     "WebKit": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"WebKit"}},"he":{"stringUnit":{"state":"translated","value":"WebKit"}}}},
     "Chromium": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Chromium"}},"he":{"stringUnit":{"state":"translated","value":"Chromium"}}}},

@@ -218,6 +218,18 @@ final class PrivateBrowserHost {
     }
   }
 
+  @discardableResult
+  func presentDevToolsCommandMenu() -> Bool {
+    if let page = activeOwner?.page, page.toggleDevToolsCommandMenu() { return true }
+    for owner in owners.values
+    where ShaarDevToolsCommandShortcut.toggleFloating(
+      shells: owner.page.shaarDevTools.values, window: keyWindow())
+    {
+      return true
+    }
+    return false
+  }
+
   func perform(_ command: BrowserMenuCommand) {
     guard let owner = activeOwner, canPerform(command) else { return }
     let store = owner.store

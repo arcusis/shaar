@@ -221,6 +221,15 @@ final class PrivatePageSession {
     if model.isOpen { model.close() } else { model.open() }
   }
 
+  @discardableResult
+  func toggleDevToolsCommandMenu() -> Bool {
+    guard let target = inspectorTarget,
+      let shell = shaarDevTools[target.tabID], shell.isOpen
+    else { return false }
+    shell.toggleCommandMenu()
+    return true
+  }
+
   func toggleDeveloperTools() {
     guard let target = inspectorTarget else { return }
     if let shell = shaarDevTools[target.tabID], shell.isOpen {

@@ -12,6 +12,16 @@ struct InspectorStylesView: View {
   @State private var important = false
   @State private var expanded: Set<Int> = [0]
   @State private var showComputed = false
+  @State private var draftRule: Int?
+  @State private var draftKey = ""
+  @State private var draftName = ""
+  @State private var draftValue = ""
+  @State private var draftImportant = false
+  @State private var addingRule: Int?
+  @State private var addedName = ""
+  @State private var addedValue = ""
+  @State private var showNewRule = false
+  @State private var newSelector = ""
 
   var body: some View {
     ScrollView {
@@ -96,6 +106,7 @@ struct InspectorStylesView: View {
                 if model.busy && model.rules.isEmpty {
                   ProgressView().controlSize(.small).frame(maxWidth: .infinity)
                 }
+                newRuleControl
                 ForEach(model.rules) { rule in
                   DisclosureGroup(
                     isExpanded: Binding(
@@ -105,32 +116,9 @@ struct InspectorStylesView: View {
                   ) {
                     VStack(alignment: .leading, spacing: 2) {
                       ForEach(rule.declarations) { declaration in
-                        VStack(alignment: .leading, spacing: 1) {
-                          Button {
-                            property = declaration.name
-                            important = declaration.value.hasSuffix(" !important")
-                            value =
-                              important ? String(declaration.value.dropLast(11)) : declaration.value
-                          } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                              Text(declaration.name + ":").foregroundStyle(.secondary)
-                              Text(declaration.value).foregroundStyle(.primary)
-                              Spacer(minLength: 0)
-                            }.environment(\.layoutDirection, .leftToRight).font(
-                              .system(size: 11, design: .monospaced)
-                            ).multilineTextAlignment(
-                              .leading
-                            )
-                            .padding(.vertical, 3).contentShape(Rectangle())
-                          }.buttonStyle(.plain).help(
-                            InspectorL10n.format(
-                              "Override %@ on this element", arguments: [.string(declaration.name)])
-                          )
-                          if let reason = model.inactiveHints[declaration.name.lowercased()] {
-                            InspectorInactiveCSSHint(reason: reason)
-                          }
-                        }
+                        declarationRow(rule, declaration)
                       }
+                      if rule.editable { addPropertyRow(rule) }
                     }.padding(.leading, 2).padding(.top, 5)
                   } label: {
                     VStack(alignment: .leading, spacing: 4) {
@@ -139,6 +127,9 @@ struct InspectorStylesView: View {
                       )
                       .lineLimit(3).fixedSize(horizontal: false, vertical: true)
                       .environment(\.layoutDirection, .leftToRight)
+                      if let caption = ruleCaption(rule) {
+                        Text(caption).font(.system(size: 10)).foregroundStyle(.secondary)
+                      }
                       Text(sourceLabel(rule.source)).font(.system(size: 10)).foregroundStyle(
                         .secondary
                       )
@@ -235,6 +226,237 @@ struct InspectorStylesView: View {
         property: property.trimmingCharacters(in: .whitespacesAndNewlines), value: value,
         important: important)
     }
+  }
+
+  @ViewBuilder private var newRuleControl: some View {
+    if showNewRule {
+      VStack(alignment: .leading, spacing: 6) {
+        TextField(InspectorL10n.string("Selector"), text: $newSelector)
+          .textFieldStyle(.roundedBorder)
+          .font(.system(size: 11, design: .monospaced))
+          .environment(\.layoutDirection, .leftToRight)
+          .onSubmit(commitNewRule)
+        HStack {
+          Button(InspectorL10n.string("Cancel")) {
+            showNewRule = false
+            newSelector = ""
+          }
+          Spacer()
+          Button(InspectorL10n.string("Apply"), action: commitNewRule)
+            .disabled(trimmed(newSelector).isEmpty || model.busy)
+        }
+      }.controlSize(.small).font(.system(size: 11))
+    } else {
+      Button(InspectorL10n.string("New rule")) {
+        newSelector = inspector.selection?.css ?? ""
+        showNewRule = true
+      }
+      .controlSize(.small).font(.system(size: 11))
+    }
+  }
+
+  private func declarationRow(
+    _ rule: InspectorRule, _ declaration: InspectorDeclaration
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 1) {
+      if isDraft(rule, declaration) {
+        draftFields(rule, declaration)
+      } else if rule.editable {
+        editableDeclaration(rule, declaration)
+      } else {
+        overrideDeclaration(declaration)
+      }
+      if let reason = model.inactiveHints[declaration.name.lowercased()],
+        !isDraft(rule, declaration)
+      {
+        InspectorInactiveCSSHint(reason: reason)
+      }
+    }
+  }
+
+  private func editableDeclaration(
+    _ rule: InspectorRule, _ declaration: InspectorDeclaration
+  ) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 4) {
+      Toggle(
+        "",
+        isOn: Binding(
+          get: { !declaration.disabled },
+          set: { enabled in
+            Task { await model.setDeclaration(rule, declaration, enabled: enabled) }
+          }
+        )
+      )
+      .toggleStyle(.checkbox).labelsHidden().disabled(model.busy)
+      .accessibilityLabel(
+        InspectorL10n.string(declaration.disabled ? "Turn property on" : "Turn property off")
+      )
+      if declaration.disabled {
+        declarationLabel(declaration)
+      } else {
+        Button {
+          beginDraft(rule, declaration)
+        } label: {
+          declarationLabel(declaration)
+        }.buttonStyle(.plain)
+      }
+    }
+  }
+
+  private func overrideDeclaration(_ declaration: InspectorDeclaration) -> some View {
+    Button {
+      property = declaration.name
+      important = declaration.important
+      value = declaration.plainValue
+    } label: {
+      declarationLabel(declaration)
+    }.buttonStyle(.plain).help(
+      InspectorL10n.format(
+        "Override %@ on this element", arguments: [.string(declaration.name)])
+    )
+  }
+
+  private func declarationLabel(_ declaration: InspectorDeclaration) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 4) {
+      Text(declaration.name + ":")
+        .foregroundStyle(declaration.disabled ? .tertiary : .secondary)
+        .strikethrough(declaration.disabled)
+      Text(declaration.value)
+        .foregroundStyle(declaration.disabled ? .tertiary : .primary)
+        .strikethrough(declaration.disabled)
+      Spacer(minLength: 0)
+    }
+    .environment(\.layoutDirection, .leftToRight)
+    .font(.system(size: 11, design: .monospaced))
+    .multilineTextAlignment(.leading)
+    .padding(.vertical, 3)
+    .contentShape(Rectangle())
+  }
+
+  private func draftFields(
+    _ rule: InspectorRule, _ declaration: InspectorDeclaration
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 6) {
+        TextField(InspectorL10n.string("property"), text: $draftName)
+          .frame(width: 104)
+          .accessibilityLabel(InspectorL10n.string("CSS property"))
+        Text(":").foregroundStyle(.secondary)
+        TextField(InspectorL10n.string("value"), text: $draftValue)
+          .accessibilityLabel(InspectorL10n.string("CSS value"))
+      }
+      .environment(\.layoutDirection, .leftToRight)
+      .font(.system(size: 11, design: .monospaced))
+      .textFieldStyle(.roundedBorder)
+      .onSubmit { commitDraft(rule, declaration) }
+      HStack {
+        Toggle("!important", isOn: $draftImportant).toggleStyle(.checkbox)
+          .font(.system(size: 11, design: .monospaced))
+        Spacer()
+        Button(InspectorL10n.string("Cancel")) { clearDraft() }
+        Button(InspectorL10n.string("Apply")) { commitDraft(rule, declaration) }
+          .disabled(trimmed(draftName).isEmpty || model.busy)
+      }.controlSize(.small).font(.system(size: 11))
+    }
+  }
+
+  @ViewBuilder private func addPropertyRow(_ rule: InspectorRule) -> some View {
+    if addingRule == rule.id {
+      VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 6) {
+          TextField(InspectorL10n.string("property"), text: $addedName)
+            .frame(width: 104)
+            .accessibilityLabel(InspectorL10n.string("CSS property"))
+          Text(":").foregroundStyle(.secondary)
+          TextField(InspectorL10n.string("value"), text: $addedValue)
+            .accessibilityLabel(InspectorL10n.string("CSS value"))
+        }
+        .environment(\.layoutDirection, .leftToRight)
+        .font(.system(size: 11, design: .monospaced))
+        .textFieldStyle(.roundedBorder)
+        .onSubmit { commitAddedProperty(rule) }
+        HStack {
+          Button(InspectorL10n.string("Cancel")) { clearAddedProperty() }
+          Spacer()
+          Button(InspectorL10n.string("Apply")) { commitAddedProperty(rule) }
+            .disabled(trimmed(addedName).isEmpty || trimmed(addedValue).isEmpty || model.busy)
+        }.controlSize(.small).font(.system(size: 11))
+      }
+    } else {
+      Button(InspectorL10n.string("Add property")) {
+        addedName = ""
+        addedValue = ""
+        addingRule = rule.id
+      }
+      .controlSize(.small).font(.system(size: 11)).disabled(model.busy)
+    }
+  }
+
+  private func ruleCaption(_ rule: InspectorRule) -> String? {
+    if rule.note == "Inherited" { return InspectorL10n.string("Inherited") }
+    guard rule.note.hasPrefix("::") else { return nil }
+    let name = String(rule.note.dropFirst(2))
+    guard !name.isEmpty else { return nil }
+    return InspectorL10n.format("Pseudo-element %@", arguments: [.string(name)])
+  }
+
+  private func isDraft(_ rule: InspectorRule, _ declaration: InspectorDeclaration) -> Bool {
+    draftRule == rule.id && draftKey == declaration.id
+  }
+
+  private func beginDraft(_ rule: InspectorRule, _ declaration: InspectorDeclaration) {
+    draftRule = rule.id
+    draftKey = declaration.id
+    draftName = declaration.name
+    draftValue = declaration.plainValue
+    draftImportant = declaration.important
+  }
+
+  private func clearDraft() {
+    draftRule = nil
+    draftKey = ""
+    draftName = ""
+    draftValue = ""
+    draftImportant = false
+  }
+
+  private func commitDraft(_ rule: InspectorRule, _ declaration: InspectorDeclaration) {
+    let name = trimmed(draftName)
+    guard !name.isEmpty else { return }
+    let replacing = name == declaration.name ? nil : declaration.name
+    let nextValue = draftValue
+    let nextImportant = draftImportant
+    clearDraft()
+    Task {
+      await model.editRule(
+        rule, property: name, value: nextValue, important: nextImportant, replacing: replacing)
+    }
+  }
+
+  private func commitNewRule() {
+    let selector = trimmed(newSelector)
+    guard !selector.isEmpty else { return }
+    showNewRule = false
+    newSelector = ""
+    Task { await model.addRule(selector: selector) }
+  }
+
+  private func commitAddedProperty(_ rule: InspectorRule) {
+    let name = trimmed(addedName)
+    let nextValue = trimmed(addedValue)
+    guard !name.isEmpty, !nextValue.isEmpty else { return }
+    clearAddedProperty()
+    Task { await model.editRule(rule, property: name, value: nextValue, important: false) }
+  }
+
+  private func clearAddedProperty() {
+    addingRule = nil
+    addedName = ""
+    addedValue = ""
+  }
+
+  private func trimmed(_ text: String) -> String {
+    text.trimmingCharacters(in: .whitespacesAndNewlines)
   }
   private func sourceLabel(_ source: String) -> String {
     if source.hasPrefix("Stylesheet ") {

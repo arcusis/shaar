@@ -11,14 +11,27 @@ struct InspectorDeclaration: Identifiable, Equatable {
   let name: String
   let value: String
   var key: String? = nil
+  var disabled = false
   var id: String { key ?? name }
+  var important: Bool { value.hasSuffix(" !important") }
+  var plainValue: String { important ? String(value.dropLast(11)) : value }
+}
+
+enum InspectorRuleOrigin: Equatable {
+  case inline
+  case author
+  case userAgent
 }
 
 struct InspectorRule: Identifiable {
   let id: Int
   let selector: String
   let source: String
-  let declarations: [InspectorDeclaration]
+  var declarations: [InspectorDeclaration]
+  var origin: InspectorRuleOrigin = .author
+  var editable = false
+  var matchText = ""
+  var note = ""
 }
 
 @MainActor @Observable
@@ -104,7 +117,8 @@ final class InspectorStylesModel {
       }
       let (matched, values) = try await inspector.withSelectedNode { node in
         let matched = try await inspector.call(
-          "CSS.getMatchedStylesForNode", params: ["nodeId": node])
+          "CSS.getMatchedStylesForNode",
+          params: ["nodeId": node, "includePseudo": true, "includeInherited": true])
         let values = try await inspector.call(
           "CSS.getComputedStyleForNode", params: ["nodeId": node])
         return (matched, values)
@@ -122,31 +136,36 @@ final class InspectorStylesModel {
       if let inline = matched["inlineStyle"] as? [String: Any],
         !declarations(inline).isEmpty
       {
-        nextRules.append(
-          InspectorRule(
-            id: 0, selector: "element.style", source: "Inline overrides",
-            declarations: declarations(inline)))
+        nextRules.append(inlineRule(inline))
       }
-      for row in ((matched["matchedCSSRules"] as? [[String: Any]]) ?? []).suffix(80).reversed() {
-        guard let rule = row["rule"] as? [String: Any], let style = rule["style"] as? [String: Any],
-          let selectors = rule["selectorList"] as? [String: Any],
-          let selector = selectors["text"] as? String
-        else { continue }
-        let sheet = rule["styleSheetId"] as? String
-        let line = ((style["range"] as? [String: Any])?["startLine"] as? Int).map { $0 + 1 }
-        let location: String
-        if let sheet {
-          location =
-            await source(for: sheet, selector: selector, style: style, inspector: inspector)
-            + (line.map { ":\($0)" } ?? "")
-        } else {
-          location =
-            rule["origin"] as? String == "user-agent" ? "Browser default" : "Source unavailable"
+      await appendMatches(
+        (matched["matchedCSSRules"] as? [[String: Any]]) ?? [], note: "", limit: 80,
+        into: &nextRules, inspector: inspector)
+      for pseudo in ((matched["pseudoElements"] as? [[String: Any]]) ?? []).prefix(8) {
+        let name = (pseudo["pseudoType"] as? String).map { "::\($0)" } ?? ""
+        await appendMatches(
+          (pseudo["matches"] as? [[String: Any]]) ?? [], note: name, limit: 4,
+          into: &nextRules, inspector: inspector)
+      }
+      for ancestor in ((matched["inherited"] as? [[String: Any]]) ?? []).prefix(4) {
+        if let inline = ancestor["inlineStyle"] as? [String: Any], !declarations(inline).isEmpty,
+          nextRules.count < 120
+        {
+          let inherited = inlineRule(inline)
+          nextRules.append(
+            InspectorRule(
+              id: nextRules.count, selector: inherited.selector, source: inherited.source,
+              declarations: inherited.declarations, origin: .inline, editable: false,
+              note: "Inherited"))
         }
-        nextRules.append(
-          InspectorRule(
-            id: nextRules.count, selector: String(selector.prefix(2048)), source: location,
-            declarations: declarations(style)))
+        await appendMatches(
+          (ancestor["matchedCSSRules"] as? [[String: Any]]) ?? [], note: "Inherited", limit: 4,
+          into: &nextRules, inspector: inspector)
+      }
+      if let muted = try? await inspector.evaluate(
+        "globalThis.__shaarInspectorStyles.mutedRows()") as? [[String: String]]
+      {
+        nextRules = mergingMuted(muted, into: nextRules)
       }
       guard inspector.isOpen, inspector.documentGeneration == generation,
         inspector.selection?.id == selection.id
@@ -177,7 +196,7 @@ final class InspectorStylesModel {
     guard let inspector, inspector.isOpen, inspector.selection?.id == selectionID,
       inspector.documentGeneration == generation
     else { throw CancellationError() }
-    guard rules.count <= 81, computed.count <= 2048,
+    guard rules.count <= 120, computed.count <= 2048,
       rules.allSatisfy({
         $0.selector.count <= 2048 && $0.source.count <= 16_384 && $0.declarations.count <= 120
       }),
@@ -193,17 +212,105 @@ final class InspectorStylesModel {
     updated = Date()
   }
 
+  private func inlineRule(_ style: [String: Any]) -> InspectorRule {
+    InspectorRule(
+      id: 0, selector: "element.style", source: "Inline overrides",
+      declarations: declarations(style), origin: .inline, editable: true,
+      matchText: String(((style["cssText"] as? String) ?? "").prefix(65_536)))
+  }
+
+  private func appendMatches(
+    _ rows: [[String: Any]], note: String, limit: Int, into rules: inout [InspectorRule],
+    inspector: InspectorModel
+  ) async {
+    for row in rows.suffix(limit).reversed() {
+      guard rules.count < 120, let rule = row["rule"] as? [String: Any],
+        let style = rule["style"] as? [String: Any],
+        let selectors = rule["selectorList"] as? [String: Any],
+        let selector = selectors["text"] as? String
+      else { continue }
+      let sheet = rule["styleSheetId"] as? String
+      let line = ((style["range"] as? [String: Any])?["startLine"] as? Int).map { $0 + 1 }
+      let location: String
+      if let sheet {
+        location =
+          await source(for: sheet, selector: selector, style: style, inspector: inspector)
+          + (line.map { ":\($0)" } ?? "")
+      } else {
+        location =
+          rule["origin"] as? String == "user-agent" ? "Browser default" : "Source unavailable"
+      }
+      let origin: InspectorRuleOrigin =
+        rule["origin"] as? String == "user-agent" ? .userAgent : .author
+      let matchText = String(((style["cssText"] as? String) ?? "").prefix(65_536))
+      rules.append(
+        InspectorRule(
+          id: rules.count, selector: String(selector.prefix(2048)), source: location,
+          declarations: declarations(style), origin: origin,
+          editable: origin == .author && !matchText.isEmpty, matchText: matchText, note: note))
+    }
+  }
+
+  func mergingMuted(_ muted: [[String: String]], into rules: [InspectorRule]) -> [InspectorRule] {
+    var next = rules
+    for row in muted {
+      guard let selector = row["selector"], selector.count <= 2048,
+        let property = row["property"], property.count <= 128,
+        let value = row["value"], value.count <= 4110
+      else { continue }
+      let match = row["matchText"] ?? ""
+      ensureInlineRule(selector: selector, match: match, rules: &next)
+      guard let index = mutedRuleIndex(selector: selector, match: match, in: next) else {
+        continue
+      }
+      if next[index].declarations.contains(where: { $0.name == property }) { continue }
+      next[index].declarations.append(
+        InspectorDeclaration(
+          name: property, value: value, key: "muted-\(property)", disabled: true))
+    }
+    return next
+  }
+
+  private func ensureInlineRule(selector: String, match: String, rules: inout [InspectorRule]) {
+    guard selector == "element.style", match.isEmpty,
+      !rules.contains(where: { $0.selector == "element.style" && $0.editable })
+    else { return }
+    let id = (rules.map(\.id).max() ?? -1) + 1
+    rules.insert(
+      InspectorRule(
+        id: id, selector: "element.style", source: "Inline overrides",
+        declarations: [], origin: .inline, editable: true),
+      at: 0)
+  }
+
+  private func mutedRuleIndex(selector: String, match: String, in rules: [InspectorRule]) -> Int? {
+    if selector == "element.style", match.isEmpty,
+      let index = rules.firstIndex(where: { $0.selector == "element.style" && $0.editable })
+    {
+      return index
+    }
+    let exact = rules.indices.filter { index in
+      let rule = rules[index]
+      return rule.selector == selector && (match.isEmpty || rule.matchText == match)
+    }
+    if exact.count == 1 { return exact[0] }
+    guard !match.isEmpty else { return nil }
+    let editable = rules.indices.filter { rules[$0].selector == selector && rules[$0].editable }
+    if editable.count == 1 { return editable[0] }
+    return nil
+  }
+
   func declarations(_ style: [String: Any]) -> [InspectorDeclaration] {
     return ((style["cssProperties"] as? [[String: Any]]) ?? []).prefix(2048).enumerated().compactMap
     { index, row in
-      guard row["implicit"] as? Bool != true, row["disabled"] as? Bool != true,
+      guard row["implicit"] as? Bool != true,
         style["styleSheetId"] == nil || row["range"] != nil || row["text"] != nil,
         let name = row["name"] as? String, name.count <= 128,
         let value = row["value"] as? String, value.count <= 4096
       else { return nil }
       return InspectorDeclaration(
         name: name, value: value + (row["important"] as? Bool == true ? " !important" : ""),
-        key: String(index))
+        key: String(index), disabled: row["disabled"] as? Bool == true)
     }.prefix(120).map { $0 }
   }
 
@@ -298,6 +405,66 @@ final class InspectorStylesModel {
       let literal = String(data: try JSONSerialization.data(withJSONObject: args), encoding: .utf8)!
       let result =
         try await inspector.evaluate("globalThis.__shaarInspectorStyles.edit(...\(literal))")
+        as? [String: Any]
+      guard result?["ok"] as? Bool == true else {
+        throw InspectorFailure(
+          InspectorL10n.display(result?["error"] as? String ?? "CSS could not be applied."))
+      }
+      await refresh(force: true)
+      await inspector.refresh()
+    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+  }
+
+  func editRule(
+    _ rule: InspectorRule, property: String, value: String, important: Bool,
+    replacing: String? = nil
+  ) async {
+    if rule.origin == .inline {
+      if let replacing, replacing != property {
+        await edit(property: replacing, value: "", important: false)
+        guard failure == nil else { return }
+      }
+      await edit(property: property, value: value, important: important)
+      return
+    }
+    guard rule.editable, !busy, let inspector, let selection = inspector.selection, selection.locked
+    else { return }
+    await applyStyleResult(
+      "editRule",
+      arguments: [
+        selection.id, rule.selector, rule.matchText, property, value, important ? "important" : "",
+        replacing ?? "",
+      ])
+  }
+
+  func setDeclaration(
+    _ rule: InspectorRule, _ declaration: InspectorDeclaration, enabled: Bool
+  ) async {
+    guard !busy, let inspector, let selection = inspector.selection, selection.locked else {
+      return
+    }
+    let selector = rule.origin == .inline ? "element.style" : rule.selector
+    await applyStyleResult(
+      "setEnabled",
+      arguments: [
+        selection.id, selector, rule.matchText, declaration.name, enabled,
+      ])
+  }
+
+  func addRule(selector: String) async {
+    guard !busy, let inspector, let selection = inspector.selection, selection.locked else {
+      return
+    }
+    await applyStyleResult("addRule", arguments: [selection.id, selector])
+  }
+
+  private func applyStyleResult(_ name: String, arguments: [Any]) async {
+    guard let inspector else { return }
+    do {
+      let literal = String(
+        data: try JSONSerialization.data(withJSONObject: arguments), encoding: .utf8)!
+      let result =
+        try await inspector.evaluate("globalThis.__shaarInspectorStyles.\(name)(...\(literal))")
         as? [String: Any]
       guard result?["ok"] as? Bool == true else {
         throw InspectorFailure(

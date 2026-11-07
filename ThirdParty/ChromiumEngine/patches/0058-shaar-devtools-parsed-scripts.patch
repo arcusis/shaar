@@ -245,7 +245,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
 +  EXPECT_TRUE(ProjectPhase2EventForTesting(
 +      R"({"method":"Debugger.scriptParsed","params":{"scriptId":"42","url":"https://example.test/src/App.vue","sourceMapURL":"data:application/json;base64,e30=","hash":"private"}})",
 +      "https://example.test", 7, &output));
-+  EXPECT_NE(std::string::npos, output.find("\"eventID\":20"));
++  EXPECT_NE(std::string::npos, output.find("\"eventID\":30"));
 +  EXPECT_NE(std::string::npos, output.find("App.vue"));
 +  EXPECT_EQ(std::string::npos, output.find("private"));
 +  EXPECT_FALSE(ProjectPhase2EventForTesting(
@@ -256,3 +256,36 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
  
  TEST(ShaarDevToolsTest, EventListenersAreInspectorOnlyAndCommand80) {
    std::string output;
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -13,7 +13,7 @@
+ #endif
+ 
+ #define SHAAR_ENGINE_ABI_MAJOR 1u
+-#define SHAAR_ENGINE_ABI_MINOR 9u
++#define SHAAR_ENGINE_ABI_MINOR 10u
+ #define SHAAR_EXPORT __attribute__((visibility("default")))
+ 
+ typedef struct shaar_engine shaar_engine;
+@@ -292,7 +292,8 @@
+   SHAAR_DEVTOOLS_PANEL_DOM_CHILDREN_SET = 25,
+   SHAAR_DEVTOOLS_PANEL_DOM_SHADOW_ROOT_PUSHED = 26,
+   SHAAR_DEVTOOLS_PANEL_DOM_SHADOW_ROOT_POPPED = 27,
+-  SHAAR_DEVTOOLS_PANEL_DOM_CHILD_COUNT_UPDATED = 28
++  SHAAR_DEVTOOLS_PANEL_DOM_CHILD_COUNT_UPDATED = 28,
++  SHAAR_DEVTOOLS_PANEL_SCRIPT_PARSED = 30
+ } shaar_devtools_panel_event_id;
+ typedef enum {
+   SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS = 1,
+@@ -312,7 +313,9 @@
+   SHAAR_DEVTOOLS_PHASE2_RESOURCE_TREE = 15,
+   SHAAR_DEVTOOLS_PHASE2_RESOURCE_CONTENT = 16,
+   SHAAR_DEVTOOLS_PHASE2_LONG_TASKS = 17,
+-  SHAAR_DEVTOOLS_PHASE2_VITALS_INPUTS = 18
++  SHAAR_DEVTOOLS_PHASE2_VITALS_INPUTS = 18,
++  SHAAR_DEVTOOLS_PHASE2_PARSED_SCRIPTS = 19,
++  SHAAR_DEVTOOLS_PHASE2_SCRIPT_SOURCE = 20
+ } shaar_devtools_phase2_command_id;
+ typedef enum {
+   SHAAR_DEVTOOLS_DOCK_RIGHT = 1,

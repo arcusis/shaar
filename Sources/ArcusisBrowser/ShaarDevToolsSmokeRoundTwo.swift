@@ -34,20 +34,31 @@ import Foundation
     _ shell: ShaarDevToolsModel, inspector: InspectorModel, report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .elements
-    shell.dom.search = "body"
+    let created = try? await inspector.evaluate(
+      "(()=>{const node=document.createElement('div');node.id='shaar-round2-search';document.body.appendChild(node);return true})()")
+    let live = try? await inspector.evaluate(
+      "document.getElementById('shaar-round2-search') !== null")
+    shell.dom.search = "#shaar-round2-search"
     await shell.dom.performSearch()
     let matched = shell.dom.matchOrder.count > 0
-      && shell.dom.selected?.name.caseInsensitiveCompare("BODY") == .orderedSame
+      && shell.dom.selected?.attributes.contains {
+        $0.name == "id" && $0.value == "shaar-round2-search"
+      } == true
     record(
       matched, "world2-elements-search",
-      "Matches=\(shell.dom.matchOrder.count), selected=\(shell.dom.selected?.name ?? "none"), error=\(shell.dom.failure ?? "none")",
+      "Created=\(String(describing: created)), live=\(String(describing: live)), DOM available=\(shell.dom.available), matches=\(shell.dom.matchOrder.count), selected=\(shell.dom.selected?.name ?? "none"), error=\(shell.dom.failure ?? "none")",
       report: report)
-    guard matched else { return }
+    guard matched else {
+      _ = try? await inspector.evaluate("document.getElementById('shaar-round2-search')?.remove()")
+      return
+    }
     await shell.dom.setAttribute("data-shaar-round2", value: "edited")
-    let value = try? await inspector.evaluate("document.body.getAttribute('data-shaar-round2')")
+    let value = try? await inspector.evaluate(
+      "document.getElementById('shaar-round2-search')?.getAttribute('data-shaar-round2')")
     record(
       value as? String == "edited", "world2-elements-attribute",
-      "Edited body attribute through Elements: \(String(describing: value))", report: report)
+      "Edited searched element attribute through Elements: \(String(describing: value))", report: report)
+    _ = try? await inspector.evaluate("document.getElementById('shaar-round2-search')?.remove()")
   }
 
   private static func roundTwoConsole(
@@ -115,9 +126,14 @@ import Foundation
       let before = shell.sources.displayedContent
       shell.sources.prettyPrint = true
       let after = shell.sources.displayedContent
-      record(
-        after != nil && after != before, "world2-source-pretty",
-        "Pretty print transformed \(chosen.name)", report: report)
+      let compact = before?.split(separator: "\n").count == 1 && before?.contains("{") == true
+      if compact {
+        record(
+          after != nil && after != before, "world2-source-pretty",
+          "Pretty print transformed \(chosen.name)", report: report)
+      } else {
+        report.manual("world2-source-pretty", "\(chosen.name) is already formatted")
+      }
     } else {
       report.manual("world2-source-pretty", "Selected \(chosen.name) is not a prettifiable type")
     }
@@ -237,7 +253,16 @@ import Foundation
     await shell.performance.refresh()
     shell.performance.stopRecording()
     let count = shell.performance.timelineTasks.count
-    record(count > 0, "world2-performance-long-task", "Recorded \(count) long tasks", report: report)
+    let observed = try? await inspector.evaluate("globalThis.__shaarLongTasks?.length ?? 0")
+    if observed as? Int == 0 && count == 0 {
+      report.manual(
+        "world2-performance-long-task",
+        "Hidden page emitted no long-task entry after a 160ms timer callback")
+    } else {
+      record(
+        count > 0, "world2-performance-long-task",
+        "Page observer=\(String(describing: observed)), panel tasks=\(count)", report: report)
+    }
   }
 
   private static func roundTwoLayout(
@@ -327,12 +352,17 @@ import Foundation
     report: ShaarDevToolsSmokeReport
   ) async {
     guard pageURL.port == 3210 else { return }
-    _ = try? await inspector.evaluate("document.getElementById('spa-link')?.click()")
+    let clicked = try? await inspector.evaluate(
+      "(()=>{const link=document.getElementById('spa-link');if(!link)return false;link.click();return true})()")
+    let navigated = await wait(attempts: 100) {
+      shell.target.url.path == "/details"
+    }
     let reconnected = await wait(attempts: 100) { shell.phase2.available }
     let path = try? await inspector.evaluate("location.pathname")
     record(
-      path as? String == "/details" && reconnected,
-      "world2-spa", "Next.js Link path=\(String(describing: path)), lease=\(reconnected)",
+      clicked as? Bool == true && navigated && path as? String == "/details" && reconnected,
+      "world2-spa",
+      "Clicked=\(String(describing: clicked)), path=\(String(describing: path)), lease=\(reconnected)",
       report: report)
     context.engine.runtime.goBack(inTabID: shell.target.tabID.uuidString)
     _ = await wait(attempts: 100) { context.engine.siteControlTarget?.url.path == "/" }

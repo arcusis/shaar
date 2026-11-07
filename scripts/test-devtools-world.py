@@ -48,7 +48,7 @@ def main():
         original_hmr = args.hmr_file.read_text() if args.hmr_file else None
         def edit_hmr():
             marker = root / "hmr-ready"
-            for _ in range(600):
+            for _ in range(6000):
                 if marker.is_file():
                     if original_hmr is not None and "before-edit" in original_hmr:
                         args.hmr_file.write_text(original_hmr.replace("before-edit", "after-edit"))

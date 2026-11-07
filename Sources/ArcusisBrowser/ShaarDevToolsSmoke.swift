@@ -412,7 +412,7 @@ import Vision
     }
     reportRealWorld(
       initiallyEmpty && pressed && loaded, "dom-expand",
-      "Disclosure found=\(appeared), press=\(pressed), shallow children empty=\(initiallyEmpty), loaded=\(loaded); \(shell.dom.failure ?? "no error")",
+      "Disclosure found=\(appeared), press=\(pressed), expanded=\(shell.dom.expanded.contains(body.id)), shallow children empty=\(initiallyEmpty), loaded=\(loaded); \(shell.dom.failure ?? "no error")",
       report: report)
     shell.dom.select(body.id)
     do {
@@ -2200,8 +2200,9 @@ enum ShaarDevToolsSmokeAccess {
     guard let down = mouseEvent(.leftMouseDown, at: point, window: window),
       let up = mouseEvent(.leftMouseUp, at: point, window: window)
     else { return false }
-    window.sendEvent(down)
-    window.sendEvent(up)
+    let hit = root.hitTest(CGPoint(x: x, y: y)) ?? root
+    hit.mouseDown(with: down)
+    hit.mouseUp(with: up)
     return true
   }
 

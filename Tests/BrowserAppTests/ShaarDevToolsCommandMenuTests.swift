@@ -16,6 +16,7 @@ import Testing
       sources: [], nodes: [])
     let titles = matches.map(\.title)
     #expect(titles.first == "Elements")
+    #expect(titles.contains("Security"))
     #expect(titles.contains("Dock to bottom"))
     #expect(titles.contains("Open in separate window"))
     #expect(titles.contains("Settings"))

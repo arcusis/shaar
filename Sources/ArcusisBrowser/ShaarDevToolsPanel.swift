@@ -37,6 +37,7 @@ extension ShaarDevToolsSection {
     case .application: "externaldrive"
     case .performance: "speedometer"
     case .sources: "curlybraces"
+    case .security: "lock"
     case .repro: "record.circle"
     case .viewports: "rectangle.on.rectangle"
     case .comparison: "square.split.2x1"
@@ -52,6 +53,7 @@ extension ShaarDevToolsSection {
     case .application: "App"
     case .performance: "Perf"
     case .sources: "Sources"
+    case .security: "Security"
     case .repro: "Repro"
     case .viewports: "Views"
     case .comparison: "WebKit"
@@ -311,6 +313,8 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .security:
+      ShaarDevToolsSecurityPanel(model: model)
     case .repro:
       ShaarReproPanel(
         model: model.repro,
@@ -449,6 +453,7 @@ struct ShaarDevToolsPanel: View {
         ? "Source resources are scoped to this tab"
         : "Sources are unavailable for this tab"
     }
+    if model.section == .security { return "Security details are scoped to this tab" }
     if model.section == .repro { return "Repro data is scoped to this tab" }
     if model.section == .viewports {
       return model.viewports.available

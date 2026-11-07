@@ -14,6 +14,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case application = "Application"
   case performance = "Performance"
   case sources = "Sources"
+  case security = "Security"
   case repro = "Repro"
   case viewports = "Viewports"
   case comparison = "Comparison"
@@ -354,6 +355,11 @@ final class ShaarDevToolsModel {
   let framework = ShaarFrameworkComponentsModel()
   let comparison: ShaarWebKitComparisonModel
   let allowsWebKitComparison: Bool
+  var securitySummary: ShaarDevToolsSecuritySummary
+  @ObservationIgnored var loadSecurity:
+    (@MainActor (SiteControlTarget) async -> ShaarDevToolsSecuritySummary)?
+  @ObservationIgnored var presentCertificate: @MainActor () -> Void = {}
+  @ObservationIgnored private var securityGeneration = 0
   var sections: [ShaarDevToolsSection] {
     ShaarDevToolsSection.allCases.filter { $0 != .comparison || allowsWebKitComparison }
   }
@@ -384,6 +390,8 @@ final class ShaarDevToolsModel {
     comparisonPreview: ShaarWebKitComparisonPreview? = nil
   ) {
     self.target = target
+    securitySummary = ShaarDevToolsSecuritySummary.make(
+      url: target.url, engineLevel: nil, certificate: nil)
     self.allowsWebKitComparison = allowsWebKitComparison
     comparison = ShaarWebKitComparisonModel(target: target, preview: comparisonPreview)
     self.layoutDefaults = layoutDefaults
@@ -648,6 +656,7 @@ final class ShaarDevToolsModel {
     cookies.reset()
     sources.reset()
     framework.updateAccess(url: target.url)
+    replaceSecuritySummary()
     closeCommandMenu()
     closeSettings()
     repro.updateTarget(target, committed: committed)
@@ -662,6 +671,25 @@ final class ShaarDevToolsModel {
       startLocalStreams()
       rules.resume()
     }
+  }
+
+  var securityReloadToken: String {
+    "\(securityGeneration)|\(target.url.absoluteString)"
+  }
+
+  func refreshSecurity() async {
+    guard let loadSecurity else { return }
+    let generation = securityGeneration
+    let requested = target
+    let summary = await loadSecurity(requested)
+    guard generation == securityGeneration, target == requested else { return }
+    securitySummary = summary
+  }
+
+  private func replaceSecuritySummary() {
+    securityGeneration += 1
+    securitySummary = ShaarDevToolsSecuritySummary.make(
+      url: target.url, engineLevel: nil, certificate: nil)
   }
 
   func refreshFrameworkComponents() {

@@ -5,6 +5,7 @@
 import BrowserCore
 import ChromiumBridge
 import Foundation
+import Security
 
 struct DevToolsOpenURLRequest {
   let windowID: String
@@ -73,9 +74,57 @@ extension BrowserEngine {
     }
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector
+    attachDevToolsSecurity(to: shell)
     shell.updateTarget(target)
     shell.open(inspector: inspector)
     return true
+  }
+
+  private func attachDevToolsSecurity(to shell: ShaarDevToolsModel) {
+    shell.loadSecurity = { [weak self] target in
+      guard let self else {
+        return ShaarDevToolsSecuritySummary.make(
+          url: target.url, engineLevel: nil, certificate: nil)
+      }
+      return await self.devToolsSecuritySummary(for: target)
+    }
+    shell.presentCertificate = { [weak self, weak shell] in
+      guard let self, let shell else { return }
+      let target = shell.target
+      Task { await self.presentPageCertificate(for: target) }
+    }
+  }
+
+  private func devToolsSecuritySummary(for target: SiteControlTarget) async
+    -> ShaarDevToolsSecuritySummary
+  {
+    ShaarDevToolsSecuritySummary.make(
+      url: target.url, engineLevel: securityLevel(of: target),
+      certificate: await certificateIdentity(for: target))
+  }
+
+  /// Opens the system certificate window for the chain site controls already load.
+  private func presentPageCertificate(for target: SiteControlTarget) async {
+    guard siteControlTarget == target,
+      let chain = try? await certificateChain(for: target),
+      let window = runtime.window(forID: windowID)
+    else { return }
+    SiteCertificateViewer.present(chain, in: window)
+  }
+
+  private func securityLevel(of target: SiteControlTarget) -> String? {
+    let info = runtime.securityInfo(
+      forTabID: target.tabID.uuidString, profileID: target.profileID.uuidString)
+    return info?["level"] as? String
+  }
+
+  private func certificateIdentity(for target: SiteControlTarget) async -> ShaarCertificateIdentity?
+  {
+    guard target.url.scheme?.lowercased() == "https" else { return nil }
+    guard let chain = try? await certificateChain(for: target), let leaf = chain.first else {
+      return nil
+    }
+    return ShaarCertificateIdentityReader.leaf(from: leaf)
   }
 
   @discardableResult

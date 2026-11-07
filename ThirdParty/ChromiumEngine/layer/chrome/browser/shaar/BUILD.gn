@@ -98,6 +98,8 @@ source_set("engine") {
     "media/shaar_media.cc",
     "media/shaar_media.h",
     "media/shaar_media_lifecycle_adapter.cc",
+    "media/shaar_media_permission.cc",
+    "media/shaar_media_permission.h",
     # END media
     # BEGIN storage_keychain
     "storage_keychain/shaar_storage_keychain.cc",

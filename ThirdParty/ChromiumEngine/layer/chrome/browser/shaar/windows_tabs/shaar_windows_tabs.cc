@@ -11,9 +11,10 @@
 #include <unordered_set>
 #include <utility>
 
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 
 namespace shaar::windows_tabs {
 
@@ -165,6 +166,30 @@ bool BrowserTabRegistryImpl::IsSelectedWebContents(
   return state && contents && owner && state->active_browser == owner &&
          FindWebContents(engine, window, tab) == contents &&
          owner->tab_strip_model()->GetActiveWebContents() == contents;
+}
+
+std::optional<SelectedRegularTab>
+BrowserTabRegistryImpl::FindSelectedRegularTab(
+    shaar_engine* engine, content::WebContents* contents) const {
+  if (!engine || !contents || EngineQuitRequested(engine))
+    return std::nullopt;
+  for (const auto& tab : tabs_) {
+    if (tab.engine != engine || tab.contents != contents || !tab.browser ||
+        tab.browser->profile()->IsOffTheRecord())
+      continue;
+    for (const auto& window : windows_) {
+      if (window.engine != engine || window.handle != tab.window ||
+          window.closing || window.active_browser != tab.browser ||
+          tab.browser->tab_strip_model()->GetActiveWebContents() != contents)
+        continue;
+      for (const auto& [profile_id, browser] : window.browsers_by_profile) {
+        if (browser == tab.browser)
+          return SelectedRegularTab{tab.window, tab.handle, profile_id,
+                                    window.window_id, tab.id};
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 content::WebContents* BrowserTabRegistryImpl::FindWebContents(

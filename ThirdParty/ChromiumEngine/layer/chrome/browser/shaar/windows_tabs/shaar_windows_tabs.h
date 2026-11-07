@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_H_
 #define CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_H_
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -22,6 +23,14 @@ class WebContents;
 }
 
 namespace shaar::windows_tabs {
+
+struct SelectedRegularTab {
+  shaar_window* window;
+  shaar_tab* tab;
+  std::string profile_id;
+  std::string window_id;
+  std::string tab_id;
+};
 
 bool HasHiddenNativeWindow(content::WebContents* contents);
 void UpdateDockedDevTools(content::WebContents* inspected,
@@ -50,6 +59,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   Browser* FindBrowser(shaar_engine*, shaar_window*) override;
   bool IsSelectedWebContents(shaar_engine*, shaar_window*, shaar_tab*,
                              content::WebContents*) override;
+  std::optional<SelectedRegularTab> FindSelectedRegularTab(
+      shaar_engine*, content::WebContents*) const;
   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
                                          shaar_tab*) override;
   content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,

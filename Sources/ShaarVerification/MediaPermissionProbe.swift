@@ -151,24 +151,16 @@ final class MediaPermissionProbe {
           window.arcusisProbeStream=stream;window.arcusisMediaResult={allowed:true,
             audio:stream.getAudioTracks().length,video:stream.getVideoTracks().length};
         }).catch(error=>window.arcusisMediaResult={error:error.name});return {started:true};})()
-      """, userGesture: true)
+      """)
     guard started?["started"] as? Bool == true else {
       throw MediaProbeFailure("Could not request fake media.")
     }
   }
 
-  private func evaluate(_ tab: UUID, _ expression: String, userGesture: Bool = false) async
-    -> [String: Any]?
-  {
+  private func evaluate(_ tab: UUID, _ expression: String) async -> [String: Any]? {
     let json: String? = await withCheckedContinuation { continuation in
-      if userGesture {
-        runtime.evaluateProbeUserGesture(inTabID: tab.uuidString, script: expression) {
-          continuation.resume(returning: $0)
-        }
-      } else {
-        runtime.evaluate(inTabID: tab.uuidString, script: expression) {
-          continuation.resume(returning: $0)
-        }
+      runtime.evaluate(inTabID: tab.uuidString, script: expression) {
+        continuation.resume(returning: $0)
       }
     }
     guard let data = json?.data(using: .utf8) else { return nil }

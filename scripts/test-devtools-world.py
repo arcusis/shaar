@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--spa-only", action="store_true")
     parser.add_argument("--round2", action="store_true")
+    parser.add_argument("--round3", action="store_true")
     parser.add_argument("--hmr-file", type=Path)
     args = parser.parse_args()
     output = ROOT / "build/devtools-world" / args.name
@@ -63,6 +64,8 @@ def main():
             mode = "spa-only"
         elif args.round2:
             mode = "round-two"
+        elif args.round3:
+            mode = "round-three"
         with (output / "stdout.txt").open("w") as stdout, (output / "stderr.txt").open("w") as stderr:
             try:
                 result = subprocess.run(

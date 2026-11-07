@@ -14,7 +14,7 @@ import Vision
 @MainActor enum ShaarDevToolsSmoke {
   static func run(
     frameworkURL: URL, outputURL: URL, pageURL: URL?, realWorld: Bool = false,
-    spaOnly: Bool = false, roundTwo: Bool = false
+    spaOnly: Bool = false, roundTwo: Bool = false, roundThree: Bool = false
   ) -> Int32 {
     guard let pageURL,
       realWorld && ["http", "https"].contains(pageURL.scheme ?? "")
@@ -41,7 +41,8 @@ import Vision
         Task {
           await exercise(
             host: host, pageURL: pageURL, outputURL: outputURL, keys: keys,
-            realWorld: realWorld, spaOnly: spaOnly, roundTwo: roundTwo)
+            realWorld: realWorld, spaOnly: spaOnly, roundTwo: roundTwo,
+            roundThree: roundThree)
         }
       }
       return withExtendedLifetime(host) {
@@ -59,7 +60,7 @@ import Vision
 
   private static func exercise(
     host: NativeBrowserHost, pageURL: URL, outputURL: URL, keys: ShaarDevToolsSmokeKeys,
-    realWorld: Bool, spaOnly: Bool, roundTwo: Bool
+    realWorld: Bool, spaOnly: Bool, roundTwo: Bool, roundThree: Bool
   ) async {
     let report = ShaarDevToolsSmokeReport(directory: outputURL.deletingLastPathComponent())
     report.note(
@@ -118,6 +119,12 @@ import Vision
     if spaOnly {
       await exerciseSPANavigation(
         shell: shell, inspector: inspector, context: context, report: report)
+      return
+    }
+    if roundThree {
+      await exerciseRealWorldRoundThree(
+        shell: shell, inspector: inspector, context: context, host: host,
+        pageURL: pageURL, report: report)
       return
     }
     if realWorld {
@@ -1820,7 +1827,7 @@ import Vision
     return String(describing: notice)
   }
 
-  private static func contentIdentifier(_ section: ShaarDevToolsSection) -> String? {
+  static func contentIdentifier(_ section: ShaarDevToolsSection) -> String? {
     switch section {
     case .memory: "shaar.devtools.memoryPanel"
     case .coverage: "shaar.devtools.coverage"
@@ -1883,7 +1890,7 @@ import Vision
     }
   }
 
-  private static func prepareDock(_ shell: ShaarDevToolsModel, context: NativeBrowserContext) {
+  static func prepareDock(_ shell: ShaarDevToolsModel, context: NativeBrowserContext) {
     shell.dock = .bottom
     shell.bottomHeight = min(640, context.hosting.bounds.height * 0.62)
   }
@@ -1905,12 +1912,12 @@ import Vision
     return context.engine.pages[target.tabID]?.loading == false
   }
 
-  private static func worldPageReady(_ context: NativeBrowserContext, _ pageURL: URL) -> Bool {
+  static func worldPageReady(_ context: NativeBrowserContext, _ pageURL: URL) -> Bool {
     guard let target = context.engine.siteControlTarget else { return false }
     return target.url.host == pageURL.host && context.engine.pages[target.tabID] != nil
   }
 
-  private static func windowsHidden(_ host: NativeBrowserHost) -> Bool {
+  static func windowsHidden(_ host: NativeBrowserHost) -> Bool {
     host.contexts.values.allSatisfy { !$0.window.isVisible }
       && NSApp.windows.allSatisfy { !$0.isVisible }
   }
@@ -1953,7 +1960,7 @@ import Vision
     }
   }
 
-  private static func panelIsPainted(_ section: ShaarDevToolsSection, in text: String) -> Bool {
+  static func panelIsPainted(_ section: ShaarDevToolsSection, in text: String) -> Bool {
     panelMarkers(section).contains { ShaarDevToolsSmokeAccess.shows($0, in: text) }
   }
 

@@ -29,11 +29,12 @@ public enum BrowserLaunch {
       let mode = arguments.indices.contains(index + 3) ? arguments[index + 3] : "fixture"
       let spaOnly = mode == "spa-only"
       let roundTwo = mode == "round-two"
-      let realWorld = mode == "real-world" || spaOnly || roundTwo
+      let roundThree = mode == "round-three"
+      let realWorld = mode == "real-world" || spaOnly || roundTwo || roundThree
       exit(
         ShaarDevToolsSmoke.run(
           frameworkURL: framework, outputURL: output, pageURL: page,
-          realWorld: realWorld, spaOnly: spaOnly, roundTwo: roundTwo))
+          realWorld: realWorld, spaOnly: spaOnly, roundTwo: roundTwo, roundThree: roundThree))
     }
     if let index = arguments.firstIndex(of: "--devtools-capability-probe"),
       arguments.indices.contains(index + 2),

@@ -87,6 +87,10 @@ import AppKit
       ["shaar.devtools.consoleSearch", "shaar.devtools.consoleCommand"]
     case "Network":
       ["shaar.devtools.networkSearch"]
+    case "Elements":
+      ["shaar.devtools.domSearch"]
+    case "Inspector":
+      ["shaar.devtools.computedFilter"]
     default:
       []
     }

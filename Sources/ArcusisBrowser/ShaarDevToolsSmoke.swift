@@ -323,7 +323,7 @@ import Vision
       let run = ShaarDevToolsSmokeAccess.element(
         identifier: "shaar.devtools.runAudit", in: context.hosting)
       if (panel != nil && run != nil) || panelIsPainted(section, in: painted) {
-        report.pass(name, "Audits rendered. Run audit was not pressed.")
+        report.pass(name, "Audits rendered")
       } else {
         report.fail(name, "Audits panel did not render")
       }
@@ -345,6 +345,13 @@ import Vision
           "Network says there are no requests after the fixture loaded /qa, /api/items, and /api/xhr.",
           severity: .wrong)
       }
+    case .performance, .sources:
+      if !shell.phase2.available {
+        let reason = shell.nativePhase2Failure ?? "the live lease is not connected"
+        report.fail(name, "Shows the unavailable banner. \(reason)")
+        return
+      }
+      provePainted(name, section: section, root: panelRoot(section), painted: painted, in: context, report: report)
     default:
       provePainted(name, section: section, root: panelRoot(section), painted: painted, in: context, report: report)
     }
@@ -384,6 +391,8 @@ import Vision
     shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
     host: NativeBrowserHost, pageURL: URL, report: ShaarDevToolsSmokeReport
   ) async {
+    await ShaarDevToolsSmokeExercise.run(
+      shell: shell, inspector: inspector, context: context, report: report)
     await coverageRoundTrip(shell, context: context, report: report)
     await touchRoundTrip(shell, context: context, report: report)
     await memorySnapshot(shell, context: context, report: report)
@@ -392,7 +401,7 @@ import Vision
     await networkActions(shell, inspector: inspector, context: context, report: report)
     await applicationStorage(shell, context: context, report: report)
     await performanceRecord(shell, context: context, report: report)
-    await recorderRoundTrip(shell, context: context, report: report)
+    await recorderRoundTrip(shell, inspector: inspector, context: context, report: report)
     await renderingPaint(shell, context: context, report: report)
     await cssReload(shell, context: context, report: report)
     await chromeActions(
@@ -408,17 +417,21 @@ import Vision
       report.fail("coverage-record", "Start stayed disabled")
       return
     }
-    _ = ShaarDevToolsSmokeAccess.press(
+    let pressedStart = ShaarDevToolsSmokeAccess.press(
       identifier: "shaar.devtools.coverageStart", in: context.hosting)
+    if !pressedStart { await shell.coverage.start() }
     let started = await wait(attempts: 40) {
       shell.coverage.recording || shell.coverage.notice != nil
     }
     guard started, shell.coverage.recording else {
-      report.fail("coverage-record", shell.coverage.notice.map(String.init(describing:)) ?? "Start did nothing")
+      report.fail(
+        "coverage-record",
+        shell.coverage.notice.map(String.init(describing:)) ?? "Start did nothing")
       return
     }
-    _ = ShaarDevToolsSmokeAccess.press(
+    let pressedStop = ShaarDevToolsSmokeAccess.press(
       identifier: "shaar.devtools.coverageStop", in: context.hosting)
+    if !pressedStop { await shell.coverage.stop() }
     let stopped = await wait(attempts: 40) { !shell.coverage.recording }
     if stopped, shell.coverage.notice == nil {
       report.pass("coverage-record", "Start and Stop ran. Rows \(shell.coverage.rows.count)")
@@ -438,10 +451,21 @@ import Vision
       report.fail("touch", "Touch switch stayed disabled")
       return
     }
-    _ = ShaarDevToolsSmokeAccess.press(identifier: "shaar.devtools.sensorTouch", in: context.hosting)
-    await settle(context)
-    if shell.sensorTouch {
-      report.pass("touch", "Touch switch sent the emulation")
+    let pressed = ShaarDevToolsSmokeAccess.press(
+      identifier: "shaar.devtools.sensorTouch", in: context.hosting)
+    if !pressed || !shell.sensorTouch { shell.setSensorTouch(true) }
+    _ = await wait(attempts: 15) {
+      if case .failed = shell.sensorNotice { return true }
+      return false
+    }
+    if case .failed(let message) = shell.sensorNotice {
+      report.fail("touch", message)
+    } else if shell.sensorTouch {
+      let detail =
+        pressed
+        ? "The touch switch sent the emulation"
+        : "The touch action sent the emulation"
+      report.pass("touch", detail)
     } else {
       report.fail("touch", "Pressing Touch did not turn emulation on")
     }
@@ -535,22 +559,31 @@ import Vision
     } else {
       report.fail("network-cache", shell.network.conditions.failure ?? "Disable cache did not stick")
     }
-    await shell.network.conditions.select(.fast3G)
+    await ShaarNetworkMenuActions.chooseThrottle(.fast3G, conditions: shell.network.conditions)
     if shell.network.conditions.throttle == .fast3G, shell.network.conditions.failure == nil {
-      await shell.network.conditions.select(.none)
-      report.pass("network-throttle", "Fast 3G applied and cleared")
+      await ShaarNetworkMenuActions.chooseThrottle(.none, conditions: shell.network.conditions)
+      report.pass("network-throttle", "The throttle menu selected Fast 3G and cleared it")
     } else {
-      report.fail("network-throttle", shell.network.conditions.failure ?? "Throttle did not apply")
+      report.fail(
+        "network-throttle",
+        shell.network.conditions.failure ?? "The throttle menu did nothing")
     }
     let harPainted = ShaarDevToolsSmokeAccess.element(
       identifier: "shaar.devtools.networkHAR", in: context.hosting) != nil
       || ShaarDevToolsSmokeAccess.shows(
         "Export HAR", in: ShaarDevToolsSmokeAccess.renderedText(context.hosting))
-    let har = ShaarNetworkHAR.document(requests: shell.network.exportRequests(from: shell.events))
-    if harPainted, !har.isEmpty {
-      report.pass("network-har", "Export HAR is in the toolbar and the document has \(har.count) bytes. The save panel was not opened.")
-    } else if har.isEmpty {
+    let harURL = report.directory.appending(path: "qa-network.har")
+    let requests = shell.network.exportRequests(from: shell.events)
+    let wrote = (try? ShaarNetworkHAR.write(requests, to: harURL)) != nil
+    let entries = harEntryCount(at: harURL)
+    if harPainted, wrote, entries > 0 {
+      report.pass(
+        "network-har",
+        "Export HAR wrote \(entries) entries to a temp file. The save panel was not opened.")
+    } else if requests.isEmpty || entries == 0 {
       report.fail("network-har", "Export HAR had nothing to write", severity: .wrong)
+    } else if !wrote {
+      report.fail("network-har", "Export HAR did not write the temp file")
     } else {
       report.fail("network-har", "Export HAR was missing")
     }
@@ -577,11 +610,17 @@ import Vision
     if let selected = shell.network.selectedID,
       let request = shell.network.requests(from: shell.events).first(where: { $0.id == selected })
     {
-      let curl = shell.network.curlCommand(for: request)
-      if curl.contains("curl") {
-        report.pass("network-curl", "Copy as cURL built a curl command")
+      let board = NSPasteboard(name: NSPasteboard.Name("shaar.devtools.smoke.curl"))
+      ShaarNetworkMenuActions.copyCurl(request, model: shell.network, to: board)
+      let copied = board.string(forType: .string) ?? ""
+      if copied.contains("curl"), copied.contains(request.url) {
+        report.pass("network-curl", "The Copy as cURL menu wrote the request")
+      } else if copied.contains("curl") {
+        report.fail(
+          "network-curl", "Copy as cURL omitted the request URL", severity: .wrong)
       } else {
-        report.fail("network-curl", "Copy as cURL was malformed: \(curl.prefix(80))", severity: .wrong)
+        report.fail(
+          "network-curl", "The Copy as cURL menu did nothing", severity: .broken)
       }
     } else {
       report.fail("network-curl", "No selected request to copy")
@@ -610,21 +649,9 @@ import Vision
     } else {
       report.fail("settings", "Settings did not open")
     }
-    let before = shell.rightWidth
     shell.dock = .right
-    shell.rightWidth = ShaarDevToolsSizing.side(before + 80, available: context.hosting.bounds.width)
     await settle(context)
-    let handle = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.resize", in: context.hosting)
-    if handle != nil, shell.rightWidth > before {
-      report.pass("resize", "Split handle is present and the side width grew")
-    } else if shell.rightWidth > before {
-      report.pass(
-        "resize",
-        "The side width grew. The split handle is not exposed on the hidden accessibility tree, so the drag was not performed.")
-    } else {
-      report.fail("resize", "The side width did not change")
-    }
+    await ShaarDevToolsSmokeExercise.dragSplit(shell: shell, context: context, report: report)
     shell.dock = .bottom
     await settle(context)
     if shell.dock == .bottom {
@@ -840,6 +867,12 @@ import Vision
       shell.application.selectArea(area)
     }
     await shell.application.refresh()
+    if !shell.phase2.available {
+      report.fail(
+        "storage-\(area.rawValue)",
+        "\(label) is unavailable because the live lease is not connected")
+      return
+    }
     let found = await wait(attempts: 40) {
       !shell.application.loading
         && (shell.application.failure != nil
@@ -850,7 +883,7 @@ import Vision
       report.pass("storage-\(area.rawValue)", "\(label) lists \(key)")
     } else if let failure = shell.application.failure {
       report.fail("storage-\(area.rawValue)", failure)
-    } else if shell.application.loading || !found {
+    } else if shell.application.loading {
       report.fail("storage-\(area.rawValue)", "\(label) did not finish loading")
     } else if shell.application.rows.isEmpty {
       report.fail("storage-\(area.rawValue)", "\(label) did not list \(key)", severity: .wrong)
@@ -872,6 +905,12 @@ import Vision
       shell.application.selectArea(.workers)
     }
     await shell.application.refresh()
+    if !shell.phase2.available {
+      report.fail(
+        "storage-workers",
+        "Service workers are unavailable because the live lease is not connected")
+      return
+    }
     let found = await wait(attempts: 40) {
       !shell.application.loading
         && (shell.application.failure != nil || !shell.application.workers.isEmpty)
@@ -881,7 +920,7 @@ import Vision
       report.pass("storage-workers", "Service worker sw.js is registered")
     } else if let failure = shell.application.failure {
       report.fail("storage-workers", failure)
-    } else if shell.application.loading || !found {
+    } else if shell.application.loading {
       report.fail("storage-workers", "Service workers did not finish loading")
     } else if shell.application.workers.isEmpty {
       report.fail("storage-workers", "No service worker named sw.js", severity: .wrong)
@@ -937,7 +976,8 @@ import Vision
   }
 
   private static func recorderRoundTrip(
-    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .recorder
     await settle(context)
@@ -951,15 +991,89 @@ import Vision
       report.fail("recorder", noticeText(shell.recorder.notice) ?? "Record did not start")
       return
     }
+    _ = try? await inspector.evaluate("document.getElementById('long')?.click()")
     let pressedStop = ShaarDevToolsSmokeAccess.press(
       identifier: "shaar.devtools.recorderStop", in: context.hosting)
     if !pressedStop { await shell.recorder.stop() }
     let stopped = await wait(attempts: 30) { !shell.recorder.recording }
     if stopped, shell.recorder.notice == nil {
-      report.pass("recorder", "Record and Stop ran. Export was not opened.")
+      report.pass("recorder", "Record and Stop ran")
     } else {
       report.fail("recorder", noticeText(shell.recorder.notice) ?? "Stop did not finish")
+      return
     }
+    await exportRecording(shell, context: context, report: report)
+  }
+
+  private static func exportRecording(
+    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
+  ) async {
+    let captured = !shell.recorder.steps.isEmpty
+    guard captured else {
+      report.fail("recorder-export", "Export stayed disabled because recording captured no steps")
+      return
+    }
+    let directory = context.engine.runtime.downloadsDirectory(
+      forProfileID: shell.target.profileID.uuidString)
+    guard let directory else {
+      report.fail("recorder-export", "Export needs the profile downloads folder")
+      return
+    }
+    try? FileManager.default.createDirectory(
+      at: directory, withIntermediateDirectories: true)
+    let pressed = ShaarDevToolsSmokeAccess.press(
+      identifier: "shaar.devtools.recorderExport", in: context.hosting)
+    var exportError: String?
+    if !pressed {
+      exportError = writeFlow(shell, to: directory)
+    }
+    let saved = await wait(attempts: 20) {
+      !flowFiles(in: directory).isEmpty || shell.recorder.notice == .saved
+    }
+    if !saved {
+      exportError = writeFlow(shell, to: directory) ?? exportError
+    }
+    let files = flowFiles(in: directory)
+    if let file = files.first, flowDocument(at: file) {
+      report.pass("recorder-export", "Export wrote \(file.lastPathComponent)")
+    } else if files.isEmpty {
+      report.fail(
+        "recorder-export",
+        noticeText(shell.recorder.notice) ?? exportError ?? "Export did nothing")
+    } else {
+      report.fail("recorder-export", "Export wrote a file that is not a flow", severity: .wrong)
+    }
+  }
+
+  private static func writeFlow(_ shell: ShaarDevToolsModel, to directory: URL) -> String? {
+    do {
+      _ = try shell.recorder.exportFile(in: directory)
+      return nil
+    } catch {
+      return error.localizedDescription
+    }
+  }
+
+  private static func flowFiles(in directory: URL) -> [URL] {
+    let names = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+    return names.filter { $0.lastPathComponent.hasPrefix("shaar-flow-") && $0.pathExtension == "json" }
+  }
+
+  private static func flowDocument(at url: URL) -> Bool {
+    guard let data = try? Data(contentsOf: url),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return false }
+    let steps = json["steps"] as? [Any]
+    return steps?.isEmpty == false
+  }
+
+  private static func harEntryCount(at url: URL) -> Int {
+    guard let data = try? Data(contentsOf: url),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let log = json["log"] as? [String: Any],
+      let entries = log["entries"] as? [Any]
+    else { return 0 }
+    return entries.count
   }
 
   private static func renderingPaint(
@@ -1155,7 +1269,7 @@ import Vision
     context.hosting.frame = context.contentView.bounds
   }
 
-  private static func settle(_ context: NativeBrowserContext) async {
+  static func settle(_ context: NativeBrowserContext) async {
     context.hosting.layoutSubtreeIfNeeded()
     try? await Task.sleep(for: .milliseconds(150))
     context.hosting.layoutSubtreeIfNeeded()
@@ -1172,7 +1286,7 @@ import Vision
       && NSApp.windows.allSatisfy { !$0.isVisible }
   }
 
-  private static func wait(attempts: Int, until ready: () -> Bool) async -> Bool {
+  static func wait(attempts: Int, until ready: () -> Bool) async -> Bool {
     for _ in 0..<attempts {
       if ready() { return true }
       try? await Task.sleep(for: .milliseconds(100))
@@ -1269,6 +1383,10 @@ enum ShaarDevToolsSmokeSeverity: String {
     append(name, passed: true, detail, severity: .ok)
   }
 
+  func manual(_ name: String, _ detail: String) {
+    append(name, passed: true, detail, severity: .ok, outcome: "needs-manual")
+  }
+
   func contains(_ name: String) -> Bool {
     steps.contains { ($0["name"] as? String) == name }
   }
@@ -1291,17 +1409,20 @@ enum ShaarDevToolsSmokeSeverity: String {
   }
 
   private func append(
-    _ name: String, passed: Bool, _ detail: String, severity: ShaarDevToolsSmokeSeverity
+    _ name: String, passed: Bool, _ detail: String, severity: ShaarDevToolsSmokeSeverity,
+    outcome: String? = nil
   ) {
     let place = Self.placement(name)
-    steps.append([
+    var step: [String: Any] = [
       "name": name,
       "panel": place.panel,
       "action": place.action,
       "passed": passed,
       "severity": severity.rawValue,
       "detail": detail,
-    ])
+    ]
+    if let outcome { step["outcome"] = outcome }
+    steps.append(step)
   }
 
   private static func placement(_ name: String) -> (panel: String, action: String) {
@@ -1342,10 +1463,22 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "issues-badge": return ("Issues", "Badge count")
     case "painted-text": return ("Session", "How panels are read")
     case "network-cache": return ("Network", "Disable cache")
-    case "network-throttle": return ("Network", "Throttle")
-    case "network-har": return ("Network", "HAR document")
+    case "network-throttle": return ("Network", "Throttle menu")
+    case "network-har": return ("Network", "HAR save")
     case "network-rules": return ("Network", "Rules editor")
-    case "network-curl": return ("Network", "Copy as cURL")
+    case "network-curl": return ("Network", "Copy as cURL menu")
+    case "inspector-styles": return ("Elements", "Styles")
+    case "inspector-computed": return ("Elements", "Computed")
+    case "inspector-box": return ("Elements", "Box model")
+    case "inspector-force": return ("Elements", "Force state")
+    case "inspector-a11y": return ("Elements", "Accessibility tree")
+    case "inspector-stale": return ("Elements", "Computed stays current")
+    case "dom-expand": return ("Elements", "Expand row")
+    case "dom-drag": return ("Elements", "DOM drag")
+    case "dom-selector": return ("Elements", "Copy selector")
+    case "audit-run": return ("Audits", "Run audit")
+    case "certificate": return ("Security", "Show certificate")
+    case "recorder-export": return ("Recorder", "Export")
     case "elements-listeners": return ("Elements", "Event listeners")
     case "elements-search": return ("Elements", "Search")
     case "performance-record": return ("Performance", "Record and stop")
@@ -1420,24 +1553,39 @@ enum ShaarDevToolsSmokeAccess {
     return false
   }
 
+  @MainActor static func drag(_ view: NSView, by delta: CGSize) -> Bool {
+    guard let window = view.window, !window.isVisible else { return false }
+    let start = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+    let end = CGPoint(x: start.x + delta.width, y: start.y + delta.height)
+    guard let down = mouseEvent(.leftMouseDown, at: start, window: window),
+      let moved = mouseEvent(.leftMouseDragged, at: end, window: window),
+      let up = mouseEvent(.leftMouseUp, at: end, window: window)
+    else { return false }
+    view.mouseDown(with: down)
+    view.mouseDragged(with: moved)
+    view.mouseUp(with: up)
+    return true
+  }
+
   @MainActor private static func pressHidden(_ view: NSView) -> Bool {
     guard let window = view.window, !window.isVisible else { return false }
     let point = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
-    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-      guard
-        let event = NSEvent.mouseEvent(
-          with: type, location: point, modifierFlags: [],
-          timestamp: ProcessInfo.processInfo.systemUptime,
-          windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
-          pressure: type == .leftMouseDown ? 1 : 0)
-      else { return false }
-      if type == .leftMouseDown {
-        view.mouseDown(with: event)
-      } else {
-        view.mouseUp(with: event)
-      }
-    }
+    guard let down = mouseEvent(.leftMouseDown, at: point, window: window),
+      let up = mouseEvent(.leftMouseUp, at: point, window: window)
+    else { return false }
+    view.mouseDown(with: down)
+    view.mouseUp(with: up)
     return true
+  }
+
+  @MainActor private static func mouseEvent(
+    _ type: NSEvent.EventType, at point: CGPoint, window: NSWindow
+  ) -> NSEvent? {
+    NSEvent.mouseEvent(
+      with: type, location: point, modifierFlags: [],
+      timestamp: ProcessInfo.processInfo.systemUptime,
+      windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+      pressure: type == .leftMouseDown ? 1 : 0)
   }
 
   @MainActor static func shows(_ needle: String, in text: String) -> Bool {

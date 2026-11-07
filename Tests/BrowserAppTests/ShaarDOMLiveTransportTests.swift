@@ -22,7 +22,7 @@ import Testing
 
 @Suite struct ShaarDOMLiveTransportTests {
   @Test func mapsDocumentSearchAndMutationToBoundedDOMCommands() {
-    let document = ShaarDOMRequest(.document)
+    let document = ShaarDOMRequest(.document(depth: 2))
     #expect(document.method == "DOM.getDocument")
     #expect(document.params["depth"] as? Int == 2)
     #expect(document.params["pierce"] as? Bool == true)

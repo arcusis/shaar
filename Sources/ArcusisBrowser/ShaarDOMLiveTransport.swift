@@ -11,9 +11,9 @@ struct ShaarDOMRequest {
 
   init(_ command: ShaarDOMCommand) {
     switch command {
-    case .document:
+    case .document(let depth):
       method = "DOM.getDocument"
-      params = ["depth": 2, "pierce": true]
+      params = ["depth": depth, "pierce": true]
     case .children(let id):
       method = "DOM.requestChildNodes"
       params = ["nodeId": id, "depth": 1, "pierce": true]

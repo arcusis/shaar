@@ -71,7 +71,10 @@ struct ShaarNetworkPanel: View {
       Menu {
         ForEach(ShaarNetworkThrottle.allCases, id: \.self) { preset in
           Button(ShellL10n.string(preset.rawValue)) {
-            Task { await model.conditions.select(preset) }
+            Task {
+              await ShaarNetworkMenuActions.chooseThrottle(
+                preset, conditions: model.conditions)
+            }
           }
         }
       } label: {
@@ -365,7 +368,7 @@ struct ShaarNetworkPanel: View {
           .accessibilityLabel(ShellL10n.string("Create rule from request"))
           Menu {
             Button(ShellL10n.string("Copy as cURL")) {
-              copy(model.curlCommand(for: selected))
+              ShaarNetworkMenuActions.copyCurl(selected, model: model)
             }
             Button(ShellL10n.string("Copy as fetch")) {
               copy(model.fetchCommand(for: selected))
@@ -571,12 +574,32 @@ struct ShaarNetworkPanel: View {
   }
 
   private func exportHAR() {
-    let data = ShaarNetworkHAR.document(requests: model.exportRequests(from: events))
+    let requests = model.exportRequests(from: events)
     let panel = NSSavePanel()
     panel.nameFieldStringValue = "shaar-network.har"
     panel.allowedContentTypes = [.json]
     guard panel.runModal() == .OK, let url = panel.url else { return }
-    try? data.write(to: url, options: .atomic)
+    try? ShaarNetworkHAR.write(requests, to: url)
+  }
+}
+
+enum ShaarNetworkMenuActions {
+  @MainActor static func chooseThrottle(
+    _ preset: ShaarNetworkThrottle, conditions: ShaarNetworkConditionsModel
+  ) async {
+    await conditions.select(preset)
+  }
+
+  @MainActor static func copyCurl(
+    _ row: ShaarNetworkRequest, model: ShaarNetworkModel, to pasteboard: NSPasteboard = .general
+  ) {
+    copy(model.curlCommand(for: row), to: pasteboard)
+  }
+
+  static func copy(_ value: String, to pasteboard: NSPasteboard) {
+    guard !value.isEmpty else { return }
+    pasteboard.clearContents()
+    pasteboard.setString(value, forType: .string)
   }
 }
 

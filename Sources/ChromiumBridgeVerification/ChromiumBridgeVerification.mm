@@ -865,13 +865,6 @@ NSString *ARCProbePrivateQuitDialogResult(BOOL ownerCurrent, NSString *dialogErr
   return @"devtools-error";
 }
 
-BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
-  if ([elementID isEqualToString:@"blank"]) return YES;
-  if ([elementID isEqualToString:@"popup"]) return YES;
-  if ([elementID isEqualToString:@"performance-input"]) return YES;
-  return [elementID isEqualToString:@"arcusis-private-quit-activation"];
-}
-
 static NSMutableDictionary *PrivateQuitHoldOwners(ARCShaarRuntime *runtime) {
   if (!runtime) return nil;
   NSMutableDictionary *owners = objc_getAssociatedObject(runtime, kPrivateQuitHoldOwnersKey);
@@ -1255,45 +1248,11 @@ static NSDictionary *ProbePopupOwner(ARCShaarRuntime *runtime, NSString *popupID
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
                     completion:(void (^)(BOOL))completion {
   if (!completion) return;
-  if (!ProbeCaptureAllowed() || !ARCProbeTrustedClickElementAllowed(elementID)) {
+  if (!ProbeCaptureAllowed()) {
     completion(NO);
     return;
   }
-  NSView *view = [self viewForTabID:tabID];
-  if (!view.window || view.window.isVisible) {
-    completion(NO);
-    return;
-  }
-  for (NSWindow *window in NSApp.windows) {
-    if (window.isVisible) {
-      completion(NO);
-      return;
-    }
-  }
-  NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
-  NSString *windowID = [self windowIDForTabID:tabID];
-  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
-    completion(NO);
-    return;
-  }
-  NSString *script = [NSString stringWithFormat:@"(()=>{const e=document.getElementById('%@');if(!e)return null;const r=e.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()", elementID];
-  [self evaluateInTabID:tabID script:script completion:^(NSString *result) {
-    NSData *data = [result dataUsingEncoding:NSUTF8StringEncoding];
-    NSDictionary *point = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    NSNumber *x = [point isKindOfClass:NSDictionary.class] ? point[@"x"] : nil;
-    NSNumber *y = [point isKindOfClass:NSDictionary.class] ? point[@"y"] : nil;
-    if (![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class]) {
-      completion(NO);
-      return;
-    }
-    const shaar_operation operation = static_cast<shaar_operation>(1093);
-    if (![self shaarDevToolsSubmit:operation tabID:tabID profileID:profileID
-                         windowID:windowID
-                          payload:@{@"schemaVersion": @1, @"x": x, @"y": y}
-                       completion:^(NSDictionary *reply, NSError *error) {
-                         completion(!error && [reply[@"submitted"] boolValue]);
-                       }]) completion(NO);
-  }];
+  [self submitTrustedProbeClickInTabID:tabID elementID:elementID completion:completion];
 }
 - (NSDictionary *)privateNavigationProbeAuditForTabID:(NSString *)tabID {
   if (!ProbeCaptureAllowed()) return nil;

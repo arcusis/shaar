@@ -227,6 +227,9 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 
 /// Shaar C ABI implementation of the core profile/window/tab/navigation backend.
 @interface ARCShaarRuntime : ARCChromiumRuntime <ARCBrowserCoreBackend>
+/// Testing-only input for an owned, hidden local fixture. The engine enforces the probe root.
+- (void)submitTrustedProbeClickInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                            completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 /// The panel lease and fixed screencast commands only.
 - (void)panelRequest:(NSUInteger)operation tabID:(NSString *)tabID
          profileID:(NSString *)profileID windowID:(NSString *)windowID

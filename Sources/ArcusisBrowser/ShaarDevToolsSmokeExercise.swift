@@ -358,6 +358,11 @@ import ShaarEngineABI
       report.fail("dom-drag", "DOM drag had no loaded element siblings")
       return
     }
+    shell.dom.select(long.id)
+    if !shell.dom.expanded.contains(long.id) { await shell.dom.toggleExpanded(long.id) }
+    if !shell.dom.expanded.contains(fresh[0].id) { await shell.dom.toggleExpanded(fresh[0].id) }
+    _ = ShaarDevToolsSmokeAccess.capture(
+      context.hosting, to: report.directory.appending(path: "panel-elements-dom-drag.png"))
     let draggedKey = signature(fresh[1], model: shell.dom)
     let beforeKey = signature(fresh[0], model: shell.dom)
     guard draggedKey != beforeKey else {

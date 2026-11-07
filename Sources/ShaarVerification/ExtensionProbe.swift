@@ -91,11 +91,17 @@ final class ExtensionProbe {
         "popup \(index) belongs to its selected space profile and tab")
       attachHiddenPopup(popup.id)
       let initial = try await waitForPopup(popup.id, expression: "window.probeState")
+      let nativeTabID = (initial["tabID"] as? NSNumber)?.intValue ?? -1
+      try expect(
+        nativeTabID > 0
+          && initial["tabURL"] as? String
+            == store.session.selectedSpace.selectedTab?.url.absoluteString,
+        "popup \(index) targets the correct active tab through chrome.tabs")
       _ = await evaluatePopup(
         popup.id,
         expression: """
           (() => { window.probeActionTitle = null;
-            chrome.action.setTitle({tabId:\(runtime.nativeTabID(forID: tab)),title:'Inspect account'})
+            chrome.action.setTitle({tabId:\(nativeTabID),title:'Inspect account'})
               .then(() => window.probeActionTitle = {done:true})
               .catch(error => window.probeActionTitle = {error:String(error)});
             return true; })()
@@ -108,9 +114,6 @@ final class ExtensionProbe {
       try expect(
         initial["serviceWorker"] as? Bool == true,
         "popup \(index) connects to its MV3 service worker")
-      try expect(
-        (initial["tabID"] as? NSNumber)?.int32Value == runtime.nativeTabID(forID: tab),
-        "popup \(index) targets the correct active tab through chrome.tabs")
       try expect(initial["error"] == nil, "popup \(index) reports no extension API error")
       if phase == "initial" && index < 2 {
         try expect(

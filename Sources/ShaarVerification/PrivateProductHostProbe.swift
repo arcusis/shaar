@@ -671,7 +671,7 @@ final class PrivateProductHostProbe {
         continuation.resume(returning: $0)
       }
     }
-    guard clicked else { return false }
+    guard clicked, await waitForTrustedQuitActivation(on: tabID) else { return false }
     return await withCheckedContinuation { continuation in
       runtime.evaluate(
         inTabID: tabID,
@@ -689,6 +689,23 @@ final class PrivateProductHostProbe {
         continuation.resume(returning: result == "true")
       }
     }
+  }
+
+  private func waitForTrustedQuitActivation(on tabID: String) async -> Bool {
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
+      let activated: Bool = await withCheckedContinuation { continuation in
+        runtime.evaluate(
+          inTabID: tabID,
+          script:
+            "navigator.userActivation.hasBeenActive && window.__arcusisQuitClickTrusted === true"
+        ) { result in
+          continuation.resume(returning: result == "true")
+        }
+      }
+      if activated { return true }
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+    return false
   }
 
   private func removeBeforeUnload(on tabID: String) async -> Bool {

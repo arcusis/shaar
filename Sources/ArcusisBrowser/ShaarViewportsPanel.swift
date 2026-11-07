@@ -186,8 +186,9 @@ struct ShaarViewportsPanel: View {
       ViewportInputSurface(
         width: frame.contentWidth, height: frame.contentHeight,
         onClick: { x, y in run(.click(frame.id, x: x, y: y)) },
-        onScroll: { dx, dy in run(.scroll(frame.id, deltaX: dx, deltaY: dy)) })
-        .frame(width: preview.width, height: preview.height)
+        onScroll: { dx, dy in run(.scroll(frame.id, deltaX: dx, deltaY: dy)) }
+      )
+      .frame(width: preview.width, height: preview.height)
       if showsNotch(frame) {
         let notch = ShaarViewportPreviewLayout.notchSize(previewWidth: preview.width)
         Capsule().fill(Color.primary)

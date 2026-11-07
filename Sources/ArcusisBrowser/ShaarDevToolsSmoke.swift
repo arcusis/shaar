@@ -326,6 +326,9 @@ import Vision
         let chainCount = chain?.count ?? 0
         let viewerButton = ShaarDevToolsSmokeAccess.element(
           identifier: "shaar.devtools.showCertificate", in: context.hosting) != nil
+          || ShaarDevToolsSmokeAccess.shows(
+            ShellL10n.string("Show certificate"),
+            in: ShaarDevToolsSmokeAccess.renderedText(context.hosting))
         let certificate = identity.map { value in
           !value.subject.isEmpty && !value.issuer.isEmpty
             && value.notBefore < value.notAfter

@@ -408,7 +408,7 @@ import Vision
         identifier: "shaar.devtools.memory.engineGate", in: context.hosting) != nil
         || ShaarDevToolsSmokeAccess.shows("Live heap snapshots need engine support", in: painted)
       if gate {
-        report.fail(name, "Memory shows a needs-engine banner on shaar.21")
+        report.fail(name, "Memory shows a needs-engine banner")
       } else if panelIsPainted(section, in: painted) {
         report.pass(name, "Memory does not show a needs-engine banner before the snapshot")
       } else {

@@ -467,6 +467,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0054-shaar-devtools-network-headers.patch",
       "sha256": "d4c031c5d19bad6988fad1db7404a3b055e7d3c11a95dc78b2ce0acf2a089631"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0055-shaar-page-certificate.patch",
+      "sha256": "8e7c490dd5bb898f42cff99fd1dc73e659e2efdb563dd876c098abd97bea5f4c"
     }
   ],
   "requiredExports": [

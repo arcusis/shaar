@@ -46,6 +46,8 @@ struct ShaarCertificateIdentity: Equatable, Sendable {
   var issuer: String
   var notBefore: Date
   var notAfter: Date
+  var subjectAltNames: [String] = []
+  var chainSubjects: [String] = []
 }
 
 struct ShaarDevToolsSecuritySummary: Equatable, Sendable {
@@ -79,6 +81,17 @@ struct ShaarDevToolsSecuritySummary: Equatable, Sendable {
 }
 
 enum ShaarCertificateIdentityReader {
+  static func read(_ details: SiteCertificateChain.Details) -> ShaarCertificateIdentity? {
+    guard let certificate = details.certificates.first,
+      var identity = leaf(from: certificate)
+    else { return nil }
+    identity.subjectAltNames = details.subjectAltNames
+    identity.chainSubjects = details.certificates.enumerated().map { index, certificate in
+      (SecCertificateCopySubjectSummary(certificate) as String?) ?? "Certificate \(index + 1)"
+    }
+    return identity
+  }
+
   /// Subject, issuer, and validity of one certificate the site controls already loaded.
   static func leaf(from certificate: SecCertificate) -> ShaarCertificateIdentity? {
     let keys =
@@ -183,6 +196,12 @@ struct ShaarDevToolsSecurityPanel: View {
         title: "Valid from", value: ShaarCertificateDateText.string(from: certificate.notBefore))
       ShaarSecurityFact(
         title: "Valid until", value: ShaarCertificateDateText.string(from: certificate.notAfter))
+      if !certificate.subjectAltNames.isEmpty {
+        ShaarSecurityFact(title: "SANs", value: certificate.subjectAltNames.joined(separator: "\n"))
+      }
+      if !certificate.chainSubjects.isEmpty {
+        ShaarSecurityFact(title: "Chain", value: certificate.chainSubjects.joined(separator: "\n"))
+      }
       Button(ShellL10n.string("Show certificate"), action: model.presentCertificate)
         .controlSize(.small)
         .accessibilityIdentifier("shaar.devtools.showCertificate")

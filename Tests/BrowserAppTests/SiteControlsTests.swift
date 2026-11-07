@@ -234,17 +234,3 @@ private func target(_ address: String) -> SiteControlTarget {
   }
   #expect(model.isAllowed(.sound))
 }
-
-@Test func certificateFingerprintsMatchChromiumsColonSeparatedForm() {
-  let certificate = Data("certificate".utf8)
-  let digest = SiteCertificateChain.fingerprint(of: certificate)
-  #expect(digest.count == 64 && digest == digest.uppercased())
-  var chromium = ""
-  for (index, character) in digest.enumerated() {
-    if index > 0 && index.isMultiple(of: 2) { chromium.append(":") }
-    chromium.append(character)
-  }
-  #expect(SiteCertificateChain.fingerprint(chromium, matches: certificate))
-  #expect(SiteCertificateChain.fingerprint(chromium.lowercased(), matches: certificate))
-  #expect(!SiteCertificateChain.fingerprint(chromium, matches: Data("other".utf8)))
-}

@@ -109,6 +109,8 @@
     "Certificate": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Certificate"}},"he":{"stringUnit":{"state":"translated","value":"אישור"}}}},
     "Subject": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Subject"}},"he":{"stringUnit":{"state":"translated","value":"נושא"}}}},
     "Issuer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Issuer"}},"he":{"stringUnit":{"state":"translated","value":"מנפיק"}}}},
+    "SANs": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"SANs"}},"he":{"stringUnit":{"state":"translated","value":"שמות חלופיים"}}}},
+    "Chain": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Chain"}},"he":{"stringUnit":{"state":"translated","value":"שרשרת אישורים"}}}},
     "Valid from": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Valid from"}},"he":{"stringUnit":{"state":"translated","value":"בתוקף מתאריך"}}}},
     "Valid until": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Valid until"}},"he":{"stringUnit":{"state":"translated","value":"בתוקף עד"}}}},
     "Security details are scoped to this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Security details are scoped to this tab"}},"he":{"stringUnit":{"state":"translated","value":"פרטי האבטחה חלים על הלשונית הזו"}}}},

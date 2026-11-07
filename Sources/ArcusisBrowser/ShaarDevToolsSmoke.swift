@@ -321,16 +321,19 @@ import Vision
         report.fail("world-capture-\(name)", "Offscreen capture failed")
       }
       if section == .security && shell.target.url.scheme == "https" {
-        let certificate = shell.securitySummary.certificate != nil
-        var detail = "HTTPS certificate subject, issuer, and dates"
-        if !certificate {
-          do {
-            let chain = try await context.engine.certificateChain(for: shell.target)
-            detail = "Identity absent; certificate chain count \(chain.count)"
-          } catch {
-            detail = "Identity absent: \(error.localizedDescription)"
-          }
-        }
+        let identity = shell.securitySummary.certificate
+        let chain = try? await context.engine.certificateChain(for: shell.target)
+        let chainCount = chain?.count ?? 0
+        let viewerButton = ShaarDevToolsSmokeAccess.element(
+          identifier: "shaar.devtools.showCertificate", in: context.hosting) != nil
+        let certificate = identity.map { value in
+          !value.subject.isEmpty && !value.issuer.isEmpty
+            && value.notBefore < value.notAfter
+            && !value.subjectAltNames.isEmpty
+            && chainCount > 0 && value.chainSubjects.count == chainCount
+            && viewerButton
+        } ?? false
+        let detail = "Identity \(identity == nil ? "absent" : "present"); SANs \(identity?.subjectAltNames.count ?? 0); chain \(chainCount); viewer button \(viewerButton)"
         reportRealWorld(
           certificate, "world-certificate", detail, report: report)
       }

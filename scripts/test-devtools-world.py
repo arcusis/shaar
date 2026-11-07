@@ -13,6 +13,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
+import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,8 @@ def main():
     parser.add_argument("--app", type=Path, default=fixture.DEFAULT_APP)
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--spa-only", action="store_true")
+    parser.add_argument("--round2", action="store_true")
+    parser.add_argument("--hmr-file", type=Path)
     args = parser.parse_args()
     output = ROOT / "build/devtools-world" / args.name
     output.mkdir(parents=True, exist_ok=True)
@@ -41,15 +45,34 @@ def main():
         environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
         environment["SHAAR_COMPUTED_CAPTURE"] = "1"
         environment.pop("SHAAR_ENGINE_TESTING", None)
+        original_hmr = args.hmr_file.read_text() if args.hmr_file else None
+        def edit_hmr():
+            marker = root / "hmr-ready"
+            for _ in range(600):
+                if marker.is_file():
+                    if original_hmr is not None and "before-edit" in original_hmr:
+                        args.hmr_file.write_text(original_hmr.replace("before-edit", "after-edit"))
+                        (root / "hmr-edited").touch()
+                    return
+                time.sleep(0.1)
+        worker = threading.Thread(target=edit_hmr, daemon=True) if args.hmr_file else None
+        if worker:
+            worker.start()
+        mode = "real-world"
+        if args.spa_only:
+            mode = "spa-only"
+        elif args.round2:
+            mode = "round-two"
         with (output / "stdout.txt").open("w") as stdout, (output / "stderr.txt").open("w") as stderr:
             try:
                 result = subprocess.run(
-                    [str(executable), "--devtools-smoke", str(report_path), args.url,
-                     "spa-only" if args.spa_only else "real-world"],
+                    [str(executable), "--devtools-smoke", str(report_path), args.url, mode],
                     env=environment, stdout=stdout, stderr=stderr, timeout=600, check=False,
                 )
             except subprocess.TimeoutExpired:
                 result = subprocess.CompletedProcess([], 124)
+        if original_hmr is not None:
+            args.hmr_file.write_text(original_hmr)
         report = json.loads(report_path.read_text()) if report_path.is_file() else {"steps": []}
         for capture in root.glob("world-*.png"):
             shutil.copy2(capture, output / capture.name)

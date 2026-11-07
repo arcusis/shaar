@@ -14,7 +14,7 @@ import Vision
 @MainActor enum ShaarDevToolsSmoke {
   static func run(
     frameworkURL: URL, outputURL: URL, pageURL: URL?, realWorld: Bool = false,
-    spaOnly: Bool = false
+    spaOnly: Bool = false, roundTwo: Bool = false
   ) -> Int32 {
     guard let pageURL,
       realWorld && ["http", "https"].contains(pageURL.scheme ?? "")
@@ -41,7 +41,7 @@ import Vision
         Task {
           await exercise(
             host: host, pageURL: pageURL, outputURL: outputURL, keys: keys,
-            realWorld: realWorld, spaOnly: spaOnly)
+            realWorld: realWorld, spaOnly: spaOnly, roundTwo: roundTwo)
         }
       }
       return withExtendedLifetime(host) {
@@ -59,7 +59,7 @@ import Vision
 
   private static func exercise(
     host: NativeBrowserHost, pageURL: URL, outputURL: URL, keys: ShaarDevToolsSmokeKeys,
-    realWorld: Bool, spaOnly: Bool
+    realWorld: Bool, spaOnly: Bool, roundTwo: Bool
   ) async {
     let report = ShaarDevToolsSmokeReport(directory: outputURL.deletingLastPathComponent())
     report.note(
@@ -123,7 +123,7 @@ import Vision
     if realWorld {
       await exerciseRealWorld(
         shell: shell, inspector: inspector, context: context, host: host,
-        pageURL: pageURL, report: report)
+        pageURL: pageURL, report: report, roundTwo: roundTwo)
       return
     }
     if context.store.reloadCurrentPage() {
@@ -255,7 +255,8 @@ import Vision
 
   private static func exerciseRealWorld(
     shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
-    host: NativeBrowserHost, pageURL: URL, report: ShaarDevToolsSmokeReport
+    host: NativeBrowserHost, pageURL: URL, report: ShaarDevToolsSmokeReport,
+    roundTwo: Bool
   ) async {
     prepareDock(shell, context: context)
     let beforeFirstReload = Date().timeIntervalSince1970
@@ -273,12 +274,18 @@ import Vision
       report.fail("world-reload-before", "Initial reload was refused")
     }
     await walkRealWorldPanels(shell: shell, context: context, report: report)
-    await inspectRealWorldElement(shell: shell, inspector: inspector, report: report)
+    await inspectRealWorldElement(
+      shell: shell, inspector: inspector, context: context, report: report)
     await filterRealWorldConsole(
       shell: shell, inspector: inspector, context: context, report: report)
     await inspectRealWorldRequest(shell: shell, context: context, report: report)
     await inspectRealWorldStorage(shell: shell, context: context, report: report)
     await performanceRecord(shell, context: context, report: report)
+    if roundTwo {
+      await exerciseRealWorldRoundTwo(
+        shell: shell, inspector: inspector, context: context, pageURL: pageURL,
+        report: report)
+    }
     let beforeSecondReload = Date().timeIntervalSince1970
     if context.store.reloadCurrentPage() {
       let reloaded = await wait(attempts: 160) {
@@ -377,26 +384,36 @@ import Vision
 
   private static func inspectRealWorldElement(
     shell: ShaarDevToolsModel, inspector: InspectorModel,
-    report: ShaarDevToolsSmokeReport
+    context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .elements
     _ = await wait(attempts: 60) { shell.dom.available && shell.dom.rootID != nil }
-    if !shell.dom.nodes.values.contains(where: { isBody($0) }) {
-      await shell.dom.loadDocument(depth: 8)
-    }
+    await shell.dom.loadDocument(depth: 2)
     guard let body = shell.dom.nodes.values.first(where: { isBody($0) }) else {
       let names = shell.dom.nodes.values.map(\.name).sorted().prefix(12).joined(separator: ", ")
-      report.fail("world-inspect", shell.dom.failure ?? "Body absent from DOM nodes: \(names)")
+      report.fail("dom-expand", shell.dom.failure ?? "Body absent from shallow DOM: \(names)")
+      report.fail("world-inspect", "Body absent from shallow DOM")
       return
     }
-    let childError = await shell.dom.loadChildrenIfNeeded(body.id)
-    if let childError {
-      report.fail("dom-expand", childError)
-    } else if (shell.dom.nodes[body.id]?.childrenIDs.count ?? 0) > 0 {
-      report.pass("dom-expand", "Expanding body loaded its children")
-    } else {
-      report.fail("dom-expand", "Body expansion showed no children")
+    if shell.dom.expanded.contains(body.id) {
+      await shell.dom.toggleExpanded(body.id)
     }
+    await settle(context)
+    let initiallyEmpty = shell.dom.nodes[body.id]?.childrenIDs.isEmpty == true
+    let disclosure = "shaar.devtools.domDisclosure.\(body.id)"
+    let appeared = await wait(attempts: 40) {
+      ShaarDevToolsSmokeAccess.element(identifier: disclosure, in: context.hosting) != nil
+    }
+    let pressed = appeared
+      ? ShaarDevToolsSmokeAccess.press(identifier: disclosure, in: context.hosting)
+      : ShaarDevToolsSmokeAccess.pressDisclosureText("<body>", in: context.hosting)
+    let loaded = await wait(attempts: 80) {
+      (shell.dom.nodes[body.id]?.childrenIDs.count ?? 0) > 0
+    }
+    reportRealWorld(
+      initiallyEmpty && pressed && loaded, "dom-expand",
+      "Disclosure found=\(appeared), press=\(pressed), shallow children empty=\(initiallyEmpty), loaded=\(loaded); \(shell.dom.failure ?? "no error")",
+      report: report)
     shell.dom.select(body.id)
     do {
       try await inspector.selectDOMNode(body.id)
@@ -2035,6 +2052,30 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "world-headers": return ("Network", "Headers")
     case "world-response": return ("Network", "Response")
     case "world-timing": return ("Network", "Timing")
+    case "world2-elements-search": return ("Elements", "Search body")
+    case "world2-elements-attribute": return ("Elements", "Edit attribute")
+    case "world2-console-object": return ("Console", "Expand object")
+    case "world2-console-multiline": return ("Console", "Multiline eval")
+    case "world2-source-open": return ("Sources", "Open source")
+    case "world2-source-pretty": return ("Sources", "Pretty print")
+    case "world2-source-map": return ("Sources", "Source map")
+    case "world2-network-volume": return ("Network", "100+ requests")
+    case "world2-network-filter": return ("Network", "Filter chip")
+    case "world2-network-search": return ("Network", "Search")
+    case "world2-network-fetch": return ("Network", "Copy as fetch")
+    case "world2-network-har": return ("Network", "Export HAR")
+    case "world2-websocket": return ("Network", "WebSocket")
+    case "world2-service-worker": return ("Application", "Service worker")
+    case "world2-cookie-edit": return ("Application", "Edit cookie")
+    case "world2-cookie-delete": return ("Application", "Delete cookie")
+    case "world2-performance-long-task": return ("Performance", "Long task")
+    case "world2-dock-bottom": return ("Chrome", "Dock bottom")
+    case "world2-dock-right": return ("Chrome", "Dock right")
+    case "world2-theme-light": return ("Chrome", "Light mode")
+    case "world2-theme-dark": return ("Chrome", "Dark mode")
+    case "world2-keyboard": return ("Chrome", "Keyboard navigation")
+    case "world2-hmr": return ("Session", "Hot reload")
+    case "world2-spa": return ("Session", "SPA navigation")
     case "world-certificate": return ("Security", "Certificate identity")
     case "world-loading": return ("Session", "Loading indicator")
     case "world-reload-before": return ("Session", "Reload after stream")
@@ -2123,6 +2164,47 @@ enum ShaarDevToolsSmokeSeverity: String {
 }
 
 enum ShaarDevToolsSmokeAccess {
+  @MainActor static func sendRightArrow(in root: NSView) -> Bool {
+    guard let window = root.window, !window.isVisible,
+      let event = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: window.windowNumber, context: nil,
+        characters: "\u{F703}", charactersIgnoringModifiers: "\u{F703}",
+        isARepeat: false, keyCode: 124)
+    else { return false }
+    window.sendEvent(event)
+    return true
+  }
+
+  @MainActor static func pressDisclosureText(_ label: String, in root: NSView) -> Bool {
+    root.layoutSubtreeIfNeeded()
+    guard let window = root.window, !window.isVisible,
+      let bitmap = root.bitmapImageRepForCachingDisplay(in: root.bounds)
+    else { return false }
+    root.cacheDisplay(in: root.bounds, to: bitmap)
+    guard let image = bitmap.cgImage else { return false }
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = false
+    let handler = VNImageRequestHandler(cgImage: image, options: [:])
+    guard (try? handler.perform([request])) != nil,
+      let row = request.results?.first(where: {
+        $0.topCandidates(1).first?.string.localizedCaseInsensitiveContains(label) == true
+      })
+    else { return false }
+    let x = row.boundingBox.minX * root.bounds.width - 12
+    let imageY = row.boundingBox.midY * root.bounds.height
+    let y = root.isFlipped ? root.bounds.height - imageY : imageY
+    let point = root.convert(CGPoint(x: x, y: y), to: nil)
+    guard let down = mouseEvent(.leftMouseDown, at: point, window: window),
+      let up = mouseEvent(.leftMouseUp, at: point, window: window)
+    else { return false }
+    window.sendEvent(down)
+    window.sendEvent(up)
+    return true
+  }
+
   @MainActor static func element(identifier: String, in root: NSView) -> NSObject? {
     root.layoutSubtreeIfNeeded()
     return find(identifier: identifier, label: nil, in: root, seen: [])

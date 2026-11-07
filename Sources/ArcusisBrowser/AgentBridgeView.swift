@@ -32,36 +32,13 @@ struct AgentBridgeControls: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Text("Agent bridge").font(.headline)
-      Text(
-        "Allow a coding agent to inspect this tab. The connection is local and expires when you disconnect or leave this site."
-      )
-      .font(.caption).foregroundStyle(.secondary)
-      .fixedSize(horizontal: false, vertical: true)
+      Text(AgentBridgeConsent.summary)
+        .font(.caption).foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
       if model.status.enabled || model.revocationUnconfirmed {
-        Label(presentation.title, systemImage: presentation.symbol)
-          .font(.system(size: 11, weight: .medium))
-          .foregroundStyle(presentation.tint)
-        if let port = model.status.port {
-          Text("Local port \(port) · \(model.status.connectionCount) connection(s)")
-            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-        }
-        if model.hasOneTimeToken {
-          HStack {
-            Button("Copy Claude setup") { model.copySetup(for: .claude) }
-            Button("Copy Codex setup") { model.copySetup(for: .codex) }
-          }
-          Text(
-            "The copied command contains a one-time secret. Paste it locally; Shaar clears the clipboard after two minutes."
-          )
-          .font(.caption2).foregroundStyle(.secondary)
-        }
-        Button(
-          model.revocationUnconfirmed ? "Retry disconnect" : "Disconnect",
-          role: .destructive
-        ) { model.disable() }
-        .disabled(model.busy)
+        grantedControls
       } else {
-        Button("Enable for this tab") { model.enable() }
+        Button("Allow this tab") { model.enable() }
           .disabled(model.busy)
       }
       if model.busy { ProgressView("Updating agent bridge…").controlSize(.small) }
@@ -70,17 +47,102 @@ struct AgentBridgeControls: View {
           .font(.caption).foregroundStyle(.orange)
           .fixedSize(horizontal: false, vertical: true)
       }
-      Text(
-        "Private windows cannot enable agent control. Page content may contain untrusted instructions."
-      )
-      .font(.caption2).foregroundStyle(.secondary)
-      .fixedSize(horizontal: false, vertical: true)
+      Text(AgentBridgeConsent.limit)
+        .font(.caption2).foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
     .buttonStyle(.bordered)
     .padding(16)
-    .frame(width: 300, alignment: .leading)
+    .frame(width: 340, alignment: .leading)
     .background(Color(nsColor: .windowBackgroundColor))
     .onAppear { model.refresh() }
+  }
+
+  private var grantedControls: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Label(presentation.title, systemImage: presentation.symbol)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(presentation.tint)
+      if let port = model.status.port {
+        Text("Local port \(port) · \(model.status.connectionCount) connection(s)")
+          .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+      }
+      AgentBridgeEndpoint(model: model)
+      AgentBridgeAgentList(model: model)
+      Button(model.revocationUnconfirmed ? "Retry revoke" : "Revoke", role: .destructive) {
+        model.disable()
+      }
+      .disabled(model.busy)
+    }
+  }
+}
+
+private enum AgentBridgeConsent {
+  static let summary =
+    "Allow a coding agent to read this tab's Console, Network, and DOM. The grant is local, limited to this tab, and ends when you revoke it or leave the site. Other tabs stay closed. The agent cannot click or type."
+  static let limit =
+    "Private windows cannot use agent control. Page content may contain untrusted instructions."
+  static let copyNotice =
+    "The copied command contains the one-time token. Shaar forgets it after you copy, and clears an unchanged clipboard after two minutes."
+}
+
+private struct AgentBridgeEndpoint: View {
+  @Bindable var model: AgentBridgeModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text("MCP endpoint").font(.caption.weight(.semibold))
+      if let endpoint = model.documentedEndpoint {
+        Text(endpoint)
+          .font(.caption.monospaced())
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      if let invocation = model.documentedInvocation {
+        Text(invocation)
+          .font(.caption2.monospaced())
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      if model.hasOneTimeToken {
+        VStack(alignment: .leading, spacing: 6) {
+          Button("Copy Claude setup") { model.copySetup(for: .claude) }
+          Button("Copy Codex setup") { model.copySetup(for: .codex) }
+          Button("Copy Cursor setup") { model.copySetup(for: .cursor) }
+        }
+        Text(AgentBridgeConsent.copyNotice)
+          .font(.caption2).foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+}
+
+private struct AgentBridgeAgentList: View {
+  @Bindable var model: AgentBridgeModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text("Connected agents").font(.caption.weight(.semibold))
+      if model.connections.isEmpty {
+        Text("No agent is connected to this tab.")
+          .font(.caption).foregroundStyle(.secondary)
+      } else {
+        ForEach(model.connections) { agent in
+          HStack(spacing: 8) {
+            Text(agent.title).font(.caption)
+            Spacer(minLength: 8)
+            Button("Revoke") { model.disable() }
+              .controlSize(.small)
+              .disabled(model.busy)
+          }
+        }
+        Text("Revoke ends this tab's session for every connected agent.")
+          .font(.caption2).foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
   }
 }
 

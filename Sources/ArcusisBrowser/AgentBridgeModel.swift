@@ -18,6 +18,58 @@ enum AgentBridgeOperation: Int {
   case status = 1007
 }
 
+struct AgentBridgeConnection: Equatable, Identifiable {
+  let index: Int
+  var id: Int { index }
+  var title: String { "Local agent \(index)" }
+}
+
+enum AgentBridgeSetup {
+  static func invocation(endpoint: String) -> String {
+    let header = "'{\"Authorization\":\"Bearer <token>\"}'"
+    return "npx -y chrome-devtools-mcp@latest --wsEndpoint=\(endpoint) --wsHeaders=\(header)"
+  }
+
+  static func command(
+    for client: AgentBridgeModel.Client, endpoint: String, token: String
+  ) -> String {
+    let header = bearerHeader(token)
+    let flags = "--wsEndpoint=\(endpoint) --wsHeaders='\(header)'"
+    switch client {
+    case .claude:
+      return "claude mcp add shaar-agent -- npx -y chrome-devtools-mcp@latest \(flags)"
+    case .codex:
+      return "codex mcp add shaar-agent -- npx -y chrome-devtools-mcp@latest \(flags)"
+    case .cursor:
+      return cursorConfiguration(endpoint: endpoint, header: header)
+    }
+  }
+
+  private static func bearerHeader(_ token: String) -> String {
+    #"{"Authorization":"Bearer "# + token + #""}"#
+  }
+
+  private static func cursorConfiguration(endpoint: String, header: String) -> String {
+    let value: [String: Any] = [
+      "mcpServers": [
+        "shaar-agent": [
+          "command": "npx",
+          "args": [
+            "-y", "chrome-devtools-mcp@latest",
+            "--wsEndpoint=\(endpoint)", "--wsHeaders=\(header)",
+          ],
+        ]
+      ]
+    ]
+    guard
+      let data = try? JSONSerialization.data(
+        withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
+      let text = String(data: data, encoding: .utf8)
+    else { return "" }
+    return text
+  }
+}
+
 struct AgentBridgeStatus: Equatable {
   let enabled: Bool
   let port: Int?
@@ -82,6 +134,14 @@ final class AgentBridgeModel {
   var isConnected: Bool { status.connectionCount > 0 }
   var needsBanner: Bool { isConnected || revocationUnconfirmed }
   var hasOneTimeToken: Bool { canCopySetup }
+  var connections: [AgentBridgeConnection] {
+    guard status.enabled, status.connectionCount > 0 else { return [] }
+    return (1...status.connectionCount).map { AgentBridgeConnection(index: $0) }
+  }
+  var documentedEndpoint: String? { status.enabled ? status.wsEndpoint : nil }
+  var documentedInvocation: String? {
+    documentedEndpoint.map(AgentBridgeSetup.invocation)
+  }
 
   init(target: SiteControlTarget, request: @escaping Request) {
     self.target = target
@@ -201,18 +261,13 @@ final class AgentBridgeModel {
     if wasEnabled { request(.disable, old) { _, _ in } }
   }
 
-  enum Client { case claude, codex }
+  enum Client { case claude, codex, cursor }
 
   func setupCommand(for client: Client) -> String? {
     guard let token = oneTimeToken, let endpoint = status.wsEndpoint else { return nil }
-    let header = #"{"Authorization":"Bearer "# + token + #""}"#
-    let arguments = "--wsEndpoint=\(endpoint) --wsHeaders='\(header)'"
-    switch client {
-    case .claude:
-      return "claude mcp add shaar-agent -- npx -y chrome-devtools-mcp@latest \(arguments)"
-    case .codex:
-      return "codex mcp add shaar-agent -- npx -y chrome-devtools-mcp@latest \(arguments)"
-    }
+    let command = AgentBridgeSetup.command(for: client, endpoint: endpoint, token: token)
+    guard !command.isEmpty else { return nil }
+    return command
   }
 
   func copySetup(for client: Client) {

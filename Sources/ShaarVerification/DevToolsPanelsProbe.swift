@@ -77,6 +77,17 @@ import Foundation
       }
       return "Console error and loopback fetch reached the live app event models"
     }
+    await check("network-row") {
+      try await self.wait("live network row columns") {
+        self.finishedPrivacyRow(shell) != nil
+      }
+      guard let row = self.finishedPrivacyRow(shell) else {
+        throw Failure("Live network row lost its columns")
+      }
+      let size = row.encodedBytes ?? 0
+      let millis = Int(((row.duration ?? 0) * 1_000).rounded())
+      return "\(row.method) \(row.name) \(row.resource.rawValue) \(size) bytes \(millis) ms"
+    }
     await check("application-cookie") {
       shell.cookies.configure(store: self.engine, target: target)
       await shell.cookies.refresh()
@@ -400,6 +411,16 @@ import Foundation
       && chromium?.modifiers == [.command, .option, .shift]
   }
 
+  private func finishedPrivacyRow(_ shell: ShaarDevToolsModel) -> ShaarNetworkRequest? {
+    shell.network.requests(from: shell.events).first { row in
+      row.url.contains("/profile-privacy-cache")
+        && row.method == "GET"
+        && row.name == "profile-privacy-cache"
+        && row.encodedBytes != nil
+        && row.duration != nil
+    }
+  }
+
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
   }
@@ -423,7 +444,8 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "f12-route", "console-network", "application-cookie", "application-local-storage",
+    "f12-route", "console-network", "network-row", "application-cookie",
+    "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",
     "application-service-worker", "network-rules", "source-bytes", "viewports",
     "masked-repro", "elements-live", "elements-scale",

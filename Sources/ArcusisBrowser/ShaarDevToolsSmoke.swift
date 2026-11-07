@@ -480,10 +480,14 @@ import Vision
     let hasDocument = initial.contains {
       $0.method == "GET" && URL(string: $0.url)?.path == targetPath
     }
+    let documentRows = initial.filter { URL(string: $0.url)?.path == targetPath }
+    let documentDetails = documentRows.map {
+      "id=\($0.id) method=\($0.method.isEmpty ? "<empty>" : $0.method) status=\($0.status.map(String.init) ?? "-")"
+    }.joined(separator: "; ")
     let paths = initial.prefix(12).compactMap { URL(string: $0.url)?.path }.joined(separator: ", ")
     reportRealWorld(
       hasDocument, "world-network-load",
-      "Load-time document in \(initial.count) requests (first paths: \(paths))",
+      "Load-time document in \(initial.count) requests (rows: \(documentDetails); first paths: \(paths))",
       report: report)
     if let inspector = context.engine.siteControlTarget.flatMap({
       context.engine.inspectors[$0.tabID]

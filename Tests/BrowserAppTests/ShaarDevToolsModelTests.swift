@@ -201,6 +201,30 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     shell.close()
   }
 
+  @Test func documentRequestSurvivesSameTabCommit() async {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
+    let transport = HeldDevToolsTransport()
+    let shell = ShaarDevToolsModel(target: target, transport: transport)
+    let inspector = InspectorModel(target: target, engine: nil)
+    shell.open(inspector: inspector)
+    for _ in 0..<20 where !shell.streamAvailable { await Task.yield() }
+    transport.emit(.network(.init(
+      id: UUID(), method: "GET", url: "https://example.com/old",
+      status: 200, requestID: "old-1", phase: .response)))
+    for _ in 0..<20 where shell.networkCount == 0 { await Task.yield() }
+    shell.beginNavigation()
+    transport.emit(.network(.init(
+      id: UUID(), method: "GET", url: target.url.absoluteString,
+      status: nil, requestID: "document-1", phase: .request)))
+    for _ in 0..<20 where shell.networkCount == 0 { await Task.yield() }
+    shell.updateTarget(target, committed: true)
+    let requests = shell.network.requests(from: shell.events)
+    #expect(requests.count == 1)
+    #expect(requests.first?.method == "GET")
+    shell.close()
+  }
+
   @Test func preserveLogKeepsConsoleAcrossNavigationAndClearDropsOnlyConsole() async {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/one")!)

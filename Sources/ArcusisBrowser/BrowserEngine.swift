@@ -441,7 +441,9 @@ final class BrowserEngine {
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity)
       else { return }
-      if loading && self.pages[id]?.loading != true && self.store?.pageFind?.tabID == id {
+      let startedLoading = loading && self.pages[id]?.loading != true
+      if startedLoading { self.shaarDevTools[id]?.beginNavigation() }
+      if startedLoading && self.store?.pageFind?.tabID == id {
         self.store?.dismissPageFind()
       }
       let finishedLoading = self.pages[id]?.loading == true && !loading
@@ -653,6 +655,7 @@ final class BrowserEngine {
     else { return false }
     guard ensureLiveWindow() else { return false }
     if liveTabs.contains(tab) {
+      shaarDevTools[tab]?.beginNavigation()
       if runtime.reloadTabID(
         tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode)
       {

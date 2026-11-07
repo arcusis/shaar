@@ -355,6 +355,7 @@ final class ShaarDevToolsModel {
   @ObservationIgnored var floatingWindow: ShaarDevToolsFloatingWindow?
   private(set) var streamAvailable = false
   private var eventBuffer = ShaarDevToolsEventBuffer()
+  @ObservationIgnored private var navigationResetPending = false
   var events: [ShaarDevToolsEvent] { eventBuffer.events }
   var droppedConsoleCount: Int { eventBuffer.droppedConsoleCount }
   var droppedNetworkCount: Int { eventBuffer.droppedNetworkCount }
@@ -547,6 +548,7 @@ final class ShaarDevToolsModel {
     repro.history.stop()
     repro.stopFrames()
     eventBuffer.clear()
+    navigationResetPending = false
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
     console.clearEntries()
@@ -752,6 +754,14 @@ final class ShaarDevToolsModel {
     }
   }
 
+  func beginNavigation() {
+    guard !navigationResetPending else { return }
+    retainConsoleIfRequested()
+    eventBuffer.clear()
+    network.resetLog()
+    navigationResetPending = true
+  }
+
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
     let tabChanged = self.target.tabID != target.tabID
@@ -762,6 +772,7 @@ final class ShaarDevToolsModel {
     // Closing it here drops the new document's console and network events,
     // which fire while the replacement lease is still opening.
     let keepLease = !tabChanged && eventTask != nil
+    let keepNavigationEvents = navigationResetPending && keepLease
     if !keepLease {
       streamAvailable = false
       localEventsBySource.removeAll()
@@ -769,9 +780,12 @@ final class ShaarDevToolsModel {
     }
     repro.history.stop()
     repro.stopFrames()
-    retainConsoleIfRequested()
-    eventBuffer.clear()
-    network.resetLog()
+    if !keepNavigationEvents {
+      retainConsoleIfRequested()
+      eventBuffer.clear()
+      network.resetLog()
+    }
+    if committed || tabChanged { navigationResetPending = false }
     rules.updateTarget(target, committed: committed)
     phase2.updateTarget(target, committed: committed)
     viewports.updateTarget(target, committed: committed)

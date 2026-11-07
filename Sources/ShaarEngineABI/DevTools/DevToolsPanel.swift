@@ -36,6 +36,11 @@ public struct ShaarDevToolsConsoleFrame: Equatable, Sendable {
   public let source: String
 }
 
+public struct ShaarDevToolsPanelHeader: Equatable, Sendable {
+  public let name: String
+  public let value: String
+}
+
 /// A deliberately small projection of a CDP event. Nil means the field does
 /// not apply to that event ID. Panel data is live-only and must not be saved.
 public struct ShaarDevToolsPanelData: Equatable, Sendable {
@@ -52,6 +57,8 @@ public struct ShaarDevToolsPanelData: Equatable, Sendable {
   public let droppedCount: UInt32?
   public let frame: ShaarDevToolsPanelFrame?
   public let stack: [ShaarDevToolsConsoleFrame]
+  public let requestHeaders: [ShaarDevToolsPanelHeader]
+  public let responseHeaders: [ShaarDevToolsPanelHeader]
   public let truncated: Bool
 }
 
@@ -126,7 +133,7 @@ public enum ShaarDevToolsPanelEventRouter {
         status: nil, mimeType: nil, encodedBytes: nil, name: nil,
         metrics: nil, droppedCount: nil,
         frame: ShaarDevToolsPanelFrame(jpeg: jpeg, sessionID: sessionID),
-        stack: [], truncated: false)
+        stack: [], requestHeaders: [], responseHeaders: [], truncated: false)
     }
     if id == .eventsDropped {
       guard Set(fields.keys) == ["count"],
@@ -136,7 +143,8 @@ public enum ShaarDevToolsPanelEventRouter {
       return ShaarDevToolsPanelData(
         text: nil, level: nil, requestID: nil, url: nil, method: nil,
         status: nil, mimeType: nil, encodedBytes: nil, name: nil,
-        metrics: nil, droppedCount: value, frame: nil, stack: [], truncated: false)
+        metrics: nil, droppedCount: value, frame: nil, stack: [],
+        requestHeaders: [], responseHeaders: [], truncated: false)
     }
     guard let truncated = fields["truncated"] as? Bool,
       Set(fields.keys).isSubset(of: allowedKeys(for: id)),
@@ -176,13 +184,36 @@ public enum ShaarDevToolsPanelEventRouter {
       metrics = nil
     }
     guard let stack = consoleFrames(fields) else { return nil }
+    guard let requestHeaders = headers(fields["requestHeaders"]),
+      let responseHeaders = headers(fields["responseHeaders"])
+    else { return nil }
     return ShaarDevToolsPanelData(
       text: fields["text"] as? String, level: fields["level"] as? String,
       requestID: requestID, url: fields["url"] as? String,
       method: fields["method"] as? String, status: status,
       mimeType: fields["mimeType"] as? String, encodedBytes: encodedBytes,
       name: fields["name"] as? String, metrics: metrics,
-      droppedCount: nil, frame: nil, stack: stack, truncated: truncated)
+      droppedCount: nil, frame: nil, stack: stack,
+      requestHeaders: requestHeaders, responseHeaders: responseHeaders,
+      truncated: truncated)
+  }
+
+  private static func headers(_ raw: Any?) -> [ShaarDevToolsPanelHeader]? {
+    guard let raw else { return [] }
+    guard let entries = raw as? [[String: Any]], entries.count <= 64 else { return nil }
+    var headers: [ShaarDevToolsPanelHeader] = []
+    var totalBytes = 0
+    for entry in entries {
+      guard Set(entry.keys) == ["name", "value"],
+        let name = entry["name"] as? String, !name.isEmpty,
+        name.utf8.count <= 128,
+        let value = entry["value"] as? String, value.utf8.count <= 1_024
+      else { return nil }
+      totalBytes += name.utf8.count + value.utf8.count
+      guard totalBytes <= 16_384 else { return nil }
+      headers.append(ShaarDevToolsPanelHeader(name: name, value: value))
+    }
+    return headers
   }
 
   private static func consoleFrames(
@@ -208,8 +239,10 @@ public enum ShaarDevToolsPanelEventRouter {
     switch id {
     case .consoleAPICalled, .logEntryAdded: fields.formUnion(["text", "level", "stack"])
     case .exceptionThrown: fields.formUnion(["text", "stack"])
-    case .requestWillBeSent: fields.formUnion(["requestID", "url", "method"])
-    case .responseReceived: fields.formUnion(["requestID", "url", "status", "mimeType"])
+    case .requestWillBeSent:
+      fields.formUnion(["requestID", "url", "method", "requestHeaders"])
+    case .responseReceived:
+      fields.formUnion(["requestID", "url", "status", "mimeType", "responseHeaders"])
     case .loadingFinished, .dataReceived: fields.formUnion(["requestID", "encodedBytes"])
     case .loadingFailed: fields.formUnion(["requestID", "text"])
     case .pageLifecycle: fields.insert("name")

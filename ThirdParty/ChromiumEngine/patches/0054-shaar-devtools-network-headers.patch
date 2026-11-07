@@ -1,0 +1,113 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+index bdb2ec9..23774f8 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -56,2 +56,4 @@ constexpr size_t kMaxRequestIDs = 512;
+ constexpr size_t kMaxPendingBodies = 16;
++constexpr size_t kMaxHeaderCount = 64;
++constexpr size_t kMaxHeaderBytes = 16 * 1024;
+ constexpr size_t kMaxPhase2Rows = 50;
+@@ -333,2 +335,38 @@ void PutString(base::DictValue* output, std::string_view key,
+ 
++bool SensitiveHeader(std::string_view name) {
++  const std::string lower = base::ToLowerASCII(name);
++  return lower == "authorization" || lower == "proxy-authorization" ||
++         lower == "cookie" || lower == "set-cookie" ||
++         lower == "x-api-key";
++}
++
++void CopyHeaders(base::DictValue* output, std::string_view key,
++                 const base::DictValue* source, bool* truncated) {
++  if (!source)
++    return;
++  base::ListValue headers;
++  size_t bytes = 0;
++  for (const auto item : *source) {
++    const std::string& name = item.first;
++    if (!item.second.is_string() || name.empty() || name.size() > 128) {
++      *truncated = true;
++      continue;
++    }
++    const std::string value = SensitiveHeader(name)
++                                  ? "[redacted]"
++                                  : item.second.GetString();
++    if (value.size() > 1024 || headers.size() == kMaxHeaderCount ||
++        bytes + name.size() + value.size() > kMaxHeaderBytes) {
++      *truncated = true;
++      break;
++    }
++    base::DictValue header;
++    header.Set("name", name);
++    header.Set("value", value);
++    headers.Append(std::move(header));
++    bytes += name.size() + value.size();
++  }
++  output->Set(key, std::move(headers));
++}
++
+ std::string ConsoleText(const base::ListValue* args, bool* truncated) {
+@@ -475,4 +513,4 @@ struct Projection {
+ // Only these fixed protocol notifications can cross the ABI. Each projection
+-// copies named scalar fields; headers, cookies, post data and protocol JSON
+-// never enter the event envelope.
++// copies bounded named fields. Sensitive header values, cookies, post data and
++// protocol JSON never enter the event envelope.
+ bool Project(std::string_view method, const base::DictValue& params,
+@@ -583,2 +621,11 @@ bool Project(std::string_view method, const base::DictValue& params,
+               &result->truncated);
++    CopyHeaders(&data, "requestHeaders",
++                request ? request->FindDict("headers") : nullptr,
++                &result->truncated);
++  } else if (method == "Network.requestWillBeSentExtraInfo") {
++    result->id = SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT;
++    PutString(&data, "requestID", params.FindString("requestId"),
++              &result->truncated);
++    CopyHeaders(&data, "requestHeaders", params.FindDict("headers"),
++                &result->truncated);
+   } else if (method == "Network.responseReceived") {
+@@ -598,2 +645,11 @@ bool Project(std::string_view method, const base::DictValue& params,
+     }
++    CopyHeaders(&data, "responseHeaders",
++                response ? response->FindDict("headers") : nullptr,
++                &result->truncated);
++  } else if (method == "Network.responseReceivedExtraInfo") {
++    result->id = SHAAR_DEVTOOLS_PANEL_RESPONSE_RECEIVED;
++    PutString(&data, "requestID", params.FindString("requestId"),
++              &result->truncated);
++    CopyHeaders(&data, "responseHeaders", params.FindDict("headers"),
++                &result->truncated);
+   } else if (method == "Network.loadingFinished" ||
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+index 1208f24..706a6c8 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -1395,3 +1395,3 @@ TEST(ShaarDevToolsPanelTest, ProjectsOnlyNamedFieldsFromAllowlistedEvents) {
+   EXPECT_EQ(std::string::npos, output.find("secret"));
+-  EXPECT_EQ(std::string::npos, output.find("headers"));
++  EXPECT_NE(std::string::npos, output.find("[redacted]"));
+   EXPECT_FALSE(ProjectPanelEventForTesting(
+@@ -1407,2 +1407,24 @@ TEST(ShaarDevToolsPanelTest, ProjectsOnlyNamedFieldsFromAllowlistedEvents) {
+ 
++TEST(ShaarDevToolsPanelTest, ProjectsBoundedNetworkHeadersAndExtraInfo) {
++  std::string output;
++  ASSERT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Network.responseReceived","params":{"requestId":"r1","response":{"url":"https://example.test/","status":200,"headers":{"Content-Type":"text/html","Set-Cookie":"secret"}}}})",
++      42, &output));
++  auto parsed = base::JSONReader::Read(output, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(parsed && parsed->is_dict());
++  const auto* headers = parsed->GetDict().FindDict("data")->FindList("responseHeaders");
++  ASSERT_NE(nullptr, headers);
++  EXPECT_EQ(2u, headers->size());
++  EXPECT_EQ(std::string::npos, output.find("secret"));
++  EXPECT_NE(std::string::npos, output.find("[redacted]"));
++  ASSERT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Network.requestWillBeSentExtraInfo","params":{"requestId":"r1","headers":{"Accept":"text/html"}}})",
++      42, &output));
++  parsed = base::JSONReader::Read(output, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(parsed && parsed->is_dict());
++  EXPECT_EQ(4, parsed->GetDict().FindInt("eventID"));
++  EXPECT_EQ(1u, parsed->GetDict().FindDict("data")
++                    ->FindList("requestHeaders")->size());
++}
++
+ TEST(ShaarDevToolsPanelTest, ClipsTextAndRejectsUnboundedProtocolInput) {

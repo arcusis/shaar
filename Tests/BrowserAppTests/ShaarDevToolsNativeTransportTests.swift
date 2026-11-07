@@ -85,6 +85,39 @@ import Testing
     #expect(requester.operations.contains(.panelGetResponseBody))
   }
 
+  @Test func networkHeadersReachTheRequestModel() async throws {
+    let transport = ShaarDevToolsNativeTransport(
+      requester: PanelRequesterFixture(), windowID: UUID().uuidString)
+    var stream = transport.messages(for: target).makeAsyncIterator()
+    #expect(await stream.next() == .streamAvailable)
+    let identity = target.tabID.uuidString
+    let profile = target.profileID.uuidString
+    transport.receive(
+      tabID: identity, profileID: profile,
+      payload: try event(4, data: [
+        "requestID": "r1", "url": "https://example.com/", "method": "GET",
+        "requestHeaders": [["name": "Accept", "value": "text/html"]],
+        "truncated": false,
+      ]), sequence: 1)
+    transport.receive(
+      tabID: identity, profileID: profile,
+      payload: try event(5, data: [
+        "requestID": "r1", "status": 200,
+        "responseHeaders": [["name": "Content-Type", "value": "text/html"]],
+        "truncated": false,
+      ]), sequence: 2)
+    guard case .event(let request)? = await stream.next(),
+      case .event(let response)? = await stream.next()
+    else {
+      Issue.record("Missing network header events")
+      return
+    }
+    let rows = ShaarNetworkModel().requests(from: [request, response])
+    #expect(rows.count == 1)
+    #expect(rows.first?.requestHeaders.first?.name == "Accept")
+    #expect(rows.first?.responseHeaders.first?.name == "Content-Type")
+  }
+
   @Test func consoleMessageKeepsStackFramesForSources() async throws {
     let requester = PanelRequesterFixture()
     let transport = ShaarDevToolsNativeTransport(

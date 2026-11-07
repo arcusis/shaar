@@ -406,7 +406,13 @@ private struct ShaarDOMPanelObserver {
           id: UUID(), method: data.method ?? "", url: data.url ?? "",
           status: data.status.map(Int.init), requestID: requestID, phase: phase,
           mimeType: data.mimeType, encodedBytes: data.encodedBytes.map(Int.init),
-          time: Date().timeIntervalSince1970, failure: phase == .failed ? data.text : nil))
+          time: Date().timeIntervalSince1970, failure: phase == .failed ? data.text : nil,
+          requestHeaders: data.requestHeaders.map {
+            ShaarNetworkHeader(name: $0.name, value: $0.value)
+          },
+          responseHeaders: data.responseHeaders.map {
+            ShaarNetworkHeader(name: $0.name, value: $0.value)
+          }))
     case .pageLifecycle, .performanceMetrics, .eventsDropped, .screencastFrame:
       return nil
     }

@@ -537,7 +537,7 @@ struct ShaarNetworkPanel: View {
           .font(.system(size: 10)).foregroundStyle(.primary)
       }
       ForEach(Array(headers.enumerated()), id: \.offset) { _, header in
-        detailValue(header.name, header.value)
+        detailValue(header.name, ShaarNetworkHeaderRedaction.value(header))
       }
     }
   }

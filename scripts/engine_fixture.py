@@ -542,6 +542,17 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         if path == '/inspector-ai-failure':
             self.send_error(503, 'Inspector AI fixture error')
             return
+        if path == '/inspector-viewports':
+            self.html(b"""<!doctype html><html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Viewport sync fixture</title>
+<style>html,body{margin:0;background:#1d4ed8}#marker{height:220px;background:#f8fafc}.band{height:720px}</style>
+<div id="marker"></div>
+<div class="band" style="background:#f59e0b"></div>
+<div class="band" style="background:#10b981"></div>
+<div class="band" style="background:#111827"></div>
+<script>document.addEventListener('click',function(){document.getElementById('marker').style.background='#dc2626'});
+document.addEventListener('wheel',function(){document.getElementById('marker').style.background='#7c3aed'});</script></html>""")
+            return
         if path == '/inspector-tools':
             self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">

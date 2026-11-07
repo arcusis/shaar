@@ -34,6 +34,24 @@ import Testing
     #expect(transport.frames.allSatisfy { $0.url.absoluteString == "https://example.com/b" })
     #expect(transport.targets.allSatisfy { $0 == target })
 
+    try await model.perform(.rotate(phone.id))
+    for _ in 0..<30
+    where model.frames.first(where: { $0.id == phone.id })?.orientation != .landscape {
+      await Task.yield()
+    }
+    let rotated = try #require(model.frames.first(where: { $0.id == phone.id }))
+    #expect(rotated.orientation == .landscape)
+    #expect(rotated.contentWidth == 852)
+    #expect(rotated.contentHeight == 393)
+    let desktopFrame = try #require(model.frames.first(where: { $0.id == desktop.id }))
+    #expect(desktopFrame.orientation == .portrait)
+    try await model.perform(.click(rotated.id, x: 100, y: 40))
+    #expect(
+      transport.clicks == [
+        .init(viewportID: phone.id, x: 100, y: 40),
+        .init(viewportID: desktop.id, x: 150, y: 81),
+      ])
+
     model.updateTarget(
       SiteControlTarget(
         tabID: target.tabID, profileID: target.profileID,
@@ -91,6 +109,73 @@ import Testing
     try await model.perform(.remove(pixel.id))
     for _ in 0..<30 where model.frames.count != 1 { await Task.yield() }
     #expect(model.frames.map(\.id) == [phone.id])
+
+    try await model.perform(.add(.ipad))
+    for _ in 0..<30 where model.frames.count != 2 { await Task.yield() }
+    let ipad = try #require(model.frames.first(where: { $0.preset == .ipad }))
+    #expect(ipad.safeArea == .init(top: 24, right: 0, bottom: 20, left: 0))
+    #expect(ipad.contentWidth == 820)
+    try await model.perform(.rotate(ipad.id))
+    for _ in 0..<30
+    where model.frames.first(where: { $0.id == ipad.id })?.orientation != .landscape {
+      await Task.yield()
+    }
+    let landscape = try #require(model.frames.first(where: { $0.id == ipad.id }))
+    #expect(landscape.orientation == .landscape)
+    #expect(landscape.safeArea == .init(top: 0, right: 24, bottom: 0, left: 20))
+    #expect(landscape.contentWidth == 1180)
+    try await model.perform(.rotate(ipad.id))
+    for _ in 0..<30
+    where model.frames.first(where: { $0.id == ipad.id })?.orientation != .portrait {
+      await Task.yield()
+    }
+    let restored = try #require(model.frames.first(where: { $0.id == ipad.id }))
+    #expect(restored.orientation == .portrait)
+    #expect(restored.safeArea == ipad.safeArea)
     model.close()
+  }
+
+  @Test func presetsCoverPhoneTabletAndroidAndDesktopWidths() {
+    #expect(ShaarViewportPreset.allCases.map(\.rawValue) == [
+      "iphone15Pro", "ipad", "pixel8", "desktop", "desktop1440",
+    ])
+    #expect(ShaarViewportPreset.desktop.width == 1280)
+    #expect(ShaarViewportPreset.desktop1440.width == 1440)
+    #expect(ShaarViewportPreset.desktop1440.height == 900)
+    #expect(ShaarViewportPreset.ipad.defaultInsets.bottom == 20)
+  }
+
+  @Test func zoomToFitSharesOneScaleAcrossDevices() {
+    let content = [
+      CGSize(width: 393, height: 852),
+      CGSize(width: 820, height: 1180),
+      CGSize(width: 1280, height: 800),
+    ]
+    let fitted = ShaarViewportPreviewLayout.fitScale(
+      content: content, available: CGSize(width: 1040, height: 360))
+    let fixed = ShaarViewportPreviewLayout.scale(
+      fitting: false, content: content, available: CGSize(width: 1040, height: 360))
+    #expect(fixed == 0.5)
+    #expect(fitted < 0.5)
+    #expect(fitted > 0.15)
+    let phone = ShaarViewportPreviewLayout.previewSize(
+      contentWidth: 393, contentHeight: 852, scale: fitted)
+    let desktop = ShaarViewportPreviewLayout.previewSize(
+      contentWidth: 1280, contentHeight: 800, scale: fitted)
+    let phoneRatio = phone.width / phone.height
+    let desktopRatio = desktop.width / desktop.height
+    #expect(abs(phoneRatio - (393.0 / 852.0)) < 0.02)
+    #expect(abs(desktopRatio - (1280.0 / 800.0)) < 0.02)
+    #expect(desktop.width > phone.width)
+  }
+
+  @Test func cardWidthKeepsTheDeviceHeaderReadable() {
+    let narrow = ShaarViewportPreviewLayout.cardWidth(previewWidth: 80)
+    #expect(narrow == ShaarViewportPreviewLayout.minimumCardWidth)
+    #expect(ShaarViewportPreviewLayout.cardWidth(previewWidth: 640) == 640)
+    let notch = ShaarViewportPreviewLayout.notchSize(previewWidth: 196)
+    #expect(notch.width > 40)
+    #expect(notch.width < 80)
+    #expect(notch.height < notch.width)
   }
 }

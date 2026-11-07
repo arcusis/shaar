@@ -263,7 +263,8 @@ final class ShaarConsoleModel {
   nonisolated private static func regexMatches(
     _ expression: NSRegularExpression, _ event: ShaarConsoleEvent
   ) -> Bool {
-    let fields = [event.message, event.source ?? "", event.origin.rawValue]
+    let fields =
+      [event.message, event.source ?? "", event.origin.rawValue]
       + event.stack.map(\.source)
     return fields.contains { field in
       let range = NSRange(field.startIndex..<field.endIndex, in: field)

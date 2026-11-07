@@ -109,9 +109,10 @@ struct DevToolsPanelTests {
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"boom","level":"error","truncated":false,"stack":[{"function":"loadOrders","source":"orders.ts:17"}]}}"#
     let decoded = decodePanel(framed)
     #expect(decoded?.data.text == "boom")
-    #expect(decoded?.data.stack == [
-      ShaarDevToolsConsoleFrame(function: "loadOrders", source: "orders.ts:17")
-    ])
+    #expect(
+      decoded?.data.stack == [
+        ShaarDevToolsConsoleFrame(function: "loadOrders", source: "orders.ts:17")
+      ])
     let plain =
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"hello","level":"log","truncated":false}}"#
     #expect(decodePanel(plain)?.data.stack.isEmpty == true)

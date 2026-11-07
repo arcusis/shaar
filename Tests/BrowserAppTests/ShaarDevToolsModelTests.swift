@@ -170,7 +170,8 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
   @Test func preserveLogKeepsConsoleAcrossNavigationAndClearDropsOnlyConsole() async {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/one")!)
-    let warning = ShaarConsoleEvent(id: UUID(), level: .warning, message: "Slow render", source: nil)
+    let warning = ShaarConsoleEvent(
+      id: UUID(), level: .warning, message: "Slow render", source: nil)
     let network = ShaarNetworkEvent(id: UUID(), method: "GET", url: "/api/items", status: 200)
     let transport = OneShotDevToolsTransport(fixture: [.console(warning), .network(network)])
     let inspector = InspectorModel(target: target, engine: nil)

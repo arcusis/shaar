@@ -212,4 +212,22 @@ import Testing
     #expect(!image.isEmpty)
     shell.close()
   }
+
+  @Test func consoleSourceLinksRenderOffscreen() throws {
+    _ = NSApplication.shared
+    let http = ShaarConsoleFrame(
+      function: "shaarThrowForSources",
+      source: "http://127.0.0.1:9/inspector-tools:8:40")
+    let file = ShaarConsoleFrame(function: "local", source: "/app/main.ts:8:1")
+    let event = ShaarConsoleEvent(
+      id: UUID(), level: .error, message: "shaar-source-jump", source: http.source,
+      stack: [http, file])
+    let model = ShaarConsoleModel()
+    model.selectedID = event.id
+    let image = try VisualCapture.pngOffscreen(
+      ShaarConsolePanel(
+        model: model, events: [.console(event)], droppedCount: 0, inspector: nil),
+      size: NSSize(width: 820, height: 420))
+    #expect(!image.isEmpty)
+  }
 }

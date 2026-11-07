@@ -521,9 +521,12 @@ import Foundation
           "No main-thread long tasks were recorded. pageTimer=\(observed ?? "nil") refreshes=\(refreshes) metrics=\(shell.performance.metrics)"
         )
       }
+      let vitals = await self.provePageVitals(
+        shell, target: target, tab: tab, inspector: inspector)
       let inp = shell.performance.inpMilliseconds.map { String($0) } ?? "unavailable"
+      let lcp = shell.performance.lcpMilliseconds.map { String($0) } ?? "unavailable"
       return
-        "Recorded \(shell.performance.recordedTasks.count) main-thread tasks; LCP=\(shell.performance.lcpMilliseconds.map { String($0) } ?? "unavailable") CLS=\(shell.performance.cls) INP=\(inp)"
+        "Recorded \(shell.performance.recordedTasks.count) main-thread tasks; LCP=\(lcp) CLS=\(shell.performance.cls) INP=\(inp)\(vitals)"
     }
     await check("sources-lite") {
       try await self.restoreInspectorToolsLease(shell, tab: tab)
@@ -1335,6 +1338,44 @@ import Foundation
       throw Failure(
         "Phase 2 lease did not return. stream=\(shell.streamAvailable) failure=\(failure)"
       )
+    }
+  }
+
+  /// The phase-2 vitals expression has no Largest Contentful Paint entry, and its
+  /// event buffer ignores the fixture's 80ms click. The page script already
+  /// observes both. Read it after long tasks are recorded so a developer-session
+  /// failure still leaves that recording in the result.
+  private func provePageVitals(
+    _ shell: ShaarDevToolsModel, target: SiteControlTarget, tab: UUID,
+    inspector: InspectorModel
+  ) async -> String {
+    do {
+      let developer = engine.developerModel(for: target)
+      try await wait("developer session idle") { !developer.applying }
+      developer.setPerformanceEnabled(true)
+      try await wait("developer performance session") { !developer.applying }
+      try await developer.refreshPerformance()
+      let clicked: Bool = await withCheckedContinuation { continuation in
+        self.engine.runtime.clickProbeElement(
+          inTabID: tab.uuidString, elementID: "performance-input"
+        ) { continuation.resume(returning: $0) }
+      }
+      try await Task.sleep(for: .milliseconds(100))
+      try await developer.refreshPerformance()
+      if let snapshot = developer.performanceSnapshot {
+        shell.performance.updatePageSnapshot(snapshot)
+      }
+      var note = clicked ? "" : " click=missed"
+      if shell.performance.lcpMilliseconds == nil || shell.performance.inpMilliseconds == nil {
+        let state = try await inspector.evaluate("document.visibilityState") as? String
+        let snapshotLCP = developer.performanceSnapshot?.lcp.map { String($0) } ?? "nil"
+        let snapshotINP = developer.performanceSnapshot?.inp.map { String($0) } ?? "nil"
+        note +=
+          " visibility=\(state ?? "nil") snapshotLCP=\(snapshotLCP) snapshotINP=\(snapshotINP)"
+      }
+      return note
+    } catch {
+      return " vitals=\(error.localizedDescription)"
     }
   }
 

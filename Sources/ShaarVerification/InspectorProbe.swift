@@ -80,8 +80,10 @@ final class InspectorProbe {
       overlay?["painted"] as? Bool == true && (overlay?["colors"] as? [String])?.count == 4,
       "hover paints margin, border, padding, and content shading")
     try expect(
-      (overlay?["badge"] as? String)?.contains("×") == true,
-      "hover badge contains tag and dimensions")
+      (overlay?["badge"] as? String)?.contains("span#label") == true
+        && (overlay?["badge"] as? String)?.contains("×") == true,
+      "hover badge names the element and its border box")
+    try await proveNamedOverlay(model)
     try expect(
       await pointer(model, selector: "#save", click: true),
       "trusted click locks the hovered element")
@@ -417,6 +419,84 @@ final class InspectorProbe {
     }
   }
 
+  private func proveNamedOverlay(_ model: InspectorModel) async throws {
+    let install = """
+      (()=>{
+        document.getElementById('overlay-proof')?.remove();
+        const plate=document.createElement('div');
+        plate.id='overlay-proof';
+        plate.style.cssText='position:fixed;left:8px;bottom:8px;width:340px;height:160px;background:#ffffff;z-index:5';
+        const named=document.createElement('div');
+        named.id='overlay-name';
+        named.className='alpha bravo charlie delta echo';
+        named.textContent='Named';
+        named.style.cssText='position:absolute;left:16px;top:64px;width:200px;height:36px;background:#ffffff';
+        plate.append(named);
+        document.body.append(plate);
+        return true;
+      })()
+      """
+    try expect(
+      try await model.evaluate(install) as? Bool == true,
+      "overlay fixture adds a named element with five classes")
+    try expect(
+      await pointer(model, selector: "#overlay-name", click: false),
+      "trusted pointer hovers the named overlay fixture")
+    try await wait(
+      "hover badge shows the id, more than two classes, a hidden count, and the border box"
+    ) {
+      self.namedBadge(
+        try await model.evaluate("globalThis.__shaarInspectorV2.overlay()"), fill: "dark")
+    }
+    let darken = """
+      (()=>{
+        const plate=document.getElementById('overlay-proof');
+        const named=document.getElementById('overlay-name');
+        if(!plate||!named)return false;
+        plate.style.background='#111111';
+        named.style.background='#111111';
+        return true;
+      })()
+      """
+    try expect(
+      try await model.evaluate(darken) as? Bool == true, "overlay fixture switches to a dark page")
+    try expect(
+      await pointer(model, selector: "#save", click: false),
+      "pointer leaves the named fixture before the dark sample")
+    try expect(
+      await pointer(model, selector: "#overlay-name", click: false),
+      "trusted pointer hovers the named fixture on a dark page")
+    try await wait("hover badge uses a light fill on a dark page") {
+      self.namedBadge(
+        try await model.evaluate("globalThis.__shaarInspectorV2.overlay()"), fill: "light")
+    }
+    try expect(
+      await pointer(model, selector: "#overlay-name", click: true),
+      "named overlay fixture can be locked")
+    try await wait("named element stays locked for capture") {
+      model.selection?.identifier == "overlay-name" && model.mode == .locked
+    }
+    try await capture(model, stem: "\(phase)-inspector-overlay-name")
+    try expect(
+      try await model.evaluate("document.getElementById('overlay-proof')?.remove(); true") as? Bool
+        == true, "overlay fixture is removed")
+    await model.pick()?.value
+    try expect(
+      await pointer(model, selector: "#save", click: false),
+      "trusted pointer returns to the authored button")
+    try await wait("hover returns to the button label") {
+      model.selection?.tag == "span" && model.mode == .picking
+    }
+  }
+
+  private func namedBadge(_ value: Any?, fill: String) -> Bool {
+    guard let overlay = value as? [String: Any], let text = overlay["badge"] as? String,
+      overlay["painted"] as? Bool == true, (overlay["colors"] as? [String])?.count == 4,
+      overlay["badgeFill"] as? String == fill
+    else { return false }
+    return text.contains("div#overlay-name.alpha.bravo.charlie.delta +1") && text.contains("×")
+  }
+
   private func styles(_ model: InspectorModel) async throws {
     engine.runtime.window(forID: engine.windowID)?.contentView?.layoutSubtreeIfNeeded()
     let pageID = model.target.tabID.uuidString
@@ -552,7 +632,7 @@ final class InspectorProbe {
 
   private func loaded(host: String) async throws {
     try await wait("page loads at \(host)") {
-      guard let target = self.engine.siteControlTarget, target.host == host,
+      guard let target = self.engine.siteControlTarget, target.url.host == host,
         self.engine.pages[target.tabID]?.loading == false
       else { return false }
       return self.engine.runtime.view(forTabID: target.tabID.uuidString)?.superview != nil

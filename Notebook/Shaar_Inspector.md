@@ -4,7 +4,7 @@ Option-Command-C, View → Inspect Element, or the site control center's **Inspe
 
 ## Element inspection
 
-Hover previews the deepest element with margin, border, padding and content shading, a blue outline, and a tag/class size badge. Clicking locks selection without activating the page. Up selects the parent, Down the first visible child, and Left/Right visible siblings. The breadcrumb selects ancestors; its overflow menu retains earlier ancestors. Escape or Close removes the overlay and dock. Same-origin frames retain their frame chain in copied locators.
+Hover previews the deepest element with margin, border, padding and content shading, a blue outline, and a badge showing the tag, id, classes, and border-box size. Long class lists keep a hidden count. The badge uses a light or dark fill so the label stays readable on the page behind it. Clicking locks selection without activating the page. Up selects the parent, Down the first visible child, and Left/Right visible siblings. The breadcrumb selects ancestors; its overflow menu retains earlier ancestors. Escape or Close removes the overlay and dock. Same-origin frames retain their frame chain in copied locators.
 
 The header shows an exposed component name when available, tag, dimensions, and copy actions for CSS, Playwright, XPath and JavaScript. CSS chooses the shortest unique candidate from bounded tag, ID, attribute, class and ancestor candidates. Playwright prefers unique test IDs, confidently resolved roles/names, then text; uncertain cases use a unique CSS/XPath locator. This is not a complete accessible-name implementation. Shadow-root contents and cross-origin frame contents are outside Phase A; their host/frame element remains selectable.
 

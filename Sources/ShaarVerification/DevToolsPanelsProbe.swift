@@ -362,6 +362,18 @@ import Foundation
       else { throw Failure("Elements attribute edit did not reach the page") }
       return "DOM insertion appeared through the live stream; attribute edit reached the page"
     }
+    await check("elements-inspector") {
+      guard shell.section == .elements, inspector.isOpen, inspector.target.tabID == tab,
+        self.engine.inspectors[tab] === inspector, shell.dom.available,
+        shell.dom.nodes.values.contains(where: { $0.name == "BODY" })
+      else { throw Failure("Elements is not using this tab's Inspector") }
+      let marker =
+        try await inspector.evaluate(
+          "document.getElementById('shaar-live-element') !== null") as? Bool
+      guard marker == true else { throw Failure("This tab's Inspector lost the Elements node") }
+      let path = inspector.target.url.path
+      return "Elements is open on this tab's Inspector at \(path)"
+    }
     await check("elements-scale") {
       try await DevToolsDOMScaleProof(shell: shell, inspector: inspector).run()
     }
@@ -546,7 +558,7 @@ import Foundation
     "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",
     "application-service-worker", "network-rules", "source-bytes", "viewports",
-    "masked-repro", "elements-live", "elements-scale",
+    "masked-repro", "elements-live", "elements-inspector", "elements-scale",
   ]
 
   private var entries: [String: [String: Any]] = [:]

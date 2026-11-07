@@ -355,8 +355,9 @@ final class PrivateProductHostProbe {
       && nativePageView != nil && first.store.showsStartPage
 
     try await captureStartPage(first)
-    let firstPath = fixture.appending(path: "private-product-\(runID.lowercased())-a")
-      .absoluteString
+    let firstVisit = "private-product-\(runID.lowercased())-a"
+    let nextVisit = "private-product-\(runID.lowercased())-next"
+    let firstPath = fixture.appending(path: firstVisit).absoluteString
     let alphabetQuery =
       fixture.appending(
         path: "private-product-\(runID.lowercased())-search"
@@ -405,17 +406,16 @@ final class PrivateProductHostProbe {
     }
     first.store.navigate(firstPath)
     first.store.confirmHTTP(useHTTPS: false)
-    try await waitForURL(first.store, tabID: secondTab.id, contains: "private-product-")
-    let nextPath = fixture.appending(path: "private-product-\(runID.lowercased())-next")
-      .absoluteString
+    try await waitForURL(first.store, tabID: secondTab.id, contains: firstVisit)
+    let nextPath = fixture.appending(path: nextVisit).absoluteString
     first.store.navigate(nextPath)
     first.store.confirmHTTP(useHTTPS: false)
-    try await waitForURL(first.store, tabID: secondTab.id, contains: "-next")
+    try await waitForURL(first.store, tabID: secondTab.id, contains: nextVisit)
     try await waitForTab(first.store, tabID: secondTab.id, canGoBack: true)
     first.store.goBack()
-    try await waitForURL(first.store, tabID: secondTab.id, contains: "private-product-")
+    try await waitForURL(first.store, tabID: secondTab.id, contains: firstVisit)
     first.store.goForward()
-    try await waitForURL(first.store, tabID: secondTab.id, contains: "-next")
+    try await waitForURL(first.store, tabID: secondTab.id, contains: nextVisit)
     first.store.reload()
     try await waitForLoading(first.store, tabID: secondTab.id, loading: true)
     try await waitForLoading(first.store, tabID: secondTab.id, loading: false)
@@ -930,8 +930,17 @@ final class PrivateProductHostProbe {
   private func waitForURL(_ store: BrowserStore, tabID: String, contains value: String)
     async throws
   {
-    for _ in 0..<100 {
-      if store.tabs.first(where: { $0.id == tabID })?.url.contains(value) == true { return }
+    let attempts = Int(100 * ProbeTimeout.scale)
+    for _ in 0..<attempts {
+      let tab = store.tabs.first { $0.id == tabID }
+      if PrivateNavigationReadiness.hasSettled(
+        url: tab?.url,
+        loading: tab?.loading ?? true,
+        phase: navigationPhase(for: tabID),
+        contains: value
+      ) {
+        return
+      }
       try await Task.sleep(for: .milliseconds(50))
     }
     let observed = store.tabs.first(where: { $0.id == tabID })?.url ?? "missing tab"
@@ -941,6 +950,11 @@ final class PrivateProductHostProbe {
     throw PrivateWindowFailure(
       "Private product navigation callback timed out: expected \(value), observed \(observed), selected tab \(store.selectedTabID), native failure \(nativeFailure), pipeline \(pipeline), native document \(nativeDocument)."
     )
+  }
+
+  private func navigationPhase(for tabID: String) -> String? {
+    let audit = runtime.privateNavigationProbeAudit(forTabID: tabID)
+    return audit?["lastEventPhase"] as? String
   }
 
   private func nativeNavigationSnapshot(tabID: String, contextID: String) -> String {

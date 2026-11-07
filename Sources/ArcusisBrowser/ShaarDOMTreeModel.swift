@@ -667,14 +667,16 @@ final class ShaarDOMTreeModel {
         await loadDocument()
         return
       }
+      let directChildren = children.filter { $0.parentID == parent }
       let special = parentNode.childrenIDs.filter { nodes[$0]?.relation != .child }
       for id in parentNode.childrenIDs where nodes[id]?.relation == .child {
         removeDescendants(of: id)
       }
       for child in children { nodes[child.id] = child }
-      let count = event.truncated ? max(parentNode.childCount, children.count) : children.count
+      let count = event.truncated
+        ? max(parentNode.childCount, directChildren.count) : directChildren.count
       nodes[parent] = parentNode.replacing(
-        childCount: count, childrenIDs: children.map(\.id) + special)
+        childCount: count, childrenIDs: directChildren.map(\.id) + special)
     case .attributeModified(let id, let name, let value):
       guard let node = nodes[id] else { return }
       var attributes = node.attributes.filter { $0.name != name }

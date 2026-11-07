@@ -116,7 +116,14 @@ struct DevToolsDOMTests {
 
   @Test func projectedChildrenAcceptOneHundredTwentyRows() throws {
     let nodes: [[String: Any]] = (0..<120).map { index in
-      ["nodeId": index + 10, "nodeType": 1, "nodeName": "DIV", "nodeValue": ""]
+      [
+        "nodeId": index + 10, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
+        "childNodeCount": 1,
+        "children": [[
+          "nodeId": index + 1_000, "nodeType": 3, "nodeName": "#text",
+          "nodeValue": "Row \(index)",
+        ]],
+      ]
     }
     let envelope: [String: Any] = [
       "schemaVersion": 1, "kind": "panelEvent", "eventID": 25, "leaseID": 7,
@@ -133,7 +140,13 @@ struct DevToolsDOMTests {
       return
     }
     #expect(parent == 4)
-    #expect(children.count == 120)
+    #expect(children.count == 240)
+    let firstRow = try #require(children.first { $0.id == 10 })
+    #expect(firstRow.parentID == 4)
+    #expect(firstRow.childrenIDs == [1_000])
+    let firstText = try #require(children.first { $0.id == 1_000 })
+    #expect(firstText.parentID == 10)
+    #expect(firstText.value == "Row 0")
   }
 
   @Test func fixedDOMCommandsUseInspectorCapability() throws {

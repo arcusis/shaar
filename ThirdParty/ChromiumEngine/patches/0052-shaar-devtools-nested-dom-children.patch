@@ -1,0 +1,56 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+index 2d09fd5..bdb2ec9 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -423,7 +423,7 @@ void CopyConsoleStack(base::DictValue* data, const base::DictValue* trace,
+ }
+ 
+ bool CopyDOMNode(const base::DictValue* node, base::DictValue* copy,
+-                 bool* truncated) {
++                 bool* truncated, size_t* nested_budget = nullptr) {
+   if (!node || !node->FindInt("nodeId") || !node->FindInt("nodeType") ||
+       !node->FindString("nodeName"))
+     return false;
+@@ -444,6 +444,25 @@ bool CopyDOMNode(const base::DictValue* node, base::DictValue* copy,
+     }
+     copy->Set("attributes", std::move(values));
+   }
++  if (nested_budget) {
++    if (const auto* children = node->FindList("children")) {
++      base::ListValue copies;
++      for (const auto& child : *children) {
++        if (!child.is_dict() || *nested_budget == 0) {
++          *truncated = true;
++          break;
++        }
++        base::DictValue child_copy;
++        if (!CopyDOMNode(&child.GetDict(), &child_copy, truncated)) {
++          *truncated = true;
++          continue;
++        }
++        copies.Append(std::move(child_copy));
++        --*nested_budget;
++      }
++      copy->Set("children", std::move(copies));
++    }
++  }
+   return true;
+ }
+ 
+@@ -487,13 +506,15 @@ bool Project(std::string_view method, const base::DictValue& params,
+     if (!parent || !nodes) return false;
+     data.Set("parentNodeId", *parent);
+     base::ListValue copies;
++    size_t nested_budget = 256;
+     for (const auto& value : *nodes) {
+       if (!value.is_dict() || copies.size() == 256) {
+         result->truncated = true;
+         break;
+       }
+       base::DictValue node;
+-      if (!CopyDOMNode(&value.GetDict(), &node, &result->truncated))
++      if (!CopyDOMNode(&value.GetDict(), &node, &result->truncated,
++                       &nested_budget))
+         return false;
+       copies.Append(std::move(node));
+     }

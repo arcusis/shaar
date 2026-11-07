@@ -401,6 +401,21 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     .newPrivateWindow, .newMiniWindow, .quit,
   ]
 
+  private func presentDevToolsCommandMenu() -> Bool {
+    if privateHost?.hasActiveWindow == true {
+      return privateHost?.presentDevToolsCommandMenu() ?? false
+    }
+    if activeContext?.engine.toggleDevToolsCommandMenu() == true { return true }
+    let key = keyWindow()
+    for context in contexts.values
+    where ShaarDevToolsCommandShortcut.toggleFloating(
+      shells: context.engine.shaarDevTools.values, window: key)
+    {
+      return true
+    }
+    return privateHost?.presentDevToolsCommandMenu() ?? false
+  }
+
   func perform(_ command: BrowserMenuCommand) {
     guard canPerform(command) else { return }
     if performAppCommand(command) { return }
@@ -1395,6 +1410,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       guard let self, let menu = self.menu, NSApp.mainMenu === menu else { return event }
       if ShaarDevToolsShortcut.isF12(event), self.canPerform(.developerTools) {
         self.perform(.developerTools)
+        return nil
+      }
+      if ShaarDevToolsShortcut.isCommandMenu(event), self.presentDevToolsCommandMenu() {
         return nil
       }
       guard

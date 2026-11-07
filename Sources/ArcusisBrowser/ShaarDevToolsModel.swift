@@ -321,6 +321,14 @@ final class ShaarDevToolsModel {
   var leftWidth: CGFloat = 420 {
     didSet { layoutDefaults.set(Double(leftWidth), forKey: "shaar.devtools.leftWidth") }
   }
+  var commandMenuOpen = false
+  var commandQuery = "" {
+    didSet {
+      guard commandQuery != oldValue else { return }
+      commandSelection = 0
+    }
+  }
+  var commandSelection = 0
   @ObservationIgnored private let layoutDefaults: UserDefaults
   @ObservationIgnored var floatingWindow: ShaarDevToolsFloatingWindow?
   private(set) var streamAvailable = false
@@ -469,7 +477,85 @@ final class ShaarDevToolsModel {
       guard !Task.isCancelled, !isOpen else { return }
       inspector?.close()
     }
+    closeCommandMenu()
     isOpen = false
+  }
+
+  func toggleCommandMenu() {
+    if commandMenuOpen {
+      closeCommandMenu()
+    } else {
+      commandMenuOpen = true
+      commandQuery = ""
+      commandSelection = 0
+    }
+  }
+
+  func closeCommandMenu() {
+    commandMenuOpen = false
+    commandQuery = ""
+    commandSelection = 0
+  }
+
+  var commandMatches: [ShaarDevToolsCommandMatch] {
+    let entries = consoleEvents.compactMap { event -> ShaarConsoleEvent? in
+      guard case .console(let entry) = event else { return nil }
+      return entry
+    }
+    return ShaarDevToolsCommandIndex.matches(
+      query: commandQuery, sections: sections, console: entries,
+      network: network.requests(from: events), sources: sources.resources,
+      nodes: Array(dom.nodes.values))
+  }
+
+  var clampedCommandSelection: Int {
+    let count = commandMatches.count
+    guard count > 0 else { return 0 }
+    return min(commandSelection, count - 1)
+  }
+
+  func moveCommandSelection(forward: Bool) {
+    let count = commandMatches.count
+    guard count > 0 else { return }
+    let next = commandSelection + (forward ? 1 : -1)
+    commandSelection = min(count - 1, max(0, next))
+  }
+
+  func performSelectedCommand() {
+    let matches = commandMatches
+    guard matches.indices.contains(clampedCommandSelection) else { return }
+    perform(matches[clampedCommandSelection])
+  }
+
+  func perform(_ match: ShaarDevToolsCommandMatch) {
+    closeCommandMenu()
+    switch match.hit {
+    case .section(let section):
+      self.section = section
+    case .dock(let dock):
+      self.dock = dock
+    case .console(let id):
+      section = .console
+      console.level = nil
+      console.origin = nil
+      console.search = ""
+      console.selectedID = id
+    case .network(let id):
+      section = .network
+      network.filter = .all
+      network.search = ""
+      network.selectedID = id
+    case .source(let url):
+      section = .sources
+      sources.search = ""
+      guard let resource = sources.resources.first(where: { $0.url == url }) else { return }
+      let sources = sources
+      Task { await sources.select(resource) }
+    case .element(let id):
+      section = .elements
+      dom.search = ""
+      dom.select(id)
+    }
   }
 
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
@@ -494,6 +580,7 @@ final class ShaarDevToolsModel {
     cookies.reset()
     sources.reset()
     framework.updateAccess(url: target.url)
+    closeCommandMenu()
     repro.updateTarget(target, committed: committed)
     streamGeneration += 1
     eventTask?.cancel()

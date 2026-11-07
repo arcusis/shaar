@@ -78,6 +78,15 @@ extension BrowserEngine {
     return true
   }
 
+  @discardableResult
+  func toggleDevToolsCommandMenu() -> Bool {
+    guard let target = siteControlTarget,
+      let shell = shaarDevTools[target.tabID], shell.isOpen
+    else { return false }
+    shell.toggleCommandMenu()
+    return true
+  }
+
   func toggleDeveloperTools() {
     guard let target = siteControlTarget else { return }
     if let shell = shaarDevTools[target.tabID], shell.isOpen {

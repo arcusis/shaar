@@ -33,6 +33,10 @@ final class ShaarDevToolsFloatingWindow: NSObject, NSWindowDelegate {
     window.orderFront(nil)
   }
 
+  func isWindow(_ candidate: NSWindow) -> Bool {
+    window === candidate
+  }
+
   func dismiss() {
     dismissing = true
     window.close()

@@ -1,0 +1,35 @@
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
+@@ -175,7 +175,7 @@
+     return std::nullopt;
+   for (const auto& tab : tabs_) {
+     if (tab.engine != engine || tab.contents != contents || !tab.browser ||
+-        tab.browser->profile()->IsOffTheRecord())
++        tab.browser->GetProfile()->IsOffTheRecord())
+       continue;
+     for (const auto& window : windows_) {
+       if (window.engine != engine || window.handle != tab.window ||
+diff --git a/chrome/browser/shaar/media/shaar_media_permission.cc b/chrome/browser/shaar/media/shaar_media_permission.cc
+--- a/chrome/browser/shaar/media/shaar_media_permission.cc
++++ b/chrome/browser/shaar/media/shaar_media_permission.cc
+@@ -52,8 +52,8 @@
+ }
+ 
+ uint64_t& NextRequestID() {
+-  static base::NoDestructor<uint64_t> next(0);
+-  return *next;
++  static uint64_t next = 0;
++  return next;
+ }
+ 
+ void Finish(std::string_view request_id, bool allowed) {
+@@ -135,7 +135,7 @@
+   }
+ 
+   const GURL page_url = contents->GetLastCommittedURL();
+-  const GURL origin = request.security_origin.GetOrigin();
++  const GURL origin = request.security_origin.DeprecatedGetOriginAsURL();
+   if (!page_url.SchemeIsHTTPOrHTTPS() || !origin.SchemeIsHTTPOrHTTPS()) {
+     std::move(decision).Run(false);
+     return;

@@ -425,6 +425,10 @@
       "sha256": "e373f179d5974a81bff87413174df81eaaebd1758dd5b39b1711ac3b62f4f12c"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0044-shaar-devtools-heap-snapshot-limit.patch",
+      "sha256": "72dae9f45d2c2f8eeb66f6977dc5ae69158cd8ee9fe1ae34831ea1a031609d78"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0045-shaar-website-media-consent.patch",
       "sha256": "7d217f0e4460dd164769580de7c3637bf2889f37c8e74be16b7db39c2ff1f49a"
     },
@@ -435,6 +439,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0047-shaar-tab-adoption.patch",
       "sha256": "8d6083315f128753bc14747a5c9f92fc1852e84e78b70e2f2acdf4edfff037aa"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0048-shaar-layer-compile-fixes.patch",
+      "sha256": "b2874af5bbf98f1c1712627537b391370ecef0092b99754b7b930d3da23f22e9"
     }
   ],
   "requiredExports": [

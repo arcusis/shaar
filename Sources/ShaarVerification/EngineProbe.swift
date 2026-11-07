@@ -524,6 +524,11 @@ final class EngineProbe {
         residentMemoryBytes: NativeResidentMemory.currentBytes())
       try await waitForDisplayedNativeTab(
         tabID, "Space switch warm-up \(index + 1) displays the selected native tab")
+      // Prime the authored renderer snapshot before the timed switch loop.
+      let state = try await snapshot(tabID)
+      try expect(
+        state["cookie"] as? String == "account=alpha" && state["instance"] as? String != nil,
+        "Space switch warm-up \(index + 1) reads the live account document")
     }
   }
 

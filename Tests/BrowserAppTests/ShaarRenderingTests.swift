@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -81,13 +83,14 @@ private struct RenderingSampleError: LocalizedError {
       colorScheme: .noOverride, motion: .noOverride, cssMedia: .noEmulation,
       paintRects: true, layoutShiftRegions: false, fpsMeter: true,
       overlayAvailable: true)
-    #expect(shown.map(\.method) == [
-      "Emulation.setEmulatedMedia",
-      "Overlay.enable",
-      "Overlay.setShowPaintRects",
-      "Overlay.setShowLayoutShiftRegions",
-      "Overlay.setShowFPSCounter",
-    ])
+    #expect(
+      shown.map(\.method) == [
+        "Emulation.setEmulatedMedia",
+        "Overlay.enable",
+        "Overlay.setShowPaintRects",
+        "Overlay.setShowLayoutShiftRegions",
+        "Overlay.setShowFPSCounter",
+      ])
     #expect(shown[1].params.isEmpty)
     #expect(shown[2].params["result"] as? Bool == true)
     #expect(shown[3].params["result"] as? Bool == false)
@@ -118,13 +121,14 @@ private struct RenderingSampleError: LocalizedError {
     model.paintRects = true
     await model.settled()
     let sent = fixture.sent.last
-    #expect(sent?.map(\.method) == [
-      "Emulation.setEmulatedMedia",
-      "Overlay.enable",
-      "Overlay.setShowPaintRects",
-      "Overlay.setShowLayoutShiftRegions",
-      "Overlay.setShowFPSCounter",
-    ])
+    #expect(
+      sent?.map(\.method) == [
+        "Emulation.setEmulatedMedia",
+        "Overlay.enable",
+        "Overlay.setShowPaintRects",
+        "Overlay.setShowLayoutShiftRegions",
+        "Overlay.setShowFPSCounter",
+      ])
     #expect(sent?[2].params["result"] as? Bool == true)
     #expect(sent?[3].params["result"] as? Bool == false)
     #expect(sent?[4].params["show"] as? Bool == false)
@@ -142,7 +146,8 @@ private struct RenderingSampleError: LocalizedError {
     #expect(model.colorScheme == .noOverride)
     #expect(model.motion == .noOverride)
     #expect(model.cssMedia == .noEmulation)
-    guard case .media(let media, let colorScheme, let reducedMotion) = fixture.sent.last?.first?.payload
+    guard
+      case .media(let media, let colorScheme, let reducedMotion) = fixture.sent.last?.first?.payload
     else {
       Issue.record("Expected a clearing media command")
       return
@@ -213,6 +218,56 @@ private struct RenderingSampleError: LocalizedError {
     #expect(!ShaarRenderingCapability.isMissing(gone))
     #expect(ShaarRenderingCapability.targetGone(gone))
     #expect(!ShaarRenderingCapability.targetGone(protocolError))
+  }
+
+  @Test func renderingPanelRendersOffscreenForEachState() async throws {
+    _ = NSApplication.shared
+    #expect(ShaarRenderingColorScheme.allCases.map(\.title) == ["No override", "Light", "Dark"])
+    #expect(ShaarRenderingMotion.allCases.map(\.title) == ["No override", "Reduce"])
+    #expect(ShaarRenderingCSSMedia.allCases.map(\.title) == ["No emulation", "Screen", "Print"])
+    let pending = ShaarRenderingModel(target: renderingTarget())
+    let waiting = try VisualCapture.pngOffscreen(
+      ShaarRenderingPanel(model: pending), size: NSSize(width: 520, height: 360))
+    pending.colorScheme = .dark
+    await pending.settled()
+    #expect(pending.failure == "Rendering needs a live page.")
+    let failed = try VisualCapture.pngOffscreen(
+      ShaarRenderingPanel(model: pending), size: NSSize(width: 520, height: 360))
+    let blockedTransport = ShaarRenderingFixtureTransport()
+    blockedTransport.overlayAnswer = false
+    let blocked = ShaarRenderingModel(target: renderingTarget(), transport: blockedTransport)
+    await blocked.prepare()
+    let note = try VisualCapture.pngOffscreen(
+      ShaarRenderingPanel(model: blocked), size: NSSize(width: 520, height: 360))
+    let readyTransport = ShaarRenderingFixtureTransport()
+    readyTransport.overlayAnswer = true
+    let ready = ShaarRenderingModel(target: renderingTarget(), transport: readyTransport)
+    await ready.prepare()
+    ready.paintRects = true
+    ready.layoutShiftRegions = true
+    ready.fpsMeter = true
+    await ready.settled()
+    let enabled = try VisualCapture.pngOffscreen(
+      ShaarRenderingPanel(model: ready), size: NSSize(width: 520, height: 360))
+    let shellTransport = ShaarRenderingFixtureTransport()
+    shellTransport.overlayAnswer = false
+    let defaults = UserDefaults(suiteName: "ShaarRendering.\(UUID().uuidString)")!
+    let target = renderingTarget()
+    let shell = ShaarDevToolsModel(
+      target: target, renderingTransport: shellTransport, layoutDefaults: defaults)
+    let inspector = InspectorModel(target: target, engine: nil)
+    shell.open(inspector: inspector)
+    shell.section = .rendering
+    await shell.rendering.prepare()
+    let panel = try VisualCapture.pngOffscreen(
+      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 850, height: 620))
+    #expect(!waiting.isEmpty)
+    #expect(!failed.isEmpty)
+    #expect(!note.isEmpty)
+    #expect(!enabled.isEmpty)
+    #expect(!panel.isEmpty)
+    shell.close()
   }
 }
 

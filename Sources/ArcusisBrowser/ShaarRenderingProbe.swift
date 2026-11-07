@@ -82,7 +82,8 @@ import Foundation
       overlayAvailable: false)
     do {
       try await transport.send(applied, to: target)
-      report["applied"] = try await mediaFlags(on: target, runtime: runtime, windowID: context.engine.windowID)
+      report["applied"] = try await mediaFlags(
+        on: target, runtime: runtime, windowID: context.engine.windowID)
     } catch {
       report["applyError"] = error.localizedDescription
     }
@@ -100,7 +101,8 @@ import Foundation
       overlayAvailable: false)
     do {
       try await transport.send(cleared, to: target)
-      report["cleared"] = try await mediaFlags(on: target, runtime: runtime, windowID: context.engine.windowID)
+      report["cleared"] = try await mediaFlags(
+        on: target, runtime: runtime, windowID: context.engine.windowID)
     } catch {
       report["clearError"] = error.localizedDescription
     }
@@ -146,7 +148,9 @@ import Foundation
     """
 
   private static func write(_ report: [String: Any], to url: URL) {
-    guard let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+    guard
+      let data = try? JSONSerialization.data(
+        withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
     else { return }
     try? data.write(to: url, options: .atomic)
   }

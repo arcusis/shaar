@@ -27,18 +27,23 @@ enum DevelopmentSourceResolver {
   }
 
   static func sourceMapURL(in body: String, resourceURL: URL) -> URL? {
-    guard body.utf8.count <= 1_048_576 else { return nil }
+    guard let reference = sourceMapReference(in: body),
+      !reference.hasPrefix("data:"),
+      let url = URL(string: reference, relativeTo: resourceURL)?.absoluteURL,
+      url.user == nil, url.password == nil,
+      sameOrigin(url, resourceURL)
+    else { return nil }
+    return url
+  }
+
+  static func sourceMapReference(in body: String) -> String? {
+    guard body.utf8.count <= 5 * 1_048_576 else { return nil }
     let pattern = #"(?:\/\/[#@]|\/\*[#@])\s*sourceMappingURL=([^\s*]+)"#
     guard let expression = try? NSRegularExpression(pattern: pattern),
       let match = expression.matches(in: body, range: NSRange(body.startIndex..., in: body)).last,
       let range = Range(match.range(at: 1), in: body)
     else { return nil }
-    let reference = String(body[range])
-    guard !reference.hasPrefix("data:"),
-      let url = URL(string: reference, relativeTo: resourceURL)?.absoluteURL,
-      sameOrigin(url, resourceURL)
-    else { return nil }
-    return url
+    return String(body[range])
   }
 
   static func locations(
@@ -132,7 +137,7 @@ enum DevelopmentSourceHTTP {
     let (data, response) = try await session.data(from: url)
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
       let finalURL = http.url, DevelopmentSourceResolver.sameOrigin(finalURL, url),
-      data.count <= 1_048_576
+      data.count <= 5 * 1_048_576
     else { throw URLError(.badServerResponse) }
     return data
   }

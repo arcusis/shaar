@@ -22,7 +22,9 @@ struct ShaarSourcesPanel: View {
       Divider()
       sourceContent.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .task { await model.refresh() }
+    .task(id: model.available) {
+      if model.available && model.resources.isEmpty { await model.refresh() }
+    }
     .onChange(of: model.selectedURL) { _, _ in localSourceStatus = nil }
     .fileImporter(
       isPresented: $choosingProjectFolder, allowedContentTypes: [.folder]

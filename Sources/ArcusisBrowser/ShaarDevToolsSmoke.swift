@@ -278,6 +278,9 @@ import Vision
       } else {
         report.fail("capture-\(section.rawValue)", "Offscreen capture failed")
       }
+      if section == .components {
+        await proveComponentAccessorInvocation(shell, inspector: inspector, context: context, report: report)
+      }
     }
     if !report.contains("look/clip/sidebar") {
       report.fail(
@@ -292,15 +295,45 @@ import Vision
     _ shell: ShaarDevToolsModel, inspector: InspectorModel, report: ShaarDevToolsSmokeReport
   ) async {
     _ = await wait(attempts: 40) { shell.framework.inspected && !shell.framework.loading }
-    let summary = shell.framework.nodes.flatMap(\.props)
-      .first { $0.name == "accessorProbe" }?.value
+    let field = shell.framework.nodes.flatMap(\.props)
+      .first { $0.name == "accessorProbe" }
+    let summary = field?.value
     let calls = (try? await inspector.evaluate("globalThis.inspectorGetterCalls || 0")) as? Int
-    if summary?.contains("[Accessor]") == true, calls == 0 {
-      report.pass("components-accessors", "Props show [Accessor] without running the page getter")
+    if summary?.contains("(...)") == true, field?.accessors.contains("danger") == true,
+      calls == 0
+    {
+      report.pass("components-accessors", "Props show (...) without running the page getter")
     } else {
       report.fail(
         "components-accessors",
         "Accessor summary: \(summary ?? "missing"); getter calls: \(calls.map(String.init) ?? "unknown")",
+        severity: .broken)
+    }
+  }
+
+  private static func proveComponentAccessorInvocation(
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
+  ) async {
+    guard let field = shell.framework.selected?.props.first(where: { $0.name == "accessorProbe" })
+    else {
+      report.fail("components-accessor-invoke", "The selected component has no accessor probe")
+      return
+    }
+    let identifier = "shaar.devtools.components.invoke.\(field.id).danger"
+    let pressed = ShaarDevToolsSmokeAccess.press(identifier: identifier, in: context.hosting)
+    let invoked = await wait(attempts: 30) {
+      shell.framework.selected?.props.first(where: { $0.name == "accessorProbe" })?
+        .invoked["danger"] == "unexpected"
+    }
+    let calls = (try? await inspector.evaluate("globalThis.inspectorGetterCalls || 0")) as? Int
+    if pressed, invoked, calls == 1 {
+      report.pass("components-accessor-invoke", "Offscreen click invoked the getter once")
+    } else {
+      let foundByID = ShaarDevToolsSmokeAccess.element(identifier: identifier, in: context.hosting) != nil
+      report.fail(
+        "components-accessor-invoke",
+        "Found ID: \(foundByID); pressed: \(pressed); invoked: \(invoked); getter calls: \(calls.map(String.init) ?? "unknown")",
         severity: .broken)
     }
   }
@@ -1688,6 +1721,7 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "css-overview": return ("CSS overview", "Reload")
     case "css-declaration-label": return ("CSS overview", "Declaration label")
     case "components-accessors": return ("Components", "Read accessor props")
+    case "components-accessor-invoke": return ("Components", "Invoke accessor")
     case "command-menu": return ("Chrome", "Command menu")
     case "settings": return ("Chrome", "Settings")
     case "resize": return ("Chrome", "Resize split")

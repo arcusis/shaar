@@ -45,10 +45,15 @@ import Testing
     let snapshot = try FrameworkFixture.snapshot(in: context)
     let counter = try #require(snapshot.nodes.first { $0.name == "Counter" })
     let props = Dictionary(uniqueKeysWithValues: counter.props.map { ($0.name, $0.value) })
-    #expect(props["lazy"] == "[Accessor]")
-    #expect(props["nested"] == "{\"danger\":\"[Accessor]\"}")
-    #expect(props["list"] == "[1, [Accessor]]")
+    #expect(props["lazy"] == "(...)")
+    #expect(props["nested"] == "{\"danger\":\"(...)\"}")
+    #expect(props["list"] == "[1, (...)]")
+    #expect(counter.props.first(where: { $0.name == "lazy" })?.accessors == [""])
+    #expect(counter.props.first(where: { $0.name == "nested" })?.accessors == ["danger"])
+    #expect(counter.props.first(where: { $0.name == "list" })?.accessors == ["1"])
     #expect(context.evaluateScript("globalThis.inspectorGetterCalls")?.toInt32() == 0)
+    #expect(ShaarFrameworkPageScript.propsExpression(id: counter.id) != nil)
+    #expect(context.evaluateScript("globalThis.__shaarFrameworkProps?.[\"\(counter.id)\"] === counter.memoizedProps")?.toBool() == true)
   }
 
   @Test func plainPageHasNoFrameworkTree() throws {
@@ -180,6 +185,38 @@ import Testing
     await model.highlight(nil)
     #expect(page.expressions.count == 1)
     #expect(page.expressions[0].contains("(null,"))
+  }
+
+  @Test @MainActor func getterRunsOnlyAfterExplicitInvocation() async throws {
+    let page = GetterFrameworkPage()
+    let model = ShaarFrameworkComponentsModel()
+    model.attach(page)
+    model.updateAccess(url: try #require(URL(string: "http://localhost/")))
+    await model.refresh()
+    #expect(page.methods.isEmpty)
+    #expect(model.selected?.props.first?.value == "(...)")
+    await model.invokePropGetter(nodeID: "1", name: "lazy")
+    #expect(page.methods.prefix(3) == [
+      "Runtime.evaluate", "Runtime.getProperties", "Runtime.callFunctionOn",
+    ])
+    #expect(page.propertyParams?["ownProperties"] as? Bool == true)
+    #expect(page.propertyParams?["accessorPropertiesOnly"] as? Bool == true)
+    #expect(model.selected?.props.first?.value == "unexpected")
+  }
+
+  @Test @MainActor func nestedGetterUsesOwnPropertyBeforeExplicitInvocation() async throws {
+    let page = GetterFrameworkPage()
+    let model = ShaarFrameworkComponentsModel()
+    model.attach(page)
+    model.updateAccess(url: try #require(URL(string: "http://localhost/")))
+    await model.refresh()
+    #expect(page.methods.isEmpty)
+    await model.invokePropGetter(nodeID: "1", name: "nested", path: "danger")
+    #expect(page.methods.prefix(4) == [
+      "Runtime.evaluate", "Runtime.getProperties", "Runtime.getProperties",
+      "Runtime.callFunctionOn",
+    ])
+    #expect(model.selected?.props.first(where: { $0.name == "nested" })?.invoked["danger"] == "unexpected")
   }
 
   private func expectTree(
@@ -372,6 +409,9 @@ enum FrameworkFixture {
     expressions.append(expression)
     return value
   }
+  func callFramework(_ method: String, params: [String: Any]) async throws -> [String: Any] {
+    [:]
+  }
 }
 
 @MainActor final class DelayedFrameworkPage: ShaarFrameworkPageEvaluating {
@@ -389,5 +429,38 @@ enum FrameworkFixture {
       return slow
     }
     return fast
+  }
+  func callFramework(_ method: String, params: [String: Any]) async throws -> [String: Any] {
+    [:]
+  }
+}
+
+@MainActor final class GetterFrameworkPage: ShaarFrameworkPageEvaluating {
+  var methods: [String] = []
+  var propertyParams: [String: Any]?
+  func evaluateFramework(_ expression: String) async throws -> Any? {
+    var node = FrameworkFixture.node("1")
+    node["props"] = [
+      ["name": "lazy", "value": "(...)", "accessors": [""]],
+      ["name": "nested", "value": "{\"danger\":\"(...)\"}", "accessors": ["danger"]],
+    ]
+    return FrameworkFixture.payload(nodes: [node])
+  }
+  func callFramework(_ method: String, params: [String: Any]) async throws -> [String: Any] {
+    methods.append(method)
+    switch method {
+    case "Runtime.evaluate": return ["result": ["objectId": "props-1"]]
+    case "Runtime.getProperties":
+      propertyParams = params
+      if params["accessorPropertiesOnly"] as? Bool == true {
+        return ["result": [
+          ["name": "lazy", "get": ["objectId": "getter-1", "type": "function"]],
+          ["name": "danger", "get": ["objectId": "getter-2", "type": "function"]],
+        ]]
+      }
+      return ["result": [["name": "nested", "value": ["objectId": "nested-1"]]]]
+    case "Runtime.callFunctionOn": return ["result": ["value": "unexpected"]]
+    default: return [:]
+    }
   }
 }

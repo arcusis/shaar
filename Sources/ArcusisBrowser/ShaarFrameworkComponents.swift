@@ -49,6 +49,8 @@ struct ShaarFrameworkField: Equatable, Identifiable, Sendable {
   var id: String
   var name: String
   var value: String
+  var accessors: [String] = []
+  var invoked: [String: String] = [:]
 }
 
 struct ShaarFrameworkNode: Equatable, Identifiable, Sendable {
@@ -170,7 +172,11 @@ enum ShaarFrameworkSnapshotParser {
         let raw = record["value"] as? String, raw.utf16.count <= ShaarFrameworkLimits.value,
         !raw.unicodeScalars.contains(where: { $0.value < 32 })
       else { throw ShaarFrameworkFailure(reason: "field") }
-      fields.append(ShaarFrameworkField(id: "\(index)", name: name, value: raw))
+      let accessors = record["accessors"] as? [String] ?? []
+      guard accessors.count <= 8,
+        accessors.allSatisfy({ $0.utf16.count <= ShaarFrameworkLimits.key })
+      else { throw ShaarFrameworkFailure(reason: "field") }
+      fields.append(ShaarFrameworkField(id: "\(index)", name: name, value: raw, accessors: accessors))
     }
     return fields
   }
@@ -213,11 +219,16 @@ enum ShaarFrameworkSnapshotParser {
 @MainActor
 protocol ShaarFrameworkPageEvaluating: AnyObject {
   func evaluateFramework(_ expression: String) async throws -> Any?
+  func callFramework(_ method: String, params: [String: Any]) async throws -> [String: Any]
 }
 
 extension InspectorModel: ShaarFrameworkPageEvaluating {
   func evaluateFramework(_ expression: String) async throws -> Any? {
     try await evaluate(expression)
+  }
+
+  func callFramework(_ method: String, params: [String: Any]) async throws -> [String: Any] {
+    try await call(method, params: params)
   }
 }
 
@@ -348,6 +359,69 @@ final class ShaarFrameworkComponentsModel {
       next = rows.count - 1
     }
     select(rows[next].id)
+  }
+
+  func invokePropGetter(nodeID: String, name: String, path: String = "") async {
+    guard allowed, selectedID == nodeID,
+      let nodeIndex = nodes.firstIndex(where: { $0.id == nodeID }),
+      let fieldIndex = nodes[nodeIndex].props.firstIndex(where: {
+        $0.name == name && $0.accessors.contains(path)
+      }),
+      let expression = ShaarFrameworkPageScript.propsExpression(id: nodeID), let page
+    else { return }
+    let token = generation
+    do {
+      let group = "shaar-framework-props-\(UUID().uuidString)"
+      let object = try await page.callFramework(
+        "Runtime.evaluate", params: ["expression": expression, "objectGroup": group])
+      guard let rootID = (object["result"] as? [String: Any])?["objectId"] as? String else { return }
+      defer {
+        Task { _ = try? await page.callFramework("Runtime.releaseObjectGroup", params: ["objectGroup": group]) }
+      }
+      var objectID = rootID
+      if !path.isEmpty {
+        let properties = try await page.callFramework(
+          "Runtime.getProperties", params: ["objectId": rootID, "ownProperties": true])
+        let rows = properties["result"] as? [[String: Any]] ?? []
+        guard let row = rows.first(where: { ($0["name"] as? String) == name }),
+          let value = row["value"] as? [String: Any],
+          let nestedID = value["objectId"] as? String
+        else { return }
+        objectID = nestedID
+      }
+      let accessors = try await page.callFramework(
+        "Runtime.getProperties",
+        params: ["objectId": objectID, "ownProperties": true, "accessorPropertiesOnly": true])
+      let rows = accessors["result"] as? [[String: Any]] ?? []
+      let property = path.isEmpty ? name : path
+      guard rows.contains(where: {
+        ($0["name"] as? String) == property && ($0["get"] as? [String: Any])?["type"] as? String == "function"
+      }) else { return }
+      let reply = try await page.callFramework(
+        "Runtime.callFunctionOn",
+        params: [
+          "objectId": objectID, "functionDeclaration": "function(name) { return this[name]; }",
+          "arguments": [["value": property]], "returnByValue": true,
+        ])
+      guard token == generation, selectedID == nodeID,
+        nodeIndex < nodes.count, fieldIndex < nodes[nodeIndex].props.count else { return }
+      let result = reply["result"] as? [String: Any] ?? [:]
+      let value = reply["exceptionDetails"] == nil
+        ? Self.getterValue(result) : ShellL10n.string("Getter threw an exception")
+      if path.isEmpty {
+        nodes[nodeIndex].props[fieldIndex].value = value
+      } else {
+        nodes[nodeIndex].props[fieldIndex].invoked[path] = value
+      }
+    } catch {
+      // Keep the accessor available for another explicit attempt.
+    }
+  }
+
+  private static func getterValue(_ result: [String: Any]) -> String {
+    let value = result["description"] as? String
+      ?? result["value"].map { String(describing: $0) } ?? "undefined"
+    return String(value.prefix(ShaarFrameworkLimits.value))
   }
 
   func highlight(_ id: String?) async {

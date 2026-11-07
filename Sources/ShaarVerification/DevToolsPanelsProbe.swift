@@ -379,7 +379,44 @@ import Foundation
           "document.getElementById('shaar-live-element').getAttribute('data-probe')") as? String,
         value == "edited-in-elements"
       else { throw Failure("Elements attribute edit did not reach the page") }
-      return "DOM insertion appeared through the live stream; attribute edit reached the page"
+      _ = try await inspector.evaluate(
+        "(()=>{const host=document.createElement('div');host.id='shaar-copy-host';const first=document.createElement('em');const second=document.createElement('em');host.append(first,second);document.body.appendChild(host);return true})()"
+      )
+      try await reloadBodyChildren(shell.dom)
+      try await self.wait("copy host in the DOM model") {
+        shell.dom.nodes.values.contains { node in
+          node.attributes.contains { $0.name == "id" && $0.value == "shaar-copy-host" }
+        }
+      }
+      guard
+        let host = shell.dom.nodes.values.first(where: { node in
+          node.attributes.contains { $0.name == "id" && $0.value == "shaar-copy-host" }
+        })
+      else { throw Failure("Copy host disappeared") }
+      await shell.dom.toggleExpanded(host.id)
+      try await self.wait("copy host children") {
+        let children = shell.dom.nodes[host.id]?.childrenIDs ?? []
+        return children.compactMap { shell.dom.nodes[$0] }.filter { $0.name == "EM" }.count == 2
+      }
+      guard
+        let second = shell.dom.nodes[host.id]?.childrenIDs.compactMap({ shell.dom.nodes[$0] })
+          .last(where: { $0.name == "EM" })
+      else { throw Failure("Second em was not loaded") }
+      await shell.dom.prepareCopyPath(for: second.id)
+      guard let live = await inspector.pathsForDOMNode(second.id) else {
+        throw Failure("Inspector did not compute a selector for the second em")
+      }
+      let css = shell.dom.selector(for: second.id)
+      let xpath = shell.dom.xpath(for: second.id)
+      guard css == live.css, xpath == live.xpath, css.contains("nth-of-type(2)"),
+        xpath.contains("[2]")
+      else {
+        throw Failure(
+          "Copy paths diverged: model css=\(css) xpath=\(xpath); inspector css=\(live.css) xpath=\(live.xpath)"
+        )
+      }
+      return
+        "DOM insertion appeared through the live stream; attribute edit reached the page; copy paths matched \(css)"
     }
     await check("elements-inspector") {
       guard shell.section == .elements, inspector.isOpen, inspector.target.tabID == tab,
@@ -1077,6 +1114,21 @@ import Foundation
 
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
+  }
+
+  /// The first child list can miss a node inserted afterwards. Ask the page again.
+  private func reloadBodyChildren(_ dom: ShaarDOMTreeModel) async throws {
+    await dom.loadDocument()
+    try await wait("DOM reload before copy host") {
+      dom.rootID != nil && !dom.loading && dom.nodes.values.contains { $0.name == "BODY" }
+    }
+    guard let body = dom.nodes.values.first(where: { $0.name == "BODY" }) else {
+      throw Failure("BODY missing after reload")
+    }
+    if dom.expanded.contains(body.id) {
+      await dom.toggleExpanded(body.id)
+    }
+    await dom.toggleExpanded(body.id)
   }
 
   private func url(_ path: String) -> URL {

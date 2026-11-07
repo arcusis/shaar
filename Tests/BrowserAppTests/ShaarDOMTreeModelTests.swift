@@ -149,7 +149,11 @@ import Testing
     #expect(model.nodes[7]?.relation == .shadowRoot)
     model.select(5)
     #expect(model.breadcrumbs.map(\.id) == [1, 2, 3, 4, 5])
-    #expect(model.selector(for: 5).contains("h1:nth-of-type(1)"))
+    #expect(model.selector(for: 5) == "h1")
+    #expect(
+      model.xpath(for: 5)
+        == "/*[local-name()='html'][1]/*[local-name()='body'][1]/*[local-name()='main'][1]/*[local-name()='h1'][1]"
+    )
     model.search = "main"
     await model.performSearch()
     #expect(model.matches == [4])
@@ -196,6 +200,91 @@ import Testing
     #expect(model.nodes[4]?.childrenIDs == [9, 7])
     #expect(model.nodes[7]?.relation == .shadowRoot)
     model.close()
+  }
+
+  @Test func copyPathsMatchInspectorForALaterSibling() async {
+    let fixture = DOMFixtureTransport()
+    fixture.document = laterSiblingDocument()
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    #expect(model.selector(for: 4) == "#notes")
+    #expect(model.xpath(for: 4) == "//*[@id='notes']")
+    #expect(model.selector(for: 5) == "section:nth-of-type(2)")
+    #expect(
+      model.xpath(for: 5)
+        == "/*[local-name()='html'][1]/*[local-name()='body'][1]/*[local-name()='section'][2]"
+    )
+    #expect(model.selector(for: 6) == "[data-testid=later]")
+    #expect(
+      model.xpath(for: 6)
+        == "/*[local-name()='html'][1]/*[local-name()='body'][1]/*[local-name()='section'][3]"
+    )
+    #expect(model.selector(for: 8) == "#a\\'b")
+    #expect(model.xpath(for: 8) == "//*[@id=\"a'b\"]")
+    model.close()
+  }
+
+  @Test func partialDocumentSliceDoesNotInventASiblingIndex() async {
+    let fixture = DOMFixtureTransport()
+    fixture.document = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+            "children": [
+              [
+                "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+                "childNodeCount": 4,
+                "children": [
+                  ["nodeId": 5, "nodeType": 1, "nodeName": "SECTION", "nodeValue": ""]
+                ],
+              ]
+            ],
+          ]
+        ],
+      ]
+    ]
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    #expect(model.selector(for: 5).isEmpty)
+    #expect(model.xpath(for: 5).isEmpty)
+    model.close()
+  }
+
+  private func laterSiblingDocument() -> [String: Any] {
+    [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+            "children": [
+              [
+                "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+                "children": [
+                  [
+                    "nodeId": 4, "nodeType": 1, "nodeName": "SECTION", "nodeValue": "",
+                    "attributes": ["id", "notes"],
+                  ],
+                  ["nodeId": 5, "nodeType": 1, "nodeName": "SECTION", "nodeValue": ""],
+                  [
+                    "nodeId": 6, "nodeType": 1, "nodeName": "SECTION", "nodeValue": "",
+                    "attributes": ["data-testid", "later"],
+                  ],
+                  [
+                    "nodeId": 8, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
+                    "attributes": ["id", "a'b"],
+                  ],
+                ],
+              ]
+            ],
+          ]
+        ],
+      ]
+    ]
   }
 
   @Test func malformedDocumentShowsErrorInsteadOfBlankTree() async {

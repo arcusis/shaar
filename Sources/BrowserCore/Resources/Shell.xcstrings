@@ -177,6 +177,7 @@
     "Expand or collapse node": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Expand or collapse node"}},"he":{"stringUnit":{"state":"translated","value":"הרחבה או כיווץ של צומת"}}}},
     "Copy element": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy element"}},"he":{"stringUnit":{"state":"translated","value":"העתקת אלמנט"}}}},
     "Copy selector": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy selector"}},"he":{"stringUnit":{"state":"translated","value":"העתקת בורר"}}}},
+    "Copy XPath": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy XPath"}},"he":{"stringUnit":{"state":"translated","value":"העתקת XPath"}}}},
     "Copy Playwright locator": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy Playwright locator"}},"he":{"stringUnit":{"state":"translated","value":"העתקת מאתר Playwright"}}}},
     "Edit attribute…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Edit attribute…"}},"he":{"stringUnit":{"state":"translated","value":"עריכת מאפיין…"}}}},
     "Edit text…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Edit text…"}},"he":{"stringUnit":{"state":"translated","value":"עריכת טקסט…"}}}},

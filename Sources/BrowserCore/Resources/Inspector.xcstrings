@@ -913,6 +913,22 @@
         }
       }
     },
+    "Force state": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force state"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כפיית מצב"
+          }
+        }
+      }
+    },
     "Edit box model value": {
       "localizations": {
         "en": {

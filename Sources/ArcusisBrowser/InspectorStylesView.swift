@@ -36,6 +36,9 @@ struct InspectorStylesView: View {
       ScrollView {
         VStack(spacing: 0) {
           if inspector.selection?.locked == true {
+            InspectorPseudoForceControls(forced: model.forcedPseudos) { name in
+              Task { await model.togglePseudo(name) }
+            }
             if model.selectedID == inspector.selection?.id {
               InspectorSection(
                 InspectorL10n.string("Styles"), id: "Styles",

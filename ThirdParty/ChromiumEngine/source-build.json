@@ -377,6 +377,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0033-shaar-lazy-framework-devtools.patch",
       "sha256": "bd8d6ae51041e9057dad6fba4eb566ceb76290fd6d2ea6a6d21192b422900357"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0034-shaar-devtools-force-pseudo-state.patch",
+      "sha256": "af75d129ce2e163f0a6a3d373b13fa458a80d3b8986a7a6fca1f518dba6719ed"
     }
   ],
   "requiredExports": [

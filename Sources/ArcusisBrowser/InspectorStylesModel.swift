@@ -50,16 +50,20 @@ final class InspectorStylesModel {
   private(set) var overlay = false
   private(set) var undoDepth = 0
   private(set) var capturing = false
+  private(set) var forcedPseudos: Set<String> = []
   var filter = ""
   @ObservationIgnored private var epoch = -1
   @ObservationIgnored private var updated = Date.distantPast
   @ObservationIgnored private var sources: [String: String] = [:]
   @ObservationIgnored private var resources: [(String, String)] = []
   @ObservationIgnored private var resourcesLoaded = false
+  @ObservationIgnored private var forcedNodeID: Int?
+  @ObservationIgnored private var forcing = false
 
   init(inspector: InspectorModel) { self.inspector = inspector }
 
   func reset() {
+    let node = takeForcedNode()
     rules = []
     computed = []
     inactiveHints = [:]
@@ -71,6 +75,10 @@ final class InspectorStylesModel {
     resourcesLoaded = false
     updated = .distantPast
     failure = nil
+    guard node != nil else { return }
+    Task { [weak self] in
+      await self?.releaseForcedNode(node)
+    }
   }
 
   var layout: [InspectorDeclaration] {
@@ -116,6 +124,11 @@ final class InspectorStylesModel {
     do {
       if selectedID != selection.id || epoch != generation {
         await clearOverlay()
+        let selectionChanged = selectedID != nil && selectedID != selection.id
+        let documentChanged = epoch >= 0 && epoch != generation
+        if selectionChanged || documentChanged {
+          await releaseForcedNode(takeForcedNode())
+        }
         rules = []
         computed = []
       }
@@ -405,6 +418,54 @@ final class InspectorStylesModel {
       sources[sheet] = value
       return value
     } catch { return "Stylesheet \(sheet)" }
+  }
+
+  private func takeForcedNode() -> Int? {
+    let node = forcedNodeID
+    forcedPseudos = []
+    forcedNodeID = nil
+    return node
+  }
+
+  private func releaseForcedNode(_ node: Int?) async {
+    guard let node, let inspector else { return }
+    _ = try? await inspector.call(
+      "CSS.forcePseudoState",
+      params: ["nodeId": node, "forcedPseudoClasses": [String]()])
+  }
+
+  func togglePseudo(_ name: String) async {
+    guard !forcing, !busy, InspectorPseudoForce.names.contains(name), let inspector,
+      inspector.isOpen,
+      let selection = inspector.selection, selection.locked
+    else { return }
+    forcing = true
+    defer { forcing = false }
+    let turningOn = !forcedPseudos.contains(name)
+    var next = forcedPseudos
+    if turningOn {
+      next.insert(name)
+    } else {
+      next.remove(name)
+    }
+    let classes = InspectorPseudoForce.ordered(next)
+    do {
+      let node = try await inspector.withSelectedNode { nodeID in
+        _ = try await inspector.call(
+          "CSS.forcePseudoState",
+          params: ["nodeId": nodeID, "forcedPseudoClasses": classes])
+        return nodeID
+      }
+      guard inspector.isOpen, inspector.selection?.id == selection.id else { return }
+      forcedPseudos = next
+      forcedNodeID = classes.isEmpty ? nil : node
+      failure = nil
+      await refresh(force: true)
+    } catch {
+      if turningOn, inspector.isOpen, inspector.selection?.id == selection.id {
+        failure = InspectorL10n.display(error.localizedDescription)
+      }
+    }
   }
 
   func edit(property: String, value: String, important: Bool) async {

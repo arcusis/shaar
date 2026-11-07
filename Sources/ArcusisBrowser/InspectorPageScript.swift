@@ -15,7 +15,7 @@ enum InspectorPageScript {
       const shadow=shield.attachShadow({mode:'closed'}),svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),emphasis=document.createElementNS('http://www.w3.org/2000/svg','svg'),badge=document.createElement('div');
       svg.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden;';
       emphasis.style.cssText=svg.style.cssText;
-      badge.style.cssText='all:initial;position:fixed;display:none;background:#202124;color:#fff;border-radius:4px;padding:5px 8px;font:11px ui-monospace,SFMono-Regular,monospace;line-height:16px;pointer-events:none;box-shadow:0 2px 6px #0003;';
+      badge.style.cssText='all:initial;position:fixed;display:none;background:#202124;color:#f8f9fa;border:1px solid transparent;border-radius:4px;padding:5px 8px;font:11px ui-monospace,SFMono-Regular,monospace;line-height:16px;pointer-events:none;box-shadow:0 2px 6px #0003;';
       shadow.append(svg,emphasis,badge);document.documentElement.append(shield);
       const normalize=s=>String(s||'').replace(/[\u200b\u00ad]/g,'').replace(/\s+/g,' ').trim();
       const quoted=s=>JSON.stringify(String(s));
@@ -151,9 +151,10 @@ enum InspectorPageScript {
         if(edgeFocus){const outer=model[edgeFocus.region],inner=model[{margin:'border',border:'padding',padding:'content'}[edgeFocus.region]],i=edgeFocus.index*2,j=(i+2)%8;
           const edge=document.createElementNS(svg.namespaceURI,'path');edge.setAttribute('d',path([outer[i],outer[i+1],outer[j],outer[j+1],inner[j],inner[j+1],inner[i],inner[i+1]]));edge.setAttribute('fill','#3985ff66');edge.setAttribute('stroke','#3985ff');edge.setAttribute('stroke-width','2');emphasis.append(edge);}
         const native=current.getBoundingClientRect();
-        badge.textContent=label(current).slice(0,100)+'  '+Math.round(native.width*100)/100+' × '+Math.round(native.height*100)/100;
+        badge.textContent=badgeName(current)+'  '+badgeSize(native);
         badge.style.display='block';badge.style.left=Math.max(4,Math.min(innerWidth-badge.offsetWidth-4,r.x))+'px';
-        badge.style.top=Math.max(4,r.y>=32?r.y-30:Math.min(innerHeight-28,r.y+r.h+4))+'px';
+        badge.style.top=badgeTop(r)+'px';
+        applyBadgeFill();
       };
       const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d',{willReadFrequently:true});
       const color=value=>{const text=String(value),match=/^rgba?\(([^)]+)\)$/.exec(text);
@@ -161,6 +162,46 @@ enum InspectorPageScript {
           if(parts.length>=3)return {css:text.slice(0,256),rgba:parts.slice(0,3).map(v=>channel(v)).concat(parts[3]?channel(parts[3],true):1)};}
         ctx.clearRect(0,0,1,1);ctx.fillStyle=value;ctx.fillRect(0,0,1,1);const data=[...ctx.getImageData(0,0,1,1).data].map(n=>n/255);return {css:text.slice(0,256),rgba:data};};
       const over=(a,b)=>{const alpha=a[3]+b[3]*(1-a[3]);return alpha?a.slice(0,3).map((n,i)=>(n*a[3]+b[i]*b[3]*(1-a[3]))/alpha).concat(alpha):[0,0,0,0];};
+      const clipToken=(value,limit)=>String(value||'').slice(0,limit);
+      const badgeClasses=node=>{
+        const names=[...node.classList].map(value=>clipToken(value,24)).filter(name=>name.length>0);
+        const visible=names.slice(0,4);
+        const hidden=names.length-visible.length;
+        const shown=visible.map(name=>'.'+name).join('');
+        if(!hidden)return shown;
+        return shown+' +'+hidden;
+      };
+      const badgeName=node=>{const id=node.id?'#'+clipToken(node.id,48):'';return node.localName+id+badgeClasses(node);};
+      const badgeSize=rect=>Math.round(rect.width*100)/100+' × '+Math.round(rect.height*100)/100;
+      const badgeTop=rect=>{if(rect.y>=32)return Math.max(4,rect.y-30);return Math.max(4,Math.min(innerHeight-28,rect.y+rect.h+4));};
+      const channelLuminance=value=>value<=0.04045?value/12.92:((value+0.055)/1.055)**2.4;
+      const luminance=rgba=>0.2126*channelLuminance(rgba[0])+0.7152*channelLuminance(rgba[1])+0.0722*channelLuminance(rgba[2]);
+      const canvasBackground=scheme=>{
+        const surface=document.createElement('i');
+        surface.style.cssText='display:none;background:Canvas;color-scheme:'+scheme;
+        shadow.append(surface);const value=getComputedStyle(surface).backgroundColor;surface.remove();return value;
+      };
+      const compositedBackdrop=node=>{
+        let backdrop=[0,0,0,0],ancestor=node,steps=0;
+        while(ancestor&&steps++<128){
+          const style=ancestor.ownerDocument.defaultView.getComputedStyle(ancestor);
+          backdrop=over(backdrop,color(style.backgroundColor).rgba);
+          ancestor=parent(ancestor);
+        }
+        const scheme=node.ownerDocument.defaultView.getComputedStyle(node).colorScheme;
+        return over(backdrop,color(canvasBackground(scheme)).rgba);
+      };
+      const applyBadgeFill=()=>{
+        const width=Math.max(innerWidth,1),height=Math.max(innerHeight,1);
+        const x=Math.max(0,Math.min(width-1,parseFloat(badge.style.left)+badge.offsetWidth/2));
+        const y=Math.max(0,Math.min(height-1,parseFloat(badge.style.top)+4));
+        const node=at(x,y)||document.documentElement;
+        const lightFill=luminance(compositedBackdrop(node))<0.2;
+        badge.style.backgroundColor=lightFill?'#f8f9fa':'#202124';
+        badge.style.color=lightFill?'#202124':'#f8f9fa';
+        badge.style.borderColor=lightFill?'#20212455':'#f8f9fa55';
+        badge.dataset.fill=lightFill?'light':'dark';
+      };
       const collect=()=>{
         if(!attached(current))return null;
         const node=current,win=node.ownerDocument.defaultView,s=win.getComputedStyle(node),r=node.getBoundingClientRect();
@@ -239,7 +280,7 @@ enum InspectorPageScript {
         return {closed,revision,selection:packet};},
         copyMetadata:()=>current?{role:role(current),component:component(current)}:null,rectFor:topRect,
         highlightEdge:(region,index)=>{edgeFocus=['margin','border','padding'].includes(region)&&Number.isInteger(index)&&index>=0&&index<4?{region,index}:null;paint();return true;},edgeHighlight:()=>({active:edgeFocus,painted:emphasis.childElementCount===1}),
-        element:()=>current,select:node=>{if(!attached(node)||node===shield)return false;choose(node,true);return true;},onStop:callback=>cleanups.push(callback),addOverlay:node=>shadow.append(node),visible:value=>{shield.style.visibility=value&&!suspended?'visible':'hidden';},fontElements,fontScanTruncated:()=>fontTruncated,overlay:()=>({painted:svg.childElementCount===5,badge:badge.textContent,colors:[...svg.children].slice(0,4).map(n=>n.getAttribute('fill'))}),choose:id=>{const node=nodes.get(id);if(attached(node))choose(node,true);return true;},
+        element:()=>current,select:node=>{if(!attached(node)||node===shield)return false;choose(node,true);return true;},onStop:callback=>cleanups.push(callback),addOverlay:node=>shadow.append(node),visible:value=>{shield.style.visibility=value&&!suspended?'visible':'hidden';},fontElements,fontScanTruncated:()=>fontTruncated,overlay:()=>({painted:svg.childElementCount===5,badge:badge.textContent,badgeFill:badge.dataset.fill||'',colors:[...svg.children].slice(0,4).map(n=>n.getAttribute('fill'))}),choose:id=>{const node=nodes.get(id);if(attached(node))choose(node,true);return true;},
         suspend:value=>{suspended=!!value;if(suspended){edgeFocus=null;paint();}shield.style.visibility=suspended?'hidden':'visible';shield.style.pointerEvents=suspended||locked?'none':'auto';return true;},
         pick:()=>{suspended=false;edgeFocus=null;shield.style.visibility='visible';locked=false;packet=null;revision++;shield.style.pointerEvents='auto';paint();return true;},navigate,
         quads:(id,rev,model)=>{if(id===ids.get(current)&&rev===revision){quads=model;paint();}return true;},stop};

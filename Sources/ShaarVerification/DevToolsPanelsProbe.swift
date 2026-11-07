@@ -365,6 +365,9 @@ import Foundation
     await check("elements-scale") {
       try await DevToolsDOMScaleProof(shell: shell, inspector: inspector).run()
     }
+    await check("split-shell") {
+      try await self.proveSplitShells(firstTab: tab, firstShell: shell)
+    }
     return try results.finish(
       root: root, phase: phase, engine: engine.runtime.chromiumVersion,
       hidden: NSApp.windows.allSatisfy { !$0.isVisible })
@@ -446,6 +449,75 @@ import Foundation
     }
   }
 
+  private func proveSplitShells(
+    firstTab: UUID, firstShell: ShaarDevToolsModel
+  ) async throws -> String {
+    let existing = Set(store.session.selectedSpace.tabs.map(\.id))
+    store.perform(.open(url("/account")))
+    do {
+      try await wait("second pane page") { self.secondPaneTab(existing: existing) != nil }
+    } catch {
+      throw Failure(secondPaneFailure(existing: existing))
+    }
+    guard let second = secondPaneTab(existing: existing) else {
+      throw Failure("Second pane tab disappeared")
+    }
+    store.splitTabs(firstTab, second)
+    guard let split = store.selectedSplit, split.tabIDs.contains(firstTab),
+      split.tabIDs.contains(second)
+    else { throw Failure("The two pages did not share a split") }
+    store.focusSplitTab(second)
+    try await wait("second pane selected") { self.engine.siteControlTarget?.tabID == second }
+    guard let secondTarget = engine.siteControlTarget, secondTarget.tabID == second else {
+      throw Failure("Second pane was not the selected page")
+    }
+    guard engine.showDeveloperTools(for: secondTarget),
+      let secondShell = engine.shaarDevTools[second], secondShell.isOpen,
+      let secondInspector = engine.inspectors[second]
+    else { throw Failure("Second pane did not open its own shell") }
+    guard firstShell.isOpen, firstShell !== secondShell else {
+      throw Failure("Split panes shared one shell")
+    }
+    try await wait("second pane shell stream") { secondShell.streamAvailable }
+    _ = try await secondInspector.evaluate("console.error('shaar-split-pane'); true")
+    try await wait("second pane console event") { self.splitMarker(secondShell) }
+    guard !splitMarker(firstShell) else {
+      throw Failure("Split pane console event crossed shells")
+    }
+    secondShell.close()
+    guard !secondShell.isOpen, firstShell.isOpen else {
+      throw Failure("Closing one pane shell closed the other")
+    }
+    return "Two split panes kept separate shells"
+  }
+
+  private func secondPaneTab(existing: Set<UUID>) -> UUID? {
+    store.session.selectedSpace.tabs.map(\.id).first { id in
+      guard !existing.contains(id), engine.liveTabs.contains(id),
+        engine.pages[id]?.loading == false
+      else { return false }
+      return engine.runtime.windowID(forTabID: id.uuidString) == engine.windowID
+    }
+  }
+
+  private func secondPaneFailure(existing: Set<UUID>) -> String {
+    let described = store.session.selectedSpace.tabs.map(\.id).filter { !existing.contains($0) }
+      .map { id -> String in
+        let loading = engine.pages[id]?.loading == true
+        let live = engine.liveTabs.contains(id)
+        let window = engine.runtime.windowID(forTabID: id.uuidString) ?? "none"
+        return "\(id.uuidString.prefix(8)) live=\(live) loading=\(loading) window=\(window)"
+      }
+    return "Second pane did not load: \(described.joined(separator: "; "))"
+  }
+
+  private func splitMarker(_ shell: ShaarDevToolsModel) -> Bool {
+    shell.events.contains { event in
+      guard case .console(let entry) = event else { return false }
+      return entry.message.contains("shaar-split-pane")
+    }
+  }
+
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
   }
@@ -469,7 +541,7 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "f12-route", "console-network", "network-row", "console-repeat",
+    "f12-route", "console-network", "network-row", "console-repeat", "split-shell",
     "application-cookie",
     "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",

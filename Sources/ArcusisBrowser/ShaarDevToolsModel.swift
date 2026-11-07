@@ -16,6 +16,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case performance = "Performance"
   case audits = "Audits"
   case sources = "Sources"
+  case cssOverview = "CSS overview"
   case security = "Security"
   case sensors = "Sensors"
   case repro = "Repro"
@@ -354,6 +355,7 @@ final class ShaarDevToolsModel {
   let cookies = ShaarCookieModel()
   let performance: ShaarPerformanceModel
   let sources: ShaarSourcesModel
+  let cssOverview: ShaarDevToolsCSSOverviewModel
   let repro: ShaarReproModel
   let viewports: ShaarViewportsModel
   let rendering: ShaarRenderingModel
@@ -443,6 +445,7 @@ final class ShaarDevToolsModel {
     sources = ShaarSourcesModel(
       phase2: phase2, inspectorContent: sourceInspectorContent,
       loadSourceData: sourceLoader)
+    cssOverview = ShaarDevToolsCSSOverviewModel(sources: sources)
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
     rendering = ShaarRenderingModel(target: target, transport: renderingTransport)
@@ -511,6 +514,7 @@ final class ShaarDevToolsModel {
     cookies.reset()
     performance.reset()
     sources.reset()
+    cssOverview.reset()
     pageAudit.reset()
     pageAudit.inspector = nil
     auditFixture = nil
@@ -712,6 +716,7 @@ final class ShaarDevToolsModel {
     application.reset()
     cookies.reset()
     sources.reset()
+    cssOverview.reset()
     pageAudit.reset()
     auditFixture = nil
     framework.updateAccess(url: target.url)

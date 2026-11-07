@@ -269,28 +269,12 @@ final class ShaarSourcesModel {
       if generation == self.generation, selectedURL == url { contentLoading = false }
     }
     do {
-      let reply: ShaarDevToolsPhase2Reply
-      do {
-        reply = try await phase2.execute(.resourceContent(url: url))
-      } catch {
-        guard !(error is CancellationError), let inspectorContent,
-          let resourceURL = URL(string: url),
-          DevelopmentSourceResolver.sameOrigin(resourceURL, phase2.target.url)
-        else { throw error }
-        let fallback = try await inspectorContent(url, phase2.target)
-        guard generation == self.generation, selectedURL == url else { return }
-        content = fallback.body
-        contentRevision += 1
-        binary = fallback.base64Encoded
-        contentTruncated = false
-        failure = nil
-        return
-      }
+      let loaded = try await loadResourceText(url: url)
       guard generation == self.generation, selectedURL == url else { return }
-      content = reply.body
+      content = loaded.body
       contentRevision += 1
-      binary = reply.base64Encoded == true
-      contentTruncated = reply.truncated
+      binary = loaded.base64Encoded
+      contentTruncated = loaded.truncated
       failure = nil
     } catch is CancellationError {
       return
@@ -298,6 +282,53 @@ final class ShaarSourcesModel {
       if generation == self.generation, selectedURL == url {
         failure = error.localizedDescription
       }
+    }
+  }
+
+  func loadStylesheets() async throws -> ShaarLoadedStylesheets? {
+    guard phase2.available else { return nil }
+    let reply = try await phase2.execute(.resourceTree)
+    var resources: [ShaarSourceResource] = []
+    for item in reply.items {
+      guard let url = item.text["url"] else { continue }
+      let type = item.text["type"] ?? ""
+      let mimeType = item.text["mimeType"] ?? ""
+      guard ShaarDevToolsCSSOverview.isStylesheet(type: type, mimeType: mimeType, url: url),
+        ShaarDevToolsCSSOverview.isLoadableSheetURL(url)
+      else { continue }
+      resources.append(ShaarSourceResource(url: url, type: type, mimeType: mimeType))
+    }
+    var sheets: [ShaarDevToolsCSSSheet] = []
+    var clipped = resources.count > ShaarDevToolsCSSOverview.maximumSheets
+    for resource in resources.prefix(ShaarDevToolsCSSOverview.maximumSheets) {
+      let loaded = try await loadResourceText(url: resource.url)
+      if loaded.base64Encoded { continue }
+      let piece = ShaarDevToolsCSSOverview.clipped(loaded.body ?? "")
+      if piece.clipped { clipped = true }
+      sheets.append(ShaarDevToolsCSSSheet(name: resource.name, url: resource.url, text: piece.text))
+    }
+    return ShaarLoadedStylesheets(sheets: sheets, clipped: clipped)
+  }
+
+  private struct LoadedResourceText {
+    var body: String?
+    var base64Encoded: Bool
+    var truncated: Bool
+  }
+
+  private func loadResourceText(url: String) async throws -> LoadedResourceText {
+    do {
+      let reply = try await phase2.execute(.resourceContent(url: url))
+      return LoadedResourceText(
+        body: reply.body, base64Encoded: reply.base64Encoded == true, truncated: reply.truncated)
+    } catch {
+      guard !(error is CancellationError), let inspectorContent,
+        let resourceURL = URL(string: url),
+        DevelopmentSourceResolver.sameOrigin(resourceURL, phase2.target.url)
+      else { throw error }
+      let fallback = try await inspectorContent(url, phase2.target)
+      return LoadedResourceText(
+        body: fallback.body, base64Encoded: fallback.base64Encoded, truncated: false)
     }
   }
 

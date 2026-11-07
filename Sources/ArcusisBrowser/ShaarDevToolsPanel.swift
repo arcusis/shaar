@@ -39,6 +39,7 @@ extension ShaarDevToolsSection {
     case .performance: "speedometer"
     case .audits: "checkmark.shield"
     case .sources: "curlybraces"
+    case .cssOverview: "paintbrush"
     case .security: "lock"
     case .sensors: "location"
     case .repro: "record.circle"
@@ -59,6 +60,7 @@ extension ShaarDevToolsSection {
     case .performance: "Perf"
     case .audits: "Audits"
     case .sources: "Sources"
+    case .cssOverview: "CSS"
     case .security: "Security"
     case .sensors: "Sensors"
     case .repro: "Repro"
@@ -342,6 +344,8 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .cssOverview:
+      ShaarDevToolsCSSOverviewPanel(model: model)
     case .security:
       ShaarDevToolsSecurityPanel(model: model)
     case .sensors:
@@ -488,6 +492,7 @@ struct ShaarDevToolsPanel: View {
         ? "Source resources are scoped to this tab"
         : "Sources are unavailable for this tab"
     }
+    if model.section == .cssOverview { return "CSS overview is scoped to this tab" }
     if model.section == .security { return "Security details are scoped to this tab" }
     if model.section == .sensors { return "Sensors are scoped to this tab" }
     if model.section == .repro { return "Repro data is scoped to this tab" }

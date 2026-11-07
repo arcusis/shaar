@@ -48,6 +48,19 @@ import Testing
       ]) == 1)
   }
 
+  @Test func firstTabProbeRequiresItsOwnAppFramework() {
+    let app = URL(filePath: "/tmp/Shaar Verification.app")
+    let executable = app.appending(path: "Contents/MacOS/ShaarVerification")
+    let framework = app.appending(
+      path: "Contents/Frameworks/Chromium Framework.framework")
+    #expect(ShaarFirstTabProbe.isBundledFramework(framework, for: executable))
+    #expect(!ShaarFirstTabProbe.isBundledFramework(
+      framework, for: URL(filePath: "/tmp/.build/debug/ShaarVerification")))
+    #expect(!ShaarFirstTabProbe.isBundledFramework(
+      URL(filePath: "/tmp/Other.app/Contents/Frameworks/Chromium Framework.framework"),
+      for: executable))
+  }
+
   @Test func requestedURLAcceptsNormalizedRootAndRejectsOtherNavigation() {
     let requested = URL(string: "https://example.com")!
     #expect(

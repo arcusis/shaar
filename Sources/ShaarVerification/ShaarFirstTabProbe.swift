@@ -48,6 +48,13 @@ final class ShaarFirstTabProbe {
     }
 
     let framework = URL(filePath: try value(after: "--probe-framework"))
+    let executable = Bundle.main.executableURL
+    guard let executable,
+      Self.isBundledFramework(framework, for: executable)
+    else {
+      throw Failure(
+        "The first-tab probe requires Shaar Verification.app and its bundled Chromium framework. Build it with scripts/bundle-app.sh --with-engine --verification.")
+    }
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
     checksInspector = arguments.contains("--probe-shaar-inspector")
@@ -109,9 +116,23 @@ final class ShaarFirstTabProbe {
       let probe = try ShaarFirstTabProbe(arguments: arguments)
       return probe.run()
     } catch {
-      FileHandle.standardError.write(Data("Shaar first-tab probe: \(error)\n".utf8))
+      FileHandle.standardError.write(
+        Data("Shaar first-tab probe: \(error.localizedDescription)\n".utf8))
       return 1
     }
+  }
+
+  static func isBundledFramework(_ framework: URL, for executable: URL) -> Bool {
+    let executable = executable.resolvingSymlinksInPath().standardizedFileURL
+    let macOS = executable.deletingLastPathComponent()
+    let contents = macOS.deletingLastPathComponent()
+    let app = contents.deletingLastPathComponent()
+    guard macOS.lastPathComponent == "MacOS", contents.lastPathComponent == "Contents",
+      app.pathExtension == "app"
+    else { return false }
+    let expected = contents.appending(path: "Frameworks/Chromium Framework.framework")
+    return framework.resolvingSymlinksInPath().standardizedFileURL.path
+      == expected.resolvingSymlinksInPath().standardizedFileURL.path
   }
 
   private func run() -> Int32 {

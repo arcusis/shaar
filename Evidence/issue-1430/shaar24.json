@@ -1,0 +1,27 @@
+{
+  "allWindowsHidden" : true,
+  "backend" : "shaar",
+  "coreRoutesObserved" : false,
+  "error" : "",
+  "extensionListObserved" : false,
+  "faviconCacheRestored" : false,
+  "faviconObserved" : false,
+  "inactiveFaviconObserved" : false,
+  "inspectorChecks" : [
+
+  ],
+  "nativeView" : true,
+  "navigationObserved" : true,
+  "passed" : true,
+  "privatePolicyChecks" : {
+
+  },
+  "privatePolicyStatus" : {
+
+  },
+  "probeMode" : "shaar-first-tab",
+  "requestedURL" : "https:\/\/example.com",
+  "schemaVersion" : 1,
+  "systemQuitRequested" : false,
+  "tabID" : "36318AC1-37F1-4649-8E27-D65FA2611395"
+}

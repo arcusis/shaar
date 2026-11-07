@@ -230,6 +230,7 @@ struct ShaarDOMTreePanel: View {
         .buttonStyle(.plain)
         .accessibilityLabel(
           ShellL10n.string(model.expanded.contains(row.id) ? "Collapse node" : "Expand node"))
+        .accessibilityIdentifier("shaar.devtools.domDisclosure.\(row.id)")
       } else {
         Color.clear.frame(width: 14, height: 20)
       }

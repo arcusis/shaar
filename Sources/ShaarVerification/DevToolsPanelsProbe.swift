@@ -74,6 +74,9 @@ import Foundation
     await check("security") {
       try await self.proveSecurity(shell: shell)
     }
+    await check("audits") {
+      try await self.proveAudits(shell: shell, inspector: inspector)
+    }
     await check("console-network") {
       _ = try await inspector.evaluate(
         "console.error('shaar19-live-console'); fetch('/profile-privacy-cache', {cache:'no-store'}).then(r=>r.text())"
@@ -752,6 +755,100 @@ import Foundation
       "examined=\(summary.examined) colors=[\(colors)] fonts=[\(fonts)] media=[\(media)] sheets=[\(sheets)] failure=\(shell.cssOverview.failure ?? "") tree=[\(tree)]"
   }
 
+  private func proveAudits(
+    shell: ShaarDevToolsModel, inspector: InspectorModel
+  ) async throws -> String {
+    let previous = shell.section
+    defer { shell.section = previous }
+    shell.section = .audits
+    let planted = try await inspector.evaluate(Self.auditPlant)
+    guard planted as? Bool == true else {
+      throw Failure("Audit fixture controls were not added to the page")
+    }
+    do {
+      let summary = try await proveAuditResults(shell: shell, inspector: inspector)
+      _ = try? await inspector.evaluate(Self.auditClear)
+      return summary
+    } catch {
+      _ = try? await inspector.evaluate(Self.auditClear)
+      throw error
+    }
+  }
+
+  private func proveAuditResults(
+    shell: ShaarDevToolsModel, inspector: InspectorModel
+  ) async throws -> String {
+    let route = shell.target.url.path.isEmpty ? "/" : shell.target.url.path
+    let project = try auditBudgetProject(route: route)
+    defer { try? FileManager.default.removeItem(at: project) }
+    try shell.performance.loadBudgets(from: project)
+    guard inspector.isOpen, shell.pageAudit.inspector != nil else {
+      throw Failure("Audits has no Inspector for this tab")
+    }
+    shell.pageAudit.setScope(.page)
+    shell.pageAudit.run()
+    try await wait("axe report", attempts: 200) {
+      !shell.pageAudit.busy && (shell.pageAudit.report != nil || shell.pageAudit.failure != nil)
+    }
+    guard let report = shell.pageAudit.report else {
+      throw Failure("Audit did not finish: \(shell.pageAudit.failure ?? "no report")")
+    }
+    let rules = Set(report.findings.map(\.ruleID))
+    guard rules.contains("button-name"), rules.contains("image-alt") else {
+      let listed = rules.sorted().joined(separator: ", ")
+      throw Failure("Audit missed the planted controls. rules=[\(listed)]")
+    }
+    if shell.phase2.available { await shell.performance.refresh() }
+    let counts = shell.auditCounts
+    guard counts.hasReport, counts.violations >= 2, counts.hasBudget,
+      shell.auditRoute == route,
+      counts.passed + counts.over + counts.unavailable == 2,
+      counts.passed + counts.over >= 1
+    else {
+      let metrics =
+        shell.performance.budgetResult?.metrics.map {
+          "\($0.name)=\($0.status.rawValue)"
+        }.joined(separator: ", ") ?? "none"
+      throw Failure(
+        "Audit counts route=\(shell.auditRoute ?? "nil") violations=\(counts.violations) passed=\(counts.passed) over=\(counts.over) unavailable=\(counts.unavailable) metrics=[\(metrics)]"
+      )
+    }
+    return
+      "axe reported \(counts.violations) violations, including the unnamed button and the image without alt. Route budget \(route) passed \(counts.passed), over \(counts.over), unavailable \(counts.unavailable)."
+  }
+
+  private func auditBudgetProject(route: String) throws -> URL {
+    let project = FileManager.default.temporaryDirectory.appending(
+      path: "shaar-audit-budget-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let directory = project.appending(path: ".shaar", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let payload = """
+      {"schemaVersion":1,"routes":[{"route":"\(route)","cls":1,"requestCount":1000000}]}
+      """
+    try Data(payload.utf8).write(to: directory.appending(path: "budgets.json"))
+    return project
+  }
+
+  private static let auditPlant = """
+    (() => {
+      const button = document.createElement('button');
+      button.id = 'shaar-audit-unnamed';
+      const image = document.createElement('img');
+      image.id = 'shaar-audit-image';
+      image.src = '/favicon-initial.png';
+      document.body.append(button, image);
+      return true;
+    })()
+    """
+
+  private static let auditClear = """
+    (() => {
+      document.getElementById('shaar-audit-unnamed')?.remove();
+      document.getElementById('shaar-audit-image')?.remove();
+      return true;
+    })()
+    """
+
   private func engineLevel(_ shell: ShaarDevToolsModel) -> String? {
     let info = engine.runtime.securityInfo(
       forTabID: shell.target.tabID.uuidString, profileID: shell.target.profileID.uuidString)
@@ -963,7 +1060,7 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "f12-route", "shell-defaults", "security", "console-network", "network-tools",
+    "f12-route", "shell-defaults", "security", "audits", "console-network", "network-tools",
     "network-throttle", "network-row", "console-repeat", "issues", "application-cookie",
     "application-local-storage", "application-session-storage", "application-indexed-db",
     "application-cache-storage", "application-service-worker", "network-rules", "source-bytes",

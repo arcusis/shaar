@@ -1105,6 +1105,66 @@
         }
       }
     },
+    "Cancel": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },
+        "he": { "stringUnit": { "state": "translated", "value": "ביטול" } }
+      }
+    },
+    "New rule": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New rule" } },
+        "he": { "stringUnit": { "state": "translated", "value": "כלל חדש" } }
+      }
+    },
+    "Selector": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Selector" } },
+        "he": { "stringUnit": { "state": "translated", "value": "בורר" } }
+      }
+    },
+    "Add property": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Add property" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הוספת מאפיין" } }
+      }
+    },
+    "Turn property off": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Turn property off" } },
+        "he": { "stringUnit": { "state": "translated", "value": "כיבוי מאפיין" } }
+      }
+    },
+    "Turn property on": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Turn property on" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הפעלת מאפיין" } }
+      }
+    },
+    "Inherited": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Inherited" } },
+        "he": { "stringUnit": { "state": "translated", "value": "בירושה" } }
+      }
+    },
+    "Pseudo-element %@": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pseudo-element %@" } },
+        "he": { "stringUnit": { "state": "translated", "value": "פסאודו-אלמנט %@" } }
+      }
+    },
+    "This rule cannot be edited from the page.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This rule cannot be edited from the page." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לערוך את הכלל הזה מתוך הדף." } }
+      }
+    },
+    "Invalid selector.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Invalid selector." } },
+        "he": { "stringUnit": { "state": "translated", "value": "בורר לא תקין." } }
+      }
+    },
     "Applies to this element until reload. Empty value removes the override.": {
       "localizations": {
         "en": {

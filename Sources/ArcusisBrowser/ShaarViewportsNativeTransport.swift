@@ -110,7 +110,16 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
       }
       let old = session.frames[currentIndex].frame
       session.frames[currentIndex].frame = ShaarViewportFrame(
-        id: old.id, preset: old.preset, url: old.url, pngData: old.pngData, safeArea: insets)
+        id: old.id, preset: old.preset, url: old.url, pngData: old.pngData, safeArea: insets,
+        orientation: old.orientation)
+    case .rotate(let id):
+      let nativeID = try viewportID(id, in: session)
+      _ = try await actionRequest(
+        session, leaseID: leaseID, fields: ["kind": "rotate", "viewportID": nativeID])
+      guard current(session),
+        let index = session.frames.firstIndex(where: { $0.nativeID == nativeID })
+      else { throw ShaarViewportsError.staleTarget }
+      session.frames[index].frame = session.frames[index].frame.rotated(keepingImage: false)
     case .click(let id, let x, let y):
       let nativeID = try viewportID(id, in: session)
       _ = try await actionRequest(
@@ -132,7 +141,7 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
           nativeID,
           ShaarViewportFrame(
             id: frame.id, preset: frame.preset, url: url, pngData: Data(),
-            safeArea: frame.safeArea)
+            safeArea: frame.safeArea, orientation: frame.orientation)
         )
       }
     }
@@ -222,7 +231,8 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
       data.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
     else { return nil }
     return ShaarViewportFrame(
-      id: old.id, preset: old.preset, url: url, pngData: data, safeArea: old.safeArea)
+      id: old.id, preset: old.preset, url: url, pngData: data, safeArea: old.safeArea,
+      orientation: old.orientation)
   }
 
   private func actionRequest(

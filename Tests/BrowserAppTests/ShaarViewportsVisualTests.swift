@@ -24,18 +24,33 @@ import XCTest
     let imageRoot = FileManager.default.temporaryDirectory
     let phoneImage = try makeFrameImage(
       preset: .iphone15Pro, to: imageRoot.appending(path: "shaar-1159-phone.png"))
+    let ipadImage = try makeFrameImage(
+      preset: .ipad, to: imageRoot.appending(path: "shaar-1159-ipad.png"))
     let pixelImage = try makeFrameImage(
       preset: .pixel8, to: imageRoot.appending(path: "shaar-1159-pixel.png"))
     let desktopImage = try makeFrameImage(
       preset: .desktop, to: imageRoot.appending(path: "shaar-1159-desktop.png"))
-    let fixture = ShaarViewportsFixtureTransport(frames: [
+    let wideImage = try makeFrameImage(
+      preset: .desktop1440, to: imageRoot.appending(path: "shaar-1159-desktop-1440.png"))
+    let landscapeImage = try makeFrameImage(
+      preset: .iphone15Pro, orientation: .landscape,
+      to: imageRoot.appending(path: "shaar-1159-phone-landscape.png"))
+    let fitted = ShaarViewportsFixtureTransport(frames: [
+      deviceFrame(.iphone15Pro, url: target.url, png: phoneImage),
+      deviceFrame(.ipad, url: target.url, png: ipadImage),
+      deviceFrame(.pixel8, url: target.url, png: pixelImage),
+      deviceFrame(.desktop, url: target.url, png: desktopImage),
+    ])
+    let rotatedPhone = deviceFrame(.iphone15Pro, url: target.url, png: landscapeImage)
+      .rotated(keepingImage: true)
+    let rotated = ShaarViewportsFixtureTransport(frames: [
       ShaarViewportFrame(
-        id: UUID(), preset: .iphone15Pro, url: target.url, pngData: phoneImage,
-        safeArea: .init(top: 59, right: 0, bottom: 34, left: 0)),
-      ShaarViewportFrame(
-        id: UUID(), preset: .pixel8, url: target.url, pngData: pixelImage,
-        safeArea: .init(top: 24, right: 0, bottom: 24, left: 0)),
-      ShaarViewportFrame(id: UUID(), preset: .desktop, url: target.url, pngData: desktopImage),
+        id: rotatedPhone.id, preset: rotatedPhone.preset, url: rotatedPhone.url,
+        pngData: landscapeImage, safeArea: rotatedPhone.safeArea,
+        orientation: rotatedPhone.orientation),
+      deviceFrame(.ipad, url: target.url, png: ipadImage),
+      deviceFrame(.desktop, url: target.url, png: desktopImage),
+      deviceFrame(.desktop1440, url: target.url, png: wideImage),
     ])
     for scheme in [ColorScheme.light, .dark] {
       let suffix = scheme == .dark ? "dark" : "light"
@@ -48,22 +63,43 @@ import XCTest
         scheme: scheme, appearance: appearance, root: root)
       pending.close()
 
-      let live = ShaarDevToolsModel(target: target, viewportsTransport: fixture)
+      let live = ShaarDevToolsModel(target: target, viewportsTransport: fitted)
       live.section = .viewports
+      live.viewports.zoomToFit = true
       live.open(inspector: inspector)
-      for _ in 0..<30 where live.viewports.frames.count != 3 { await Task.yield() }
-      XCTAssertEqual(live.viewports.frames.count, 3)
+      for _ in 0..<30 where live.viewports.frames.count != 4 { await Task.yield() }
+      XCTAssertEqual(live.viewports.frames.count, 4)
       try capture(
-        panel: live, inspector: inspector, named: "after-viewports-results-\(suffix)",
+        panel: live, inspector: inspector, named: "after-viewports-fit-\(suffix)",
         scheme: scheme, appearance: appearance, root: root)
       live.close()
+
+      let wide = ShaarDevToolsModel(target: target, viewportsTransport: rotated)
+      wide.section = .viewports
+      wide.viewports.zoomToFit = true
+      wide.open(inspector: inspector)
+      for _ in 0..<30 where wide.viewports.frames.count != 4 { await Task.yield() }
+      XCTAssertEqual(wide.viewports.frames.first?.orientation, .landscape)
+      try capture(
+        panel: wide, inspector: inspector, named: "after-viewports-rotated-\(suffix)",
+        scheme: scheme, appearance: appearance, root: root)
+      wide.close()
     }
     XCTAssertTrue(NSApp.keyWindow === previous)
   }
 
-  private func makeFrameImage(preset: ShaarViewportPreset, to url: URL) throws -> Data {
-    let width = CGFloat(preset.width)
-    let height = CGFloat(preset.height)
+  private func deviceFrame(
+    _ preset: ShaarViewportPreset, url: URL, png: Data
+  ) -> ShaarViewportFrame {
+    ShaarViewportFrame(
+      id: UUID(), preset: preset, url: url, pngData: png, safeArea: preset.defaultInsets)
+  }
+
+  private func makeFrameImage(
+    preset: ShaarViewportPreset, orientation: ShaarViewportOrientation = .portrait, to url: URL
+  ) throws -> Data {
+    let width = CGFloat(orientation == .portrait ? preset.width : preset.height)
+    let height = CGFloat(orientation == .portrait ? preset.height : preset.width)
     let page = VStack(alignment: .leading, spacing: 16) {
       Text("Dashboard").font(.system(size: 28, weight: .semibold))
       Text("Revenue").font(.system(size: 14)).foregroundStyle(.secondary)

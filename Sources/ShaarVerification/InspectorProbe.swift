@@ -462,6 +462,24 @@ final class InspectorProbe {
         as? Bool == true,
       "undo restores absent style attribute exactly")
     try await wait("undo restores box details") { model.selection?.box.padding.first == "10px" }
+    let authorRule = try require(
+      styles.rules.first {
+        $0.selector == "button" && $0.editable && $0.source.contains("#style-")
+      }, "button author rule can be edited")
+    await styles.editRule(authorRule, property: "outline-offset", value: "4px", important: false)
+    let editedOffset =
+      try await model.evaluate("getComputedStyle(document.querySelector('#save')).outlineOffset")
+      as? String
+    try expect(
+      styles.failure == nil && editedOffset == "4px",
+      "author rule edits change the renderer")
+    await styles.undo()
+    let restoredOffset =
+      try await model.evaluate("getComputedStyle(document.querySelector('#save')).outlineOffset")
+      as? String
+    try expect(
+      styles.failure == nil && restoredOffset == "0px",
+      "undo removes the author rule edit")
     try expect(
       await pointer(model, selector: "#next", click: false, modifiers: 1),
       "trusted Option hover reaches page")

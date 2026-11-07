@@ -39,6 +39,7 @@ enum InspectorL10n {
       "Computed styles are unavailable.", "Style data exceeds the supported size.",
       "CSS could not be applied.", "CSS could not be restored.",
       "Lock an element before editing.", "Invalid CSS declaration.",
+      "This rule cannot be edited from the page.", "Invalid selector.",
       "Chromium does not support this CSS value.", "No edits to undo.",
       "Page styles changed after this edit. Undo would overwrite them.",
       "An element capture is already in progress.", "Lock an element first.",

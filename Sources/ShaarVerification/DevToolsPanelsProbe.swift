@@ -238,7 +238,7 @@ import Foundation
         return frame.safeArea == insets && !frame.pngData.isEmpty
           && frame.pngData != beforeInsets
       }
-      return "Two PNG frames delivered; the mobile safe-area inset changed rendered pixels"
+      return try await self.proveSyncedViewports(shell)
     }
     await check("masked-repro") {
       do {
@@ -312,6 +312,55 @@ import Foundation
     return try results.finish(
       root: root, phase: phase, engine: engine.runtime.chromiumVersion,
       hidden: NSApp.windows.allSatisfy { !$0.isVisible })
+  }
+
+  private func proveSyncedViewports(_ shell: ShaarDevToolsModel) async throws -> String {
+    let destination = url("/inspector-viewports")
+    let beforeNavigation = viewportPNG(shell)
+    try await shell.viewports.perform(.navigate(destination))
+    try await wait("synced viewport navigation", attempts: 160) {
+      self.viewportsShow(shell, path: "/inspector-viewports", changedFrom: beforeNavigation)
+    }
+    guard let source = shell.viewports.frames.first(where: { $0.preset == .iphone15Pro }) else {
+      throw Failure("Mobile viewport missing after navigation")
+    }
+    let beforeClick = viewportPNG(shell)
+    try await shell.viewports.perform(.click(source.id, x: 48, y: 48))
+    try await wait("synced viewport click", attempts: 160) {
+      self.viewportsChanged(shell, from: beforeClick)
+    }
+    let beforeScroll = viewportPNG(shell)
+    try await shell.viewports.perform(.scroll(source.id, deltaX: 0, deltaY: 640))
+    try await wait("synced viewport scroll", attempts: 160) {
+      self.viewportsChanged(shell, from: beforeScroll)
+    }
+    let paths = Set(shell.viewports.frames.map(\.url.path))
+    guard paths == ["/inspector-viewports"], shell.viewports.frames.count == 2 else {
+      throw Failure("Viewport navigation diverged: \(paths)")
+    }
+    return "Safe area, navigation, click, and scroll changed both offscreen viewport frames"
+  }
+
+  private func viewportPNG(_ shell: ShaarDevToolsModel) -> [UUID: Data] {
+    Dictionary(uniqueKeysWithValues: shell.viewports.frames.map { ($0.id, $0.pngData) })
+  }
+
+  private func viewportsChanged(
+    _ shell: ShaarDevToolsModel, from previous: [UUID: Data]
+  ) -> Bool {
+    let frames = shell.viewports.frames
+    guard frames.count >= 2, frames.count == previous.count else { return false }
+    return frames.allSatisfy { frame in
+      guard let before = previous[frame.id] else { return false }
+      return !before.isEmpty && !frame.pngData.isEmpty && frame.pngData != before
+    }
+  }
+
+  private func viewportsShow(
+    _ shell: ShaarDevToolsModel, path: String, changedFrom previous: [UUID: Data]
+  ) -> Bool {
+    guard viewportsChanged(shell, from: previous) else { return false }
+    return shell.viewports.frames.allSatisfy { $0.url.path == path }
   }
 
   private func check(_ name: String, _ operation: () async throws -> String) async {

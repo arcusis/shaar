@@ -1025,6 +1025,86 @@
         }
       }
     },
+    "Flex and grid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flex and grid"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flex ו-Grid"
+          }
+        }
+      }
+    },
+    "No flex or grid containers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No flex or grid containers"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אין מכולות Flex או Grid בדף"
+          }
+        }
+      }
+    },
+    "Line numbers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Line numbers"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מספרי קווים"
+          }
+        }
+      }
+    },
+    "Track sizes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track sizes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גודל מסילות"
+          }
+        }
+      }
+    },
+    "Area names": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Area names"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שמות אזורים"
+          }
+        }
+      }
+    },
     "Element overrides": {
       "localizations": {
         "en": {

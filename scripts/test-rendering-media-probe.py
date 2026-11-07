@@ -82,7 +82,8 @@ def main():
                 or applied.get("reduce") is not True
                 or applied.get("print") is not True
                 or applied.get("screen") is not False
-                or report.get("overlayMissing") is not True
+                or report.get("overlayMissing") is not False
+                or report.get("overlayError") != ""
             ):
                 raise SystemExit(1)
         server.shutdown()

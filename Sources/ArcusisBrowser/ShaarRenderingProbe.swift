@@ -7,9 +7,8 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
-/// Proves media emulation on the pinned engine from a window that is never ordered
-/// on screen. Overlay commands are attempted once and expected to be rejected until
-/// the engine build that accepts them.
+/// Proves media emulation and paint overlay support on the pinned engine from a
+/// window that is never ordered on screen.
 @MainActor enum ShaarRenderingProbe {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
     guard let pageURL, pageURL.host == "127.0.0.1", pageURL.scheme == "http" else { return 2 }

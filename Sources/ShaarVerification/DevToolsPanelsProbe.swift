@@ -88,6 +88,25 @@ import Foundation
       let millis = Int(((row.duration ?? 0) * 1_000).rounded())
       return "\(row.method) \(row.name) \(row.resource.rawValue) \(size) bytes \(millis) ms"
     }
+    await check("console-repeat") {
+      _ = try await inspector.evaluate(
+        "console.error('shaar-repeat-copy'); console.error('shaar-repeat-copy'); true"
+      )
+      try await self.wait("repeated console row") {
+        self.repeatedCopyRow(shell) != nil
+      }
+      guard let row = self.repeatedCopyRow(shell) else {
+        throw Failure("Repeated console row disappeared")
+      }
+      let copy = shell.console.agentCopyText(for: row)
+      guard copy.contains("shaar-repeat-copy"),
+        copy.contains("Repeated \(row.count) times")
+      else {
+        throw Failure("Copy for agent missed the repeated console row")
+      }
+      let flat = copy.replacingOccurrences(of: "\n", with: " | ")
+      return "Repeated \(row.count) times. Stack frames \(row.event.stack.count). \(flat)"
+    }
     await check("application-cookie") {
       shell.cookies.configure(store: self.engine, target: target)
       await shell.cookies.refresh()
@@ -421,6 +440,12 @@ import Foundation
     }
   }
 
+  private func repeatedCopyRow(_ shell: ShaarDevToolsModel) -> ShaarConsoleRow? {
+    shell.console.rows(from: shell.consoleEvents).first { row in
+      row.event.message == "shaar-repeat-copy" && row.count >= 2
+    }
+  }
+
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
   }
@@ -444,7 +469,8 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "f12-route", "console-network", "network-row", "application-cookie",
+    "f12-route", "console-network", "network-row", "console-repeat",
+    "application-cookie",
     "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",
     "application-service-worker", "network-rules", "source-bytes", "viewports",

@@ -97,7 +97,9 @@ const NSArray<NSString *> *ShaarMethods() {
       @"DOM.getSearchResults", @"DOM.discardSearchResults", @"Overlay.highlightNode",
       @"Overlay.hideHighlight", @"DOM.resolveNode", @"Runtime.callFunctionOn",
       @"DOM.getOuterHTML", @"CSS.forcePseudoState",
-      @"Emulation.setTouchEmulationEnabled"];
+      @"Emulation.setTouchEmulationEnabled",
+      @"Overlay.setShowPaintRects", @"Overlay.setShowLayoutShiftRegions",
+      @"Overlay.setShowFPSCounter"];
   });
   return methods;
 }
@@ -105,6 +107,7 @@ const NSArray<NSString *> *ShaarMethods() {
 // CSS.forcePseudoState is command 64. Its place in this list would otherwise
 // send 62, which the engine uses for Page.disable. 63 is Page.handleJavaScriptDialog.
 // Emulation.setTouchEmulationEnabled is command 65. Appending it would otherwise send 63.
+// The rendering overlay commands are 66-68 for the same reason.
 NSUInteger ShaarDevToolsCommandID(NSString *method) {
   NSUInteger index = [ShaarMethods() indexOfObject:method];
   if (index == NSNotFound)
@@ -113,6 +116,12 @@ NSUInteger ShaarDevToolsCommandID(NSString *method) {
     return 64;
   if ([method isEqualToString:@"Emulation.setTouchEmulationEnabled"])
     return 65;
+  if ([method isEqualToString:@"Overlay.setShowPaintRects"])
+    return 66;
+  if ([method isEqualToString:@"Overlay.setShowLayoutShiftRegions"])
+    return 67;
+  if ([method isEqualToString:@"Overlay.setShowFPSCounter"])
+    return 68;
   return index + 1;
 }
 

@@ -20,6 +20,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case sensors = "Sensors"
   case repro = "Repro"
   case viewports = "Viewports"
+  case rendering = "Rendering"
   case comparison = "Comparison"
 }
 
@@ -355,6 +356,7 @@ final class ShaarDevToolsModel {
   let sources: ShaarSourcesModel
   let repro: ShaarReproModel
   let viewports: ShaarViewportsModel
+  let rendering: ShaarRenderingModel
   let framework = ShaarFrameworkComponentsModel()
   let comparison: ShaarWebKitComparisonModel
   let pageAudit = InspectorAuditModel(inspector: nil)
@@ -401,6 +403,7 @@ final class ShaarDevToolsModel {
     sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load,
     reproTransport: any ShaarReproTransport = ShaarReproPendingTransport(),
     viewportsTransport: any ShaarViewportsTransport = ShaarViewportsPendingTransport(),
+    renderingTransport: any ShaarRenderingTransport = ShaarRenderingPendingTransport(),
     localTransports: [any ShaarLocalConsoleTransport] = [],
     rulesTransport: any ShaarNetworkRulesTransport = ShaarNetworkRulesPendingTransport(),
     domTransport: any ShaarDOMTransport = ShaarDOMPendingTransport(),
@@ -442,6 +445,7 @@ final class ShaarDevToolsModel {
       loadSourceData: sourceLoader)
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
+    rendering = ShaarRenderingModel(target: target, transport: renderingTransport)
     framework.updateAccess(url: target.url)
     section = resolvedOpeningSection()
   }
@@ -499,6 +503,7 @@ final class ShaarDevToolsModel {
     rules.close()
     phase2.close()
     viewports.close()
+    rendering.restore()
     comparison.close()
     comparisonInspector = nil
     dom.close()
@@ -701,6 +706,7 @@ final class ShaarDevToolsModel {
     rules.updateTarget(target, committed: committed)
     phase2.updateTarget(target, committed: committed)
     viewports.updateTarget(target, committed: committed)
+    rendering.updateTarget(target, committed: committed)
     comparison.updateTarget(target, committed: committed)
     dom.updateTarget(target, committed: committed)
     application.reset()

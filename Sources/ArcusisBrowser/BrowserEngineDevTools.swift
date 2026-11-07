@@ -61,6 +61,8 @@ extension BrowserEngine {
         viewportsTransport: ShaarViewportsNativeTransport(
           requester: ShaarViewportRuntimeRequester(
             runtime: shaar, windowID: windowID, contextID: nil)),
+        renderingTransport: ShaarRenderingNativeTransport(
+          runtime: shaar, windowID: windowID, contextID: nil),
         localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()],
         rulesTransport: ShaarNetworkRulesNativeTransport(panel: panel),
         domTransport: ShaarDOMLiveTransport(engine: self, panel: panel),

@@ -427,6 +427,12 @@ import Vision
       initiallyEmpty && pressed && loaded, "dom-expand",
       "Disclosure found=\(appeared), press=\(pressed), expanded=\(shell.dom.expanded.contains(body.id)), shallow children empty=\(initiallyEmpty), loaded=\(loaded); \(shell.dom.failure ?? "no error")",
       report: report)
+    if loaded {
+      let capture = report.directory.appending(path: "world-elements-expanded.png")
+      if !ShaarDevToolsSmokeAccess.capture(context.hosting, to: capture) {
+        report.fail("world-capture-expanded-elements", "Offscreen expanded Elements capture failed")
+      }
+    }
     shell.dom.select(body.id)
     do {
       try await inspector.selectDOMNode(body.id)

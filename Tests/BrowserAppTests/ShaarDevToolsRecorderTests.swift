@@ -2,7 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
+import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -105,6 +108,78 @@ import Testing
   private static let navigation: [String: Any] = [
     "kind": "navigation", "selector": "", "value": "https://example.com/next",
   ]
+
+  @Test func recorderPanelRendersOffscreenForEachState() async throws {
+    _ = NSApplication.shared
+    let idle = ShaarDevToolsRecorderModel()
+    let empty = try renderRecorder(idle, width: 640, height: 420)
+
+    let needsPage = ShaarDevToolsRecorderModel()
+    await needsPage.start()
+    #expect(needsPage.notice == .needsPage)
+    let page = try renderRecorder(needsPage, width: 640, height: 420)
+
+    let folder = ShaarDevToolsRecorderModel()
+    folder.noteMissingFolder()
+    #expect(folder.notice == .needsFolder)
+    let folderImage = try renderRecorder(folder, width: 640, height: 420)
+
+    let saved = ShaarDevToolsRecorderModel()
+    saved.noteSaved()
+    #expect(saved.notice == .saved)
+    let savedImage = try renderRecorder(saved, width: 640, height: 420)
+
+    let rejected = ShaarDevToolsRecorderModel()
+    rejected.evaluate = { _ in throw ShaarRecorderFailure("Recorder was rejected.") }
+    await rejected.start()
+    #expect(rejected.notice == .failed("Recorder was rejected."))
+    let failed = try renderRecorder(rejected, width: 640, height: 420)
+
+    let recordingModel = ShaarDevToolsRecorderModel()
+    recordingModel.evaluate = { _ in [] }
+    await recordingModel.start()
+    #expect(recordingModel.recording)
+    let recording = try renderRecorder(recordingModel, width: 640, height: 420)
+    await recordingModel.stop()
+    #expect(recordingModel.recording == false)
+
+    let populated = ShaarDevToolsRecorderModel()
+    populated.apply(Self.clickAndInput + [Self.navigation])
+    #expect(populated.steps.map(\.kind) == [.click, .change, .navigation])
+    let rows = try renderRecorder(populated, width: 640, height: 520)
+
+    let defaults = UserDefaults(suiteName: "ShaarRecorder.render.\(UUID().uuidString)")!
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
+    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    let inspector = InspectorModel(target: target, engine: nil)
+    shell.open(inspector: inspector)
+    shell.section = .recorder
+    let shellEmpty = try VisualCapture.pngOffscreen(
+      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 850, height: 620))
+    shell.recorder.apply(Self.clickAndInput + [Self.navigation])
+    let shellRows = try VisualCapture.pngOffscreen(
+      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 850, height: 620))
+    #expect(!empty.isEmpty)
+    #expect(!page.isEmpty)
+    #expect(!folderImage.isEmpty)
+    #expect(!savedImage.isEmpty)
+    #expect(!failed.isEmpty)
+    #expect(!recording.isEmpty)
+    #expect(!rows.isEmpty)
+    #expect(!shellEmpty.isEmpty)
+    #expect(!shellRows.isEmpty)
+    shell.close()
+  }
+}
+
+@MainActor private func renderRecorder(
+  _ model: ShaarDevToolsRecorderModel, width: CGFloat, height: CGFloat
+) throws -> Data {
+  try VisualCapture.pngOffscreen(
+    ShaarDevToolsRecorderPanel(model: model), size: NSSize(width: width, height: height))
 }
 
 @MainActor private final class RecorderScriptLog {

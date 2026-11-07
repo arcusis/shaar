@@ -1,0 +1,30 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -1653,9 +1653,24 @@
+   }
+   void WebContentsDestroyed() override { Close(); }
+   void DidFinishNavigation(content::NavigationHandle* navigation) override {
+-    if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame() &&
+-        !navigation->IsSameDocument())
++    if (!navigation->HasCommitted() || !navigation->IsInPrimaryMainFrame() ||
++        navigation->IsSameDocument())
++      return;
++    if (!StillOwnsTarget()) {
+       Close();
++      return;
++    }
++    // The lease belongs to the tab. A document load changes its origin and
++    // invalidates resource IDs, but the DevTools session keeps receiving the
++    // new document's early console and network events.
++    origin_ = url::Origin::Create(contents_->GetLastCommittedURL()).Serialize();
++    known_requests_.clear();
++    request_order_.clear();
++    cache_ids_.clear();
++    cache_urls_.clear();
++    worker_scopes_.clear();
++    resource_urls_.clear();
++    frame_id_.clear();
+   }
+ 
+  private:

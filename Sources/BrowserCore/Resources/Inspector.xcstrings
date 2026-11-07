@@ -913,6 +913,22 @@
         }
       }
     },
+    "Edit box model value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit box model value"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עריכת ערך במודל התיבה"
+          }
+        }
+      }
+    },
     "Box model. Content %@ by %@ pixels.": {
       "localizations": {
         "en": {

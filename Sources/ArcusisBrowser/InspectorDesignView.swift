@@ -36,6 +36,13 @@ struct InspectorDesignView: View {
       return property + ": " + $0.value.formatted(model.colorFormat) + ";"
     }.joined(separator: "\n")
   }
+  private var boxEdit: ((String, String) -> Void)? {
+    guard selection.locked else { return nil }
+    return { property, value in
+      Task { await model.styles.edit(property: property, value: value, important: false) }
+    }
+  }
+
   var body: some View {
     ScrollView {
       VStack(spacing: 0) {
@@ -56,9 +63,15 @@ struct InspectorDesignView: View {
                 value: InspectorColor.number(selection.box.height.rounded()) + "px"
               ) { model.copy($0, label: "height") }
             }
-            InspectorBoxModel(box: selection.box) { region, index, active in
+            InspectorBoxModel(box: selection.box, edit: boxEdit) { region, index, active in
               model.highlightEdge(region, index, active: active)
             }.padding(.top, 3)
+            if let failure = model.styles.failure {
+              Text(InspectorL10n.display(failure)).font(.system(size: 11)).foregroundStyle(
+                .secondary
+              )
+              .frame(maxWidth: .infinity, alignment: .leading)
+            }
           }
         }
         if !selection.typography.preview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

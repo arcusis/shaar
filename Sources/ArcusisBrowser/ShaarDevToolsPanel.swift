@@ -44,6 +44,7 @@ extension ShaarDevToolsSection {
     case .security: "lock"
     case .sensors: "location"
     case .repro: "record.circle"
+    case .recorder: "play.circle"
     case .viewports: "rectangle.on.rectangle"
     case .rendering: "paintbrush"
     case .comparison: "square.split.2x1"
@@ -66,6 +67,7 @@ extension ShaarDevToolsSection {
     case .security: "Security"
     case .sensors: "Sensors"
     case .repro: "Repro"
+    case .recorder: "Record"
     case .viewports: "Views"
     case .rendering: "Render"
     case .comparison: "WebKit"
@@ -366,6 +368,16 @@ struct ShaarDevToolsPanel: View {
           inspector?.engine?.downloads.registerGeneratedFile(
             file, profileID: model.target.profileID)
         })
+    case .recorder:
+      ShaarDevToolsRecorderPanel(
+        model: model.recorder,
+        directory: reproDirectory
+          ?? inspector?.engine?.runtime.downloadsDirectory(
+            forProfileID: model.target.profileID.uuidString),
+        onSaved: { file in
+          inspector?.engine?.downloads.registerGeneratedFile(
+            file, profileID: model.target.profileID)
+        })
     case .viewports:
       if model.viewports.available {
         ShaarViewportsPanel(model: model.viewports)
@@ -519,6 +531,7 @@ struct ShaarDevToolsPanel: View {
     if model.section == .security { return "Security details are scoped to this tab" }
     if model.section == .sensors { return "Sensors are scoped to this tab" }
     if model.section == .repro { return "Repro data is scoped to this tab" }
+    if model.section == .recorder { return "Recorder is scoped to this tab" }
     if model.section == .viewports {
       return model.viewports.available
         ? "Viewports are scoped to this tab"

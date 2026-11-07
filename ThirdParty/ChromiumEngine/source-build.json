@@ -252,7 +252,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0002-shaar-lifecycle-hooks.patch",
-      "sha256": "ccc93512f6e7143dc9b420118990d0ebc7021bebe1fa5925f74004607be91493"
+      "sha256": "31f00f7431c9edd3e63f9cebbb582ee5a87242ba52505488af1fd39302b2a6d4"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0003-shaar-layer-tests.patch",
@@ -417,6 +417,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0043-shaar-devtools-event-listeners.patch",
       "sha256": "471c7bcd05cc6563a44fa222207c99eae61f9740c778e74dae1cb514fa98669e"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0044-shaar-quit-cancellation-callback.patch",
+      "sha256": "e373f179d5974a81bff87413174df81eaaebd1758dd5b39b1711ac3b62f4f12c"
     }
   ],
   "requiredExports": [

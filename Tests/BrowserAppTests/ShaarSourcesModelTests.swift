@@ -248,6 +248,17 @@ import Testing
     #expect(formatted.contains("work();"))
   }
 
+  @Test func prettyPrintKeepsRegexAndTemplateLiteralsInMinifiedScript() {
+    let source = #"const re=/https?:\/\/[^{};]+/g;function match(url){const label=`a;${url}`;return re.test(url)&&label.length>0;}"#
+    let formatted = ShaarSourceFormatter.layout(source)
+    #expect(formatted.contains(#"/https?:\/\/[^{};]+/g"#))
+    #expect(formatted.contains(#"`a;${url}`"#))
+    #expect(formatted.split(separator: "\n").count >= 5)
+    #expect(formatted.contains("return re.test(url)&&label.length>0;"))
+    let afterCondition = ShaarSourceFormatter.layout("if(ok)/[{};]/.test(value);")
+    #expect(afterCondition.contains("/[{};]/.test(value);"))
+  }
+
   @Test func sourcesPanelRendersOffscreenForTreeAndSearch() async throws {
     _ = NSApplication.shared
     let target = SiteControlTarget(

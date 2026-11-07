@@ -9,6 +9,52 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor final class ShaarSourcesVisualTests: XCTestCase {
+  func testMinifiedScriptPrettyPrintBeforeAfterOffscreen() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_SOURCES_PRETTY_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen pretty-print capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1435")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    let script = #"const re=/https?:\/\/[^{};]+/g;function match(url){const label=`a;${url}`;return re.test(url)&&label.length>0;}"#
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return ["items": [["url": "https://example.test/min.js", "type": "Script", "mimeType": "text/javascript"]]]
+      case .resourceContent:
+        return ["items": [], "body": script, "base64Encoded": false]
+      default: return ["items": []]
+      }
+    }
+    let inspector = InspectorModel(target: target, engine: nil)
+    let live = ShaarDevToolsModel(target: target, phase2Transport: fixture)
+    live.open(inspector: inspector)
+    live.section = .sources
+    for _ in 0..<20 where !live.phase2.available { await Task.yield() }
+    await live.sources.refresh()
+    for stage in ["before", "after"] {
+      live.sources.prettyPrint = stage == "after"
+      for scheme in [ColorScheme.light, .dark] {
+        let suffix = scheme == .light ? "light" : "dark"
+        let appearance: NSAppearance.Name = scheme == .light ? .aqua : .darkAqua
+        let view = ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {})
+          .frame(width: 1040, height: 600)
+          .background(Color(nsColor: .windowBackgroundColor))
+          .environment(\.colorScheme, scheme)
+        try VisualCapture.renderOffscreen(
+          view, size: NSSize(width: 1040, height: 600), appearance: appearance,
+          to: root.appending(path: "\(stage)-pretty-\(suffix).png"))
+      }
+    }
+    XCTAssertGreaterThan(live.sources.displayedLines?.count ?? 0, 5)
+    live.close()
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   func testOriginalSourceMapBeforeAfterOffscreen() async throws {
     guard ProcessInfo.processInfo.environment["SHAAR_SOURCES_MAP_CAPTURE"] == "1" else {
       throw XCTSkip("Offscreen source-map capture requires explicit opt-in")

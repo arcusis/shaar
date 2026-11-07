@@ -17,8 +17,7 @@
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 
-// Optional until the engine that emits tab "opened" events is published.
-// The layer header stays on the previous minor so shaar.21 still loads.
+// Optional for older engine builds that do not emit tab "opened" events.
 extern "C" shaar_error_code shaar_tab_find(
     shaar_engine *engine, shaar_bytes window_id, shaar_bytes tab_id,
     shaar_tab **out, shaar_error *error);

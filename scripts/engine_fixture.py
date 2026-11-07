@@ -638,6 +638,35 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             self.end_headers()
             self.wfile.write(body)
             return
+        if path == '/account/agent-bridge-network':
+            body = b'shaar-agent-network-granted'
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == '/account/agent-bridge':
+            self.html(b"""<!doctype html><html data-agent-bridge="granted"><meta charset="utf-8">
+<title>Agent bridge granted tab</title>
+<main id="shaar-agent-dom" data-role="granted">Granted tab DOM</main>
+<script>
+window.__shaarAgent = {role:'granted', console:['shaar-agent-console-granted'], network:null};
+console.log('shaar-agent-console-granted');
+fetch('/account/agent-bridge-network').then(function (response) { return response.text(); })
+  .then(function (body) { window.__shaarAgent.network = body; });
+</script></html>""")
+            return
+        if path == '/account/agent-bridge-other':
+            self.html(b"""<!doctype html><html data-agent-bridge="other"><meta charset="utf-8">
+<title>Agent bridge other tab</title>
+<main id="shaar-agent-dom" data-role="other">Other tab DOM</main>
+<script>
+window.__shaarAgent = {role:'other', console:['shaar-agent-console-other'], network:'shaar-agent-network-other'};
+console.log('shaar-agent-console-other');
+</script></html>""")
+            return
         if path.startswith('/download/'):
             self.download(path.rsplit('/', 1)[-1])
             return

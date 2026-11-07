@@ -89,7 +89,7 @@ final class DevToolsRouteProbe {
     try expect(hiddenWindowCountIs(nativeWindowCount), "MCP URL creates no Chromium window")
     if let opened = store.session.selectedPage?.tab.id { store.closeTab(opened) }
     store.perform(.tab(space: space, tab: tab))
-    try await wait("closing MCP tab leaves DevTools alive") {
+    try await wait("closing the Get MCP tab leaves DevTools and the browser alive") {
       engine.liveTabs.contains(tab) && dockAudit(identity)?["open"] as? Bool == true
     }
     var nodePayload: [String: Any] = ["schemaVersion": 1]
@@ -212,6 +212,8 @@ final class DevToolsRouteProbe {
   }
 
   private func verifyAgentBridge(tabID: String, target: SiteControlTarget) async throws {
+    let otherTabID = try await prepareAgentBridgePages(grantedTabID: tabID, target: target)
+    defer { closeProbeTab(otherTabID) }
     let (enabledData, error) = await agentRequest(operation: 1005, tabID: tabID, target: target)
     guard error == nil, let enabledData,
       let enabled = try JSONSerialization.jsonObject(with: enabledData) as? [String: Any],
@@ -230,7 +232,7 @@ final class DevToolsRouteProbe {
     let session = URLSession(
       configuration: {
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 5
+        config.timeoutIntervalForRequest = 15
         return config
       }())
     defer { session.invalidateAndCancel() }
@@ -280,8 +282,10 @@ final class DevToolsRouteProbe {
       let targetsObject = try JSONSerialization.jsonObject(with: targetsData) as? [String: Any],
       let result = targetsObject["result"] as? [String: Any],
       let targetInfos = result["targetInfos"] as? [[String: Any]], targetInfos.count == 1,
-      let targetID = targetInfos[0]["targetId"] as? String
-    else { throw Failure("Agent bridge did not expose exactly one target") }
+      let targetID = targetInfos[0]["targetId"] as? String,
+      let targetURL = targetInfos[0]["url"] as? String,
+      targetURL.contains("/account/agent-bridge"), !targetURL.contains("agent-bridge-other")
+    else { throw Failure("Agent bridge did not expose exactly the granted tab") }
     checks.append("agent bridge discovers exactly one owned tab")
     try await socket.send(
       .string(
@@ -303,10 +307,26 @@ final class DevToolsRouteProbe {
         "{\"id\":4,\"method\":\"Target.attachToTarget\",\"params\":{\"targetId\":\"\(targetID)\",\"flatten\":true}}"
       ))
     let attached = try await socket.receive()
-    guard case .string(let attachedJSON) = attached, attachedJSON.contains("sessionId") else {
-      throw Failure("Agent bridge could not attach to its owned tab")
-    }
+    guard case .string(let attachedJSON) = attached,
+      let attachedData = attachedJSON.data(using: .utf8),
+      let attachedObject = try JSONSerialization.jsonObject(with: attachedData) as? [String: Any],
+      let attachedResult = attachedObject["result"] as? [String: Any],
+      let pageSession = attachedResult["sessionId"] as? String, !pageSession.isEmpty
+    else { throw Failure("Agent bridge could not attach to its owned tab") }
     checks.append("agent bridge attaches to its owned tab")
+    let client = ScopedAgentClient(task: socket, nextID: 5)
+    try await readGrantedTab(client, session: pageSession)
+    try await refuseUngrantedReads(client)
+    try await expectOtherTabDisabled(otherTabID, target: target)
+    var listed = false
+    for _ in 0..<20 {
+      if await connectionCount(tabID: tabID, target: target) >= 1 {
+        listed = true
+        break
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    try expect(listed, "agent bridge lists the scoped client")
     try expect(
       engine.runtime.navigateTabID(
         tabID, profileID: target.profileID.uuidString, windowID: engine.windowID,
@@ -326,6 +346,198 @@ final class DevToolsRouteProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     try expect(revoked, "agent bridge revokes the grant on navigation")
+  }
+
+  private func prepareAgentBridgePages(
+    grantedTabID: String, target: SiteControlTarget
+  ) async throws -> String {
+    try expect(
+      engine.runtime.navigateTabID(
+        grantedTabID, profileID: target.profileID.uuidString, windowID: engine.windowID,
+        url: fixture.appending(path: "agent-bridge").absoluteString),
+      "navigate the granted tab to the agent-bridge fixture")
+    try await wait("granted tab records its console message and network body") {
+      let page = await self.pageObject(grantedTabID, "window.__shaarAgent")
+      let console = page?["console"] as? [String]
+      return page?["role"] as? String == "granted"
+        && console?.contains("shaar-agent-console-granted") == true
+        && page?["network"] as? String == "shaar-agent-network-granted"
+    }
+    let existing = Set(store.session.selectedSpace.tabs.map(\.id))
+    store.perform(.open(fixture.appending(path: "agent-bridge-other")))
+    try await wait("other tab opens beside the granted tab") {
+      self.store.session.selectedSpace.tabs.contains { !existing.contains($0.id) }
+    }
+    guard
+      let other = store.session.selectedSpace.tabs.map(\.id).first(where: { !existing.contains($0) })
+    else { throw Failure("No second agent tab") }
+    let otherID = other.uuidString
+    try await wait("other tab records a different console and DOM marker") {
+      guard self.engine.liveTabs.contains(other), self.engine.pages[other]?.loading == false
+      else { return false }
+      let page = await self.pageObject(otherID, "window.__shaarAgent")
+      return page?["role"] as? String == "other"
+    }
+    return otherID
+  }
+
+  private func closeProbeTab(_ tabID: String) {
+    guard let id = UUID(uuidString: tabID) else { return }
+    store.closeTab(id)
+  }
+
+  private func pageObject(_ tabID: String, _ script: String) async -> [String: Any]? {
+    let json: String? = await withCheckedContinuation { continuation in
+      engine.runtime.evaluate(inTabID: tabID, script: script) {
+        continuation.resume(returning: $0)
+      }
+    }
+    guard let json, let data = json.data(using: .utf8) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  }
+
+  private func readGrantedTab(_ client: ScopedAgentClient, session: String) async throws {
+    _ = try protocolResult(try await client.call("DOM.enable", session: session))
+    let document = try protocolResult(
+      try await client.call("DOM.getDocument", session: session, params: ["depth": 0]))
+    guard let root = document["root"] as? [String: Any],
+      let documentURL = root["documentURL"] as? String,
+      documentURL.contains("/account/agent-bridge"), !documentURL.contains("agent-bridge-other"),
+      let rootID = root["nodeId"] as? Int
+    else { throw Failure("Agent bridge DOM was not the granted tab") }
+    checks.append("agent bridge reads the granted tab document")
+    let query = try protocolResult(
+      try await client.call(
+        "DOM.querySelector", session: session,
+        params: ["nodeId": rootID, "selector": "#shaar-agent-dom"]))
+    guard let nodeID = query["nodeId"] as? Int, nodeID > 0 else {
+      throw Failure("Agent bridge could not find the granted tab marker")
+    }
+    let outer = try protocolResult(
+      try await client.call("DOM.getOuterHTML", session: session, params: ["nodeId": nodeID]))
+    guard let html = outer["outerHTML"] as? String, html.contains("data-role=\"granted\""),
+      !html.contains("data-role=\"other\"")
+    else { throw Failure("Agent bridge DOM HTML was not limited to the granted tab") }
+    checks.append("agent bridge reads only the granted tab DOM")
+    try expect(
+      try await evaluatedString(client, session: session, expression: "window.__shaarAgent.console[0]")
+        == "shaar-agent-console-granted",
+      "agent bridge reads the granted tab console record")
+    try expect(
+      try await evaluatedString(
+        client, session: session, expression: "window.__shaarAgent.network")
+        == "shaar-agent-network-granted",
+      "agent bridge reads the granted tab network body")
+    _ = try protocolResult(try await client.call("Network.enable", session: session))
+    _ = try protocolResult(try await client.call("Log.enable", session: session))
+    checks.append("agent bridge enables Network and Log on the granted tab")
+  }
+
+  private func refuseUngrantedReads(_ client: ScopedAgentClient) async throws {
+    for method in ["DOM.getDocument", "Runtime.evaluate", "Network.enable"] {
+      let params = readParameters(for: method)
+      let browser = try await client.call(method, params: params)
+      guard browser["error"] != nil else {
+        throw Failure("Agent bridge allowed \(method) outside the granted session")
+      }
+      let foreign = try await client.call(
+        method, session: "not-the-granted-session", params: params)
+      guard foreign["error"] != nil else {
+        throw Failure("Agent bridge allowed \(method) on a foreign session")
+      }
+    }
+    checks.append(
+      "agent bridge refuses Console, Network, and DOM reads outside the granted tab")
+  }
+
+  private func readParameters(for method: String) -> [String: Any]? {
+    guard method == "Runtime.evaluate" else { return nil }
+    return ["expression": "window.__shaarAgent.role", "returnByValue": true]
+  }
+
+  private func evaluatedString(
+    _ client: ScopedAgentClient, session: String, expression: String
+  ) async throws -> String {
+    let result = try protocolResult(
+      try await client.call(
+        "Runtime.evaluate", session: session,
+        params: ["expression": expression, "returnByValue": true]))
+    guard let remote = result["result"] as? [String: Any],
+      let value = remote["value"] as? String
+    else { throw Failure("Agent bridge evaluation did not return a string") }
+    return value
+  }
+
+  private func protocolResult(_ reply: [String: Any]) throws -> [String: Any] {
+    guard reply["error"] == nil, let result = reply["result"] as? [String: Any] else {
+      let detail = String(describing: reply).prefix(500)
+      throw Failure("Agent bridge command failed: \(detail)")
+    }
+    return result
+  }
+
+  private func expectOtherTabDisabled(_ tabID: String, target: SiteControlTarget) async throws {
+    let (data, error) = await agentRequest(operation: 1007, tabID: tabID, target: target)
+    guard error == nil, let data,
+      let status = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      status["enabled"] as? Bool == false, status["token"] == nil
+    else { throw Failure("Agent bridge exposed a grant for the other tab") }
+    checks.append("agent bridge status on the other tab stays disabled")
+  }
+
+  private func connectionCount(tabID: String, target: SiteControlTarget) async -> Int {
+    let (data, error) = await agentRequest(operation: 1007, tabID: tabID, target: target)
+    guard error == nil, let data,
+      let status = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let count = status["connectionCount"] as? Int
+    else { return -1 }
+    return count
+  }
+
+  @MainActor
+  private final class ScopedAgentClient {
+    let task: URLSessionWebSocketTask
+    private var nextID: Int
+
+    init(task: URLSessionWebSocketTask, nextID: Int) {
+      self.task = task
+      self.nextID = nextID
+    }
+
+    func call(
+      _ method: String, session: String? = nil, params: [String: Any]? = nil
+    ) async throws -> [String: Any] {
+      let id = nextID
+      nextID += 1
+      var object: [String: Any] = ["id": id, "method": method]
+      if let session { object["sessionId"] = session }
+      if let params { object["params"] = params }
+      let data = try JSONSerialization.data(withJSONObject: object)
+      guard let text = String(data: data, encoding: .utf8) else {
+        throw Failure("Could not encode \(method)")
+      }
+      try await task.send(.string(text))
+      for _ in 0..<6 {
+        guard let reply = try await receiveObject() else { continue }
+        if reply["id"] as? Int == id { return reply }
+      }
+      throw Failure("Agent bridge did not answer \(method)")
+    }
+
+    private func receiveObject() async throws -> [String: Any]? {
+      let message = try await task.receive()
+      let payload = websocketText(message)
+      guard let payload, let body = payload.data(using: .utf8) else { return nil }
+      return try JSONSerialization.jsonObject(with: body) as? [String: Any]
+    }
+
+    private func websocketText(_ message: URLSessionWebSocketTask.Message) -> String? {
+      switch message {
+      case .string(let value): return value
+      case .data(let value): return String(data: value, encoding: .utf8)
+      @unknown default: return nil
+      }
+    }
   }
 
   private func wait(_ message: String, _ condition: () async -> Bool) async throws {

@@ -62,13 +62,13 @@ import XCTest
         size: CGSize(width: 320, height: 760))
       try capture(
         AgentBridgeControls(model: bridge), "agent-off", scheme: scheme,
-        size: CGSize(width: 320, height: 300))
+        size: CGSize(width: 340, height: 180))
       let connecting = AgentBridgeModel(target: target) { _, _, _ in }
       connecting.enable()
       XCTAssertTrue(connecting.busy)
       try capture(
         AgentBridgeControls(model: connecting), "agent-loading", scheme: scheme,
-        size: CGSize(width: 320, height: 300))
+        size: CGSize(width: 372, height: 300))
       let failed = AgentBridgeModel(target: target) { operation, _, reply in
         if operation == .enable { reply(nil, AgentBridgeFailure.invalidReply) }
       }
@@ -76,12 +76,12 @@ import XCTest
       XCTAssertNotNil(failed.failure)
       try capture(
         AgentBridgeControls(model: failed), "agent-error", scheme: scheme,
-        size: CGSize(width: 320, height: 300))
+        size: CGSize(width: 372, height: 320))
       bridge.enable()
       bridge.receive(enabled: true, connectionCount: 1)
       try capture(
         AgentBridgeControls(model: bridge), "agent-connected", scheme: scheme,
-        size: CGSize(width: 320, height: 330))
+        size: CGSize(width: 372, height: 560))
       try capture(
         AgentBridgeBanner(model: bridge), "agent-banner", scheme: scheme,
         size: CGSize(width: 760, height: 34))

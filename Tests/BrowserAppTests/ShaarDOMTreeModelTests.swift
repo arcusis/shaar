@@ -180,7 +180,8 @@ import Testing
     model.close()
   }
 
-  @Test func searchCyclesEveryMatchAndReportsTheCount() async {
+  @Test func searchCyclesEveryMatchAndReportsTheCount() async throws {
+    _ = NSApplication.shared
     let fixture = DOMFixtureTransport()
     fixture.searchNodeIDs = [8, 5, 4]
     let model = ShaarDOMTreeModel(target: target(), transport: fixture)
@@ -196,6 +197,12 @@ import Testing
     #expect(model.matchCountLabel == counted(1, of: 3))
     #expect(model.expanded.isSuperset(of: [1, 2, 3, 4, 7]))
     #expect(model.rows.contains { $0.id == 8 })
+    let inspector = InspectorModel(target: target(), engine: nil)
+    defer { inspector.close() }
+    inspector.open()
+    let countedImage = try VisualCapture.pngOffscreen(
+      ShaarDOMTreePanel(model: model, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 720, height: 480))
 
     await model.toggleExpanded(3)
     #expect(!model.rows.contains { $0.id == 5 })
@@ -225,6 +232,11 @@ import Testing
     #expect(model.matchOrder.isEmpty)
     #expect(model.matchCountLabel == nil)
     #expect(model.matches.isEmpty)
+    let clearedImage = try VisualCapture.pngOffscreen(
+      ShaarDOMTreePanel(model: model, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 720, height: 480))
+    #expect(!countedImage.isEmpty)
+    #expect(!clearedImage.isEmpty)
     await model.stepSearchMatch(forward: true)
     #expect(model.selectedID == 4)
     model.close()

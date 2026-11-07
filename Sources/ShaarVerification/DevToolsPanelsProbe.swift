@@ -110,6 +110,9 @@ import Foundation
       let flat = copy.replacingOccurrences(of: "\n", with: " | ")
       return "Repeated \(row.count) times. Stack frames \(row.event.stack.count). \(flat)"
     }
+    await check("issues") {
+      try await self.proveIssues(shell: shell, inspector: inspector)
+    }
     await check("application-cookie") {
       shell.cookies.configure(store: self.engine, target: target)
       await shell.cookies.refresh()
@@ -458,6 +461,55 @@ import Foundation
     }
   }
 
+  private func proveIssues(shell: ShaarDevToolsModel, inspector: InspectorModel) async throws
+    -> String
+  {
+    let previous = shell.section
+    defer { shell.section = previous }
+    _ = try await inspector.evaluate(
+      "console.error('shaar-issue-copy'); console.error('shaar-issue-copy'); fetch('/shaar-issues-missing',{cache:'no-store'}); true"
+    )
+    do {
+      try await wait("grouped issue and failed request") { self.issuesReady(shell) }
+    } catch {
+      throw Failure("Issues not ready: \(self.issueSummary(shell))")
+    }
+    let rows = shell.issues
+    guard
+      let consoleIssue = rows.first(where: { $0.title == "shaar-issue-copy" && $0.count >= 2 }),
+      case .console(let consoleID, _) = consoleIssue.kind,
+      let networkIssue = rows.first(where: { self.isMissingRequest($0) }),
+      case .network(let networkID, _, _) = networkIssue.kind
+    else { throw Failure("Issue rows disappeared: \(issueSummary(shell))") }
+    shell.openIssue(consoleIssue)
+    guard shell.section == .console, shell.console.selectedID == consoleID else {
+      throw Failure("Choosing a console issue did not open Console")
+    }
+    shell.openIssue(networkIssue)
+    guard shell.section == .network, shell.network.selectedID == networkID else {
+      throw Failure("Choosing a network issue did not open Network")
+    }
+    return
+      "Identical console errors counted as 1 issue (\(consoleIssue.count) times). Failed request listed. Choosing a row opened Console, then Network. Tab count \(rows.count)."
+  }
+
+  private func issuesReady(_ shell: ShaarDevToolsModel) -> Bool {
+    let rows = shell.issues
+    let grouped = rows.contains { $0.title == "shaar-issue-copy" && $0.count >= 2 }
+    return grouped && rows.contains { self.isMissingRequest($0) }
+  }
+
+  private func isMissingRequest(_ issue: ShaarDevToolsIssue) -> Bool {
+    guard case .network = issue.kind else { return false }
+    return issue.title.contains("shaar-issues-missing")
+  }
+
+  private func issueSummary(_ shell: ShaarDevToolsModel) -> String {
+    shell.issues
+      .map { "\($0.count)x \(String($0.title.prefix(80)))" }
+      .joined(separator: " | ")
+  }
+
   private func repeatedCopyRow(_ shell: ShaarDevToolsModel) -> ShaarConsoleRow? {
     shell.console.rows(from: shell.consoleEvents).first { row in
       row.event.message == "shaar-repeat-copy" && row.count >= 2
@@ -595,7 +647,7 @@ import Foundation
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
     "f12-route", "shell-defaults", "console-network", "network-row",
-    "console-repeat", "split-shell", "application-cookie",
+    "console-repeat", "issues", "split-shell", "application-cookie",
     "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",
     "application-service-worker", "network-rules", "source-bytes", "viewports",

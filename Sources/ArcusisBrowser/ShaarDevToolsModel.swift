@@ -877,6 +877,12 @@ final class ShaarDevToolsModel {
     (transport as? ShaarDevToolsNativeTransport)?.recordingStarting ?? false
   }
 
+  /// The repro mask deletes its style node once the page grows past 2000 elements.
+  func releasePageMask() async {
+    await (transport as? ShaarDevToolsNativeTransport)?.releaseRecording()
+    repro.stopFrames()
+  }
+
   var canTapLocalLogs: Bool {
     DevelopmentModePreference.isEnabled
       && DevelopmentPage.detect(url: target.url).isDevelopmentPage

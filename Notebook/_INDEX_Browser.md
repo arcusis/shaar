@@ -16,6 +16,7 @@
 - [[Picture_In_Picture_Controls]]
 - [[Site_Control_Center]]
 - [[Shaar_DevTools_Hebrew_RTL]]
+- [[Shaar_DevTools_Elements_Scale]]
 - [[Shaar_Inspector]]
 - [[Shaar_Inspector_CSS]]
 - [[Shaar_Inspector_Details]]

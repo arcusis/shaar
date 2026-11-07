@@ -209,6 +209,22 @@ import Testing
     #expect(!requester.operations.contains(.panelClose))
   }
 
+  @Test func releaseRecordingStopsTheScreencast() async throws {
+    let requester = PanelRequesterFixture()
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    var shell = transport.messages(for: target).makeAsyncIterator()
+    #expect(await shell.next() == .streamAvailable)
+    for _ in 0..<30 where !transport.recordingAvailable {
+      await Task.yield()
+    }
+    #expect(transport.recordingAvailable)
+    await transport.releaseRecording()
+    let stop = requester.payloads.last { $0["commandID"] as? Int == 2 }
+    #expect(stop?["leaseID"] as? UInt32 == 7)
+    #expect(!transport.recordingAvailable)
+  }
+
   @Test func consoleStackMapsOntoTheRow() async throws {
     let requester = PanelRequesterFixture()
     let transport = ShaarDevToolsNativeTransport(

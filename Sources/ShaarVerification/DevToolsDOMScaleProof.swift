@@ -14,6 +14,8 @@ import Foundation
   let inspector: InspectorModel
 
   func run() async throws -> String {
+    await shell.releasePageMask()
+    try await waitForMaskRemoval()
     try await prepareBody()
     var added = 0
     while added < Self.nodeCount {
@@ -29,6 +31,31 @@ import Foundation
     }
     let rows = shell.dom.rows.count
     return "Elements held \(held) live nodes and \(Self.nodeCount) spans (rows \(rows))."
+  }
+
+  private func waitForMaskRemoval() async throws {
+    var previous = shell.dom.nodes.count
+    var stable = 0
+    for _ in 0..<25 {
+      try await Task.sleep(for: .milliseconds(40))
+      let count = shell.dom.nodes.count
+      if maskIsPresent || count != previous {
+        stable = 0
+        previous = count
+        continue
+      }
+      stable += 1
+      if stable == 3 { return }
+    }
+    if maskIsPresent {
+      throw Failure(status("Repro mask style was still in the Elements tree"))
+    }
+  }
+
+  private var maskIsPresent: Bool {
+    shell.dom.nodes.values.contains { node in
+      node.attributes.contains { $0.name == "id" && $0.value == "shaar-repro-mask" }
+    }
   }
 
   private func prepareBody() async throws {

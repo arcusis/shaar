@@ -9,6 +9,52 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor final class ShaarConsoleVisualTests: XCTestCase {
+  func testLoggedObjectExpansionRendersOffscreen() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_CONSOLE_OBJECT_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen Console object capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1437")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3210/")!)
+    let entry = ShaarConsoleEvent(
+      id: UUID(), level: .log, message: "shaar-round2-object Object", source: nil,
+      objectID: "root-1", usesPanelLease: true)
+    let inspector = InspectorModel(target: target, engine: nil)
+    let model = ShaarDevToolsModel(
+      target: target, transport: ShaarDevToolsFixtureTransport(fixture: [.console(entry)]))
+    model.open(inspector: inspector)
+    model.section = .console
+    for _ in 0..<30 where model.events.isEmpty { await Task.yield() }
+    XCTAssertEqual(model.events.count, 1)
+    model.console.selectedID = entry.id
+    try capture(
+      ShaarDevToolsPanel(model: model, inspector: inspector, openChromium: {}),
+      named: "before-console-object", scheme: .dark, appearance: .darkAqua,
+      root: root, pageLabel: "localhost:3210")
+    model.console.loadProperties = { objectID in
+      if objectID == "root-1" {
+        return [
+          ShaarConsoleProperty(name: "shaarRound2", value: "42"),
+          ShaarConsoleProperty(name: "nested", value: "Object", objectID: "child-1"),
+        ]
+      }
+      return [ShaarConsoleProperty(name: "ok", value: "true")]
+    }
+    await model.console.toggleProperties(for: entry, inspector: inspector)
+    let nested = try XCTUnwrap(model.console.properties[entry.id]?.last)
+    await model.console.toggleChild(nested, in: entry, inspector: inspector)
+    try capture(
+      ShaarDevToolsPanel(model: model, inspector: inspector, openChromium: {}),
+      named: "after-console-object", scheme: .dark, appearance: .darkAqua,
+      root: root, pageLabel: "localhost:3210")
+    model.close()
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   func testSpotlightFeedRendersOffscreenInBothAppearances() async throws {
     guard ProcessInfo.processInfo.environment["SHAAR_SPOTLIGHT_CAPTURE"] == "1" else {
       throw XCTSkip("Offscreen Spotlight capture requires explicit opt-in")

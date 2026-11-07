@@ -46,6 +46,7 @@ public struct ShaarDevToolsPanelHeader: Equatable, Sendable {
 public struct ShaarDevToolsPanelData: Equatable, Sendable {
   public let text: String?
   public let level: String?
+  public let objectID: String?
   public let requestID: String?
   public let url: String?
   public let method: String?
@@ -129,7 +130,7 @@ public enum ShaarDevToolsPanelEventRouter {
         let sessionID = fields["sessionID"] as? Int, sessionID > 0
       else { return nil }
       return ShaarDevToolsPanelData(
-        text: nil, level: nil, requestID: nil, url: nil, method: nil,
+        text: nil, level: nil, objectID: nil, requestID: nil, url: nil, method: nil,
         status: nil, mimeType: nil, encodedBytes: nil, name: nil,
         metrics: nil, droppedCount: nil,
         frame: ShaarDevToolsPanelFrame(jpeg: jpeg, sessionID: sessionID),
@@ -141,7 +142,7 @@ public enum ShaarDevToolsPanelEventRouter {
         count > 0, let value = UInt32(exactly: count)
       else { return nil }
       return ShaarDevToolsPanelData(
-        text: nil, level: nil, requestID: nil, url: nil, method: nil,
+        text: nil, level: nil, objectID: nil, requestID: nil, url: nil, method: nil,
         status: nil, mimeType: nil, encodedBytes: nil, name: nil,
         metrics: nil, droppedCount: value, frame: nil, stack: [],
         requestHeaders: [], responseHeaders: [], truncated: false)
@@ -149,6 +150,7 @@ public enum ShaarDevToolsPanelEventRouter {
     guard let truncated = fields["truncated"] as? Bool,
       Set(fields.keys).isSubset(of: allowedKeys(for: id)),
       validString(fields["text"]), validString(fields["level"]),
+      validString(fields["objectID"]),
       validString(fields["requestID"], limit: 128),
       validString(fields["url"]), validString(fields["method"]),
       validString(fields["mimeType"]), validString(fields["name"])
@@ -189,6 +191,7 @@ public enum ShaarDevToolsPanelEventRouter {
     else { return nil }
     return ShaarDevToolsPanelData(
       text: fields["text"] as? String, level: fields["level"] as? String,
+      objectID: fields["objectID"] as? String,
       requestID: requestID, url: fields["url"] as? String,
       method: fields["method"] as? String, status: status,
       mimeType: fields["mimeType"] as? String, encodedBytes: encodedBytes,
@@ -237,7 +240,8 @@ public enum ShaarDevToolsPanelEventRouter {
   private static func allowedKeys(for id: ShaarDevToolsPanelEventID) -> Set<String> {
     var fields: Set<String> = ["truncated"]
     switch id {
-    case .consoleAPICalled, .logEntryAdded: fields.formUnion(["text", "level", "stack"])
+    case .consoleAPICalled: fields.formUnion(["text", "level", "stack", "objectID"])
+    case .logEntryAdded: fields.formUnion(["text", "level", "stack"])
     case .exceptionThrown: fields.formUnion(["text", "stack"])
     case .requestWillBeSent:
       fields.formUnion(["requestID", "url", "method", "requestHeaders"])

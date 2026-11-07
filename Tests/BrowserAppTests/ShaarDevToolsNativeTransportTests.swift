@@ -26,6 +26,23 @@ import Testing
     }
     if operation == .panelPhase2Command {
       if !supportsPhase2 { throw CancellationError() }
+      if payload["commandID"] as? Int == 21 {
+        if (payload["params"] as? [String: String])?["objectID"] == "child-1" {
+          return [
+            "schemaVersion": 1, "commandID": 21,
+            "items": [
+              ["name": "b", "value": "2"]
+            ], "truncated": false,
+          ]
+        }
+        return [
+          "schemaVersion": 1, "commandID": 21,
+          "items": [
+            ["name": "a", "value": "1"],
+            ["name": "nested", "value": "Object", "objectID": "child-1"],
+          ], "truncated": false,
+        ]
+      }
       return [
         "schemaVersion": 1, "commandID": payload["commandID"] as? Int ?? 0,
         "items": [], "truncated": false,
@@ -144,6 +161,32 @@ import Testing
     #expect(rows.count == 1)
     #expect(rows.first?.requestHeaders.first?.name == "Accept")
     #expect(rows.first?.responseHeaders.first?.name == "Content-Type")
+  }
+
+  @Test func loggedObjectExpandsThroughOwningPanelLease() async throws {
+    let requester = PanelRequesterFixture()
+    requester.supportsPhase2 = true
+    let transport = ShaarDevToolsNativeTransport(requester: requester, windowID: UUID().uuidString)
+    var stream = transport.messages(for: target).makeAsyncIterator()
+    #expect(await stream.next() == .streamAvailable)
+    transport.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(
+        1,
+        data: [
+          "text": "Object", "level": "log", "objectID": "root-1", "truncated": false,
+        ]), sequence: 1)
+    guard case .event(.console(let entry)) = await stream.next() else {
+      Issue.record("Missing logged object")
+      return
+    }
+    #expect(entry.objectID == "root-1")
+    let properties = try await transport.consoleProperties(objectID: "root-1", for: target)
+    #expect(properties.map(\.name) == ["a", "nested"])
+    #expect(properties.last?.objectID == "child-1")
+    #expect(requester.payloads.last?["leaseID"] as? UInt32 == 7)
+    let child = try await transport.consoleProperties(objectID: "child-1", for: target)
+    #expect(child == [ShaarConsoleProperty(name: "b", value: "2")])
   }
 
   @Test func consoleMessageKeepsStackFramesForSources() async throws {

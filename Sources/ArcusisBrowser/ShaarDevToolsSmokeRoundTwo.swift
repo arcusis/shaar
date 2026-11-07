@@ -11,7 +11,7 @@ import Foundation
     context: NativeBrowserContext, pageURL: URL, report: ShaarDevToolsSmokeReport
   ) async {
     await roundTwoElements(shell, inspector: inspector, report: report)
-    await roundTwoConsole(shell, inspector: inspector, report: report)
+    await roundTwoConsole(shell, inspector: inspector, context: context, report: report)
     await roundTwoSources(shell, pageURL: pageURL, report: report)
     await roundTwoNetwork(shell, pageURL: pageURL, report: report)
     await roundTwoSocketAndWorker(shell, inspector: inspector, pageURL: pageURL, report: report)
@@ -68,25 +68,54 @@ import Foundation
   }
 
   private static func roundTwoConsole(
-    _ shell: ShaarDevToolsModel, inspector: InspectorModel, report: ShaarDevToolsSmokeReport
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel,
+    context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .console
     _ = try? await inspector.evaluate(
       "console.log('shaar-round2-object', {shaarRound2: 42, nested: {ok: true}})")
     let received = await wait(attempts: 60) {
       shell.console.rows(from: shell.consoleEvents).contains {
-        $0.event.message.contains("shaar-round2-object")
+        $0.event.origin == .browser && $0.event.message.contains("shaar-round2-object")
       }
     }
     if let object = shell.console.rows(from: shell.consoleEvents).last(where: {
-      $0.event.message.contains("shaar-round2-object")
+      $0.event.origin == .browser && $0.event.message.contains("shaar-round2-object")
     }) {
-      await shell.console.toggleProperties(for: object.event, inspector: inspector)
+      shell.console.selectedID = object.id
+      await settle(context)
+      _ = ShaarDevToolsSmokeAccess.capture(
+        context.hosting, to: report.directory.appending(path: "world-round2-console-before.png"))
+      let pressed = ShaarDevToolsSmokeAccess.press(
+        identifier: "shaar.devtools.consoleObjectProperties", in: context.hosting)
+      _ = await wait(attempts: 40) { shell.console.properties[object.id] != nil }
       let properties = shell.console.properties[object.id] ?? object.event.previewProperties
       record(
-        received && properties.contains { $0.name == "shaarRound2" },
-        "world2-console-object", "Expanded object has \(properties.count) properties",
+        received && pressed && properties.contains { $0.name == "shaarRound2" },
+        "world2-console-object",
+        "UI press=\(pressed), expanded object has \(properties.count) properties",
         report: report)
+      if let nested = properties.first(where: { $0.name == "nested" }) {
+        await settle(context)
+        let nestedPressed = ShaarDevToolsSmokeAccess.press(
+          identifier: "shaar.devtools.consoleNestedProperty", in: context.hosting)
+        if let objectID = nested.objectID {
+          _ = await wait(attempts: 40) { shell.console.childProperties[objectID] != nil }
+          let children = shell.console.childProperties[objectID] ?? []
+          record(
+            nestedPressed && children.contains { $0.name == "ok" && $0.value.contains("true") },
+            "world2-console-nested",
+            "UI press=\(nestedPressed), nested object has \(children.count) properties",
+            report: report)
+        } else {
+          report.fail("world2-console-nested", "Nested property has no object handle")
+        }
+      } else {
+        report.fail("world2-console-nested", "Nested property missing")
+      }
+      await settle(context)
+      _ = ShaarDevToolsSmokeAccess.capture(
+        context.hosting, to: report.directory.appending(path: "world-round2-console-after.png"))
     } else {
       report.fail("world2-console-object", "Console object did not arrive")
     }
@@ -99,7 +128,9 @@ import Foundation
     let evaluated = shell.console.localEntries.contains {
       $0.level == .info && $0.message == "42"
     }
-    record(evaluated, "world2-console-multiline", "Multiline console expression returned 42", report: report)
+    record(
+      evaluated, "world2-console-multiline", "Multiline console expression returned 42",
+      report: report)
   }
 
   private static func roundTwoSources(

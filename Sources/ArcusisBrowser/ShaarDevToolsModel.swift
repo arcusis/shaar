@@ -56,6 +56,7 @@ struct ShaarConsoleEvent: Equatable, Sendable {
   let stack: [ShaarConsoleFrame]
   let objectID: String?
   let previewProperties: [ShaarConsoleProperty]
+  let usesPanelLease: Bool
   let origin: Origin
   let timestamp: Date
 
@@ -63,7 +64,7 @@ struct ShaarConsoleEvent: Equatable, Sendable {
     id: UUID, level: Level, message: String, source: String?,
     stack: [ShaarConsoleFrame] = [], objectID: String? = nil,
     previewProperties: [ShaarConsoleProperty] = [], origin: Origin = .browser,
-    timestamp: Date = Date()
+    timestamp: Date = Date(), usesPanelLease: Bool = false
   ) {
     self.id = id
     self.level = level
@@ -72,6 +73,7 @@ struct ShaarConsoleEvent: Equatable, Sendable {
     self.stack = stack
     self.objectID = objectID
     self.previewProperties = previewProperties
+    self.usesPanelLease = usesPanelLease
     self.origin = origin
     self.timestamp = timestamp
   }
@@ -85,6 +87,7 @@ struct ShaarConsoleFrame: Hashable, Sendable {
 struct ShaarConsoleProperty: Equatable, Sendable {
   let name: String
   let value: String
+  var objectID: String? = nil
 }
 
 struct ShaarNetworkEvent: Equatable, Sendable {
@@ -490,6 +493,12 @@ final class ShaarDevToolsModel {
     section = resolvedOpeningSection()
     console.onClear = { [weak self] in
       self?.eventBuffer.removeConsole()
+    }
+    console.loadProperties = { [weak self] objectID in
+      guard let self, let transport = self.transport as? ShaarDevToolsNativeTransport else {
+        throw ShaarConsoleEvaluationError(message: "Console object is unavailable.")
+      }
+      return try await transport.consoleProperties(objectID: objectID, for: self.target)
     }
     network.loadBody = { [weak self] requestID in
       guard let self, let transport = self.transport as? ShaarDevToolsNativeTransport else {

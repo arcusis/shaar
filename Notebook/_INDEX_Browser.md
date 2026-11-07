@@ -21,6 +21,7 @@
 - [[Shaar_DevTools_Heap_Snapshot_Limit]]
 - [[Shaar_DevTools_Coverage]]
 - [[Shaar_DevTools_Idle_Override]]
+- [[Shaar_DevTools_Touch_Emulation]]
 - [[Shaar_Inspector]]
 - [[Shaar_Inspector_CSS]]
 - [[Shaar_Inspector_Details]]

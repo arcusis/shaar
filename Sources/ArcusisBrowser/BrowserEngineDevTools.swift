@@ -66,6 +66,7 @@ extension BrowserEngine {
         localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()],
         rulesTransport: ShaarNetworkRulesNativeTransport(panel: panel),
         domTransport: ShaarDOMLiveTransport(engine: self, panel: panel),
+        listenersTransport: ShaarEventListenersLiveTransport(engine: self),
         allowsWebKitComparison: store?.isPrivate != true)
       panel.onLeaseOpened = { [weak shell] in shell?.rules.resume() }
     } else {

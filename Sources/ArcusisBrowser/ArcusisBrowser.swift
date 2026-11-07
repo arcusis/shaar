@@ -48,6 +48,15 @@ public enum BrowserLaunch {
       let page = URL(string: arguments[index + 2])
       exit(ShaarSensorsProbe.run(frameworkURL: framework, outputURL: output, pageURL: page))
     }
+    if let index = arguments.firstIndex(of: "--event-listeners-probe"),
+      arguments.indices.contains(index + 2),
+      let frameworks = Bundle.main.privateFrameworksURL
+    {
+      let framework = frameworks.appending(path: "Chromium Framework.framework")
+      let output = URL(fileURLWithPath: arguments[index + 1])
+      let page = URL(string: arguments[index + 2])
+      exit(ShaarEventListenersProbe.run(frameworkURL: framework, outputURL: output, pageURL: page))
+    }
     if let index = arguments.firstIndex(of: "--render-preview"),
       arguments.indices.contains(index + 1)
     {

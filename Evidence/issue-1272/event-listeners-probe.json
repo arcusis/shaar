@@ -1,0 +1,20 @@
+{
+  "exitCode": 0,
+  "report": {
+    "allWindowsHidden": true,
+    "argumentsError": "DevTools request failed.",
+    "argumentsRejected": true,
+    "documentError": "",
+    "documentReady": true,
+    "domEnableError": "",
+    "listenerCount": 0,
+    "listenerError": "DevTools request failed.",
+    "listenerMissing": true,
+    "nodeResolved": true,
+    "normalBundle": "com.arcusis.browser.engine-preview",
+    "resolveError": "",
+    "searchCount": 1,
+    "targetURL": "http://127.0.0.1:56073/"
+  },
+  "stderrTail": "[30235:94677729:1107/014145.282754:ERROR:net/cert/ev_root_ca_metadata.cc:158] Failed to decode OID: 0\n[30235:94677602:1107/014145.283814:ERROR:CONSOLE:0] \"Unchecked runtime.lastError: The browser is shutting down.\", source:  (0)\n[30235:94677602:1107/014145.283841:ERROR:CONSOLE:0] \"Unchecked runtime.lastError: The browser is shutting down.\", source:  (0)\n"
+}

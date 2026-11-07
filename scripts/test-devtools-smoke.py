@@ -24,8 +24,11 @@ FRAMEWORKS = (
 PIXEL = b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
+LINK_CSS = b""".qa-link { color: #c2410c; }
+"""
 PAGE = b"""<!doctype html><html><head><meta charset="utf-8">
 <title>Shaar DevTools QA</title>
+<link rel="stylesheet" href="/qa.css">
 <style>
   body { font: 16px Arial, sans-serif; margin: 0; color: #172033; background: #fff; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
@@ -48,6 +51,9 @@ for (let index = 0; index < 120; index += 1) {
   row.textContent = "QA row " + index;
   long.appendChild(row);
 }
+const added = document.createElement("style");
+added.textContent = ".qa-added { color: #0f766e; }";
+document.head.appendChild(added);
 console.log("qa-log");
 console.error(new Error("qa-error"));
 localStorage.setItem("qa-local", "ready");
@@ -110,6 +116,9 @@ class Fixture(BaseHTTPRequestHandler):
         if path == "/frameworks.js":
             self.page(self.frameworks, "text/javascript; charset=utf-8")
             return
+        if path == "/qa.css":
+            self.page(LINK_CSS, "text/css; charset=utf-8")
+            return
         if path == "/sw.js":
             self.page(WORKER, "text/javascript; charset=utf-8")
             return
@@ -171,6 +180,10 @@ SMOKE_SOURCES = (
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmokeLook.swift",
     ROOT / "Sources/ArcusisBrowser/ArcusisBrowser.swift",
     ROOT / "Sources/ArcusisBrowser/SidebarTabRow.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarDevToolsCSSOverview.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarDevToolsModel.swift",
+    ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift",
+    ROOT / "Sources/ArcusisBrowser/PrivatePageSession.swift",
 )
 
 
@@ -247,6 +260,23 @@ def ensure_sidebar_title_row(steps):
         "passed": False,
         "severity": "polish",
         "detail": "The smoke never checked the sidebar tab title.",
+    })
+
+
+def ensure_css_overview_row(steps):
+    """The packaged smoke must count the fixture's inline, linked, and added sheets."""
+    for step in steps:
+        if step.get("name") == "css-overview" or (
+            step.get("panel") == "CSS overview" and step.get("action") == "Reload"
+        ):
+            return
+    steps.append({
+        "name": "css-overview",
+        "panel": "CSS overview",
+        "action": "Reload",
+        "passed": False,
+        "severity": "wrong",
+        "detail": "The smoke never checked that CSS overview counted the fixture style sheets.",
     })
 
 
@@ -328,6 +358,7 @@ def main():
             if not isinstance(steps, list):
                 steps = []
             ensure_sidebar_title_row(steps)
+            ensure_css_overview_row(steps)
             for name in crashes:
                 steps.append({
                     "panel": "Session",

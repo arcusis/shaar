@@ -179,6 +179,9 @@ import Vision
             severity: .polish)
         }
       }
+      if section == .cssOverview {
+        _ = await cssOverviewSettled(shell)
+      }
       await settle(context)
       let painted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
       recordTab(section, pressed: pressed && shell.section == section, painted: painted, report: report)
@@ -984,23 +987,83 @@ import Vision
   ) async {
     shell.section = .cssOverview
     await settle(context)
-    _ = await wait(attempts: 40) { !shell.cssOverview.loading }
-    _ = ShaarDevToolsSmokeAccess.press(identifier: "shaar.devtools.cssReload", in: context.hosting)
-    let finished = await wait(attempts: 40) {
+    _ = await cssOverviewSettled(shell)
+    let pressed = ShaarDevToolsSmokeAccess.press(
+      identifier: "shaar.devtools.cssReload", in: context.hosting)
+    if pressed {
+      _ = await wait(attempts: 20) { shell.cssOverview.loading }
+    } else {
+      await shell.cssOverview.reload(force: true)
+    }
+    var finished = await cssOverviewSettled(shell)
+    if cssFixtureNeedsAnotherRead(shell, finished: finished) {
+      await shell.cssOverview.reload(force: true)
+      finished = await cssOverviewSettled(shell)
+    }
+    reportCSSOverview(shell, finished: finished, report: report)
+    captureCSSOverview(context, report: report)
+  }
+
+  private static func cssOverviewSettled(_ shell: ShaarDevToolsModel) async -> Bool {
+    await wait(attempts: 40) {
       !shell.cssOverview.loading && (shell.cssOverview.loaded || shell.cssOverview.failure != nil)
     }
+  }
+
+  private static func cssFixtureNeedsAnotherRead(
+    _ shell: ShaarDevToolsModel, finished: Bool
+  ) -> Bool {
+    guard finished, shell.cssOverview.loaded, shell.cssOverview.failure == nil else { return false }
+    return cssFixtureGap(shell.cssOverview.summary) != nil
+  }
+
+  private static func reportCSSOverview(
+    _ shell: ShaarDevToolsModel, finished: Bool, report: ShaarDevToolsSmokeReport
+  ) {
     if finished, shell.cssOverview.loaded, shell.cssOverview.failure == nil,
-      shell.cssOverview.summary.examined > 0
+      cssFixtureGap(shell.cssOverview.summary) == nil
     {
-      report.pass("css-overview", "Reload loaded the page style sheets")
-    } else if finished, shell.cssOverview.loaded, shell.cssOverview.failure == nil {
+      report.pass(
+        "css-overview",
+        "Reload counted the inline style, the linked sheet, and the sheet added by the page")
+      return
+    }
+    if finished, shell.cssOverview.loaded, shell.cssOverview.failure == nil,
+      let gap = cssFixtureGap(shell.cssOverview.summary)
+    {
       report.fail(
         "css-overview",
-        "CSS overview says this page has no style sheets. The fixture page has a style element with color, flex, and grid.",
+        "CSS overview missed fixture sheets (\(gap)).",
         severity: .wrong)
-    } else {
-      report.fail("css-overview", shell.cssOverview.failure ?? "CSS overview did not load")
+      return
     }
+    report.fail("css-overview", shell.cssOverview.failure ?? "CSS overview did not load")
+  }
+
+  /// Missing fixture colors. Nil means the inline sheet, the linked sheet, and
+  /// the sheet the page added are all present.
+  private static func cssFixtureGap(_ summary: ShaarDevToolsCSSSummary) -> String? {
+    let labels = summary.colors.map { $0.label.lowercased().filter { !$0.isWhitespace } }
+    var missing: [String] = []
+    if summary.examined < 3 {
+      missing.append("examined \(summary.examined)")
+    }
+    if !labels.contains(where: { $0.contains("172033") }) { missing.append("#172033") }
+    if !labels.contains(where: isLinkedFixtureColor) { missing.append("#c2410c") }
+    if !labels.contains(where: { $0.contains("0f766e") }) { missing.append("#0f766e") }
+    guard !missing.isEmpty else { return nil }
+    return "missing \(missing.joined(separator: ", "))"
+  }
+
+  private static func isLinkedFixtureColor(_ label: String) -> Bool {
+    label.contains("c2410c") || label == "rgb(194,65,12)"
+  }
+
+  private static func captureCSSOverview(
+    _ context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
+  ) {
+    let url = report.directory.appending(path: "panel-css-overview.png")
+    _ = ShaarDevToolsSmokeAccess.capture(context.hosting, to: url)
   }
 
   private static func postedF12(_ context: NativeBrowserContext) -> Bool {
@@ -1164,7 +1227,7 @@ import Vision
     case .coverage: ["Coverage collection", "No coverage recorded"]
     case .audits: ["Run an audit", "Entire page"]
     case .sources: ["Filter resources", "Find in source"]
-    case .cssOverview: ["style sheets", "This page has no style"]
+    case .cssOverview: ["style sheets", "This page has no style", "Colors", "declarations"]
     case .security: ["Not Secure", "loaded over HTTP"]
     case .sensors: ["Touch emulation", "Clear location"]
     case .repro: ["REPRO BUNDLE", "Create .shaarrepro"]

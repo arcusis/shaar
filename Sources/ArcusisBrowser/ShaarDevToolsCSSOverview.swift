@@ -88,6 +88,126 @@ enum ShaarDevToolsCSSOverview {
     return (scheme == "http" || scheme == "https") && parts.host != nil
   }
 
+  /// Reads style sheets from the live document. The inspector protocol client
+  /// drops CSS.styleSheetAdded, so a reload has to ask the page again.
+  static let pageSheetExpression = """
+    (() => {
+      const maxSheets = 32;
+      const maxChars = 524288;
+      const out = [];
+      function ruleText(sheet) {
+        let rules;
+        try { rules = sheet.cssRules; } catch (e) { return null; }
+        if (!rules) return "";
+        let text = "";
+        for (let i = 0; i < rules.length; i++) {
+          text += rules[i].cssText + "\\n";
+          if (text.length >= maxChars) return text.slice(0, maxChars);
+        }
+        return text;
+      }
+      function push(name, url, text) {
+        if (out.length >= maxSheets || text == null) return;
+        out.push({ name: name || "sheet", url: url || "", text: String(text).slice(0, maxChars) });
+      }
+      function visit(doc) {
+        if (!doc) return;
+        let sheets;
+        try { sheets = doc.styleSheets; } catch (e) { return; }
+        const limit = Math.min(sheets.length, maxSheets);
+        for (let i = 0; i < limit; i++) {
+          const sheet = sheets[i];
+          const node = sheet.ownerNode;
+          const inline = node && node.localName === "style";
+          if (inline) {
+            push("style", doc.URL + "#style-" + (i + 1), node.textContent || "");
+            continue;
+          }
+          if (sheet.href) {
+            const text = ruleText(sheet);
+            if (text == null) continue;
+            const name = sheet.href.split("/").pop().split("?")[0];
+            push(name, sheet.href, text);
+            continue;
+          }
+          push("sheet", doc.URL + "#sheet-" + (i + 1), ruleText(sheet) || "");
+        }
+        const adopted = doc.adoptedStyleSheets || [];
+        for (let i = 0; i < adopted.length && out.length < maxSheets && i < maxSheets; i++) {
+          const text = ruleText(adopted[i]);
+          if (!text) continue;
+          push("adopted", doc.URL + "#adopted-" + (i + 1), text);
+        }
+      }
+      visit(document);
+      return out;
+    })()
+    """
+
+  static func sheets(fromPage value: Any?) -> [ShaarDevToolsCSSSheet] {
+    let rows = pageRows(value)
+    var sheets: [ShaarDevToolsCSSSheet] = []
+    for row in rows.prefix(maximumSheets) {
+      let url = stringField(row, "url")
+      let name = stringField(row, "name")
+      let text = stringField(row, "text")
+      guard url.utf8.count <= 2_048, name.utf8.count <= 256, text.utf8.count <= maximumTextBytes
+      else { continue }
+      let piece = clipped(text)
+      let label = name.isEmpty ? "sheet" : name
+      sheets.append(ShaarDevToolsCSSSheet(name: label, url: url, text: piece.text))
+    }
+    return sheets
+  }
+
+  /// Resource-tree file text wins for a shared URL when that text is present.
+  /// An empty resource body keeps the page text. Page sheets then fill in
+  /// inline, adopted, and linked sheets the resource tree did not return.
+  static func merging(
+    page: [ShaarDevToolsCSSSheet], resource: [ShaarDevToolsCSSSheet]
+  ) -> [ShaarDevToolsCSSSheet] {
+    let pageText = pageTextByURL(page)
+    var seen = Set<String>()
+    var sheets: [ShaarDevToolsCSSSheet] = []
+    func append(_ sheet: ShaarDevToolsCSSSheet) {
+      guard sheets.count < maximumSheets else { return }
+      if !sheet.url.isEmpty && !seen.insert(sheet.url).inserted { return }
+      sheets.append(sheet)
+    }
+    for sheet in resource {
+      append(resourceSheet(sheet, pageText: pageText))
+    }
+    for sheet in page { append(sheet) }
+    return sheets
+  }
+
+  private static func pageTextByURL(_ page: [ShaarDevToolsCSSSheet]) -> [String: String] {
+    var text: [String: String] = [:]
+    for sheet in page where !sheet.url.isEmpty && !sheet.text.isEmpty {
+      text[sheet.url] = sheet.text
+    }
+    return text
+  }
+
+  private static func resourceSheet(
+    _ sheet: ShaarDevToolsCSSSheet, pageText: [String: String]
+  ) -> ShaarDevToolsCSSSheet {
+    guard sheet.text.isEmpty, let text = pageText[sheet.url] else { return sheet }
+    return ShaarDevToolsCSSSheet(name: sheet.name, url: sheet.url, text: text)
+  }
+
+  private static func pageRows(_ value: Any?) -> [[String: Any]] {
+    if let rows = value as? [[String: Any]] { return rows }
+    guard let rows = value as? [Any] else { return [] }
+    return rows.compactMap { $0 as? [String: Any] }
+  }
+
+  private static func stringField(_ row: [String: Any], _ key: String) -> String {
+    if let text = row[key] as? String { return text }
+    if let text = row[key] as? NSString { return text as String }
+    return ""
+  }
+
   static func clipped(_ text: String) -> (text: String, clipped: Bool) {
     guard text.utf8.count > maximumTextBytes else { return (text, false) }
     let bytes = text.utf8.prefix(maximumTextBytes)
@@ -825,41 +945,103 @@ final class ShaarDevToolsCSSOverviewModel {
   private(set) var loaded = false
   var failure: String?
   var pick: ShaarDevToolsCSSPick?
+  var hasPageReader: Bool { pageSheets != nil }
   @ObservationIgnored private let sources: ShaarSourcesModel
   @ObservationIgnored private var generation = 0
   @ObservationIgnored private var usingFixture = false
+  @ObservationIgnored private var reloadAgain = false
+  @ObservationIgnored private var pageSheets: (@MainActor () async throws -> [ShaarDevToolsCSSSheet])?
 
   init(sources: ShaarSourcesModel) {
     self.sources = sources
   }
 
+  func attach(
+    pageSheets: @escaping @MainActor () async throws -> [ShaarDevToolsCSSSheet]
+  ) {
+    self.pageSheets = pageSheets
+  }
+
   func reload(force: Bool = false) async {
-    guard !usingFixture, !loading else { return }
+    guard !usingFixture else { return }
+    if loading {
+      if force { reloadAgain = true }
+      return
+    }
     if loaded && !force { return }
     let generation = generation
     loading = true
     defer {
       if generation == self.generation { loading = false }
+      if reloadAgain, generation == self.generation {
+        reloadAgain = false
+        Task { [weak self] in
+          await self?.reload(force: true)
+        }
+      }
     }
+    let page = await readPageSheets()
+    if page.cancelled { return }
+    let resource: ShaarLoadedStylesheets?
     do {
-      guard let batch = try await sources.loadStylesheets() else { return }
-      guard generation == self.generation, !usingFixture else { return }
-      var summary = ShaarDevToolsCSSOverview.summarize(batch.sheets)
-      summary.clipped = batch.clipped
-      self.summary = summary
-      loaded = true
-      failure = nil
-      if force { pick = nil }
+      resource = try await sources.loadStylesheets()
     } catch is CancellationError {
       return
     } catch {
-      guard generation == self.generation else { return }
-      failure = error.localizedDescription
+      guard generation == self.generation, !usingFixture else { return }
+      apply(page: page, resource: nil, resourceFailure: error.localizedDescription, force: force)
+      return
     }
+    guard generation == self.generation, !usingFixture else { return }
+    apply(page: page, resource: resource, resourceFailure: nil, force: force)
+  }
+
+  private func readPageSheets() async -> (
+    sheets: [ShaarDevToolsCSSSheet], failure: String?, cancelled: Bool
+  ) {
+    guard let pageSheets else { return ([], nil, false) }
+    do {
+      return (try await pageSheets(), nil, false)
+    } catch is CancellationError {
+      return ([], nil, true)
+    } catch {
+      return ([], error.localizedDescription, false)
+    }
+  }
+
+  private func apply(
+    page: (sheets: [ShaarDevToolsCSSSheet], failure: String?, cancelled: Bool),
+    resource: ShaarLoadedStylesheets?,
+    resourceFailure: String?,
+    force: Bool
+  ) {
+    let resourceSheets = resource?.sheets ?? []
+    let merged = ShaarDevToolsCSSOverview.merging(page: page.sheets, resource: resourceSheets)
+    if merged.isEmpty && resource == nil && pageSheets == nil && page.failure == nil {
+      return
+    }
+    if merged.isEmpty && page.failure != nil {
+      failure = page.failure
+      loaded = false
+      return
+    }
+    if merged.isEmpty && resourceFailure != nil {
+      failure = resourceFailure
+      loaded = false
+      return
+    }
+    var summary = ShaarDevToolsCSSOverview.summarize(merged)
+    let pageFilledTheCap = page.sheets.count >= ShaarDevToolsCSSOverview.maximumSheets
+    summary.clipped = resource?.clipped == true || pageFilledTheCap
+    self.summary = summary
+    loaded = true
+    failure = nil
+    if force { pick = nil }
   }
 
   func present(_ sheets: [ShaarDevToolsCSSSheet]) {
     generation += 1
+    reloadAgain = false
     usingFixture = true
     loading = false
     summary = ShaarDevToolsCSSOverview.summarize(sheets)
@@ -878,6 +1060,7 @@ final class ShaarDevToolsCSSOverviewModel {
 
   func reset() {
     generation += 1
+    reloadAgain = false
     usingFixture = false
     summary = .empty
     loading = false
@@ -919,6 +1102,12 @@ struct ShaarDevToolsCSSOverviewPanel: View {
     }
   }
 
+  private func reloadDisabled(_ model: ShaarDevToolsModel) -> Bool {
+    if model.cssOverview.loading { return true }
+    if model.phase2.available { return false }
+    return !model.cssOverview.hasPageReader
+  }
+
   private var controls: some View {
     HStack(spacing: 8) {
       Button {
@@ -927,7 +1116,7 @@ struct ShaarDevToolsCSSOverviewPanel: View {
         Text(ShellL10n.string("Reload"))
       }
       .controlSize(.small)
-      .disabled(model.cssOverview.loading || !model.phase2.available)
+      .disabled(reloadDisabled(model))
       .accessibilityIdentifier("shaar.devtools.cssReload")
       if model.cssOverview.loading {
         ProgressView().controlSize(.small)

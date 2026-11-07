@@ -196,6 +196,162 @@ import Testing
     clipped.phase2.close()
   }
 
+  @Test func mergingKeepsResourceFileTextAndAddsTheInlineSheet() {
+    let resource = [
+      ShaarDevToolsCSSSheet(
+        name: "qa.css", url: "https://example.com/qa.css", text: ".qa-link { color: #c2410c; }"),
+      ShaarDevToolsCSSSheet(
+        name: "empty.css", url: "https://example.com/empty.css", text: "/* empty */"),
+    ]
+    let page = [
+      ShaarDevToolsCSSSheet(
+        name: "qa.css", url: "https://example.com/qa.css", text: ".qa-link { color: rgb(194, 65, 12); }"),
+      ShaarDevToolsCSSSheet(
+        name: "style", url: "https://example.com/#style-1", text: "body { color: #172033; }"),
+    ]
+    let merged = ShaarDevToolsCSSOverview.merging(page: page, resource: resource)
+    #expect(merged.map(\.url) == [
+      "https://example.com/qa.css",
+      "https://example.com/empty.css",
+      "https://example.com/#style-1",
+    ])
+    #expect(merged[0].text.contains("#c2410c"))
+    let summary = ShaarDevToolsCSSOverview.summarize(merged)
+    #expect(summary.examined == 3)
+    #expect(summary.colors.contains { $0.label.contains("172033") })
+    #expect(summary.colors.contains { $0.label.contains("c2410c") })
+  }
+
+  @Test func pageRowsDecodeInlineAndLinkedSheets() {
+    let value: [[String: Any]] = [
+      ["name": "style", "url": "https://example.com/#style-1", "text": "body { color: #172033; }"],
+      ["name": "qa.css", "url": "https://example.com/qa.css", "text": ".qa-link { color: #c2410c; }"],
+    ]
+    let sheets = ShaarDevToolsCSSOverview.sheets(fromPage: value)
+    #expect(sheets.map(\.name) == ["style", "qa.css"])
+    #expect(sheets.map(\.url).count == 2)
+  }
+
+  @Test func pageRowsDecodeTheJSONShapeEvaluateReturns() throws {
+    let data = Data(
+      """
+      [{"name":"style","url":"https://example.com/#style-1","text":"body { color: #172033; }"}]
+      """.utf8)
+    let value = try JSONSerialization.jsonObject(with: data)
+    let sheets = ShaarDevToolsCSSOverview.sheets(fromPage: value)
+    #expect(sheets.map(\.name) == ["style"])
+    #expect(sheets.first?.text.contains("#172033") == true)
+  }
+
+  @Test func mergingFillsAnEmptyResourceBodyFromThePage() {
+    let resource = [
+      ShaarDevToolsCSSSheet(name: "qa.css", url: "https://example.com/qa.css", text: ""),
+      ShaarDevToolsCSSSheet(name: "empty.css", url: "https://example.com/empty.css", text: ""),
+    ]
+    let page = [
+      ShaarDevToolsCSSSheet(
+        name: "qa.css", url: "https://example.com/qa.css",
+        text: ".qa-link { color: rgb(194, 65, 12); }"),
+    ]
+    let merged = ShaarDevToolsCSSOverview.merging(page: page, resource: resource)
+    #expect(merged.map(\.name) == ["qa.css", "empty.css"])
+    #expect(merged[0].text.contains("rgb(194, 65, 12)"))
+    #expect(merged[1].text.isEmpty)
+  }
+
+  @Test @MainActor func reloadCountsInlineSheetsTheResourceTreeSkipped() async {
+    let shell = cssShell()
+    shell.cssOverview.attach {
+      [
+        ShaarDevToolsCSSSheet(
+          name: "style", url: "https://example.com/#style-1", text: "body { color: #172033; }")
+      ]
+    }
+    await shell.cssOverview.reload()
+    #expect(shell.cssOverview.loaded)
+    #expect(shell.cssOverview.failure == nil)
+    #expect(shell.cssOverview.summary.examined == 1)
+    #expect(shell.cssOverview.summary.colors.contains { $0.label.contains("172033") })
+    shell.close()
+  }
+
+  @Test @MainActor func reloadSeesASheetAddedOnTheNextRead() async {
+    let shell = cssShell()
+    let reads = CSSSheetReads()
+    shell.cssOverview.attach {
+      reads.count += 1
+      if reads.count == 1 {
+        return [
+          ShaarDevToolsCSSSheet(
+            name: "style", url: "https://example.com/#style-1", text: "body { color: #172033; }")
+        ]
+      }
+      return [
+        ShaarDevToolsCSSSheet(
+          name: "style", url: "https://example.com/#style-1", text: "body { color: #172033; }"),
+        ShaarDevToolsCSSSheet(
+          name: "added", url: "https://example.com/#style-2", text: ".qa-added { color: #0f766e; }"),
+      ]
+    }
+    await shell.cssOverview.reload()
+    #expect(shell.cssOverview.summary.examined == 1)
+    await shell.cssOverview.reload(force: true)
+    #expect(shell.cssOverview.summary.examined == 2)
+    #expect(shell.cssOverview.summary.colors.contains { $0.label.contains("0f766e") })
+    shell.close()
+  }
+
+  @Test @MainActor func forceReloadDuringAReadRunsAgainWhenThePageAddsASheet() async {
+    let shell = cssShell()
+    let reads = CSSSheetReads()
+    shell.cssOverview.attach {
+      reads.count += 1
+      if reads.count == 1 {
+        await shell.cssOverview.reload(force: true)
+        return [
+          ShaarDevToolsCSSSheet(
+            name: "style", url: "https://example.com/#style-1", text: "body { color: #172033; }")
+        ]
+      }
+      return [
+        ShaarDevToolsCSSSheet(
+          name: "style", url: "https://example.com/#style-1", text: "body { color: #172033; }"),
+        ShaarDevToolsCSSSheet(
+          name: "added", url: "https://example.com/#style-2", text: ".qa-added { color: #0f766e; }"),
+      ]
+    }
+    await shell.cssOverview.reload()
+    for _ in 0..<30 where reads.count < 2 {
+      await Task.yield()
+    }
+    #expect(reads.count == 2)
+    #expect(shell.cssOverview.summary.examined == 2)
+    #expect(shell.cssOverview.summary.colors.contains { $0.label.contains("0f766e") })
+    shell.close()
+  }
+
+  @Test @MainActor func reloadReportsAPageThatHasNoStyleSheets() async {
+    let shell = cssShell()
+    shell.cssOverview.attach { [] }
+    await shell.cssOverview.reload()
+    #expect(shell.cssOverview.loaded)
+    #expect(shell.cssOverview.failure == nil)
+    #expect(shell.cssOverview.summary.examined == 0)
+    shell.close()
+  }
+
+  @Test @MainActor func reloadDoesNotClaimAnEmptyPageWhenThePageReadFails() async {
+    let shell = cssShell()
+    shell.cssOverview.attach {
+      throw InspectorFailure("The page could not be read.")
+    }
+    await shell.cssOverview.reload()
+    #expect(!shell.cssOverview.loaded)
+    #expect(shell.cssOverview.failure == "The page could not be read.")
+    #expect(shell.cssOverview.summary.examined == 0)
+    shell.close()
+  }
+
   @MainActor private func cssShell() -> ShaarDevToolsModel {
     let defaults = UserDefaults(suiteName: "ShaarDevToolsCSS.\(UUID().uuidString)")!
     return ShaarDevToolsModel(target: cssTarget(), layoutDefaults: defaults)
@@ -256,4 +412,8 @@ import Testing
 
 @MainActor private final class CSSCommandRecord {
   var commands: [ShaarDevToolsPhase2Command] = []
+}
+
+@MainActor private final class CSSSheetReads {
+  var count = 0
 }

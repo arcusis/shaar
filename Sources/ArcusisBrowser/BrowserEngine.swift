@@ -529,10 +529,13 @@ final class BrowserEngine {
       DispatchQueue.main.async { [weak self] in self?.reconcile() }
     }
     callbacks.onNewTab = { [weak self] identity, owner, address, opener, foreground in
-      guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
-        let id = UUID(uuidString: identity), let profile = UUID(uuidString: owner),
+      guard let self, self.runtime.windowID(forTabID: identity) == self.windowID else { return }
+      guard let id = UUID(uuidString: identity), let profile = UUID(uuidString: owner),
         let url = URL(string: address.isEmpty ? "about:blank" : address)
-      else { return }
+      else {
+        self.runtime.discardTabID(identity)
+        return
+      }
       self.liveTabs.insert(id)
       let accepted =
         self.store?.nativeTabOpened(

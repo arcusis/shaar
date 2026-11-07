@@ -431,6 +431,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0046-shaar-devtools-profiler-enable.patch",
       "sha256": "1f8fbac79a82c416b42b3827a5b925f270fee1afec220300a598d7cebc405af5"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0047-shaar-tab-adoption.patch",
+      "sha256": "8d6083315f128753bc14747a5c9f92fc1852e84e78b70e2f2acdf4edfff037aa"
     }
   ],
   "requiredExports": [
@@ -461,6 +465,7 @@
     "_shaar_submit",
     "_shaar_tab_close",
     "_shaar_tab_favicon_png",
+    "_shaar_tab_find",
     "_shaar_tab_get_probe_state",
     "_shaar_tab_host_view",
     "_shaar_tab_open",

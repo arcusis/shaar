@@ -5,6 +5,7 @@
 - [[Profile_Favorites]]
 - [[Favicon_Cache]]
 - [[Native_Window_Ownership]]
+- [[Page_Tab_Adoption]]
 - [[Managed_Workspace_Persistence]]
 - [[Session_Durability]]
 - [[Sidebar_Tab_Organization]]

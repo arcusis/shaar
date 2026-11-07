@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumRuntimeInternal.h"
+#import "ChromiumShaarPrivateSupport.h"
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 
 @implementation ARCShaarRuntime (DeveloperMode)
@@ -30,6 +31,25 @@
                    tabID:tabID profileID:profileID windowID:windowID
               completion:^(NSDictionary *result, NSError *error) {
     if (![weakSelf shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+      completion(nil, ARCBridgeError(@"The developer tools target changed."));
+      return;
+    }
+    completion(result, error);
+  }];
+}
+
+- (void)privateDeveloperCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
+                    windowID:(NSString *)windowID contextID:(NSString *)contextID
+                  completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
+  if (![self privateTabOwned:tabID windowID:windowID contextID:contextID]) {
+    completion(nil, ARCBridgeError(@"The developer tools target is no longer available."));
+    return;
+  }
+  __weak ARCShaarRuntime *weakSelf = self;
+  [self shaarPrivateDevToolsCall:method params:params capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER
+                         tabID:tabID windowID:windowID contextID:contextID
+                     completion:^(NSDictionary *result, NSError *error) {
+    if (![weakSelf privateTabOwned:tabID windowID:windowID contextID:contextID]) {
       completion(nil, ARCBridgeError(@"The developer tools target changed."));
       return;
     }

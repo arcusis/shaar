@@ -385,6 +385,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0035-shaar-devtools-touch-emulation.patch",
       "sha256": "f79b5e7f77ac1cef74a0458d1a0b97fc962541c7aa775cb04d5cbeed55ee4ff7"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0036-shaar-devtools-rendering-overlay.patch",
+      "sha256": "9d526f95adcbd17b3272eac36e8aebcd34471eaaf3810888ea87273ddb873124"
     }
   ],
   "requiredExports": [

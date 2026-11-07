@@ -43,6 +43,7 @@ extension ShaarDevToolsSection {
     case .sensors: "location"
     case .repro: "record.circle"
     case .viewports: "rectangle.on.rectangle"
+    case .rendering: "paintbrush"
     case .comparison: "square.split.2x1"
     }
   }
@@ -62,6 +63,7 @@ extension ShaarDevToolsSection {
     case .sensors: "Sensors"
     case .repro: "Repro"
     case .viewports: "Views"
+    case .rendering: "Render"
     case .comparison: "WebKit"
     }
   }
@@ -360,6 +362,8 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .rendering:
+      ShaarRenderingPanel(model: model.rendering)
     case .comparison:
       if model.allowsWebKitComparison {
         ShaarWebKitComparisonPanel(
@@ -492,6 +496,7 @@ struct ShaarDevToolsPanel: View {
         ? "Viewports are scoped to this tab"
         : "Viewports need engine support"
     }
+    if model.section == .rendering { return "Rendering changes are scoped to this tab" }
     if model.section == .comparison { return "WebKit comparison is scoped to this tab" }
     guard model.streamAvailable else { return "Console commands are unavailable for this tab" }
     if model.section == .network { return "Network requests are scoped to this tab" }

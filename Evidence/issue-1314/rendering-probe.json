@@ -1,0 +1,25 @@
+{
+  "exitCode": 0,
+  "report": {
+    "allWindowsHidden": true,
+    "applied": {
+      "dark": true,
+      "light": false,
+      "print": true,
+      "reduce": true,
+      "screen": false
+    },
+    "cleared": {
+      "dark": true,
+      "light": false,
+      "print": false,
+      "reduce": false,
+      "screen": true
+    },
+    "normalBundle": "com.arcusis.browser.engine-preview",
+    "overlayError": "DevTools request failed.",
+    "overlayMissing": true,
+    "targetURL": "http://127.0.0.1:50954/"
+  },
+  "stderrTail": ""
+}

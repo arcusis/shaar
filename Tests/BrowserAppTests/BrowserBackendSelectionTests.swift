@@ -116,6 +116,7 @@ final class BrowserBackendSelectionTests: XCTestCase {
       "beginDeveloperSessionForTabID:profileID:windowID:",
       "endDeveloperSessionForTabID:profileID:windowID:",
       "developerCall:params:tabID:profileID:windowID:completion:",
+      "privateDeveloperCall:params:tabID:windowID:contextID:completion:",
     ] {
       assertShaarOverrides(selector)
     }

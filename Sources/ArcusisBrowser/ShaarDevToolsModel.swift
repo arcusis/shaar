@@ -22,6 +22,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case security = "Security"
   case sensors = "Sensors"
   case repro = "Repro"
+  case recorder = "Recorder"
   case viewports = "Viewports"
   case rendering = "Rendering"
   case comparison = "Comparison"
@@ -372,6 +373,7 @@ final class ShaarDevToolsModel {
   let sources: ShaarSourcesModel
   let cssOverview: ShaarDevToolsCSSOverviewModel
   let repro: ShaarReproModel
+  let recorder = ShaarDevToolsRecorderModel()
   let viewports: ShaarViewportsModel
   let rendering: ShaarRenderingModel
   let framework = ShaarFrameworkComponentsModel()
@@ -501,6 +503,7 @@ final class ShaarDevToolsModel {
     pageAudit.inspector = inspector
     attachSensorSender(inspector)
     coverage.attach(inspector, target: target)
+    recorder.attach(inspector)
     if !inspector.isOpen {
       inspector.open()
       ownedInspector = inspector
@@ -549,6 +552,7 @@ final class ShaarDevToolsModel {
     coverage.detach()
     sources.reset()
     cssOverview.reset()
+    recorder.detach()
     pageAudit.reset()
     pageAudit.inspector = nil
     auditFixture = nil
@@ -753,6 +757,7 @@ final class ShaarDevToolsModel {
     cssOverview.reset()
     memory.reset()
     coverage.retarget(target)
+    recorder.retarget(tabChanged: tabChanged, committed: committed)
     pageAudit.reset()
     auditFixture = nil
     framework.updateAccess(url: target.url)

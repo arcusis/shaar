@@ -443,6 +443,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0048-shaar-layer-compile-fixes.patch",
       "sha256": "b2874af5bbf98f1c1712627537b391370ecef0092b99754b7b930d3da23f22e9"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0049-shaar-devtools-lease-navigation.patch",
+      "sha256": "6c40ace19e1d432cf742f2b137a53e78f6d6a8c33e5a4ae50938807dbcf78b1a"
     }
   ],
   "requiredExports": [

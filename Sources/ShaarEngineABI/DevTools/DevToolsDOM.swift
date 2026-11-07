@@ -120,6 +120,16 @@ public struct ShaarDOMSnapshot: Equatable, Sendable {
     return Self(rootID: rootID, nodes: nodes)
   }
 
+  static func decodeSubtree(_ fields: [String: Any], parentID: Int) -> [ShaarDOMNode]? {
+    var nodes: [ShaarDOMNode] = []
+    var seen: Set<Int> = []
+    guard append(
+      fields, parentID: parentID, relation: .child,
+      depth: 0, nodes: &nodes, seen: &seen) != nil
+    else { return nil }
+    return nodes
+  }
+
   private static func append(
     _ fields: [String: Any], parentID: Int?, relation: ShaarDOMRelation,
     depth: Int, nodes: inout [ShaarDOMNode], seen: inout Set<Int>
@@ -234,10 +244,14 @@ public enum ShaarDOMEventRouter {
         let parent = positive(fields["parentNodeId"]),
         let raw = fields["nodes"] as? [[String: Any]], raw.count <= 256
       else { return nil }
-      let nodes = raw.compactMap {
-        ShaarDOMNode.decode($0, parentID: parent, relation: .child)
+      var nodes: [ShaarDOMNode] = []
+      for fields in raw {
+        guard let subtree = ShaarDOMSnapshot.decodeSubtree(fields, parentID: parent),
+          nodes.count + subtree.count <= 512
+        else { return nil }
+        nodes.append(contentsOf: subtree)
       }
-      guard nodes.count == raw.count else { return nil }
+      guard Set(nodes.map(\.id)).count == nodes.count else { return nil }
       return .childrenSet(parentID: parent, nodes: nodes)
     }
     if id == 23 {

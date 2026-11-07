@@ -361,7 +361,10 @@ import ShaarEngineABI
     let draggedKey = signature(fresh[1], model: shell.dom)
     let beforeKey = signature(fresh[0], model: shell.dom)
     guard draggedKey != beforeKey else {
-      report.fail("dom-drag", "DOM drag had no distinct row text")
+      let rows = fresh.prefix(2).map {
+        "\($0.id): \($0.childrenIDs.count)/\($0.childCount) children, \(signature($0, model: shell.dom))"
+      }
+      report.fail("dom-drag", "DOM drag had no distinct row text. \(rows.joined(separator: "; "))")
       return
     }
     let beforeOrder = fresh.map { signature($0, model: shell.dom) }

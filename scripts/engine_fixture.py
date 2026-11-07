@@ -686,7 +686,7 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
 #next{background:white;color:#111827;border-color:#d1d5db}iframe{width:340px;height:160px;border:2px solid #ddd}
 #transparent{color:rgba(0,0,0,.5);background:white;padding:12px}
 #gradient{background:linear-gradient(white,black);color:white;padding:12px}
-</style><h1>Inspect the details.</h1><main id="card"><button id="save" data-testid="save" onclick="window.clicked=(window.clicked||0)+1"><span id="label">Save changes</span></button><button id="next">Cancel</button>
+</style><h1>Inspect the details.</h1><main id="card"><button id="save" data-testid="save" onclick="window.clicked=(window.clicked||0)+1"><span id="label">Save changes</span></button><button id="next">Cancel</button><button id="labelled" aria-label="Apply the form">Apply</button>
 <p id="transparent">Transparent text</p><p id="gradient">Gradient contrast</p>
 <iframe id="frame" src="/inspector-frame"></iframe>
 <section id="grid" style="display:grid;grid-template-columns:1fr 2fr;gap:12px;padding:8px;background:#eef2ff"><div>First track</div><div>Second track</div></section>

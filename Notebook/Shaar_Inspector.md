@@ -14,6 +14,8 @@ The panel shows computed box edges and content size, computed typography, and Ch
 
 Colors support HEX, RGB and OKLCH, preserving alpha in calculations. WCAG 2.2 contrast composites solid backgrounds and text alpha, uses the large-text thresholds where appropriate, and displays AA/AAA or Fail. Images, gradients, filters, blending, opacity and wide-gamut colors show an explicit contrast limitation instead of an invented score. Wide-gamut swatches are sRGB approximations. Ratios describe the selected element's computed text color and background, not a page-wide accessibility audit.
 
+The Accessibility tab says where the accessible name came from: the element's text, aria-label, aria-labelledby, or a label. A missing name is stated as missing. Contrast there is the same ratio, AA/AAA grade, and limitation text the Design tab shows, and it stays blank when Design cannot compute a ratio.
+
 ## Native and engine boundaries
 
 `InspectorPage` allocates page-card space to the native SwiftUI panel; no separate tools window opens. Models belong to an exact tab, profile and native window, revalidate ownership before and after calls, reset on document changes, and close on tab/window teardown. Selection payloads have size, shape and finite-value bounds. Remote objects use unique groups released after each query.

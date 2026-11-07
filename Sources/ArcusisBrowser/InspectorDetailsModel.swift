@@ -43,6 +43,7 @@ struct InspectorAccessibilityData: Decodable {
   }
   var role = "Unavailable"
   var name = ""
+  var nameSource: String?
   var ignored: Bool?
   var properties: [Property] = []
   enum CodingKeys: CodingKey { case aria, tabOrder, tabLimit, warnings }
@@ -170,6 +171,10 @@ final class InspectorDetailsModel {
         {
           next.role = axValue(node["role"]) ?? "Unavailable"
           next.name = axValue(node["name"]) ?? ""
+          next.nameSource = InspectorAccessibleName.source(of: node["name"] as? [String: Any])
+          if next.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            next.nameSource = nil
+          }
           next.ignored = node["ignored"] as? Bool ?? false
           next.properties = ((node["properties"] as? [[String: Any]]) ?? []).prefix(64).compactMap {
             row in

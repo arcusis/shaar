@@ -124,6 +124,12 @@ struct InspectorDetailsView: View {
     }
   }
 
+  private var contrastSelection: InspectorSelection? {
+    guard let selection = inspector.selection else { return nil }
+    if selection.contrast == nil, selection.contrastLimit == nil { return nil }
+    return selection
+  }
+
   @ViewBuilder private var accessibility: some View {
     if let data = model.accessibility {
       InspectorSection(InspectorDetailsL10n.string("Accessibility")) {
@@ -138,6 +144,15 @@ struct InspectorDetailsView: View {
             value: data.name.isEmpty
               ? InspectorDetailsL10n.string("No accessible name") : data.name,
             copy: inspector.copy)
+          if let source = data.nameSource {
+            InspectorProperty(
+              InspectorDetailsL10n.string("Source"),
+              value: InspectorDetailsL10n.string(source),
+              copy: inspector.copy)
+          }
+          if let selection = contrastSelection {
+            InspectorContrastLine(selection: selection).padding(.top, 6)
+          }
           InspectorProperty(
             InspectorDetailsL10n.string("In tree"),
             value: data.ignored.map {

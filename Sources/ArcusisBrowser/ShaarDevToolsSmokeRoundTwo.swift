@@ -311,6 +311,7 @@ import Foundation
       value: "after", secure: cookie.secure, httpOnly: cookie.httpOnly,
       sameSite: cookie.sameSite)
     let matching = shell.cookies.cookies.filter { $0.name == "shaar_round2" }
+    shell.cookies.search = cookie.name
     await settle(context)
     _ = ShaarDevToolsSmokeAccess.capture(
       context.hosting, to: report.directory.appending(path: "world-round2-cookie-after-edit.png"))

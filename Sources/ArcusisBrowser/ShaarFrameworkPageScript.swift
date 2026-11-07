@@ -16,6 +16,11 @@ enum ShaarFrameworkPageScript {
     return "globalThis.__shaarHighlightFrameworkComponent?.(\(token),\(epoch))"
   }
 
+  static func propsExpression(id: String) -> String? {
+    guard isComponentID(id) else { return nil }
+    return "globalThis.__shaarFrameworkProps?.[\"\(id)\"]"
+  }
+
   static func isComponentID(_ id: String) -> Bool {
     guard (1...4).contains(id.utf16.count) else { return false }
     return id.unicodeScalars.allSatisfy { ("0"..."9").contains(Character($0)) }
@@ -34,6 +39,7 @@ enum ShaarFrameworkPageScript {
       if (!window || !document) return { schema: 1, framework: null, nodes: [] };
       const nodes = [];
       const hosts = {};
+      const propsObjects = {};
       function clip(value, limit) {
         const text = String(value);
         if (text.length <= limit) return text;
@@ -49,6 +55,11 @@ enum ShaarFrameworkPageScript {
         try { return Object.getOwnPropertyDescriptor(object, key); }
         catch (error) { return null; }
       }
+      function ownValue(object, key) {
+        const descriptor = ownProperty(object, key);
+        return descriptor && Object.prototype.hasOwnProperty.call(descriptor, "value")
+          ? descriptor.value : undefined;
+      }
       function isAccessor(descriptor) {
         return descriptor && !Object.prototype.hasOwnProperty.call(descriptor, "value");
       }
@@ -60,7 +71,7 @@ enum ShaarFrameworkPageScript {
           const descriptor = ownProperty(value, key);
           if (!descriptor) continue;
           if (isAccessor(descriptor)) {
-            summary[key] = "[Accessor]";
+            summary[key] = "(...)";
           } else if (primitive(descriptor.value) != null) {
             summary[key] = descriptor.value;
           }
@@ -70,21 +81,29 @@ enum ShaarFrameworkPageScript {
       function fieldValue(value) {
         const text = primitive(value);
         if (text != null) return text;
-        if (value == null || typeof value !== "object" || value.nodeType) return null;
+        if (value == null || typeof value !== "object" || ownValue(value, "nodeType")) return null;
         if (Array.isArray(value)) {
           const parts = [];
           for (let index = 0; index < value.length && parts.length < 8; index += 1) {
             const descriptor = ownProperty(value, String(index));
             const item = isAccessor(descriptor)
-              ? "[Accessor]" : primitive(descriptor && descriptor.value);
+              ? "(...)" : primitive(descriptor && descriptor.value);
             if (item != null) parts.push(item);
           }
           return clip("[" + parts.join(", ") + "]", 120);
         }
         return clip(objectSummary(value), 120);
       }
+      function accessorNames(value) {
+        if (!value || typeof value !== "object") return [];
+        const result = [];
+        for (const key of Object.keys(value).slice(0, 8)) {
+          if (isAccessor(ownProperty(value, key))) result.push(key);
+        }
+        return result;
+      }
       function fieldsOf(object) {
-        if (!object || typeof object !== "object" || object.nodeType) return [];
+        if (!object || typeof object !== "object" || ownValue(object, "nodeType")) return [];
         const skipped = { children: true, child: true, sibling: true, return: true, ref: true, key: true };
         const result = [];
         const keys = Object.keys(object);
@@ -93,9 +112,13 @@ enum ShaarFrameworkPageScript {
           if (skipped[name] || name.charAt(0) === "_") continue;
           const descriptor = ownProperty(object, name);
           if (!descriptor) continue;
-          const text = isAccessor(descriptor) ? "[Accessor]" : fieldValue(descriptor.value);
+          const accessor = isAccessor(descriptor);
+          const text = accessor ? "(...)" : fieldValue(descriptor.value);
           if (text == null) continue;
-          result.push({ name: clip(name, 40), value: text });
+          result.push({
+            name: clip(name, 40), value: text,
+            accessors: accessor ? [""] : accessorNames(descriptor.value),
+          });
         }
         return result;
       }
@@ -117,6 +140,7 @@ enum ShaarFrameworkPageScript {
           props: entry.props || [],
           state: entry.state || [],
         });
+        if (entry.propsObject) propsObjects[id] = entry.propsObject;
         return id;
       }
       function remember(id, element) {
@@ -221,11 +245,13 @@ enum ShaarFrameworkPageScript {
         let nextParent = parentID;
         let nextDepth = depth;
         if (name && depth <= 12) {
+          const props = ownValue(fiber, "memoizedProps");
           const id = addNode({
             parentID: parentID,
             name: name,
             key: fiber.key,
-            props: fieldsOf(fiber.memoizedProps),
+            props: fieldsOf(props),
+            propsObject: props,
             state: hookFields(fiber.memoizedState),
           });
           if (id) {
@@ -280,10 +306,12 @@ enum ShaarFrameworkPageScript {
         seen.add(instance);
         const type = instance.type || {};
         const name = type.name || type.__name || "Anonymous";
+        const props = ownValue(instance, "props");
         const id = addNode({
           parentID: parentID,
           name: name,
-          props: fieldsOf(instance.props),
+          props: fieldsOf(props),
+          propsObject: props,
           state: vueState(instance),
         });
         if (!id) return;
@@ -331,11 +359,13 @@ enum ShaarFrameworkPageScript {
         return "Anonymous";
       }
       function angularProps(component) {
-        if (component.inputs && typeof component.inputs === "object") return fieldsOf(component.inputs);
+        const inputs = ownValue(component, "inputs");
+        if (inputs && typeof inputs === "object") return fieldsOf(inputs);
         return fieldsOf(component);
       }
       function angularState(component) {
-        if (component.state && typeof component.state === "object") return fieldsOf(component.state);
+        const state = ownValue(component, "state");
+        if (state && typeof state === "object") return fieldsOf(state);
         return [];
       }
       function angularRoots() {
@@ -353,10 +383,12 @@ enum ShaarFrameworkPageScript {
         let nextDepth = depth;
         if (component && typeof component === "object" && !seen.has(component)) {
           seen.add(component);
+          const inputs = ownValue(component, "inputs");
           const id = addNode({
             parentID: parentID,
             name: angularName(component, element),
             props: angularProps(component),
+            propsObject: inputs && typeof inputs === "object" ? inputs : component,
             state: angularState(component),
           });
           if (!id) return;
@@ -383,6 +415,7 @@ enum ShaarFrameworkPageScript {
       else if (readVue()) framework = "vue";
       else if (readAngular()) framework = "angular";
       window.__shaarFrameworkHosts = hosts;
+      window.__shaarFrameworkProps = propsObjects;
       let highlightEpoch = window.__shaarFrameworkHighlightEpoch || 0;
       window.__shaarHighlightFrameworkComponent = function (id, epoch) {
         if (typeof epoch === "number" && epoch < highlightEpoch) return false;

@@ -143,7 +143,7 @@ struct ShaarFrameworkComponentsPanel: View {
             .accessibilityIdentifier("shaar.devtools.components.selection")
           fieldSection(
             ShellL10n.string("Props"), selected.props, empty: ShellL10n.string("No props"),
-            identifier: "shaar.devtools.components.props")
+            identifier: "shaar.devtools.components.props", nodeID: selected.id)
           fieldSection(
             ShellL10n.string("State"), selected.state, empty: ShellL10n.string("No state"),
             identifier: "shaar.devtools.components.state")
@@ -156,11 +156,13 @@ struct ShaarFrameworkComponentsPanel: View {
   }
 
   private func fieldSection(
-    _ title: String, _ fields: [ShaarFrameworkField], empty: String, identifier: String
+    _ title: String, _ fields: [ShaarFrameworkField], empty: String, identifier: String,
+    nodeID: String? = nil
   ) -> some View {
     VStack(alignment: .leading, spacing: 4) {
       Text(title)
         .font(.system(size: 11, weight: .semibold))
+        .accessibilityIdentifier(identifier)
       if fields.isEmpty {
         Text(empty)
           .font(.system(size: 11))
@@ -172,17 +174,41 @@ struct ShaarFrameworkComponentsPanel: View {
               .font(.system(size: 11, weight: .medium))
               .frame(width: 96, alignment: .leading)
               .lineLimit(1)
-            Text(field.value)
-              .font(.system(size: 11, design: .monospaced))
-              .foregroundStyle(.primary)
-              .textSelection(.enabled)
+            if field.accessors.contains("") && nodeID != nil {
+              ShaarFrameworkInvokeButton(
+                title: "(...)", identifier: "shaar.devtools.components.invoke.\(field.id)"
+              ) {
+                guard let nodeID else { return }
+                Task { await model.invokePropGetter(nodeID: nodeID, name: field.name) }
+              }
+            } else {
+              Text(field.value)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+            }
             Spacer(minLength: 0)
+          }
+          if let nodeID {
+            ForEach(field.accessors.filter { !$0.isEmpty }, id: \.self) { path in
+              if let value = field.invoked[path] {
+                Text("\(path): \(value)")
+                  .font(.system(size: 11, design: .monospaced))
+                  .padding(.leading, 104)
+              } else {
+                ShaarFrameworkInvokeButton(
+                  title: "\(path): (...)",
+                  identifier: "shaar.devtools.components.invoke.\(field.id).\(path)"
+                ) {
+                  Task { await model.invokePropGetter(nodeID: nodeID, name: field.name, path: path) }
+                }
+                .padding(.leading, 104)
+              }
+            }
           }
         }
       }
     }
-    .accessibilityElement(children: .contain)
-    .accessibilityIdentifier(identifier)
   }
 
   private var withheld: some View {
@@ -237,5 +263,36 @@ struct ShaarFrameworkComponentsPanel: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .padding(24)
     .accessibilityIdentifier("shaar.devtools.components.empty")
+  }
+}
+
+private struct ShaarFrameworkInvokeButton: NSViewRepresentable {
+  let title: String
+  let identifier: String
+  let action: () -> Void
+
+  func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+  func makeNSView(context: Context) -> NSButton {
+    let button = NSButton(title: title, target: context.coordinator, action: #selector(Coordinator.press))
+    button.isBordered = false
+    button.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+    button.toolTip = ShellL10n.string("Invoke getter")
+    button.setContentHuggingPriority(.required, for: .horizontal)
+    return button
+  }
+
+  func updateNSView(_ button: NSButton, context: Context) {
+    context.coordinator.action = action
+    button.title = title
+    button.setAccessibilityIdentifier(identifier)
+  }
+
+  final class Coordinator: NSObject {
+    var action: () -> Void
+
+    init(action: @escaping () -> Void) { self.action = action }
+
+    @objc func press() { action() }
   }
 }

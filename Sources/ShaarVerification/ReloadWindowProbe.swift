@@ -63,7 +63,8 @@ final class ReloadWindowProbe {
     runtime.closeTabID(retained.uuidString)
     try await wait("failed-page view") { owner.store.rendererFailures[retained] != nil }
     let failure = try require(owner.store.rendererFailures[retained], "Missing failed-page state")
-    try expect(owner.store.reloadFailedPage(failure.id), "Reload action accepts destroyed tab")
+    let accepted = owner.store.reloadFailedPage(failure.id)
+    try expect(accepted, reloadRejection(owner, failure: failure, tab: retained))
     try await wait("reloaded document") {
       await document(retained, runtime: runtime)?["href"] as? String == originA.absoluteString
         && owner.store.rendererFailures[retained] == nil
@@ -264,6 +265,38 @@ final class ReloadWindowProbe {
 
   private func expect(_ condition: Bool, _ message: String) throws {
     if !condition { throw Failure(message) }
+  }
+
+  /// Names the gate that rejected Reload so a hidden run can show it without a window.
+  private func reloadRejection(
+    _ owner: NativeBrowserContext, failure: RendererFailure, tab: UUID
+  ) -> String {
+    let store = owner.store
+    let recorded = store.rendererFailures[tab]
+    var reasons: [String] = []
+    if store.session.selectedPage?.tab.id != tab {
+      let selected = store.session.selectedPage?.tab.id.uuidString ?? "none"
+      reasons.append("selected tab is \(selected)")
+    }
+    if recorded == nil {
+      reasons.append("failure was cleared")
+    } else if recorded?.id != failure.id {
+      reasons.append("failure id changed")
+    }
+    if recorded?.profileID != store.session.selectedSpace.profileID {
+      reasons.append("profile does not match the selected space")
+    }
+    if store.commandIsOpen { reasons.append("command palette is open") }
+    if store.sheet != nil { reasons.append("a sheet is open") }
+    if recorded?.reloading == true { reasons.append("reload is already running") }
+    if store.onReloadPage == nil { reasons.append("reload handler is missing") }
+    if owner.engine.isClosed { reasons.append("engine is closed") }
+    if runtime.isQuitting { reasons.append("engine is quitting") }
+    if !runtime.isWindowOpenID(owner.nativeID) { reasons.append("engine window is closed") }
+    if owner.engine.liveTabs.contains(tab) { reasons.append("tab is still marked live") }
+    if let notice = owner.engine.notice, !notice.isEmpty { reasons.append(notice) }
+    let detail = reasons.isEmpty ? "reload handler returned false" : reasons.joined(separator: "; ")
+    return "Reload action accepts destroyed tab (\(detail))"
   }
 
   private struct Failure: LocalizedError {

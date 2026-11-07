@@ -77,6 +77,8 @@ final class BrowserEngine {
   @ObservationIgnored private var failedProfiles: Set<UUID> = []
   @ObservationIgnored var liveTabs: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
+  /// Crashed documents whose native reload failed before the close event arrived.
+  @ObservationIgnored private var tabsAwaitingReload: Set<UUID> = []
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var receivingNativeSelection = false
   @ObservationIgnored private var lastSpaceID: UUID?
@@ -499,6 +501,7 @@ final class BrowserEngine {
         self.lastTabOrders[profile] = nil
         store.nativeRendererGone(id, profileID: profile, status: "native_tab_closed", exitCode: 0)
       }
+      self.scheduleReloadRecreation(id)
     }
     callbacks.onTabActivated = { [weak self] identity, owner in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
@@ -645,9 +648,39 @@ final class BrowserEngine {
     else { return false }
     guard ensureLiveWindow() else { return false }
     if liveTabs.contains(tab) {
-      return runtime.reloadTabID(
+      if runtime.reloadTabID(
         tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode)
+      {
+        return true
+      }
+      // WebContentsDestroyed unbinds the document immediately and posts the
+      // closed event later. Reload in that gap still sees a live tab and the
+      // native call fails. Recreate once the close event drops the stale target.
+      guard store?.rendererFailures[tab] != nil else { return false }
+      return recreateAfterRejectedReload(tab)
     }
+    return openRetainedDocument(tab, profile: profile)
+  }
+
+  private func recreateAfterRejectedReload(_ tab: UUID) -> Bool {
+    tabsAwaitingReload.insert(tab)
+    runtime.closeTabID(tab.uuidString)
+    return true
+  }
+
+  private func scheduleReloadRecreation(_ tab: UUID) {
+    guard tabsAwaitingReload.remove(tab) != nil else { return }
+    Task { @MainActor [weak self] in
+      self?.openReplacementDocument(tab)
+    }
+  }
+
+  private func openReplacementDocument(_ tab: UUID) {
+    guard !isClosed, let profile = store?.session.profileID(forTabID: tab) else { return }
+    _ = openRetainedDocument(tab, profile: profile)
+  }
+
+  private func openRetainedDocument(_ tab: UUID, profile: UUID) -> Bool {
     // A failed open or destroyed WebContents has no native target to reload.
     // Materialize the retained session entry again with its original identity.
     failedTabs.remove(tab)

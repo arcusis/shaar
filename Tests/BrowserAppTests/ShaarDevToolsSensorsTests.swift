@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -93,6 +95,77 @@ import Testing
       ShaarDevToolsSensorCommands.sanFrancisco(), .timezone("America/New_York"), .locale("fr-FR"),
     ])
   #expect(model.sensorNotice == .invalidLocation)
+}
+
+@Test func sensorTitlesIdentifiersAndTouchCommand() {
+  #expect(ShaarDevToolsSensorTimezone.allCases.map(\.title) == ["System", "New York", "Tokyo"])
+  #expect(
+    ShaarDevToolsSensorTimezone.allCases.map(\.identifier) == [
+      "", "America/New_York", "Asia/Tokyo",
+    ])
+  #expect(
+    ShaarDevToolsSensorLocale.allCases.map(\.title) == ["System", "English", "French", "Hebrew"])
+  #expect(ShaarDevToolsSensorLocale.allCases.map(\.identifier) == ["", "en-US", "fr-FR", "he-IL"])
+  let touch = ShaarDevToolsSensorCommand.touch(true)
+  #expect(touch.isTouch)
+  #expect(touch.touchEnabled == true)
+  #expect(touch.method == "Emulation.setTouchEmulationEnabled")
+  #expect(touch.params["enabled"] as? Bool == true)
+  #expect(ShaarDevToolsSensorCommand.clearGeolocation.isTouch == false)
+  #expect(ShaarDevToolsSensorCommand.clearGeolocation.touchEnabled == nil)
+}
+
+@MainActor @Test func sensorsPanelRendersOffscreenForEachState() async throws {
+  _ = NSApplication.shared
+  let model = sensorModel(suite: "ShaarDevToolsSensors.render")
+  let target = model.target
+  let inspector = InspectorModel(target: target, engine: nil)
+  model.open(inspector: inspector)
+  model.section = .sensors
+  let waiting = try VisualCapture.pngOffscreen(
+    ShaarDevToolsSensorsPanel(model: model), size: NSSize(width: 640, height: 420))
+  model.sensorLocation = .custom
+  model.sensorLatitude = "91"
+  model.sensorLongitude = "0"
+  model.sensorAccuracy = "1"
+  model.applySensorLocation()
+  #expect(model.sensorNotice == .invalidLocation)
+  let invalid = try VisualCapture.pngOffscreen(
+    ShaarDevToolsSensorsPanel(model: model), size: NSSize(width: 640, height: 480))
+  model.sendSensorCommand = nil
+  model.selectSensorLocation(.system)
+  model.selectSensorTimezone(.system)
+  model.selectSensorLocale(.system)
+  #expect(model.sensorNotice == .unavailable)
+  let unavailable = try VisualCapture.pngOffscreen(
+    ShaarDevToolsSensorsPanel(model: model), size: NSSize(width: 640, height: 420))
+  model.sendSensorCommand = { _ in throw DeveloperModeFailure("Sensors failed.") }
+  model.selectSensorLocale(.english)
+  for _ in 0..<40 where model.sensorNotice != .failed("Sensors failed.") {
+    await Task.yield()
+  }
+  #expect(model.sensorNotice == .failed("Sensors failed."))
+  let failed = try VisualCapture.pngOffscreen(
+    ShaarDevToolsSensorsPanel(model: model), size: NSSize(width: 640, height: 420))
+  model.sensorTouchReady = true
+  model.sensorTouch = true
+  model.sensorNotice = nil
+  let ready = try VisualCapture.pngOffscreen(
+    ShaarDevToolsSensorsPanel(model: model), size: NSSize(width: 640, height: 420))
+  let nextTab = SiteControlTarget(tabID: UUID(), profileID: target.profileID, url: target.url)
+  model.sensorLocation = .london
+  model.updateTarget(nextTab)
+  #expect(model.sensorLocation == .system)
+  let panel = try VisualCapture.pngOffscreen(
+    ShaarDevToolsPanel(model: model, inspector: inspector, openChromium: {}),
+    size: NSSize(width: 850, height: 620))
+  #expect(!waiting.isEmpty)
+  #expect(!invalid.isEmpty)
+  #expect(!unavailable.isEmpty)
+  #expect(!failed.isEmpty)
+  #expect(!ready.isEmpty)
+  #expect(!panel.isEmpty)
+  model.close()
 }
 
 @MainActor private func sensorModel(suite: String) -> ShaarDevToolsModel {

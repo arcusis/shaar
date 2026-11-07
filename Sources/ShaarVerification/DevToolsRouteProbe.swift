@@ -369,7 +369,8 @@ final class DevToolsRouteProbe {
       self.store.session.selectedSpace.tabs.contains { !existing.contains($0.id) }
     }
     guard
-      let other = store.session.selectedSpace.tabs.map(\.id).first(where: { !existing.contains($0) })
+      let other = store.session.selectedSpace.tabs.map(\.id).first(where: { !existing.contains($0) }
+      )
     else { throw Failure("No second agent tab") }
     let otherID = other.uuidString
     try await wait("other tab records a different console and DOM marker") {
@@ -420,7 +421,8 @@ final class DevToolsRouteProbe {
     else { throw Failure("Agent bridge DOM HTML was not limited to the granted tab") }
     checks.append("agent bridge reads only the granted tab DOM")
     try expect(
-      try await evaluatedString(client, session: session, expression: "window.__shaarAgent.console[0]")
+      try await evaluatedString(
+        client, session: session, expression: "window.__shaarAgent.console[0]")
         == "shaar-agent-console-granted",
       "agent bridge reads the granted tab console record")
     try expect(

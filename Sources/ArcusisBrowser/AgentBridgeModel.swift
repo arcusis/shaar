@@ -58,11 +58,12 @@ enum AgentBridgeSetup {
             "-y", "chrome-devtools-mcp@latest",
             "--wsEndpoint=\(endpoint)", "--wsHeaders=\(header)",
           ],
-        ],
-      ],
+        ]
+      ]
     ]
-    guard let data = try? JSONSerialization.data(
-      withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
+    guard
+      let data = try? JSONSerialization.data(
+        withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
       let text = String(data: data, encoding: .utf8)
     else { return "" }
     return text

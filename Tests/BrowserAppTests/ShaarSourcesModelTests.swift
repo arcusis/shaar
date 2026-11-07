@@ -11,6 +11,101 @@ import Testing
 @testable import ShaarEngineABI
 
 @Suite @MainActor struct ShaarSourcesModelTests {
+  @Test func parsedScriptsAddModulesAndOpenDebuggerSource() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
+    let module = "https://example.com/src/App.vue"
+    let dynamic = "https://example.com/src/lazy.ts"
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return ["items": [["url": "https://example.com/", "type": "Document"]]]
+      case .parsedScripts(let skip, _):
+        if skip == 0 {
+          return ["items": [["url": module, "scriptID": "41"]], "hasMore": true]
+        }
+        return ["items": [["url": dynamic, "scriptID": "42"]], "hasMore": false]
+      case .scriptSource(let id):
+        return ["items": [], "body": id == "41" ? "export const app = 41;" : "export const lazy = 42;", "base64Encoded": false]
+      case .resourceContent:
+        throw InspectorFailure("parsed module is absent from Page resources")
+      default: return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(phase2: phase2)
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    #expect(model.resources.contains { $0.url == module })
+    #expect(model.resources.contains { $0.url == dynamic })
+    if let resource = model.resources.first(where: { $0.url == module }) {
+      await model.select(resource)
+      #expect(model.content == "export const app = 41;")
+    }
+    phase2.close()
+  }
+
+  @Test func parsedScriptsReplaceOldModulesAfterReload() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
+    var module = "https://example.com/first.js"
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree: return ["items": []]
+      case .parsedScripts:
+        return ["items": [["url": module, "scriptID": "42"]], "hasMore": false]
+      case .scriptSource:
+        return ["items": [], "body": "export const current = true;", "base64Encoded": false]
+      default: return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(phase2: phase2)
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    #expect(model.resources.contains { $0.url == module })
+    module = "https://example.com/second.js"
+    await model.refresh()
+    #expect(model.resources.map(\.url) == [module])
+    phase2.close()
+  }
+
+  @Test func parsedScriptMapHintAddsOriginalWithoutSourceComment() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
+    let scriptURL = "https://example.com/assets/app.js"
+    let map = [
+      "version": 3, "sources": ["src/App.vue"],
+      "sourcesContent": ["<template><main>App</main></template>"],
+    ] as [String: Any]
+    let mapData = try JSONSerialization.data(withJSONObject: map)
+    let hint = "data:application/json;base64,\(mapData.base64EncodedString())"
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree: return ["items": []]
+      case .parsedScripts:
+        return ["items": [["url": scriptURL, "scriptID": "51", "sourceMapURL": hint]]]
+      case .scriptSource:
+        return ["items": [], "body": "export const app = true;", "base64Encoded": false]
+      default: return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(phase2: phase2)
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    for _ in 0..<100 where !model.resources.contains(where: { $0.type == "Original" }) {
+      await Task.yield()
+    }
+    let original = try #require(model.resources.first { $0.name == "App.vue" })
+    await model.select(original)
+    #expect(model.content == "<template><main>App</main></template>")
+    phase2.close()
+  }
+
   @Test func fiveMegabyteSourceFixtureIsFullyDisplayed() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)

@@ -55,6 +55,59 @@ import XCTest
     XCTAssertTrue(NSApp.keyWindow === previous)
   }
 
+  func testParsedModuleBeforeAfterOffscreen() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_SOURCES_PARSED_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen parsed-module capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1435")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    for parsed in [false, true] {
+      let fixture = ShaarPhase2FixtureTransport { command in
+        switch command {
+        case .resourceTree:
+          return ["items": [["url": "https://example.test/", "type": "Document"]]]
+        case .parsedScripts:
+          return ["items": parsed
+            ? [["url": "https://example.test/src/App.vue", "scriptID": "41"]] : []]
+        case .scriptSource:
+          return ["items": [], "body": "export const app = true;", "base64Encoded": false]
+        case .resourceContent:
+          return ["items": [], "body": "<!doctype html>", "base64Encoded": false]
+        default: return ["items": []]
+        }
+      }
+      let inspector = InspectorModel(target: target, engine: nil)
+      let live = ShaarDevToolsModel(target: target, phase2Transport: fixture)
+      live.open(inspector: inspector)
+      live.section = .sources
+      for _ in 0..<20 where !live.phase2.available { await Task.yield() }
+      await live.sources.refresh()
+      if parsed, let module = live.sources.resources.first(where: { $0.name == "App.vue" }) {
+        await live.sources.select(module)
+        XCTAssertEqual(live.sources.content, "export const app = true;")
+      }
+      let stage = parsed ? "after" : "before"
+      for scheme in [ColorScheme.light, .dark] {
+        let suffix = scheme == .light ? "light" : "dark"
+        let appearance: NSAppearance.Name = scheme == .light ? .aqua : .darkAqua
+        let view = ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {})
+          .frame(width: 1040, height: 600)
+          .background(Color(nsColor: .windowBackgroundColor))
+          .environment(\.colorScheme, scheme)
+        try VisualCapture.renderOffscreen(
+          view, size: NSSize(width: 1040, height: 600), appearance: appearance,
+          to: root.appending(path: "\(stage)-parsed-module-\(suffix).png"))
+      }
+      live.close()
+    }
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   func testOriginalSourceMapBeforeAfterOffscreen() async throws {
     guard ProcessInfo.processInfo.environment["SHAAR_SOURCES_MAP_CAPTURE"] == "1" else {
       throw XCTSkip("Offscreen source-map capture requires explicit opt-in")

@@ -68,6 +68,10 @@ final class ShaarSourcesModel {
   @ObservationIgnored private var contentRevision = 0
   @ObservationIgnored private var lineCache: (revision: Int, pretty: Bool, lines: [Substring])?
   @ObservationIgnored private var originalContent: [String: String] = [:]
+  @ObservationIgnored private var scriptIDs: [String: String] = [:]
+  @ObservationIgnored private var sourceMapHints: [String: String] = [:]
+  @ObservationIgnored private var mapTask: Task<Void, Never>?
+  @ObservationIgnored private var refreshPending = false
 
   init(
     phase2: ShaarPhase2Model,
@@ -86,6 +90,9 @@ final class ShaarSourcesModel {
     DevelopmentPage.detect(url: phase2.target.url).isDevelopmentPage
   }
   var available: Bool { phase2.available }
+  var latestParsedScriptSequence: UInt64 {
+    phase2.events.last(where: { $0.id == .scriptParsed })?.sequence ?? 0
+  }
   var truncated: Bool { listTruncated || contentTruncated }
 
   var visibleResources: [ShaarSourceResource] {
@@ -203,6 +210,11 @@ final class ShaarSourcesModel {
 
   func reset() {
     generation += 1
+    mapTask?.cancel()
+    mapTask = nil
+    refreshPending = false
+    scriptIDs.removeAll()
+    sourceMapHints.removeAll()
     contentRevision += 1
     lineCache = nil
     resources.removeAll()
@@ -228,34 +240,89 @@ final class ShaarSourcesModel {
   }
 
   func refresh() async {
-    guard phase2.available, !loading else { return }
+    guard phase2.available else { return }
+    guard !loading else {
+      refreshPending = true
+      return
+    }
     let generation = generation
     loading = true
     defer {
-      if generation == self.generation { loading = false }
+      if generation == self.generation {
+        loading = false
+        if refreshPending {
+          refreshPending = false
+          Task { await self.refresh() }
+        }
+      }
     }
     do {
       let reply = try await phase2.execute(.resourceTree)
+      let scripts = await loadParsedScripts()
       guard generation == self.generation else { return }
+      let previousSelection = selectedURL
+      let previousScriptID = previousSelection.flatMap { scriptIDs[$0] }
+      scriptIDs = scripts.ids
+      sourceMapHints = scripts.mapHints
       let originals = resources.filter { $0.type == "Original" }
-      resources = (reply.items.compactMap { item in
+      let pageResources: [ShaarSourceResource] = reply.items.compactMap { item in
         guard let url = item.text["url"] else { return nil }
         return ShaarSourceResource(
           url: url, type: item.text["type"] ?? "Other",
           mimeType: item.text["mimeType"] ?? "")
-      } + originals)
-      .sorted { $0.url.localizedStandardCompare($1.url) == .orderedAscending }
+      }
+      var byURL: [String: ShaarSourceResource] = [:]
+      for resource in pageResources + originals { byURL[resource.url] = resource }
+      for script in scripts.resources { byURL[script.url] = script }
+      resources = byURL.values.sorted {
+        $0.url.localizedStandardCompare($1.url) == .orderedAscending
+      }
       if !resources.contains(where: { $0.url == selectedURL }) {
         selectedURL = resources.first?.url
       }
-      listTruncated = reply.truncated || reply.hasMore == true
+      listTruncated = reply.truncated || reply.hasMore == true || scripts.truncated
       failure = nil
-      await loadSelected()
+      let selectedScriptID = selectedURL.flatMap { scriptIDs[$0] }
+      if content == nil || selectedURL != previousSelection
+        || selectedScriptID != previousScriptID
+      {
+        await loadSelected()
+      }
+      mapTask?.cancel()
+      mapTask = Task { await discoverOriginalSources(in: scripts.resources, generation: generation) }
     } catch is CancellationError {
       return
     } catch {
       if generation == self.generation { failure = error.localizedDescription }
     }
+  }
+
+  private func loadParsedScripts() async -> (
+    resources: [ShaarSourceResource], ids: [String: String],
+    mapHints: [String: String], truncated: Bool
+  ) {
+    var resources: [ShaarSourceResource] = []
+    var ids: [String: String] = [:]
+    var hints: [String: String] = [:]
+    var truncated = false
+    for page in 0..<82 {
+      guard let reply = try? await phase2.execute(.parsedScripts(skip: page * 50, count: 50))
+      else { break }
+      for item in reply.items {
+        guard let url = item.text["url"], let id = item.text["scriptID"], !url.isEmpty
+        else { continue }
+        if ids[url] == nil {
+          resources.append(ShaarSourceResource(
+            url: url, type: "Script", mimeType: "text/javascript"))
+        }
+        ids[url] = id
+        if let hint = item.text["sourceMapURL"] { hints[url] = hint }
+      }
+      truncated = truncated || reply.truncated
+      guard reply.hasMore == true else { break }
+      if reply.items.isEmpty || page == 81 { truncated = true; break }
+    }
+    return (resources, ids, hints, truncated)
   }
 
   func select(_ resource: ShaarSourceResource) async {
@@ -374,7 +441,9 @@ final class ShaarSourcesModel {
         let selected, selected.type.caseInsensitiveCompare("Script") == .orderedSame,
         let resourceURL = URL(string: url)
       {
-        await addOriginalSources(from: body, resourceURL: resourceURL, generation: generation)
+        await addOriginalSources(
+          from: body, resourceURL: resourceURL,
+          sourceMapURL: sourceMapHints[url], generation: generation)
       }
     } catch is CancellationError {
       return
@@ -420,6 +489,12 @@ final class ShaarSourcesModel {
     if let body = originalContent[url] {
       return LoadedResourceText(body: body, base64Encoded: false, truncated: false)
     }
+    if let id = scriptIDs[url],
+      let reply = try? await phase2.execute(.scriptSource(id: id))
+    {
+      return LoadedResourceText(
+        body: reply.body, base64Encoded: false, truncated: reply.truncated)
+    }
     do {
       let reply = try await phase2.execute(.resourceContent(url: url))
       let decoded = Self.readableText(body: reply.body, base64Encoded: reply.base64Encoded == true)
@@ -438,9 +513,27 @@ final class ShaarSourcesModel {
     }
   }
 
-  private func addOriginalSources(from body: String, resourceURL: URL, generation: Int) async {
+  private func discoverOriginalSources(
+    in scripts: [ShaarSourceResource], generation: Int
+  ) async {
+    for script in scripts {
+      guard !Task.isCancelled, generation == self.generation,
+        let url = URL(string: script.url),
+        let loaded = try? await loadResourceText(url: script.url),
+        let body = loaded.body, !loaded.base64Encoded
+      else { continue }
+      await addOriginalSources(
+        from: body, resourceURL: url,
+        sourceMapURL: sourceMapHints[script.url], generation: generation)
+    }
+  }
+
+  private func addOriginalSources(
+    from body: String, resourceURL: URL, sourceMapURL: String? = nil, generation: Int
+  ) async {
     guard let originals = try? await ShaarSourceMap.load(
-      from: body, resourceURL: resourceURL, fetch: loadSourceData),
+      from: body, resourceURL: resourceURL,
+      sourceMapURL: sourceMapURL, fetch: loadSourceData),
       generation == self.generation
     else { return }
     for original in originals {

@@ -23,7 +23,10 @@ struct ShaarSourcesPanel: View {
       sourceContent.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .task(id: model.available) {
-      if model.available && model.resources.isEmpty { await model.refresh() }
+      if model.available { await model.refresh() }
+    }
+    .task(id: model.latestParsedScriptSequence) {
+      if model.available && model.latestParsedScriptSequence > 0 { await model.refresh() }
     }
     .onChange(of: model.selectedURL) { _, _ in localSourceStatus = nil }
     .fileImporter(

@@ -15,9 +15,11 @@ enum ShaarSourceMap {
 
   static func load(
     from script: String, resourceURL: URL,
+    sourceMapURL: String? = nil,
     fetch: @Sendable (URL) async throws -> Data
   ) async throws -> [ShaarOriginalSource] {
-    guard let reference = DevelopmentSourceResolver.sourceMapReference(in: script) else { return [] }
+    guard let reference = DevelopmentSourceResolver.sourceMapReference(in: script)
+      ?? sourceMapURL else { return [] }
     let data: Data
     if reference.hasPrefix("data:") {
       guard let decoded = inlineData(reference) else { return [] }

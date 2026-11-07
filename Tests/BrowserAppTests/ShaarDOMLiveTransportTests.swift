@@ -45,6 +45,11 @@ import Testing
     let undo = ShaarDOMRequest(.undo)
     #expect(undo.method == "DOM.undo")
     #expect(undo.params.isEmpty)
+
+    let backend = ShaarDOMRequest(.describeBackend(52))
+    #expect(backend.method == "DOM.describeNode")
+    #expect(backend.params["backendNodeId"] as? Int == 52)
+    #expect(backend.params["nodeId"] == nil)
   }
 }
 

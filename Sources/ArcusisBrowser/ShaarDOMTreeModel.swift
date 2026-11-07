@@ -13,6 +13,7 @@ enum ShaarDOMCommand: Equatable {
   case searchResults(String, Int)
   case discardSearch(String)
   case describe(Int)
+  case describeBackend(Int)
   case highlight(Int)
   case hideHighlight
   case setAttribute(Int, String, String)
@@ -66,6 +67,52 @@ struct ShaarDOMRow: Identifiable {
   let node: ShaarDOMNode
   let depth: Int
   var id: Int { node.id }
+}
+
+/// Where a frontend node sat in the last document. Frontend ids are dropped on
+/// navigation; the path and backend id are how a later document finds the same node.
+struct ShaarDOMNodeIdentity: Equatable {
+  struct Step: Equatable {
+    let name: String
+    let index: Int
+  }
+
+  let backendNodeID: Int?
+  let steps: [Step]
+
+  static func capture(_ id: Int, nodes: [Int: ShaarDOMNode], rootID: Int?) -> Self? {
+    guard let rootID, let selected = nodes[id] else { return nil }
+    var steps: [Step] = []
+    var current = id
+    while current != rootID {
+      guard steps.count < 40, let node = nodes[current],
+        let parentID = node.parentID, let parent = nodes[parentID],
+        let index = parent.childrenIDs.firstIndex(of: current)
+      else { return nil }
+      steps.append(Step(name: node.name, index: index))
+      current = parentID
+    }
+    return Self(backendNodeID: selected.backendNodeID, steps: steps.reversed())
+  }
+
+  func find(in nodes: [Int: ShaarDOMNode], rootID: Int?) -> Int? {
+    if let backendNodeID,
+      let sameNode = nodes.values.first(where: { $0.backendNodeID == backendNodeID })
+    {
+      return sameNode.id
+    }
+    guard let rootID, nodes[rootID] != nil else { return nil }
+    var current = rootID
+    for step in steps {
+      guard let parent = nodes[current], parent.childrenIDs.indices.contains(step.index) else {
+        return nil
+      }
+      let child = parent.childrenIDs[step.index]
+      guard nodes[child]?.name == step.name else { return nil }
+      current = child
+    }
+    return current
+  }
 }
 
 @MainActor @Observable
@@ -218,6 +265,43 @@ final class ShaarDOMTreeModel {
     }
   }
 
+  /// Asks the inspector session for a fresh document and returns the ids that now
+  /// stand where `ids` stood. A reload drops the ids `DOM.resolveNode` still holds.
+  func rebindFrontendIDs(_ ids: [Int]) async -> [Int: Int] {
+    guard isOpen, available else { return [:] }
+    let target = target
+    let generation = generation
+    let captured = ids.compactMap { id -> (Int, ShaarDOMNodeIdentity)? in
+      guard let identity = ShaarDOMNodeIdentity.capture(id, nodes: nodes, rootID: rootID) else {
+        return nil
+      }
+      return (id, identity)
+    }
+    let previousSelection = selectedID
+    await loadDocument()
+    guard self.target == target, self.generation == generation,
+      failure == nil, rootID != nil
+    else { return [:] }
+    var mapped: [Int: Int] = [:]
+    for (id, identity) in captured {
+      if let backend = identity.backendNodeID,
+        let bound = await frontendID(forBackend: backend)
+      {
+        mapped[id] = bound
+      } else if let found = identity.find(in: nodes, rootID: rootID) {
+        mapped[id] = found
+      }
+    }
+    if let previousSelection {
+      if let replacement = mapped[previousSelection] {
+        select(replacement)
+      } else {
+        selectedID = nil
+      }
+    }
+    return mapped
+  }
+
   func loadDocument(depth: Int = 2) async {
     guard available else { return }
     let generation = generation
@@ -335,6 +419,14 @@ final class ShaarDOMTreeModel {
       else { return }
       attach(node, to: parentID)
     }
+  }
+
+  private func frontendID(forBackend backend: Int) async -> Int? {
+    guard let result = try? await execute(.describeBackend(backend)),
+      let node = result["node"] as? [String: Any],
+      let id = integerValue(node["nodeId"]), id > 0
+    else { return nil }
+    return id
   }
 
   private func describedNode(_ id: Int) async -> [String: Any]? {

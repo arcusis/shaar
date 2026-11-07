@@ -54,6 +54,7 @@ for (let index = 0; index < 120; index += 1) {
 const added = document.createElement("style");
 added.textContent = ".qa-added { color: #0f766e; }";
 document.head.appendChild(added);
+document.body.addEventListener("qa-ping", function () {});
 console.log("qa-log");
 console.error(new Error("qa-error"));
 localStorage.setItem("qa-local", "ready");
@@ -193,6 +194,9 @@ SMOKE_SOURCES = (
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsModel.swift",
     ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift",
     ROOT / "Sources/ArcusisBrowser/PrivatePageSession.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarDOMLiveTransport.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarEventListenersLiveTransport.swift",
+    ROOT / "Sources/ShaarEngineABI/DevTools/DevToolsDOM.swift",
 )
 
 
@@ -295,6 +299,25 @@ def result_label(step):
     return "PASS" if step.get("passed") is True else "FAIL"
 
 
+def ensure_event_listeners_row(steps):
+    """The packaged smoke must read the selected node's listeners, not only the pane title."""
+    for step in steps:
+        if step.get("name") != "elements-listeners":
+            continue
+        detail = str(step.get("detail") or "")
+        if "qa-ping" in detail or "No node with given id" in detail:
+            return
+        break
+    steps.append({
+        "name": "elements-listeners",
+        "panel": "Elements",
+        "action": "Event listeners",
+        "passed": False,
+        "severity": "broken",
+        "detail": "The smoke never checked listeners for the selected node.",
+    })
+
+
 def print_table(steps):
     print("| Result | Severity | Panel | Action | Detail |", flush=True)
     print("| --- | --- | --- | --- | --- |", flush=True)
@@ -375,6 +398,7 @@ def main():
                 steps = []
             ensure_sidebar_title_row(steps)
             ensure_css_overview_row(steps)
+            ensure_event_listeners_row(steps)
             for name in crashes:
                 steps.append({
                     "panel": "Session",

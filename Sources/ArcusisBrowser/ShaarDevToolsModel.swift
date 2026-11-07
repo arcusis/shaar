@@ -464,7 +464,14 @@ final class ShaarDevToolsModel {
       uniqueKeysWithValues: localTransports.map { ($0.sourceID, $0) })
     rules = ShaarNetworkRulesModel(
       target: target, store: rulesStore, transport: rulesTransport)
-    dom = ShaarDOMTreeModel(target: target, transport: domTransport)
+    let domModel = ShaarDOMTreeModel(target: target, transport: domTransport)
+    dom = domModel
+    if let live = listenersTransport as? ShaarEventListenersLiveTransport {
+      live.rebind = { [weak domModel] ids, target in
+        guard let domModel, domModel.target == target else { return [:] }
+        return await domModel.rebindFrontendIDs(ids)
+      }
+    }
     listeners = ShaarEventListenersModel(target: target, transport: listenersTransport)
     let phase2 = ShaarPhase2Model(target: target, transport: phase2Transport)
     self.phase2 = phase2
@@ -879,12 +886,16 @@ final class ShaarDevToolsModel {
     framework.activate()
   }
 
-  /// The document-commit read can run before the parser inserts style sheets.
+  /// The document-commit read can run before the parser inserts style sheets
+  /// and before the new document's DOM node ids are bound.
   /// Read again once the page has finished loading.
   func pageDidFinishLoading() {
     guard isOpen else { return }
     Task { [weak self] in
       await self?.cssOverview.reload(force: true)
+      guard let self else { return }
+      await self.dom.loadDocument()
+      await self.listeners.refresh()
     }
   }
 

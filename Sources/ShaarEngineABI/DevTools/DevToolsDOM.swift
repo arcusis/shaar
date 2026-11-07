@@ -30,6 +30,25 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
   public let attributes: [ShaarDOMAttribute]
   public let childCount: Int
   public let childrenIDs: [Int]
+  /// Blink's id for this node. It survives a new inspector session and dies when the node does.
+  public let backendNodeID: Int?
+
+  public init(
+    id: Int, parentID: Int?, relation: ShaarDOMRelation, nodeType: Int, name: String,
+    value: String, attributes: [ShaarDOMAttribute], childCount: Int, childrenIDs: [Int],
+    backendNodeID: Int? = nil
+  ) {
+    self.id = id
+    self.parentID = parentID
+    self.relation = relation
+    self.nodeType = nodeType
+    self.name = name
+    self.value = value
+    self.attributes = attributes
+    self.childCount = childCount
+    self.childrenIDs = childrenIDs
+    self.backendNodeID = backendNodeID
+  }
 
   public var canExpand: Bool { childCount > 0 || !childrenIDs.isEmpty }
   public var attributeSummary: String {
@@ -59,7 +78,18 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
     return Self(
       id: id, parentID: parentID, relation: relation, nodeType: type,
       name: name, value: value, attributes: attributes,
-      childCount: count, childrenIDs: childrenIDs)
+      childCount: count, childrenIDs: childrenIDs,
+      backendNodeID: backendNodeID(fields["backendNodeId"]))
+  }
+
+  private static func backendNodeID(_ value: Any?) -> Int? {
+    if let value = value as? Int, value > 0 { return value }
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
+      return nil
+    }
+    let parsed = number.intValue
+    guard parsed > 0 else { return nil }
+    return parsed
   }
 
   public func replacing(
@@ -69,7 +99,8 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
     Self(
       id: id, parentID: parentID, relation: relation, nodeType: nodeType,
       name: name, value: value ?? self.value, attributes: attributes ?? self.attributes,
-      childCount: childCount ?? self.childCount, childrenIDs: childrenIDs ?? self.childrenIDs)
+      childCount: childCount ?? self.childCount, childrenIDs: childrenIDs ?? self.childrenIDs,
+      backendNodeID: backendNodeID)
   }
 }
 

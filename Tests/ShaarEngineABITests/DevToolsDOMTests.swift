@@ -30,6 +30,20 @@ private final class DOMSubmitting: ShaarDevToolsSubmitting, @unchecked Sendable 
 struct DevToolsDOMTests {
   private let scope = ShaarNavigationScope(profileID: "profile-a")
 
+  @Test func decodeKeepsTheBackendNodeId() {
+    let node = ShaarDOMNode.decode(
+      [
+        "nodeId": 4, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+        "backendNodeId": NSNumber(value: 52),
+      ],
+      parentID: 2, relation: .child)
+    #expect(node?.backendNodeID == 52)
+    let without = ShaarDOMNode.decode(
+      ["nodeId": 4, "nodeType": 1, "nodeName": "BODY", "nodeValue": ""],
+      parentID: 2, relation: .child)
+    #expect(without?.backendNodeID == nil)
+  }
+
   @Test func documentAcceptsBoundedLongInlineStyle() throws {
     func document(_ style: String) -> [String: Any] {
       [

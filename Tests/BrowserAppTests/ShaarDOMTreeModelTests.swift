@@ -16,6 +16,7 @@ import Testing
   var undoDocuments: [[String: Any]] = []
   var searchNodeIDs: [Int] = [4]
   var describedNodes: [Int: [String: Any]] = [:]
+  var describedBackends: [Int: [String: Any]] = [:]
   var document: [String: Any] = [
     "root": [
       "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
@@ -101,6 +102,9 @@ import Testing
     case .searchResults: return ["nodeIds": searchNodeIDs]
     case .describe(let id):
       if let node = describedNodes[id] { return ["node": node] }
+      return [:]
+    case .describeBackend(let id):
+      if let node = describedBackends[id] { return ["node": node] }
       return [:]
     case .outerHTML: return ["outerHTML": "<main id=\"app\">Dashboard</main>"]
     case .move(let id, let parent, let before):
@@ -232,6 +236,129 @@ enum ShaarDOMFixtureDocument {
   private func target() -> SiteControlTarget {
     SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test")!)
+  }
+
+  @Test func rebindMapsAStaleNodeOntoTheDocumentRequestedAfterReload() async {
+    let fixture = DOMFixtureTransport()
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    model.select(3)
+    fixture.document = [
+      "root": [
+        "nodeId": 11, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "backendNodeId": 50,
+        "children": [
+          [
+            "nodeId": 12, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+            "backendNodeId": 51,
+            "children": [
+              [
+                "nodeId": 13, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+                "backendNodeId": 52,
+              ]
+            ],
+          ]
+        ],
+      ]
+    ]
+    let mapped = await model.rebindFrontendIDs([3, 2, 1])
+    #expect(mapped[1] == 11)
+    #expect(mapped[2] == 12)
+    #expect(mapped[3] == 13)
+    #expect(model.selectedID == 13)
+    #expect(model.nodes[13]?.backendNodeID == 52)
+    model.close()
+  }
+
+  @Test func rebindUsesTheBackendIdWhenThePathIsGone() async {
+    let fixture = DOMFixtureTransport()
+    fixture.document = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 8, "nodeType": 1, "nodeName": "BUTTON", "nodeValue": "",
+            "backendNodeId": 80,
+          ]
+        ],
+      ]
+    ]
+    fixture.describedBackends[80] = [
+      "nodeId": 30, "nodeType": 1, "nodeName": "BUTTON", "nodeValue": "",
+    ]
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    model.select(8)
+    fixture.document = [
+      "root": [
+        "nodeId": 11, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+      ]
+    ]
+    let mapped = await model.rebindFrontendIDs([8])
+    #expect(mapped[8] == 30)
+    #expect(fixture.commands.contains(.describeBackend(80)))
+    model.close()
+  }
+
+  @Test func rebindDoesNotReuseIdsWhenTheFreshDocumentFails() async {
+    let fixture = DOMFixtureTransport()
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    model.select(3)
+    fixture.document = [:]
+    let mapped = await model.rebindFrontendIDs([3])
+    #expect(mapped.isEmpty)
+    #expect(model.failure == "DOM tree could not be read")
+    model.close()
+  }
+
+  @Test func rebindKeepsTheSelectedNodeWhenItsFrontendIdIsReused() async {
+    let fixture = DOMFixtureTransport()
+    fixture.document = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+            "children": [
+              [
+                "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+                "backendNodeId": 52,
+              ]
+            ],
+          ]
+        ],
+      ]
+    ]
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    model.select(3)
+    fixture.document = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+            "children": [
+              ["nodeId": 3, "nodeType": 1, "nodeName": "DIV", "nodeValue": ""],
+              [
+                "nodeId": 13, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+                "backendNodeId": 52,
+              ],
+            ],
+          ]
+        ],
+      ]
+    ]
+    let mapped = await model.rebindFrontendIDs([3])
+    #expect(model.nodes[3]?.name == "DIV")
+    #expect(mapped[3] == 13)
+    #expect(model.selectedID == 13)
+    model.close()
   }
 
   @Test func pendingProductionTransportShowsNoFixtureTree() async {

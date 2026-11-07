@@ -7,6 +7,7 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 import ObjectiveC.runtime
+import ShaarEngineABI
 import Vision
 
 /// Walks Shaar DevTools in the shipping app. Windows stay unordered and offscreen.
@@ -736,23 +737,13 @@ import Vision
       identifier: "shaar.devtools.streamUnavailable", in: context.hosting) != nil
     let pressed = ShaarDevToolsSmokeAccess.press(
       identifier: "shaar.devtools.domRow", in: context.hosting)
-    if shell.dom.selectedID == nil, let row = shell.dom.rows.first {
-      shell.dom.select(row.id)
-    }
     if ready, unavailable == false, blocked == false, shell.dom.rootID != nil {
       let how = pressed ? "A DOM row was pressed" : "The DOM tree is on screen"
       report.pass(name, how)
     } else {
       report.fail(name, shell.dom.failure ?? "Elements did not show the DOM tree")
     }
-    let listeners = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.eventListeners", in: context.hosting) != nil
-      || ShaarDevToolsSmokeAccess.shows("Event listeners", in: painted)
-    if listeners {
-      report.pass("elements-listeners", "Event listeners pane is in Elements")
-    } else {
-      report.fail("elements-listeners", "Event listeners pane did not render")
-    }
+    await proveEventListeners(shell, context: context, report: report)
     shell.dom.search = "QA row"
     _ = ShaarDevToolsSmokeAccess.press(label: "Find in DOM", in: context.hosting)
     await shell.dom.performSearch()
@@ -766,6 +757,64 @@ import Vision
     } else {
       report.fail("elements-search", "DOM search did not match QA row", severity: .wrong)
     }
+  }
+
+  private static func isBody(_ node: ShaarDOMNode) -> Bool {
+    node.nodeType == 1 && node.name.caseInsensitiveCompare("BODY") == .orderedSame
+  }
+
+  private static func selectListenerFixtureNode(_ dom: ShaarDOMTreeModel) async -> Bool {
+    let loaded = await wait(attempts: 80) { dom.rootID != nil && !dom.loading }
+    guard loaded else { return false }
+    if let body = dom.nodes.values.first(where: isBody) {
+      dom.select(body.id)
+      return true
+    }
+    dom.search = "body"
+    await dom.performSearch()
+    guard let body = dom.nodes.values.first(where: isBody) else { return false }
+    dom.select(body.id)
+    return true
+  }
+
+  /// The pane title used to pass while the body still said the selected node was missing.
+  private static func proveEventListeners(
+    _ shell: ShaarDevToolsModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
+  ) async {
+    var detail = "The fixture body could not be selected"
+    for _ in 0..<3 {
+      guard await selectListenerFixtureNode(shell.dom), let selected = shell.dom.selectedID else {
+        break
+      }
+      let ancestors = ShaarEventListenerAncestors.chain(from: selected, nodes: shell.dom.nodes)
+      await shell.listeners.load(nodeID: selected, ancestors: ancestors)
+      let settled = await wait(attempts: 40) { !shell.listeners.loading }
+      let painted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
+      let failure = shell.listeners.failure ?? ""
+      let missing =
+        failure.localizedCaseInsensitiveContains("no node with given id")
+        || ShaarDevToolsSmokeAccess.shows("No node with given id found", in: painted)
+      let selectedBody =
+        shell.dom.selectedID == selected && shell.dom.nodes[selected].map(isBody) == true
+      let listed = shell.listeners.listeners.contains { $0.type == "qa-ping" }
+      if settled, selectedBody, missing == false, listed {
+        report.pass("elements-listeners", "Event listeners lists qa-ping on the selected body")
+        let url = report.directory.appending(path: "panel-elements-listeners.png")
+        if !ShaarDevToolsSmokeAccess.capture(context.hosting, to: url) {
+          report.fail("capture-elements-listeners", "Event listeners offscreen capture failed")
+        }
+        return
+      }
+      if missing {
+        detail = failure.isEmpty ? "No node with given id found" : failure
+      } else if selectedBody {
+        detail = failure.isEmpty ? "Event listeners did not list qa-ping" : failure
+      } else {
+        detail = "The fixture body selection changed during the listener read"
+      }
+    }
+    report.fail("elements-listeners", detail)
   }
 
   private static func fixtureReady(_ inspector: InspectorModel) async -> Bool {

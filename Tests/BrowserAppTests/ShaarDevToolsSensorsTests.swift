@@ -142,6 +142,29 @@ import Testing
   model.close()
 }
 
+@MainActor @Test func touchProbeEnablesTheSwitchWhenThePageAcceptsIt() async {
+  let model = sensorModel(suite: "ShaarDevToolsSensors.touchProbe")
+  var sent: [ShaarDevToolsSensorCommand] = []
+  model.sendSensorCommand = { command in sent.append(command) }
+  await model.probeTouchState()
+  #expect(model.sensorTouchReady)
+  #expect(sent == [.touch(false)])
+  await model.probeTouchState()
+  #expect(sent == [.touch(false)])
+}
+
+@MainActor @Test func touchProbeStaysDisabledWhenTheEngineRejectsIt() async {
+  let model = sensorModel(suite: "ShaarDevToolsSensors.touchMissing")
+  model.sendSensorCommand = { _ in
+    throw DeveloperModeFailure("unknown DevTools capability or command")
+  }
+  await model.probeTouchState()
+  #expect(!model.sensorTouchReady)
+  model.setSensorTouch(true)
+  #expect(model.sensorTouch)
+  #expect(model.sensorNotice == nil)
+}
+
 @MainActor @Test func touchIsRecordedByTheFixtureAndNotSentWhileTheEngineLacksIt() async {
   let model = sensorModel(suite: "ShaarDevToolsSensors")
   var recorded: [ShaarDevToolsSensorCommand] = []

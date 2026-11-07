@@ -220,17 +220,10 @@ struct ShaarDOMTreePanel: View {
   private func treeRow(_ row: ShaarDOMRow) -> some View {
     HStack(spacing: 5) {
       if row.node.canExpand {
-        Button {
+        ShaarDOMDisclosureButton(id: row.id, expanded: model.expanded.contains(row.id)) {
           Task { await model.toggleExpanded(row.id) }
-        } label: {
-          Image(systemName: model.expanded.contains(row.id) ? "chevron.down" : "chevron.right")
-            .font(.system(size: 9, weight: .semibold))
-            .frame(width: 14, height: 20)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-          ShellL10n.string(model.expanded.contains(row.id) ? "Collapse node" : "Expand node"))
-        .accessibilityIdentifier("shaar.devtools.domDisclosure.\(row.id)")
+        .frame(width: 14, height: 20)
       } else {
         Color.clear.frame(width: 14, height: 20)
       }
@@ -548,6 +541,41 @@ struct ShaarDOMTreePanel: View {
     guard !value.isEmpty else { return }
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(value, forType: .string)
+  }
+}
+
+private struct ShaarDOMDisclosureButton: NSViewRepresentable {
+  let id: Int
+  let expanded: Bool
+  let action: () -> Void
+
+  func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+  func makeNSView(context: Context) -> NSButton {
+    let button = NSButton(title: "", target: context.coordinator, action: #selector(Coordinator.press))
+    button.isBordered = false
+    button.imagePosition = .imageOnly
+    button.imageScaling = .scaleProportionallyDown
+    button.focusRingType = .exterior
+    return button
+  }
+
+  func updateNSView(_ button: NSButton, context: Context) {
+    context.coordinator.action = action
+    button.image = NSImage(
+      systemSymbolName: expanded ? "chevron.down" : "chevron.right",
+      accessibilityDescription: nil)
+    button.contentTintColor = .labelColor
+    button.setAccessibilityIdentifier("shaar.devtools.domDisclosure.\(id)")
+    button.setAccessibilityLabel(ShellL10n.string(expanded ? "Collapse node" : "Expand node"))
+  }
+
+  final class Coordinator: NSObject {
+    var action: () -> Void
+
+    init(action: @escaping () -> Void) { self.action = action }
+
+    @objc func press() { action() }
   }
 }
 

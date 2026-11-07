@@ -12,8 +12,13 @@ import Vision
 
 /// Walks Shaar DevTools in the shipping app. Windows stay unordered and offscreen.
 @MainActor enum ShaarDevToolsSmoke {
-  static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
-    guard let pageURL, pageURL.host == "127.0.0.1", pageURL.scheme == "http" else { return 2 }
+  static func run(
+    frameworkURL: URL, outputURL: URL, pageURL: URL?, realWorld: Bool = false
+  ) -> Int32 {
+    guard let pageURL,
+      realWorld && ["http", "https"].contains(pageURL.scheme ?? "")
+        || !realWorld && pageURL.host == "127.0.0.1" && pageURL.scheme == "http"
+    else { return 2 }
     let smokeRoot = outputURL.deletingLastPathComponent()
     let root = pageURL.query == "vitalsOnly=1" ? smokeRoot : smokeRoot.appending(path: "profile")
     let keys = ShaarDevToolsSmokeKeys()
@@ -33,7 +38,9 @@ import Vision
         guard let host else { return }
         NSApp.setActivationPolicy(.prohibited)
         Task {
-          await exercise(host: host, pageURL: pageURL, outputURL: outputURL, keys: keys)
+          await exercise(
+            host: host, pageURL: pageURL, outputURL: outputURL, keys: keys,
+            realWorld: realWorld)
         }
       }
       return withExtendedLifetime(host) {
@@ -50,7 +57,8 @@ import Vision
   }
 
   private static func exercise(
-    host: NativeBrowserHost, pageURL: URL, outputURL: URL, keys: ShaarDevToolsSmokeKeys
+    host: NativeBrowserHost, pageURL: URL, outputURL: URL, keys: ShaarDevToolsSmokeKeys,
+    realWorld: Bool
   ) async {
     let report = ShaarDevToolsSmokeReport(directory: outputURL.deletingLastPathComponent())
     report.note(
@@ -72,13 +80,14 @@ import Vision
     keys.window = context.window
     widen(context)
     context.store.perform(.open(pageURL))
-    let opened = await wait(attempts: 900) {
-      pageReady(context, pageURL)
+    let opened = await wait(attempts: realWorld ? 180 : 900) {
+      realWorld ? worldPageReady(context, pageURL) : pageReady(context, pageURL)
     }
     guard opened, let target = context.engine.siteControlTarget else {
       report.fail("page", pageDiagnostic(context, pageURL))
       return
     }
+    if realWorld { try? await Task.sleep(for: .seconds(2)) }
     report.pass("page", target.url.absoluteString)
     if pageURL.query == "vitalsOnly=1" {
       await exerciseVitalsOnly(host: host, context: context, target: target, report: report)
@@ -104,6 +113,12 @@ import Vision
       report.pass("phase2", "Application, Performance, and Sources can use the live lease")
     } else {
       report.fail("phase2", shell.nativePhase2Failure ?? "Phase 2 lease did not connect")
+    }
+    if realWorld {
+      await exerciseRealWorld(
+        shell: shell, inspector: inspector, context: context, host: host,
+        pageURL: pageURL, report: report)
+      return
     }
     if context.store.reloadCurrentPage() {
       let reloaded = await wait(attempts: 80) { pageReady(context, pageURL) }
@@ -204,6 +219,295 @@ import Vision
     } catch {
       report.fail("performance-vitals", error.localizedDescription)
     }
+  }
+
+  private static func exerciseRealWorld(
+    shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
+    host: NativeBrowserHost, pageURL: URL, report: ShaarDevToolsSmokeReport
+  ) async {
+    prepareDock(shell, context: context)
+    let beforeFirstReload = Date().timeIntervalSince1970
+    if context.store.reloadCurrentPage() {
+      let reloaded = await wait(attempts: 160) {
+        worldPageReady(context, pageURL)
+          && shell.network.requests(from: shell.events).contains {
+            $0.startedAt > beforeFirstReload
+          }
+      }
+      reportRealWorld(
+        reloaded, "world-reload-before", "Reloaded after the live stream connected", report: report)
+      try? await Task.sleep(for: .seconds(1))
+    } else {
+      report.fail("world-reload-before", "Initial reload was refused")
+    }
+    await walkRealWorldPanels(shell: shell, context: context, report: report)
+    await inspectRealWorldElement(shell: shell, inspector: inspector, report: report)
+    await filterRealWorldConsole(
+      shell: shell, inspector: inspector, context: context, report: report)
+    await inspectRealWorldRequest(shell: shell, context: context, report: report)
+    await inspectRealWorldStorage(shell: shell, context: context, report: report)
+    await performanceRecord(shell, context: context, report: report)
+    let beforeSecondReload = Date().timeIntervalSince1970
+    if context.store.reloadCurrentPage() {
+      let reloaded = await wait(attempts: 160) {
+        worldPageReady(context, pageURL)
+          && shell.network.requests(from: shell.events).contains {
+            $0.startedAt > beforeSecondReload
+          }
+      }
+      reportRealWorld(reloaded, "world-reload", "Same-page reload committed", report: report)
+      let lease = await wait(attempts: 100) { shell.phase2.available }
+      reportRealWorld(lease, "world-lease", "Live lease available after reload", report: report)
+    } else {
+      report.fail("world-reload", "Reload was refused")
+    }
+    if let target = context.engine.siteControlTarget {
+      let cleared = await wait(attempts: 300) {
+        context.engine.pages[target.tabID]?.loading == false
+      }
+      reportRealWorld(
+        cleared, "world-loading", "Page loading indicator cleared within 30s", report: report)
+    }
+    reportRealWorld(windowsHidden(host), "windows", "Every window stayed hidden", report: report)
+  }
+
+  private static func walkRealWorldPanels(
+    shell: ShaarDevToolsModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
+  ) async {
+    for section in shell.sections {
+      let name = section.rawValue
+      let button = "shaar.devtools.\(name.lowercased())"
+      let pressed = ShaarDevToolsSmokeAccess.press(identifier: button, in: context.hosting)
+      if !pressed || shell.section != section { shell.section = section }
+      await settle(context)
+      if section == .security {
+        await shell.refreshSecurity()
+        try? await Task.sleep(for: .seconds(2))
+        await settle(context)
+      }
+      let content = contentIdentifier(section)
+      let appeared = await wait(attempts: 40) {
+        guard let content else {
+          return !ShaarDevToolsSmokeAccess.renderedText(context.hosting).isEmpty
+        }
+        return ShaarDevToolsSmokeAccess.element(identifier: content, in: context.hosting) != nil
+      }
+      let painted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
+      var rendered =
+        appeared || panelIsPainted(section, in: painted)
+        || section == .issues && !shell.issues.isEmpty
+        || section == .components
+          && ShaarDevToolsSmokeAccess.shows("stay off for this website", in: painted)
+      if section == .security {
+        rendered =
+          ShaarDevToolsSmokeAccess.shows("connection to this site", in: painted)
+          || ShaarDevToolsSmokeAccess.shows("loaded over HTTP", in: painted)
+      }
+      if rendered {
+        report.pass("world-panel-\(name)", "\(name) rendered")
+      } else {
+        report.fail(
+          "world-panel-\(name)",
+          panelFailure(section, shell: shell) ?? "\(name) root and content did not render")
+      }
+      ShaarDevToolsSmokeLook.survey(
+        panel: name, contentIdentifier: content, in: context.hosting,
+        failure: panelFailure(section, shell: shell), report: report)
+      ShaarDevToolsSmokeLook.focus(panel: name, in: context.hosting, report: report)
+      let capture = report.directory.appending(
+        path: "world-\(name.replacingOccurrences(of: " ", with: "-").lowercased()).png")
+      if !ShaarDevToolsSmokeAccess.capture(context.hosting, to: capture) {
+        report.fail("world-capture-\(name)", "Offscreen capture failed")
+      }
+      if section == .security && shell.target.url.scheme == "https" {
+        let certificate = shell.securitySummary.certificate != nil
+        var detail = "HTTPS certificate subject, issuer, and dates"
+        if !certificate {
+          do {
+            let chain = try await context.engine.certificateChain(for: shell.target)
+            detail = "Identity absent; certificate chain count \(chain.count)"
+          } catch {
+            detail = "Identity absent: \(error.localizedDescription)"
+          }
+        }
+        reportRealWorld(
+          certificate, "world-certificate", detail, report: report)
+      }
+    }
+  }
+
+  private static func inspectRealWorldElement(
+    shell: ShaarDevToolsModel, inspector: InspectorModel,
+    report: ShaarDevToolsSmokeReport
+  ) async {
+    shell.section = .elements
+    _ = await wait(attempts: 60) { shell.dom.available && shell.dom.rootID != nil }
+    if !shell.dom.nodes.values.contains(where: { isBody($0) }) {
+      await shell.dom.loadDocument(depth: 8)
+    }
+    guard let body = shell.dom.nodes.values.first(where: { isBody($0) }) else {
+      let names = shell.dom.nodes.values.map(\.name).sorted().prefix(12).joined(separator: ", ")
+      report.fail("world-inspect", shell.dom.failure ?? "Body absent from DOM nodes: \(names)")
+      return
+    }
+    let childError = await shell.dom.loadChildrenIfNeeded(body.id)
+    if let childError {
+      report.fail("dom-expand", childError)
+    } else if (shell.dom.nodes[body.id]?.childrenIDs.count ?? 0) > 0 {
+      report.pass("dom-expand", "Expanding body loaded its children")
+    } else {
+      report.fail("dom-expand", "Body expansion showed no children")
+    }
+    shell.dom.select(body.id)
+    do {
+      try await inspector.selectDOMNode(body.id)
+      report.pass("world-inspect", "Selected body in Elements and Inspector")
+      await inspector.styles.edit(
+        property: "outline", value: "3px solid rgb(17, 34, 51)", important: false)
+      let result = try await inspector.evaluate("getComputedStyle(document.body).outlineWidth")
+      if result as? String == "3px" {
+        report.pass("world-style", "Inspector edit changed body outline to 3px")
+      } else {
+        report.fail(
+          "world-style",
+          inspector.styles.failure ?? "Outline width stayed \(String(describing: result))")
+      }
+    } catch {
+      report.fail("world-inspect", error.localizedDescription)
+      report.fail("world-style", "No selected element for style edit")
+    }
+  }
+
+  private static func filterRealWorldConsole(
+    shell: ShaarDevToolsModel, inspector: InspectorModel,
+    context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
+  ) async {
+    shell.section = .console
+    _ = try? await inspector.evaluate("console.error('shaar-world-error')")
+    let arrived = await wait(attempts: 60) {
+      shell.console.rows(from: shell.consoleEvents).contains {
+        $0.event.message.contains("shaar-world-error")
+      }
+    }
+    reportRealWorld(arrived, "world-console", "Page error reached Console", report: report)
+    shell.console.level = .error
+    await settle(context)
+    let filtered = shell.console.rows(from: shell.consoleEvents).allSatisfy {
+      $0.event.level == .error
+    }
+    reportRealWorld(
+      filtered && arrived, "world-console-filter", "Errors filter retained the page error",
+      report: report)
+    shell.console.level = nil
+  }
+
+  private static func inspectRealWorldRequest(
+    shell: ShaarDevToolsModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
+  ) async {
+    shell.section = .network
+    let initial = shell.network.requests(from: shell.events)
+    let targetPath = shell.target.url.path
+    let hasDocument = initial.contains {
+      $0.method == "GET" && URL(string: $0.url)?.path == targetPath
+    }
+    let paths = initial.prefix(12).compactMap { URL(string: $0.url)?.path }.joined(separator: ", ")
+    reportRealWorld(
+      hasDocument, "world-network-load",
+      "Load-time document in \(initial.count) requests (first paths: \(paths))",
+      report: report)
+    if let inspector = context.engine.siteControlTarget.flatMap({
+      context.engine.inspectors[$0.tabID]
+    }) {
+      _ = try? await inspector.evaluate(
+        "fetch(location.pathname + '?shaarWorld=1', {cache:'no-store'}).then(r=>r.text())")
+    }
+    let loaded = await wait(attempts: 80) {
+      shell.network.requests(from: shell.events).contains {
+        $0.url.contains("shaarWorld=1") && $0.status == 200
+      }
+    }
+    let rows = shell.network.requests(from: shell.events)
+    let har = report.directory.appending(path: "world-network.har")
+    _ = try? ShaarNetworkHAR.write(shell.network.exportRequests(from: shell.events), to: har)
+    guard loaded,
+      let request = rows.first(where: {
+        $0.url.contains("shaarWorld=1") && $0.status == 200
+      })
+    else {
+      report.fail("world-request", "No completed 200 request in Network")
+      return
+    }
+    shell.network.selectedID = request.id
+    await settle(context)
+    let headers = !request.requestHeaders.isEmpty && !request.responseHeaders.isEmpty
+    reportRealWorld(
+      headers, "world-headers",
+      "Request and response headers for \(request.name): \(request.requestHeaders.count)/\(request.responseHeaders.count)",
+      report: report)
+    await shell.network.loadResponseBody(id: request.id)
+    shell.network.detailTab = .response
+    await settle(context)
+    let selected = shell.network.exportRequests(from: shell.events).first { $0.id == request.id }
+    reportRealWorld(
+      selected?.responseBody?.isEmpty == false, "world-response",
+      "Response body for \(request.name)", report: report)
+    shell.network.detailTab = .timing
+    await settle(context)
+    let completed = await wait(attempts: 50) {
+      shell.network.requests(from: shell.events).first { $0.id == request.id }?.duration != nil
+    }
+    reportRealWorld(completed, "world-timing", "Timing for \(request.name)", report: report)
+  }
+
+  private static func inspectRealWorldStorage(
+    shell: ShaarDevToolsModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
+  ) async {
+    shell.section = .application
+    for area in ShaarApplicationArea.allCases {
+      shell.application.selectArea(area)
+      if area == .cookies {
+        await shell.cookies.refresh()
+      } else {
+        await shell.application.refresh()
+      }
+      let finished = await wait(attempts: 40) { !shell.application.loading }
+      await settle(context)
+      let painted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
+      let count: Int
+      switch area {
+      case .cookies: count = shell.cookies.cookies.count
+      case .workers: count = shell.application.workers.count
+      default: count = shell.application.rows.count
+      }
+      let empty: String
+      switch area {
+      case .cookies: empty = "No cookies for this page"
+      case .local, .session: empty = "No storage items for this page"
+      case .indexedDB: empty = "No IndexedDB data for this page"
+      case .cache: empty = "No cached resources for this page"
+      case .workers: empty = "No service workers for this page"
+      }
+      let visible = count > 0 || ShaarDevToolsSmokeAccess.shows(empty, in: painted)
+      let failure = area == .cookies ? shell.cookies.failure : shell.application.failure
+      if finished, failure == nil, visible {
+        report.pass(
+          "world-storage-\(area.rawValue)", "\(area.rawValue): \(count) rows or visible empty state"
+        )
+      } else {
+        report.fail(
+          "world-storage-\(area.rawValue)",
+          failure ?? "\(area.rawValue) stayed loading or lacked its empty state")
+      }
+    }
+  }
+
+  private static func reportRealWorld(
+    _ passed: Bool, _ name: String, _ detail: String, report: ShaarDevToolsSmokeReport
+  ) {
+    if passed { report.pass(name, detail) } else { report.fail(name, detail) }
   }
 
   private static func openWithF12(
@@ -1463,7 +1767,8 @@ import Vision
     }
     let address = target?.url.absoluteString ?? "none"
     let notice = context.engine.notice ?? ""
-    return "No committed web page. target=\(address) selected=\(selected) loading=\(loading) liveTabs=\(live) notice=\(notice) expected=\(pageURL.absoluteString)"
+    return
+      "No committed web page. target=\(address) selected=\(selected) loading=\(loading) liveTabs=\(live) notice=\(notice) expected=\(pageURL.absoluteString)"
   }
 
   private static func panelRoot(_ section: ShaarDevToolsSection) -> String? {
@@ -1507,6 +1812,11 @@ import Vision
     guard let target = context.engine.siteControlTarget else { return false }
     guard target.url.path == pageURL.path else { return false }
     return context.engine.pages[target.tabID]?.loading == false
+  }
+
+  private static func worldPageReady(_ context: NativeBrowserContext, _ pageURL: URL) -> Bool {
+    guard let target = context.engine.siteControlTarget else { return false }
+    return target.url.host == pageURL.host && context.engine.pages[target.tabID] != nil
   }
 
   private static func windowsHidden(_ host: NativeBrowserHost) -> Bool {
@@ -1671,10 +1981,27 @@ enum ShaarDevToolsSmokeSeverity: String {
     if name == "storage-workers" { return ("Application", "Service workers") }
     if name == "storage-cookies" { return ("Application", "Cookies") }
     if let area = prefixed(name, "storage-") { return ("Application", area) }
+    if let panel = prefixed(name, "world-panel-") { return (panel, "Open panel") }
+    if let panel = prefixed(name, "world-capture-") { return (panel, "Offscreen capture") }
+    if let area = prefixed(name, "world-storage-") { return ("Application", area) }
     switch name {
     case "page": return ("Session", "Open fixture")
     case "f12": return ("Session", "Press F12")
     case "performance-vitals": return ("Performance", "Measure LCP and INP")
+    case "world-inspect": return ("Elements", "Inspect body")
+    case "world-style": return ("Elements", "Edit style")
+    case "world-console": return ("Console", "Page error")
+    case "world-console-filter": return ("Console", "Errors filter")
+    case "world-request": return ("Network", "Select request")
+    case "world-network-load": return ("Network", "Load-time document")
+    case "world-headers": return ("Network", "Headers")
+    case "world-response": return ("Network", "Response")
+    case "world-timing": return ("Network", "Timing")
+    case "world-certificate": return ("Security", "Certificate identity")
+    case "world-loading": return ("Session", "Loading indicator")
+    case "world-reload-before": return ("Session", "Reload after stream")
+    case "world-reload": return ("Session", "Reload mid-session")
+    case "world-lease": return ("Session", "Lease after reload")
     case "stream": return ("Session", "Live stream")
     case "phase2": return ("Session", "Phase 2 lease")
     case "fixture": return ("Session", "Fixture ready")

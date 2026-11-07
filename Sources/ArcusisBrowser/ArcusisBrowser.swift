@@ -26,7 +26,10 @@ public enum BrowserLaunch {
       let framework = frameworks.appending(path: "Chromium Framework.framework")
       let output = URL(fileURLWithPath: arguments[index + 1])
       let page = URL(string: arguments[index + 2])
-      exit(ShaarDevToolsSmoke.run(frameworkURL: framework, outputURL: output, pageURL: page))
+      let realWorld = arguments.indices.contains(index + 3) && arguments[index + 3] == "real-world"
+      exit(
+        ShaarDevToolsSmoke.run(
+          frameworkURL: framework, outputURL: output, pageURL: page, realWorld: realWorld))
     }
     if let index = arguments.firstIndex(of: "--devtools-capability-probe"),
       arguments.indices.contains(index + 2),

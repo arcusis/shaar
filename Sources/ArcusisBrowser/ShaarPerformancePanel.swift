@@ -222,8 +222,10 @@ struct ShaarPerformancePanel: View {
       Spacer()
       if model.loading { ProgressView().controlSize(.mini) }
       Button(action: toggleCapture) {
-        Label(captureAction, systemImage: model.capture == .recording ? "stop.fill" : "record.circle")
-          .font(.system(size: 11, weight: .medium))
+        Label(
+          captureAction, systemImage: model.capture == .recording ? "stop.fill" : "record.circle"
+        )
+        .font(.system(size: 11, weight: .medium))
       }
       .buttonStyle(.plain)
       .help(captureHelp)
@@ -317,7 +319,8 @@ struct ShaarPerformancePanel: View {
   private var timeline: some View {
     VStack(alignment: .leading, spacing: 0) {
       sectionHeader("Main thread")
-      if model.timelineTasks.isEmpty && model.lcpMilliseconds == nil && model.fcpMilliseconds == nil {
+      if model.timelineTasks.isEmpty && model.lcpMilliseconds == nil && model.fcpMilliseconds == nil
+      {
         emptyState("No performance entries for this page yet")
       } else {
         timelineRow("FCP", start: 0, duration: model.fcpMilliseconds, color: .blue)

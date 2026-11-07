@@ -51,7 +51,9 @@ enum ShaarConsoleLocations {
   private static func frame(from line: String) -> ShaarConsoleFrame? {
     guard line.hasPrefix("at ") else { return nil }
     let body = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
-    if body.hasSuffix(")"), let open = body.lastIndex(of: "("), open < body.index(before: body.endIndex) {
+    if body.hasSuffix(")"), let open = body.lastIndex(of: "("),
+      open < body.index(before: body.endIndex)
+    {
       let inside = body[body.index(after: open)..<body.index(before: body.endIndex)]
       guard let location = parse(String(inside)) else { return nil }
       let function = body[..<open].trimmingCharacters(in: .whitespaces)

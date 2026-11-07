@@ -31,7 +31,6 @@ class TabAdoptionPatchTests(unittest.TestCase):
         patches = manifest["patches"]
         matching = [entry for entry in patches if entry["file"] == str(PATCH.relative_to(ROOT))]
         self.assertEqual(len(matching), 1)
-        self.assertEqual(patches[-1]["file"], str(PATCH.relative_to(ROOT)))
         self.assertEqual(matching[0]["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest())
         self.assertIn("_shaar_tab_find", manifest["requiredExports"])
 

@@ -20,6 +20,7 @@
 - [[Shaar_DevTools_Elements_Scale]]
 - [[Shaar_DevTools_Heap_Snapshot_Limit]]
 - [[Shaar_DevTools_Coverage]]
+- [[Shaar_DevTools_Idle_Override]]
 - [[Shaar_Inspector]]
 - [[Shaar_Inspector_CSS]]
 - [[Shaar_Inspector_Details]]

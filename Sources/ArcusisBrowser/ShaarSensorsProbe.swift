@@ -8,7 +8,7 @@ import ChromiumBridge
 import Foundation
 
 /// Proves timezone, locale, and idle overrides from a window that is never ordered
-/// on screen. Idle commands are expected to be rejected until the engine build.
+/// on screen. The caller reads the idle errors; an empty string means the page accepted the command.
 @MainActor enum ShaarSensorsProbe {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
     guard let pageURL, pageURL.host == "127.0.0.1", pageURL.scheme == "http" else { return 2 }
@@ -98,6 +98,18 @@ import Foundation
       on: target, runtime: runtime, windowID: windowID)
     report["emptyLocaleValue"] = await reading(
       localeExpression, on: target, runtime: runtime, windowID: windowID)
+    report["idleActiveError"] = await attempt(
+      "Emulation.setIdleOverride",
+      params: ["isUserActive": true, "isScreenUnlocked": true],
+      on: target, runtime: runtime, windowID: windowID)
+    report["idleUserError"] = await attempt(
+      "Emulation.setIdleOverride",
+      params: ["isUserActive": false, "isScreenUnlocked": true],
+      on: target, runtime: runtime, windowID: windowID)
+    report["idleLockedError"] = await attempt(
+      "Emulation.setIdleOverride",
+      params: ["isUserActive": false, "isScreenUnlocked": false],
+      on: target, runtime: runtime, windowID: windowID)
     let idleError = await attempt(
       "Emulation.clearIdleOverride", params: [:], on: target, runtime: runtime, windowID: windowID)
     report["idleError"] = idleError

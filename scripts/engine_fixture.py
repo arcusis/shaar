@@ -503,6 +503,15 @@ INSPECTOR_TOOLS_CSP = (
     + "; worker-src 'self'"
 )
 MEDIA_SESSION_CSP = PAGE_CSP + "; media-src blob:"
+FRAMEWORK_COMPONENT_FILES = {
+    "/framework-components/react": "react.html",
+    "/framework-components/react.js": "react.js",
+    "/framework-components/vue": "vue.html",
+    "/framework-components/vue.js": "vue.js",
+    "/framework-components/angular": "angular.html",
+    "/framework-components/angular.js": "angular.js",
+    "/framework-components/plain": "plain.html",
+}
 MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seekable-clip.webm'
 
 
@@ -535,6 +544,9 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'text/javascript')
             self.send_header('Content-Length', '0')
             self.end_headers()
+            return
+        if path in FRAMEWORK_COMPONENT_FILES:
+            self.framework_component(FRAMEWORK_COMPONENT_FILES[path])
             return
         if path == '/stall':
             STALL_RELEASE.wait(STALL_SECONDS)
@@ -740,6 +752,20 @@ console.log('shaar-agent-console-other');
 <form><label>Username <input id="username" autocomplete="username"></label>
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
 <script>window.arcusisInstance=crypto.randomUUID();</script></html>""")
+
+    def framework_component(self, filename):
+        source = Path(__file__).resolve().parents[1] / "Tests/Fixtures/framework-components" / filename
+        body = source.read_bytes()
+        if filename.endswith(".js"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.html(
+            body, csp=PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self'"))
 
     def html(self, body, csp=PAGE_CSP, cookie=None):
         self.send_response(200)

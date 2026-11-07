@@ -5,6 +5,24 @@
 import AppKit
 import SwiftUI
 
+/// How a sidebar tab title is measured. The close control stays in the row for focus,
+/// but it must not reserve width while it is hidden: that reservation was clipping
+/// “Shaar DevTools QA” to “Shaar DevToo…”.
+enum SidebarTabTitle {
+  static let fontSize: CGFloat = 13
+  static let minimumScale: CGFloat = 0.85
+  /// Room kept clear of the close glyph once that control is actually shown.
+  static let closeReserve: CGFloat = 22
+
+  static func isMidwordClip(_ painted: String) -> Bool {
+    painted.range(of: #"Shaar DevToo(?!ls)"#, options: [.regularExpression, .caseInsensitive]) != nil
+  }
+
+  static func showsFullTitle(_ painted: String) -> Bool {
+    painted.range(of: #"Shaar DevTools\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+  }
+}
+
 struct SidebarTabRow: View {
   private enum Control: Hashable {
     case select
@@ -27,44 +45,9 @@ struct SidebarTabRow: View {
   }
 
   var body: some View {
-    HStack(spacing: 8) {
-      Button(action: onSelect) {
-        HStack(spacing: 9) {
-          if let favicon {
-            Image(nsImage: favicon)
-              .resizable()
-              .scaledToFit()
-              .frame(width: 16, height: 16)
-          } else {
-            Image(systemName: isPinned ? "pin" : "globe")
-              .font(.system(size: 12))
-              .foregroundStyle(.secondary)
-          }
-          Text(title).font(.system(size: 13)).lineLimit(1).truncationMode(.tail)
-          Spacer(minLength: 0)
-        }
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .focused($focusedControl, equals: .select)
-      .accessibilityLabel(title)
-      .accessibilityAddTraits(isSelected ? .isSelected : [])
-      .accessibilityAction(named: ShellL10n.text("Close tab"), onClose)
-      .accessibilityIdentifier("sidebar-tab-select-\(tabID.uuidString)")
-
-      Button(action: onClose) {
-        Image(systemName: "xmark").font(.system(size: 9, weight: .medium))
-          .frame(width: 18, height: 18)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .focused($focusedControl, equals: .close)
-      .opacity(showsClose ? 1 : 0)
-      .allowsHitTesting(showsClose)
-      .accessibilityHidden(!showsClose)
-      .accessibilityLabel(ShellL10n.format("Close %@", arguments: [.string(title)]))
-      .help(ShellL10n.format("Close %@", arguments: [.string(title)]))
-      .accessibilityIdentifier("sidebar-tab-close-\(tabID.uuidString)")
+    ZStack(alignment: .trailing) {
+      selectButton
+      closeButton
     }
     .padding(.horizontal, 10)
     .frame(height: 34)
@@ -73,5 +56,57 @@ struct SidebarTabRow: View {
       in: RoundedRectangle(cornerRadius: 8)
     )
     .onHover(perform: onHoverChanged)
+  }
+
+  private var selectButton: some View {
+    Button(action: onSelect) {
+      HStack(spacing: 9) {
+        tabIcon
+        Text(title)
+          .font(.system(size: SidebarTabTitle.fontSize))
+          .lineLimit(1)
+          .minimumScaleFactor(SidebarTabTitle.minimumScale)
+          .truncationMode(.tail)
+          .padding(.trailing, showsClose ? SidebarTabTitle.closeReserve : 0)
+        Spacer(minLength: 0)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .focused($focusedControl, equals: .select)
+    .accessibilityLabel(title)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+    .accessibilityAction(named: ShellL10n.text("Close tab"), onClose)
+    .accessibilityIdentifier("sidebar-tab-select-\(tabID.uuidString)")
+  }
+
+  @ViewBuilder private var tabIcon: some View {
+    if let favicon {
+      Image(nsImage: favicon)
+        .resizable()
+        .scaledToFit()
+        .frame(width: 16, height: 16)
+    } else {
+      Image(systemName: isPinned ? "pin" : "globe")
+        .font(.system(size: 12))
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  private var closeButton: some View {
+    Button(action: onClose) {
+      Image(systemName: "xmark").font(.system(size: 9, weight: .medium))
+        .frame(width: 18, height: 18)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .focused($focusedControl, equals: .close)
+    .opacity(showsClose ? 1 : 0)
+    .allowsHitTesting(showsClose)
+    .accessibilityHidden(!showsClose)
+    .accessibilityLabel(ShellL10n.format("Close %@", arguments: [.string(title)]))
+    .help(ShellL10n.format("Close %@", arguments: [.string(title)]))
+    .accessibilityIdentifier("sidebar-tab-close-\(tabID.uuidString)")
   }
 }

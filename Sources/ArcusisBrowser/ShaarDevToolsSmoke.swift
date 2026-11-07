@@ -182,14 +182,7 @@ import Vision
       await settle(context)
       let painted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
       recordTab(section, pressed: pressed && shell.section == section, painted: painted, report: report)
-      if !report.contains("look/clip/sidebar"),
-        ShaarDevToolsSmokeAccess.shows("Shaar DevToo", in: painted)
-      {
-        report.fail(
-          "look/clip/sidebar",
-          "The sidebar tab title is cut off (“Shaar DevToo…”).",
-          severity: .polish)
-      }
+      recordSidebarTitle(painted, report: report)
       await provePanel(section, shell: shell, context: context, painted: painted, report: report)
       ShaarDevToolsSmokeLook.survey(
         panel: section.rawValue, contentIdentifier: content, in: context.hosting,
@@ -203,7 +196,29 @@ import Vision
         report.fail("capture-\(section.rawValue)", "Offscreen capture failed")
       }
     }
+    if !report.contains("look/clip/sidebar") {
+      report.fail(
+        "look/clip/sidebar",
+        "The sidebar tab title was not readable.",
+        severity: .polish)
+    }
     await proveIssueBadge(shell, context: context, report: report)
+  }
+
+  private static func recordSidebarTitle(
+    _ painted: String, report: ShaarDevToolsSmokeReport
+  ) {
+    guard !report.contains("look/clip/sidebar") else { return }
+    if SidebarTabTitle.isMidwordClip(painted) {
+      report.fail(
+        "look/clip/sidebar",
+        "The sidebar tab title is cut off (“Shaar DevToo…”).",
+        severity: .polish)
+      return
+    }
+    if SidebarTabTitle.showsFullTitle(painted) {
+      report.pass("look/clip/sidebar", "The sidebar tab shows the page title")
+    }
   }
 
   private static func recordTab(

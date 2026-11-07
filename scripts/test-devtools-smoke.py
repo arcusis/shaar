@@ -170,6 +170,7 @@ SMOKE_SOURCES = (
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmoke.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmokeLook.swift",
     ROOT / "Sources/ArcusisBrowser/ArcusisBrowser.swift",
+    ROOT / "Sources/ArcusisBrowser/SidebarTabRow.swift",
 )
 
 
@@ -232,6 +233,21 @@ def severity_of(step):
     if raw in SEVERITIES:
         return raw
     return "ok" if step.get("passed") is True else "broken"
+
+
+def ensure_sidebar_title_row(steps):
+    """The packaged smoke must judge the sidebar tab title, not only print a failure."""
+    for step in steps:
+        if step.get("name") == "look/clip/sidebar" or step.get("action") == "Sidebar tab title":
+            return
+    steps.append({
+        "name": "look/clip/sidebar",
+        "panel": "Chrome",
+        "action": "Sidebar tab title",
+        "passed": False,
+        "severity": "polish",
+        "detail": "The smoke never checked the sidebar tab title.",
+    })
 
 
 def print_table(steps):
@@ -311,6 +327,7 @@ def main():
             steps = report.get("steps", [])
             if not isinstance(steps, list):
                 steps = []
+            ensure_sidebar_title_row(steps)
             for name in crashes:
                 steps.append({
                     "panel": "Session",

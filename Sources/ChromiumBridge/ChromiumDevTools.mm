@@ -214,6 +214,12 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
 
 }  // namespace
 
+extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
+  NSSet<NSString *> *allowed = [NSSet setWithArray:@[
+    @"blank", @"popup", @"performance-input", @"arcusis-private-quit-activation"]];
+  return [allowed containsObject:elementID];
+}
+
 @interface ARCShaarRuntime (NativeFrontend)
 - (NSView *)shaarNativeFrontendViewForTabID:(NSString *)tabID
                                  profileID:(NSString *)profileID windowID:(NSString *)windowID;
@@ -225,9 +231,8 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
                             completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
   if (!completion) return;
   const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
-  NSSet<NSString *> *allowed = [NSSet setWithArray:@[
-    @"blank", @"popup", @"performance-input", @"arcusis-private-quit-activation"]];
-  if (!testing || std::strcmp(testing, "1") != 0 || ![allowed containsObject:elementID]) {
+  if (!testing || std::strcmp(testing, "1") != 0 ||
+      !ARCProbeTrustedClickElementAllowed(elementID)) {
     completion(NO);
     return;
   }

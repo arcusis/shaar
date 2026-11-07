@@ -151,6 +151,7 @@ final class PrivatePageSession {
     back: Bool, forward: Bool
   ) {
     guard liveTabs.contains(id) || store?.session.page(forTabID: id) != nil else { return }
+    let finishedLoading = pages[id]?.loading == true && !loading
     if let parsed = URL(string: url) {
       inspectors[id]?.documentChanged(
         url: parsed, committed: loading && pages[id]?.loading == false)
@@ -162,6 +163,7 @@ final class PrivatePageSession {
     }
     if loading, store?.pageFind?.tabID == id { store?.dismissPageFind() }
     pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
+    if finishedLoading { shaarDevTools[id]?.pageDidFinishLoading() }
     if let parsed = URL(string: url) {
       if parsed.absoluteString != "about:blank" { failure = nil }
       store?.nativeTabChanged(id, url: parsed, title: title)

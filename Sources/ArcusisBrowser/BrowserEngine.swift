@@ -444,6 +444,7 @@ final class BrowserEngine {
       if loading && self.pages[id]?.loading != true && self.store?.pageFind?.tabID == id {
         self.store?.dismissPageFind()
       }
+      let finishedLoading = self.pages[id]?.loading == true && !loading
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       self.store?.nativePageLoading(id, loading: loading)
       if let url = URL(string: address) {
@@ -452,6 +453,7 @@ final class BrowserEngine {
           self.shaarDevTools[id]?.updateTarget(
             SiteControlTarget(tabID: id, profileID: profile, url: url))
           if !loading { self.shaarDevTools[id]?.refreshFrameworkComponents() }
+          if finishedLoading { self.shaarDevTools[id]?.pageDidFinishLoading() }
         }
         self.developerDocumentChanged(id, url: url)
         self.updateDevelopmentPage(tabID: id, url: url, loading: loading)

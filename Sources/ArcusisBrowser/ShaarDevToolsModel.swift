@@ -505,6 +505,7 @@ final class ShaarDevToolsModel {
     frameworkClose?.cancel()
     frameworkClose = nil
     comparisonInspector = inspector
+    attachCSSPageSheets(inspector)
     pageAudit.inspector = inspector
     attachSensorSender(inspector)
     coverage.attach(inspector, target: target)
@@ -736,6 +737,14 @@ final class ShaarDevToolsModel {
     }
   }
 
+  private func attachCSSPageSheets(_ inspector: InspectorModel) {
+    cssOverview.attach { [weak inspector] in
+      guard let inspector else { return [] }
+      let value = try await inspector.evaluate(ShaarDevToolsCSSOverview.pageSheetExpression)
+      return ShaarDevToolsCSSOverview.sheets(fromPage: value)
+    }
+  }
+
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
     let tabChanged = self.target.tabID != target.tabID
@@ -767,6 +776,11 @@ final class ShaarDevToolsModel {
     cookies.reset()
     sources.reset()
     cssOverview.reset()
+    if committed || tabChanged {
+      Task { [weak self] in
+        await self?.cssOverview.reload(force: true)
+      }
+    }
     memory.reset()
     coverage.retarget(target)
     recorder.retarget(tabChanged: tabChanged, committed: committed)
@@ -863,6 +877,15 @@ final class ShaarDevToolsModel {
   func refreshFrameworkComponents() {
     guard isOpen, section == .components else { return }
     framework.activate()
+  }
+
+  /// The document-commit read can run before the parser inserts style sheets.
+  /// Read again once the page has finished loading.
+  func pageDidFinishLoading() {
+    guard isOpen else { return }
+    Task { [weak self] in
+      await self?.cssOverview.reload(force: true)
+    }
   }
 
   var localConsoleEvents: [ShaarConsoleEvent] {

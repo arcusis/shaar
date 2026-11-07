@@ -33,6 +33,7 @@ extension ShaarDevToolsSection {
     case .elements: "square.dashed.inset.filled"
     case .components: "square.stack.3d.up"
     case .console: "terminal"
+    case .issues: "exclamationmark.triangle"
     case .network: "network"
     case .application: "externaldrive"
     case .performance: "speedometer"
@@ -49,6 +50,7 @@ extension ShaarDevToolsSection {
     case .elements: "Elements"
     case .components: "Comps"
     case .console: "Console"
+    case .issues: "Issues"
     case .network: "Network"
     case .application: "App"
     case .performance: "Perf"
@@ -104,9 +106,10 @@ struct ShaarDevToolsPanel: View {
     GeometryReader { geometry in
       let showsLabels = geometry.size.width >= 700
       let visible = visibleSections(width: geometry.size.width, showsLabels: showsLabels)
+      let issueCount = model.issues.count
       HStack(spacing: 3) {
         ForEach(visible, id: \.self) { section in
-          sectionButton(section, showsLabel: showsLabels)
+          sectionButton(section, showsLabel: showsLabels, issueCount: issueCount)
         }
         if visible.count < model.sections.count {
           Menu {
@@ -154,7 +157,9 @@ struct ShaarDevToolsPanel: View {
     return Array(first.dropLast()) + [model.section]
   }
 
-  private func sectionButton(_ section: ShaarDevToolsSection, showsLabel: Bool) -> some View {
+  private func sectionButton(
+    _ section: ShaarDevToolsSection, showsLabel: Bool, issueCount: Int
+  ) -> some View {
     Button {
       model.section = section
       focusedSection = section
@@ -166,6 +171,11 @@ struct ShaarDevToolsPanel: View {
           Text(ShellL10n.string(section.shortLabel))
             .font(.system(size: 10, weight: .medium))
             .lineLimit(1)
+          if section == .issues, issueCount > 0 {
+            Text(verbatim: ShaarDevToolsIssues.countText(issueCount))
+              .font(.system(size: 10, weight: .semibold))
+              .lineLimit(1)
+          }
         }
       }
       .foregroundStyle(.primary)
@@ -189,9 +199,18 @@ struct ShaarDevToolsPanel: View {
     .focused($focusedSection, equals: section)
     .help(ShaarDevToolsAccessibility.sectionHelp(section))
     .accessibilityLabel(ShaarDevToolsAccessibility.sectionLabel(section))
-    .accessibilityValue(model.section == section ? ShellL10n.string("Selected") : "")
+    .accessibilityValue(sectionValue(section, issueCount: issueCount))
     .accessibilityAddTraits(model.section == section ? .isSelected : [])
     .accessibilityIdentifier("shaar.devtools.\(section.rawValue.lowercased())")
+  }
+
+  private func sectionValue(_ section: ShaarDevToolsSection, issueCount: Int) -> String {
+    var parts: [String] = []
+    if model.section == section { parts.append(ShellL10n.string("Selected")) }
+    if section == .issues, issueCount > 0 {
+      parts.append(ShaarDevToolsIssues.countText(issueCount))
+    }
+    return parts.joined(separator: ", ")
   }
 
   private var commandMenuButton: some View {
@@ -283,6 +302,8 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .issues:
+      ShaarDevToolsIssuesPanel(model: model)
     case .network:
       if model.streamAvailable {
         ShaarNetworkPanel(
@@ -437,6 +458,7 @@ struct ShaarDevToolsPanel: View {
         ? "Components are scoped to this tab"
         : "Component tools read only localhost until you turn them on for a site."
     }
+    if model.section == .issues { return "Issues are scoped to this tab" }
     if model.section == .application {
       if model.application.area == .cookies { return "Cookies are scoped to this page" }
       return model.phase2.available

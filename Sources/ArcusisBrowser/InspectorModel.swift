@@ -82,6 +82,16 @@ final class InspectorModel {
     }
   }
 
+  /// Hide Inspector immediately. Page commands still run until `close()`.
+  func stopPresenting() {
+    presentation.dismiss()
+    mode = .closed
+    pollTask?.cancel()
+    pollTask = nil
+    fontTask?.cancel()
+    fontTask = nil
+  }
+
   func close() {
     presentation.dismiss()
     aiCopy.cancel()

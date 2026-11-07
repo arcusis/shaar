@@ -742,13 +742,19 @@ final class ShaarDevToolsModel {
     if self.target.host != target.host { disconnectLogTap() }
     self.target = target
     performance.updateTarget(target, committed: committed)
-    streamAvailable = false
+    // The panel lease is attached to the tab, and it stays up across a reload.
+    // Closing it here drops the new document's console and network events,
+    // which fire while the replacement lease is still opening.
+    let keepLease = !tabChanged && eventTask != nil
+    if !keepLease {
+      streamAvailable = false
+      localEventsBySource.removeAll()
+      localAvailableSources.removeAll()
+    }
     repro.history.stop()
     repro.stopFrames()
     retainConsoleIfRequested()
     eventBuffer.clear()
-    localEventsBySource.removeAll()
-    localAvailableSources.removeAll()
     network.resetLog()
     rules.updateTarget(target, committed: committed)
     phase2.updateTarget(target, committed: committed)
@@ -772,15 +778,19 @@ final class ShaarDevToolsModel {
     closeCommandMenu()
     closeSettings()
     repro.updateTarget(target, committed: committed)
-    streamGeneration += 1
-    eventTask?.cancel()
-    eventTask = nil
-    cancelLocalTasks()
+    if !keepLease {
+      streamGeneration += 1
+      eventTask?.cancel()
+      eventTask = nil
+      cancelLocalTasks()
+    }
     if isOpen {
       repro.history.start(for: target)
       repro.startFrames(for: target)
-      startStream()
-      startLocalStreams()
+      if !keepLease {
+        startStream()
+        startLocalStreams()
+      }
       rules.resume()
     }
   }

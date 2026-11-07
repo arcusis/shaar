@@ -167,6 +167,39 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     #expect(shell.target == next && shell.events.isEmpty)
   }
 
+  @Test func sameTabNavigationKeepsThePanelLease() async {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/one")!)
+    let transport = HeldDevToolsTransport()
+    let inspector = InspectorModel(target: target, engine: nil)
+    let shell = ShaarDevToolsModel(target: target, transport: transport)
+    shell.open(inspector: inspector)
+    for _ in 0..<20 where !shell.streamAvailable { await Task.yield() }
+    transport.emit(
+      .console(ShaarConsoleEvent(id: UUID(), level: .log, message: "qa-log", source: nil)))
+    transport.emit(
+      .network(ShaarNetworkEvent(id: UUID(), method: "GET", url: "/api/items", status: 200)))
+    for _ in 0..<20 where shell.consoleCount < 1 || shell.networkCount < 1 { await Task.yield() }
+    #expect(shell.consoleCount == 1 && shell.networkCount == 1)
+    let next = SiteControlTarget(
+      tabID: target.tabID, profileID: target.profileID,
+      url: URL(string: "https://example.com/one")!)
+    shell.updateTarget(next, committed: true)
+    #expect(shell.events.isEmpty)
+    #expect(shell.streamAvailable)
+    #expect(transport.openings == 1)
+    transport.emit(
+      .console(ShaarConsoleEvent(id: UUID(), level: .error, message: "qa-error", source: nil)))
+    transport.emit(
+      .network(ShaarNetworkEvent(id: UUID(), method: "GET", url: "/api/xhr", status: 200)))
+    for _ in 0..<20 where shell.consoleCount < 1 || shell.networkCount < 1 { await Task.yield() }
+    #expect(shell.console.rows(from: shell.consoleEvents).contains {
+      $0.event.message == "qa-error"
+    })
+    #expect(shell.network.requests(from: shell.events).contains { $0.url == "/api/xhr" })
+    shell.close()
+  }
+
   @Test func preserveLogKeepsConsoleAcrossNavigationAndClearDropsOnlyConsole() async {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/one")!)
@@ -332,6 +365,23 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     let snapshot = history.snapshot(at: now)
     #expect(snapshot.console.map(\.message) == ["current"])
     #expect(snapshot.network.isEmpty)
+  }
+}
+
+@MainActor private final class HeldDevToolsTransport: ShaarDevToolsEventTransport {
+  private var continuation: AsyncStream<ShaarDevToolsTransportMessage>.Continuation?
+  private(set) var openings = 0
+
+  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
+    openings += 1
+    return AsyncStream { continuation in
+      self.continuation = continuation
+      continuation.yield(.streamAvailable)
+    }
+  }
+
+  func emit(_ event: ShaarDevToolsEvent) {
+    continuation?.yield(.event(event))
   }
 }
 

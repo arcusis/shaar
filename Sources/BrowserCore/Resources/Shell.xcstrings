@@ -1,6 +1,15 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Coverage": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Coverage"}},"he":{"stringUnit":{"state":"translated","value":"כיסוי"}}}},
+    "Start": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Start"}},"he":{"stringUnit":{"state":"translated","value":"התחלה"}}}},
+    "Stop": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Stop"}},"he":{"stringUnit":{"state":"translated","value":"עצירה"}}}},
+    "Script": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Script"}},"he":{"stringUnit":{"state":"translated","value":"סקריפט"}}}},
+    "Style sheet": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Style sheet"}},"he":{"stringUnit":{"state":"translated","value":"גיליון סגנון"}}}},
+    "No coverage recorded for this tab.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No coverage recorded for this tab."}},"he":{"stringUnit":{"state":"translated","value":"לא נרשמה מדידת כיסוי ללשונית הזו."}}}},
+    "Coverage collection waits for the next engine build.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Coverage collection waits for the next engine build."}},"he":{"stringUnit":{"state":"translated","value":"איסוף הכיסוי ממתין לבניית המנוע הבאה."}}}},
+    "Coverage needs a page to record.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Coverage needs a page to record."}},"he":{"stringUnit":{"state":"translated","value":"הכיסוי צריך דף כדי לתעד."}}}},
+    "Coverage is scoped to this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Coverage is scoped to this tab"}},"he":{"stringUnit":{"state":"translated","value":"הכיסוי חל על הלשונית הזו"}}}},
     "Sensors": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sensors"}},"he":{"stringUnit":{"state":"translated","value":"חיישנים"}}}},
     "System": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"System"}},"he":{"stringUnit":{"state":"translated","value":"מערכת"}}}},
     "San Francisco": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"San Francisco"}},"he":{"stringUnit":{"state":"translated","value":"סן פרנסיסקו"}}}},

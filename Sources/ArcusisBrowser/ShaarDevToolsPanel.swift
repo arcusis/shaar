@@ -37,6 +37,7 @@ extension ShaarDevToolsSection {
     case .network: "network"
     case .application: "externaldrive"
     case .performance: "speedometer"
+    case .coverage: "chart.bar"
     case .audits: "checkmark.shield"
     case .sources: "curlybraces"
     case .cssOverview: "paintbrush"
@@ -58,6 +59,7 @@ extension ShaarDevToolsSection {
     case .network: "Network"
     case .application: "App"
     case .performance: "Perf"
+    case .coverage: "Coverage"
     case .audits: "Audits"
     case .sources: "Sources"
     case .cssOverview: "CSS"
@@ -338,6 +340,8 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .coverage:
+      ShaarDevToolsCoveragePanel(model: model.coverage)
     case .audits:
       ShaarDevToolsAuditsPanel(model: model, inspector: inspector)
     case .sources:
@@ -504,6 +508,7 @@ struct ShaarDevToolsPanel: View {
         ? "Performance data is scoped to this tab"
         : "Performance data is unavailable for this tab"
     }
+    if model.section == .coverage { return "Coverage is scoped to this tab" }
     if model.section == .audits { return "Audits are scoped to this tab" }
     if model.section == .sources {
       return model.phase2.available

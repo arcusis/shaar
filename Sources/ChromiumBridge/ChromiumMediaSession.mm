@@ -340,6 +340,19 @@ static void ShaarPublishPictureInPicture(ARCShaarRuntime *runtime, NSString *tab
 - (void)receiveShaarMediaEventForTabID:(NSString *)tabID payload:(NSDictionary *)payload {
   if (!tabID.length || ![payload[@"schemaVersion"] isEqual:@1]) return;
   NSString *kind = payload[@"kind"];
+  if ([kind isEqualToString:@"capture_changed"]) {
+    NSNumber *camera = payload[@"camera"];
+    NSNumber *microphone = payload[@"microphone"];
+    NSNumber *screen = payload[@"screen"];
+    if (![camera isKindOfClass:NSNumber.class] ||
+        ![microphone isKindOfClass:NSNumber.class] ||
+        ![screen isKindOfClass:NSNumber.class]) return;
+    if (self.onMediaAccess) {
+      self.onMediaAccess(tabID, @{@"camera": camera, @"microphone": microphone,
+                                  @"screen": screen});
+    }
+    return;
+  }
   if ([kind isEqualToString:@"state_changed"]) {
     NSDictionary *native = payload[@"state"];
     if (![native isKindOfClass:NSDictionary.class]) return;
@@ -360,6 +373,9 @@ static void ShaarPublishPictureInPicture(ARCShaarRuntime *runtime, NSString *tab
 }
 
 - (void)forgetShaarMediaForTabID:(NSString *)tabID {
+  if (self.onMediaAccess) {
+    self.onMediaAccess(tabID, @{@"camera": @NO, @"microphone": @NO, @"screen": @NO});
+  }
   [ShaarMediaCache(self, ShaarMediaCacheKey) removeObjectForKey:tabID];
   [ShaarMediaCache(self, ShaarMediaRefreshKey) removeObjectForKey:tabID];
   [ShaarMediaCache(self, ShaarMediaPipKey) removeObjectForKey:tabID];

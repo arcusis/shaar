@@ -179,7 +179,9 @@ private struct ShaarDOMPanelObserver {
     if let session { close(session) }
     let next = ShaarPanelSession(target: target)
     session = next
-    return AsyncStream(bufferingPolicy: .bufferingNewest(32)) { continuation in
+    // The engine flushes a backlog on one turn. A newest-32 buffer drops the
+    // console line at the front of that backlog and used to close the lease.
+    return AsyncStream(bufferingPolicy: .unbounded) { continuation in
       next.continuation = continuation
       next.task = Task { [weak self] in await self?.start(next) }
       continuation.onTermination = { @Sendable [weak self, weak next] _ in
@@ -245,8 +247,8 @@ private struct ShaarDOMPanelObserver {
     else { return }
     session.sequence = sequence
     if projected.id == .eventsDropped {
-      emit(.streamUnavailable, to: session)
-      close(session)
+      // Those events are already gone. Closing the lease would also drop every
+      // console and network line that arrives after the burst.
       return
     }
     if let frame = projected.data.frame {
@@ -325,8 +327,8 @@ private struct ShaarDOMPanelObserver {
   private func emit(_ message: ShaarDevToolsTransportMessage, to session: ShaarPanelSession) {
     guard let continuation = session.continuation else { return }
     switch continuation.yield(message) {
-    case .enqueued: break
-    case .dropped, .terminated: close(session)
+    case .enqueued, .dropped: break
+    case .terminated: close(session)
     @unknown default: close(session)
     }
   }

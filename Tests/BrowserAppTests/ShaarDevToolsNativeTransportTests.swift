@@ -225,6 +225,41 @@ import Testing
     #expect(!transport.recordingAvailable)
   }
 
+  @Test func consoleBurstStaysOnTheOpenLease() async throws {
+    let requester = PanelRequesterFixture()
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    var shell = transport.messages(for: target).makeAsyncIterator()
+    #expect(await shell.next() == .streamAvailable)
+    for index in 1...40 {
+      transport.receive(
+        tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+        payload: try event(
+          1, data: ["text": "line-\(index)", "level": "error", "truncated": false]),
+        sequence: UInt64(index))
+    }
+    transport.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(11, data: ["count": 4]), sequence: 41)
+    for index in 1...40 {
+      guard case .event(.console(let console)) = await shell.next() else {
+        Issue.record("Console line \(index) was dropped")
+        return
+      }
+      #expect(console.message == "line-\(index)")
+    }
+    transport.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(1, data: ["text": "after-drop", "level": "log", "truncated": false]),
+      sequence: 42)
+    guard case .event(.console(let console)) = await shell.next() else {
+      Issue.record("The lease closed after the engine reported dropped events")
+      return
+    }
+    #expect(console.message == "after-drop")
+    #expect(!requester.operations.contains(.panelClose))
+  }
+
   @Test func consoleStackMapsOntoTheRow() async throws {
     let requester = PanelRequesterFixture()
     let transport = ShaarDevToolsNativeTransport(

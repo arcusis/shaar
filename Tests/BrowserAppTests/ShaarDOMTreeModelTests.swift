@@ -13,6 +13,8 @@ import Testing
 @MainActor final class DOMFixtureTransport: ShaarDOMTransport {
   var continuation: AsyncStream<ShaarDOMMessage>.Continuation?
   var commands: [ShaarDOMCommand] = []
+  var searchNodeIDs: [Int] = [4]
+  var describedNodes: [Int: [String: Any]] = [:]
   var document: [String: Any] = [
     "root": [
       "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
@@ -94,8 +96,11 @@ import Testing
     commands.append(command)
     switch command {
     case .document: return document
-    case .search: return ["searchId": "s1", "resultCount": 1]
-    case .searchResults: return ["nodeIds": [4]]
+    case .search: return ["searchId": "s1", "resultCount": searchNodeIDs.count]
+    case .searchResults: return ["nodeIds": searchNodeIDs]
+    case .describe(let id):
+      if let node = describedNodes[id] { return ["node": node] }
+      return [:]
     case .outerHTML: return ["outerHTML": "<main id=\"app\">Dashboard</main>"]
     default: return [:]
     }
@@ -173,6 +178,82 @@ import Testing
     model.updateTarget(target(), committed: true)
     #expect(model.nodes.isEmpty && model.selectedID == nil)
     model.close()
+  }
+
+  @Test func searchCyclesEveryMatchAndReportsTheCount() async {
+    let fixture = DOMFixtureTransport()
+    fixture.searchNodeIDs = [8, 5, 4]
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    #expect(!model.expanded.contains(3))
+    model.search = "button"
+    await model.performSearch()
+    #expect(model.matchOrder == [8, 5, 4])
+    #expect(model.matches == [8, 5, 4])
+    #expect(model.matchIndex == 0)
+    #expect(model.selectedID == 8)
+    #expect(model.matchCountLabel == counted(1, of: 3))
+    #expect(model.expanded.isSuperset(of: [1, 2, 3, 4, 7]))
+    #expect(model.rows.contains { $0.id == 8 })
+
+    await model.toggleExpanded(3)
+    #expect(!model.rows.contains { $0.id == 5 })
+    await model.stepSearchMatch(forward: true)
+    #expect(model.matchIndex == 1)
+    #expect(model.selectedID == 5)
+    #expect(model.matchCountLabel == counted(2, of: 3))
+    #expect(model.expanded.contains(3))
+    #expect(model.expanded.contains(4))
+    #expect(model.rows.contains { $0.id == 5 })
+
+    await model.stepSearchMatch(forward: true)
+    #expect(model.selectedID == 4)
+    #expect(model.matchCountLabel == counted(3, of: 3))
+    await model.stepSearchMatch(forward: true)
+    #expect(model.matchIndex == 0)
+    #expect(model.selectedID == 8)
+    #expect(model.matchCountLabel == counted(1, of: 3))
+
+    await model.stepSearchMatch(forward: false)
+    #expect(model.matchIndex == 2)
+    #expect(model.selectedID == 4)
+    #expect(model.matchCountLabel == counted(3, of: 3))
+
+    model.search = "   "
+    await model.performSearch()
+    #expect(model.matchOrder.isEmpty)
+    #expect(model.matchCountLabel == nil)
+    #expect(model.matches.isEmpty)
+    await model.stepSearchMatch(forward: true)
+    #expect(model.selectedID == 4)
+    model.close()
+  }
+
+  @Test func searchRevealsAHitThatWasNotLoaded() async {
+    let fixture = DOMFixtureTransport()
+    fixture.searchNodeIDs = [99]
+    fixture.describedNodes[99] = [
+      "nodeId": 99, "parentId": 3, "nodeType": 1, "nodeName": "SPAN", "nodeValue": "",
+      "childNodeCount": 0, "attributes": ["id", "shaar-live-element"],
+    ]
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    #expect(model.nodes[99] == nil)
+    model.search = "#shaar-live-element"
+    await model.performSearch()
+    #expect(model.matchOrder == [99])
+    #expect(model.selectedID == 99)
+    #expect(model.matchCountLabel == counted(1, of: 1))
+    #expect(model.nodes[3]?.childrenIDs.contains(99) == true)
+    #expect(model.expanded.contains(3))
+    #expect(model.rows.contains { $0.id == 99 })
+    model.close()
+  }
+
+  private func counted(_ index: Int, of count: Int) -> String {
+    ShellL10n.format("%d of %d", arguments: [.integer(index), .integer(count)])
   }
 
   @Test func projectedMutationChangesTreeWithoutReload() async {

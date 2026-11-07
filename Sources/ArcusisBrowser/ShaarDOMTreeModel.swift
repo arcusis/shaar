@@ -12,6 +12,7 @@ enum ShaarDOMCommand: Equatable {
   case search(String)
   case searchResults(String, Int)
   case discardSearch(String)
+  case describe(Int)
   case highlight(Int)
   case hideHighlight
   case setAttribute(Int, String, String)
@@ -75,6 +76,8 @@ final class ShaarDOMTreeModel {
   private(set) var nodes: [Int: ShaarDOMNode] = [:]
   private(set) var rootID: Int?
   private(set) var matches: Set<Int> = []
+  private(set) var matchOrder: [Int] = []
+  private(set) var matchIndex: Int?
   private(set) var selectedID: Int?
   private(set) var expanded: Set<Int> = []
   private(set) var canUndo = false
@@ -93,6 +96,13 @@ final class ShaarDOMTreeModel {
   }
 
   var selected: ShaarDOMNode? { selectedID.flatMap { nodes[$0] } }
+
+  var matchCountLabel: String? {
+    guard let matchIndex, !matchOrder.isEmpty else { return nil }
+    return ShellL10n.format(
+      "%d of %d",
+      arguments: [.integer(matchIndex + 1), .integer(matchOrder.count)])
+  }
   var rows: [ShaarDOMRow] {
     guard let rootID else { return [] }
     var result: [ShaarDOMRow] = []
@@ -171,7 +181,7 @@ final class ShaarDOMTreeModel {
     rootID = nil
     selectedID = nil
     expanded = []
-    matches = []
+    clearMatches()
     search = ""
     searchID = nil
     canUndo = false
@@ -250,7 +260,7 @@ final class ShaarDOMTreeModel {
     guard available else { return }
     if let searchID { _ = try? await execute(.discardSearch(searchID)) }
     searchID = nil
-    matches = []
+    clearMatches()
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !query.isEmpty else { return }
     do {
@@ -264,10 +274,115 @@ final class ShaarDOMTreeModel {
       guard let ids = found["nodeIds"] as? [Int], ids.count <= 500 else {
         throw ShaarDOMFailure("DOM search could not be completed")
       }
-      matches = Set(ids)
-      if let first = ids.first { select(first) }
+      let ordered = uniqueMatchIDs(ids)
+      matchOrder = ordered
+      matches = Set(ordered)
+      if ordered.isEmpty {
+        matchIndex = nil
+      } else {
+        matchIndex = 0
+        await revealAndSelect(ordered[0])
+      }
       failure = nil
     } catch { failure = error.localizedDescription }
+  }
+
+  func stepSearchMatch(forward: Bool) async {
+    let count = matchOrder.count
+    guard count > 0, let matchIndex else { return }
+    let delta = forward ? 1 : -1
+    let next = (matchIndex + delta + count) % count
+    self.matchIndex = next
+    await revealAndSelect(matchOrder[next])
+  }
+
+  /// A search id can name a node the depth-limited document never loaded. Ask for that node and
+  /// attach it under the nearest ancestor already in the tree.
+  private func revealAndSelect(_ id: Int) async {
+    if nodes[id] == nil {
+      await linkUnloadedMatch(id)
+    }
+    select(id)
+  }
+
+  private func linkUnloadedMatch(_ id: Int) async {
+    var pending: [[String: Any]] = []
+    var cursor: Int? = id
+    var steps = 0
+    while let nodeID = cursor, nodes[nodeID] == nil, steps < 40 {
+      steps += 1
+      guard let described = await describedNode(nodeID) else { return }
+      pending.append(described)
+      cursor = integerValue(described["parentId"])
+    }
+    guard let anchor = cursor, nodes[anchor] != nil else { return }
+    for fields in pending.reversed() {
+      guard let parentID = integerValue(fields["parentId"]), nodes[parentID] != nil else {
+        return
+      }
+      guard
+        let node = ShaarDOMNode.decode(
+          decodedSearchNode(fields), parentID: parentID, relation: .child)
+      else { return }
+      attach(node, to: parentID)
+    }
+  }
+
+  private func describedNode(_ id: Int) async -> [String: Any]? {
+    guard let result = try? await execute(.describe(id)),
+      let node = result["node"] as? [String: Any],
+      integerValue(node["nodeId"]) == id
+    else { return nil }
+    return node
+  }
+
+  private func attach(_ node: ShaarDOMNode, to parentID: Int) {
+    guard var parent = nodes[parentID] else { return }
+    if !parent.childrenIDs.contains(node.id) {
+      var children = parent.childrenIDs
+      children.append(node.id)
+      parent = parent.replacing(
+        childCount: max(parent.childCount, children.count),
+        childrenIDs: children)
+      nodes[parentID] = parent
+    }
+    if nodes[node.id] == nil {
+      nodes[node.id] = node
+    }
+  }
+
+  private func decodedSearchNode(_ fields: [String: Any]) -> [String: Any] {
+    var payload = fields
+    if let nodeID = integerValue(fields["nodeId"]) { payload["nodeId"] = nodeID }
+    if let type = integerValue(fields["nodeType"]) { payload["nodeType"] = type }
+    if let count = integerValue(fields["childNodeCount"]) { payload["childNodeCount"] = count }
+    if payload["nodeValue"] == nil { payload["nodeValue"] = "" }
+    if let raw = fields["attributes"] as? [Any] {
+      let names = raw.compactMap { $0 as? String }
+      if names.count == raw.count { payload["attributes"] = names }
+    }
+    return payload
+  }
+
+  private func integerValue(_ value: Any?) -> Int? {
+    if let value = value as? Int { return value }
+    if let value = value as? NSNumber { return value.intValue }
+    return nil
+  }
+
+  private func clearMatches() {
+    matches = []
+    matchOrder = []
+    matchIndex = nil
+  }
+
+  private func uniqueMatchIDs(_ ids: [Int]) -> [Int] {
+    var seen: Set<Int> = []
+    var ordered: [Int] = []
+    for id in ids where seen.insert(id).inserted {
+      ordered.append(id)
+    }
+    return ordered
   }
 
   func highlight(_ id: Int?) async {

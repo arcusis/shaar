@@ -26,6 +26,9 @@ struct ShaarDOMRequest {
     case .discardSearch(let searchID):
       method = "DOM.discardSearchResults"
       params = ["searchId": searchID]
+    case .describe(let id):
+      method = "DOM.describeNode"
+      params = ["nodeId": id]
     case .highlight(let id):
       method = "Overlay.highlightNode"
       params = [

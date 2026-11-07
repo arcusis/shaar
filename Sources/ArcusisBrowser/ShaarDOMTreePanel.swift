@@ -23,6 +23,7 @@ struct ShaarDOMTreePanel: View {
   @State private var editorValue = ""
   @State private var deleting = false
   @FocusState private var focusedNode: Int?
+  @FocusState private var searchFieldFocused: Bool
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
   var body: some View {
@@ -111,9 +112,34 @@ struct ShaarDOMTreePanel: View {
         .textFieldStyle(.roundedBorder)
         .font(.system(size: 11))
         .devToolsDataDirection()
+        .focused($searchFieldFocused)
         .onSubmit { Task { await model.performSearch() } }
         .help(ShellL10n.string("Search the DOM and press Return to apply the search"))
         .onExitCommand { model.search = "" }
+      if let label = model.matchCountLabel {
+        Text(label)
+          .font(.system(size: 10, design: .monospaced))
+          .foregroundStyle(.primary)
+          .lineLimit(1)
+          .fixedSize()
+          .accessibilityIdentifier("shaar.devtools.domMatchCount")
+      }
+      Button {
+        Task { await model.stepSearchMatch(forward: false) }
+      } label: {
+        Image(systemName: "chevron.up")
+      }
+      .disabled(model.matchOrder.isEmpty)
+      .help(ShellL10n.string("Previous match"))
+      .accessibilityLabel(ShellL10n.string("Previous match"))
+      Button {
+        Task { await model.stepSearchMatch(forward: true) }
+      } label: {
+        Image(systemName: "chevron.down")
+      }
+      .disabled(model.matchOrder.isEmpty)
+      .help(ShellL10n.string("Next match"))
+      .accessibilityLabel(ShellL10n.string("Next match"))
       Button {
         Task { await model.performSearch() }
       } label: {
@@ -142,6 +168,16 @@ struct ShaarDOMTreePanel: View {
     .controlSize(.small)
     .padding(.horizontal, 10)
     .frame(height: 36)
+    .background {
+      Button {
+        searchFieldFocused = true
+      } label: {
+        Color.clear
+      }
+      .keyboardShortcut("f", modifiers: .command)
+      .frame(width: 0, height: 0)
+      .accessibilityHidden(true)
+    }
   }
 
   private func treeRow(_ row: ShaarDOMRow) -> some View {

@@ -379,6 +379,25 @@ import Foundation
           "document.getElementById('shaar-live-element').getAttribute('data-probe')") as? String,
         value == "edited-in-elements"
       else { throw Failure("Elements attribute edit did not reach the page") }
+      shell.dom.search = "#shaar-live-element"
+      await shell.dom.performSearch()
+      guard let label = shell.dom.matchCountLabel, !shell.dom.matchOrder.isEmpty,
+        let selected = shell.dom.selectedID, shell.dom.matchOrder.contains(selected),
+        shell.dom.nodes[selected] != nil
+      else {
+        throw Failure(
+          "DOM search missed the live element: \(shell.dom.failure ?? "none") order=\(shell.dom.matchOrder) selected=\(String(describing: shell.dom.selectedID))"
+        )
+      }
+      let visible = shell.dom.rows.contains { $0.id == selected }
+      guard visible else {
+        throw Failure("DOM search hit \(selected) stayed outside the visible tree")
+      }
+      await shell.dom.stepSearchMatch(forward: true)
+      await shell.dom.stepSearchMatch(forward: false)
+      guard shell.dom.selectedID == selected, shell.dom.matchOrder.contains(selected) else {
+        throw Failure("DOM search did not keep the current hit after wrapping")
+      }
       _ = try await inspector.evaluate(
         "(()=>{const host=document.createElement('div');host.id='shaar-copy-host';const first=document.createElement('em');const second=document.createElement('em');host.append(first,second);document.body.appendChild(host);return true})()"
       )
@@ -416,7 +435,7 @@ import Foundation
         )
       }
       return
-        "DOM insertion appeared through the live stream; attribute edit reached the page; copy paths matched \(css)"
+        "DOM insertion appeared through the live stream; attribute edit reached the page; search reported \(label); copy paths matched \(css)"
     }
     await check("elements-inspector") {
       guard shell.section == .elements, inspector.isOpen, inspector.target.tabID == tab,

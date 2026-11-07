@@ -10,7 +10,7 @@ import Foundation
     shell: ShaarDevToolsModel, inspector: InspectorModel,
     context: NativeBrowserContext, pageURL: URL, report: ShaarDevToolsSmokeReport
   ) async {
-    await roundTwoElements(shell, inspector: inspector, report: report)
+    await roundTwoElements(shell, inspector: inspector, context: context, report: report)
     await roundTwoConsole(shell, inspector: inspector, context: context, report: report)
     await roundTwoSources(shell, pageURL: pageURL, report: report)
     await roundTwoNetwork(shell, pageURL: pageURL, report: report)
@@ -32,7 +32,8 @@ import Foundation
   }
 
   private static func roundTwoElements(
-    _ shell: ShaarDevToolsModel, inspector: InspectorModel, report: ShaarDevToolsSmokeReport
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .elements
     let ready = await wait(attempts: 80) { shell.dom.available }
@@ -45,16 +46,43 @@ import Foundation
       "(()=>{const node=document.createElement('div');node.id='shaar-round2-search';document.body.appendChild(node);return true})()")
     let live = try? await inspector.evaluate(
       "document.getElementById('shaar-round2-search') !== null")
+    await shell.dom.loadDocument(depth: 2)
+    let shallowHasMatch = shell.dom.nodes.values.contains { node in
+      node.attributes.contains { $0.name == "id" && $0.value == "shaar-round2-search" }
+    }
     shell.dom.search = "#shaar-round2-search"
-    await shell.dom.performSearch()
-    let matched = shell.dom.matchOrder.count > 0
+    let pressed = ShaarDevToolsSmokeAccess.press(
+      identifier: "shaar.devtools.domSearchButton", in: context.hosting)
+    let finished = await wait(attempts: 80) {
+      shell.dom.selected?.attributes.contains {
+        $0.name == "id" && $0.value == "shaar-round2-search"
+      } == true || shell.dom.failure != nil
+    }
+    await settle(context)
+    let selectedID = shell.dom.selectedID
+    var inspectorID: Int?
+    for _ in 0..<20 {
+      inspectorID = await inspector.currentDOMNodeID()
+      if inspectorID == selectedID { break }
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+    await settle(context)
+    let matched = pressed && finished && shell.dom.matchOrder.count > 0
       && shell.dom.selected?.attributes.contains {
         $0.name == "id" && $0.value == "shaar-round2-search"
       } == true
+      && shell.dom.rows.contains { $0.id == shell.dom.selectedID }
+      && inspectorID == shell.dom.selectedID
     record(
       matched, "world2-elements-search",
-      "Created=\(String(describing: created)), live=\(String(describing: live)), DOM available=\(shell.dom.available), matches=\(shell.dom.matchOrder.count), selected=\(shell.dom.selected?.name ?? "none"), error=\(shell.dom.failure ?? "none")",
+      "Created=\(String(describing: created)), live=\(String(describing: live)), shallow match present=\(shallowHasMatch), search pressed=\(pressed), DOM available=\(shell.dom.available), matches=\(shell.dom.matchOrder.count), selected=\(shell.dom.selected?.name ?? "none"), inspector node=\(String(describing: inspectorID)), error=\(shell.dom.failure ?? "none")",
       report: report)
+    if matched {
+      let capture = report.directory.appending(path: "world-elements-search.png")
+      if !ShaarDevToolsSmokeAccess.capture(context.hosting, to: capture) {
+        report.fail("world-capture-elements-search", "Offscreen Elements search capture failed")
+      }
+    }
     guard matched else {
       _ = try? await inspector.evaluate("document.getElementById('shaar-round2-search')?.remove()")
       return

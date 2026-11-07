@@ -474,6 +474,21 @@ def bump_inspector_service_worker():
         return SW_GENERATION
 
 
+SCALE_SOURCE_BYTES = 5 * 1024 * 1024
+_SCALE_SOURCE_BODY = None
+
+
+def scale_source_body():
+    """A comment-only script of exactly 5 MiB. The phase 2 route caps bodies at 1 MiB."""
+    global _SCALE_SOURCE_BODY
+    if _SCALE_SOURCE_BODY is None:
+        prefix = b'/* shaar-scale-source\n'
+        suffix = b'\nshaar-scale-end */\n'
+        padding = SCALE_SOURCE_BYTES - len(prefix) - len(suffix)
+        _SCALE_SOURCE_BODY = prefix + (b'x' * padding) + suffix
+    return _SCALE_SOURCE_BODY
+
+
 # A silent canvas stream: no network or audio device. The handlers log each Media Session
 # action so the probe can confirm what reached the page. The clip is a 40 second silent
 # WebM loaded as a blob, so it has a duration to skip within.
@@ -556,6 +571,15 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             body = self.headers.get('X-Shaar-Probe', '').encode('ascii')
             self.send_response(200)
             self.send_header('Content-Type', 'text/plain')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == '/scale-source.js':
+            body = scale_source_body()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)

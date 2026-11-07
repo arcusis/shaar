@@ -170,6 +170,7 @@
     "DOM tree needs engine support": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"DOM tree needs engine support"}},"he":{"stringUnit":{"state":"translated","value":"עץ DOM דורש תמיכת מנוע"}}}},
     "DOM tree is scoped to this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"DOM tree is scoped to this tab"}},"he":{"stringUnit":{"state":"translated","value":"עץ DOM משויך לכרטיסייה הזאת"}}}},
     "DOM tree": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"DOM tree"}},"he":{"stringUnit":{"state":"translated","value":"עץ DOM"}}}},
+    "hidden": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"hidden"}},"he":{"stringUnit":{"state":"translated","value":"מוסתר"}}}},
     "Search text or selector": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Search text or selector"}},"he":{"stringUnit":{"state":"translated","value":"חיפוש טקסט או בורר"}}}},
     "Find in DOM": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Find in DOM"}},"he":{"stringUnit":{"state":"translated","value":"חיפוש ב-DOM"}}}},
     "%d of %d": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%d of %d"}},"he":{"stringUnit":{"state":"translated","value":"%d מתוך %d"}}}},

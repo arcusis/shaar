@@ -55,6 +55,7 @@ struct InspectorPanel: View {
         }
     }
     .coordinateSpace(name: "InspectorPanel")
+    .background { ShaarCSSLengthNudgeHost() }
     .environment(\.inspectorPresentation, model.presentation)
     .environment(\.inspectorSectionScope, model.tab.rawValue)
     .overlay {

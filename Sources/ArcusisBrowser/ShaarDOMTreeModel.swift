@@ -370,6 +370,21 @@ final class ShaarDOMTreeModel {
     return nil
   }
 
+  private func styleValue(of node: ShaarDOMNode) -> String {
+    node.attributes.first { $0.name.caseInsensitiveCompare("style") == .orderedSame }?.value ?? ""
+  }
+
+  private func replaceStyle(_ value: String, on id: Int) {
+    guard let node = nodes[id] else { return }
+    var attributes = node.attributes.filter {
+      $0.name.caseInsensitiveCompare("style") != .orderedSame
+    }
+    if !value.isEmpty {
+      attributes.append(ShaarDOMAttribute(name: "style", value: value))
+    }
+    nodes[id] = node.replacing(attributes: attributes)
+  }
+
   private func clearMatches() {
     matches = []
     matchOrder = []
@@ -421,6 +436,28 @@ final class ShaarDOMTreeModel {
   func move(_ id: Int, to parentID: Int, before siblingID: Int? = nil) async {
     guard id != parentID, nodes[id] != nil, nodes[parentID] != nil else { return }
     await mutate(.move(id, parentID, siblingID))
+  }
+
+  func showsHidden(_ node: ShaarDOMNode) -> Bool {
+    node.nodeType == 1 && ShaarElementVisibility.isHidden(styleValue(of: node))
+  }
+
+  func toggleVisibility() async {
+    guard let id = selectedID, let node = nodes[id], node.nodeType == 1 else { return }
+    let next = ShaarElementVisibility.toggledStyle(styleValue(of: node))
+    do {
+      if next.isEmpty {
+        _ = try await execute(.removeAttribute(id, "style"))
+      } else {
+        _ = try await execute(.setAttribute(id, "style", next))
+      }
+    } catch {
+      failure = error.localizedDescription
+      return
+    }
+    replaceStyle(next, on: id)
+    failure = nil
+    if (try? await execute(.markUndo)) != nil { canUndo = true }
   }
 
   func toggleClass(_ className: String) async {

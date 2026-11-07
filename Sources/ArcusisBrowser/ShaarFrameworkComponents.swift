@@ -353,7 +353,8 @@ final class ShaarFrameworkComponentsModel {
   func highlight(_ id: String?) async {
     highlightEpoch += 1
     let epoch = highlightEpoch
-    guard let page, let expression = ShaarFrameworkPageScript.highlightExpression(id: id, epoch: epoch)
+    guard let page,
+      let expression = ShaarFrameworkPageScript.highlightExpression(id: id, epoch: epoch)
     else { return }
     _ = try? await page.evaluateFramework(expression)
   }

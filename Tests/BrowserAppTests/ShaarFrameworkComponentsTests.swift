@@ -128,8 +128,10 @@ import Testing
 
   @Test @MainActor func staleRefreshCannotReplaceANewerTree() async throws {
     let page = DelayedFrameworkPage(
-      slow: FrameworkFixture.payload(nodes: [FrameworkFixture.node("1", name: "Slow")], framework: "vue"),
-      fast: FrameworkFixture.payload(nodes: [FrameworkFixture.node("1", name: "Fast")], framework: "react"))
+      slow: FrameworkFixture.payload(
+        nodes: [FrameworkFixture.node("1", name: "Slow")], framework: "vue"),
+      fast: FrameworkFixture.payload(
+        nodes: [FrameworkFixture.node("1", name: "Fast")], framework: "react"))
     let model = ShaarFrameworkComponentsModel()
     model.attach(page)
     model.updateAccess(url: try #require(URL(string: "http://localhost:3000/")))
@@ -163,8 +165,10 @@ import Testing
     #expect(snapshot.rows.map(\.key) == components.map(\.key))
     for (node, expected) in zip(snapshot.nodes, components) {
       #expect(node.name == expected.name)
-      #expect(Dictionary(uniqueKeysWithValues: node.props.map { ($0.name, $0.value) }) == expected.props)
-      #expect(Dictionary(uniqueKeysWithValues: node.state.map { ($0.name, $0.value) }) == expected.state)
+      #expect(
+        Dictionary(uniqueKeysWithValues: node.props.map { ($0.name, $0.value) }) == expected.props)
+      #expect(
+        Dictionary(uniqueKeysWithValues: node.state.map { ($0.name, $0.value) }) == expected.state)
     }
   }
 

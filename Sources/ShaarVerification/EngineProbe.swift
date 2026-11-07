@@ -748,7 +748,8 @@ final class EngineProbe {
         guard let browserEngine else { throw ProbeFailure("Components panel engine is missing.") }
         bootstrapStage = .ready
         fixtureStage = "FrameworkComponents"
-        try expect(NSApp.windows.allSatisfy { !$0.isVisible }, "Components panel windows stay hidden")
+        try expect(
+          NSApp.windows.allSatisfy { !$0.isVisible }, "Components panel windows stay hidden")
         checks += try await FrameworkComponentsProbe(
           engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()

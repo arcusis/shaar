@@ -113,7 +113,9 @@ import Foundation
     }
     let kept = try await inspector.evaluate(
       "document.getElementById('shaar-framework-highlight') != null")
-    guard kept as? Bool == true else { throw Failure("A stale highlight clear removed the overlay") }
+    guard kept as? Bool == true else {
+      throw Failure("A stale highlight clear removed the overlay")
+    }
     await shell.framework.highlight(nil)
     let gone = try await inspector.evaluate(
       "document.getElementById('shaar-framework-highlight') == null")

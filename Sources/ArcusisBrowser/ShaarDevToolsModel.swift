@@ -470,6 +470,9 @@ final class ShaarDevToolsModel {
     sources.reset()
     let inspector = ownedInspector
     ownedInspector = nil
+    // The component highlight still needs this page. Stop presenting now so
+    // ownership is restored before the highlight clear finishes.
+    inspector?.stopPresenting()
     let hide = framework.beginHide()
     frameworkClose?.cancel()
     frameworkClose = Task { @MainActor in

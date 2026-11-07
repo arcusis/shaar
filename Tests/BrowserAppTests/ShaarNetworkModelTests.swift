@@ -119,4 +119,57 @@ import Testing
     model.selectAdjacent(in: rows, forward: false)
     #expect(model.selectedID == rows[0].id)
   }
+
+  @Test func statusFilterIsSeparateFromResourceType() {
+    let model = ShaarNetworkModel()
+    let events: [ShaarDevToolsEvent] = [
+      .network(.init(id: UUID(), method: "GET", url: "https://example.com/ok", status: 204)),
+      .network(.init(id: UUID(), method: "GET", url: "https://example.com/moved", status: 302)),
+      .network(.init(id: UUID(), method: "GET", url: "https://example.com/missing", status: 404)),
+      .network(
+        .init(
+          id: UUID(), method: "GET", url: "https://example.com/down", status: nil,
+          phase: .failed, failure: "Failed")),
+    ]
+    model.statusFilter = .success
+    #expect(model.visibleRequests(from: events).map(\.url) == ["https://example.com/ok"])
+    model.statusFilter = .redirect
+    #expect(model.visibleRequests(from: events).map(\.status) == [302])
+    model.statusFilter = .clientError
+    #expect(model.visibleRequests(from: events).map(\.status) == [404])
+    model.statusFilter = .failed
+    #expect(model.visibleRequests(from: events).map(\.failure) == ["Failed"])
+    model.statusFilter = .any
+    model.filter = .errors
+    #expect(model.visibleRequests(from: events).count == 2)
+  }
+
+  @Test func storedBodyFeedsPreviewAndHARRedactsHeaders() async {
+    let model = ShaarNetworkModel()
+    let event = ShaarNetworkEvent(
+      id: UUID(), method: "POST", url: "https://example.com/api", status: 200,
+      requestID: "body-1", mimeType: "application/json",
+      requestHeaders: [.init(name: "Authorization", value: "Bearer secret")],
+      payload: "{\"q\":1}")
+    model.loadBody = { _ in
+      ShaarStoredResponseBody(body: "{\"ok\":true}", base64Encoded: false)
+    }
+    await model.loadResponseBody(id: "body-1")
+    let row = model.exportRequests(from: [.network(event)])[0]
+    #expect(row.responseBody == "{\"ok\":true}")
+    #expect(model.jsonTree(for: row.responseBody ?? "")?.first?.children.first?.name == "ok")
+    let image = ShaarStoredResponseBody(
+      body: Data([0x89, 0x50, 0x4E, 0x47]).base64EncodedString(), base64Encoded: true)
+    let presented = ShaarNetworkBodyPresentation.apply(image, mime: "image/png")
+    #expect(presented.binary && presented.image?.count == 4 && presented.text.isEmpty)
+    let har = String(decoding: ShaarNetworkHAR.document(requests: [row]), as: UTF8.self)
+    #expect(har.contains("example.com\\/api"))
+    #expect(har.contains("{\\\"ok\\\":true}") || har.contains("{\"ok\":true}"))
+    #expect(har.contains("[redacted]"))
+    #expect(!har.contains("Bearer secret"))
+    #expect(ShaarNetworkThrottle.slow3G.parameters["latency"] as? Int == 400)
+    #expect(ShaarNetworkThrottle.fast3G.parameters["downloadThroughput"] as? Int == 200_000)
+    #expect(ShaarNetworkThrottle.none.parameters["offline"] as? Bool == false)
+    #expect(ShaarNetworkThrottle.offline.parameters["offline"] as? Bool == true)
+  }
 }

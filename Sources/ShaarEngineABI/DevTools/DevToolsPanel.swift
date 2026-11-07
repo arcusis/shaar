@@ -31,6 +31,11 @@ public struct ShaarDevToolsPanelMetric: Equatable, Sendable {
   public let value: Double
 }
 
+public struct ShaarDevToolsConsoleFrame: Equatable, Sendable {
+  public let function: String
+  public let source: String
+}
+
 /// A deliberately small projection of a CDP event. Nil means the field does
 /// not apply to that event ID. Panel data is live-only and must not be saved.
 public struct ShaarDevToolsPanelData: Equatable, Sendable {
@@ -46,6 +51,7 @@ public struct ShaarDevToolsPanelData: Equatable, Sendable {
   public let metrics: [ShaarDevToolsPanelMetric]?
   public let droppedCount: UInt32?
   public let frame: ShaarDevToolsPanelFrame?
+  public let stack: [ShaarDevToolsConsoleFrame]
   public let truncated: Bool
 }
 
@@ -120,7 +126,7 @@ public enum ShaarDevToolsPanelEventRouter {
         status: nil, mimeType: nil, encodedBytes: nil, name: nil,
         metrics: nil, droppedCount: nil,
         frame: ShaarDevToolsPanelFrame(jpeg: jpeg, sessionID: sessionID),
-        truncated: false)
+        stack: [], truncated: false)
     }
     if id == .eventsDropped {
       guard Set(fields.keys) == ["count"],
@@ -130,7 +136,7 @@ public enum ShaarDevToolsPanelEventRouter {
       return ShaarDevToolsPanelData(
         text: nil, level: nil, requestID: nil, url: nil, method: nil,
         status: nil, mimeType: nil, encodedBytes: nil, name: nil,
-        metrics: nil, droppedCount: value, frame: nil, truncated: false)
+        metrics: nil, droppedCount: value, frame: nil, stack: [], truncated: false)
     }
     guard let truncated = fields["truncated"] as? Bool,
       Set(fields.keys).isSubset(of: allowedKeys(for: id)),
@@ -169,20 +175,39 @@ public enum ShaarDevToolsPanelEventRouter {
     } else {
       metrics = nil
     }
+    guard let stack = consoleFrames(fields) else { return nil }
     return ShaarDevToolsPanelData(
       text: fields["text"] as? String, level: fields["level"] as? String,
       requestID: requestID, url: fields["url"] as? String,
       method: fields["method"] as? String, status: status,
       mimeType: fields["mimeType"] as? String, encodedBytes: encodedBytes,
       name: fields["name"] as? String, metrics: metrics,
-      droppedCount: nil, frame: nil, truncated: truncated)
+      droppedCount: nil, frame: nil, stack: stack, truncated: truncated)
+  }
+
+  private static func consoleFrames(
+    _ fields: [String: Any]
+  ) -> [ShaarDevToolsConsoleFrame]? {
+    guard let raw = fields["stack"] else { return [] }
+    guard let entries = raw as? [[String: Any]], entries.count <= 8 else { return nil }
+    var frames: [ShaarDevToolsConsoleFrame] = []
+    for entry in entries {
+      guard Set(entry.keys) == ["function", "source"],
+        let function = entry["function"] as? String, !function.isEmpty,
+        function.utf8.count <= 128,
+        let source = entry["source"] as? String, !source.isEmpty,
+        source.utf8.count <= 512
+      else { return nil }
+      frames.append(ShaarDevToolsConsoleFrame(function: function, source: source))
+    }
+    return frames
   }
 
   private static func allowedKeys(for id: ShaarDevToolsPanelEventID) -> Set<String> {
     var fields: Set<String> = ["truncated"]
     switch id {
-    case .consoleAPICalled, .logEntryAdded: fields.formUnion(["text", "level"])
-    case .exceptionThrown: fields.insert("text")
+    case .consoleAPICalled, .logEntryAdded: fields.formUnion(["text", "level", "stack"])
+    case .exceptionThrown: fields.formUnion(["text", "stack"])
     case .requestWillBeSent: fields.formUnion(["requestID", "url", "method"])
     case .responseReceived: fields.formUnion(["requestID", "url", "status", "mimeType"])
     case .loadingFinished, .dataReceived: fields.formUnion(["requestID", "encodedBytes"])

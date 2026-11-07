@@ -4,6 +4,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ShaarNetworkPanel: View {
   @Bindable var model: ShaarNetworkModel
@@ -17,9 +18,7 @@ struct ShaarNetworkPanel: View {
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
   private var rows: [ShaarNetworkRequest] {
-    if events.count <= 500 && model.projection.result == nil {
-      return model.visibleRequests(from: events)
-    }
+    if events.count <= 500 { return model.visibleRequests(from: events) }
     return model.projection.result?.rows ?? []
   }
   private var selected: ShaarNetworkRequest? { rows.first { $0.id == model.selectedID } }
@@ -27,6 +26,7 @@ struct ShaarNetworkPanel: View {
   var body: some View {
     VStack(spacing: 0) {
       filters
+      conditionsBar
       Divider()
       GeometryReader { geometry in
         HStack(spacing: 0) {
@@ -47,7 +47,67 @@ struct ShaarNetworkPanel: View {
     .task { model.scheduleRows(from: events) }
     .onChange(of: events.last) { _, _ in model.scheduleRows(from: events) }
     .onChange(of: model.filter) { _, _ in model.scheduleRows(from: events) }
+    .onChange(of: model.statusFilter) { _, _ in model.scheduleRows(from: events) }
     .onChange(of: model.search) { _, _ in model.scheduleRows(from: events) }
+    .onChange(of: model.selectedID) { _, id in
+      guard let id else { return }
+      Task { await model.loadResponseBody(id: id) }
+    }
+  }
+
+  private var conditionsBar: some View {
+    HStack(spacing: 8) {
+      Menu {
+        ForEach(ShaarNetworkStatusFilter.allCases, id: \.self) { status in
+          Button(ShellL10n.string(status.rawValue)) { model.statusFilter = status }
+        }
+      } label: {
+        Text(ShellL10n.string(model.statusFilter.rawValue))
+          .font(.system(size: 11))
+      }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .accessibilityIdentifier("shaar.devtools.networkStatus")
+      Menu {
+        ForEach(ShaarNetworkThrottle.allCases, id: \.self) { preset in
+          Button(ShellL10n.string(preset.rawValue)) {
+            Task { await model.conditions.select(preset) }
+          }
+        }
+      } label: {
+        Text(ShellL10n.string(model.conditions.throttle.rawValue))
+          .font(.system(size: 11))
+      }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .accessibilityIdentifier("shaar.devtools.networkThrottle")
+      Toggle(ShellL10n.string("Disable cache"), isOn: cacheDisabled)
+        .toggleStyle(.checkbox)
+        .font(.system(size: 11))
+        .accessibilityIdentifier("shaar.devtools.networkCache")
+      Spacer(minLength: 4)
+      if let failure = model.conditions.failure {
+        Text(failure)
+          .font(.system(size: 10))
+          .foregroundStyle(.red)
+          .lineLimit(1)
+          .accessibilityIdentifier("shaar.devtools.networkConditionsFailure")
+      }
+      Button(ShellL10n.string("Export HAR"), action: exportHAR)
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .medium))
+        .accessibilityIdentifier("shaar.devtools.networkHAR")
+    }
+    .padding(.horizontal, 12)
+    .frame(height: 30)
+  }
+
+  private var cacheDisabled: Binding<Bool> {
+    Binding(
+      get: { model.conditions.cacheDisabled },
+      set: { disabled in
+        Task { await model.conditions.setCacheDisabled(disabled) }
+      })
   }
 
   private var filters: some View {
@@ -396,20 +456,32 @@ struct ShaarNetworkPanel: View {
         }
       }
     case .response:
-      if let body = row.responseBody {
-        if let tree = model.jsonTree(for: body) {
-          ForEach(Array(tree.enumerated()), id: \.offset) { _, node in
-            ShaarNetworkJSONTree(node: node)
-          }
-        } else {
-          VStack(alignment: .leading, spacing: 5) {
-            Text(String(body.prefix(32_768)))
-              .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
-            if body.count > 32_768 { emptyDetail("Response preview truncated") }
-          }
+      if row.responseIsBinary {
+        emptyDetail("Binary response")
+      } else if let body = row.responseBody, !body.isEmpty {
+        VStack(alignment: .leading, spacing: 5) {
+          Text(String(body.prefix(32_768)))
+            .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+          if body.count > 32_768 { emptyDetail("Response preview truncated") }
         }
       } else {
         emptyDetail("No response body is available")
+      }
+    case .preview:
+      if let data = row.previewData, let image = NSImage(data: data) {
+        Image(nsImage: image)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(maxWidth: 240, maxHeight: 160, alignment: .leading)
+          .accessibilityIdentifier("shaar.devtools.networkPreviewImage")
+      } else if let body = row.responseBody, !row.responseIsBinary,
+        let tree = model.jsonTree(for: body)
+      {
+        ForEach(Array(tree.enumerated()), id: \.offset) { _, node in
+          ShaarNetworkJSONTree(node: node)
+        }
+      } else {
+        emptyDetail("No preview is available")
       }
     case .timing:
       VStack(alignment: .leading, spacing: 10) {
@@ -496,6 +568,15 @@ struct ShaarNetworkPanel: View {
   private func copy(_ value: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(value, forType: .string)
+  }
+
+  private func exportHAR() {
+    let data = ShaarNetworkHAR.document(requests: model.exportRequests(from: events))
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = "shaar-network.har"
+    panel.allowedContentTypes = [.json]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    try? data.write(to: url, options: .atomic)
   }
 }
 

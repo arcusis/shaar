@@ -32,6 +32,8 @@ struct ShaarNetworkRequest: Identifiable, Equatable, Sendable {
   var responseHeaders: [ShaarNetworkHeader]
   var payload: String?
   var responseBody: String?
+  var responseIsBinary = false
+  var previewData: Data?
 
   var name: String {
     guard let url = URL(string: url) else { return self.url }
@@ -82,15 +84,22 @@ struct ShaarNetworkProjection: Sendable {
 @MainActor @Observable
 final class ShaarNetworkModel {
   var filter = ShaarNetworkFilter.all
+  var statusFilter = ShaarNetworkStatusFilter.any
   var search = ""
   var selectedID: String?
   var detailTab = DetailTab.headers
+  let conditions = ShaarNetworkConditionsModel()
   let projection = ShaarDevToolsListProjection<ShaarNetworkProjection>()
+  private(set) var responseBodies: [String: ShaarStoredResponseBody] = [:]
+  @ObservationIgnored var loadBody: (@MainActor (String) async throws -> ShaarStoredResponseBody)?
+  @ObservationIgnored private var lastEvents: [ShaarDevToolsEvent] = []
+  @ObservationIgnored private var loadingBodyIDs: Set<String> = []
 
   enum DetailTab: String, CaseIterable {
     case headers = "Headers"
     case payload = "Payload"
     case response = "Response"
+    case preview = "Preview"
     case timing = "Timing"
   }
 
@@ -98,6 +107,12 @@ final class ShaarNetworkModel {
     projection.clear()
     selectedID = nil
     detailTab = .headers
+  }
+
+  func resetLog() {
+    responseBodies.removeAll()
+    loadingBodyIDs.removeAll()
+    clearSelection()
   }
 
   func selectAdjacent(in rows: [ShaarNetworkRequest], forward: Bool, from focusedID: String? = nil)
@@ -120,16 +135,38 @@ final class ShaarNetworkModel {
   }
 
   func scheduleRows(from events: [ShaarDevToolsEvent]) {
+    lastEvents = events
     let filter = filter
+    let statusFilter = statusFilter
     let search = search
+    let bodies = responseBodies
     let failureLabel = ShellL10n.string("Request failed")
     projection.schedule {
-      let requests = Self.buildRequests(events, failureLabel: failureLabel)
-      let visible = Self.filterRequests(requests, filter: filter, search: search)
+      let requests = Self.applyBodies(
+        Self.buildRequests(events, failureLabel: failureLabel), bodies: bodies)
+      let visible = Self.filterRequests(
+        requests, filter: filter, status: statusFilter, search: search)
       return ShaarNetworkProjection(
         rows: visible, totalCount: requests.count,
         firstTime: visible.map(\.startedAt).min() ?? 0,
         lastTime: visible.map { $0.completedAt ?? $0.startedAt }.max() ?? 0)
+    }
+  }
+
+  func exportRequests(from events: [ShaarDevToolsEvent]) -> [ShaarNetworkRequest] {
+    Self.applyBodies(requests(from: events), bodies: responseBodies)
+  }
+
+  func loadResponseBody(id: String) async {
+    guard responseBodies[id] == nil, !loadingBodyIDs.contains(id), let loadBody else { return }
+    if requests(from: lastEvents).first(where: { $0.id == id })?.responseBody != nil { return }
+    loadingBodyIDs.insert(id)
+    defer { loadingBodyIDs.remove(id) }
+    do {
+      responseBodies[id] = try await loadBody(id)
+      scheduleRows(from: lastEvents)
+    } catch {
+      return
     }
   }
 
@@ -157,19 +194,38 @@ final class ShaarNetworkModel {
   }
 
   func visibleRequests(from events: [ShaarDevToolsEvent]) -> [ShaarNetworkRequest] {
-    Self.filterRequests(requests(from: events), filter: filter, search: search)
+    Self.filterRequests(
+      Self.applyBodies(requests(from: events), bodies: responseBodies),
+      filter: filter, status: statusFilter, search: search)
   }
 
   nonisolated private static func filterRequests(
-    _ requests: [ShaarNetworkRequest], filter: ShaarNetworkFilter, search: String
+    _ requests: [ShaarNetworkRequest], filter: ShaarNetworkFilter,
+    status: ShaarNetworkStatusFilter, search: String
   ) -> [ShaarNetworkRequest] {
     let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
     return requests.filter { row in
       if filter == .errors && !row.isError { return false }
       if filter != .all && filter != .errors && filter != row.resource { return false }
+      guard status.matches(row) else { return false }
       return needle.isEmpty || row.url.localizedStandardContains(needle)
         || row.method.localizedStandardContains(needle)
         || row.status.map(String.init)?.contains(needle) == true
+    }
+  }
+
+  nonisolated private static func applyBodies(
+    _ rows: [ShaarNetworkRequest], bodies: [String: ShaarStoredResponseBody]
+  ) -> [ShaarNetworkRequest] {
+    guard !bodies.isEmpty else { return rows }
+    return rows.map { row in
+      guard let stored = bodies[row.id] else { return row }
+      var copy = row
+      let presented = ShaarNetworkBodyPresentation.apply(stored, mime: row.mimeType)
+      copy.responseBody = presented.text
+      copy.previewData = presented.image
+      copy.responseIsBinary = presented.binary
+      return copy
     }
   }
 
@@ -186,7 +242,7 @@ final class ShaarNetworkModel {
     var parts = ["curl", "-X", Self.shellQuote(row.method), Self.shellQuote(row.url)]
     for header in row.requestHeaders.prefix(32) {
       parts.append("-H")
-      parts.append(Self.shellQuote("\(header.name): \(safeValue(header))"))
+      parts.append(Self.shellQuote("\(header.name): \(ShaarNetworkHeaderRedaction.value(header))"))
     }
     if let payload = row.payload { parts += ["--data-raw", Self.shellQuote(payload)] }
     return parts.joined(separator: " ")
@@ -196,7 +252,7 @@ final class ShaarNetworkModel {
     var fields = ["method: \(Self.jsonQuote(row.method))"]
     if !row.requestHeaders.isEmpty {
       let headers = row.requestHeaders.prefix(32).map {
-        "\(Self.jsonQuote($0.name)): \(Self.jsonQuote(safeValue($0)))"
+        "\(Self.jsonQuote($0.name)): \(Self.jsonQuote(ShaarNetworkHeaderRedaction.value($0)))"
       }.joined(separator: ", ")
       fields.append("headers: { \(headers) }")
     }
@@ -214,7 +270,7 @@ final class ShaarNetworkModel {
     }
     if let failure = row.failure { lines.append("Failure: \(failure)") }
     for header in row.responseHeaders.prefix(20) {
-      lines.append("\(header.name): \(safeValue(header))")
+      lines.append("\(header.name): \(ShaarNetworkHeaderRedaction.value(header))")
     }
     return String(lines.joined(separator: "\n").prefix(16_384))
   }
@@ -241,11 +297,6 @@ final class ShaarNetworkModel {
       row.completedAt = event.time
       row.failure = event.failure ?? failureLabel
     }
-  }
-
-  private func safeValue(_ header: ShaarNetworkHeader) -> String {
-    let sensitive = ["authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key"]
-    return sensitive.contains(header.name.lowercased()) ? "[redacted]" : header.value
   }
 
   private static func shellQuote(_ text: String) -> String {

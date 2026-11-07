@@ -83,6 +83,10 @@ import Foundation
       }
       return "Console error and loopback fetch reached the live app event models"
     }
+    await check("network-tools") { try await self.proveNetworkTools(shell) }
+    await check("network-throttle") {
+      try await self.proveNetworkThrottle(target, inspector: inspector)
+    }
     await check("network-row") {
       try await self.wait("live network row columns") {
         self.finishedPrivacyRow(shell) != nil
@@ -389,6 +393,9 @@ import Foundation
     await check("split-shell") {
       try await self.proveSplitShells(firstTab: tab, firstShell: shell)
     }
+    await check("console-tools") {
+      try await self.proveConsoleTools(shell, inspector: inspector)
+    }
     return try results.finish(
       root: root, phase: phase, engine: engine.runtime.chromiumVersion,
       hidden: NSApp.windows.allSatisfy { !$0.isVisible })
@@ -441,6 +448,207 @@ import Foundation
   ) -> Bool {
     guard viewportsChanged(shell, from: previous) else { return false }
     return shell.viewports.frames.allSatisfy { $0.url.path == path }
+  }
+
+  private func proveNetworkTools(_ shell: ShaarDevToolsModel) async throws -> String {
+    try await wait("privacy cache request finished") {
+      shell.network.requests(from: shell.events).contains { row in
+        row.url.contains("/profile-privacy-cache") && row.status != nil
+      }
+    }
+    guard
+      let row = shell.network.requests(from: shell.events).first(where: {
+        $0.url.contains("/profile-privacy-cache")
+      })
+    else { throw Failure("Loopback fetch did not reach the Network model") }
+    shell.network.filter = .fetch
+    shell.network.statusFilter = .success
+    shell.network.search = "privacy-cache"
+    guard shell.network.visibleRequests(from: shell.events).contains(where: { $0.id == row.id })
+    else { throw Failure("Type, status, and text filters hid the loopback fetch") }
+    shell.network.statusFilter = .clientError
+    guard !shell.network.visibleRequests(from: shell.events).contains(where: { $0.id == row.id })
+    else { throw Failure("4xx filter kept a successful request") }
+    shell.network.filter = .all
+    shell.network.statusFilter = .any
+    shell.network.search = ""
+    let curl = shell.network.curlCommand(for: row)
+    let fetch = shell.network.fetchCommand(for: row)
+    guard curl.contains("profile-privacy-cache"), fetch.hasPrefix("fetch(") else {
+      throw Failure("cURL or fetch copy missed the request")
+    }
+    let body = try await responseBody(shell, requestID: row.id)
+    let har = String(
+      decoding: ShaarNetworkHAR.document(
+        requests: shell.network.exportRequests(from: shell.events)),
+      as: UTF8.self)
+    guard har.contains("profile-privacy-cache"), har.contains(body) else {
+      throw Failure("HAR export missed the request or its body")
+    }
+    return "Type, status, and text filters, response body, cURL, fetch, and HAR matched the live fetch"
+  }
+
+  private func responseBody(_ shell: ShaarDevToolsModel, requestID: String) async throws -> String {
+    var body = ""
+    for _ in 0..<15 {
+      await shell.network.loadResponseBody(id: requestID)
+      body =
+        shell.network.exportRequests(from: shell.events).first { $0.id == requestID }?.responseBody
+        ?? ""
+      if !body.isEmpty { return body }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw Failure("Response body did not load for the loopback fetch")
+  }
+
+  private func proveNetworkThrottle(
+    _ target: SiteControlTarget, inspector: InspectorModel
+  ) async throws -> String {
+    let developer = engine.developerModel(for: target)
+    try await wait("developer session idle") { !developer.applying }
+    try developer.retainDeveloperSession()
+    let baseline = try await elapsedFetch(inspector, path: "/inspector-echo-header?base=1")
+    let slowed: TimeInterval
+    do {
+      try await ShaarNetworkConditions.applyThrottle(.slow3G) { method, params in
+        _ = try await developer.call(method, params: params)
+      }
+      slowed = try await elapsedFetch(inspector, path: "/inspector-echo-header?slow=1")
+    } catch {
+      try? await ShaarNetworkConditions.applyThrottle(.none) { method, params in
+        _ = try await developer.call(method, params: params)
+      }
+      throw error
+    }
+    try await ShaarNetworkConditions.applyThrottle(.none) { method, params in
+      _ = try await developer.call(method, params: params)
+    }
+    guard slowed >= baseline + 0.25 else {
+      throw Failure(
+        "Slow 3G added \(slowed - baseline)s over a \(baseline)s baseline")
+    }
+    let cacheDetail = await cacheDisabledDetail(developer)
+    let added = Int(((slowed - baseline) * 1_000).rounded())
+    return "Slow 3G delayed a loopback fetch by \(added) ms. \(cacheDetail)"
+  }
+
+  private func cacheDisabledDetail(_ developer: DeveloperPageModel) async -> String {
+    do {
+      try await ShaarNetworkConditions.applyCacheDisabled(true) { method, params in
+        _ = try await developer.call(method, params: params)
+      }
+      try await ShaarNetworkConditions.applyCacheDisabled(false) { method, params in
+        _ = try await developer.call(method, params: params)
+      }
+      return "Disable cache was accepted by this engine."
+    } catch {
+      return
+        "Disable cache is not in this engine (command 69): \(error.localizedDescription). Ready for engine build."
+    }
+  }
+
+  private func elapsedFetch(_ inspector: InspectorModel, path: String) async throws -> TimeInterval
+  {
+    let started = Date()
+    _ = try await inspector.evaluate("fetch('\(path)',{cache:'no-store'}).then(r=>r.text())")
+    return Date().timeIntervalSince(started)
+  }
+
+  private func proveConsoleTools(
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel
+  ) async throws -> String {
+    _ = try await inspector.evaluate("console.error('shaar19-live-console')")
+    try await wait("console tools error") {
+      shell.console.rows(from: shell.consoleEvents).contains {
+        $0.event.message.contains("shaar19-live-console")
+      }
+    }
+    shell.console.command = "({probe:1124, ok:true})"
+    await shell.console.submit { expression in
+      let reply = try await inspector.call(
+        "Runtime.evaluate",
+        params: [
+          "expression": expression,
+          "objectGroup": ShaarConsoleModel.objectGroup,
+          "generatePreview": true,
+          "awaitPromise": true,
+          "silent": true,
+        ])
+      return try ShaarConsoleModel.evaluation(from: reply)
+    }
+    guard
+      let entry = shell.console.rows(from: shell.consoleEvents).last(where: {
+        $0.event.objectID != nil
+      })?.event,
+      let objectID = entry.objectID,
+      entry.previewProperties.contains(where: { $0.name == "probe" })
+    else { throw Failure("Evaluated object did not keep a preview or object id") }
+    let properties = try await inspector.call(
+      "Runtime.getProperties", params: ["objectId": objectID, "ownProperties": true])
+    guard ShaarConsoleModel.parseProperties(properties).contains(where: { $0.name == "probe" })
+    else { throw Failure("Runtime.getProperties did not expand the evaluated object") }
+    shell.console.searchUsesRegex = true
+    shell.console.search = "shaar19-live-console"
+    guard
+      shell.console.rows(from: shell.consoleEvents).contains(where: {
+        $0.event.message.contains("shaar19-live-console")
+      })
+    else { throw Failure("Regular expression filter missed the live console error") }
+    shell.console.search = "("
+    guard shell.console.regexIsInvalid, shell.console.rows(from: shell.consoleEvents).isEmpty
+    else { throw Failure("Invalid regular expression still matched console rows") }
+    shell.console.searchUsesRegex = false
+    shell.console.search = ""
+    shell.console.level = .error
+    let errors = shell.console.rows(from: shell.consoleEvents)
+    guard errors.allSatisfy({ $0.event.level == .error }),
+      errors.contains(where: { $0.event.message.contains("shaar19-live-console") })
+    else { throw Failure("Error level filter did not keep only console errors") }
+    shell.console.level = nil
+    let stackNote = try await liveConsoleStackNote(shell, inspector: inspector)
+    guard shell.console.history.contains("({probe:1124, ok:true})") else {
+      throw Failure("Command history did not keep the evaluation")
+    }
+    shell.console.preserveLog = true
+    shell.updateTarget(shell.target, committed: true)
+    try await wait("panel stream restored") { shell.streamAvailable }
+    guard
+      shell.console.rows(from: shell.consoleEvents).contains(where: {
+        $0.event.message.contains("shaar19-live-console")
+      })
+    else { throw Failure("Preserve log dropped the console error on navigation") }
+    let history = shell.console.history
+    shell.console.clearEntries()
+    guard
+      !shell.console.rows(from: shell.consoleEvents).contains(where: {
+        $0.event.message.contains("shaar19-live-console")
+      })
+    else { throw Failure("Clear left the preserved console error in the log") }
+    guard shell.console.history == history else { throw Failure("Clear dropped command history") }
+    shell.console.preserveLog = false
+    return
+      "Evaluation expanded, regex and level filters matched, preserve log survived navigation, and clear kept history. "
+      + stackNote
+  }
+
+  private func liveConsoleStackNote(
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel
+  ) async throws -> String {
+    _ = try await inspector.evaluate(
+      "(function shaarStackProbe(){ console.error('shaar-stack-probe'); return true })()")
+    try await wait("console stack probe") {
+      shell.console.rows(from: shell.consoleEvents).contains {
+        $0.event.message.contains("shaar-stack-probe")
+      }
+    }
+    guard
+      let frame = shell.console.rows(from: shell.consoleEvents).first(where: {
+        $0.event.message.contains("shaar-stack-probe")
+      })?.event.stack.first
+    else {
+      return "Live stack is absent on this engine. Ready for engine build."
+    }
+    return "Live stack \(frame.function) \(frame.source)."
   }
 
   private static func f12OpensShaarDevTools() -> Bool {
@@ -681,12 +889,12 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "f12-route", "shell-defaults", "security", "console-network", "network-row",
-    "console-repeat", "issues", "split-shell", "application-cookie",
-    "application-local-storage",
-    "application-session-storage", "application-indexed-db", "application-cache-storage",
-    "application-service-worker", "network-rules", "source-bytes", "viewports",
-    "masked-repro", "elements-live", "elements-inspector", "elements-scale",
+    "f12-route", "shell-defaults", "security", "console-network", "network-tools",
+    "network-throttle", "network-row", "console-repeat", "issues", "application-cookie",
+    "application-local-storage", "application-session-storage", "application-indexed-db",
+    "application-cache-storage", "application-service-worker", "network-rules", "source-bytes",
+    "viewports", "masked-repro", "elements-live", "elements-inspector", "elements-scale",
+    "split-shell", "console-tools",
   ]
 
   private var entries: [String: [String: Any]] = [:]

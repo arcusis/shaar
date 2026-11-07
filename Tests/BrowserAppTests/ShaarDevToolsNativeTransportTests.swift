@@ -10,6 +10,7 @@ import Testing
 
 @MainActor private final class PanelRequesterFixture: ShaarPanelRequesting {
   var operations: [ShaarDevToolsOperation] = []
+  var payloads: [[String: Any]] = []
   var failOpen = false
   var supportsPhase2 = false
 
@@ -17,8 +18,12 @@ import Testing
     _ operation: ShaarDevToolsOperation, target: SiteControlTarget, payload: [String: Any]
   ) async throws -> [String: Any] {
     operations.append(operation)
+    payloads.append(payload)
     if failOpen && operation == .panelOpen { throw CancellationError() }
     if operation == .panelOpen { return ["schemaVersion": 1, "leaseID": 7] }
+    if operation == .panelGetResponseBody {
+      return ["schemaVersion": 1, "body": "shaar-body", "base64Encoded": false]
+    }
     if operation == .panelPhase2Command {
       if !supportsPhase2 { throw CancellationError() }
       return [
@@ -64,6 +69,20 @@ import Testing
       await Task.yield()
     }
     #expect(requester.operations.filter({ $0 == .panelScreencast }).count >= 2)
+  }
+
+  @Test func responseBodyUsesTheOpenPanelLease() async throws {
+    let requester = PanelRequesterFixture()
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    var iterator = transport.messages(for: target).makeAsyncIterator()
+    #expect(await iterator.next() == .streamAvailable)
+    let stored = try await transport.responseBody(requestID: "req-9", for: target)
+    #expect(stored.body == "shaar-body")
+    #expect(!stored.base64Encoded)
+    let payload = try #require(requester.payloads.last { $0["requestID"] as? String == "req-9" })
+    #expect(payload["leaseID"] as? UInt32 == 7)
+    #expect(requester.operations.contains(.panelGetResponseBody))
   }
 
   @Test func unavailablePanelKeepsStreamGated() async {
@@ -162,7 +181,32 @@ import Testing
       return
     }
     #expect(console.message == "still live")
+    #expect(console.stack.isEmpty)
     #expect(!requester.operations.contains(.panelClose))
+  }
+
+  @Test func consoleStackMapsOntoTheRow() async throws {
+    let requester = PanelRequesterFixture()
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    var shell = transport.messages(for: target).makeAsyncIterator()
+    #expect(await shell.next() == .streamAvailable)
+    transport.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(
+        1,
+        data: [
+          "text": "boom", "level": "error", "truncated": false,
+          "stack": [["function": "loadOrders", "source": "orders.ts:17"]],
+        ]), sequence: 1)
+    guard case .event(.console(let console)) = await shell.next() else {
+      Issue.record("Console stack did not reach the shell stream")
+      return
+    }
+    #expect(console.message == "boom")
+    #expect(console.level == .error)
+    #expect(console.source == "orders.ts:17")
+    #expect(console.stack == [ShaarConsoleFrame(function: "loadOrders", source: "orders.ts:17")])
   }
 
   private func event(_ id: Int, data: [String: Any]) throws -> Data {

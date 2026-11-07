@@ -51,7 +51,7 @@ import Testing
     model.command = " 6 * 7 "
     await model.submit { expression in
       #expect(expression == "6 * 7")
-      return "42"
+      return ShaarConsoleEvaluation(message: "42", objectID: nil, previewProperties: [])
     }
     #expect(model.history == ["6 * 7"])
     #expect(model.historyCommand(up: true) == "6 * 7")
@@ -111,5 +111,76 @@ import Testing
       timestamp: Date(timeIntervalSince1970: 1))
     let rows = ShaarConsoleModel().rows(from: [.console(browser), .console(server)])
     #expect(rows.map(\.event.message) == ["Server", "Browser"])
+  }
+
+  @Test func regularExpressionFiltersMessagesAndRejectsInvalidPatterns() {
+    let model = ShaarConsoleModel()
+    let events: [ShaarDevToolsEvent] = [
+      .console(.init(id: UUID(), level: .error, message: "shaar19-live-console", source: nil)),
+      .console(.init(id: UUID(), level: .log, message: "ready", source: "/app/main.ts")),
+    ]
+    model.searchUsesRegex = true
+    model.search = "shaar19-live-.*"
+    #expect(model.rows(from: events).map(\.event.message) == ["shaar19-live-console"])
+    model.search = "MAIN"
+    #expect(model.rows(from: events).isEmpty)
+    model.search = "("
+    #expect(model.regexIsInvalid)
+    #expect(model.rows(from: events).isEmpty)
+    model.searchUsesRegex = false
+    model.search = "MAIN"
+    #expect(!model.regexIsInvalid)
+    #expect(model.rows(from: events).map(\.event.message) == ["ready"])
+  }
+
+  @Test func evaluationKeepsObjectHandlesAndReportsExceptions() throws {
+    let reply: [String: Any] = [
+      "result": [
+        "type": "object",
+        "description": "Object",
+        "objectId": "obj-7",
+        "preview": [
+          "properties": [
+            ["name": "probe", "value": "1124", "type": "number"],
+            ["name": "ok", "type": "boolean"],
+          ]
+        ],
+      ]
+    ]
+    let evaluation = try ShaarConsoleModel.evaluation(from: reply)
+    #expect(evaluation.message == "Object")
+    #expect(evaluation.objectID == "obj-7")
+    #expect(evaluation.previewProperties.map(\.name) == ["probe", "ok"])
+    #expect(evaluation.previewProperties[0].value == "1124")
+    #expect(throws: ShaarConsoleEvaluationError.self) {
+      try ShaarConsoleModel.evaluation(from: [
+        "exceptionDetails": ["exception": ["description": "boom"], "text": "Uncaught"]
+      ])
+    }
+    let number = try ShaarConsoleModel.evaluation(from: [
+      "result": ["type": "number", "value": 42, "description": "42"]
+    ])
+    #expect(number.message == "42")
+    let text = try ShaarConsoleModel.evaluation(from: [
+      "result": ["type": "string", "value": "hello"]
+    ])
+    #expect(text.message == "hello")
+  }
+
+  @Test func clearDropsEntriesAndKeepsHistory() async {
+    let model = ShaarConsoleModel()
+    var cleared = false
+    model.onClear = { cleared = true }
+    model.command = "1 + 1"
+    await model.submit { _ in
+      ShaarConsoleEvaluation(message: "2", objectID: "obj-1", previewProperties: [
+        ShaarConsoleProperty(name: "n", value: "2")
+      ])
+    }
+    #expect(model.rows(from: []).contains { $0.event.objectID == "obj-1" })
+    model.clearEntries()
+    #expect(cleared)
+    #expect(model.rows(from: []).isEmpty)
+    #expect(model.history == ["1 + 1"])
   }
 }

@@ -318,6 +318,7 @@ struct ShaarDevToolsPanel: View {
           model: model.network, rules: model.rules, events: model.events,
           droppedCount: model.droppedNetworkCount,
           openChromium: openChromium)
+          .task { bindNetworkConditions() }
       } else {
         unavailablePanel
       }
@@ -429,6 +430,22 @@ struct ShaarDevToolsPanel: View {
       return model.nativePhase2Failure ?? model.nativeStreamFailure
     default:
       return model.nativeStreamFailure
+    }
+  }
+
+  private func bindNetworkConditions() {
+    let developer = inspector?.engine?.developerModel(for: model.target)
+    model.network.conditions.applyThrottle = { throttle in
+      guard let developer else { return }
+      try await ShaarNetworkConditions.applyThrottle(throttle) { method, params in
+        _ = try await developer.call(method, params: params)
+      }
+    }
+    model.network.conditions.applyCacheDisabled = { disabled in
+      guard let developer else { return }
+      try await ShaarNetworkConditions.applyCacheDisabled(disabled) { method, params in
+        _ = try await developer.call(method, params: params)
+      }
     }
   }
 

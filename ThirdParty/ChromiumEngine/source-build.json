@@ -389,6 +389,14 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0036-shaar-devtools-rendering-overlay.patch",
       "sha256": "9d526f95adcbd17b3272eac36e8aebcd34471eaaf3810888ea87273ddb873124"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0037-shaar-devtools-network-cache-disabled.patch",
+      "sha256": "69a2423552d0ff1283ddee3474339758680d4db2cbcf1268755a1355b1e2368f"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0038-shaar-devtools-console-stack.patch",
+      "sha256": "3f594403e07d7306d7bd2883f80446c34bb071e8ee56574d00394059ff792dc2"
     }
   ],
   "requiredExports": [

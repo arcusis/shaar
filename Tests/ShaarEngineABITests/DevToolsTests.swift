@@ -96,6 +96,27 @@ struct DevToolsTests {
     }
   }
 
+  @Test func cacheDisabledCommandIsDeveloperOnly() throws {
+    let fake = FakeDevToolsEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    _ = try adapter.call(
+      capability: .developer, command: .networkSetCacheDisabled,
+      parametersJSON: Data(#"{"cacheDisabled":true}"#.utf8),
+      scope: ShaarNavigationScope(profileID: "profile-a"),
+      windowID: "window-a", tabID: "tab-a", completion: { _ in })
+    let request = try #require(fake.request)
+    let root = try #require(JSONSerialization.jsonObject(with: request.payload) as? [String: Any])
+    #expect(root["command"] as? UInt32 == 69)
+    #expect(root["capability"] as? UInt32 == ShaarDevToolsCapability.developer.rawValue)
+    #expect((root["params"] as? [String: Bool])?["cacheDisabled"] == true)
+    #expect(throws: ShaarEngineError.self) {
+      try adapter.call(
+        capability: .inspector, command: .networkSetCacheDisabled,
+        scope: ShaarNavigationScope(profileID: "profile-a"),
+        windowID: "window-a", tabID: "tab-a", completion: { _ in })
+    }
+  }
+
   @Test func frontendUsesOnlyShowOrCloseAndRejectsMissingOwners() throws {
     let fake = FakeDevToolsEngine()
     let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))

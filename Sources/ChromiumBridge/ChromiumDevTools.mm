@@ -99,7 +99,7 @@ const NSArray<NSString *> *ShaarMethods() {
       @"DOM.getOuterHTML", @"CSS.forcePseudoState",
       @"Emulation.setTouchEmulationEnabled",
       @"Overlay.setShowPaintRects", @"Overlay.setShowLayoutShiftRegions",
-      @"Overlay.setShowFPSCounter"];
+      @"Overlay.setShowFPSCounter", @"Network.setCacheDisabled"];
   });
   return methods;
 }
@@ -108,6 +108,7 @@ const NSArray<NSString *> *ShaarMethods() {
 // send 62, which the engine uses for Page.disable. 63 is Page.handleJavaScriptDialog.
 // Emulation.setTouchEmulationEnabled is command 65. Appending it would otherwise send 63.
 // The rendering overlay commands are 66-68 for the same reason.
+// Network.setCacheDisabled is command 69. Appending it would otherwise send 67.
 NSUInteger ShaarDevToolsCommandID(NSString *method) {
   NSUInteger index = [ShaarMethods() indexOfObject:method];
   if (index == NSNotFound)
@@ -122,6 +123,8 @@ NSUInteger ShaarDevToolsCommandID(NSString *method) {
     return 67;
   if ([method isEqualToString:@"Overlay.setShowFPSCounter"])
     return 68;
+  if ([method isEqualToString:@"Network.setCacheDisabled"])
+    return 69;
   return index + 1;
 }
 
@@ -189,6 +192,7 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
       operation != SHAAR_OP_DEVTOOLS_PANEL_CLOSE &&
       operation != SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND &&
       operation != SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST &&
+      operation != SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY &&
       operation != 1080 /* SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES in patch 0024 */) {
     completion(nil, ShaarDevToolsError(@"This panel operation is unavailable."));
     return;

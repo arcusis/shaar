@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/media/shaar_media.h"
+#include "chrome/browser/shaar/media/shaar_media_permission.h"
 
 #include <algorithm>
 #include <cmath>
@@ -907,6 +908,25 @@ shaar_error_code HandleMediaOperation(
                 "invalid media request envelope");
 
   const ReplyContext request{request_id, reply, reply_context};
+  if (operation == SHAAR_OP_MEDIA_PERMISSION_DECISION) {
+    const std::string* permission_id = args->FindString("id");
+    const auto accepted = args->FindBool("accepted");
+    if (!HasOnlyKeys(*args, {"schemaVersion", "id", "accepted"}) ||
+        !permission_id || permission_id->empty() || permission_id->size() > 128 ||
+        !accepted)
+      return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                  "invalid website media decision");
+    const auto allowed = shaar::media::ResolveWebsiteMediaPermission(
+        engine, contents, *permission_id, *accepted);
+    if (!allowed)
+      return Fail(immediate_error, SHAAR_NOT_FOUND,
+                  "website media request is unavailable");
+    base::DictValue result;
+    result.Set("schemaVersion", 1);
+    result.Set("accepted", *allowed);
+    Reply(request, std::move(result));
+    return SHAAR_OK;
+  }
   if (operation == SHAAR_OP_PROBE_MEDIA_GESTURE) {
     if (!IsMarkedMediaProbe(engine, contents))
       return Fail(immediate_error, SHAAR_POLICY_BLOCKED,

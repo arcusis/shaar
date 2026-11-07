@@ -1,0 +1,172 @@
+diff --git a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.cc b/chrome/browser/media/webrtc/permission_bubble_media_access_handler.cc
+--- a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.cc
++++ b/chrome/browser/media/webrtc/permission_bubble_media_access_handler.cc
+@@ -7,6 +7,7 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/metrics/field_trial.h"
+@@ -46,6 +47,12 @@
+     base::OnceCallback<void(const blink::mojom::StreamDevicesSet& devices,
+                             blink::mojom::MediaStreamRequestResult result,
+                             std::unique_ptr<content::MediaStreamUI> ui)>;
++
++namespace shaar::media {
++void RequestWebsiteMediaPermission(
++    content::WebContents*, const content::MediaStreamRequest&,
++    base::OnceCallback<void(bool)>) __attribute__((weak_import));
++}  // namespace shaar::media
+ 
+ #if BUILDFLAG(IS_MAC)
+ using system_permission_settings::SystemPermission;
+@@ -247,11 +254,40 @@
+   const content::MediaStreamRequest& request =
+       it->second.begin()->second.request;
+ 
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    auto decision = base::BindOnce(
++        &PermissionBubbleMediaAccessHandler::OnShaarMediaPermissionDecision,
++        weak_factory_.GetWeakPtr(), web_contents, request_id, request);
++    if (shaar::media::RequestWebsiteMediaPermission) {
++      shaar::media::RequestWebsiteMediaPermission(
++          web_contents, request, std::move(decision));
++    } else {
++      std::move(decision).Run(false);
++    }
++    return;
++  }
++
+   webrtc::MediaStreamDevicesController::RequestPermissions(
+       request, MediaCaptureDevicesDispatcher::GetInstance(),
+       base::BindOnce(
+           &PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse,
+           base::Unretained(this), web_contents, request_id, request));
++}
++
++void PermissionBubbleMediaAccessHandler::OnShaarMediaPermissionDecision(
++    content::WebContents* web_contents,
++    int64_t request_id,
++    content::MediaStreamRequest request,
++    bool allowed) {
++  auto found = pending_requests_.find(web_contents);
++  if (found == pending_requests_.end() ||
++      !found->second.contains(request_id))
++    return;
++  webrtc::MediaStreamDevicesController::RequestPermissionsWithShaarDecision(
++      request, MediaCaptureDevicesDispatcher::GetInstance(), allowed,
++      base::BindOnce(
++          &PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse,
++          weak_factory_.GetWeakPtr(), web_contents, request_id, request));
+ }
+ 
+ void PermissionBubbleMediaAccessHandler::UpdateMediaRequestState(
+diff --git a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.h b/chrome/browser/media/webrtc/permission_bubble_media_access_handler.h
+--- a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.h
++++ b/chrome/browser/media/webrtc/permission_bubble_media_access_handler.h
+@@ -56,6 +56,11 @@
+ 
+   void ProcessQueuedAccessRequest(
+       MayBeDangling<content::WebContents> web_contents);
++  void OnShaarMediaPermissionDecision(
++      content::WebContents* web_contents,
++      int64_t request_id,
++      content::MediaStreamRequest request,
++      bool allowed);
+   void OnMediaStreamRequestResponse(
+       content::WebContents* web_contents,
+       int64_t request_id,
+diff --git a/components/webrtc/media_stream_devices_controller.cc b/components/webrtc/media_stream_devices_controller.cc
+--- a/components/webrtc/media_stream_devices_controller.cc
++++ b/components/webrtc/media_stream_devices_controller.cc
+@@ -192,6 +192,70 @@
+           base::BindOnce(
+               &MediaStreamDevicesController::PromptAnsweredGroupedRequest,
+               std::move(controller)));
++}
++
++// static
++void MediaStreamDevicesController::RequestPermissionsWithShaarDecision(
++    const content::MediaStreamRequest& request,
++    MediaStreamDeviceEnumerator* enumerator,
++    bool allowed,
++    ResultCallback callback) {
++  content::RenderFrameHost* frame = content::RenderFrameHost::FromID(
++      request.render_process_id, request.render_frame_id);
++  if (!frame || !frame->IsActive()) {
++    std::move(callback).Run(
++        blink::mojom::StreamDevicesSet(),
++        blink::mojom::MediaStreamRequestResult::
++            FAILED_DUE_TO_SHUTDOWN_NO_RFH_IN_CONTROLLER,
++        false, {}, {});
++    return;
++  }
++  const GURL url = frame->GetLastCommittedOrigin().GetURL();
++  if (url.is_empty() || url != request.security_origin) {
++    std::move(callback).Run(
++        blink::mojom::StreamDevicesSet(),
++        blink::mojom::MediaStreamRequestResult::INVALID_SECURITY_ORIGIN,
++        false, {}, {});
++    return;
++  }
++  content::WebContents* contents = content::WebContents::FromRenderFrameHost(frame);
++  if (!contents) {
++    std::move(callback).Run(
++        blink::mojom::StreamDevicesSet(),
++        blink::mojom::MediaStreamRequestResult::INVALID_SECURITY_ORIGIN,
++        false, {}, {});
++    return;
++  }
++  std::unique_ptr<MediaStreamDevicesController> controller(
++      new MediaStreamDevicesController(contents, enumerator, request,
++                                       std::move(callback)));
++  bool blocked_by_policy = false;
++  auto decide = [&](blink::PermissionType type, ContentSetting* setting) {
++    if (*setting != CONTENT_SETTING_ASK)
++      return;
++    auto descriptor = content::PermissionDescriptorUtil::
++        CreatePermissionDescriptorForPermissionType(type);
++    content::PermissionResult permission =
++        contents->GetBrowserContext()
++            ->GetPermissionController()
++            ->GetPermissionResultForCurrentDocument(descriptor, frame);
++    if (permission.status == blink::mojom::PermissionStatus::DENIED) {
++      *setting = CONTENT_SETTING_BLOCK;
++      controller->denial_reason_ =
++          blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED_BY_CONTROLLER;
++      blocked_by_policy |=
++          permission.source == content::PermissionStatusSource::FEATURE_POLICY ||
++          permission.source == content::PermissionStatusSource::FENCED_FRAME;
++      return;
++    }
++    *setting = allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
++    if (!allowed)
++      controller->denial_reason_ =
++          blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED;
++  };
++  decide(blink::PermissionType::AUDIO_CAPTURE, &controller->audio_setting_);
++  decide(blink::PermissionType::VIDEO_CAPTURE, &controller->video_setting_);
++  controller->RunCallback(blocked_by_policy);
+ }
+ 
+ MediaStreamDevicesController::~MediaStreamDevicesController() {
+diff --git a/components/webrtc/media_stream_devices_controller.h b/components/webrtc/media_stream_devices_controller.h
+--- a/components/webrtc/media_stream_devices_controller.h
++++ b/components/webrtc/media_stream_devices_controller.h
+@@ -53,6 +53,14 @@
+   static void RequestPermissions(const content::MediaStreamRequest& request,
+                                  MediaStreamDeviceEnumerator* enumerator,
+                                  ResultCallback callback);
++
++  // Shaar has already collected the website's camera/microphone decision.
++  // Enumerate only after that decision, while retaining Chromium's origin,
++  // policy, kill-switch and device checks.
++  static void RequestPermissionsWithShaarDecision(
++      const content::MediaStreamRequest& request,
++      MediaStreamDeviceEnumerator* enumerator, bool allowed,
++      ResultCallback callback);
+ 
+   ~MediaStreamDevicesController();
+ 

@@ -49,6 +49,7 @@ shaar_error EmptyError() {
 void IgnoreReply(void *, const shaar_result *) {}
 
 struct Symbols {
+  decltype(&shaar_abi_minor) abi_minor = nullptr;
   decltype(&shaar_engine_create) create = nullptr;
   decltype(&shaar_engine_run) run = nullptr;
   decltype(&shaar_engine_request_quit) request_quit = nullptr;
@@ -71,6 +72,7 @@ struct Symbols {
   bool Load(void *library) {
 #define SHAAR_LOAD(field, symbol) \
   field = reinterpret_cast<decltype(field)>(dlsym(library, "shaar_" #symbol))
+    SHAAR_LOAD(abi_minor, abi_minor);
     SHAAR_LOAD(create, engine_create);
     SHAAR_LOAD(run, engine_run);
     SHAAR_LOAD(request_quit, engine_request_quit);
@@ -90,7 +92,7 @@ struct Symbols {
     SHAAR_LOAD(tab_view_focus, tab_view_focus);
     SHAAR_LOAD(submit, submit);
 #undef SHAAR_LOAD
-    return create && run && request_quit && release && profile_open &&
+    return abi_minor && create && run && request_quit && release && profile_open &&
            window_open && window_close && window_host_view && window_host_resize &&
            window_native_window && tab_open && tab_close && tab_favicon_png && tab_host_view &&
            tab_view_attach && tab_view_detach && tab_view_focus && submit;
@@ -116,9 +118,11 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSValue *> *_hostSizes;
   NSMutableDictionary<NSString *, NSString *> *_shaarFindTokens;
   NSMutableDictionary<NSString *, NSString *> *_shaarFindRequests;
+  NSMutableDictionary<NSString *, NSString *> *_shaarMediaRequests;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
+  BOOL _shaarMediaConsentAvailable;
   NSString *_shaarStartupNotice;
 }
 - (void)receiveEvent:(const shaar_event *)event;
@@ -161,6 +165,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   _hostSizes = [NSMutableDictionary dictionary];
   _shaarFindTokens = [NSMutableDictionary dictionary];
   _shaarFindRequests = [NSMutableDictionary dictionary];
+  _shaarMediaRequests = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -175,6 +180,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     _shaarLibrary = nullptr;
     return nil;
   }
+  _shaarMediaConsentAvailable = _symbols.abi_minor() >= 8;
   return self;
 }
 
@@ -190,7 +196,8 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   shaar_config config = {};
   config.size = sizeof(config);
   config.requested_major = SHAAR_ENGINE_ABI_MAJOR;
-  config.requested_minor = SHAAR_ENGINE_ABI_MINOR;
+  // Minor 7 remains the launch baseline; website media consent is gated below.
+  config.requested_minor = 7;
   config.data_root = Bytes(path);
   config.locale = Bytes(self.languageIdentifier ?: @"en");
   config.on_event = ShaarEventCallback;
@@ -225,6 +232,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   [_shaarTabs removeAllObjects];
   [_shaarFindTokens removeAllObjects];
   [_shaarFindRequests removeAllObjects];
+  [_shaarMediaRequests removeAllObjects];
   _symbols.release(_shaarEngine);
   _shaarEngine = nullptr;
   return result == SHAAR_OK ? 0 : 1;
@@ -276,6 +284,39 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   }
   NSString *tabID = String(event->tab_id);
   NSString *profileID = String(event->profile_id).uppercaseString;
+  if (event->kind == SHAAR_EVENT_PERMISSION &&
+      [kind isEqualToString:@"websiteMediaDismissed"]) {
+    NSString *requestID = payload[@"id"];
+    if (![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] ||
+        ![_shaarMediaRequests[requestID] isEqualToString:tabID]) return;
+    [_shaarMediaRequests removeObjectForKey:requestID];
+    if (self.onWebsiteMediaDismissed) self.onWebsiteMediaDismissed(requestID);
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_PERMISSION &&
+      [kind isEqualToString:@"websiteMediaRequested"]) {
+    NSString *windowID = String(event->window_id);
+    NSString *requestID = payload[@"id"];
+    if (!_shaarMediaConsentAvailable || event->session_id.size ||
+        ![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] || !requestID.length ||
+        requestID.length > 128 || _shaarMediaRequests[requestID] ||
+        !_shaarTabs[tabID] ||
+        ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+    _shaarMediaRequests[requestID] = tabID;
+    NSMutableDictionary *request = [payload mutableCopy];
+    request[@"profileID"] = profileID;
+    request[@"tabID"] = tabID;
+    request[@"windowID"] = windowID;
+    if (self.onWebsiteMediaRequest) {
+      self.onWebsiteMediaRequest(request);
+    } else {
+      [self resolveWebsiteMediaRequestID:requestID accepted:NO];
+    }
+    return;
+  }
   if (event->kind == SHAAR_EVENT_DEVTOOLS && [kind isEqualToString:@"panelEvent"] &&
       !event->session_id.size && [payload[@"schemaVersion"] isEqual:@1] &&
       _shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
@@ -335,6 +376,8 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     return;
   }
   if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"closed"]) {
+    for (NSString *requestID in [_shaarMediaRequests allKeysForObject:tabID])
+      [self resolveWebsiteMediaRequestID:requestID accepted:NO];
     NSString *windowID = _shaarTabWindows[tabID];
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
@@ -1080,7 +1123,16 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 }
 
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted {
-  if (self.onNotice) self.onNotice(@"Website media approval is unsupported by this Shaar engine.");
+  if (!_shaarMediaConsentAvailable) {
+    if (self.onNotice) self.onNotice(@"Website media approval is unsupported by this Shaar engine.");
+    return;
+  }
+  NSString *tabID = _shaarMediaRequests[requestID];
+  if (!tabID) return;
+  [_shaarMediaRequests removeObjectForKey:requestID];
+  [self submitTabID:tabID operation:SHAAR_OP_MEDIA_PERMISSION_DECISION
+            payload:@{@"schemaVersion": @1, @"id": requestID,
+                      @"accepted": @(accepted)}];
 }
 
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {

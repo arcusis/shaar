@@ -1,0 +1,181 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -73,6 +73,10 @@
+ constexpr int kDeveloper = 2;
+ constexpr int kPanel = 3;
+ constexpr base::TimeDelta kProbeCaptureTimeout = base::Seconds(12);
++// Chromium drops mouse down while first-paint commit deferral is set.
++// That deferral lifts only when a main frame runs after 500ms.
++constexpr base::TimeDelta kProbeClickCommitDelay = base::Milliseconds(600);
++constexpr base::TimeDelta kProbeClickLeaseHold = base::Milliseconds(50);
+ 
+ class RuntimeServices final : public DevToolsRuntimeServices {
+ public:
+@@ -345,9 +349,143 @@
+       return;
+     }
+     Reply(reply_, SHAAR_OK, std::move(payload));
++  }
++
++  ReplyContext reply_;
++  base::WeakPtr<content::WebContents> contents_;
++  base::ScopedClosureRunner capturer_;
++  base::OneShotTimer timer_;
++  bool finished_ = false;
++};
++
++content::RenderWidgetHostImpl* ProbeWidget(content::WebContents* contents) {
++  if (!contents)
++    return nullptr;
++  auto* view = contents->GetRenderWidgetHostView();
++  if (!view || !view->GetRenderWidgetHost())
++    return nullptr;
++  auto* widget =
++      content::RenderWidgetHostImpl::From(view->GetRenderWidgetHost());
++  if (!widget || !widget->input_router())
++    return nullptr;
++  return widget;
++}
++
++bool ProbeClickInsideView(content::WebContents* contents, int x, int y) {
++  if (!contents)
++    return false;
++  auto* view = contents->GetRenderWidgetHostView();
++  if (!view)
++    return false;
++  const gfx::Size size = view->GetViewBounds().size();
++  return x < size.width() && y < size.height();
++}
++
++void DispatchTrustedClick(content::RenderWidgetHost* widget, int x, int y) {
++  const gfx::PointF point(x, y);
++  const base::TimeTicks now = base::TimeTicks::Now();
++  widget->ForwardMouseEvent(blink::WebMouseEvent(
++      blink::WebInputEvent::Type::kMouseMove, point, point,
++      blink::WebPointerProperties::Button::kNoButton, 0,
++      blink::WebInputEvent::kNoModifiers, now));
++  widget->ForwardMouseEvent(blink::WebMouseEvent(
++      blink::WebInputEvent::Type::kMouseDown, point, point,
++      blink::WebPointerProperties::Button::kLeft, 1,
++      blink::WebInputEvent::kLeftButtonDown, now));
++  widget->ForwardMouseEvent(blink::WebMouseEvent(
++      blink::WebInputEvent::Type::kMouseUp, point, point,
++      blink::WebPointerProperties::Button::kLeft, 1,
++      blink::WebInputEvent::kNoModifiers, now));
++}
++
++// A never-shown page does not composite, so paint-holding commit deferral
++// stays set and the renderer drops mouse down. Show the renderer without
++// ordering its window, wait out the deadline, force one frame, then click.
++class ProbeTrustedClick final
++    : public base::RefCountedThreadSafe<ProbeTrustedClick> {
++ public:
++  ProbeTrustedClick(ReplyContext reply, int x, int y)
++      : reply_(reply), x_(x), y_(y) {}
++
++  void Start(content::WebContents* contents) {
++    contents_ = contents->GetWeakPtr();
++    capturer_ = StartHiddenProbeCapture(contents);
++    if (!capturer_ || !Activate()) {
++      Fail();
++      return;
++    }
++    timer_.Start(FROM_HERE, kProbeCaptureTimeout,
++                 base::BindOnce(&ProbeTrustedClick::OnTimeout,
++                                base::WrapRefCounted(this)));
++    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE,
++        base::BindOnce(&ProbeTrustedClick::ForceFrame,
++                       base::WrapRefCounted(this)),
++        kProbeClickCommitDelay);
++  }
++
++ private:
++  friend class base::RefCountedThreadSafe<ProbeTrustedClick>;
++  ~ProbeTrustedClick() = default;
++
++  content::RenderWidgetHostImpl* Activate() {
++    auto* contents = contents_.get();
++    auto* widget = ProbeWidget(contents);
++    if (!widget || !ProbeClickInsideView(contents, x_, y_))
++      return nullptr;
++    widget->input_router()->MakeActive();
++    return widget;
++  }
++
++  void ForceFrame() {
++    if (finished_)
++      return;
++    auto* widget = Activate();
++    if (!widget) {
++      Fail();
++      return;
++    }
++    widget->GetSnapshotFromBrowser(
++        base::BindOnce(&ProbeTrustedClick::OnFrame,
++                       base::WrapRefCounted(this)),
++        /*from_surface=*/true);
++  }
++
++  void OnFrame(const gfx::Image&) {
++    if (finished_)
++      return;
++    auto* widget = Activate();
++    if (!widget) {
++      Fail();
++      return;
++    }
++    DispatchTrustedClick(widget, x_, y_);
++    finished_ = true;
++    timer_.Stop();
++    Reply(reply_, SHAAR_OK, R"({"schemaVersion":1,"submitted":true})");
++    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE,
++        base::BindOnce(&ProbeTrustedClick::ReleaseLease,
++                       base::WrapRefCounted(this)),
++        kProbeClickLeaseHold);
+   }
+ 
++  void OnTimeout() { Fail(); }
++
++  void Fail() {
++    if (finished_)
++      return;
++    finished_ = true;
++    timer_.Stop();
++    capturer_.RunAndReset();
++    Reply(reply_, SHAAR_NOT_READY, {}, "trusted click could not be sent");
++  }
++
++  void ReleaseLease() { capturer_.RunAndReset(); }
++
+   ReplyContext reply_;
++  int x_;
++  int y_;
+   base::WeakPtr<content::WebContents> contents_;
+   base::ScopedClosureRunner capturer_;
+   base::OneShotTimer timer_;
+@@ -1398,19 +1536,9 @@
+     if (!view || !view->GetRenderWidgetHost() ||
+         x >= view->GetViewBounds().width() || y >= view->GetViewBounds().height())
+       return Fail(error, SHAAR_NOT_READY, "trusted click viewport unavailable");
+-    auto* widget = view->GetRenderWidgetHost();
+-    const gfx::PointF point(x, y);
+-    const base::TimeTicks now = base::TimeTicks::Now();
+-    widget->ForwardMouseEvent(blink::WebMouseEvent(
+-        blink::WebInputEvent::Type::kMouseDown, point, point,
+-        blink::WebPointerProperties::Button::kLeft, 1,
+-        blink::WebInputEvent::kLeftButtonDown, now));
+-    widget->ForwardMouseEvent(blink::WebMouseEvent(
+-        blink::WebInputEvent::Type::kMouseUp, point, point,
+-        blink::WebPointerProperties::Button::kLeft, 1,
+-        blink::WebInputEvent::kNoModifiers, base::TimeTicks::Now()));
+-    Reply({request_id, reply, reply_context}, SHAAR_OK,
+-          R"({"schemaVersion":1,"submitted":true})");
++    base::MakeRefCounted<ProbeTrustedClick>(
++        ReplyContext{request_id, reply, reply_context}, x, y)
++        ->Start(contents);
+     return SHAAR_OK;
+   }
+   if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&

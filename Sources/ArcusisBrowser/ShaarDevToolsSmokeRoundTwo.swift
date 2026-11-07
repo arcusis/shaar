@@ -15,7 +15,7 @@ import Foundation
     await roundTwoSources(shell, pageURL: pageURL, report: report)
     await roundTwoNetwork(shell, pageURL: pageURL, report: report)
     await roundTwoSocketAndWorker(shell, inspector: inspector, pageURL: pageURL, report: report)
-    await roundTwoCookies(shell, inspector: inspector, report: report)
+    await roundTwoCookies(shell, inspector: inspector, context: context, report: report)
     await roundTwoPerformance(shell, inspector: inspector, report: report)
     await roundTwoLayout(shell, context: context, report: report)
     await roundTwoKeyboard(shell, context: context, report: report)
@@ -223,7 +223,8 @@ import Foundation
   }
 
   private static func roundTwoCookies(
-    _ shell: ShaarDevToolsModel, inspector: InspectorModel, report: ShaarDevToolsSmokeReport
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel,
+    context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .application
     shell.application.selectArea(.cookies)
@@ -238,14 +239,26 @@ import Foundation
     await shell.cookies.save(
       value: "after", secure: cookie.secure, httpOnly: cookie.httpOnly,
       sameSite: cookie.sameSite)
-    let edited = shell.cookies.cookies.contains {
-      $0.name == "shaar_round2" && $0.value == "after"
-    }
-    record(edited, "world2-cookie-edit", "Cookie value changed to after", report: report)
-    shell.cookies.selectedID = shell.cookies.cookies.first { $0.name == "shaar_round2" }?.id
+    let matching = shell.cookies.cookies.filter { $0.name == "shaar_round2" }
+    await settle(context)
+    _ = ShaarDevToolsSmokeAccess.capture(
+      context.hosting, to: report.directory.appending(path: "world-round2-cookie-after-edit.png"))
+    let edited = matching.count == 1 && matching.first?.value == "after"
+    record(
+      edited, "world2-cookie-edit",
+      "Cookie rows=\(matching.count), values=\(matching.map(\.value)), error=\(shell.cookies.failure ?? "none")",
+      report: report)
+    shell.cookies.selectedID = matching.first { $0.value == "after" }?.id
     await shell.cookies.deleteSelected()
-    let deleted = !shell.cookies.cookies.contains { $0.name == "shaar_round2" }
-    record(deleted, "world2-cookie-delete", "Cookie absent after delete", report: report)
+    let remaining = shell.cookies.cookies.filter { $0.name == "shaar_round2" }
+    await settle(context)
+    _ = ShaarDevToolsSmokeAccess.capture(
+      context.hosting, to: report.directory.appending(path: "world-round2-cookie-after-delete.png"))
+    let deleted = remaining.isEmpty
+    record(
+      deleted, "world2-cookie-delete",
+      "Remaining rows=\(remaining.count), values=\(remaining.map(\.value)), error=\(shell.cookies.failure ?? "none")",
+      report: report)
   }
 
   private static func roundTwoPerformance(

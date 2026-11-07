@@ -1,0 +1,16 @@
+--- a/chrome/browser/shaar/site_data/shaar_site_data.cc
++++ b/chrome/browser/shaar/site_data/shaar_site_data.cc
+@@ -729,8 +729,12 @@
+           const bool http_only = *args.FindBool("httpOnly");
+           const auto same_site = ParseCookieSameSite(*args.FindString("sameSite"));
+           net::CookieInclusionStatus status;
++          // A host-only cookie needs an empty Domain attribute. Passing its
++          // host name here converts it into a domain cookie on edit.
++          const std::string domain_attribute =
++              selected->Domain().starts_with(".") ? selected->Domain() : "";
+           auto replacement = net::CanonicalCookie::CreateSanitizedCookie(
+-              origin, selected->Name(), value, selected->Domain(),
++              origin, selected->Name(), value, domain_attribute,
+               selected->Path(), selected->CreationDate(),
+               selected->ExpiryDate(), selected->LastAccessDate(),
+               secure, http_only, *same_site, selected->Priority(),

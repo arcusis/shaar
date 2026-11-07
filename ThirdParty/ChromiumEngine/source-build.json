@@ -475,6 +475,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0056-shaar-devtools-document-method.patch",
       "sha256": "7876fbdf84ab39fe8caea3d23d1ab0ccd3c288cd25eedc1b095f76352e883871"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0057-shaar-host-cookie-edit.patch",
+      "sha256": "95a0c99ad17f4e88ef803e3d991bb747d14d65c326a246f3bf050a5218a3b6a7"
     }
   ],
   "requiredExports": [

@@ -22,6 +22,11 @@ struct ShaarNetworkPanel: View {
     return model.projection.result?.rows ?? []
   }
   private var selected: ShaarNetworkRequest? { rows.first { $0.id == model.selectedID } }
+  private var detailTabs: [ShaarNetworkModel.DetailTab] {
+    selected?.resource == .socket
+      ? [.headers, .timing, .messages]
+      : ShaarNetworkModel.DetailTab.allCases.filter { $0 != .messages }
+  }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -51,6 +56,9 @@ struct ShaarNetworkPanel: View {
     .onChange(of: model.search) { _, _ in model.scheduleRows(from: events) }
     .onChange(of: model.selectedID) { _, id in
       guard let id else { return }
+      if selected?.resource != .socket && model.detailTab == .messages {
+        model.detailTab = .headers
+      }
       Task { await model.loadResponseBody(id: id) }
     }
   }
@@ -187,7 +195,7 @@ struct ShaarNetworkPanel: View {
 
   private func moveDetailTab(_ direction: MoveCommandDirection) {
     guard let focusedDetailTab,
-      let index = ShaarNetworkModel.DetailTab.allCases.firstIndex(of: focusedDetailTab)
+      let index = detailTabs.firstIndex(of: focusedDetailTab)
     else { return }
     let forward: Bool
     switch direction {
@@ -197,9 +205,9 @@ struct ShaarNetworkPanel: View {
     }
     guard
       let next = ShaarDevToolsNavigation.adjacentIndex(
-        index, count: ShaarNetworkModel.DetailTab.allCases.count, forward: forward)
+        index, count: detailTabs.count, forward: forward)
     else { return }
-    self.focusedDetailTab = ShaarNetworkModel.DetailTab.allCases[next]
+    self.focusedDetailTab = detailTabs[next]
   }
 
   private var requestList: some View {
@@ -388,7 +396,7 @@ struct ShaarNetworkPanel: View {
         .frame(height: 34)
         Divider()
         HStack(spacing: 2) {
-          ForEach(ShaarNetworkModel.DetailTab.allCases, id: \.self) { tab in
+          ForEach(detailTabs, id: \.self) { tab in
             Button {
               model.detailTab = tab
             } label: {
@@ -404,6 +412,10 @@ struct ShaarNetworkPanel: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier(
+              tab == .messages
+                ? "shaar.devtools.networkMessagesTab" : "shaar.devtools.networkDetailTab"
+            )
             .focusable()
             .focused($focusedDetailTab, equals: tab)
             .help(ShellL10n.string("Use Left and Right Arrow to move through request details."))
@@ -469,6 +481,23 @@ struct ShaarNetworkPanel: View {
         }
       } else {
         emptyDetail("No response body is available")
+      }
+    case .messages:
+      if row.frames.isEmpty {
+        emptyDetail("No WebSocket messages yet")
+      } else {
+        LazyVStack(alignment: .leading, spacing: 8) {
+          ForEach(Array(row.frames.enumerated()), id: \.offset) { _, frame in
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+              Text(frame.direction == .sent ? "↑" : "↓")
+              Text("\(Int(max(0, frame.time - row.startedAt) * 1_000)) ms")
+                .foregroundStyle(.secondary)
+              Text(frame.display).textSelection(.enabled)
+            }
+            .font(.system(size: 10, design: .monospaced))
+          }
+        }
+        .accessibilityIdentifier("shaar.devtools.networkMessages")
       }
     case .preview:
       if let data = row.previewData, let image = NSImage(data: data) {

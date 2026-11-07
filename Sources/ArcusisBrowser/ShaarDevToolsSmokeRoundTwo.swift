@@ -14,7 +14,8 @@ import Foundation
     await roundTwoConsole(shell, inspector: inspector, context: context, report: report)
     await roundTwoSources(shell, pageURL: pageURL, report: report)
     await roundTwoNetwork(shell, pageURL: pageURL, report: report)
-    await roundTwoSocketAndWorker(shell, inspector: inspector, pageURL: pageURL, report: report)
+    await roundTwoSocketAndWorker(
+      shell, inspector: inspector, context: context, pageURL: pageURL, report: report)
     await roundTwoCookies(shell, inspector: inspector, context: context, report: report)
     await roundTwoPerformance(shell, inspector: inspector, report: report)
     await roundTwoLayout(shell, context: context, report: report)
@@ -190,22 +191,61 @@ import Foundation
   }
 
   private static func roundTwoSocketAndWorker(
-    _ shell: ShaarDevToolsModel, inspector: InspectorModel, pageURL: URL,
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel,
+    context: NativeBrowserContext, pageURL: URL,
     report: ShaarDevToolsSmokeReport
   ) async {
     guard pageURL.port == 3212 else { return }
-    let socketState = try? await inspector.evaluate("document.getElementById('ws-state')?.textContent")
+    shell.section = .network
+    _ = try? await inspector.evaluate(
+      """
+      (() => {
+        const ws = new WebSocket('ws://127.0.0.1:3212/ws');
+        globalThis.__shaarRound2WS = ws;
+        ws.onopen = () => ws.send('hello');
+        ws.onmessage = event => document.getElementById('ws-state').textContent = event.data;
+        return true;
+      })()
+      """)
     shell.network.filter = .socket
+    _ = await wait(attempts: 80) {
+      shell.network.visibleRequests(from: shell.events).contains {
+        $0.status == 101 && $0.frames.contains { $0.payload == "echo-ready" }
+      }
+    }
     let sockets = shell.network.visibleRequests(from: shell.events)
+    let socketState = try? await inspector.evaluate(
+      "document.getElementById('ws-state')?.textContent")
+    await settle(context)
+    let selected = ShaarDevToolsSmokeAccess.press(
+      identifier: "shaar.devtools.networkRequest", in: context.hosting)
+    await settle(context)
+    _ = ShaarDevToolsSmokeAccess.capture(
+      context.hosting, to: report.directory.appending(path: "world-round2-websocket-before.png"))
+    let messagesPressed = ShaarDevToolsSmokeAccess.press(
+      identifier: "shaar.devtools.networkMessagesTab", in: context.hosting)
+    await settle(context)
+    _ = ShaarDevToolsSmokeAccess.capture(
+      context.hosting, to: report.directory.appending(path: "world-round2-websocket-after.png"))
+    let selectedSocket = sockets.first { $0.id == shell.network.selectedID }
+    let socketDetail =
+      "Page socket=\(String(describing: socketState)), WS rows=\(sockets.count), "
+      + "selected=\(selected), Messages press=\(messagesPressed), "
+      + "status=\(selectedSocket?.status ?? 0), frames=\(selectedSocket?.frames.count ?? 0)"
     record(
-      socketState as? String == "echo-ready" && !sockets.isEmpty,
-      "world2-websocket", "Page socket=\(String(describing: socketState)), WS rows=\(sockets.count)",
+      socketState as? String == "echo-ready" && selected && messagesPressed
+        && shell.network.detailTab == .messages && selectedSocket?.status == 101
+        && selectedSocket?.frames.contains { $0.payload == "echo-ready" } == true,
+      "world2-websocket",
+      socketDetail,
       report: report)
+    _ = try? await inspector.evaluate("globalThis.__shaarRound2WS?.close()")
     shell.network.filter = .all
     shell.section = .application
     shell.application.selectArea(.workers)
     await shell.application.refresh()
-    let workerState = try? await inspector.evaluate("document.getElementById('sw-state')?.textContent")
+    let workerState = try? await inspector.evaluate(
+      "document.getElementById('sw-state')?.textContent")
     record(
       workerState as? String == "registered" && !shell.application.workers.isEmpty,
       "world2-service-worker",

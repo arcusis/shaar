@@ -156,6 +156,31 @@ struct DevToolsPanelTests {
       tabID: "tab-a", leaseID: 42)
   }
 
+  @Test func webSocketEventsKeepOnlyBoundedFrameFields() {
+    let created =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":31,"leaseID":42,"data":{"requestID":"ws-1","url":"ws://example.test/ws","truncated":false}}"#
+    let handshake =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":32,"leaseID":42,"data":{"requestID":"ws-1","status":101,"truncated":false}}"#
+    let frame =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":34,"leaseID":42,"data":{"requestID":"ws-1","opcode":1,"payload":"echo-ready","truncated":false}}"#
+    #expect(decodePanel(created)?.data.url == "ws://example.test/ws")
+    #expect(decodePanel(handshake)?.data.status == 101)
+    #expect(decodePanel(frame)?.data.payload == "echo-ready")
+    #expect(decodePanel(frame)?.data.opcode == 1)
+    #expect(
+      decodePanel(frame.replacingOccurrences(of: #""opcode":1"#, with: #""opcode":16"#)) == nil)
+    #expect(
+      decodePanel(
+        frame.replacingOccurrences(
+          of: #""payload":"echo-ready""#,
+          with: #""payload":"\#(String(repeating: "x", count: 4_097))""#)) == nil)
+    #expect(
+      decodePanel(
+        frame.replacingOccurrences(
+          of: #""payload":"echo-ready""#,
+          with: #""headers":{"Cookie":"secret"}"#)) == nil)
+  }
+
   @Test func screencastFramesRequireMaskAndExactTabLease() {
     let jpeg = Data([0xFF, 0xD8, 0xFF, 0xD9]).base64EncodedString()
     let payload =

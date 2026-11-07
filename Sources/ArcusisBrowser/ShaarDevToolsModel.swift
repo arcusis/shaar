@@ -91,7 +91,10 @@ struct ShaarConsoleProperty: Equatable, Sendable {
 }
 
 struct ShaarNetworkEvent: Equatable, Sendable {
-  enum Phase: Sendable { case request, response, data, finished, failed }
+  enum Phase: Sendable {
+    case request, response, data, finished, failed
+    case webSocketCreated, webSocketHandshake, webSocketFrame, webSocketClosed
+  }
   let id: UUID
   let requestID: String
   let phase: Phase
@@ -106,6 +109,7 @@ struct ShaarNetworkEvent: Equatable, Sendable {
   let responseHeaders: [ShaarNetworkHeader]
   let payload: String?
   let responseBody: String?
+  let frame: ShaarWebSocketFrame?
 
   init(
     id: UUID, method: String, url: String, status: Int?,
@@ -113,7 +117,7 @@ struct ShaarNetworkEvent: Equatable, Sendable {
     mimeType: String? = nil, encodedBytes: Int? = nil, time: TimeInterval = 0,
     failure: String? = nil, requestHeaders: [ShaarNetworkHeader] = [],
     responseHeaders: [ShaarNetworkHeader] = [], payload: String? = nil,
-    responseBody: String? = nil
+    responseBody: String? = nil, frame: ShaarWebSocketFrame? = nil
   ) {
     self.id = id
     self.requestID = requestID ?? id.uuidString
@@ -129,6 +133,26 @@ struct ShaarNetworkEvent: Equatable, Sendable {
     self.responseHeaders = responseHeaders
     self.payload = payload
     self.responseBody = responseBody
+    self.frame = frame
+  }
+}
+
+struct ShaarWebSocketFrame: Equatable, Sendable {
+  enum Direction: Sendable { case sent, received }
+  let direction: Direction
+  let opcode: Int
+  let payload: String
+  let time: TimeInterval
+
+  var display: String {
+    switch opcode {
+    case 1: payload
+    case 2: "Binary frame"
+    case 8: "Close"
+    case 9: "Ping"
+    case 10: "Pong"
+    default: "Frame opcode \(opcode)"
+    }
   }
 }
 
@@ -300,7 +324,8 @@ struct ShaarDevToolsEventBuffer {
       return 192 + request.requestID.utf8.count + request.method.utf8.count
         + request.url.utf8.count + (request.mimeType?.utf8.count ?? 0)
         + (request.failure?.utf8.count ?? 0) + (request.payload?.utf8.count ?? 0)
-        + (request.responseBody?.utf8.count ?? 0) + headers
+        + (request.responseBody?.utf8.count ?? 0)
+        + (request.frame?.payload.utf8.count ?? 0) + headers
     }
   }
 }

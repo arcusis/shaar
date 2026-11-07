@@ -403,7 +403,8 @@ private struct ShaarDOMPanelObserver {
           source: frames.first?.source, stack: frames,
           objectID: data.objectID, usesPanelLease: data.objectID != nil))
     case .requestWillBeSent, .responseReceived, .loadingFinished,
-      .loadingFailed, .dataReceived:
+      .loadingFailed, .dataReceived, .webSocketCreated, .webSocketHandshake,
+      .webSocketFrameSent, .webSocketFrameReceived, .webSocketClosed:
       guard let requestID = data.requestID else { return nil }
       let phase: ShaarNetworkEvent.Phase
       switch event.id {
@@ -411,20 +412,35 @@ private struct ShaarDOMPanelObserver {
       case .responseReceived: phase = .response
       case .loadingFinished: phase = .finished
       case .loadingFailed: phase = .failed
-      default: phase = .data
+      case .dataReceived: phase = .data
+      case .webSocketCreated: phase = .webSocketCreated
+      case .webSocketHandshake: phase = .webSocketHandshake
+      case .webSocketFrameSent, .webSocketFrameReceived: phase = .webSocketFrame
+      case .webSocketClosed: phase = .webSocketClosed
+      default: return nil
+      }
+      let time = Date().timeIntervalSince1970
+      let frame: ShaarWebSocketFrame?
+      if let opcode = data.opcode {
+        frame = ShaarWebSocketFrame(
+          direction: event.id == .webSocketFrameSent ? .sent : .received,
+          opcode: opcode, payload: data.payload ?? "", time: time)
+      } else {
+        frame = nil
       }
       return .network(
         ShaarNetworkEvent(
-          id: UUID(), method: data.method ?? "", url: data.url ?? "",
+          id: UUID(), method: event.id == .webSocketCreated ? "GET" : data.method ?? "",
+          url: data.url ?? "",
           status: data.status.map(Int.init), requestID: requestID, phase: phase,
           mimeType: data.mimeType, encodedBytes: data.encodedBytes.map(Int.init),
-          time: Date().timeIntervalSince1970, failure: phase == .failed ? data.text : nil,
+          time: time, failure: phase == .failed ? data.text : nil,
           requestHeaders: data.requestHeaders.map {
             ShaarNetworkHeader(name: $0.name, value: $0.value)
           },
           responseHeaders: data.responseHeaders.map {
             ShaarNetworkHeader(name: $0.name, value: $0.value)
-          }))
+          }, frame: frame))
     case .pageLifecycle, .performanceMetrics, .eventsDropped, .screencastFrame:
       return nil
     }

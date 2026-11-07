@@ -10,6 +10,38 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct ShaarNetworkModelTests {
+  @Test func webSocketLifecycleShowsStatusAndFramesInWSFilter() {
+    let model = ShaarNetworkModel()
+    let id = "socket-1"
+    let frame = ShaarWebSocketFrame(
+      direction: .received, opcode: 1, payload: "echo-ready", time: 1.2)
+    let events: [ShaarDevToolsEvent] = [
+      .network(
+        .init(
+          id: UUID(), method: "GET", url: "ws://127.0.0.1:3212/ws",
+          status: nil, requestID: id, phase: .webSocketCreated, time: 1)),
+      .network(
+        .init(
+          id: UUID(), method: "", url: "", status: 101,
+          requestID: id, phase: .webSocketHandshake, time: 1.1)),
+      .network(
+        .init(
+          id: UUID(), method: "", url: "", status: nil,
+          requestID: id, phase: .webSocketFrame, time: 1.2, frame: frame)),
+      .network(
+        .init(
+          id: UUID(), method: "", url: "", status: nil,
+          requestID: id, phase: .webSocketClosed, time: 2)),
+    ]
+    model.filter = .socket
+    let rows = model.visibleRequests(from: events)
+    #expect(rows.count == 1)
+    #expect(rows[0].status == 101)
+    #expect(rows[0].frames == [frame])
+    #expect(rows[0].completedAt == 2)
+    #expect(ShaarNetworkModel.DetailTab.allCases.contains(.messages))
+  }
+
   @Test func fiftyThousandRequestFilterProjectsOffMainActor() async {
     let events: [ShaarDevToolsEvent] = (0..<50_000).map { index in
       .network(

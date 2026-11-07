@@ -413,6 +413,52 @@ final class InspectorModel {
     return value
   }
 
+  func selectDOMNode(_ id: Int) async throws {
+    guard try await selectResolvedNode(id) else { return }
+    await refresh()
+  }
+
+  /// CSS and XPath from the Inspector page script for a CDP node, when the page can select it.
+  func pathsForDOMNode(_ id: Int) async -> (css: String, xpath: String)? {
+    guard isOpen, id > 0 else { return nil }
+    if !installed { await refresh() }
+    guard installed, isOpen else { return nil }
+    let revision = generation
+    do {
+      guard try await selectResolvedNode(id), generation == revision else { return nil }
+      await refreshWhenIdle()
+    } catch {
+      return nil
+    }
+    guard generation == revision, isOpen, let selection else { return nil }
+    if selection.css.isEmpty, selection.xpath.isEmpty { return nil }
+    return (selection.css, selection.xpath)
+  }
+
+  private func selectResolvedNode(_ id: Int) async throws -> Bool {
+    guard id > 0 else { return false }
+    let resolved = try await call("DOM.resolveNode", params: ["nodeId": id])
+    guard let objectID = (resolved["object"] as? [String: Any])?["objectId"] as? String else {
+      return false
+    }
+    let invoked = try await call(
+      "Runtime.callFunctionOn",
+      params: [
+        "objectId": objectID,
+        "functionDeclaration":
+          "function() { return window.top.__shaarInspectorV2?.select(this) === true; }",
+        "returnByValue": true,
+      ])
+    return ((invoked["result"] as? [String: Any])?["value"] as? Bool) == true
+  }
+
+  private func refreshWhenIdle() async {
+    for _ in 0..<20 where refreshing {
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+    await refresh()
+  }
+
   func evaluate(_ expression: String) async throws -> Any? {
     let result = try await call(
       "Runtime.evaluate",

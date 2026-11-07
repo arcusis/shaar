@@ -118,19 +118,26 @@ final class ShaarDOMTreeModel {
   }
 
   func selector(for id: Int) -> String {
-    var parts: [String] = []
+    ShaarDOMLocator.css(for: id, nodes: nodes)
+  }
+
+  func xpath(for id: Int) -> String {
+    ShaarDOMLocator.xpath(for: id, nodes: nodes)
+  }
+
+  /// Loads missing ancestor children so a copy is not taken from a partial document slice.
+  func prepareCopyPath(for id: Int) async {
+    var ancestors: [Int] = []
     var current: Int? = id
-    while let value = current, let node = nodes[value], parts.count < 32 {
-      if node.nodeType == 1 {
-        let name = node.name.lowercased()
-        let siblings = node.parentID.flatMap { nodes[$0]?.childrenIDs } ?? []
-        let sameName = siblings.compactMap { nodes[$0] }.filter { $0.name == node.name }
-        let index = sameName.firstIndex(where: { $0.id == value }).map { $0 + 1 } ?? 1
-        parts.append("\(name):nth-of-type(\(index))")
-      }
-      current = node.parentID
+    var depth = 0
+    while let value = current, depth < 40 {
+      depth += 1
+      if let parentID = nodes[value]?.parentID { ancestors.append(parentID) }
+      current = nodes[value]?.parentID
     }
-    return parts.reversed().joined(separator: " > ")
+    for parent in ancestors.reversed() {
+      await loadChildrenIfNeeded(parent)
+    }
   }
 
   func open() {
@@ -326,6 +333,16 @@ final class ShaarDOMTreeModel {
   func outerHTML(for id: Int) async -> String? {
     guard let result = try? await execute(.outerHTML(id)) else { return nil }
     return result["outerHTML"] as? String
+  }
+
+  private func loadChildrenIfNeeded(_ id: Int) async {
+    guard let node = nodes[id], node.childrenIDs.count < node.childCount else { return }
+    do { _ = try await execute(.children(id)) } catch { return }
+    for _ in 0..<40 {
+      let current = nodes[id]
+      if (current?.childrenIDs.count ?? 0) >= (current?.childCount ?? 0) { return }
+      try? await Task.sleep(for: .milliseconds(25))
+    }
   }
 
   private func mutate(_ command: ShaarDOMCommand) async {

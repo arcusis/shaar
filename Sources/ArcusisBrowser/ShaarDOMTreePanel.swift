@@ -230,12 +230,20 @@ struct ShaarDOMTreePanel: View {
     Button(ShellL10n.string("Copy element")) {
       Task { if let html = await model.outerHTML(for: node.id) { copy(html) } }
     }
-    Button(ShellL10n.string("Copy selector")) { copy(model.selector(for: node.id)) }
+    Button(ShellL10n.string("Copy selector")) {
+      Task { copy(await copiedPath(for: node.id).css) }
+    }
+    Button(ShellL10n.string("Copy XPath")) {
+      Task { copy(await copiedPath(for: node.id).xpath) }
+    }
     Button(ShellL10n.string("Copy Playwright locator")) {
-      let selector = model.selector(for: node.id)
-      let encoded = try? JSONEncoder().encode(selector)
-      let quoted = encoded.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
-      copy("page.locator(\(quoted))")
+      Task {
+        let selector = await copiedPath(for: node.id).css
+        guard !selector.isEmpty else { return }
+        let encoded = try? JSONEncoder().encode(selector)
+        let quoted = encoded.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
+        copy("page.locator(\(quoted))")
+      }
     }
     Button(ShellL10n.string("Copy for agent")) {
       Task {
@@ -392,7 +400,14 @@ struct ShaarDOMTreePanel: View {
       .joined(separator: ", ")
   }
 
+  private func copiedPath(for id: Int) async -> (css: String, xpath: String) {
+    if let live = await inspector.pathsForDOMNode(id) { return live }
+    await model.prepareCopyPath(for: id)
+    return (model.selector(for: id), model.xpath(for: id))
+  }
+
   private func copy(_ value: String) {
+    guard !value.isEmpty else { return }
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(value, forType: .string)
   }
@@ -401,22 +416,5 @@ struct ShaarDOMTreePanel: View {
 extension InspectorModel {
   func currentDOMNodeID() async -> Int? {
     try? await withSelectedNode { $0 }
-  }
-
-  func selectDOMNode(_ id: Int) async throws {
-    guard id > 0 else { return }
-    let resolved = try await call("DOM.resolveNode", params: ["nodeId": id])
-    guard let objectID = (resolved["object"] as? [String: Any])?["objectId"] as? String else {
-      return
-    }
-    _ = try await call(
-      "Runtime.callFunctionOn",
-      params: [
-        "objectId": objectID,
-        "functionDeclaration":
-          "function() { return window.top.__shaarInspectorV2?.select(this) === true; }",
-        "returnByValue": true,
-      ])
-    await refresh()
   }
 }

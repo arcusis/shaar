@@ -310,7 +310,9 @@ import Foundation
         return frame.safeArea == insets && !frame.pngData.isEmpty
           && frame.pngData != beforeInsets
       }
-      return try await self.proveSyncedViewports(shell)
+      let synced = try await self.proveSyncedViewports(shell)
+      let presets = try await self.proveViewportPresets(shell)
+      return "\(synced). \(presets)"
     }
     await check("masked-repro") {
       do {
@@ -642,6 +644,65 @@ import Foundation
       throw Failure("Viewport navigation diverged: \(paths)")
     }
     return "Safe area, navigation, click, and scroll changed both offscreen viewport frames"
+  }
+
+  private func proveViewportPresets(_ shell: ShaarDevToolsModel) async throws -> String {
+    guard shell.viewports.frames.count == 2 else {
+      throw Failure("Expected two viewports before adding presets")
+    }
+    let portrait = ShaarViewportInsets(top: 24, right: 0, bottom: 20, left: 0)
+    let landscape = ShaarViewportInsets(top: 0, right: 24, bottom: 0, left: 20)
+    try await shell.viewports.perform(.add(.ipad))
+    try await wait("iPad viewport frame", attempts: 160) {
+      self.renderedPreset(
+        shell, .ipad, size: (820, 1180), orientation: .portrait, safeArea: portrait)
+    }
+    guard let ipad = shell.viewports.frames.first(where: { $0.preset == .ipad }) else {
+      throw Failure("iPad viewport missing after its frame arrived")
+    }
+    try await shell.viewports.perform(.rotate(ipad.id))
+    try await wait("rotated iPad viewport frame", attempts: 160) {
+      self.renderedPreset(
+        shell, .ipad, size: (1180, 820), orientation: .landscape, safeArea: landscape)
+    }
+    try await shell.viewports.perform(.rotate(ipad.id))
+    try await wait("iPad viewport restored to portrait", attempts: 160) {
+      self.renderedPreset(
+        shell, .ipad, size: (820, 1180), orientation: .portrait, safeArea: portrait)
+    }
+    try await shell.viewports.perform(.add(.desktop1440))
+    try await wait("Desktop 1440 viewport frame", attempts: 160) {
+      self.renderedPreset(
+        shell, .desktop1440, size: (1440, 900), orientation: .portrait, safeArea: .zero)
+    }
+    guard !NSApp.windows.contains(where: \.isVisible) else {
+      throw Failure("Viewport preset probe opened a window")
+    }
+    return "iPad rendered 820x1180, rotated to 1180x820, and returned to portrait. "
+      + "Desktop 1440 rendered 1440x900"
+  }
+
+  private func renderedPreset(
+    _ shell: ShaarDevToolsModel, _ preset: ShaarViewportPreset, size: (Int, Int),
+    orientation: ShaarViewportOrientation, safeArea: ShaarViewportInsets
+  ) -> Bool {
+    guard let frame = shell.viewports.frames.first(where: { $0.preset == preset }),
+      let actual = pngSize(frame.pngData)
+    else {
+      return false
+    }
+    return frame.orientation == orientation && frame.safeArea == safeArea && actual == size
+  }
+
+  private func pngSize(_ data: Data) -> (Int, Int)? {
+    let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    guard data.count >= 24, data.starts(with: signature) else { return nil }
+    return (pngDimension(data, at: 16), pngDimension(data, at: 20))
+  }
+
+  private func pngDimension(_ data: Data, at offset: Int) -> Int {
+    let bytes = [UInt8](data[offset..<(offset + 4)])
+    return (Int(bytes[0]) << 24) | (Int(bytes[1]) << 16) | (Int(bytes[2]) << 8) | Int(bytes[3])
   }
 
   private func viewportPNG(_ shell: ShaarDevToolsModel) -> [UUID: Data] {

@@ -1,0 +1,101 @@
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -510,6 +510,13 @@
+   base::DictValue data;
+   bool truncated = false;
+ };
++
++std::string CommittedNavigationMethod(content::NavigationHandle* navigation) {
++  std::string method = navigation->GetRequestMethod();
++  if (!method.empty())
++    return method;
++  return navigation->IsPost() ? "POST" : "GET";
++}
+ 
+ Projection CommittedDocumentRequest(std::string_view request_id,
+                                     const std::string& url,
+@@ -1747,8 +1754,9 @@
+       if (type && *type == "Document") {
+         const auto* request = params->FindDict("request");
+         const auto* url = request ? request->FindString("url") : nullptr;
+-        if (url && request->FindString("method"))
+-          document_request_urls_.insert(*url);
++        const auto* request_id = params->FindString("requestId");
++        if (url && request_id && !request_id->empty() && request_id->size() <= 128)
++          document_request_ids_[*url] = *request_id;
+       }
+       const auto* request_id = params->FindString("requestId");
+       if (request_id && request_id->size() <= 128 &&
+@@ -1766,8 +1774,12 @@
+       const auto* response = params->FindDict("response");
+       const auto* url = response ? response->FindString("url") : nullptr;
+       const auto* request_id = params->FindString("requestId");
+-      if (url && request_id)
++      if (url && request_id && !request_id->empty() && request_id->size() <= 128) {
+         document_response_ids_[*url] = *request_id;
++        const auto found = document_methods_.find(*url);
++        if (found != document_methods_.end())
++          Enqueue(CommittedDocumentRequest(*request_id, *url, found->second));
++      }
+     }
+   }
+ 
+@@ -1779,8 +1791,17 @@
+   void DidStartNavigation(content::NavigationHandle* navigation) override {
+     if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument())
+       return;
+-    document_request_urls_.clear();
++    document_request_ids_.clear();
+     document_response_ids_.clear();
++    document_methods_.clear();
++    document_methods_[navigation->GetURL().spec()] =
++        CommittedNavigationMethod(navigation);
++  }
++  void DidRedirectNavigation(content::NavigationHandle* navigation) override {
++    if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument())
++      return;
++    document_methods_[navigation->GetURL().spec()] =
++        CommittedNavigationMethod(navigation);
+   }
+   void DidFinishNavigation(content::NavigationHandle* navigation) override {
+     if (!navigation->HasCommitted() || !navigation->IsInPrimaryMainFrame() ||
+@@ -1793,16 +1814,18 @@
+     const std::string url = navigation->GetURL().spec();
+     const net::HttpResponseHeaders* headers = navigation->GetResponseHeaders();
+     if (navigation->GetURL().SchemeIsHTTPOrHTTPS() &&
+-        !navigation->IsErrorPage() && headers &&
+-        !document_request_urls_.contains(url)) {
+-      const auto found = document_response_ids_.find(url);
+-      const std::string request_id =
+-          found == document_response_ids_.end()
+-              ? "navigation-" + std::to_string(navigation->GetNavigationId())
+-              : found->second;
+-      Enqueue(CommittedDocumentRequest(request_id, url,
+-                                       navigation->GetRequestMethod()));
+-      if (found == document_response_ids_.end())
++        !navigation->IsErrorPage()) {
++      const auto sent = document_request_ids_.find(url);
++      const auto received = document_response_ids_.find(url);
++      std::string request_id =
++          "navigation-" + std::to_string(navigation->GetNavigationId());
++      if (sent != document_request_ids_.end())
++        request_id = sent->second;
++      if (received != document_response_ids_.end())
++        request_id = received->second;
++      Enqueue(CommittedDocumentRequest(
++          request_id, url, CommittedNavigationMethod(navigation)));
++      if (headers && received == document_response_ids_.end())
+         Enqueue(CommittedDocumentResponse(request_id, url,
+                                           headers->response_code()));
+     }
+@@ -2178,8 +2201,9 @@
+   std::deque<std::string> queue_;
+   std::set<std::string> known_requests_;
+   std::deque<std::string> request_order_;
+-  std::set<std::string> document_request_urls_;
++  std::map<std::string, std::string> document_request_ids_;
+   std::map<std::string, std::string> document_response_ids_;
++  std::map<std::string, std::string> document_methods_;
+   std::map<int, ReplyTarget> pending_bodies_;
+   std::map<int, PendingPhase2> pending_phase2_;
+   std::optional<PendingRules> pending_rules_;

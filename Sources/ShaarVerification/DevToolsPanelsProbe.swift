@@ -462,8 +462,9 @@ import Foundation
       try await self.proveMemory(shell, target: target)
     }
     await check("performance-recording") {
+      // Split-shell closes the shared panel lease. Focus this tab and open it again.
+      try await self.restoreInspectorToolsLease(shell, tab: tab)
       shell.section = .performance
-      try await self.wait("phase 2 lease") { shell.phase2.available }
       // The long-task command installs its observer on the first read. Tasks
       // that already finished are not in the timeline buffer, so that read has
       // to finish before the page timer runs.
@@ -502,8 +503,8 @@ import Foundation
         "Recorded \(shell.performance.recordedTasks.count) main-thread tasks; LCP=\(shell.performance.lcpMilliseconds.map { String($0) } ?? "unavailable") CLS=\(shell.performance.cls) INP=\(inp)"
     }
     await check("sources-lite") {
+      try await self.restoreInspectorToolsLease(shell, tab: tab)
       shell.section = .sources
-      try await self.wait("phase 2 lease for sources") { shell.phase2.available }
       await shell.sources.refresh()
       guard shell.sources.failure == nil else {
         throw Failure("Resource tree failed: \(shell.sources.failure ?? "")")
@@ -1223,6 +1224,34 @@ import Foundation
       }
     }
     return "Docked to the right. Unavailable copy does not name an engine version."
+  }
+
+  /// The split-shell check focuses another tab and closes its shell, which
+  /// drops the one panel lease. Bring /inspector-tools back and open a new lease.
+  private func restoreInspectorToolsLease(
+    _ shell: ShaarDevToolsModel, tab: UUID
+  ) async throws {
+    if engine.siteControlTarget?.tabID != tab {
+      store.focusSplitTab(tab)
+    }
+    try await wait("inspector-tools tab focused") {
+      self.engine.siteControlTarget?.tabID == tab
+    }
+    let path = engine.siteControlTarget?.url.path ?? ""
+    guard path == "/inspector-tools" else {
+      throw Failure("Performance and Sources need /inspector-tools, found \(path)")
+    }
+    if !shell.phase2.available {
+      shell.updateTarget(shell.target, committed: true)
+    }
+    do {
+      try await wait("phase 2 lease") { shell.phase2.available }
+    } catch {
+      let failure = shell.nativePhase2Failure ?? shell.nativeStreamFailure ?? "none"
+      throw Failure(
+        "Phase 2 lease did not return. stream=\(shell.streamAvailable) failure=\(failure)"
+      )
+    }
   }
 
   private func refreshPerformance(_ model: ShaarPerformanceModel) async throws {

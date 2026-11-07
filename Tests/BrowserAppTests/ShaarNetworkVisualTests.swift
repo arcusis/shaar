@@ -9,6 +9,50 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor final class ShaarNetworkVisualTests: XCTestCase {
+  func testHeaderDetailsBeforeAfterRenderOffscreen() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_NETWORK_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen Network capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1428")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    let requestID = "document-1"
+    for (name, requestHeaders, responseHeaders) in [
+      ("before-headers", [ShaarNetworkHeader](), [ShaarNetworkHeader]()),
+      (
+        "after-headers", [ShaarNetworkHeader(name: "Accept", value: "text/html")],
+        [ShaarNetworkHeader(name: "Content-Type", value: "text/html")]
+      ),
+    ] {
+      let event = ShaarDevToolsEvent.network(
+        .init(
+          id: UUID(), method: "GET", url: target.url.absoluteString, status: 200,
+          requestID: requestID, requestHeaders: requestHeaders,
+          responseHeaders: responseHeaders))
+      let shell = ShaarDevToolsModel(
+        target: target, transport: ShaarDevToolsFixtureTransport(fixture: [event]))
+      shell.open(inspector: inspector)
+      for _ in 0..<30 where shell.events.isEmpty { await Task.yield() }
+      XCTAssertEqual(shell.events.count, 1)
+      shell.section = .network
+      shell.network.selectedID = requestID
+      shell.network.detailTab = .headers
+      let image = try VisualCapture.renderOffscreen(
+        ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {})
+          .frame(width: 1040, height: 620),
+        size: NSSize(width: 1040, height: 620), appearance: .aqua,
+        to: root.appending(path: "\(name).png"))
+      XCTAssertEqual(image.pixelsWide, 1040)
+      shell.close()
+    }
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   func testNetworkStatesRenderOffscreenInBothAppearances() async throws {
     guard ProcessInfo.processInfo.environment["SHAAR_NETWORK_CAPTURE"] == "1" else {
       throw XCTSkip("Offscreen Network capture requires explicit opt-in")

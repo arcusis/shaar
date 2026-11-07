@@ -77,6 +77,22 @@ struct DevToolsPanelTests {
         leaseID: 42, afterSequence: 10) == nil)
   }
 
+  @Test func networkHeadersAreAcceptedOnRequestAndResponseEvents() {
+    let request =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":4,"leaseID":42,"data":{"requestID":"r1","url":"https://example.test/","method":"GET","requestHeaders":[{"name":"Accept","value":"text/html"}],"truncated":false}}"#
+    let response =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":5,"leaseID":42,"data":{"requestID":"r1","status":200,"responseHeaders":[{"name":"Content-Type","value":"text/html"}],"truncated":false}}"#
+    #expect(decodePanel(request) != nil)
+    #expect(decodePanel(response) != nil)
+    let oversized = request.replacingOccurrences(
+      of: "text/html", with: String(repeating: "x", count: 1_025))
+    #expect(decodePanel(oversized) == nil)
+    let unexpected = request.replacingOccurrences(
+      of: #""value":"text/html""#,
+      with: #""value":"text/html","raw":"unbounded""#)
+    #expect(decodePanel(unexpected) == nil)
+  }
+
   @Test func fixedAllowlistAndBoundsRejectUntrustedPayloads() {
     let safe =
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"hello","level":"log","truncated":false}}"#

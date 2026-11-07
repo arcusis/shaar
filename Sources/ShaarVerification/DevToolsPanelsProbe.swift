@@ -68,6 +68,9 @@ import Foundation
       return "Shaar DevTools opened the Shaar shell and left the Chromium dock closed. "
         + "F12 maps to that command."
     }
+    await check("shell-defaults") {
+      try self.proveShellDefaults(shell)
+    }
     await check("console-network") {
       _ = try await inspector.evaluate(
         "console.error('shaar19-live-console'); fetch('/profile-privacy-cache', {cache:'no-store'}).then(r=>r.text())"
@@ -530,6 +533,44 @@ import Foundation
     }
   }
 
+  private static let unavailableCopy = [
+    "Live DOM tree is unavailable for this tab",
+    "Live component tree is unavailable for this tab",
+    "Live Application is unavailable for this tab",
+    "Live Performance is unavailable for this tab",
+    "Live Sources are unavailable for this tab",
+    "Repro capture needs engine support",
+    "Live Viewports need engine support",
+    "WebKit comparison is unavailable for this tab",
+    "Live console and network are unavailable for this tab",
+    "Use Chromium DevTools until the live stream is available.",
+    "Open Chromium DevTools",
+    "Application data is unavailable for this tab",
+    "Performance data is unavailable for this tab",
+    "Sources are unavailable for this tab",
+    "Console commands are unavailable for this tab",
+  ]
+
+  private static func namesEngineVersion(_ text: String) -> Bool {
+    if text.range(of: #"\d+\.\d+"#, options: .regularExpression) != nil { return true }
+    return text.range(of: #"shaar\.\d+"#, options: .regularExpression) != nil
+  }
+
+  private func proveShellDefaults(_ shell: ShaarDevToolsModel) throws -> String {
+    guard shell.dock == .right else {
+      throw Failure("Shaar DevTools opened docked to \(shell.dock.rawValue)")
+    }
+    for language in BrowserLanguage.allCases {
+      for line in Self.unavailableCopy {
+        let text = BrowserLocalization.string(line, table: "Shell", language: language)
+        if Self.namesEngineVersion(text) {
+          throw Failure("Unavailable copy names an engine version: \(text)")
+        }
+      }
+    }
+    return "Docked to the right. Unavailable copy does not name an engine version."
+  }
+
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
   }
@@ -553,8 +594,8 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "f12-route", "console-network", "network-row", "console-repeat", "split-shell",
-    "application-cookie",
+    "f12-route", "shell-defaults", "console-network", "network-row",
+    "console-repeat", "split-shell", "application-cookie",
     "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",
     "application-service-worker", "network-rules", "source-bytes", "viewports",

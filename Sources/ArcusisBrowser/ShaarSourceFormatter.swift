@@ -12,6 +12,11 @@ enum ShaarSourceKind: Equatable {
 
 enum ShaarSourceFormatter {
   static let maximumBytes = 512 * 1_024
+  private static let regexPrefixWords: Set<String> = [
+    "return", "throw", "case", "delete", "void", "typeof", "instanceof",
+    "in", "of", "yield", "await", "else", "do",
+  ]
+  private static let controlWords: Set<String> = ["if", "while", "for", "with", "switch", "catch"]
 
   static func format(_ source: String, kind: ShaarSourceKind) -> String {
     guard source.utf8.count <= maximumBytes else { return source }
@@ -32,14 +37,17 @@ enum ShaarSourceFormatter {
     return String(data: formatted, encoding: .utf8)
   }
 
-  /// Inserts breaks after braces and after semicolons that are outside
-  /// parentheses, strings, and comments. Regex literals are not detected.
+  /// Inserts breaks after braces and after semicolons outside parentheses,
+  /// strings, comments, and regular-expression literals.
   static func layout(_ source: String) -> String {
     var result = ""
     var depth = 0
     var parentheses = 0
+    var controlParentheses: [Bool] = []
+    var precedingControlWord = false
     var quote: Character?
     var escaped = false
+    var canStartRegex = true
     var index = source.startIndex
     while index < source.endIndex {
       let character = source[index]
@@ -52,6 +60,7 @@ enum ShaarSourceFormatter {
           escaped = true
         } else if character == open {
           quote = nil
+          canStartRegex = false
         }
         index = next
         continue
@@ -64,26 +73,53 @@ enum ShaarSourceFormatter {
         copyBlockComment(source, from: &index, into: &result)
         continue
       }
+      if character == "/" && canStartRegex,
+        copyRegexLiteral(source, from: &index, into: &result)
+      {
+        canStartRegex = false
+        continue
+      }
       if character == "\"" || character == "'" || character == "`" {
+        precedingControlWord = false
         quote = character
         escaped = false
         result.append(character)
         index = next
         continue
       }
+      if character.isLetter || character == "_" || character == "$" {
+        let word = copyIdentifier(source, from: &index, into: &result)
+        canStartRegex = regexFollows(word)
+        precedingControlWord = controlWords.contains(word)
+        continue
+      }
+      if character.isNumber {
+        canStartRegex = false
+        precedingControlWord = false
+        result.append(character)
+        index = next
+        continue
+      }
       if character == "(" {
         parentheses += 1
+        controlParentheses.append(precedingControlWord)
+        precedingControlWord = false
+        canStartRegex = true
         result.append(character)
         index = next
         continue
       }
       if character == ")" {
         parentheses = max(0, parentheses - 1)
+        canStartRegex = controlParentheses.popLast() ?? false
+        precedingControlWord = false
         result.append(character)
         index = next
         continue
       }
       if character == "{" {
+        precedingControlWord = false
+        canStartRegex = true
         result.append(character)
         depth += 1
         breakLine(&result, depth: depth)
@@ -91,13 +127,17 @@ enum ShaarSourceFormatter {
         continue
       }
       if character == "}" {
+        precedingControlWord = false
         depth = max(0, depth - 1)
+        canStartRegex = false
         breakLine(&result, depth: depth)
         result.append(character)
         index = next
         continue
       }
       if character == ";" && parentheses == 0 {
+        precedingControlWord = false
+        canStartRegex = true
         result.append(character)
         breakLine(&result, depth: depth)
         index = next
@@ -113,12 +153,68 @@ enum ShaarSourceFormatter {
         index = next
         continue
       }
+      precedingControlWord = false
+      if "[,:;!?=+-*%&|^~<>".contains(character) {
+        canStartRegex = true
+      } else if character == "]" || character == "." {
+        canStartRegex = false
+      }
       result.append(character)
       index = next
     }
     while result.last == " " || result.last == "\n" { result.removeLast() }
     if result.isEmpty { return source }
     return result + "\n"
+  }
+
+  private static func regexFollows(_ word: String) -> Bool {
+    regexPrefixWords.contains(word)
+  }
+
+  private static func copyIdentifier(
+    _ source: String, from index: inout String.Index, into result: inout String
+  ) -> String {
+    var word = ""
+    while index < source.endIndex {
+      let character = source[index]
+      guard character.isLetter || character.isNumber || character == "_" || character == "$"
+      else { break }
+      word.append(character)
+      result.append(character)
+      index = source.index(after: index)
+    }
+    return word
+  }
+
+  private static func copyRegexLiteral(
+    _ source: String, from index: inout String.Index, into result: inout String
+  ) -> Bool {
+    var cursor = source.index(after: index)
+    var escaped = false
+    var inClass = false
+    while cursor < source.endIndex {
+      let character = source[cursor]
+      if character == "\n" || character == "\r" { return false }
+      if escaped {
+        escaped = false
+      } else if character == "\\" {
+        escaped = true
+      } else if character == "[" {
+        inClass = true
+      } else if character == "]" {
+        inClass = false
+      } else if character == "/" && !inClass {
+        cursor = source.index(after: cursor)
+        while cursor < source.endIndex && source[cursor].isLetter {
+          cursor = source.index(after: cursor)
+        }
+        result.append(contentsOf: source[index..<cursor])
+        index = cursor
+        return true
+      }
+      cursor = source.index(after: cursor)
+    }
+    return false
   }
 
   private static func copyLineComment(

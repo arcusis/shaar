@@ -8,6 +8,7 @@ import Observation
 
 enum ShaarDevToolsSection: String, CaseIterable {
   case elements = "Elements"
+  case components = "Components"
   case console = "Console"
   case network = "Network"
   case application = "Application"
@@ -294,6 +295,7 @@ final class ShaarDevToolsModel {
       guard isOpen, section != oldValue else { return }
       if section == .viewports { viewports.open() } else { viewports.close() }
       if section == .elements { dom.open() } else { dom.close() }
+      if section == .components { framework.activate() } else { framework.suspend() }
       if section == .comparison {
         comparison.open(inspector: comparisonInspector)
       } else {
@@ -339,6 +341,7 @@ final class ShaarDevToolsModel {
   let sources: ShaarSourcesModel
   let repro: ShaarReproModel
   let viewports: ShaarViewportsModel
+  let framework = ShaarFrameworkComponentsModel()
   let comparison: ShaarWebKitComparisonModel
   let allowsWebKitComparison: Bool
   var sections: [ShaarDevToolsSection] {
@@ -351,6 +354,7 @@ final class ShaarDevToolsModel {
   @ObservationIgnored private var localTokens: [String: UUID] = [:]
   @ObservationIgnored private var streamGeneration = 0
   @ObservationIgnored private var ownedInspector: InspectorModel?
+  @ObservationIgnored private var frameworkClose: Task<Void, Never>?
   @ObservationIgnored private weak var comparisonInspector: InspectorModel?
 
   init(
@@ -396,6 +400,7 @@ final class ShaarDevToolsModel {
       loadSourceData: sourceLoader)
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
+    framework.updateAccess(url: target.url)
   }
 
   private static func savedSize(_ key: String, fallback: CGFloat, in defaults: UserDefaults)
@@ -408,12 +413,16 @@ final class ShaarDevToolsModel {
 
   func open(inspector: InspectorModel) {
     guard !isOpen else { return }
+    frameworkClose?.cancel()
+    frameworkClose = nil
     comparisonInspector = inspector
     if !inspector.isOpen {
       inspector.open()
       ownedInspector = inspector
     }
     isOpen = true
+    framework.attach(inspector)
+    framework.updateAccess(url: target.url)
     repro.history.start(for: target)
     repro.startFrames(for: target)
     startStream()
@@ -422,6 +431,7 @@ final class ShaarDevToolsModel {
     if section == .viewports { viewports.open() }
     rules.resume()
     if section == .elements { dom.open() }
+    if section == .components { framework.activate() }
     if section == .comparison && allowsWebKitComparison { comparison.open(inspector: inspector) }
   }
 
@@ -450,8 +460,15 @@ final class ShaarDevToolsModel {
     cookies.reset()
     performance.reset()
     sources.reset()
-    ownedInspector?.close()
+    let inspector = ownedInspector
     ownedInspector = nil
+    let hide = framework.beginHide()
+    frameworkClose?.cancel()
+    frameworkClose = Task { @MainActor in
+      await framework.finishHide(epoch: hide.epoch, attachment: hide.attachment)
+      guard !Task.isCancelled, !isOpen else { return }
+      inspector?.close()
+    }
     isOpen = false
   }
 
@@ -476,6 +493,7 @@ final class ShaarDevToolsModel {
     application.reset()
     cookies.reset()
     sources.reset()
+    framework.updateAccess(url: target.url)
     repro.updateTarget(target, committed: committed)
     streamGeneration += 1
     eventTask?.cancel()
@@ -488,6 +506,11 @@ final class ShaarDevToolsModel {
       startLocalStreams()
       rules.resume()
     }
+  }
+
+  func refreshFrameworkComponents() {
+    guard isOpen, section == .components else { return }
+    framework.activate()
   }
 
   var localConsoleEvents: [ShaarConsoleEvent] {

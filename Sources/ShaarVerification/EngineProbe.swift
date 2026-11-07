@@ -37,6 +37,7 @@ final class EngineProbe {
   private let mediaSessionOnlyMode: Bool
   private let devtoolsRouteOnlyMode: Bool
   private let devtoolsPanelsOnlyMode: Bool
+  private let frameworkComponentsOnlyMode: Bool
   private let measurementTabCount: Int?
   private let measurementEager: Bool
   private let expectedAfterTermination: BrowserSession?
@@ -80,7 +81,7 @@ final class EngineProbe {
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
     localizationMode: Bool, basicBrowsingMode: Bool, reloadWindowMode: Bool, devModeOnly: Bool,
     mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool, devtoolsPanelsOnlyMode: Bool,
-    measurementTabCount: Int?, measurementEager: Bool
+    frameworkComponentsOnlyMode: Bool, measurementTabCount: Int?, measurementEager: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -103,6 +104,7 @@ final class EngineProbe {
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
     self.devtoolsRouteOnlyMode = devtoolsRouteOnlyMode
     self.devtoolsPanelsOnlyMode = devtoolsPanelsOnlyMode
+    self.frameworkComponentsOnlyMode = frameworkComponentsOnlyMode
     self.measurementTabCount = measurementTabCount
     self.measurementEager = measurementEager
     expectedAfterTermination =
@@ -233,6 +235,7 @@ final class EngineProbe {
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
       let devtoolsRouteOnlyMode = arguments.contains("--probe-devtools-route-only")
       let devtoolsPanelsOnlyMode = arguments.contains("--probe-devtools-panels-only")
+      let frameworkComponentsOnlyMode = arguments.contains("--probe-framework-components-only")
       let measurementTabCount: Int? = {
         guard let index = arguments.firstIndex(of: "--probe-measure-tabs"),
           arguments.indices.contains(index + 1)
@@ -272,6 +275,7 @@ final class EngineProbe {
         "--probe-media-session-only",
         "--probe-devtools-route-only",
         "--probe-devtools-panels-only",
+        "--probe-framework-components-only",
         "--probe-measure-tabs",
       ]
       guard externalAppConsentMode == noLaunchGuard,
@@ -309,6 +313,9 @@ final class EngineProbe {
         !devtoolsPanelsOnlyMode
           || !conflictingFlags.filter({ $0 != "--probe-devtools-panels-only" }).contains(
             where: arguments.contains),
+        !frameworkComponentsOnlyMode
+          || !conflictingFlags.filter({ $0 != "--probe-framework-components-only" }).contains(
+            where: arguments.contains),
         measurementTabCount == nil
           || !conflictingFlags.filter({ $0 != "--probe-measure-tabs" }).contains(
             where: arguments.contains),
@@ -338,6 +345,7 @@ final class EngineProbe {
         mediaSessionOnlyMode: mediaSessionOnlyMode,
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
         devtoolsPanelsOnlyMode: devtoolsPanelsOnlyMode,
+        frameworkComponentsOnlyMode: frameworkComponentsOnlyMode,
         measurementTabCount: measurementTabCount, measurementEager: measurementEager)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
@@ -730,6 +738,19 @@ final class EngineProbe {
         fixtureStage = "DevToolsPanels"
         try expect(NSApp.windows.allSatisfy { !$0.isVisible }, "DevTools panel windows stay hidden")
         checks += try await DevToolsPanelsProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      if frameworkComponentsOnlyMode {
+        guard let browserEngine else { throw ProbeFailure("Components panel engine is missing.") }
+        bootstrapStage = .ready
+        fixtureStage = "FrameworkComponents"
+        try expect(
+          NSApp.windows.allSatisfy { !$0.isVisible }, "Components panel windows stay hidden")
+        checks += try await FrameworkComponentsProbe(
           engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
         localFixturesPassed = true
@@ -1277,7 +1298,7 @@ final class EngineProbe {
       return
     }
     if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
-      || devtoolsRouteOnlyMode || devtoolsPanelsOnlyMode
+      || devtoolsRouteOnlyMode || devtoolsPanelsOnlyMode || frameworkComponentsOnlyMode
     {
       let engineClosed = browserEngine?.isClosed == true
       let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
@@ -1317,7 +1338,7 @@ final class EngineProbe {
 
   private var baseTimeoutSeconds: Double {
     if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
-      || devtoolsRouteOnlyMode
+      || devtoolsRouteOnlyMode || frameworkComponentsOnlyMode
     {
       return 180
     }
@@ -1335,6 +1356,7 @@ final class EngineProbe {
     if devModeOnly { return DevelopmentModeProbe.mode }
     if mediaSessionOnlyMode { return "media-session-only" }
     if devtoolsPanelsOnlyMode { return "devtools-panels-only" }
+    if frameworkComponentsOnlyMode { return "framework-components-only" }
     if devtoolsRouteOnlyMode { return "devtools-route-only" }
     if localizationMode { return "localization-only" }
     if privateWindowMode { return PrivateWindowProbe.mode }
@@ -1365,6 +1387,10 @@ final class EngineProbe {
     if devtoolsRouteOnlyMode {
       return
         "Owned hidden normal window, DevTools frontend URL routing, and Node discovery attachment."
+    }
+    if frameworkComponentsOnlyMode {
+      return
+        "Owned hidden normal window and authored loopback React, Vue, and Angular fixtures. No existing profile or external origin."
     }
     if localizationMode {
       return

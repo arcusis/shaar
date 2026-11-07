@@ -449,6 +449,7 @@ final class BrowserEngine {
         if let profile = self.store?.session.profileID(forTabID: id) {
           self.shaarDevTools[id]?.updateTarget(
             SiteControlTarget(tabID: id, profileID: profile, url: url))
+          if !loading { self.shaarDevTools[id]?.refreshFrameworkComponents() }
         }
         self.developerDocumentChanged(id, url: url)
         self.updateDevelopmentPage(tabID: id, url: url, loading: loading)

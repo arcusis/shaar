@@ -31,6 +31,7 @@ extension ShaarDevToolsSection {
   fileprivate var symbol: String {
     switch self {
     case .elements: "square.dashed.inset.filled"
+    case .components: "square.stack.3d.up"
     case .console: "terminal"
     case .network: "network"
     case .application: "externaldrive"
@@ -45,6 +46,7 @@ extension ShaarDevToolsSection {
   fileprivate var shortLabel: String {
     switch self {
     case .elements: "Elements"
+    case .components: "Comps"
     case .console: "Console"
     case .network: "Network"
     case .application: "App"
@@ -221,6 +223,12 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .components:
+      if let inspector, inspector.isOpen {
+        ShaarFrameworkComponentsPanel(model: model.framework, openChromium: openChromium)
+      } else {
+        unavailablePanel
+      }
     case .console:
       if model.consoleAvailable {
         ShaarConsolePanel(
@@ -320,6 +328,7 @@ struct ShaarDevToolsPanel: View {
 
   private var unavailableMessage: String {
     if model.section == .elements { return "Live DOM tree is unavailable for this tab" }
+    if model.section == .components { return "Live component tree is unavailable for this tab" }
     if model.section == .application { return "Live Application is unavailable for this tab" }
     if model.section == .performance { return "Live Performance is unavailable for this tab" }
     if model.section == .sources { return "Live Sources are unavailable for this tab" }
@@ -374,6 +383,11 @@ struct ShaarDevToolsPanel: View {
     if model.section == .elements {
       return model.dom.available
         ? "DOM tree is scoped to this tab" : "DOM tree needs engine support"
+    }
+    if model.section == .components {
+      return model.framework.allowed
+        ? "Components are scoped to this tab"
+        : "Component tools read only localhost until you turn them on for a site."
     }
     if model.section == .application {
       if model.application.area == .cookies { return "Cookies are scoped to this page" }

@@ -234,6 +234,49 @@ import Testing
     #expect(released.contains("handler-1"))
   }
 
+  @Test func liveTransportEditsAncestorFlagsAndRejectsAMissingNode() async throws {
+    let calls = ListenerCallLog()
+    let transport = ShaarEventListenersLiveTransport { method, params, _ in
+      calls.entries.append((method, params))
+      if method == "DOM.resolveNode" {
+        if params["nodeId"] as? Int == 99 { return ["object": ["objectId": ""]] }
+        calls.resolves += 1
+        return ["object": ["objectId": "node-\(calls.resolves)"]]
+      }
+      if method == "DOMDebugger.getEventListeners" {
+        return [
+          "listeners": [
+            [
+              "type": "submit", "useCapture": false, "passive": false, "once": true,
+              "handler": ["objectId": "handler-submit"],
+            ]
+          ]
+        ]
+      }
+      return [:]
+    }
+    let target = listenerTarget()
+    let found = try await transport.listeners(nodeID: 8, ancestors: [3], target: target)
+    #expect(found.count == 2)
+    #expect(found[0].onAncestor == false)
+    #expect(found[0].once == true)
+    #expect(found[0].source == nil)
+    #expect(found[1].onAncestor == true)
+    let submit = try #require(found.first)
+    try await transport.setPassive(submit, passive: true, target: target)
+    try await transport.setOnce(submit, once: false, target: target)
+    let edits = calls.entries.filter { $0.0 == "Runtime.callFunctionOn" }
+    #expect(edits.count == 2)
+    await #expect(throws: ShaarEventListenersUnavailable.self) {
+      try await transport.listeners(nodeID: 99, ancestors: [], target: target)
+    }
+    var missingHandler = submit
+    missingHandler.handlerObjectID = nil
+    await #expect(throws: ShaarEventListenersUnavailable.self) {
+      try await transport.remove(missingHandler, target: target)
+    }
+  }
+
   @Test func paneRendersOffscreenEmptyAndPopulated() async throws {
     _ = NSApplication.shared
     let previous = NSApp.keyWindow
@@ -250,6 +293,67 @@ import Testing
     #expect(!populated.isEmpty)
     #expect(empty != populated)
     #expect(NSApp.keyWindow === previous)
+  }
+
+  @Test func paneRendersLoadingEmptyFailureAndAOnceRow() async throws {
+    _ = NSApplication.shared
+    let hold = ListenerHoldTransport()
+    let loadingModel = ShaarEventListenersModel(target: listenerTarget(), transport: hold)
+    let loadingTask = Task { await loadingModel.load(nodeID: 8, ancestors: []) }
+    for _ in 0..<100 where !hold.suspended {
+      await Task.yield()
+    }
+    let sawLoading = loadingModel.loading && hold.suspended
+    let loadingImage = sawLoading ? try listenerPaneImage(loadingModel) : Data()
+    hold.finishLoad()
+    if hold.suspended {
+      await loadingTask.value
+    } else {
+      loadingTask.cancel()
+    }
+    #expect(sawLoading)
+    #expect(!loadingImage.isEmpty)
+    #expect(loadingModel.loading == false)
+
+    let emptyModel = ShaarEventListenersModel(
+      target: listenerTarget(), transport: ShaarEventListenersPendingTransport())
+    await emptyModel.load(nodeID: 8, ancestors: [])
+    #expect(emptyModel.nodeID == 8)
+    #expect(emptyModel.visibleGroups.isEmpty)
+    let emptyImage = try listenerPaneImage(emptyModel)
+    await emptyModel.load(nodeID: nil, ancestors: [])
+    #expect(emptyModel.nodeID == nil)
+    let cleared = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/cleared")!)
+    emptyModel.updateTarget(cleared)
+    #expect(emptyModel.target == cleared)
+    #expect(emptyModel.listeners.isEmpty)
+
+    let failedModel = ShaarEventListenersModel(
+      target: listenerTarget(), transport: ListenerRejectTransport())
+    await failedModel.load(nodeID: 4, ancestors: [])
+    #expect(failedModel.listeners.isEmpty)
+    #expect(failedModel.failure == "Event listeners need engine support")
+    let failedImage = try listenerPaneImage(failedModel)
+
+    let onceModel = ShaarEventListenersModel(
+      target: listenerTarget(), transport: ListenerFailEditTransport())
+    await onceModel.load(nodeID: 8, ancestors: [])
+    let once = try #require(onceModel.listeners.first)
+    #expect(once.once == true)
+    #expect(once.source == nil)
+    await onceModel.togglePassive(once.id)
+    #expect(onceModel.listeners.first?.passive == false)
+    await onceModel.remove(once.id)
+    #expect(onceModel.listeners.count == 1)
+    #expect(onceModel.failure == "Event listeners need engine support")
+    let onceImage = try listenerPaneImage(onceModel)
+
+    #expect(!emptyImage.isEmpty)
+    #expect(!failedImage.isEmpty)
+    #expect(!onceImage.isEmpty)
+    #expect(emptyImage != failedImage)
+    #expect(failedImage != onceImage)
   }
 
   @Test func writesOffscreenEvidenceWhenRequested() async throws {
@@ -285,6 +389,11 @@ import Testing
   }
 }
 
+@MainActor private func listenerPaneImage(_ model: ShaarEventListenersModel) throws -> Data {
+  try VisualCapture.pngOffscreen(
+    ShaarEventListenersPane(model: model), size: NSSize(width: 520, height: 360))
+}
+
 @MainActor private func captureListeners(
   _ view: some View, named name: String, scheme: ColorScheme, appearance: NSAppearance.Name,
   root: URL
@@ -305,4 +414,81 @@ private func listenerTarget() -> SiteControlTarget {
 @MainActor private final class ListenerCallLog {
   var entries: [(String, [String: Any])] = []
   var resolves = 0
+}
+
+@MainActor private final class ListenerHoldTransport: ShaarEventListenersTransport {
+  private var releaseLoad: CheckedContinuation<Void, Never>?
+  private(set) var suspended = false
+
+  func listeners(nodeID: Int, ancestors: [Int], target: SiteControlTarget) async throws
+    -> [ShaarEventListener]
+  {
+    await withCheckedContinuation { continuation in
+      releaseLoad = continuation
+      suspended = true
+    }
+    return []
+  }
+
+  func finishLoad() {
+    releaseLoad?.resume()
+    releaseLoad = nil
+  }
+
+  func remove(_ listener: ShaarEventListener, target: SiteControlTarget) async throws {}
+
+  func setPassive(_ listener: ShaarEventListener, passive: Bool, target: SiteControlTarget)
+    async throws
+  {}
+
+  func setOnce(_ listener: ShaarEventListener, once: Bool, target: SiteControlTarget) async throws {
+  }
+}
+
+@MainActor private struct ListenerRejectTransport: ShaarEventListenersTransport {
+  func listeners(nodeID: Int, ancestors: [Int], target: SiteControlTarget) async throws
+    -> [ShaarEventListener]
+  {
+    throw ShaarEventListenersUnavailable()
+  }
+
+  func remove(_ listener: ShaarEventListener, target: SiteControlTarget) async throws {
+    throw ShaarEventListenersUnavailable()
+  }
+
+  func setPassive(_ listener: ShaarEventListener, passive: Bool, target: SiteControlTarget)
+    async throws
+  {
+    throw ShaarEventListenersUnavailable()
+  }
+
+  func setOnce(_ listener: ShaarEventListener, once: Bool, target: SiteControlTarget) async throws {
+    throw ShaarEventListenersUnavailable()
+  }
+}
+
+@MainActor private struct ListenerFailEditTransport: ShaarEventListenersTransport {
+  func listeners(nodeID: Int, ancestors: [Int], target: SiteControlTarget) async throws
+    -> [ShaarEventListener]
+  {
+    [
+      ShaarEventListener(
+        id: "8|submit|0", type: "submit", nodeID: 8, onAncestor: false, capture: false,
+        passive: false, once: true, source: nil, handlerObjectID: nil)
+    ]
+  }
+
+  func remove(_ listener: ShaarEventListener, target: SiteControlTarget) async throws {
+    throw ShaarEventListenersUnavailable()
+  }
+
+  func setPassive(_ listener: ShaarEventListener, passive: Bool, target: SiteControlTarget)
+    async throws
+  {
+    throw ShaarEventListenersUnavailable()
+  }
+
+  func setOnce(_ listener: ShaarEventListener, once: Bool, target: SiteControlTarget) async throws {
+    throw ShaarEventListenersUnavailable()
+  }
 }

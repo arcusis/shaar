@@ -15,8 +15,10 @@ import Testing
   var commands: [ShaarDOMCommand] = []
   var undoDocuments: [[String: Any]] = []
   var searchNodeIDs: [Int] = [4]
+  var expiredSearchResults = 0
   var describedNodes: [Int: [String: Any]] = [:]
   var describedBackends: [Int: [String: Any]] = [:]
+  var documentsByDepth: [Int: [String: Any]] = [:]
   var document: [String: Any] = [
     "root": [
       "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
@@ -97,9 +99,16 @@ import Testing
   {
     commands.append(command)
     switch command {
-    case .document: return document
+    case .document(let depth): return documentsByDepth[depth] ?? document
     case .search: return ["searchId": "s1", "resultCount": searchNodeIDs.count]
-    case .searchResults: return ["nodeIds": searchNodeIDs]
+    case .searchResults:
+      if expiredSearchResults > 0 {
+        expiredSearchResults -= 1
+        throw NSError(
+          domain: "DOM", code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "No search session with given id found"])
+      }
+      return ["nodeIds": searchNodeIDs]
     case .describe(let id):
       if let node = describedNodes[id] { return ["node": node] }
       return [:]
@@ -528,6 +537,85 @@ enum ShaarDOMFixtureDocument {
     #expect(model.nodes[3]?.childrenIDs.contains(99) == true)
     #expect(model.expanded.contains(3))
     #expect(model.rows.contains { $0.id == 99 })
+    model.close()
+  }
+
+  @Test func searchRevealsAHitWhenDescribeOmitsItsParent() async {
+    let fixture = DOMFixtureTransport()
+    fixture.searchNodeIDs = [99]
+    fixture.describedNodes[99] = [
+      "nodeId": 99, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
+      "attributes": ["id", "shaar-live-element"],
+    ]
+    fixture.documentsByDepth[2] = ["root": [
+      "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+      "children": [[
+        "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+        "children": [[
+          "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+          "childNodeCount": 1,
+        ]],
+      ]],
+    ]]
+    fixture.documentsByDepth[4] = ["root": [
+      "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+      "children": [[
+        "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+        "children": [[
+          "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+          "children": [[
+            "nodeId": 99, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
+            "attributes": ["id", "shaar-live-element"],
+          ]],
+        ]],
+      ]],
+    ]]
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    model.select(3)
+    model.search = "#shaar-live-element"
+    await model.performSearch()
+    #expect(model.matchOrder == [99])
+    #expect(model.selectedID == 99)
+    #expect(model.rows.contains { $0.id == 99 })
+    #expect(model.failure == nil)
+    model.close()
+  }
+
+  @Test func searchRetriesAnExpiredSearchSession() async {
+    let fixture = DOMFixtureTransport()
+    fixture.expiredSearchResults = 1
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    model.select(3)
+    model.search = "main"
+    await model.performSearch()
+    #expect(model.selectedID == 4)
+    #expect(model.matchOrder == [4])
+    #expect(model.failure == nil)
+    let searches = fixture.commands.filter { command in
+      if case .search = command { return true }
+      return false
+    }
+    #expect(searches.count == 2)
+    model.close()
+  }
+
+  @Test func searchDoesNotReportAnUnrevealedMatch() async {
+    let fixture = DOMFixtureTransport()
+    fixture.searchNodeIDs = [99]
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    model.select(3)
+    model.search = "#missing-from-document"
+    await model.performSearch()
+    #expect(model.selectedID == 3)
+    #expect(model.matchOrder.isEmpty)
+    #expect(model.matchCountLabel == nil)
+    #expect(model.failure != nil)
     model.close()
   }
 

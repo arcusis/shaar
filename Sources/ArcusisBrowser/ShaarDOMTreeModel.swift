@@ -357,16 +357,8 @@ final class ShaarDOMTreeModel {
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !query.isEmpty else { return }
     do {
-      let result = try await execute(.search(String(query.prefix(512))))
-      guard let id = result["searchId"] as? String,
-        let count = result["resultCount"] as? Int,
-        count >= 0, count <= 20_000
-      else { throw ShaarDOMFailure("DOM search could not be completed") }
+      let (id, ids) = try await searchResults(for: String(query.prefix(512)))
       searchID = id
-      let found = try await execute(.searchResults(id, min(count, 500)))
-      guard let ids = found["nodeIds"] as? [Int], ids.count <= 500 else {
-        throw ShaarDOMFailure("DOM search could not be completed")
-      }
       let ordered = uniqueMatchIDs(ids)
       matchOrder = ordered
       matches = Set(ordered)
@@ -374,10 +366,36 @@ final class ShaarDOMTreeModel {
         matchIndex = nil
       } else {
         matchIndex = 0
-        await revealAndSelect(ordered[0])
+        guard await revealAndSelect(ordered[0]) else {
+          clearMatches()
+          throw ShaarDOMFailure("DOM search found a match but could not reveal it")
+        }
       }
       failure = nil
     } catch { failure = error.localizedDescription }
+  }
+
+  private func searchResults(for query: String) async throws -> (String, [Int]) {
+    var lastError: Error = ShaarDOMFailure("DOM search could not be completed")
+    for attempt in 0..<3 {
+      let result = try await execute(.search(query))
+      guard let id = result["searchId"] as? String,
+        let count = result["resultCount"] as? Int,
+        count >= 0, count <= 20_000
+      else { throw ShaarDOMFailure("DOM search could not be completed") }
+      do {
+        let found = try await execute(.searchResults(id, min(count, 500)))
+        guard let ids = found["nodeIds"] as? [Int], ids.count <= 500 else {
+          throw ShaarDOMFailure("DOM search could not be completed")
+        }
+        return (id, ids)
+      } catch {
+        lastError = error
+        _ = try? await execute(.discardSearch(id))
+        if attempt < 2 { try? await Task.sleep(for: .milliseconds(100)) }
+      }
+    }
+    throw lastError
   }
 
   func stepSearchMatch(forward: Bool) async {
@@ -385,17 +403,31 @@ final class ShaarDOMTreeModel {
     guard count > 0, let matchIndex else { return }
     let delta = forward ? 1 : -1
     let next = (matchIndex + delta + count) % count
-    self.matchIndex = next
-    await revealAndSelect(matchOrder[next])
+    if await revealAndSelect(matchOrder[next]) {
+      self.matchIndex = next
+      failure = nil
+    } else {
+      failure = ShaarDOMFailure("DOM search found a match but could not reveal it")
+        .localizedDescription
+    }
   }
 
   /// A search id can name a node the depth-limited document never loaded. Ask for that node and
-  /// attach it under the nearest ancestor already in the tree.
-  private func revealAndSelect(_ id: Int) async {
+  /// attach it under the nearest ancestor already in the tree. If the parent is missing, refresh
+  /// progressively deeper bounded slices before reporting that the match could not be revealed.
+  private func revealAndSelect(_ id: Int) async -> Bool {
     if nodes[id] == nil {
       await linkUnloadedMatch(id)
     }
+    if nodes[id] == nil {
+      for depth in [4, 8, 12] {
+        await loadDocument(depth: depth)
+        if nodes[id] != nil { break }
+      }
+    }
+    guard nodes[id] != nil else { return false }
     select(id)
+    return rows.contains { $0.id == id }
   }
 
   private func linkUnloadedMatch(_ id: Int) async {

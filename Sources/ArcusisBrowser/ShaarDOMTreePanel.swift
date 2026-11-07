@@ -75,9 +75,34 @@ struct ShaarDOMTreePanel: View {
   }
 
   private func syncInspectorSelection() {
+    let selectionAtStart = model.selectedID
     Task {
-      if let id = await inspector.currentDOMNodeID() { model.select(id) }
+      guard let id = await inspector.currentDOMNodeID(),
+        model.selectedID == selectionAtStart
+      else { return }
+      model.select(id)
     }
+  }
+
+  private func searchAndInspect() {
+    Task {
+      await model.performSearch()
+      await inspectSearchSelection()
+    }
+  }
+
+  private func stepSearchAndInspect(forward: Bool) {
+    Task {
+      await model.stepSearchMatch(forward: forward)
+      await inspectSearchSelection()
+    }
+  }
+
+  private func inspectSearchSelection() async {
+    guard model.failure == nil, let id = model.selectedID,
+      model.matchOrder.contains(id)
+    else { return }
+    try? await inspector.selectDOMNode(id)
   }
 
   private var tree: some View {
@@ -101,12 +126,17 @@ struct ShaarDOMTreePanel: View {
         Text(failure).font(.system(size: 11)).foregroundStyle(.primary)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        ScrollView {
-          LazyVStack(spacing: 0) {
-            ForEach(model.rows) { row in treeRow(row) }
+        ScrollViewReader { proxy in
+          ScrollView {
+            LazyVStack(spacing: 0) {
+              ForEach(model.rows) { row in treeRow(row).id(row.id) }
+            }
+          }
+          .devToolsDataDirection()
+          .onChange(of: model.selectedID) { _, id in
+            if let id { proxy.scrollTo(id, anchor: .center) }
           }
         }
-        .devToolsDataDirection()
       }
       Divider()
       ShaarEventListenersPane(model: listeners)
@@ -150,7 +180,7 @@ struct ShaarDOMTreePanel: View {
         .font(.system(size: 11))
         .devToolsDataDirection()
         .focused($searchFieldFocused)
-        .onSubmit { Task { await model.performSearch() } }
+        .onSubmit { searchAndInspect() }
         .help(ShellL10n.string("Search the DOM and press Return to apply the search"))
         .onExitCommand { model.search = "" }
       if let label = model.matchCountLabel {
@@ -162,7 +192,7 @@ struct ShaarDOMTreePanel: View {
           .accessibilityIdentifier("shaar.devtools.domMatchCount")
       }
       Button {
-        Task { await model.stepSearchMatch(forward: false) }
+        stepSearchAndInspect(forward: false)
       } label: {
         Image(systemName: "chevron.up")
       }
@@ -170,20 +200,19 @@ struct ShaarDOMTreePanel: View {
       .help(ShellL10n.string("Previous match"))
       .accessibilityLabel(ShellL10n.string("Previous match"))
       Button {
-        Task { await model.stepSearchMatch(forward: true) }
+        stepSearchAndInspect(forward: true)
       } label: {
         Image(systemName: "chevron.down")
       }
       .disabled(model.matchOrder.isEmpty)
       .help(ShellL10n.string("Next match"))
       .accessibilityLabel(ShellL10n.string("Next match"))
-      Button {
-        Task { await model.performSearch() }
-      } label: {
-        Image(systemName: "magnifyingglass")
-      }
+      ShaarDOMSymbolButton(
+        symbol: "magnifyingglass", label: ShellL10n.string("Find in DOM"),
+        identifier: "shaar.devtools.domSearchButton", action: searchAndInspect
+      )
+      .frame(width: 16, height: 20)
       .help(ShellL10n.string("Find in DOM"))
-      .accessibilityLabel(ShellL10n.string("Find in DOM"))
       Button {
         Task { await model.loadDocument() }
       } label: {
@@ -220,7 +249,12 @@ struct ShaarDOMTreePanel: View {
   private func treeRow(_ row: ShaarDOMRow) -> some View {
     HStack(spacing: 5) {
       if row.node.canExpand {
-        ShaarDOMDisclosureButton(id: row.id, expanded: model.expanded.contains(row.id)) {
+        ShaarDOMSymbolButton(
+          symbol: model.expanded.contains(row.id) ? "chevron.down" : "chevron.right",
+          label: ShellL10n.string(
+            model.expanded.contains(row.id) ? "Collapse node" : "Expand node"),
+          identifier: "shaar.devtools.domDisclosure.\(row.id)"
+        ) {
           Task { await model.toggleExpanded(row.id) }
         }
         .frame(width: 14, height: 20)
@@ -544,9 +578,10 @@ struct ShaarDOMTreePanel: View {
   }
 }
 
-private struct ShaarDOMDisclosureButton: NSViewRepresentable {
-  let id: Int
-  let expanded: Bool
+private struct ShaarDOMSymbolButton: NSViewRepresentable {
+  let symbol: String
+  let label: String
+  let identifier: String
   let action: () -> Void
 
   func makeCoordinator() -> Coordinator { Coordinator(action: action) }
@@ -562,12 +597,10 @@ private struct ShaarDOMDisclosureButton: NSViewRepresentable {
 
   func updateNSView(_ button: NSButton, context: Context) {
     context.coordinator.action = action
-    button.image = NSImage(
-      systemSymbolName: expanded ? "chevron.down" : "chevron.right",
-      accessibilityDescription: nil)
+    button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
     button.contentTintColor = .labelColor
-    button.setAccessibilityIdentifier("shaar.devtools.domDisclosure.\(id)")
-    button.setAccessibilityLabel(ShellL10n.string(expanded ? "Collapse node" : "Expand node"))
+    button.setAccessibilityIdentifier(identifier)
+    button.setAccessibilityLabel(label)
   }
 
   final class Coordinator: NSObject {

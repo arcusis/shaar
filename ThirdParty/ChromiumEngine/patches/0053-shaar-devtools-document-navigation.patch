@@ -1,0 +1,195 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+index bdb2ec9..f3a8d17 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -37,6 +37,7 @@
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
++#include "net/http/http_response_headers.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+ 
+@@ -472,6 +473,29 @@ struct Projection {
+   bool truncated = false;
+ };
+ 
++Projection CommittedDocumentRequest(std::string_view request_id,
++                                    const std::string& url,
++                                    const std::string& method) {
++  Projection projection{};
++  projection.id = SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT;
++  projection.data.Set("requestID", std::string(request_id));
++  PutString(&projection.data, "url", &url, &projection.truncated);
++  PutString(&projection.data, "method", &method, &projection.truncated);
++  projection.data.Set("truncated", projection.truncated);
++  return projection;
++}
++
++Projection CommittedDocumentResponse(std::string_view request_id,
++                                     const std::string& url, int status) {
++  Projection projection{};
++  projection.id = SHAAR_DEVTOOLS_PANEL_RESPONSE_RECEIVED;
++  projection.data.Set("requestID", std::string(request_id));
++  PutString(&projection.data, "url", &url, &projection.truncated);
++  projection.data.Set("status", status);
++  projection.data.Set("truncated", projection.truncated);
++  return projection;
++}
++
+ // Only these fixed protocol notifications can cross the ABI. Each projection
+ // copies named scalar fields; headers, cookies, post data and protocol JSON
+ // never enter the event envelope.
+@@ -1658,7 +1682,18 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+         !ProjectPhase2Event(*method, *params, origin_, &projection,
+                             &worker_scopes_))
+       return;
+-    if (projection.id == SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT) {
++    const auto event_id = projection.id;
++    const bool enqueued = Enqueue(std::move(projection));
++    if (!enqueued)
++      return;
++    if (event_id == SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT) {
++      const auto* type = params->FindString("type");
++      if (type && *type == "Document") {
++        const auto* request = params->FindDict("request");
++        const auto* url = request ? request->FindString("url") : nullptr;
++        if (url && request->FindString("method"))
++          document_request_urls_.insert(*url);
++      }
+       const auto* request_id = params->FindString("requestId");
+       if (request_id && request_id->size() <= 128 &&
+           known_requests_.insert(*request_id).second) {
+@@ -1669,7 +1704,15 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+         }
+       }
+     }
+-    Enqueue(std::move(projection));
++    const auto* type = params->FindString("type");
++    if (event_id == SHAAR_DEVTOOLS_PANEL_RESPONSE_RECEIVED &&
++        type && *type == "Document") {
++      const auto* response = params->FindDict("response");
++      const auto* url = response ? response->FindString("url") : nullptr;
++      const auto* request_id = params->FindString("requestId");
++      if (url && request_id)
++        document_response_ids_[*url] = *request_id;
++    }
+   }
+ 
+   void AgentHostClosed(content::DevToolsAgentHost*) override {
+@@ -1677,6 +1720,12 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+     Close();
+   }
+   void WebContentsDestroyed() override { Close(); }
++  void DidStartNavigation(content::NavigationHandle* navigation) override {
++    if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument())
++      return;
++    document_request_urls_.clear();
++    document_response_ids_.clear();
++  }
+   void DidFinishNavigation(content::NavigationHandle* navigation) override {
+     if (!navigation->HasCommitted() || !navigation->IsInPrimaryMainFrame() ||
+         navigation->IsSameDocument())
+@@ -1685,6 +1734,22 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+       Close();
+       return;
+     }
++    const std::string url = navigation->GetURL().spec();
++    const net::HttpResponseHeaders* headers = navigation->GetResponseHeaders();
++    if (navigation->GetURL().SchemeIsHTTPOrHTTPS() &&
++        !navigation->IsErrorPage() && headers &&
++        !document_request_urls_.contains(url)) {
++      const auto found = document_response_ids_.find(url);
++      const std::string request_id =
++          found == document_response_ids_.end()
++              ? "navigation-" + std::to_string(navigation->GetNavigationId())
++              : found->second;
++      Enqueue(CommittedDocumentRequest(request_id, url,
++                                       navigation->GetRequestMethod()));
++      if (found == document_response_ids_.end())
++        Enqueue(CommittedDocumentResponse(request_id, url,
++                                          headers->response_code()));
++    }
+     // The lease belongs to the tab. A document load changes its origin and
+     // invalidates resource IDs, but the DevTools session keeps receiving the
+     // new document's early console and network events.
+@@ -2057,6 +2122,8 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+   std::deque<std::string> queue_;
+   std::set<std::string> known_requests_;
+   std::deque<std::string> request_order_;
++  std::set<std::string> document_request_urls_;
++  std::map<std::string, std::string> document_response_ids_;
+   std::map<int, ReplyTarget> pending_bodies_;
+   std::map<int, PendingPhase2> pending_phase2_;
+   std::optional<PendingRules> pending_rules_;
+@@ -2136,6 +2203,21 @@ bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
+          EncodeProjectedEvent(std::move(projection), lease_id, output);
+ }
+ 
++bool ProjectCommittedDocumentForTesting(std::string_view request_id,
++                                        const std::string& url,
++                                        const std::string& method,
++                                        int status, int lease_id,
++                                        std::string* request,
++                                        std::string* response) {
++  if (!request || !response || request_id.empty() || request_id.size() > 128 ||
++      lease_id <= 0)
++    return false;
++  return EncodeProjectedEvent(CommittedDocumentRequest(request_id, url, method),
++                              lease_id, request) &&
++         EncodeProjectedEvent(CommittedDocumentResponse(request_id, url, status),
++                              lease_id, response);
++}
++
+ bool BuildPhase2CommandForTesting(int command_id, std::string_view params,
+                                   std::string_view origin, std::string* output) {
+   if (!output || params.size() > 20 * 1024)
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.h b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+index d070519..841e6f2 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+@@ -12,6 +12,12 @@ namespace shaar::devtools {
+ // Test seam for the same allowlist and payload encoder used by live leases.
+ bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
+                                  std::string* output);
++bool ProjectCommittedDocumentForTesting(std::string_view request_id,
++                                        const std::string& url,
++                                        const std::string& method,
++                                        int status, int lease_id,
++                                        std::string* request,
++                                        std::string* response);
+ bool HasDOMPanelLeaseForHost(content::DevToolsAgentHost* host);
+ void RouteDOMPanelEventForProtocolHost(content::DevToolsAgentHost* host,
+                                        std::string_view message);
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+index 1208f24..3fd2d66 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -1405,6 +1405,27 @@ TEST(ShaarDevToolsPanelTest, ProjectsOnlyNamedFieldsFromAllowlistedEvents) {
+       0, &output));
+ }
+ 
++TEST(ShaarDevToolsPanelTest, ProjectsCommittedDocumentFallbackWithMethod) {
++  std::string request;
++  std::string response;
++  ASSERT_TRUE(ProjectCommittedDocumentForTesting(
++      "navigation-17", "https://example.test/", "GET", 200, 42,
++      &request, &response));
++  auto request_event = base::JSONReader::Read(request, base::JSON_PARSE_RFC);
++  auto response_event = base::JSONReader::Read(response, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(request_event && request_event->is_dict());
++  ASSERT_TRUE(response_event && response_event->is_dict());
++  const auto& request_data = *request_event->GetDict().FindDict("data");
++  const auto& response_data = *response_event->GetDict().FindDict("data");
++  EXPECT_EQ(4, request_event->GetDict().FindInt("eventID"));
++  EXPECT_EQ("GET", *request_data.FindString("method"));
++  EXPECT_EQ("navigation-17", *request_data.FindString("requestID"));
++  EXPECT_EQ("https://example.test/", *request_data.FindString("url"));
++  EXPECT_EQ(5, response_event->GetDict().FindInt("eventID"));
++  EXPECT_EQ("navigation-17", *response_data.FindString("requestID"));
++  EXPECT_EQ(200, response_data.FindInt("status"));
++}
++
+ TEST(ShaarDevToolsPanelTest, ClipsTextAndRejectsUnboundedProtocolInput) {
+   std::string output;
+   const std::string message =

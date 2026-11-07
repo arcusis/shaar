@@ -459,6 +459,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0052-shaar-devtools-nested-dom-children.patch",
       "sha256": "002fb883b5970628a8976a38b433c68498466e7cd2afdc1117a91f04a87e77db"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0053-shaar-devtools-document-navigation.patch",
+      "sha256": "39602071a77d589f89b4c4f276caa76b808c6bb14520757e8075be138f7c98bb"
     }
   ],
   "requiredExports": [

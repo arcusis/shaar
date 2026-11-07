@@ -96,19 +96,23 @@ const NSArray<NSString *> *ShaarMethods() {
       @"DOM.markUndoableState", @"DOM.undo", @"DOM.performSearch",
       @"DOM.getSearchResults", @"DOM.discardSearchResults", @"Overlay.highlightNode",
       @"Overlay.hideHighlight", @"DOM.resolveNode", @"Runtime.callFunctionOn",
-      @"DOM.getOuterHTML", @"CSS.forcePseudoState"];
+      @"DOM.getOuterHTML", @"CSS.forcePseudoState",
+      @"Emulation.setTouchEmulationEnabled"];
   });
   return methods;
 }
 
 // CSS.forcePseudoState is command 64. Its place in this list would otherwise
 // send 62, which the engine uses for Page.disable. 63 is Page.handleJavaScriptDialog.
+// Emulation.setTouchEmulationEnabled is command 65. Appending it would otherwise send 63.
 NSUInteger ShaarDevToolsCommandID(NSString *method) {
   NSUInteger index = [ShaarMethods() indexOfObject:method];
   if (index == NSNotFound)
     return NSNotFound;
   if ([method isEqualToString:@"CSS.forcePseudoState"])
     return 64;
+  if ([method isEqualToString:@"Emulation.setTouchEmulationEnabled"])
+    return 65;
   return index + 1;
 }
 

@@ -17,6 +17,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case audits = "Audits"
   case sources = "Sources"
   case security = "Security"
+  case sensors = "Sensors"
   case repro = "Repro"
   case viewports = "Viewports"
   case comparison = "Comparison"
@@ -364,6 +365,21 @@ final class ShaarDevToolsModel {
     (@MainActor (SiteControlTarget) async -> ShaarDevToolsSecuritySummary)?
   @ObservationIgnored var presentCertificate: @MainActor () -> Void = {}
   @ObservationIgnored private var securityGeneration = 0
+  var sensorLocation: ShaarDevToolsSensorLocation = .system
+  var sensorLatitude = ""
+  var sensorLongitude = ""
+  var sensorAccuracy = ""
+  var sensorTimezone: ShaarDevToolsSensorTimezone = .system
+  var sensorLocale: ShaarDevToolsSensorLocale = .system
+  var sensorTouch = false
+  /// shaar.20 rejects Emulation.setTouchEmulationEnabled. The engine patch owns the live toggle.
+  var sensorTouchReady = false
+  var sensorNotice: ShaarDevToolsSensorNotice?
+  @ObservationIgnored var sensorFixture: (@MainActor (ShaarDevToolsSensorCommand) -> Void)?
+  @ObservationIgnored var sendSensorCommand:
+    (@MainActor (ShaarDevToolsSensorCommand) async throws -> Void)?
+  @ObservationIgnored weak var sensorEngine: BrowserEngine?
+  @ObservationIgnored var sensorGeneration = 0
   var sections: [ShaarDevToolsSection] {
     ShaarDevToolsSection.allCases.filter { $0 != .comparison || allowsWebKitComparison }
   }
@@ -445,6 +461,7 @@ final class ShaarDevToolsModel {
     frameworkClose = nil
     comparisonInspector = inspector
     pageAudit.inspector = inspector
+    attachSensorSender(inspector)
     if !inspector.isOpen {
       inspector.open()
       ownedInspector = inspector
@@ -506,6 +523,7 @@ final class ShaarDevToolsModel {
     }
     closeCommandMenu()
     closeSettings()
+    resetSensors()
     isOpen = false
   }
 
@@ -668,6 +686,7 @@ final class ShaarDevToolsModel {
 
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
+    let tabChanged = self.target.tabID != target.tabID
     if self.target.host != target.host { disconnectLogTap() }
     self.target = target
     performance.updateTarget(target, committed: committed)
@@ -691,6 +710,7 @@ final class ShaarDevToolsModel {
     auditFixture = nil
     framework.updateAccess(url: target.url)
     replaceSecuritySummary()
+    if tabChanged { resetSensorForm() }
     closeCommandMenu()
     closeSettings()
     repro.updateTarget(target, committed: committed)

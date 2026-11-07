@@ -40,6 +40,7 @@ extension ShaarDevToolsSection {
     case .audits: "checkmark.shield"
     case .sources: "curlybraces"
     case .security: "lock"
+    case .sensors: "location"
     case .repro: "record.circle"
     case .viewports: "rectangle.on.rectangle"
     case .comparison: "square.split.2x1"
@@ -58,6 +59,7 @@ extension ShaarDevToolsSection {
     case .audits: "Audits"
     case .sources: "Sources"
     case .security: "Security"
+    case .sensors: "Sensors"
     case .repro: "Repro"
     case .viewports: "Views"
     case .comparison: "WebKit"
@@ -340,6 +342,8 @@ struct ShaarDevToolsPanel: View {
       }
     case .security:
       ShaarDevToolsSecurityPanel(model: model)
+    case .sensors:
+      ShaarDevToolsSensorsPanel(model: model)
     case .repro:
       ShaarReproPanel(
         model: model.repro,
@@ -481,6 +485,7 @@ struct ShaarDevToolsPanel: View {
         : "Sources are unavailable for this tab"
     }
     if model.section == .security { return "Security details are scoped to this tab" }
+    if model.section == .sensors { return "Sensors are scoped to this tab" }
     if model.section == .repro { return "Repro data is scoped to this tab" }
     if model.section == .viewports {
       return model.viewports.available

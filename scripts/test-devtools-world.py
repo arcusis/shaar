@@ -71,6 +71,8 @@ def main():
                 )
             except subprocess.TimeoutExpired:
                 result = subprocess.CompletedProcess([], 124)
+        hmr_ready = (root / "hmr-ready").is_file()
+        hmr_edited = (root / "hmr-edited").is_file()
         if original_hmr is not None:
             args.hmr_file.write_text(original_hmr)
         report = json.loads(report_path.read_text()) if report_path.is_file() else {"steps": []}
@@ -90,6 +92,7 @@ def main():
                           "severity": "crash", "detail": crash})
         receipt = {
             "url": args.url, "exitCode": result.returncode,
+            "hmrReady": hmr_ready, "hmrEdited": hmr_edited,
             "passedCount": sum(step.get("passed") is True for step in steps),
             "failedCount": sum(step.get("passed") is not True for step in steps),
             "crashes": crashes, "steps": steps,

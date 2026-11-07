@@ -136,9 +136,10 @@ import Testing
   }
 
   @Test func presetsCoverPhoneTabletAndroidAndDesktopWidths() {
-    #expect(ShaarViewportPreset.allCases.map(\.rawValue) == [
-      "iphone15Pro", "ipad", "pixel8", "desktop", "desktop1440",
-    ])
+    #expect(
+      ShaarViewportPreset.allCases.map(\.rawValue) == [
+        "iphone15Pro", "ipad", "pixel8", "desktop", "desktop1440",
+      ])
     #expect(ShaarViewportPreset.desktop.width == 1280)
     #expect(ShaarViewportPreset.desktop1440.width == 1440)
     #expect(ShaarViewportPreset.desktop1440.height == 900)

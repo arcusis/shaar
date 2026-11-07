@@ -97,6 +97,7 @@ import Testing
     await model.stop()
     #expect(
       sent.methods == [
+        "Profiler.enable",
         "Profiler.startPreciseCoverage",
         "CSS.enable",
         "CSS.startRuleUsageTracking",
@@ -104,10 +105,79 @@ import Testing
         "Profiler.stopPreciseCoverage",
         "CSS.stopRuleUsageTracking",
       ])
-    let startParams = sent.params.first
-    #expect(startParams?["callCount"] as? Bool == false)
-    #expect(startParams?["detailed"] as? Bool == true)
+    let precise = zip(sent.methods, sent.params).first { method, _ in
+      method == "Profiler.startPreciseCoverage"
+    }
+    #expect(precise?.1["callCount"] as? Bool == false)
+    #expect(precise?.1["detailed"] as? Bool == true)
     #expect(model.recording == false)
+  }
+
+  @Test func probeEnablesCollectionWhenThePageAcceptsCoverage() async {
+    let model = ShaarDevToolsCoverageModel()
+    var methods: [String] = []
+    model.send = { method, _ in
+      methods.append(method)
+      return [:]
+    }
+    await model.probeCollection()
+    #expect(model.collectionReady)
+    #expect(
+      methods == [
+        "Profiler.enable",
+        "Profiler.startPreciseCoverage",
+        "Profiler.stopPreciseCoverage",
+        "CSS.enable",
+        "CSS.startRuleUsageTracking",
+        "CSS.stopRuleUsageTracking",
+      ])
+    await model.probeCollection()
+    #expect(methods.count == 6)
+  }
+
+  @Test func probeLeavesCollectionWaitingWhenTheProfilerDomainIsOff() async {
+    let model = ShaarDevToolsCoverageModel()
+    model.send = { method, _ in
+      if method == "Profiler.startPreciseCoverage" {
+        throw DeveloperModeFailure("Profiler is not enabled")
+      }
+      return [:]
+    }
+    await model.probeCollection()
+    #expect(!model.collectionReady)
+    await model.start()
+    #expect(!model.recording)
+  }
+
+  @Test func probeLeavesCollectionWaitingWhenTheEngineRejectsIt() async {
+    let model = ShaarDevToolsCoverageModel()
+    var methods: [String] = []
+    model.send = { method, _ in
+      methods.append(method)
+      throw DeveloperModeFailure("unknown DevTools capability or command")
+    }
+    await model.probeCollection()
+    #expect(!model.collectionReady)
+    #expect(methods.contains("Profiler.enable"))
+    #expect(methods.contains("Profiler.stopPreciseCoverage"))
+    #expect(!methods.contains("Profiler.startPreciseCoverage"))
+    #expect(!methods.contains("CSS.startRuleUsageTracking"))
+  }
+
+  @Test func probeRetriesWhenThePageGoesAway() async {
+    let model = ShaarDevToolsCoverageModel()
+    var rejectStart = true
+    model.send = { method, _ in
+      if rejectStart && method == "Profiler.enable" {
+        rejectStart = false
+        throw DeveloperModeFailure("The page changed. Try again.")
+      }
+      return [:]
+    }
+    await model.probeCollection()
+    #expect(!model.collectionReady)
+    await model.probeCollection()
+    #expect(model.collectionReady)
   }
 
   @Test func coverageRepliesCoverMissingIdentifiersAndNumericBoxes() {

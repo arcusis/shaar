@@ -1355,6 +1355,17 @@ import Foundation
       developer.setPerformanceEnabled(true)
       try await wait("developer performance session") { !developer.applying }
       try await developer.refreshPerformance()
+      let placement =
+        try await inspector.evaluate(
+          """
+          (()=>{const e=document.getElementById('performance-input');if(!e)return {found:false};
+          e.scrollIntoView({block:'center',inline:'center'});
+          const r=e.getBoundingClientRect();
+          return {found:true,x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),w:Math.round(r.width),h:Math.round(r.height),iw:innerWidth,ih:innerHeight};})()
+          """) as? [String: Any]
+      let visibleWindows = NSApp.windows.filter(\.isVisible).map {
+        String(describing: type(of: $0))
+      }
       let clicked: Bool = await withCheckedContinuation { continuation in
         self.engine.runtime.clickProbeElement(
           inTabID: tab.uuidString, elementID: "performance-input"
@@ -1365,7 +1376,10 @@ import Foundation
       if let snapshot = developer.performanceSnapshot {
         shell.performance.updatePageSnapshot(snapshot)
       }
-      var note = clicked ? "" : " click=missed"
+      var note =
+        clicked
+        ? ""
+        : " click=missed placement=\(placement ?? [:]) windows=\(visibleWindows)"
       if shell.performance.lcpMilliseconds == nil || shell.performance.inpMilliseconds == nil {
         let state = try await inspector.evaluate("document.visibilityState") as? String
         let snapshotLCP = developer.performanceSnapshot?.lcp.map { String($0) } ?? "nil"

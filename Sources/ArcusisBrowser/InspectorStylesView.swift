@@ -443,10 +443,14 @@ struct InspectorStylesView: View {
   private func trimmed(_ text: String) -> String {
     text.trimmingCharacters(in: .whitespacesAndNewlines)
   }
+  private func editBox(property: String, value: String) {
+    Task { await model.edit(property: property, value: value, important: false) }
+  }
+
   private func computedProperties(_ proxy: ScrollViewProxy) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       if let box = inspector.selection?.box {
-        InspectorBoxModel(box: box) { region, index, active in
+        InspectorBoxModel(box: box, edit: editBox) { region, index, active in
           inspector.highlightEdge(region, index, active: active)
         }
       }

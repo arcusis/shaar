@@ -419,7 +419,9 @@ final class ShaarDOMTreeModel {
   }
 
   func move(_ id: Int, to parentID: Int, before siblingID: Int? = nil) async {
-    guard id != parentID, nodes[id] != nil, nodes[parentID] != nil else { return }
+    guard ShaarDOMDrop.allowed(id: id, parentID: parentID, before: siblingID, nodes: nodes) else {
+      return
+    }
     await mutate(.move(id, parentID, siblingID))
   }
 

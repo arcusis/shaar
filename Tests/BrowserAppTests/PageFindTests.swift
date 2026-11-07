@@ -84,6 +84,31 @@ struct PageFindTests {
     #expect(store.pageFind?.canMove == false)
   }
 
+  @Test func changingOnlyQueryCaseKeepsTheCurrentMatch() throws {
+    let store = store()
+    var requests: [PageFindState] = []
+    store.onFindRequest = { request, _ in
+      requests.append(request)
+      return true
+    }
+    store.showPageFind()
+    store.updatePageFindQuery("OrbitFindMarker")
+    let first = try #require(store.pageFind)
+    store.receiveFindResult(
+      tabID: first.tabID, requestID: first.requestID, count: 3, active: 1, final: true)
+
+    store.updatePageFindQuery("orbitfindmarker")
+
+    #expect(store.pageFind?.query == "orbitfindmarker")
+    #expect(store.pageFind?.requestID == first.requestID)
+    #expect(store.pageFind?.status == "1 of 3")
+    #expect(requests.count == 1)
+
+    store.updatePageFindQuery("DifferentNeedle")
+    #expect(store.pageFind?.matchCount == nil)
+    #expect(requests.count == 2)
+  }
+
   @Test func switchingContextsClearsQueryEvenWhenProfilesAreShared() throws {
     let store = store()
     let original = store.session.selectedSpace

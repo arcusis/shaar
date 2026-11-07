@@ -178,6 +178,11 @@ import Foundation
       return
         "Mock, redirect, 450 ms delay, and request/response headers changed real page fetches; delay observed \(Int(elapsed)) ms. \(remainder)"
     }
+    await check("source-bytes") {
+      try await DevToolsSourceBytesProof(
+        shell: shell, inspector: inspector, fixture: self.fixture
+      ).run()
+    }
     await check("viewports") {
       shell.section = .viewports
       do {
@@ -392,8 +397,8 @@ import Foundation
   static let requiredPanels: Set<String> = [
     "console-network", "application-cookie", "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",
-    "application-service-worker", "network-rules", "viewports", "masked-repro",
-    "elements-live",
+    "application-service-worker", "network-rules", "source-bytes", "viewports",
+    "masked-repro", "elements-live",
   ]
 
   private var entries: [String: [String: Any]] = [:]

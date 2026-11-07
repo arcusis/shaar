@@ -43,7 +43,6 @@ struct InspectorPageLayout<Page: View>: View {
   let shell: ShaarDevToolsModel?
   let openChromium: () -> Void
   @ViewBuilder let page: () -> Page
-  @State private var dragStart: CGFloat?
 
   var body: some View {
     GeometryReader { geometry in
@@ -124,42 +123,38 @@ struct InspectorPageLayout<Page: View>: View {
     shell: ShaarDevToolsModel, side: ShaarDevToolsDock, available: CGFloat
   ) -> some View {
     let vertical = side == .bottom
-    return Rectangle()
-      .fill(Color.primary.opacity(0.12))
-      .frame(width: vertical ? nil : 5, height: vertical ? 5 : nil)
-      .contentShape(Rectangle())
-      .gesture(
-        DragGesture(minimumDistance: 2)
-          .onChanged { value in
-            if dragStart == nil {
-              switch side {
-              case .bottom: dragStart = shell.bottomHeight
-              case .right: dragStart = shell.rightWidth
-              case .left: dragStart = shell.leftWidth
-              case .floating: return
-              }
-            }
-            guard let dragStart else { return }
-            switch side {
-            case .bottom:
-              shell.bottomHeight = ShaarDevToolsSizing.bottom(
-                dragStart - value.translation.height, available: available)
-            case .right:
-              shell.rightWidth = ShaarDevToolsSizing.side(
-                dragStart - value.translation.width, available: available)
-            case .left:
-              shell.leftWidth = ShaarDevToolsSizing.side(
-                dragStart + value.translation.width, available: available)
-            case .floating:
-              break
-            }
-          }
-          .onEnded { _ in dragStart = nil }
-      )
-      .accessibilityLabel(
-        ShellL10n.string(
-          vertical ? "Resize DevTools height" : "Resize DevTools width")
-      )
-      .accessibilityIdentifier("shaar.devtools.resize")
+    return ShaarDevToolsSplitHandle(vertical: vertical) {
+      splitLength(shell, side: side)
+    } changed: { start, translation in
+      applySplit(
+        shell, side: side, start: start, translation: translation, available: available)
+    }
+    .frame(width: vertical ? nil : 5, height: vertical ? 5 : nil)
+    .accessibilityLabel(
+      ShellL10n.string(vertical ? "Resize DevTools height" : "Resize DevTools width")
+    )
+  }
+
+  private func splitLength(_ shell: ShaarDevToolsModel, side: ShaarDevToolsDock) -> CGFloat {
+    switch side {
+    case .bottom: shell.bottomHeight
+    case .right: shell.rightWidth
+    case .left: shell.leftWidth
+    case .floating: 0
+    }
+  }
+
+  private func applySplit(
+    _ shell: ShaarDevToolsModel, side: ShaarDevToolsDock, start: CGFloat, translation: CGFloat,
+    available: CGFloat
+  ) {
+    let next = ShaarDevToolsSplitDrag.proposed(
+      start: start, translation: translation, edge: side, available: available)
+    switch side {
+    case .bottom: shell.bottomHeight = next
+    case .right: shell.rightWidth = next
+    case .left: shell.leftWidth = next
+    case .floating: break
+    }
   }
 }

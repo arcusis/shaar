@@ -94,12 +94,26 @@ enum ShaarDOMDrop {
     let rowID = row.id
     provider.loadObject(ofClass: NSString.self) { object, _ in
       guard let text = object as? String, let draggedID = Int(text) else { return }
-      guard
-        let destination = ShaarDOMDrop.destination(
-          draggedID: draggedID, rowID: rowID, kind: kind, nodes: nodes)
-      else { return }
-      Task { @MainActor in move(draggedID, destination.parentID, destination.before) }
+      let dragged = draggedID
+      Task { @MainActor in
+        _ = ShaarDOMDrag.apply(
+          draggedID: dragged, rowID: rowID, kind: kind, nodes: nodes, move: move)
+      }
     }
+    return true
+  }
+}
+
+enum ShaarDOMDrag {
+  @MainActor static func apply(
+    draggedID: Int, rowID: Int, kind: ShaarDOMDropKind, nodes: [Int: ShaarDOMNode],
+    move: (Int, Int, Int?) -> Void
+  ) -> Bool {
+    guard
+      let destination = ShaarDOMDrop.destination(
+        draggedID: draggedID, rowID: rowID, kind: kind, nodes: nodes)
+    else { return false }
+    move(draggedID, destination.parentID, destination.before)
     return true
   }
 }

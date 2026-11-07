@@ -145,6 +145,7 @@ struct ShaarDOMTreePanel: View {
       Text(ShellL10n.string("DOM tree"))
         .font(.system(size: 11, weight: .semibold))
       TextField(ShellL10n.string("Search text or selector"), text: $model.search)
+        .accessibilityIdentifier("shaar.devtools.domSearch")
         .textFieldStyle(.roundedBorder)
         .font(.system(size: 11))
         .devToolsDataDirection()
@@ -338,7 +339,9 @@ struct ShaarDOMTreePanel: View {
       Task { if let html = await model.outerHTML(for: node.id) { copy(html) } }
     }
     Button(ShellL10n.string("Copy selector")) {
-      Task { copy(await copiedPath(for: node.id).css) }
+      Task {
+        await ShaarDOMContextMenu.copySelector(for: node.id, model: model, inspector: inspector)
+      }
     }
     Button(ShellL10n.string("Copy XPath")) {
       Task { copy(await copiedPath(for: node.id).xpath) }
@@ -550,5 +553,22 @@ struct ShaarDOMTreePanel: View {
 extension InspectorModel {
   func currentDOMNodeID() async -> Int? {
     try? await withSelectedNode { $0 }
+  }
+}
+
+enum ShaarDOMContextMenu {
+  @MainActor static func copySelector(
+    for id: Int, model: ShaarDOMTreeModel, inspector: InspectorModel,
+    pasteboard: NSPasteboard = .general
+  ) async -> String {
+    let css = await model.copiedSelector(for: id, inspector: inspector)
+    copy(css, to: pasteboard)
+    return css
+  }
+
+  static func copy(_ value: String, to pasteboard: NSPasteboard) {
+    guard !value.isEmpty else { return }
+    pasteboard.clearContents()
+    pasteboard.setString(value, forType: .string)
   }
 }

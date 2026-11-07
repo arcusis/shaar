@@ -178,6 +178,15 @@ DEFAULT_APP = ROOT / "build/Shaar.app"
 SMOKE_SOURCES = (
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmoke.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmokeLook.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmokeExercise.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSplitHandle.swift",
+    ROOT / "Sources/ArcusisBrowser/InspectorPage.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarNetworkPanel.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarNetworkHAR.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarDOMTreePanel.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarDOMTreeModel.swift",
+    ROOT / "Sources/ArcusisBrowser/ShaarDOMDrop.swift",
+    ROOT / "Sources/ArcusisBrowser/InspectorStylesView.swift",
     ROOT / "Sources/ArcusisBrowser/ArcusisBrowser.swift",
     ROOT / "Sources/ArcusisBrowser/SidebarTabRow.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsCSSOverview.swift",
@@ -280,11 +289,17 @@ def ensure_css_overview_row(steps):
     })
 
 
+def result_label(step):
+    if step.get("outcome") == "needs-manual":
+        return "NEEDS-MANUAL"
+    return "PASS" if step.get("passed") is True else "FAIL"
+
+
 def print_table(steps):
     print("| Result | Severity | Panel | Action | Detail |", flush=True)
     print("| --- | --- | --- | --- | --- |", flush=True)
     for step in steps:
-        result = "PASS" if step.get("passed") is True else "FAIL"
+        result = result_label(step)
         panel = str(step.get("panel") or "Other").replace("|", "/")
         action = str(step.get("action") or step.get("name") or "").replace("|", "/")
         detail = str(step.get("detail") or "").replace("|", "/").replace("\n", " ")
@@ -316,6 +331,7 @@ def main():
             report_path = root / "report.json"
             page = f"http://127.0.0.1:{server.server_port}/qa"
             environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
+            environment["SHAAR_COMPUTED_CAPTURE"] = "1"
             environment.pop("SHAAR_ENGINE_TESTING", None)
             stdout_path = root / "stdout.txt"
             stderr_path = root / "stderr.txt"
@@ -383,8 +399,11 @@ def main():
                     "severity": "crash",
                     "detail": f"Process exit {result.returncode}",
                 })
-            passed_count = sum(1 for step in steps if step.get("passed") is True)
-            failed_count = len(steps) - passed_count
+            manual_count = sum(1 for step in steps if step.get("outcome") == "needs-manual")
+            passed_count = sum(
+                1 for step in steps
+                if step.get("passed") is True and step.get("outcome") != "needs-manual")
+            failed_count = sum(1 for step in steps if step.get("passed") is not True)
             counts = {name: 0 for name in SEVERITIES}
             for step in steps:
                 if step.get("passed") is True:
@@ -395,6 +414,7 @@ def main():
                 "passed": report.get("passed") is True and not crashes and result.returncode == 0,
                 "passedCount": passed_count,
                 "failedCount": failed_count,
+                "needsManualCount": manual_count,
                 "severityCounts": counts,
                 "normalBundle": report.get("normalBundle", ""),
                 "steps": steps,
@@ -408,7 +428,7 @@ def main():
             print("Fixture hits: " + ", ".join(Fixture.hits), flush=True)
             print(
                 "Summary: "
-                f"{passed_count} passed, {failed_count} failed "
+                f"{passed_count} passed, {failed_count} failed, {manual_count} needs-manual "
                 f"(crash {counts['crash']}, broken {counts['broken']}, "
                 f"wrong {counts['wrong']}, polish {counts['polish']}), "
                 f"exit {result.returncode}, crashes {len(crashes)}",

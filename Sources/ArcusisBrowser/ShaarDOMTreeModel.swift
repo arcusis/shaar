@@ -7,7 +7,7 @@ import Observation
 import ShaarEngineABI
 
 enum ShaarDOMCommand: Equatable {
-  case document
+  case document(depth: Int)
   case children(Int)
   case search(String)
   case searchResults(String, Int)
@@ -131,6 +131,14 @@ final class ShaarDOMTreeModel {
     ShaarDOMLocator.css(for: id, nodes: nodes)
   }
 
+  func copiedSelector(for id: Int, inspector: InspectorModel) async -> String {
+    if let live = await inspector.pathsForDOMNode(id), !live.css.isEmpty {
+      return live.css
+    }
+    await prepareCopyPath(for: id)
+    return selector(for: id)
+  }
+
   func xpath(for id: Int) -> String {
     ShaarDOMLocator.xpath(for: id, nodes: nodes)
   }
@@ -210,14 +218,15 @@ final class ShaarDOMTreeModel {
     }
   }
 
-  func loadDocument() async {
+  func loadDocument(depth: Int = 2) async {
     guard available else { return }
     let generation = generation
     let target = target
     loading = true
     defer { if self.generation == generation { loading = false } }
+    let bounded = min(max(depth, 1), 12)
     do {
-      let reply = try await transport.execute(.document, for: target)
+      let reply = try await transport.execute(.document(depth: bounded), for: target)
       guard self.generation == generation, self.target == target else { return }
       guard let snapshot = ShaarDOMSnapshot.decode(reply) else {
         throw ShaarDOMFailure("DOM tree could not be read")
@@ -489,14 +498,20 @@ final class ShaarDOMTreeModel {
     return result["outerHTML"] as? String
   }
 
-  private func loadChildrenIfNeeded(_ id: Int) async {
-    guard let node = nodes[id], node.childrenIDs.count < node.childCount else { return }
-    do { _ = try await execute(.children(id)) } catch { return }
+  func loadChildrenIfNeeded(_ id: Int) async -> String? {
+    guard let node = nodes[id], node.childrenIDs.count < node.childCount else { return nil }
+    do { _ = try await execute(.children(id)) } catch {
+      return error.localizedDescription
+    }
     for _ in 0..<40 {
       let current = nodes[id]
-      if (current?.childrenIDs.count ?? 0) >= (current?.childCount ?? 0) { return }
+      if (current?.childrenIDs.count ?? 0) >= (current?.childCount ?? 0) { return nil }
       try? await Task.sleep(for: .milliseconds(25))
     }
+    let current = nodes[id]
+    let have = current?.childrenIDs.count ?? 0
+    let need = current?.childCount ?? 0
+    return "children stayed \(have) of \(need)"
   }
 
   private func mutate(_ command: ShaarDOMCommand) async {

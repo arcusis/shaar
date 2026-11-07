@@ -61,6 +61,10 @@ enum ShaarNetworkHAR {
     return (try? JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])) ?? Data()
   }
 
+  static func write(_ requests: [ShaarNetworkRequest], to url: URL) throws {
+    try document(requests: requests).write(to: url, options: .atomic)
+  }
+
   private static func entry(_ row: ShaarNetworkRequest) -> [String: Any] {
     var request: [String: Any] = [
       "method": row.method,

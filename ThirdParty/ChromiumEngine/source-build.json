@@ -397,6 +397,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0038-shaar-devtools-console-stack.patch",
       "sha256": "3f594403e07d7306d7bd2883f80446c34bb071e8ee56574d00394059ff792dc2"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0039-shaar-devtools-idle-override.patch",
+      "sha256": "e27701420a4c424c5f156bfe567664a6f15036ccc008070a9fc3220277a65808"
     }
   ],
   "requiredExports": [

@@ -45,12 +45,14 @@ import XCTest
       shell.sensorLocation = .sanFrancisco
       shell.sensorTimezone = .newYork
       shell.sensorLocale = .french
+      shell.sensorIdleReady = true
+      shell.sensorIdle = .idle
     }
     let panel = ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {})
-      .frame(width: 850, height: 620)
+      .frame(width: 850, height: 760)
       .environment(\.colorScheme, scheme)
     try VisualCapture.renderOffscreen(
-      panel, size: NSSize(width: 850, height: 620), appearance: appearance,
+      panel, size: NSSize(width: 850, height: 760), appearance: appearance,
       to: root.appending(path: "\(name).png"))
     shell.close()
   }

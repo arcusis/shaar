@@ -70,6 +70,31 @@ struct ShaarDevToolsSensorPosition: Equatable, Sendable {
   var accuracy: Double
 }
 
+enum ShaarDevToolsSensorIdle: String, CaseIterable, Equatable, Sendable {
+  case system
+  case active
+  case idle
+  case locked
+
+  var title: String {
+    switch self {
+    case .system: "System"
+    case .active: "Active"
+    case .idle: "Idle"
+    case .locked: "Locked"
+    }
+  }
+
+  var command: ShaarDevToolsSensorCommand {
+    switch self {
+    case .system: .clearIdle
+    case .active: .idle(isUserActive: true, isScreenUnlocked: true)
+    case .idle: .idle(isUserActive: false, isScreenUnlocked: true)
+    case .locked: .idle(isUserActive: false, isScreenUnlocked: false)
+    }
+  }
+}
+
 enum ShaarDevToolsSensorCommand: Equatable, Sendable {
   case presetGeolocation(latitude: Double, longitude: Double)
   case geolocation(latitude: Double, longitude: Double, accuracy: Double)
@@ -77,10 +102,19 @@ enum ShaarDevToolsSensorCommand: Equatable, Sendable {
   case timezone(String)
   case locale(String)
   case touch(Bool)
+  case idle(isUserActive: Bool, isScreenUnlocked: Bool)
+  case clearIdle
 
   var isTouch: Bool {
     if case .touch = self { return true }
     return false
+  }
+
+  var isIdle: Bool {
+    switch self {
+    case .idle, .clearIdle: true
+    default: false
+    }
   }
 
   var touchEnabled: Bool? {
@@ -100,6 +134,10 @@ enum ShaarDevToolsSensorCommand: Equatable, Sendable {
       "Emulation.setLocaleOverride"
     case .touch:
       "Emulation.setTouchEmulationEnabled"
+    case .idle:
+      "Emulation.setIdleOverride"
+    case .clearIdle:
+      "Emulation.clearIdleOverride"
     }
   }
 
@@ -117,7 +155,30 @@ enum ShaarDevToolsSensorCommand: Equatable, Sendable {
       ["locale": identifier]
     case .touch(let enabled):
       ["enabled": enabled]
+    case .idle(let isUserActive, let isScreenUnlocked):
+      ["isUserActive": isUserActive, "isScreenUnlocked": isScreenUnlocked]
+    case .clearIdle:
+      [:]
     }
+  }
+}
+
+enum ShaarDevToolsSensorCapability {
+  static func isMissing(_ error: Error) -> Bool {
+    let message = error.localizedDescription
+    if message.contains("unknown DevTools") { return true }
+    if message.contains("not allowed for this capability") { return true }
+    if message.contains("This DevTools command is unavailable") { return true }
+    if message == "DevTools request failed." { return true }
+    return false
+  }
+
+  static func targetGone(_ error: Error) -> Bool {
+    let message = error.localizedDescription
+    if message.contains("no longer available") { return true }
+    if message.contains("target changed") { return true }
+    if message.contains("page changed") { return true }
+    return false
   }
 }
 
@@ -190,6 +251,29 @@ extension ShaarDevToolsModel {
     deliver(.touch(enabled))
   }
 
+  func selectSensorIdle(_ choice: ShaarDevToolsSensorIdle) {
+    sensorIdle = choice
+    deliver(choice.command)
+  }
+
+  func probeIdleState() async {
+    guard !idleProbeFinished, !idleProbeInFlight else { return }
+    guard let engine = sensorEngine else { return }
+    idleProbeInFlight = true
+    defer { idleProbeInFlight = false }
+    let page = engine.developerModel(for: target)
+    do {
+      try page.retainDeveloperSession()
+      _ = try await page.call("Emulation.clearIdleOverride")
+      sensorIdleReady = true
+      idleProbeFinished = true
+    } catch {
+      if ShaarDevToolsSensorCapability.targetGone(error) { return }
+      sensorIdleReady = !ShaarDevToolsSensorCapability.isMissing(error)
+      idleProbeFinished = true
+    }
+  }
+
   func attachSensorSender(_ inspector: InspectorModel) {
     sensorEngine = inspector.engine
     guard sensorEngine != nil else {
@@ -215,6 +299,7 @@ extension ShaarDevToolsModel {
     sensorTimezone = .system
     sensorLocale = .system
     sensorTouch = false
+    sensorIdle = .system
     sensorNotice = nil
   }
 
@@ -227,6 +312,10 @@ extension ShaarDevToolsModel {
   private func deliver(_ command: ShaarDevToolsSensorCommand) {
     sensorFixture?(command)
     if command.isTouch && !sensorTouchReady {
+      sensorNotice = nil
+      return
+    }
+    if command.isIdle && !sensorIdleReady {
       sensorNotice = nil
       return
     }
@@ -271,12 +360,15 @@ struct ShaarDevToolsSensorsPanel: View {
         )
         Divider()
         touch
+        Divider()
+        idle
         notice
       }
       .padding(16)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .accessibilityIdentifier("shaar.devtools.sensors")
+    .task { await model.probeIdleState() }
   }
 
   private var location: some View {
@@ -343,6 +435,33 @@ struct ShaarDevToolsSensorsPanel: View {
     }
   }
 
+  private var idle: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 12) {
+        fieldLabel("Idle")
+        Picker(selection: idleChoice) {
+          ForEach(ShaarDevToolsSensorIdle.allCases, id: \.self) { option in
+            Text(ShellL10n.string(option.title)).tag(option)
+          }
+        } label: {
+          Text(ShellL10n.string("Idle"))
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .disabled(!model.sensorIdleReady)
+        .accessibilityIdentifier("shaar.devtools.sensorIdle")
+        Spacer(minLength: 0)
+      }
+      if !model.sensorIdleReady {
+        Text(ShellL10n.string("Idle state waits for the next engine build."))
+          .font(.system(size: 11))
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .accessibilityIdentifier("shaar.devtools.sensorIdleNote")
+      }
+    }
+  }
+
   @ViewBuilder private var notice: some View {
     switch model.sensorNotice {
     case .invalidLocation:
@@ -394,6 +513,13 @@ struct ShaarDevToolsSensorsPanel: View {
     Binding(
       get: { model.sensorTouch },
       set: { enabled in model.setSensorTouch(enabled) }
+    )
+  }
+
+  private var idleChoice: Binding<ShaarDevToolsSensorIdle> {
+    Binding(
+      get: { model.sensorIdle },
+      set: { choice in model.selectSensorIdle(choice) }
     )
   }
 

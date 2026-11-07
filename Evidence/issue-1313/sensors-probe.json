@@ -1,0 +1,21 @@
+{
+  "exitCode": 0,
+  "report": {
+    "allWindowsHidden": true,
+    "emptyLocaleError": "DevTools request failed.",
+    "emptyLocaleValue": "fr-FR",
+    "emptyTimezoneError": "DevTools request failed.",
+    "emptyTimezoneZone": "Asia/Tokyo",
+    "frenchError": "",
+    "frenchLocale": "fr-FR",
+    "idleError": "DevTools request failed.",
+    "idleMissing": true,
+    "normalBundle": "com.arcusis.browser.engine-preview",
+    "systemLocale": "en",
+    "systemTimezone": "America/New_York",
+    "targetURL": "http://127.0.0.1:59032/",
+    "tokyoError": "",
+    "tokyoTimezone": "Asia/Tokyo"
+  },
+  "stderrTail": ""
+}

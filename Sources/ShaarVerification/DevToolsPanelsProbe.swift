@@ -515,9 +515,11 @@ import Foundation
         throw Failure(
           "File tree missed the sample script: \(shell.sources.resources.map(\.url))")
       }
-      guard let sample = shell.sources.resources.first(where: {
-        $0.name == "inspector-source-sample.js"
-      }) else { throw Failure("Sample script row disappeared") }
+      guard
+        let sample = shell.sources.resources.first(where: {
+          $0.name == "inspector-source-sample.js"
+        })
+      else { throw Failure("Sample script row disappeared") }
       await shell.sources.select(sample)
       shell.sources.prettyPrint = true
       guard shell.sources.displayedContent?.contains("shaarSample") == true,

@@ -362,13 +362,15 @@ import Foundation
       value: "after", secure: cookie.secure, httpOnly: cookie.httpOnly,
       sameSite: cookie.sameSite)
     let matching = shell.cookies.cookies.filter { $0.name == "shaar_round2" }
+    shell.cookies.search = cookie.name
     await settle(context)
     _ = ShaarDevToolsSmokeAccess.capture(
       context.hosting, to: report.directory.appending(path: "world-round2-cookie-after-edit.png"))
-    let edited = matching.count == 1 && matching.first?.value == "after"
+    let edited = !cookie.domain.hasPrefix(".") && matching.count == 1
+      && matching.first?.value == "after" && matching.first?.domain == cookie.domain
     record(
       edited, "world2-cookie-edit",
-      "Cookie rows=\(matching.count), values=\(matching.map(\.value)), error=\(shell.cookies.failure ?? "none")",
+      "Cookie rows=\(matching.count), domains=\(matching.map(\.domain)), values=\(matching.map(\.value)), original domain=\(cookie.domain), error=\(shell.cookies.failure ?? "none")",
       report: report)
     shell.cookies.selectedID = matching.first { $0.value == "after" }?.id
     await shell.cookies.deleteSelected()

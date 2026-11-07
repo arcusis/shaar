@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -71,6 +71,7 @@ namespace {
+ 
+ constexpr size_t kMaxArgumentsBytes = 1024 * 1024;
+-constexpr size_t kMaxHeapSnapshotBytes = 8 * 1024 * 1024;
++// A live inspector page already exceeds 8MB. 64MB still rejects a runaway snapshot.
++constexpr size_t kMaxHeapSnapshotBytes = 64 * 1024 * 1024;
+ constexpr int kInspector = 1;
+ constexpr int kDeveloper = 2;
+ constexpr int kPanel = 3;

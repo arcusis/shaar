@@ -18,6 +18,7 @@
 - [[Shaar_DevTools_Hebrew_RTL]]
 - [[Shaar_DevTools_Panel_Stream]]
 - [[Shaar_DevTools_Elements_Scale]]
+- [[Shaar_DevTools_Heap_Snapshot_Limit]]
 - [[Shaar_Inspector]]
 - [[Shaar_Inspector_CSS]]
 - [[Shaar_Inspector_Details]]

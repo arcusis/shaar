@@ -171,8 +171,12 @@ import Foundation
         shell.rules.draft?.enabled = false
         try await shell.rules.saveDraft()
       }
+      let remainder = try await DevToolsNetworkRulesProof(
+        engine: self.engine, store: self.store, shell: shell, inspector: inspector,
+        space: space, tab: tab, root: self.root, fixture: self.fixture
+      ).run()
       return
-        "Mock, redirect, 450 ms delay, and request/response headers changed real page fetches; delay observed \(Int(elapsed)) ms"
+        "Mock, redirect, 450 ms delay, and request/response headers changed real page fetches; delay observed \(Int(elapsed)) ms. \(remainder)"
     }
     await check("viewports") {
       shell.section = .viewports

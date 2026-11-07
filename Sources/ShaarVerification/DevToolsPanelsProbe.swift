@@ -48,12 +48,26 @@ import Foundation
       self.engine.liveTabs.contains(tab) && self.engine.pages[tab]?.loading == false
         && self.engine.runtime.view(forTabID: tab.uuidString)?.superview != nil
     }
-    guard let target = engine.siteControlTarget, target.tabID == tab,
-      engine.showDeveloperTools(for: target),
-      let shell = engine.shaarDevTools[tab], let inspector = engine.inspectors[tab]
-    else { throw Failure("Shaar panel shell did not open for the selected tab") }
+    guard let target = engine.siteControlTarget, target.tabID == tab else {
+      throw Failure("No selected page for Shaar DevTools")
+    }
+    engine.toggleDeveloperTools()
+    guard let shell = engine.shaarDevTools[tab], shell.isOpen,
+      let inspector = engine.inspectors[tab]
+    else { throw Failure("Shaar DevTools menu did not open the Shaar shell") }
+    let chromiumDockClosed = engine.runtime.devToolsView(forTabID: tab.uuidString) == nil
     try await wait("live panel lease") { shell.streamAvailable }
 
+    await check("f12-route") {
+      guard shell.isOpen, chromiumDockClosed else {
+        throw Failure("The Shaar DevTools command opened the Chromium dock")
+      }
+      guard Self.f12OpensShaarDevTools() else {
+        throw Failure("F12 no longer maps to Shaar DevTools")
+      }
+      return "Shaar DevTools opened the Shaar shell and left the Chromium dock closed. "
+        + "F12 maps to that command."
+    }
     await check("console-network") {
       _ = try await inspector.evaluate(
         "console.error('shaar19-live-console'); fetch('/profile-privacy-cache', {cache:'no-store'}).then(r=>r.text())"
@@ -375,6 +389,17 @@ import Foundation
     return shell.viewports.frames.allSatisfy { $0.url.path == path }
   }
 
+  private static func f12OpensShaarDevTools() -> Bool {
+    let f12 = ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: [])
+    let chord = ShaarDevToolsShortcut.isF12(
+      keyCode: 111, modifiers: [.command, .option, .shift])
+    let shaar = ShortcutCatalog.shortcut(for: .developerTools)
+    let chromium = ShortcutCatalog.shortcut(for: .chromiumDeveloperTools)
+    guard f12, !chord, shaar?.key == "i", chromium?.key == "i" else { return false }
+    return shaar?.modifiers == [.command, .option]
+      && chromium?.modifiers == [.command, .option, .shift]
+  }
+
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
   }
@@ -398,7 +423,7 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "console-network", "application-cookie", "application-local-storage",
+    "f12-route", "console-network", "application-cookie", "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",
     "application-service-worker", "network-rules", "source-bytes", "viewports",
     "masked-repro", "elements-live", "elements-scale",

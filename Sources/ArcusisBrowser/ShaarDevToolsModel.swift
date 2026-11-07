@@ -292,6 +292,7 @@ final class ShaarDevToolsModel {
         section = oldValue
         return
       }
+      rememberSectionIfNeeded()
       guard isOpen, section != oldValue else { return }
       if section == .viewports { viewports.open() } else { viewports.close() }
       if section == .elements { dom.open() } else { dom.close() }
@@ -322,6 +323,7 @@ final class ShaarDevToolsModel {
     didSet { layoutDefaults.set(Double(leftWidth), forKey: "shaar.devtools.leftWidth") }
   }
   var commandMenuOpen = false
+  var settingsOpen = false
   var commandQuery = "" {
     didSet {
       guard commandQuery != oldValue else { return }
@@ -390,9 +392,13 @@ final class ShaarDevToolsModel {
     {
       self.dock = dock
     }
-    bottomHeight = Self.savedSize("shaar.devtools.bottomHeight", fallback: 380, in: layoutDefaults)
-    rightWidth = Self.savedSize("shaar.devtools.rightWidth", fallback: 420, in: layoutDefaults)
-    leftWidth = Self.savedSize("shaar.devtools.leftWidth", fallback: 420, in: layoutDefaults)
+    bottomHeight = Self.savedSize(
+      "shaar.devtools.bottomHeight", fallback: ShaarDevToolsMetrics.bottomHeight, in: layoutDefaults
+    )
+    rightWidth = Self.savedSize(
+      "shaar.devtools.rightWidth", fallback: ShaarDevToolsMetrics.sideWidth, in: layoutDefaults)
+    leftWidth = Self.savedSize(
+      "shaar.devtools.leftWidth", fallback: ShaarDevToolsMetrics.sideWidth, in: layoutDefaults)
     self.transport = transport
     self.localTransports = Dictionary(
       uniqueKeysWithValues: localTransports.map { ($0.sourceID, $0) })
@@ -409,6 +415,7 @@ final class ShaarDevToolsModel {
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
     framework.updateAccess(url: target.url)
+    section = resolvedOpeningSection()
   }
 
   private static func savedSize(_ key: String, fallback: CGFloat, in defaults: UserDefaults)
@@ -421,6 +428,7 @@ final class ShaarDevToolsModel {
 
   func open(inspector: InspectorModel) {
     guard !isOpen else { return }
+    applyPinnedOpeningSection()
     frameworkClose?.cancel()
     frameworkClose = nil
     comparisonInspector = inspector
@@ -481,6 +489,7 @@ final class ShaarDevToolsModel {
       inspector?.close()
     }
     closeCommandMenu()
+    closeSettings()
     isOpen = false
   }
 
@@ -488,6 +497,7 @@ final class ShaarDevToolsModel {
     if commandMenuOpen {
       closeCommandMenu()
     } else {
+      closeSettings()
       commandMenuOpen = true
       commandQuery = ""
       commandSelection = 0
@@ -558,6 +568,61 @@ final class ShaarDevToolsModel {
       section = .elements
       dom.search = ""
       dom.select(id)
+    case .settings:
+      showSettings()
+    }
+  }
+
+  var opening: ShaarDevToolsOpening { ShaarDevToolsOpening.load(layoutDefaults) }
+
+  func chooseOpening(_ opening: ShaarDevToolsOpening) {
+    layoutDefaults.set(opening.storageValue, forKey: ShaarDevToolsOpening.key)
+    switch opening {
+    case .last:
+      layoutDefaults.set(section.rawValue, forKey: ShaarDevToolsOpening.lastSectionKey)
+    case .panel:
+      section = resolvedOpeningSection()
+    }
+  }
+
+  func restoreDefaultDockSizes() {
+    bottomHeight = ShaarDevToolsMetrics.bottomHeight
+    rightWidth = ShaarDevToolsMetrics.sideWidth
+    leftWidth = ShaarDevToolsMetrics.sideWidth
+  }
+
+  func showSettings() {
+    closeCommandMenu()
+    settingsOpen = true
+  }
+
+  func closeSettings() {
+    settingsOpen = false
+  }
+
+  func resolvedOpeningSection() -> ShaarDevToolsSection {
+    let candidate = openingCandidate(opening)
+    guard sections.contains(candidate) else { return .elements }
+    return candidate
+  }
+
+  private func applyPinnedOpeningSection() {
+    guard case .panel = opening else { return }
+    section = resolvedOpeningSection()
+  }
+
+  private func rememberSectionIfNeeded() {
+    guard opening == .last else { return }
+    layoutDefaults.set(section.rawValue, forKey: ShaarDevToolsOpening.lastSectionKey)
+  }
+
+  private func openingCandidate(_ opening: ShaarDevToolsOpening) -> ShaarDevToolsSection {
+    switch opening {
+    case .last:
+      let saved = layoutDefaults.string(forKey: ShaarDevToolsOpening.lastSectionKey) ?? ""
+      return ShaarDevToolsSection(rawValue: saved) ?? .elements
+    case .panel(let panel):
+      return panel
     }
   }
 
@@ -584,6 +649,7 @@ final class ShaarDevToolsModel {
     sources.reset()
     framework.updateAccess(url: target.url)
     closeCommandMenu()
+    closeSettings()
     repro.updateTarget(target, committed: committed)
     streamGeneration += 1
     eventTask?.cancel()

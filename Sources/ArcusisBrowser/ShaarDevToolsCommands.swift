@@ -13,6 +13,7 @@ enum ShaarDevToolsCommandHit: Equatable {
   case network(String)
   case source(String)
   case element(Int)
+  case settings
 
   var token: String {
     switch self {
@@ -22,6 +23,7 @@ enum ShaarDevToolsCommandHit: Equatable {
     case .network(let id): "network:\(id)"
     case .source(let url): "source:\(url)"
     case .element(let id): "element:\(id)"
+    case .settings: "settings"
     }
   }
 
@@ -32,12 +34,13 @@ enum ShaarDevToolsCommandHit: Equatable {
     case .network: "Network"
     case .source: "Sources"
     case .element: "Elements"
+    case .settings: nil
     }
   }
 
   var localizesTitle: Bool {
     switch self {
-    case .section, .dock: true
+    case .section, .dock, .settings: true
     case .console, .network, .source, .element: false
     }
   }
@@ -98,6 +101,9 @@ enum ShaarDevToolsCommandIndex {
     }
     for dock in ShaarDevToolsDock.allCases where matches(needle, dock.rawValue) {
       result.append(ShaarDevToolsCommandMatch(hit: .dock(dock), title: dock.rawValue, detail: ""))
+    }
+    if matches(needle, "Settings") {
+      result.append(ShaarDevToolsCommandMatch(hit: .settings, title: "Settings", detail: ""))
     }
     return result
   }

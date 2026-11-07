@@ -95,6 +95,7 @@ struct ShaarDevToolsPanel: View {
     }
     .accessibilityIdentifier("shaar.devtools.shell")
     .overlay(alignment: .top) { commandMenuOverlay }
+    .overlay { settingsOverlay }
   }
 
   private var toolbar: some View {
@@ -217,8 +218,23 @@ struct ShaarDevToolsPanel: View {
     }
   }
 
+  @ViewBuilder private var settingsOverlay: some View {
+    if model.settingsOpen {
+      ZStack {
+        Color.primary.opacity(0.04)
+          .contentShape(Rectangle())
+          .onTapGesture(perform: model.closeSettings)
+          .accessibilityIdentifier("shaar.devtools.settingsDismiss")
+        ShaarDevToolsSettings(model: model)
+      }
+    }
+  }
+
   private var optionsMenu: some View {
     Menu {
+      Button(ShellL10n.string("Settings"), action: model.showSettings)
+        .accessibilityIdentifier("shaar.devtools.settingsButton")
+      Divider()
       ForEach(ShaarDevToolsDock.allCases, id: \.self) { dock in
         Button(ShellL10n.string(dock.rawValue)) { model.dock = dock }
       }
@@ -466,6 +482,10 @@ struct ShaarDevToolsPanel: View {
   }
 
   private func handleExitCommand() {
+    if model.settingsOpen {
+      model.closeSettings()
+      return
+    }
     if model.commandMenuOpen {
       model.closeCommandMenu()
       return

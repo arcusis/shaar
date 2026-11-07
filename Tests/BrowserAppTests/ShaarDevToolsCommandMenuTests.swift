@@ -18,6 +18,7 @@ import Testing
     #expect(titles.first == "Elements")
     #expect(titles.contains("Dock to bottom"))
     #expect(titles.contains("Open in separate window"))
+    #expect(titles.contains("Settings"))
     #expect(matches.allSatisfy { $0.hit.groupKey == nil })
   }
 

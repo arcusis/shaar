@@ -7,8 +7,8 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
-/// Proves timezone, locale, and idle overrides from a window that is never ordered
-/// on screen. The caller reads the idle errors; an empty string means the page accepted the command.
+/// Proves timezone, locale, idle, and touch overrides from a window that is never ordered
+/// on screen. An empty error means the page accepted the command.
 @MainActor enum ShaarSensorsProbe {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
     guard let pageURL, pageURL.host == "127.0.0.1", pageURL.scheme == "http" else { return 2 }
@@ -114,12 +114,25 @@ import Foundation
       "Emulation.clearIdleOverride", params: [:], on: target, runtime: runtime, windowID: windowID)
     report["idleError"] = idleError
     report["idleMissing"] = idleRejected(idleError)
+    report["touchBefore"] = await reading(
+      touchPointsExpression, on: target, runtime: runtime, windowID: windowID)
+    report["touchOnError"] = await attempt(
+      "Emulation.setTouchEmulationEnabled", params: ["enabled": true],
+      on: target, runtime: runtime, windowID: windowID)
+    report["touchPoints"] = await reading(
+      touchPointsExpression, on: target, runtime: runtime, windowID: windowID)
+    report["touchOffError"] = await attempt(
+      "Emulation.setTouchEmulationEnabled", params: ["enabled": false],
+      on: target, runtime: runtime, windowID: windowID)
+    report["touchPointsAfter"] = await reading(
+      touchPointsExpression, on: target, runtime: runtime, windowID: windowID)
     report["allWindowsHidden"] = host.contexts.values.allSatisfy { !$0.window.isVisible }
     write(report, to: outputURL)
   }
 
   private static let timeZoneExpression = "Intl.DateTimeFormat().resolvedOptions().timeZone"
   private static let localeExpression = "Intl.DateTimeFormat().resolvedOptions().locale"
+  private static let touchPointsExpression = "String(navigator.maxTouchPoints)"
 
   private static func pageReady(_ context: NativeBrowserContext, _ pageURL: URL) -> Bool {
     guard let target = context.engine.siteControlTarget, target.url == pageURL else { return false }

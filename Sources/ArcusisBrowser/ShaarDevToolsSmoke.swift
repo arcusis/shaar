@@ -2085,6 +2085,7 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "world2-elements-search": return ("Elements", "Search body")
     case "world2-elements-attribute": return ("Elements", "Edit attribute")
     case "world2-console-object": return ("Console", "Expand object")
+    case "world2-console-nested": return ("Console", "Expand nested object")
     case "world2-console-multiline": return ("Console", "Multiline eval")
     case "world2-source-open": return ("Sources", "Open source")
     case "world2-source-pretty": return ("Sources", "Pretty print")

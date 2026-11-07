@@ -28,6 +28,7 @@ public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
   case vitalsInputs
   case parsedScripts(skip: Int, count: Int)
   case scriptSource(id: String)
+  case consoleProperties(objectID: String)
 
   public var id: Int {
     switch self {
@@ -51,6 +52,7 @@ public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
     case .vitalsInputs: 18
     case .parsedScripts: 19
     case .scriptSource: 20
+    case .consoleProperties: 21
     }
   }
 
@@ -101,6 +103,9 @@ public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
     case .scriptSource(let id):
       guard Self.validText(id, maximum: 128) else { return nil }
       return ["scriptID": id]
+    case .consoleProperties(let objectID):
+      guard Self.validText(objectID, maximum: 4_096) else { return nil }
+      return ["objectID": objectID]
     }
   }
 
@@ -195,6 +200,7 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
     case 19: allowed = ["url", "scriptID", "sourceMapURL"]
     case 17: allowed = ["name", "startTime", "duration"]
     case 18: allowed = ["name", "value", "startTime", "duration", "interactionID"]
+    case 21: allowed = ["name", "value", "objectID"]
     default: allowed = []
     }
     guard Set(raw.keys).isSubset(of: allowed) else { return nil }

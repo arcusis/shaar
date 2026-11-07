@@ -483,6 +483,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0058-shaar-devtools-parsed-scripts.patch",
       "sha256": "9d5bbdb7becdf632337f163977197daeb38afadffd7c1507c93a17c547ee402b"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0059-shaar-devtools-console-objects.patch",
+      "sha256": "4bd602b9e9392280575cf39cce9f14f9f250808cab96fb6c4e29b06dcb3e567b"
     }
   ],
   "requiredExports": [

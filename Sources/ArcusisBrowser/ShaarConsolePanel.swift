@@ -311,19 +311,46 @@ struct ShaarConsolePanel: View {
       }
       .buttonStyle(.plain)
       .font(.system(size: 10, weight: .semibold))
+      .accessibilityIdentifier("shaar.devtools.consoleObjectProperties")
       if model.expanded.contains(event.id) {
-        ForEach(model.properties[event.id] ?? [], id: \.name) { property in
-          HStack(alignment: .firstTextBaseline) {
-            Text(property.name).foregroundStyle(.primary)
-            Text(property.value).textSelection(.enabled)
-          }
-          .font(.system(size: 10, design: .monospaced))
-        }
+        propertyRows(model.properties[event.id] ?? [], event: event, depth: 0)
         if let failure = model.propertyFailures[event.id] {
           Text(failure).font(.system(size: 10)).foregroundStyle(.primary)
         }
       }
     }
+  }
+
+  private func propertyRows(
+    _ properties: [ShaarConsoleProperty], event: ShaarConsoleEvent, depth: Int
+  ) -> AnyView {
+    AnyView(
+      ForEach(properties, id: \.name) { property in
+        VStack(alignment: .leading, spacing: 4) {
+          if let objectID = property.objectID, depth < 4 {
+            Button {
+              Task { await model.toggleChild(property, in: event, inspector: inspector) }
+            } label: {
+              Label(
+                "\(property.name): \(property.value)",
+                systemImage:
+                  model.expandedChildren.contains(objectID) ? "chevron.down" : "chevron.right")
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("shaar.devtools.consoleNestedProperty")
+            if model.expandedChildren.contains(objectID) {
+              propertyRows(model.childProperties[objectID] ?? [], event: event, depth: depth + 1)
+                .padding(.leading, 14)
+            }
+          } else {
+            HStack(alignment: .firstTextBaseline) {
+              Text(property.name).foregroundStyle(.primary)
+              Text(property.value).textSelection(.enabled)
+            }
+          }
+        }
+        .font(.system(size: 10, design: .monospaced))
+      })
   }
 
   @ViewBuilder private func sourceLink(

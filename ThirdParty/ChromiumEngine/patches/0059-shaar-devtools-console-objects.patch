@@ -1,0 +1,108 @@
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -632,6 +632,15 @@
+     result->id = SHAAR_DEVTOOLS_PANEL_CONSOLE_API_CALLED;
+     PutString(&data, "level", params.FindString("type"), &result->truncated);
+     data.Set("text", ConsoleText(params.FindList("args"), &result->truncated));
++    if (const auto* args = params.FindList("args")) {
++      for (const auto& arg : *args) {
++        if (!arg.is_dict())
++          continue;
++        const auto* object_id = arg.GetDict().FindString("objectId");
++        if (object_id && !object_id->empty() && object_id->size() <= kMaxFieldBytes)
++          data.Set("objectID", *object_id);
++      }
++    }
+     CopyConsoleStack(&data, params.FindDict("stackTrace"), &result->truncated);
+   } else if (method == "Runtime.exceptionThrown") {
+     result->id = SHAAR_DEVTOOLS_PANEL_EXCEPTION_THROWN;
+@@ -934,6 +943,13 @@
+         params.Set("silent", true);
+       }
+       break;
++    case SHAAR_DEVTOOLS_PHASE2_CONSOLE_PROPERTIES:
++      if (!HasKeys(args, {"objectID"}) || !BoundedString(args, "objectID"))
++        return false;
++      params.Set("objectId", *args.FindString("objectID"));
++      params.Set("ownProperties", true);
++      method = "Runtime.getProperties";
++      break;
+     case SHAAR_DEVTOOLS_PHASE2_RESOURCE_CONTENT:
+       if (!HasKeys(args, {"resourceURL"}) ||
+           !BoundedString(args, "resourceURL") || frame_id.empty() ||
+@@ -1182,6 +1198,41 @@
+         CopyText(&item, "type", resource, "type", &truncated);
+         CopyText(&item, "mimeType", resource, "mimeType", &truncated);
+         items.Append(std::move(item));
++      }
++      break;
++    }
++    case SHAAR_DEVTOOLS_PHASE2_CONSOLE_PROPERTIES: {
++      const auto* properties = result.FindList("result");
++      if (!properties)
++        return false;
++      for (const base::ListValue* group :
++           {properties, result.FindList("internalProperties")}) {
++        if (!group)
++          continue;
++        for (const auto& row : *group) {
++          if (items.size() == kMaxPhase2Rows) {
++            truncated = true;
++            break;
++          }
++          if (!row.is_dict())
++            continue;
++          const auto& property = row.GetDict();
++          const auto* name = property.FindString("name");
++          const auto* value = property.FindDict("value");
++          if (!name || name->empty() || name->size() > 128 || !value)
++            continue;
++          base::DictValue item;
++          item.Set("name", *name);
++          const auto* description = value->FindString("description");
++          std::string display = description ? *description : "undefined";
++          if (!description) {
++            if (const auto* raw = value->Find("value"))
++              base::JSONWriter::Write(*raw, &display);
++          }
++          PutString(&item, "value", &display, &truncated);
++          PutString(&item, "objectID", value->FindString("objectId"), &truncated);
++          items.Append(std::move(item));
++        }
+       }
+       break;
+     }
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -1446,6 +1446,19 @@
+   EXPECT_EQ(4, parsed->GetDict().FindInt("eventID"));
+   EXPECT_EQ(1u, parsed->GetDict().FindDict("data")
+                     ->FindList("requestHeaders")->size());
++}
++
++TEST(ShaarDevToolsPanelTest, ProjectsLoggedObjectHandleWithoutRawProperties) {
++  std::string output;
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Runtime.consoleAPICalled","params":{"type":"log","args":[{"type":"string","value":"probe"},{"type":"object","description":"Object","objectId":"panel-object","preview":{"properties":[{"name":"secret","value":"not-in-event"}]}}]}})",
++      42, &output));
++  auto parsed = base::JSONReader::Read(output, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(parsed && parsed->is_dict());
++  const auto* data = parsed->GetDict().FindDict("data");
++  ASSERT_NE(nullptr, data);
++  EXPECT_EQ("panel-object", *data->FindString("objectID"));
++  EXPECT_EQ(std::string::npos, output.find("not-in-event"));
+ }
+ 
+ TEST(ShaarDevToolsPanelTest, ClipsTextAndRejectsUnboundedProtocolInput) {
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -298,7 +298,8 @@
+   SHAAR_DEVTOOLS_PHASE2_LONG_TASKS = 17,
+   SHAAR_DEVTOOLS_PHASE2_VITALS_INPUTS = 18,
+   SHAAR_DEVTOOLS_PHASE2_PARSED_SCRIPTS = 19,
+-  SHAAR_DEVTOOLS_PHASE2_SCRIPT_SOURCE = 20
++  SHAAR_DEVTOOLS_PHASE2_SCRIPT_SOURCE = 20,
++  SHAAR_DEVTOOLS_PHASE2_CONSOLE_PROPERTIES = 21
+ } shaar_devtools_phase2_command_id;
+ typedef enum {
+   SHAAR_DEVTOOLS_DOCK_RIGHT = 1,

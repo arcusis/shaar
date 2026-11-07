@@ -39,11 +39,15 @@ final class ShaarConsoleModel {
   private(set) var expanded: Set<UUID> = []
   private(set) var properties: [UUID: [ShaarConsoleProperty]] = [:]
   private(set) var propertyFailures: [UUID: String] = [:]
+  private(set) var childProperties: [String: [ShaarConsoleProperty]] = [:]
+  private(set) var expandedChildren: Set<String> = []
   let projection = ShaarDevToolsListProjection<[ShaarConsoleRow]>()
   @ObservationIgnored var onClear: (@MainActor () -> Void)?
   @ObservationIgnored private var historyIndex: Int?
   @ObservationIgnored private var revision = 0
   @ObservationIgnored private var lastEvents: [ShaarDevToolsEvent] = []
+  @ObservationIgnored var loadProperties:
+    (@MainActor (String) async throws -> [ShaarConsoleProperty])?
 
   var regexIsInvalid: Bool {
     let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -115,6 +119,8 @@ final class ShaarConsoleModel {
     expanded.removeAll()
     properties.removeAll()
     propertyFailures.removeAll()
+    childProperties.removeAll()
+    expandedChildren.removeAll()
     onClear?()
   }
 
@@ -168,22 +174,63 @@ final class ShaarConsoleModel {
       return
     }
     expanded.insert(event.id)
-    if !event.previewProperties.isEmpty {
+    if !event.usesPanelLease && !event.previewProperties.isEmpty {
       properties[event.id] = event.previewProperties
       return
     }
-    guard let inspector, let objectID = event.objectID else { return }
+    guard let objectID = event.objectID else { return }
     let currentRevision = revision
     do {
-      let reply = try await inspector.call(
-        "Runtime.getProperties", params: ["objectId": objectID, "ownProperties": true])
+      let loaded = try await propertiesForObject(
+        objectID, usesPanelLease: event.usesPanelLease, inspector: inspector)
       guard currentRevision == revision else { return }
-      properties[event.id] = Self.parseProperties(reply)
+      properties[event.id] = loaded
       propertyFailures[event.id] = nil
     } catch {
       guard currentRevision == revision else { return }
       propertyFailures[event.id] = error.localizedDescription
     }
+  }
+
+  func toggleChild(
+    _ property: ShaarConsoleProperty, in event: ShaarConsoleEvent,
+    inspector: InspectorModel?
+  ) async {
+    guard let objectID = property.objectID else { return }
+    if expandedChildren.contains(objectID) {
+      expandedChildren.remove(objectID)
+      return
+    }
+    expandedChildren.insert(objectID)
+    if childProperties[objectID] != nil { return }
+    let currentRevision = revision
+    do {
+      let loaded = try await propertiesForObject(
+        objectID, usesPanelLease: event.usesPanelLease, inspector: inspector)
+      guard currentRevision == revision else { return }
+      childProperties[objectID] = loaded
+    } catch {
+      guard currentRevision == revision else { return }
+      childProperties[objectID] = [
+        ShaarConsoleProperty(name: "Error", value: error.localizedDescription)
+      ]
+    }
+  }
+
+  private func propertiesForObject(
+    _ objectID: String, usesPanelLease: Bool,
+    inspector: InspectorModel?
+  ) async throws -> [ShaarConsoleProperty] {
+    if usesPanelLease {
+      guard let loadProperties else {
+        throw ShaarConsoleEvaluationError(message: "Console object is unavailable.")
+      }
+      return try await loadProperties(objectID)
+    }
+    guard let inspector else { return [] }
+    let reply = try await inspector.call(
+      "Runtime.getProperties", params: ["objectId": objectID, "ownProperties": true])
+    return Self.parseProperties(reply)
   }
 
   static func evaluation(from reply: [String: Any]) throws -> ShaarConsoleEvaluation {
@@ -211,7 +258,9 @@ final class ShaarConsoleModel {
       let description =
         value["description"] as? String
         ?? value["value"].map { String(describing: $0) } ?? "undefined"
-      return ShaarConsoleProperty(name: name, value: String(description.prefix(1_024)))
+      return ShaarConsoleProperty(
+        name: name, value: String(description.prefix(1_024)),
+        objectID: value["objectId"] as? String)
     }
   }
 

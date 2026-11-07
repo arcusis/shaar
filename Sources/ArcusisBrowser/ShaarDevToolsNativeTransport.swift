@@ -147,6 +147,16 @@ private struct ShaarDOMPanelObserver {
     return ShaarStoredResponseBody(body: body.body, base64Encoded: body.base64Encoded)
   }
 
+  func consoleProperties(objectID: String, for target: SiteControlTarget) async throws
+    -> [ShaarConsoleProperty]
+  {
+    let reply = try await phase2Command(.consoleProperties(objectID: objectID), for: target)
+    return reply.items.compactMap { item in
+      guard let name = item.text["name"], let value = item.text["value"] else { return nil }
+      return ShaarConsoleProperty(name: name, value: value, objectID: item.text["objectID"])
+    }
+  }
+
   func setNetworkRules(_ rules: [ShaarResolvedNetworkRule], for target: SiteControlTarget)
     async throws
   {
@@ -390,7 +400,8 @@ private struct ShaarDOMPanelObserver {
       return .console(
         ShaarConsoleEvent(
           id: UUID(), level: level, message: text,
-          source: frames.first?.source, stack: frames))
+          source: frames.first?.source, stack: frames,
+          objectID: data.objectID, usesPanelLease: data.objectID != nil))
     case .requestWillBeSent, .responseReceived, .loadingFinished,
       .loadingFailed, .dataReceived:
       guard let requestID = data.requestID else { return nil }

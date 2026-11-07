@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -42,6 +44,19 @@ import Testing
     #expect(issues.count == 1)
     #expect(issues[0].title == "api")
     #expect(issues[0].detail == "GET 500")
+    let cancelled = ShaarNetworkRequest(
+      id: "req-3", method: "POST", url: "http://localhost:3000/save", status: nil,
+      mimeType: nil, encodedBytes: nil, startedAt: 0, respondedAt: nil, completedAt: 1,
+      failure: "cancelled", requestHeaders: [], responseHeaders: [], payload: nil,
+      responseBody: nil)
+    let unnamed = ShaarNetworkRequest(
+      id: "req-4", method: "GET", url: "http://localhost:3000/hang", status: nil,
+      mimeType: nil, encodedBytes: nil, startedAt: 0, respondedAt: nil, completedAt: nil,
+      failure: "", requestHeaders: [], responseHeaders: [], payload: nil, responseBody: nil)
+    let details = ShaarDevToolsIssues.list(console: [], requests: [cancelled, unnamed])
+    #expect(details.map(\.detail) == ["POST cancelled", "GET"])
+    #expect(ShaarDevToolsIssues.countText(2) == "2")
+    #expect(ShaarDevToolsIssues.countText(100) == "99+")
     if case .network(let id, let status, _) = issues[0].kind {
       #expect(id == "req-1")
       #expect(status == 500)
@@ -79,6 +94,32 @@ import Testing
     shell.openIssue(networkIssue)
     #expect(shell.section == .network)
     #expect(shell.network.selectedID == "req-9")
+    shell.close()
+  }
+
+  @Test func issuesPanelRendersOffscreenEmptyAndPopulated() async throws {
+    _ = NSApplication.shared
+    let defaults = UserDefaults(suiteName: "ShaarDevToolsIssues.\(UUID().uuidString)")!
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
+    let emptyShell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    let empty = try VisualCapture.pngOffscreen(
+      ShaarDevToolsIssuesPanel(model: emptyShell), size: NSSize(width: 640, height: 240))
+    let shell = ShaarDevToolsModel(
+      target: target, transport: IssuesFixtureTransport(errorID: UUID()), layoutDefaults: defaults)
+    let inspector = InspectorModel(target: target, engine: nil)
+    shell.open(inspector: inspector)
+    shell.section = .issues
+    for _ in 0..<40 where shell.issues.count < 2 { await Task.yield() }
+    #expect(shell.issues.count == 2)
+    let populated = try VisualCapture.pngOffscreen(
+      ShaarDevToolsIssuesPanel(model: shell), size: NSSize(width: 640, height: 240))
+    let panel = try VisualCapture.pngOffscreen(
+      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 850, height: 620))
+    #expect(!empty.isEmpty)
+    #expect(!populated.isEmpty)
+    #expect(!panel.isEmpty)
     shell.close()
   }
 }

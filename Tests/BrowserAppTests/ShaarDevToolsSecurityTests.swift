@@ -2,8 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
 import Security
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -81,6 +83,44 @@ import Testing
     shell.updateTarget(next)
     #expect(shell.securitySummary.connection == .http)
     #expect(shell.securitySummary.certificate == nil)
+  }
+
+  @Test func securityPanelRendersOffscreenForEachConnection() throws {
+    _ = NSApplication.shared
+    #expect(ShaarPageConnection.secure.symbol == "lock.fill")
+    #expect(ShaarPageConnection.http.symbol == "exclamationmark.triangle.fill")
+    #expect(ShaarPageConnection.unavailable.symbol == "questionmark.circle")
+    #expect(ShaarPageConnection.unavailable.title == "Unavailable")
+    #expect(
+      ShaarPageConnection.unavailable.explanation
+        == "Connection security is unavailable for this page.")
+    let defaults = UserDefaults(suiteName: "ShaarDevToolsSecurity.\(UUID().uuidString)")!
+    let page = URL(string: "https://example.com/")!
+    let target = SiteControlTarget(tabID: UUID(), profileID: UUID(), url: page)
+    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    let identity = ShaarCertificateIdentity(
+      subject: "localhost", issuer: "Shaar Test CA",
+      notBefore: SecurityCertificateFixture.notBefore,
+      notAfter: SecurityCertificateFixture.notAfter)
+    shell.securitySummary = ShaarDevToolsSecuritySummary(connection: .secure, certificate: identity)
+    let secure = try VisualCapture.pngOffscreen(
+      ShaarDevToolsSecurityPanel(model: shell), size: NSSize(width: 520, height: 280))
+    shell.securitySummary = ShaarDevToolsSecuritySummary(
+      connection: .certificateError, certificate: nil)
+    let missing = try VisualCapture.pngOffscreen(
+      ShaarDevToolsSecurityPanel(model: shell), size: NSSize(width: 520, height: 180))
+    shell.securitySummary = ShaarDevToolsSecuritySummary(connection: .unavailable, certificate: nil)
+    let unavailable = try VisualCapture.pngOffscreen(
+      ShaarDevToolsSecurityPanel(model: shell), size: NSSize(width: 520, height: 180))
+    let httpTarget = SiteControlTarget(
+      tabID: target.tabID, profileID: target.profileID, url: URL(string: "http://localhost/")!)
+    shell.updateTarget(httpTarget)
+    let http = try VisualCapture.pngOffscreen(
+      ShaarDevToolsSecurityPanel(model: shell), size: NSSize(width: 520, height: 180))
+    #expect(!secure.isEmpty)
+    #expect(!http.isEmpty)
+    #expect(!missing.isEmpty)
+    #expect(!unavailable.isEmpty)
   }
 }
 

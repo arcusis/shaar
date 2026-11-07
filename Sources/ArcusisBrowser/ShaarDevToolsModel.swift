@@ -10,6 +10,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case elements = "Elements"
   case components = "Components"
   case console = "Console"
+  case issues = "Issues"
   case network = "Network"
   case application = "Application"
   case performance = "Performance"
@@ -540,6 +541,30 @@ final class ShaarDevToolsModel {
     guard count > 0 else { return }
     let next = commandSelection + (forward ? 1 : -1)
     commandSelection = min(count - 1, max(0, next))
+  }
+
+  var issues: [ShaarDevToolsIssue] {
+    let console = consoleEvents.compactMap { event -> ShaarConsoleEvent? in
+      if case .console(let entry) = event { return entry }
+      return nil
+    }
+    return ShaarDevToolsIssues.list(console: console, requests: network.requests(from: events))
+  }
+
+  func openIssue(_ issue: ShaarDevToolsIssue) {
+    switch issue.kind {
+    case .console(let id, _):
+      section = .console
+      console.level = nil
+      console.origin = nil
+      console.search = ""
+      console.selectedID = id
+    case .network(let id, _, _):
+      section = .network
+      network.filter = .all
+      network.search = ""
+      network.selectedID = id
+    }
   }
 
   func performSelectedCommand() {

@@ -105,7 +105,8 @@ const NSArray<NSString *> *ShaarMethods() {
       @"Profiler.stopPreciseCoverage", @"CSS.startRuleUsageTracking",
       @"CSS.stopRuleUsageTracking",
       @"HeapProfiler.takeHeapSnapshot", @"HeapProfiler.startTrackingHeapObjects",
-      @"HeapProfiler.stopTrackingHeapObjects", @"DOMDebugger.getEventListeners"];
+      @"HeapProfiler.stopTrackingHeapObjects", @"DOMDebugger.getEventListeners",
+      @"Profiler.enable"];
   });
   return methods;
 }
@@ -118,6 +119,7 @@ const NSArray<NSString *> *ShaarMethods() {
 // Idle override is 70 and clear is 71. Appending either would send a lower command.
 // Coverage commands are 72-76. Heap profiler commands are 77-79.
 // DOMDebugger.getEventListeners is command 80. Appending it would send a lower id.
+// Profiler.enable is command 81. Appending it would send a lower id.
 // Leaving those commands on list order would send a lower id.
 NSUInteger ShaarDevToolsCommandID(NSString *method) {
   NSUInteger index = [ShaarMethods() indexOfObject:method];
@@ -157,6 +159,8 @@ NSUInteger ShaarDevToolsCommandID(NSString *method) {
     return 79;
   if ([method isEqualToString:@"DOMDebugger.getEventListeners"])
     return 80;
+  if ([method isEqualToString:@"Profiler.enable"])
+    return 81;
   return index + 1;
 }
 

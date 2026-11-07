@@ -427,6 +427,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0045-shaar-website-media-consent.patch",
       "sha256": "7d217f0e4460dd164769580de7c3637bf2889f37c8e74be16b7db39c2ff1f49a"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0046-shaar-devtools-profiler-enable.patch",
+      "sha256": "1f8fbac79a82c416b42b3827a5b925f270fee1afec220300a598d7cebc405af5"
     }
   ],
   "requiredExports": [

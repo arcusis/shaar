@@ -366,7 +366,7 @@ struct DevToolsPanelTests {
     let body = #"{"schemaVersion":1,"commandID":20,"items":[],"body":"export const app = 1;","base64Encoded":false,"truncated":false}"#
     #expect(ShaarDevToolsPhase2Reply.decode(Data(body.utf8), command: source)?.body
       == "export const app = 1;")
-    let payload = #"{"schemaVersion":1,"kind":"panelEvent","eventID":20,"leaseID":42,"data":{"url":"https://example.test/App.vue","scriptID":"42","truncated":false}}"#
+    let payload = #"{"schemaVersion":1,"kind":"panelEvent","eventID":30,"leaseID":42,"data":{"url":"https://example.test/App.vue","scriptID":"42","truncated":false}}"#
     let parsed = ShaarDevToolsPhase2EventRouter.decode(
       event(payload, scope: privateScope), scope: privateScope,
       windowID: "window-a", tabID: "tab-a", leaseID: 42)

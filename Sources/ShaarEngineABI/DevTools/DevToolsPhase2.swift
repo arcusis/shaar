@@ -234,7 +234,7 @@ public enum ShaarDevToolsPhase2EventID: Int, Sendable {
   case workerVersion = 17
   case workerError = 18
   case timeline = 19
-  case scriptParsed = 20
+  case scriptParsed = 30
 }
 
 public struct ShaarDevToolsPhase2Event: Equatable, Sendable {

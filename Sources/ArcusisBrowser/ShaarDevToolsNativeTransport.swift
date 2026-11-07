@@ -308,6 +308,20 @@ private struct ShaarDOMPanelObserver {
     }
   }
 
+  /// Stops the repro screencast. Its mask style is removed from the page, which
+  /// otherwise happens on its own once the document passes 2000 elements and
+  /// looks like the Elements tree reloaded.
+  func releaseRecording() async {
+    guard let session, !session.closed, session.recording, let leaseID = session.leaseID else {
+      return
+    }
+    session.recording = false
+    recordingAvailable = false
+    try? await requester.request(
+      .panelScreencast, target: session.target,
+      payload: ["schemaVersion": 1, "leaseID": leaseID, "commandID": 2])
+  }
+
   private func emit(_ message: ShaarDevToolsTransportMessage, to session: ShaarPanelSession) {
     guard let continuation = session.continuation else { return }
     switch continuation.yield(message) {

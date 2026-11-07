@@ -14,6 +14,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case network = "Network"
   case application = "Application"
   case performance = "Performance"
+  case audits = "Audits"
   case sources = "Sources"
   case security = "Security"
   case repro = "Repro"
@@ -355,6 +356,8 @@ final class ShaarDevToolsModel {
   let viewports: ShaarViewportsModel
   let framework = ShaarFrameworkComponentsModel()
   let comparison: ShaarWebKitComparisonModel
+  let pageAudit = InspectorAuditModel(inspector: nil)
+  private var auditFixture: AuditFixture?
   let allowsWebKitComparison: Bool
   var securitySummary: ShaarDevToolsSecuritySummary
   @ObservationIgnored var loadSecurity:
@@ -441,6 +444,7 @@ final class ShaarDevToolsModel {
     frameworkClose?.cancel()
     frameworkClose = nil
     comparisonInspector = inspector
+    pageAudit.inspector = inspector
     if !inspector.isOpen {
       inspector.open()
       ownedInspector = inspector
@@ -485,6 +489,9 @@ final class ShaarDevToolsModel {
     cookies.reset()
     performance.reset()
     sources.reset()
+    pageAudit.reset()
+    pageAudit.inspector = nil
+    auditFixture = nil
     let inspector = ownedInspector
     ownedInspector = nil
     // The component highlight still needs this page. Stop presenting now so
@@ -680,6 +687,8 @@ final class ShaarDevToolsModel {
     application.reset()
     cookies.reset()
     sources.reset()
+    pageAudit.reset()
+    auditFixture = nil
     framework.updateAccess(url: target.url)
     replaceSecuritySummary()
     closeCommandMenu()
@@ -696,6 +705,52 @@ final class ShaarDevToolsModel {
       startLocalStreams()
       rules.resume()
     }
+  }
+
+  private struct AuditFixture {
+    var report: InspectorAuditModel.Report?
+    var budget: ShaarPerformanceBudgetResult?
+  }
+
+  var auditCounts: ShaarDevToolsAuditCounts {
+    ShaarDevToolsAuditCounts.make(report: displayedAuditReport, budget: displayedAuditBudget)
+  }
+
+  var auditRows: [ShaarDevToolsAuditRow] {
+    ShaarDevToolsAudits.rows(from: displayedAuditReport)
+  }
+
+  var auditRoute: String? { displayedAuditBudget?.route }
+
+  var auditFailure: String? {
+    if auditFixture != nil { return nil }
+    return pageAudit.failure
+  }
+
+  var auditBusy: Bool {
+    if auditFixture != nil { return false }
+    return pageAudit.busy
+  }
+
+  func presentAuditFixture(
+    report: InspectorAuditModel.Report?, budget: ShaarPerformanceBudgetResult?
+  ) {
+    auditFixture = AuditFixture(report: report, budget: budget)
+  }
+
+  func openAuditFinding(_ id: String) {
+    guard let finding = pageAudit.report?.findings.first(where: { $0.id == id }) else { return }
+    pageAudit.select(finding)
+  }
+
+  private var displayedAuditReport: InspectorAuditModel.Report? {
+    if let auditFixture { return auditFixture.report }
+    return pageAudit.report
+  }
+
+  private var displayedAuditBudget: ShaarPerformanceBudgetResult? {
+    if let auditFixture { return auditFixture.budget }
+    return performance.budgetResult
   }
 
   var securityReloadToken: String {

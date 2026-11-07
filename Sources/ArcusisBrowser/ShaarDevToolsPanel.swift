@@ -37,6 +37,7 @@ extension ShaarDevToolsSection {
     case .network: "network"
     case .application: "externaldrive"
     case .performance: "speedometer"
+    case .audits: "checkmark.shield"
     case .sources: "curlybraces"
     case .security: "lock"
     case .repro: "record.circle"
@@ -54,6 +55,7 @@ extension ShaarDevToolsSection {
     case .network: "Network"
     case .application: "App"
     case .performance: "Perf"
+    case .audits: "Audits"
     case .sources: "Sources"
     case .security: "Security"
     case .repro: "Repro"
@@ -328,6 +330,8 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .audits:
+      ShaarDevToolsAuditsPanel(model: model, inspector: inspector)
     case .sources:
       if model.phase2.available {
         ShaarSourcesPanel(model: model.sources, inspector: inspector)
@@ -470,6 +474,7 @@ struct ShaarDevToolsPanel: View {
         ? "Performance data is scoped to this tab"
         : "Performance data is unavailable for this tab"
     }
+    if model.section == .audits { return "Audits are scoped to this tab" }
     if model.section == .sources {
       return model.phase2.available
         ? "Source resources are scoped to this tab"

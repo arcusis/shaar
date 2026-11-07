@@ -17,14 +17,18 @@ struct ShaarViewportsPanel: View {
       if model.frames.isEmpty {
         emptyState
       } else {
-        ScrollView([.horizontal, .vertical]) {
-          HStack(alignment: .top, spacing: 12) {
-            ForEach(model.frames) { frame in
-              viewportCard(frame)
+        GeometryReader { proxy in
+          let scale = previewScale(in: proxy.size)
+          ScrollView([.horizontal, .vertical]) {
+            HStack(alignment: .top, spacing: ShaarViewportPreviewLayout.cardSpacing) {
+              ForEach(model.frames) { frame in
+                viewportCard(frame, scale: scale)
+              }
             }
+            .padding(14)
           }
-          .padding(14)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.primary.opacity(0.025))
       }
       if let errorMessage {
@@ -61,6 +65,12 @@ struct ShaarViewportsPanel: View {
       Spacer(minLength: 8)
       Text(ShellL10n.plural("%d viewports", count: model.frames.count))
         .font(.system(size: 10)).foregroundStyle(.primary)
+      Button(ShellL10n.string("Fit")) { model.zoomToFit.toggle() }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(model.zoomToFit ? Color.accentColor : Color.secondary)
+        .accessibilityIdentifier("shaar.devtools.viewports.fit")
+        .accessibilityAddTraits(model.zoomToFit ? [.isSelected] : [])
       Menu {
         ForEach(ShaarViewportPreset.allCases, id: \.self) { preset in
           Button(ShellL10n.string(preset.title)) { run(.add(preset)) }
@@ -87,68 +97,129 @@ struct ShaarViewportsPanel: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  private func viewportCard(_ frame: ShaarViewportFrame) -> some View {
-    let previewWidth = min(400, max(190, CGFloat(frame.preset.width) * 0.48))
-    let previewHeight = previewWidth * CGFloat(frame.preset.height) / CGFloat(frame.preset.width)
-    return VStack(spacing: 0) {
-      HStack(spacing: 6) {
-        Text(ShellL10n.string(frame.preset.title))
-          .font(.system(size: 11, weight: .semibold))
-        Spacer(minLength: 3)
-        Text("\(frame.preset.width) × \(frame.preset.height)")
-          .font(.system(size: 10, design: .monospaced))
-          .foregroundStyle(.primary)
-        Button {
-          run(.remove(frame.id))
-        } label: {
-          Image(systemName: "xmark")
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-          ShellL10n.format(
-            "Remove %@ viewport", arguments: [.string(ShellL10n.string(frame.preset.title))])
-        )
-        .disabled(model.frames.count == 1)
-      }
-      .padding(.horizontal, 9).frame(height: 30)
-      Divider()
-      ZStack(alignment: .top) {
-        if let image = NSImage(data: frame.pngData) {
-          Image(nsImage: image)
-            .resizable()
-            .frame(width: previewWidth, height: previewHeight)
-        } else {
-          Color(nsColor: .textBackgroundColor)
-          Text(ShellL10n.string("Waiting for page frame"))
-            .font(.system(size: 11)).foregroundStyle(.primary)
-        }
-        ViewportInputSurface(
-          width: frame.preset.width, height: frame.preset.height,
-          onClick: { x, y in run(.click(frame.id, x: x, y: y)) },
-          onScroll: { dx, dy in run(.scroll(frame.id, deltaX: dx, deltaY: dy)) })
-        if frame.preset == .iphone15Pro && frame.safeArea.top > 0 {
-          Capsule().fill(Color.primary).frame(width: 49, height: 10).padding(.top, 7)
-            .allowsHitTesting(false)
-        }
-      }
-      .frame(width: previewWidth, height: previewHeight)
-      Divider()
-      HStack {
-        SafeAreaEditor(frame: frame) { insets in
-          run(.setSafeArea(frame.id, insets))
-        }
-        Spacer()
-        Text("T \(frame.safeArea.top) · B \(frame.safeArea.bottom)")
-          .font(.system(size: 10, design: .monospaced))
-          .foregroundStyle(.primary)
-      }
-      .padding(.horizontal, 9).frame(height: 30)
+  private func previewScale(in available: CGSize) -> CGFloat {
+    let content = model.frames.map { frame in
+      CGSize(width: frame.contentWidth, height: frame.contentHeight)
     }
-    .frame(width: previewWidth)
+    return ShaarViewportPreviewLayout.scale(
+      fitting: model.zoomToFit, content: content, available: available)
+  }
+
+  private func viewportCard(_ frame: ShaarViewportFrame, scale: CGFloat) -> some View {
+    let preview = ShaarViewportPreviewLayout.previewSize(
+      contentWidth: frame.contentWidth, contentHeight: frame.contentHeight, scale: scale)
+    let cardWidth = ShaarViewportPreviewLayout.cardWidth(previewWidth: preview.width)
+    return VStack(spacing: 0) {
+      cardHeader(frame)
+      Divider()
+      previewBody(frame, preview: preview, cardWidth: cardWidth)
+      Divider()
+      cardFooter(frame)
+    }
+    .frame(width: cardWidth)
     .background(Color(nsColor: .windowBackgroundColor))
     .clipShape(RoundedRectangle(cornerRadius: 7))
     .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.primary.opacity(0.12)))
     .accessibilityIdentifier("shaar.devtools.viewports.\(frame.preset.rawValue)")
+  }
+
+  private func cardHeader(_ frame: ShaarViewportFrame) -> some View {
+    VStack(alignment: .leading, spacing: 1) {
+      HStack(spacing: 6) {
+        Text(ShellL10n.string(frame.preset.title))
+          .font(.system(size: 11, weight: .semibold))
+          .lineLimit(1)
+        Spacer(minLength: 3)
+        rotateButton(frame)
+        removeButton(frame)
+      }
+      Text("\(frame.contentWidth) × \(frame.contentHeight)")
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+    }
+    .padding(.horizontal, 9)
+    .frame(height: 44, alignment: .center)
+  }
+
+  private func rotateButton(_ frame: ShaarViewportFrame) -> some View {
+    Button {
+      run(.rotate(frame.id))
+    } label: {
+      Image(systemName: "rotate.right")
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(
+      ShellL10n.format(
+        "Rotate %@ viewport", arguments: [.string(ShellL10n.string(frame.preset.title))])
+    )
+  }
+
+  private func removeButton(_ frame: ShaarViewportFrame) -> some View {
+    Button {
+      run(.remove(frame.id))
+    } label: {
+      Image(systemName: "xmark")
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(
+      ShellL10n.format(
+        "Remove %@ viewport", arguments: [.string(ShellL10n.string(frame.preset.title))])
+    )
+    .disabled(model.frames.count == 1)
+  }
+
+  private func previewBody(
+    _ frame: ShaarViewportFrame, preview: CGSize, cardWidth: CGFloat
+  ) -> some View {
+    ZStack(alignment: .top) {
+      if let image = NSImage(data: frame.pngData) {
+        Image(nsImage: image)
+          .resizable()
+          .frame(width: preview.width, height: preview.height)
+      } else {
+        Color(nsColor: .textBackgroundColor)
+          .frame(width: preview.width, height: preview.height)
+        Text(ShellL10n.string("Waiting for page frame"))
+          .font(.system(size: 11)).foregroundStyle(.primary)
+      }
+      ViewportInputSurface(
+        width: frame.contentWidth, height: frame.contentHeight,
+        onClick: { x, y in run(.click(frame.id, x: x, y: y)) },
+        onScroll: { dx, dy in run(.scroll(frame.id, deltaX: dx, deltaY: dy)) })
+        .frame(width: preview.width, height: preview.height)
+      if showsNotch(frame) {
+        let notch = ShaarViewportPreviewLayout.notchSize(previewWidth: preview.width)
+        Capsule().fill(Color.primary)
+          .frame(width: notch.width, height: notch.height)
+          .padding(.top, max(2, preview.width * 0.036))
+          .allowsHitTesting(false)
+      }
+    }
+    .frame(width: cardWidth, height: preview.height)
+  }
+
+  private func cardFooter(_ frame: ShaarViewportFrame) -> some View {
+    HStack {
+      SafeAreaEditor(frame: frame) { insets in
+        run(.setSafeArea(frame.id, insets))
+      }
+      Spacer()
+      Text(insetSummary(frame.safeArea))
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+    }
+    .padding(.horizontal, 9).frame(height: 30)
+  }
+
+  private func insetSummary(_ insets: ShaarViewportInsets) -> String {
+    "T \(insets.top) · R \(insets.right) · B \(insets.bottom) · L \(insets.left)"
+  }
+
+  private func showsNotch(_ frame: ShaarViewportFrame) -> Bool {
+    frame.preset == .iphone15Pro && frame.orientation == .portrait && frame.safeArea.top > 0
   }
 
   private func navigate() {

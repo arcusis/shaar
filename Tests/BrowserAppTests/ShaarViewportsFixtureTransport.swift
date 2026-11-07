@@ -59,6 +59,11 @@ struct ShaarViewportFixtureClick: Equatable {
         throw ShaarViewportsError.invalidAction
       }
       frames[index].safeArea = insets
+    case .rotate(let id):
+      guard let index = frames.firstIndex(where: { $0.id == id }) else {
+        throw ShaarViewportsError.invalidAction
+      }
+      frames[index] = frames[index].rotated(keepingImage: true)
     case .click(let id, let x, let y):
       guard let source = frames.first(where: { $0.id == id }) else {
         throw ShaarViewportsError.invalidAction
@@ -66,8 +71,8 @@ struct ShaarViewportFixtureClick: Equatable {
       clicks = frames.map { frame in
         ShaarViewportFixtureClick(
           viewportID: frame.id,
-          x: x * frame.preset.width / source.preset.width,
-          y: y * frame.preset.height / source.preset.height)
+          x: ShaarViewportGeometry.project(x, from: source.contentWidth, to: frame.contentWidth),
+          y: ShaarViewportGeometry.project(y, from: source.contentHeight, to: frame.contentHeight))
       }
     case .scroll(let id, let deltaX, let deltaY):
       guard frames.contains(where: { $0.id == id }) else {
@@ -78,7 +83,7 @@ struct ShaarViewportFixtureClick: Equatable {
       frames = frames.map { frame in
         ShaarViewportFrame(
           id: frame.id, preset: frame.preset, url: url, pngData: frame.pngData,
-          safeArea: frame.safeArea)
+          safeArea: frame.safeArea, orientation: frame.orientation)
       }
     }
     continuation?.yield(.frames(frames))

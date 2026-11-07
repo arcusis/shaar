@@ -1,0 +1,192 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc b/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
+@@ -100,12 +100,48 @@
+          !url.has_username() && !url.has_password();
+ }
+ 
++bool MatchesOrientation(int width, int height, int portrait_width,
++                        int portrait_height) {
++  return (width == portrait_width && height == portrait_height) ||
++         (width == portrait_height && height == portrait_width);
++}
++
+ bool ValidPreset(std::string_view name, int width, int height) {
+-  return (name == "iphone15Pro" && width == 393 && height == 852) ||
+-         (name == "pixel8" && width == 412 && height == 915) ||
+-         (name == "desktop" && width == 1280 && height == 800);
++  if (name == "iphone15Pro")
++    return MatchesOrientation(width, height, 393, 852);
++  if (name == "ipad")
++    return MatchesOrientation(width, height, 820, 1180);
++  if (name == "pixel8")
++    return MatchesOrientation(width, height, 412, 915);
++  if (name == "desktop")
++    return MatchesOrientation(width, height, 1280, 800);
++  if (name == "desktop1440")
++    return MatchesOrientation(width, height, 1440, 900);
++  return false;
+ }
+ 
++bool IsPortraitPreset(std::string_view name, int width, int height) {
++  if (name == "iphone15Pro")
++    return width == 393 && height == 852;
++  if (name == "ipad")
++    return width == 820 && height == 1180;
++  if (name == "pixel8")
++    return width == 412 && height == 915;
++  if (name == "desktop")
++    return width == 1280 && height == 800;
++  if (name == "desktop1440")
++    return width == 1440 && height == 900;
++  return false;
++}
++
++bool IsLandscapePreset(std::string_view name, int width, int height) {
++  return ValidPreset(name, width, height) && !IsPortraitPreset(name, width, height);
++}
++
++bool IsDesktopPreset(std::string_view name) {
++  return name == "desktop" || name == "desktop1440";
++}
++
+ bool ValidInsets(const base::DictValue& insets) {
+   if (!HasKeys(insets, {"top", "right", "bottom", "left"}))
+     return false;
+@@ -123,6 +159,9 @@
+   if (preset == "iphone15Pro") {
+     top = 59;
+     bottom = 34;
++  } else if (preset == "ipad") {
++    top = 24;
++    bottom = 20;
+   } else if (preset == "pixel8") {
+     top = 24;
+     bottom = 24;
+@@ -135,6 +174,24 @@
+   return insets;
+ }
+ 
++base::DictValue RotateInsetsClockwise(const base::DictValue& insets) {
++  base::DictValue rotated;
++  rotated.Set("top", insets.FindInt("left").value_or(0));
++  rotated.Set("right", insets.FindInt("top").value_or(0));
++  rotated.Set("bottom", insets.FindInt("right").value_or(0));
++  rotated.Set("left", insets.FindInt("bottom").value_or(0));
++  return rotated;
++}
++
++base::DictValue RotateInsetsCounterclockwise(const base::DictValue& insets) {
++  base::DictValue rotated;
++  rotated.Set("top", insets.FindInt("right").value_or(0));
++  rotated.Set("right", insets.FindInt("bottom").value_or(0));
++  rotated.Set("bottom", insets.FindInt("left").value_or(0));
++  rotated.Set("left", insets.FindInt("top").value_or(0));
++  return rotated;
++}
++
+ class ViewportSession;
+ 
+ class Viewport final : public content::DevToolsAgentHostClient,
+@@ -144,7 +201,10 @@
+            int height, std::unique_ptr<content::WebContents> contents)
+       : content::WebContentsObserver(contents.get()), session_(session), id_(id),
+         preset_(std::move(preset)), width_(width), height_(height),
+-        contents_(std::move(contents)) {}
++        insets_(DefaultInsets(preset_)), contents_(std::move(contents)) {
++    if (IsLandscapePreset(preset_, width_, height_))
++      insets_ = RotateInsetsClockwise(insets_);
++  }
+ 
+   ~Viewport() override {
+     Observe(nullptr);
+@@ -163,17 +223,41 @@
+         !host_->AttachClient(this))
+       return false;
+     attached_ = true;
++    return ApplyMetrics() && SetSafeArea(insets_);
++  }
++
++  bool ApplyMetrics() {
+     if (auto* view = contents_->GetRenderWidgetHostView())
+       view->SetSize(gfx::Size(width_, height_));
+     base::DictValue metrics;
+     metrics.Set("width", width_);
+     metrics.Set("height", height_);
+     metrics.Set("deviceScaleFactor", 1);
+-    metrics.Set("mobile", preset_ != "desktop");
+-    return Send("Emulation.setDeviceMetricsOverride", std::move(metrics)) != 0 &&
+-           SetSafeArea(DefaultInsets(preset_));
++    metrics.Set("mobile", !IsDesktopPreset(preset_));
++    return Send("Emulation.setDeviceMetricsOverride", std::move(metrics)) != 0;
+   }
+ 
++  bool Rotate() {
++    if (!Attach() || !ValidPreset(preset_, width_, height_))
++      return false;
++    const int old_width = width_;
++    const int old_height = height_;
++    base::DictValue old_insets = insets_.Clone();
++    const bool from_portrait = IsPortraitPreset(preset_, width_, height_);
++    width_ = old_height;
++    height_ = old_width;
++    insets_ = from_portrait ? RotateInsetsClockwise(old_insets)
++                            : RotateInsetsCounterclockwise(old_insets);
++    if (ApplyMetrics() && SetSafeArea(insets_))
++      return true;
++    width_ = old_width;
++    height_ = old_height;
++    insets_ = std::move(old_insets);
++    ApplyMetrics();
++    SetSafeArea(insets_);
++    return false;
++  }
++
+   int id() const { return id_; }
+   int width() const { return width_; }
+   int height() const { return height_; }
+@@ -188,7 +272,10 @@
+   bool SetSafeArea(const base::DictValue& insets) {
+     base::DictValue params;
+     params.Set("insets", insets.Clone());
+-    return Send("Emulation.setSafeAreaInsetsOverride", std::move(params)) != 0;
++    if (Send("Emulation.setSafeAreaInsetsOverride", std::move(params)) == 0)
++      return false;
++    insets_ = insets.Clone();
++    return true;
+   }
+ 
+   bool Click(int x, int y) {
+@@ -318,6 +405,7 @@
+   std::string preset_;
+   int width_;
+   int height_;
++  base::DictValue insets_;
+   std::unique_ptr<content::WebContents> contents_;
+   scoped_refptr<content::DevToolsAgentHost> host_;
+   bool attached_ = false;
+@@ -413,6 +501,11 @@
+     return viewport && ValidInsets(insets) && viewport->SetSafeArea(insets);
+   }
+ 
++  bool Rotate(int viewport_id) {
++    Viewport* viewport = Find(viewport_id);
++    return viewport && viewport->Rotate();
++  }
++
+   bool AllAttached() const {
+     return std::all_of(viewports_.begin(), viewports_.end(),
+                        [](const auto& viewport) { return viewport->attached(); });
+@@ -604,6 +697,12 @@
+       if (!id || !delta_x || !delta_y || *id <= 0 ||
+           !lease->Scroll(*id, *delta_x, *delta_y))
+         return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport scroll");
++    } else if (*kind == "rotate") {
++      if (!HasKeys(args, {"schemaVersion", "leaseID", "kind", "viewportID"}))
++        return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport rotate schema");
++      const auto id = args.FindInt("viewportID");
++      if (!id || *id <= 0 || !lease->Rotate(*id))
++        return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid viewport rotate");
+     } else {
+       return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown viewport action");
+     }

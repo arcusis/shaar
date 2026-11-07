@@ -46,6 +46,15 @@ import Testing
     try await model.perform(.add(.pixel8))
     for _ in 0..<100 where model.frames.count != 3 { await Task.yield() }
     #expect(model.frames.allSatisfy { $0.url.absoluteString == "https://example.com/next" })
+    try await model.perform(.rotate(phone.id))
+    #expect(requester.actions.last?["kind"] as? String == "rotate")
+    #expect(requester.actions.last?["viewportID"] as? Int == 1)
+    for _ in 0..<100
+    where model.frames.first(where: { $0.id == phone.id })?.orientation != .landscape {
+      await Task.yield()
+    }
+    #expect(model.frames.first(where: { $0.id == phone.id })?.contentWidth == 852)
+    #expect(model.frames.first(where: { $0.preset == .desktop })?.orientation == .portrait)
     model.close()
     for _ in 0..<100 where requester.closedCount == 0 { await Task.yield() }
     #expect(requester.closedCount == 1)

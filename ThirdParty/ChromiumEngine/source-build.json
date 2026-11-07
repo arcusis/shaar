@@ -357,6 +357,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0028-shaar-devtools-hidden-panels.patch",
       "sha256": "37933ef4840397b33042b0b510dd4c3da54b38297bd4927e4804f52298cf1d89"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0029-shaar-hidden-trusted-click.patch",
+      "sha256": "53e70f0d6c9d4af7419c3aef20566eb38a265fe168c060b3afd998a5e1ab9175"
     }
   ],
   "requiredExports": [

@@ -431,6 +431,7 @@ import Vision
     await recorderRoundTrip(shell, inspector: inspector, context: context, report: report)
     await renderingPaint(shell, context: context, report: report)
     await cssReload(shell, context: context, report: report)
+    await ShaarDevToolsSmokeMedia.run(context: context, report: report)
     await chromeActions(
       shell: shell, context: context, host: host, pageURL: pageURL, report: report)
   }
@@ -1549,6 +1550,8 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "quit-open": return ("Session", "Quit with DevTools open")
     case "restore": return ("Session", "Restore hidden window")
     case "coverage-record": return ("Coverage", "Start and stop")
+    case "media-capture": return ("Media", "Camera and microphone in use")
+    case "media-stop": return ("Media", "Capture stops")
     case "touch": return ("Sensors", "Toggle touch")
     case "memory-snapshot": return ("Memory", "Take heap snapshot")
     case "console": return ("Console", "Evaluate 6*7")

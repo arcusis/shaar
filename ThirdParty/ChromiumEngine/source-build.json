@@ -405,6 +405,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0040-shaar-devtools-coverage.patch",
       "sha256": "782145c03e7203cf57a3ddb2be588d312cfb49e4958b5fae0a084f4124c189e7"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0041-shaar-devtools-heap-profiler.patch",
+      "sha256": "a0939f8d7d6435e54ea975406303b43718aaf6f74403b3c6f606b74ecdaf3872"
     }
   ],
   "requiredExports": [

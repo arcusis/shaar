@@ -37,6 +37,7 @@ extension ShaarDevToolsSection {
     case .network: "network"
     case .application: "externaldrive"
     case .performance: "speedometer"
+    case .memory: "memorychip"
     case .coverage: "chart.bar"
     case .audits: "checkmark.shield"
     case .sources: "curlybraces"
@@ -59,6 +60,7 @@ extension ShaarDevToolsSection {
     case .network: "Network"
     case .application: "App"
     case .performance: "Perf"
+    case .memory: "Memory"
     case .coverage: "Coverage"
     case .audits: "Audits"
     case .sources: "Sources"
@@ -340,6 +342,10 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .memory:
+      ShaarMemoryPanel(
+        model: model.memory,
+        developer: inspector?.engine?.developerModel(for: model.target))
     case .coverage:
       ShaarDevToolsCoveragePanel(model: model.coverage)
     case .audits:
@@ -422,6 +428,7 @@ struct ShaarDevToolsPanel: View {
     if model.section == .components { return "Live component tree is unavailable for this tab" }
     if model.section == .application { return "Live Application is unavailable for this tab" }
     if model.section == .performance { return "Live Performance is unavailable for this tab" }
+    if model.section == .memory { return "Live heap snapshots need engine support" }
     if model.section == .sources { return "Live Sources are unavailable for this tab" }
     if model.section == .repro { return "Repro capture needs engine support" }
     if model.section == .viewports { return "Live Viewports need engine support" }
@@ -507,6 +514,14 @@ struct ShaarDevToolsPanel: View {
       return model.phase2.available
         ? "Performance data is scoped to this tab"
         : "Performance data is unavailable for this tab"
+    }
+    if model.section == .memory {
+      if model.memory.support == .needsEngine && model.memory.snapshot == nil
+        && model.memory.allocations == nil
+      {
+        return "Memory tools are unavailable for this tab"
+      }
+      return "Memory data is scoped to this tab"
     }
     if model.section == .coverage { return "Coverage is scoped to this tab" }
     if model.section == .audits { return "Audits are scoped to this tab" }

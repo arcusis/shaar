@@ -103,7 +103,9 @@ const NSArray<NSString *> *ShaarMethods() {
       @"Emulation.setIdleOverride", @"Emulation.clearIdleOverride",
       @"Profiler.startPreciseCoverage", @"Profiler.takePreciseCoverage",
       @"Profiler.stopPreciseCoverage", @"CSS.startRuleUsageTracking",
-      @"CSS.stopRuleUsageTracking"];
+      @"CSS.stopRuleUsageTracking",
+      @"HeapProfiler.takeHeapSnapshot", @"HeapProfiler.startTrackingHeapObjects",
+      @"HeapProfiler.stopTrackingHeapObjects"];
   });
   return methods;
 }
@@ -114,7 +116,8 @@ const NSArray<NSString *> *ShaarMethods() {
 // The rendering overlay commands are 66-68 for the same reason.
 // Network.setCacheDisabled is command 69. Appending it would otherwise send 67.
 // Idle override is 70 and clear is 71. Appending either would send a lower command.
-// Coverage commands are 72-76. The running engine stops at 71, so the panel does not send them yet.
+// Coverage commands are 72-76. Heap profiler commands are 77-79.
+// Leaving those commands on list order would send a lower id.
 NSUInteger ShaarDevToolsCommandID(NSString *method) {
   NSUInteger index = [ShaarMethods() indexOfObject:method];
   if (index == NSNotFound)
@@ -145,6 +148,12 @@ NSUInteger ShaarDevToolsCommandID(NSString *method) {
     return 75;
   if ([method isEqualToString:@"CSS.stopRuleUsageTracking"])
     return 76;
+  if ([method isEqualToString:@"HeapProfiler.takeHeapSnapshot"])
+    return 77;
+  if ([method isEqualToString:@"HeapProfiler.startTrackingHeapObjects"])
+    return 78;
+  if ([method isEqualToString:@"HeapProfiler.stopTrackingHeapObjects"])
+    return 79;
   return index + 1;
 }
 

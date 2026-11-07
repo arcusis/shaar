@@ -1,0 +1,309 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -70,6 +70,7 @@ namespace shaar::devtools {
+ namespace {
+ 
+ constexpr size_t kMaxArgumentsBytes = 1024 * 1024;
++constexpr size_t kMaxHeapSnapshotBytes = 8 * 1024 * 1024;
+ constexpr int kInspector = 1;
+ constexpr int kDeveloper = 2;
+ constexpr int kPanel = 3;
+@@ -264,6 +265,12 @@ constexpr CommandEntry kCommands[] = {
+      "CSS.startRuleUsageTracking", true, true},
+     {SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING, "CSS.stopRuleUsageTracking",
+      true, true},
++    {SHAAR_DEVTOOLS_HEAP_PROFILER_TAKE_HEAP_SNAPSHOT,
++     "HeapProfiler.takeHeapSnapshot", false, true},
++    {SHAAR_DEVTOOLS_HEAP_PROFILER_START_TRACKING_HEAP_OBJECTS,
++     "HeapProfiler.startTrackingHeapObjects", false, true},
++    {SHAAR_DEVTOOLS_HEAP_PROFILER_STOP_TRACKING_HEAP_OBJECTS,
++     "HeapProfiler.stopTrackingHeapObjects", false, true},
+ };
+ 
+ struct ReplyContext {
+@@ -553,6 +560,18 @@ bool ParamsHaveOnly(const base::DictValue& params,
+   return ExactKeys(params, keys);
+ }
+ 
++bool OptionalBooleanParams(const base::DictValue& params,
++                           std::initializer_list<std::string_view> keys) {
++  if (!ParamsHaveOnly(params, keys))
++    return false;
++  for (const auto key : keys) {
++    const base::Value* value = params.Find(key);
++    if (value && !value->is_bool())
++      return false;
++  }
++  return true;
++}
++
+ bool ForcedPseudoClassListIsValid(const base::DictValue& params) {
+   const base::ListValue* classes = params.FindList("forcedPseudoClasses");
+   if (!classes)
+@@ -771,6 +790,15 @@ bool ValidateParams(shaar_devtools_command command,
+     case SHAAR_DEVTOOLS_CSS_START_RULE_USAGE_TRACKING:
+     case SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING:
+       return ParamsHaveOnly(params, {});
++    case SHAAR_DEVTOOLS_HEAP_PROFILER_TAKE_HEAP_SNAPSHOT:
++      return OptionalBooleanParams(
++          params, {"reportProgress", "captureNumericValue", "exposeInternals"});
++    case SHAAR_DEVTOOLS_HEAP_PROFILER_START_TRACKING_HEAP_OBJECTS:
++      return OptionalBooleanParams(params, {"trackAllocations"});
++    case SHAAR_DEVTOOLS_HEAP_PROFILER_STOP_TRACKING_HEAP_OBJECTS:
++      return OptionalBooleanParams(
++          params, {"reportProgress", "treatGlobalObjectsAsRoots",
++                   "captureNumericValue", "exposeInternals"});
+   }
+   return false;
+ }
+@@ -1008,6 +1036,11 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+     const auto& dict = parsed->GetDict();
+     const auto* method = dict.FindString("method");
+     if (method) {
++      if (collecting_heap_snapshot_ && active_ &&
++          *method == "HeapProfiler.addHeapSnapshotChunk") {
++        TakeHeapSnapshotChunk(dict);
++        return;
++      }
+       RouteDOMPanelEventForProtocolHost(host_.get(), input);
+       if (*method == "Runtime.executionContextsCleared") {
+         contexts_.clear();
+@@ -1051,7 +1084,15 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+       Finish(SHAAR_CHROMIUM_ERROR, {}, "protocol response has no result");
+       return;
+     }
+-    Finish(SHAAR_OK, SuccessPayload(*result), {});
++    base::DictValue enriched = result->Clone();
++    if (collecting_heap_snapshot_) {
++      std::string failure;
++      if (!AttachHeapSnapshot(&enriched, &failure)) {
++        Finish(SHAAR_CHROMIUM_ERROR, {}, std::move(failure));
++        return;
++      }
++    }
++    Finish(SHAAR_OK, SuccessPayload(enriched), {});
+   }
+ 
+   void AgentHostClosed(content::DevToolsAgentHost*) override {
+@@ -1088,6 +1129,36 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+     base::ScopedClosureRunner visibility_lease;
+   };
+ 
++  void TakeHeapSnapshotChunk(const base::DictValue& event) {
++    const base::DictValue* params = event.FindDict("params");
++    const std::string* chunk = params ? params->FindString("chunk") : nullptr;
++    if (!chunk) {
++      Finish(SHAAR_CHROMIUM_ERROR, {}, "heap snapshot chunk is invalid");
++      return;
++    }
++    if (chunk->size() > kMaxHeapSnapshotBytes ||
++        heap_snapshot_chunks_.size() > kMaxHeapSnapshotBytes - chunk->size()) {
++      Finish(SHAAR_CHROMIUM_ERROR, {}, "heap snapshot is too large");
++      return;
++    }
++    heap_snapshot_chunks_.append(*chunk);
++  }
++
++  bool AttachHeapSnapshot(base::DictValue* result, std::string* failure) {
++    if (heap_snapshot_chunks_.empty()) {
++      *failure = "heap snapshot is empty";
++      return false;
++    }
++    auto snapshot = base::JSONReader::Read(
++        heap_snapshot_chunks_, base::JSON_PARSE_RFC);
++    if (!snapshot || !snapshot->is_dict()) {
++      *failure = "heap snapshot is invalid";
++      return false;
++    }
++    result->Set("snapshot", std::move(*snapshot));
++    return true;
++  }
++
+   void StartNext() {
+     if (active_ || pending_.empty())
+       return;
+@@ -1100,7 +1171,14 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+     awaiting_context_ = method && *method == "Runtime.evaluate" && params &&
+         !params->Find("contextId") && !params->Find("uniqueContextId") &&
+         !pending.main_frame_id.empty();
+-    timer_.Start(FROM_HERE, base::Seconds(15), this, &ProtocolClient::OnTimeout);
++    collecting_heap_snapshot_ = method &&
++        (*method == "HeapProfiler.takeHeapSnapshot" ||
++         *method == "HeapProfiler.stopTrackingHeapObjects");
++    heap_snapshot_chunks_.clear();
++    base::TimeDelta timeout = base::Seconds(15);
++    if (collecting_heap_snapshot_)
++      timeout = base::Seconds(60);
++    timer_.Start(FROM_HERE, timeout, this, &ProtocolClient::OnTimeout);
+     if (awaiting_context_) {
+       if (contexts_.contains(pending.main_frame_id)) {
+         MaybeEvaluate();
+@@ -1216,6 +1294,8 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+ 
+   void Finish(shaar_error_code code, std::string payload, std::string message) {
+     timer_.Stop();
++    collecting_heap_snapshot_ = false;
++    heap_snapshot_chunks_.clear();
+     const ReplyContext request = pending_.front().request;
+     auto lease = std::move(pending_.front().visibility_lease);
+     pending_.pop_front();
+@@ -1242,6 +1322,8 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+   bool awaiting_context_ = false;
+   bool attached_ = false;
+   bool dom_enabled_ = false;
++  bool collecting_heap_snapshot_ = false;
++  std::string heap_snapshot_chunks_;
+   base::WeakPtrFactory<ProtocolClient> weak_factory_{this};
+ };
+ 
+@@ -1274,7 +1356,7 @@ shaar_error_code DecodeOperation(shaar_operation operation,
+   }
+   const int cap = *root.FindInt("capability");
+   const int id = *root.FindInt("command");
+-  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 76) {
++  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 79) {
+     *reason = "unknown DevTools capability or command";
+     return SHAAR_INVALID_ARGUMENT;
+   }
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -499,8 +499,8 @@ TEST(ShaarDevToolsTest, PageDisableAndJavaScriptDialogStayOutsideTheDomTreeIds)
+       Bytes(R"({"schemaVersion":1,"capability":1,"command":61,"params":{"nodeId":1}})"),
+       61, &output, &reason)) << reason;
+   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
+-      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{}})"),
+-      77, &output, &reason));
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":80,"params":{}})"),
++      80, &output, &reason));
+   EXPECT_EQ("unknown DevTools capability or command", reason);
+ }
+ 
+@@ -608,8 +608,8 @@ TEST(ShaarDevToolsTest, RenderingOverlayCommandsAreDeveloperOnly) {
+       Bytes(R"({"schemaVersion":1,"capability":1,"command":66,"params":{"result":true}})"),
+       66, &output, &reason));
+   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
+-      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{}})"),
+-      77, &output, &reason));
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":80,"params":{}})"),
++      80, &output, &reason));
+   EXPECT_EQ("unknown DevTools capability or command", reason);
+ }
+ 
+@@ -632,7 +632,7 @@ TEST(ShaarDevToolsTest, CacheDisabledIsDeveloperOnlyAndCommand69) {
+            R"({"schemaVersion":1,"capability":1,"command":69,"params":{"cacheDisabled":true}})",
+            R"({"schemaVersion":1,"capability":2,"command":69,"params":{}})",
+            R"({"schemaVersion":1,"capability":2,"command":69,"params":{"cacheDisabled":true,"extra":1}})",
+-           R"({"schemaVersion":1,"capability":2,"command":72,"params":{"cacheDisabled":true}})"}) {
++           R"({"schemaVersion":1,"capability":2,"command":80,"params":{"cacheDisabled":true}})"}) {
+     std::string rejected;
+     std::string rejectReason;
+     EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &rejected, &rejectReason));
+@@ -689,8 +689,8 @@ TEST(ShaarDevToolsTest, IdleOverrideIsDeveloperOnly) {
+       Bytes(R"({"schemaVersion":1,"capability":1,"command":70,"params":{"isUserActive":true,"isScreenUnlocked":true}})"),
+       70, &output, &reason));
+   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
+-      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{}})"),
+-      77, &output, &reason));
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":80,"params":{}})"),
++      80, &output, &reason));
+   EXPECT_EQ("unknown DevTools capability or command", reason);
+ }
+ 
+@@ -746,11 +746,78 @@ TEST(ShaarDevToolsTest, CoverageCommandsAreDeveloperAllowed) {
+       Bytes(R"({"schemaVersion":1,"capability":2,"command":73,"params":{"extra":true}})"),
+       73, &output, &reason));
+   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
+-      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{}})"),
+-      77, &output, &reason));
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":80,"params":{}})"),
++      80, &output, &reason));
+   EXPECT_EQ("unknown DevTools capability or command", reason);
+ }
+ 
++TEST(ShaarDevToolsTest, HeapProfilerIsDeveloperOnlyAndCommands77Through79) {
++  std::string output;
++  std::string reason;
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{}})"),
++      77, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("HeapProfiler.takeHeapSnapshot"));
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{"reportProgress":true,"captureNumericValue":false,"exposeInternals":true}})"),
++      77, &output, &reason)) << reason;
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":78,"params":{"trackAllocations":true}})"),
++      78, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("HeapProfiler.startTrackingHeapObjects"));
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":79,"params":{"reportProgress":false,"treatGlobalObjectsAsRoots":true,"captureNumericValue":false,"exposeInternals":false}})"),
++      79, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("HeapProfiler.stopTrackingHeapObjects"));
++  EXPECT_STREQ("HeapProfiler.takeHeapSnapshot",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_HEAP_PROFILER_TAKE_HEAP_SNAPSHOT));
++  EXPECT_STREQ("HeapProfiler.startTrackingHeapObjects",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_HEAP_PROFILER_START_TRACKING_HEAP_OBJECTS));
++  EXPECT_STREQ("HeapProfiler.stopTrackingHeapObjects",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_HEAP_PROFILER_STOP_TRACKING_HEAP_OBJECTS));
++  EXPECT_EQ(nullptr,
++            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
++                           SHAAR_DEVTOOLS_HEAP_PROFILER_TAKE_HEAP_SNAPSHOT));
++  EXPECT_EQ(nullptr,
++            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
++                           SHAAR_DEVTOOLS_HEAP_PROFILER_START_TRACKING_HEAP_OBJECTS));
++  EXPECT_EQ(nullptr,
++            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
++                           SHAAR_DEVTOOLS_HEAP_PROFILER_STOP_TRACKING_HEAP_OBJECTS));
++  EXPECT_STREQ("Emulation.setTouchEmulationEnabled",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED));
++  EXPECT_STREQ("Network.setCacheDisabled",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_NETWORK_SET_CACHE_DISABLED));
++  EXPECT_STREQ("Emulation.setIdleOverride",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE));
++  EXPECT_STREQ("Emulation.clearIdleOverride",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE));
++  EXPECT_STREQ("Profiler.startPreciseCoverage",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_PROFILER_START_PRECISE_COVERAGE));
++  EXPECT_STREQ("CSS.stopRuleUsageTracking",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING));
++  for (const char* args : {
++           R"({"schemaVersion":1,"capability":1,"command":77,"params":{}})",
++           R"({"schemaVersion":1,"capability":1,"command":78,"params":{"trackAllocations":true}})",
++           R"({"schemaVersion":1,"capability":1,"command":79,"params":{}})",
++           R"({"schemaVersion":1,"capability":2,"command":77,"params":{"reportProgress":1}})",
++           R"({"schemaVersion":1,"capability":2,"command":78,"params":{"trackAllocations":"yes"}})",
++           R"({"schemaVersion":1,"capability":2,"command":79,"params":{"extra":true}})",
++           R"({"schemaVersion":1,"capability":2,"command":77,"params":{"reportProgress":true,"unreviewed":false}})"}) {
++    EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 77, &output, &reason))
++        << args;
++  }
++}
++
+ TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
+   const std::string args =
+       R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -396,7 +396,10 @@ typedef enum {
+   SHAAR_DEVTOOLS_PROFILER_TAKE_PRECISE_COVERAGE = 73,
+   SHAAR_DEVTOOLS_PROFILER_STOP_PRECISE_COVERAGE = 74,
+   SHAAR_DEVTOOLS_CSS_START_RULE_USAGE_TRACKING = 75,
+-  SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING = 76
++  SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING = 76,
++  SHAAR_DEVTOOLS_HEAP_PROFILER_TAKE_HEAP_SNAPSHOT = 77,
++  SHAAR_DEVTOOLS_HEAP_PROFILER_START_TRACKING_HEAP_OBJECTS = 78,
++  SHAAR_DEVTOOLS_HEAP_PROFILER_STOP_TRACKING_HEAP_OBJECTS = 79
+ } shaar_devtools_command;
+ typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
+ // END devtools command and module IDs.

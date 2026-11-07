@@ -117,6 +117,37 @@ struct DevToolsTests {
     }
   }
 
+  @Test func heapProfilerCommandsAreDeveloperOnly() throws {
+    let fake = FakeDevToolsEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    let scope = ShaarNavigationScope(profileID: "profile-a")
+    let commands: [ShaarDevToolsCommand] = [
+      .heapProfilerTakeHeapSnapshot,
+      .heapProfilerStartTrackingHeapObjects,
+      .heapProfilerStopTrackingHeapObjects,
+    ]
+    #expect(commands.map(\.rawValue) == [77, 78, 79])
+    for command in commands {
+      _ = try adapter.call(
+        capability: .developer, command: command, scope: scope,
+        windowID: "window-a", tabID: "tab-a", completion: { _ in })
+      let request = try #require(fake.request)
+      let root = try #require(JSONSerialization.jsonObject(with: request.payload) as? [String: Any])
+      #expect(root["command"] as? UInt32 == command.rawValue)
+      #expect(root["capability"] as? UInt32 == ShaarDevToolsCapability.developer.rawValue)
+      #expect(throws: ShaarEngineError.self) {
+        try adapter.call(
+          capability: .inspector, command: command, scope: scope,
+          windowID: "window-a", tabID: "tab-a", completion: { _ in })
+      }
+      #expect(throws: ShaarEngineError.self) {
+        try adapter.call(
+          capability: .devToolsPanel, command: command, scope: scope,
+          windowID: "window-a", tabID: "tab-a", completion: { _ in })
+      }
+    }
+  }
+
   @Test func frontendUsesOnlyShowOrCloseAndRejectsMissingOwners() throws {
     let fake = FakeDevToolsEngine()
     let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))

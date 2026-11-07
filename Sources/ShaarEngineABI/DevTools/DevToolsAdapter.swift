@@ -113,6 +113,10 @@ public enum ShaarDevToolsCommand: UInt32, CaseIterable, Sendable {
   case runtimeCallFunctionOn = 60
   case domGetOuterHTML = 61
   case networkSetCacheDisabled = 69
+  // 62-76 stay on the ObjC bridge. 77-79 are the heap profiler.
+  case heapProfilerTakeHeapSnapshot = 77
+  case heapProfilerStartTrackingHeapObjects = 78
+  case heapProfilerStopTrackingHeapObjects = 79
 
   fileprivate func permits(_ capability: ShaarDevToolsCapability) -> Bool {
     switch capability {
@@ -122,6 +126,7 @@ public enum ShaarDevToolsCommand: UInt32, CaseIterable, Sendable {
       return rawValue <= 4 || (15...18).contains(rawValue) || (26...40).contains(rawValue)
         || self == .emulationSetSafeAreaInsetsOverride
         || self == .networkSetCacheDisabled
+        || (77...79).contains(rawValue)
     case .devToolsPanel:
       return false
     }

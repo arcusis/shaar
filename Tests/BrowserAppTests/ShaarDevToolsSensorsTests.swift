@@ -60,6 +60,64 @@ import Testing
   #expect(sameParams(ShaarDevToolsSensorCommand.locale("").params, system.1))
 }
 
+@Test func idleCommandsUseTheEmulationMethods() {
+  let active = ShaarDevToolsSensorIdle.active.command
+  let idle = ShaarDevToolsSensorIdle.idle.command
+  let locked = ShaarDevToolsSensorIdle.locked.command
+  let cleared = ShaarDevToolsSensorIdle.system.command
+  #expect(active.method == "Emulation.setIdleOverride")
+  #expect(active.params["isUserActive"] as? Bool == true)
+  #expect(active.params["isScreenUnlocked"] as? Bool == true)
+  #expect(idle.params["isUserActive"] as? Bool == false)
+  #expect(idle.params["isScreenUnlocked"] as? Bool == true)
+  #expect(locked.params["isUserActive"] as? Bool == false)
+  #expect(locked.params["isScreenUnlocked"] as? Bool == false)
+  #expect(cleared.method == "Emulation.clearIdleOverride")
+  #expect(cleared.params.isEmpty)
+}
+
+@MainActor @Test func idleIsRecordedByTheFixtureAndNotSentWhileTheEngineLacksIt() async {
+  let model = sensorModel(suite: "ShaarDevToolsSensors.idle")
+  var recorded: [ShaarDevToolsSensorCommand] = []
+  var sent: [ShaarDevToolsSensorCommand] = []
+  model.sensorFixture = { command in recorded.append(command) }
+  model.sendSensorCommand = { command in sent.append(command) }
+  model.selectSensorIdle(.idle)
+  #expect(model.sensorIdle == .idle)
+  #expect(recorded == [ShaarDevToolsSensorIdle.idle.command])
+  #expect(sent.isEmpty)
+  #expect(model.sensorNotice == nil)
+  let delivered = await collect(model, expected: 1) {
+    model.sensorIdleReady = true
+    model.selectSensorIdle(.system)
+  }
+  #expect(delivered == [.clearIdle])
+}
+
+@Test func idleCapabilityTreatsAProtocolErrorAsPresent() {
+  let unknown = SensorSampleError(errorDescription: "unknown DevTools capability or command")
+  let denied = SensorSampleError(
+    errorDescription: "DevTools command is not allowed for this capability")
+  let bridge = SensorSampleError(errorDescription: "This DevTools command is unavailable.")
+  let dropped = SensorSampleError(errorDescription: "DevTools request failed.")
+  let invalid = SensorSampleError(errorDescription: "DevTools command parameters are invalid")
+  let missingFields = SensorSampleError(
+    errorDescription: "DevTools command is missing required parameters")
+  let gone = SensorSampleError(
+    errorDescription: "The developer tools target is no longer available.")
+  #expect(ShaarDevToolsSensorCapability.isMissing(unknown))
+  #expect(ShaarDevToolsSensorCapability.isMissing(denied))
+  #expect(ShaarDevToolsSensorCapability.isMissing(bridge))
+  #expect(ShaarDevToolsSensorCapability.isMissing(dropped))
+  #expect(!ShaarDevToolsSensorCapability.isMissing(invalid))
+  #expect(!ShaarDevToolsSensorCapability.isMissing(missingFields))
+  #expect(!ShaarDevToolsSensorCapability.isMissing(gone))
+  #expect(ShaarDevToolsSensorCapability.targetGone(gone))
+  #expect(ShaarDevToolsSensorCapability.targetGone(
+    SensorSampleError(errorDescription: "The page changed before the command finished.")))
+  #expect(!ShaarDevToolsSensorCapability.targetGone(invalid))
+}
+
 @MainActor @Test func touchIsRecordedByTheFixtureAndNotSentWhileTheEngineLacksIt() async {
   let model = sensorModel(suite: "ShaarDevToolsSensors")
   var recorded: [ShaarDevToolsSensorCommand] = []
@@ -200,4 +258,9 @@ private func simulationCommand(
 
 private func sameParams(_ actual: [String: Any], _ expected: [String: Any]) -> Bool {
   NSDictionary(dictionary: actual).isEqual(to: expected)
+}
+
+private struct SensorSampleError: LocalizedError {
+  var errorDescription: String?
+  init(errorDescription: String) { self.errorDescription = errorDescription }
 }

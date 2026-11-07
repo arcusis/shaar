@@ -99,7 +99,8 @@ const NSArray<NSString *> *ShaarMethods() {
       @"DOM.getOuterHTML", @"CSS.forcePseudoState",
       @"Emulation.setTouchEmulationEnabled",
       @"Overlay.setShowPaintRects", @"Overlay.setShowLayoutShiftRegions",
-      @"Overlay.setShowFPSCounter", @"Network.setCacheDisabled"];
+      @"Overlay.setShowFPSCounter", @"Network.setCacheDisabled",
+      @"Emulation.setIdleOverride", @"Emulation.clearIdleOverride"];
   });
   return methods;
 }
@@ -109,6 +110,7 @@ const NSArray<NSString *> *ShaarMethods() {
 // Emulation.setTouchEmulationEnabled is command 65. Appending it would otherwise send 63.
 // The rendering overlay commands are 66-68 for the same reason.
 // Network.setCacheDisabled is command 69. Appending it would otherwise send 67.
+// Idle override is 70 and clear is 71. Appending either would send a lower command.
 NSUInteger ShaarDevToolsCommandID(NSString *method) {
   NSUInteger index = [ShaarMethods() indexOfObject:method];
   if (index == NSNotFound)
@@ -125,6 +127,10 @@ NSUInteger ShaarDevToolsCommandID(NSString *method) {
     return 68;
   if ([method isEqualToString:@"Network.setCacheDisabled"])
     return 69;
+  if ([method isEqualToString:@"Emulation.setIdleOverride"])
+    return 70;
+  if ([method isEqualToString:@"Emulation.clearIdleOverride"])
+    return 71;
   return index + 1;
 }
 

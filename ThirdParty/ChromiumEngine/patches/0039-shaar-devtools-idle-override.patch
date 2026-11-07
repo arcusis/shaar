@@ -1,0 +1,170 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+index ef4e65d..59d0617 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -250,6 +250,10 @@ constexpr CommandEntry kCommands[] = {
+      false, true},
+     {SHAAR_DEVTOOLS_NETWORK_SET_CACHE_DISABLED, "Network.setCacheDisabled",
+      false, true},
++    {SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE, "Emulation.setIdleOverride",
++     false, true},
++    {SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE,
++     "Emulation.clearIdleOverride", false, true},
+ };
+ 
+ struct ReplyContext {
+@@ -740,6 +744,10 @@ bool ValidateParams(shaar_devtools_command command,
+       return ParamsHaveOnly(params, {"show"});
+     case SHAAR_DEVTOOLS_NETWORK_SET_CACHE_DISABLED:
+       return ParamsHaveOnly(params, {"cacheDisabled"});
++    case SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE:
++      return ParamsHaveOnly(params, {"isUserActive", "isScreenUnlocked"});
++    case SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE:
++      return ParamsHaveOnly(params, {});
+   }
+   return false;
+ }
+@@ -851,9 +859,9 @@ bool HasRequiredFields(shaar_devtools_command command,
+              HasNumericValue(params, "longitude") &&
+              HasNumericValue(params, "accuracy");
+     case SHAAR_DEVTOOLS_EMULATION_SET_TIMEZONE_OVERRIDE:
+-      return HasRequiredString(params, "timezoneId");
++      return params.FindString("timezoneId") != nullptr;
+     case SHAAR_DEVTOOLS_EMULATION_SET_LOCALE_OVERRIDE:
+-      return HasRequiredString(params, "locale");
++      return params.FindString("locale") != nullptr;
+     case SHAAR_DEVTOOLS_EMULATION_SET_USER_AGENT_OVERRIDE:
+       return HasRequiredString(params, "userAgent");
+     case SHAAR_DEVTOOLS_EMULATION_SET_EMULATED_MEDIA:
+@@ -888,6 +896,11 @@ bool HasRequiredFields(shaar_devtools_command command,
+       return HasRequiredBoolean(params, "show");
+     case SHAAR_DEVTOOLS_NETWORK_SET_CACHE_DISABLED:
+       return HasRequiredBoolean(params, "cacheDisabled");
++    case SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE:
++      return HasRequiredBoolean(params, "isUserActive") &&
++             HasRequiredBoolean(params, "isScreenUnlocked");
++    case SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE:
++      return true;
+     default:
+       return true;
+   }
+@@ -1234,7 +1247,7 @@ shaar_error_code DecodeOperation(shaar_operation operation,
+   }
+   const int cap = *root.FindInt("capability");
+   const int id = *root.FindInt("command");
+-  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 69) {
++  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 71) {
+     *reason = "unknown DevTools capability or command";
+     return SHAAR_INVALID_ARGUMENT;
+   }
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+index 5f4bdef..d24cfac 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -499,8 +499,8 @@ TEST(ShaarDevToolsTest, PageDisableAndJavaScriptDialogStayOutsideTheDomTreeIds)
+       Bytes(R"({"schemaVersion":1,"capability":1,"command":61,"params":{"nodeId":1}})"),
+       61, &output, &reason)) << reason;
+   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
+-      Bytes(R"({"schemaVersion":1,"capability":2,"command":70,"params":{}})"),
+-      70, &output, &reason));
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{}})"),
++      72, &output, &reason));
+   EXPECT_EQ("unknown DevTools capability or command", reason);
+ }
+ 
+@@ -608,8 +608,8 @@ TEST(ShaarDevToolsTest, RenderingOverlayCommandsAreDeveloperOnly) {
+       Bytes(R"({"schemaVersion":1,"capability":1,"command":66,"params":{"result":true}})"),
+       66, &output, &reason));
+   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
+-      Bytes(R"({"schemaVersion":1,"capability":2,"command":70,"params":{}})"),
+-      70, &output, &reason));
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{}})"),
++      72, &output, &reason));
+   EXPECT_EQ("unknown DevTools capability or command", reason);
+ }
+ 
+@@ -632,7 +632,7 @@ TEST(ShaarDevToolsTest, CacheDisabledIsDeveloperOnlyAndCommand69) {
+            R"({"schemaVersion":1,"capability":1,"command":69,"params":{"cacheDisabled":true}})",
+            R"({"schemaVersion":1,"capability":2,"command":69,"params":{}})",
+            R"({"schemaVersion":1,"capability":2,"command":69,"params":{"cacheDisabled":true,"extra":1}})",
+-           R"({"schemaVersion":1,"capability":2,"command":70,"params":{"cacheDisabled":true}})"}) {
++           R"({"schemaVersion":1,"capability":2,"command":72,"params":{"cacheDisabled":true}})"}) {
+     std::string rejected;
+     std::string rejectReason;
+     EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &rejected, &rejectReason));
+@@ -640,6 +640,60 @@ TEST(ShaarDevToolsTest, CacheDisabledIsDeveloperOnlyAndCommand69) {
+   }
+ }
+ 
++TEST(ShaarDevToolsTest, EmptyTimezoneAndLocaleClearTheOverride) {
++  std::string output;
++  std::string reason;
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":33,"params":{"timezoneId":""}})"),
++      33, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("Emulation.setTimezoneOverride"));
++  EXPECT_NE(std::string::npos, output.find("\"timezoneId\":\"\""));
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":34,"params":{"locale":""}})"),
++      34, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("Emulation.setLocaleOverride"));
++  EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":33,"params":{}})"),
++      33, &output, &reason));
++  EXPECT_EQ("DevTools command is missing required parameters", reason);
++  EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":34,"params":{}})"),
++      34, &output, &reason));
++}
++
++TEST(ShaarDevToolsTest, IdleOverrideIsDeveloperOnly) {
++  std::string output;
++  std::string reason;
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":70,"params":{"isUserActive":false,"isScreenUnlocked":true}})"),
++      70, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("Emulation.setIdleOverride"));
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":71,"params":{}})"),
++      71, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("Emulation.clearIdleOverride"));
++  EXPECT_STREQ("Emulation.setIdleOverride",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE));
++  EXPECT_EQ(nullptr,
++            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
++                           SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE));
++  EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":70,"params":{}})"),
++      70, &output, &reason));
++  EXPECT_EQ("DevTools command is missing required parameters", reason);
++  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":70,"params":{"isUserActive":true}})"),
++      70, &output, &reason));
++  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":1,"command":70,"params":{"isUserActive":true,"isScreenUnlocked":true}})"),
++      70, &output, &reason));
++  EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{}})"),
++      72, &output, &reason));
++  EXPECT_EQ("unknown DevTools capability or command", reason);
++}
++
+ TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
+   const std::string args =
+       R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index 9a990d4..b5cadb3 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -389,7 +389,9 @@ typedef enum {
+   SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_PAINT_RECTS = 66,
+   SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_LAYOUT_SHIFT_REGIONS = 67,
+   SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FPS_COUNTER = 68,
+-  SHAAR_DEVTOOLS_NETWORK_SET_CACHE_DISABLED = 69
++  SHAAR_DEVTOOLS_NETWORK_SET_CACHE_DISABLED = 69,
++  SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE = 70,
++  SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE = 71
+ } shaar_devtools_command;
+ typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
+ // END devtools command and module IDs.

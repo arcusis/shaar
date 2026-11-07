@@ -389,7 +389,12 @@ final class ShaarDevToolsModel {
   var sensorTouch = false
   /// shaar.20 rejects Emulation.setTouchEmulationEnabled. The engine patch owns the live toggle.
   var sensorTouchReady = false
+  var sensorIdle: ShaarDevToolsSensorIdle = .system
+  /// Turned on when a probe shows the engine accepts Emulation.clearIdleOverride.
+  var sensorIdleReady = false
   var sensorNotice: ShaarDevToolsSensorNotice?
+  @ObservationIgnored var idleProbeFinished = false
+  @ObservationIgnored var idleProbeInFlight = false
   @ObservationIgnored var sensorFixture: (@MainActor (ShaarDevToolsSensorCommand) -> Void)?
   @ObservationIgnored var sendSensorCommand:
     (@MainActor (ShaarDevToolsSensorCommand) async throws -> Void)?

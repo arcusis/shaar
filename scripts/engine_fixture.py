@@ -584,6 +584,9 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if path == '/shaar-issues-missing':
+            self.send_error(404, 'Shaar issues fixture')
+            return
         if path == '/profile-privacy-cache':
             body = str(time.time_ns()).encode('ascii')
             self.send_response(200)

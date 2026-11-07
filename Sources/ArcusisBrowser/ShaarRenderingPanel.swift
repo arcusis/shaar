@@ -109,7 +109,8 @@ struct ShaarRenderingPanel: View {
     }
   }
 
-  private func overlayToggle(_ title: String, isOn: Binding<Bool>, identifier: String) -> some View {
+  private func overlayToggle(_ title: String, isOn: Binding<Bool>, identifier: String) -> some View
+  {
     Toggle(ShellL10n.string(title), isOn: isOn)
       .font(.system(size: 12))
       .disabled(!overlayEnabled)

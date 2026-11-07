@@ -18,4 +18,21 @@ struct RendererCaptureEvidenceTests {
       ARCProbePNGFromDevToolsResult(
         ["data": String(repeating: "A", count: 44 * 1024 * 1024 + 1)]) == nil)
   }
+
+  @Test func popupProbeIdentifiesOneLowercaseHostAndEncodesItsValue() {
+    let popupID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    #expect(ARCProbePopupIdentifier(popupID))
+    #expect(!ARCProbePopupIdentifier(popupID.uppercased()))
+    #expect(!ARCProbePopupIdentifier("not-a-popup"))
+    #expect(!ARCProbePopupIdentifier(""))
+    #expect(ARCProbePopupExpression("window.probeState"))
+    #expect(!ARCProbePopupExpression(""))
+    #expect(!ARCProbePopupExpression(String(repeating: "a", count: 8193)))
+    #expect(
+      ARCProbeEvaluationJSON([
+        "result": ["type": "object", "value": ["serviceWorker": true]]
+      ]) == "{\"serviceWorker\":true}")
+    #expect(ARCProbeEvaluationJSON(["result": ["type": "object"], "exceptionDetails": [:]]) == nil)
+    #expect(ARCProbeEvaluationJSON([:]) == nil)
+  }
 }

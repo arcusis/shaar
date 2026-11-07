@@ -35,3 +35,7 @@ void ARCSetPictureInPictureWindowObserver(ARCPictureInPictureWindowObserver obse
                        windowID:(NSString *)windowID contextID:(NSString *)contextID
                      completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion;
 @end
+
+@interface ARCShaarRuntime (ExtensionPopupOwner)
+- (nullable NSDictionary *)shaarExtensionPopupOwnerForID:(NSString *)popupID;
+@end

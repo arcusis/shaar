@@ -272,6 +272,35 @@ NSArray<NSDictionary *> *ARCProbeTracePrivateSelection(
   return [calls copy];
 }
 
+BOOL ARCProbePopupIdentifier(NSString *popupID) {
+  if (popupID.length != 36) return NO;
+  for (NSUInteger index = 0; index < popupID.length; index++) {
+    unichar character = [popupID characterAtIndex:index];
+    BOOL dashSlot = index == 8 || index == 13 || index == 18 || index == 23;
+    if (dashSlot) {
+      if (character != '-') return NO;
+      continue;
+    }
+    if (character < '0' || (character > '9' && character < 'a') || character > 'f') return NO;
+  }
+  return YES;
+}
+
+BOOL ARCProbePopupExpression(NSString *script) {
+  return script.length > 0 && script.length <= 8192;
+}
+
+NSString *ARCProbeEvaluationJSON(NSDictionary *result) {
+  if (![result isKindOfClass:NSDictionary.class] || result[@"exceptionDetails"]) return nil;
+  NSDictionary *remote = [result[@"result"] isKindOfClass:NSDictionary.class]
+      ? result[@"result"] : nil;
+  id value = remote[@"value"];
+  if (!value) return nil;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value
+                                             options:NSJSONWritingFragmentsAllowed error:nil];
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+}
+
 NSData *ARCProbePNGFromDevToolsResult(NSDictionary *result) {
   NSString *encoded = result[@"data"];
   if (![encoded isKindOfClass:NSString.class] || encoded.length > 44 * 1024 * 1024)
@@ -1066,6 +1095,26 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
 
 @end
 
+static const shaar_operation kProbePopupEvaluateOperation = static_cast<shaar_operation>(1095);
+static const shaar_operation kProbePopupCaptureOperation = static_cast<shaar_operation>(1096);
+
+static NSDictionary *ProbePopupOwner(ARCShaarRuntime *runtime, NSString *popupID) {
+  if (!ProbeCaptureAllowed() || !ARCProbePopupIdentifier(popupID)) return nil;
+  NSDictionary *owner = [runtime shaarExtensionPopupOwnerForID:popupID];
+  if (![owner isKindOfClass:NSDictionary.class]) return nil;
+  NSString *tabID = owner[@"tabID"];
+  NSString *windowID = owner[@"windowID"];
+  id selected = ProbeTable(runtime, "_shaarSelectedTabs")[windowID];
+  if (![selected isEqual:tabID]) return nil;
+  if (ARCPrivateShaarState(runtime)[@"tabs"][tabID]) return nil;
+  NSView *view = [runtime viewForExtensionPopupID:popupID];
+  if (!view.window || view.window.isVisible) return nil;
+  for (NSWindow *window in NSApp.windows) {
+    if (window.isVisible) return nil;
+  }
+  return owner;
+}
+
 @implementation ARCShaarRuntime (Verification)
 - (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
   if (!ProbeCaptureAllowed()) return nil;
@@ -1149,6 +1198,57 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
           completion(NO);
         });
       }];
+}
+
+- (void)evaluateProbePopupID:(NSString *)popupID script:(NSString *)script
+                 completion:(void (^)(NSString *))completion {
+  if (!completion) return;
+  NSDictionary *owner = ProbePopupOwner(self, popupID);
+  if (!owner || !ARCProbePopupExpression(script)) {
+    completion(nil);
+    return;
+  }
+  NSString *tabID = owner[@"tabID"];
+  NSString *profileID = owner[@"profileID"];
+  NSString *windowID = owner[@"windowID"];
+  __weak ARCShaarRuntime *weakRuntime = self;
+  [self shaarDevToolsSubmit:kProbePopupEvaluateOperation tabID:tabID profileID:profileID
+                  windowID:windowID
+                   payload:@{@"schemaVersion": @1, @"popupId": popupID, @"expression": script}
+                completion:^(NSDictionary *reply, NSError *error) {
+    ARCShaarRuntime *runtime = weakRuntime;
+    NSDictionary *current = runtime ? ProbePopupOwner(runtime, popupID) : nil;
+    if (error || ![current isEqualToDictionary:owner]) {
+      completion(nil);
+      return;
+    }
+    completion(ARCProbeEvaluationJSON(reply));
+  }];
+}
+
+- (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData *))completion {
+  if (!completion) return;
+  NSDictionary *owner = ProbePopupOwner(self, popupID);
+  if (!owner) {
+    completion(nil);
+    return;
+  }
+  NSString *tabID = owner[@"tabID"];
+  NSString *profileID = owner[@"profileID"];
+  NSString *windowID = owner[@"windowID"];
+  __weak ARCShaarRuntime *weakRuntime = self;
+  [self shaarDevToolsSubmit:kProbePopupCaptureOperation tabID:tabID profileID:profileID
+                  windowID:windowID
+                   payload:@{@"schemaVersion": @1, @"popupId": popupID}
+                completion:^(NSDictionary *reply, NSError *error) {
+    ARCShaarRuntime *runtime = weakRuntime;
+    NSDictionary *current = runtime ? ProbePopupOwner(runtime, popupID) : nil;
+    if (error || ![current isEqualToDictionary:owner]) {
+      completion(nil);
+      return;
+    }
+    completion(ARCProbePNGFromDevToolsResult(reply));
+  }];
 }
 
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID

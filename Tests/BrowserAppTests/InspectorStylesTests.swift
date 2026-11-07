@@ -10,7 +10,7 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorStylesTests {
-  @Test func authoredDeclarationsPreserveFallbacksAndExcludeExpandedShorthands() {
+  @Test func authoredDeclarationsPreserveFallbacksAndKeepDisabledRows() {
     let inspector = makeInspector()
     let rows = inspector.styles.declarations([
       "styleSheetId": "sheet",
@@ -22,9 +22,51 @@ import Testing
         ["name": "margin-top", "value": "4px"],
       ],
     ])
-    #expect(rows.map(\.name) == ["display", "display"])
-    #expect(rows.map(\.value) == ["block", "grid !important"])
-    #expect(Set(rows.map(\.id)).count == 2)
+    #expect(rows.map(\.name) == ["display", "display", "color"])
+    #expect(rows.map(\.value) == ["block", "grid !important", "red"])
+    #expect(rows.map(\.disabled) == [false, false, true])
+    #expect(rows.map(\.plainValue) == ["block", "grid", "red"])
+    #expect(Set(rows.map(\.id)).count == 3)
+  }
+
+  @Test func mutedDeclarationsRejoinTheMatchingRule() {
+    let inspector = makeInspector()
+    let author = InspectorRule(
+      id: 1, selector: "button", source: "http://127.0.0.1/inspector#style-1:2",
+      declarations: [.init(name: "color", value: "white")],
+      origin: .author, editable: true, matchText: "color: white;")
+    let inherited = InspectorRule(
+      id: 2, selector: "button", source: "http://127.0.0.1/inspector#style-1:8",
+      declarations: [.init(name: "color", value: "black")],
+      origin: .author, editable: false, matchText: "color: black;", note: "Inherited")
+    let merged = inspector.styles.mergingMuted(
+      [
+        [
+          "selector": "button", "property": "outline-offset", "value": "4px",
+          "matchText": "color: white;",
+        ],
+        ["selector": "element.style", "property": "margin", "value": "1px"],
+      ], into: [inherited, author])
+    #expect(merged[0].selector == "element.style")
+    #expect(merged[0].editable)
+    #expect(merged[0].origin == .inline)
+    #expect(merged[0].declarations.map(\.name) == ["margin"])
+    #expect(merged[0].declarations[0].disabled)
+    let button = merged.first { $0.id == 1 }
+    #expect(button?.declarations.contains { $0.name == "outline-offset" && $0.disabled } == true)
+    #expect(merged.first { $0.id == 2 }?.declarations.map(\.name) == ["color"])
+    let inline = InspectorRule(
+      id: 0, selector: "element.style", source: "Inline overrides",
+      declarations: [.init(name: "color", value: "red")], origin: .inline, editable: true)
+    let kept = inspector.styles.mergingMuted(
+      [["selector": "element.style", "property": "margin", "value": "1px"]], into: [inline])
+    #expect(kept.count == 1)
+    #expect(kept[0].declarations.map(\.name) == ["color", "margin"])
+    let present = inspector.styles.mergingMuted(
+      [["selector": "button", "property": "color", "value": "red", "matchText": "color: white;"]],
+      into: [author])
+    #expect(present[0].declarations.map(\.name) == ["color"])
+    #expect(present[0].declarations[0].disabled == false)
   }
 
   @Test func layoutAndExportsUseCurrentValidatedSnapshot() async throws {

@@ -88,6 +88,30 @@ async function serve() {
   assert.equal(await page.locator('#save').evaluate(el => getComputedStyle(el).padding), '30px');
   assert.equal((await page.evaluate(() => globalThis.__shaarInspectorStyles.undo())).ok, true);
   assert.equal(await page.locator('#save').getAttribute('style'), null);
+  const ruleEdit = await page.evaluate(({ id, selector, matchText }) => globalThis.__shaarInspectorStyles.editRule(id, selector, matchText, 'outline-offset', '3px', ''), {
+    id: selected.id, selector: authored.selectorList.text, matchText: authored.style.cssText,
+  });
+  assert.equal(ruleEdit.ok, true);
+  assert.equal(await page.locator('#save').evaluate(el => getComputedStyle(el).outlineOffset), '3px');
+  const turnedOff = await page.evaluate(({ id, selector, matchText }) => globalThis.__shaarInspectorStyles.setEnabled(id, selector, matchText, 'outline-offset', false), {
+    id: selected.id, selector: authored.selectorList.text, matchText: ruleEdit.matchText,
+  });
+  assert.equal(turnedOff.ok, true);
+  assert.equal(await page.locator('#save').evaluate(el => getComputedStyle(el).outlineOffset), '0px');
+  assert.equal((await page.evaluate(() => globalThis.__shaarInspectorStyles.mutedRows())).some(row => row.property === 'outline-offset'), true);
+  const turnedOn = await page.evaluate(({ id, selector, matchText }) => globalThis.__shaarInspectorStyles.setEnabled(id, selector, matchText, 'outline-offset', true), {
+    id: selected.id, selector: authored.selectorList.text, matchText: turnedOff.matchText,
+  });
+  assert.equal(turnedOn.ok, true);
+  assert.equal(await page.locator('#save').evaluate(el => getComputedStyle(el).outlineOffset), '3px');
+  const added = await page.evaluate(id => globalThis.__shaarInspectorStyles.addRule(id, '#save'), selected.id);
+  assert.equal(added.ok, true);
+  assert.match((await page.evaluate(id => globalThis.__shaarInspectorStyles.addRule(id, 'div{color:red}'), selected.id)).error, /Invalid selector/);
+  while ((await page.evaluate(() => globalThis.__shaarInspectorStyles.undoDepth())) > 0) {
+    assert.equal((await page.evaluate(() => globalThis.__shaarInspectorStyles.undo())).ok, true);
+  }
+  assert.equal(await page.locator('#save').evaluate(el => getComputedStyle(el).outlineOffset), '0px');
+  assert.equal(await page.locator('#save').getAttribute('style'), null);
   assert.match((await page.evaluate(id => globalThis.__shaarInspectorStyles.edit(id, 'padding', 'invalid-css', ''), selected.id)).error, /support/);
   await page.keyboard.down('Alt');
   await page.locator('#next').hover({ force: true });

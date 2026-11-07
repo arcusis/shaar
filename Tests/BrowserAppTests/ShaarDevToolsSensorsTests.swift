@@ -113,9 +113,33 @@ import Testing
   #expect(!ShaarDevToolsSensorCapability.isMissing(missingFields))
   #expect(!ShaarDevToolsSensorCapability.isMissing(gone))
   #expect(ShaarDevToolsSensorCapability.targetGone(gone))
-  #expect(ShaarDevToolsSensorCapability.targetGone(
-    SensorSampleError(errorDescription: "The page changed before the command finished.")))
+  #expect(
+    ShaarDevToolsSensorCapability.targetGone(
+      SensorSampleError(errorDescription: "The page changed before the command finished.")))
   #expect(!ShaarDevToolsSensorCapability.targetGone(invalid))
+}
+
+@MainActor @Test func idleControlRendersOffscreenBeforeAndAfterTheEngineAcceptsIt() throws {
+  _ = NSApplication.shared
+  #expect(ShaarDevToolsSensorIdle.allCases.map(\.title) == ["System", "Active", "Idle", "Locked"])
+  let model = sensorModel(suite: "ShaarDevToolsSensors.idleRender")
+  let inspector = InspectorModel(target: model.target, engine: nil)
+  model.open(inspector: inspector)
+  model.section = .sensors
+  #expect(!model.sensorIdleReady)
+  let waiting = try VisualCapture.pngOffscreen(
+    ShaarDevToolsSensorsPanel(model: model), size: NSSize(width: 640, height: 520))
+  model.sensorIdleReady = true
+  model.sensorIdle = .locked
+  let ready = try VisualCapture.pngOffscreen(
+    ShaarDevToolsSensorsPanel(model: model), size: NSSize(width: 640, height: 480))
+  let panel = try VisualCapture.pngOffscreen(
+    ShaarDevToolsPanel(model: model, inspector: inspector, openChromium: {}),
+    size: NSSize(width: 850, height: 620))
+  #expect(!waiting.isEmpty)
+  #expect(!ready.isEmpty)
+  #expect(!panel.isEmpty)
+  model.close()
 }
 
 @MainActor @Test func touchIsRecordedByTheFixtureAndNotSentWhileTheEngineLacksIt() async {

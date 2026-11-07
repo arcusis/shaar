@@ -299,6 +299,19 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
   NSDictionary *info = ShaarExtensionState(self).popupInfo[popupID];
   return info ? [self shaarExtensionPopupViewForID:popupID windowID:info[@"windowID"]] : nil;
 }
+
+- (NSDictionary *)shaarExtensionPopupOwnerForID:(NSString *)popupID {
+  NSDictionary *info = ShaarExtensionState(self).popupInfo[popupID];
+  if (![info isKindOfClass:NSDictionary.class]) return nil;
+  NSString *windowID = info[@"windowID"];
+  NSString *tabID = info[@"tabID"];
+  NSString *profileID = info[@"profileID"];
+  if (![windowID isKindOfClass:NSString.class] || ![tabID isKindOfClass:NSString.class] ||
+      ![profileID isKindOfClass:NSString.class]) return nil;
+  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) return nil;
+  if (![self viewForExtensionPopupID:popupID]) return nil;
+  return @{@"windowID": windowID, @"tabID": tabID, @"profileID": profileID};
+}
 - (void)closeExtensionPopup { [self closeExtensionPopupForWindowID:self.primaryWindowID]; }
 - (void)closeExtensionPopupForWindowID:(NSString *)windowID {
   ARCShaarExtensionState *state = ShaarExtensionState(self);

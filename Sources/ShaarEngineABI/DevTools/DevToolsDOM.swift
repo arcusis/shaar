@@ -192,7 +192,7 @@ public enum ShaarDOMEventRouter {
       event.profileID == Data(scope.profileID.utf8),
       event.sessionID == Data((scope.sessionID ?? "").utf8),
       event.windowID == Data(windowID.utf8), event.tabID == Data(tabID.utf8),
-      event.payloadJSON.count <= 32_768,
+      event.payloadJSON.count <= 65_536,
       let root = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       Set(root.keys) == ["schemaVersion", "kind", "eventID", "leaseID", "data"],
       root["schemaVersion"] as? Int == 1,
@@ -232,7 +232,7 @@ public enum ShaarDOMEventRouter {
     if id == 25 {
       guard keys == ["parentNodeId", "nodes"],
         let parent = positive(fields["parentNodeId"]),
-        let raw = fields["nodes"] as? [[String: Any]], raw.count <= 64
+        let raw = fields["nodes"] as? [[String: Any]], raw.count <= 256
       else { return nil }
       let nodes = raw.compactMap {
         ShaarDOMNode.decode($0, parentID: parent, relation: .child)

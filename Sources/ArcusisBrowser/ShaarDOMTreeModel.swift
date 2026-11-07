@@ -630,8 +630,13 @@ final class ShaarDOMTreeModel {
     guard available, event.sequence > lastSequence else { return }
     lastSequence = event.sequence
     if event.truncated {
-      await loadDocument()
-      return
+      switch event.mutation {
+      case .childrenSet:
+        break // Keep the bounded children instead of losing the expanded tree.
+      default:
+        await loadDocument()
+        return
+      }
     }
     switch event.mutation {
     case .documentUpdated:
@@ -667,8 +672,9 @@ final class ShaarDOMTreeModel {
         removeDescendants(of: id)
       }
       for child in children { nodes[child.id] = child }
+      let count = event.truncated ? max(parentNode.childCount, children.count) : children.count
       nodes[parent] = parentNode.replacing(
-        childCount: children.count, childrenIDs: children.map(\.id) + special)
+        childCount: count, childrenIDs: children.map(\.id) + special)
     case .attributeModified(let id, let name, let value):
       guard let node = nodes[id] else { return }
       var attributes = node.attributes.filter { $0.name != name }

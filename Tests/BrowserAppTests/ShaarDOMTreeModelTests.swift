@@ -629,6 +629,20 @@ enum ShaarDOMFixtureDocument {
     model.close()
   }
 
+  @Test func truncatedChildrenKeepTheExpandedTree() async {
+    let fixture = DOMFixtureTransport()
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    fixture.send(
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":25,"leaseID":7,"data":{"parentNodeId":4,"nodes":[{"nodeId":9,"nodeType":1,"nodeName":"P","nodeValue":""}],"truncated":true}}"#)
+    for _ in 0..<20 where model.nodes[9] == nil { await Task.yield() }
+    #expect(model.rootID == 1)
+    #expect(model.nodes[4]?.childrenIDs.contains(9) == true)
+    #expect(model.nodes[9] != nil)
+    model.close()
+  }
+
   @Test func copyPathsMatchInspectorForALaterSibling() async {
     let fixture = DOMFixtureTransport()
     fixture.document = laterSiblingDocument()

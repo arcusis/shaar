@@ -1259,11 +1259,9 @@ private struct ShaarDevToolsCSSCountRow: View {
           .font(.system(size: 12, design: .monospaced))
           .lineLimit(1)
         Spacer(minLength: 8)
-        Text(
-          ShellL10n.format("%1$@ declarations", arguments: [.string(String(count))])
-        )
-        .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(.secondary)
+        Text(declarationCountLabel)
+          .font(.system(size: 11, design: .monospaced))
+          .foregroundStyle(.secondary)
       }
       .padding(.horizontal, 8)
       .padding(.vertical, 4)
@@ -1274,6 +1272,11 @@ private struct ShaarDevToolsCSSCountRow: View {
     }
     .buttonStyle(.plain)
     .accessibilityIdentifier(identifier)
+  }
+
+  private var declarationCountLabel: String {
+    let key = count == 1 ? "%1$@ declaration" : "%1$@ declarations"
+    return ShellL10n.format(key, arguments: [.string(String(count))])
   }
 
   @ViewBuilder private var swatch: some View {

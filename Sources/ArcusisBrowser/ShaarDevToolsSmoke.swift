@@ -1124,6 +1124,21 @@ import Vision
     }
     reportCSSOverview(shell, finished: finished, report: report)
     captureCSSOverview(context, report: report)
+    reportCSSDeclarationLabel(context, report: report)
+  }
+
+  private static func reportCSSDeclarationLabel(
+    _ context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
+  ) {
+    let painted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
+    let singular = painted.range(of: "\\b1 declaration\\b(?!s)", options: .regularExpression) != nil
+    if singular {
+      report.pass("css-declaration-label", "One-count CSS rows use the singular label")
+    } else {
+      report.fail(
+        "css-declaration-label", "One-count CSS rows did not show '1 declaration'",
+        severity: .polish)
+    }
   }
 
   private static func cssOverviewSettled(_ shell: ShaarDevToolsModel) async -> Bool {
@@ -1493,6 +1508,7 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "recorder": return ("Recorder", "Record and stop")
     case "rendering-paint": return ("Rendering", "Paint flashing")
     case "css-overview": return ("CSS overview", "Reload")
+    case "css-declaration-label": return ("CSS overview", "Declaration label")
     case "command-menu": return ("Chrome", "Command menu")
     case "settings": return ("Chrome", "Settings")
     case "resize": return ("Chrome", "Resize split")

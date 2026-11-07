@@ -70,6 +70,7 @@ final class InspectorProbe {
         && (after.width < before.width || after.height < before.height)
     }
     try await proveLayoutOverlays(model)
+    try await proveAccessibleName(model)
     try expect(
       await pointer(model, selector: "#save", click: false),
       "trusted pointer hovers the authored element")
@@ -563,6 +564,71 @@ final class InspectorProbe {
       """)
     await model.pick()?.value
     try await wait("layout probe returns to picking") { model.mode == .picking }
+  }
+
+  private func proveAccessibleName(_ model: InspectorModel) async throws {
+    model.tab = .accessibility
+    try await lockForName(model, selector: "h1")
+    try await wait("heading locks for its accessible name") {
+      model.selection?.locked == true && model.selection?.tag == "h1"
+    }
+    await model.details.refresh(force: true)
+    let heading = model.details.accessibility
+    try expect(
+      model.details.failure == nil && heading?.name == "Inspect the details."
+        && heading?.nameSource == "From the element's text",
+      "heading name comes from its text (name \(heading?.name ?? "none"), source \(heading?.nameSource ?? "none"), \(model.details.failure ?? "ok"))"
+    )
+    try await lockForName(model, selector: "#labelled")
+    try await wait("labelled button locks") {
+      model.selection?.locked == true && model.selection?.identifier == "labelled"
+    }
+    await model.details.refresh(force: true)
+    let labelled = model.details.accessibility
+    let labelledRatio = model.selection?.contrast
+    try expect(
+      model.details.failure == nil && labelled?.name == "Apply the form"
+        && labelled?.nameSource == "From aria-label"
+        && labelled?.nameSource != heading?.nameSource,
+      "aria-label button names a different source (name \(labelled?.name ?? "none"), source \(labelled?.nameSource ?? "none"), \(model.details.failure ?? "ok"))"
+    )
+    try await lockForName(model, selector: "#save")
+    try await wait("save button locks for contrast") {
+      model.selection?.locked == true && model.selection?.identifier == "save"
+    }
+    let saveText = model.selection?.contrast.map(InspectorContrastLine.ratioText)
+    let labelledText = labelledRatio.map(InspectorContrastLine.ratioText)
+    try expect(
+      model.selection?.contrastLimit == nil && saveText == labelledText && saveText == "5.17:1"
+        && model.selection?.contrastGrade == "AA",
+      "solid button contrast matches Design (\(saveText ?? "none"))")
+    try await lockForName(model, selector: "#gradient")
+    try await wait("gradient locks") {
+      model.selection?.locked == true && model.selection?.identifier == "gradient"
+    }
+    try expect(
+      model.selection?.contrast == nil
+        && model.selection?.contrastLimit == "Image or gradient behind text",
+      "gradient contrast is the Design limitation")
+    try await lockForName(model, selector: "#labelled")
+    try await wait("labelled button returns for capture") {
+      model.selection?.locked == true && model.selection?.identifier == "labelled"
+    }
+    await model.details.refresh(force: true)
+    try expect(
+      model.details.accessibility?.nameSource == "From aria-label"
+        && model.selection?.contrast != nil
+        && model.selection?.contrastLimit == nil,
+      "the accessibility capture shows the name source and contrast")
+    try await capture(model, stem: "\(phase)-inspector-name")
+    model.tab = .design
+    await model.pick()?.value
+    try await wait("name probe returns to picking") { model.mode == .picking }
+  }
+
+  private func lockForName(_ model: InspectorModel, selector: String) async throws {
+    _ = try await model.evaluate(
+      "globalThis.__shaarInspectorV2.select(document.querySelector(\(json(selector))))")
   }
 
   private func styles(_ model: InspectorModel) async throws {

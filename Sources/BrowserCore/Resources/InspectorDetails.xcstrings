@@ -292,6 +292,70 @@
         }
       }
     },
+    "From the element's text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From the element's text"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מתוך הטקסט של האלמנט"
+          }
+        }
+      }
+    },
+    "From aria-label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From aria-label"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מתוך aria-label"
+          }
+        }
+      }
+    },
+    "From aria-labelledby": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From aria-labelledby"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מתוך aria-labelledby"
+          }
+        }
+      }
+    },
+    "From a label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From a label"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מתוך תווית"
+          }
+        }
+      }
+    },
     "In tree": {
       "localizations": {
         "en": {

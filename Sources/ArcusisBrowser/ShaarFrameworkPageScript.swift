@@ -45,12 +45,25 @@ enum ShaarFrameworkPageScript {
         if (kind === "string" || kind === "number" || kind === "boolean") return clip(value, 120);
         return null;
       }
+      function ownProperty(object, key) {
+        try { return Object.getOwnPropertyDescriptor(object, key); }
+        catch (error) { return null; }
+      }
+      function isAccessor(descriptor) {
+        return descriptor && !Object.prototype.hasOwnProperty.call(descriptor, "value");
+      }
       function objectSummary(value) {
         const summary = {};
         const keys = Object.keys(value);
         for (let index = 0; index < keys.length && index < 8; index += 1) {
-          const item = primitive(value[keys[index]]);
-          if (item != null) summary[keys[index]] = value[keys[index]];
+          const key = keys[index];
+          const descriptor = ownProperty(value, key);
+          if (!descriptor) continue;
+          if (isAccessor(descriptor)) {
+            summary[key] = "[Accessor]";
+          } else if (primitive(descriptor.value) != null) {
+            summary[key] = descriptor.value;
+          }
         }
         try { return JSON.stringify(summary); } catch (error) { return "{…}"; }
       }
@@ -61,7 +74,9 @@ enum ShaarFrameworkPageScript {
         if (Array.isArray(value)) {
           const parts = [];
           for (let index = 0; index < value.length && parts.length < 8; index += 1) {
-            const item = primitive(value[index]);
+            const descriptor = ownProperty(value, String(index));
+            const item = isAccessor(descriptor)
+              ? "[Accessor]" : primitive(descriptor && descriptor.value);
             if (item != null) parts.push(item);
           }
           return clip("[" + parts.join(", ") + "]", 120);
@@ -76,7 +91,9 @@ enum ShaarFrameworkPageScript {
         for (let index = 0; index < keys.length && result.length < 12; index += 1) {
           const name = keys[index];
           if (skipped[name] || name.charAt(0) === "_") continue;
-          const text = fieldValue(object[name]);
+          const descriptor = ownProperty(object, name);
+          if (!descriptor) continue;
+          const text = isAccessor(descriptor) ? "[Accessor]" : fieldValue(descriptor.value);
           if (text == null) continue;
           result.push({ name: clip(name, 40), value: text });
         }

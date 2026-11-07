@@ -25,6 +25,32 @@ import Testing
     try expectTree(snapshot, framework: .react, components: FrameworkFixture.reactComponents)
   }
 
+  @Test func componentSnapshotDoesNotInvokePropAccessors() throws {
+    let context = try FrameworkFixture.context(script: "react.js")
+    context.evaluateScript(
+      """
+      globalThis.inspectorGetterCalls = 0;
+      const counter = document.getElementById('react-app')
+        ['__reactContainer$fixture'].current.child.child.sibling;
+      const getter = () => { globalThis.inspectorGetterCalls += 1; return 'unexpected'; };
+      Object.defineProperty(counter.memoizedProps, 'lazy', { enumerable: true, get: getter });
+      const nested = {};
+      Object.defineProperty(nested, 'danger', { enumerable: true, get: getter });
+      counter.memoizedProps.nested = nested;
+      const list = [1];
+      Object.defineProperty(list, '1', { enumerable: true, get: getter });
+      counter.memoizedProps.list = list;
+      """)
+    try FrameworkFixture.requireClean(context)
+    let snapshot = try FrameworkFixture.snapshot(in: context)
+    let counter = try #require(snapshot.nodes.first { $0.name == "Counter" })
+    let props = Dictionary(uniqueKeysWithValues: counter.props.map { ($0.name, $0.value) })
+    #expect(props["lazy"] == "[Accessor]")
+    #expect(props["nested"] == "{\"danger\":\"[Accessor]\"}")
+    #expect(props["list"] == "[1, [Accessor]]")
+    #expect(context.evaluateScript("globalThis.inspectorGetterCalls")?.toInt32() == 0)
+  }
+
   @Test func plainPageHasNoFrameworkTree() throws {
     let snapshot = try FrameworkFixture.snapshot(script: nil)
     #expect(snapshot.framework == nil)

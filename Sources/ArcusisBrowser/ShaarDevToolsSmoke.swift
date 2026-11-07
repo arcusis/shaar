@@ -120,7 +120,7 @@ import Vision
     }
     prepareDock(shell, context: context)
     await settle(context)
-    await walkPanels(shell: shell, context: context, report: report)
+    await walkPanels(shell: shell, inspector: inspector, context: context, report: report)
     await exerciseActions(
       shell: shell, inspector: inspector, context: context, host: host, pageURL: pageURL,
       report: report)
@@ -230,7 +230,8 @@ import Vision
   }
 
   private static func walkPanels(
-    shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
+    shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
   ) async {
     report.note(
       "painted-text",
@@ -263,6 +264,9 @@ import Vision
       recordTab(section, pressed: pressed && shell.section == section, painted: painted, report: report)
       recordSidebarTitle(painted, report: report)
       await provePanel(section, shell: shell, context: context, painted: painted, report: report)
+      if section == .components {
+        await proveComponentAccessors(shell, inspector: inspector, report: report)
+      }
       ShaarDevToolsSmokeLook.survey(
         panel: section.rawValue, contentIdentifier: content, in: context.hosting,
         failure: panelFailure(section, shell: shell), report: report)
@@ -282,6 +286,23 @@ import Vision
         severity: .polish)
     }
     await proveIssueBadge(shell, context: context, report: report)
+  }
+
+  private static func proveComponentAccessors(
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel, report: ShaarDevToolsSmokeReport
+  ) async {
+    _ = await wait(attempts: 40) { shell.framework.inspected && !shell.framework.loading }
+    let summary = shell.framework.nodes.flatMap(\.props)
+      .first { $0.name == "accessorProbe" }?.value
+    let calls = (try? await inspector.evaluate("globalThis.inspectorGetterCalls || 0")) as? Int
+    if summary?.contains("[Accessor]") == true, calls == 0 {
+      report.pass("components-accessors", "Props show [Accessor] without running the page getter")
+    } else {
+      report.fail(
+        "components-accessors",
+        "Accessor summary: \(summary ?? "missing"); getter calls: \(calls.map(String.init) ?? "unknown")",
+        severity: .broken)
+    }
   }
 
   private static func recordSidebarTitle(
@@ -1661,6 +1682,7 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "rendering-paint": return ("Rendering", "Paint flashing")
     case "css-overview": return ("CSS overview", "Reload")
     case "css-declaration-label": return ("CSS overview", "Declaration label")
+    case "components-accessors": return ("Components", "Read accessor props")
     case "command-menu": return ("Chrome", "Command menu")
     case "settings": return ("Chrome", "Settings")
     case "resize": return ("Chrome", "Resize split")

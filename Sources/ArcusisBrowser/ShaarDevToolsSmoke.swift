@@ -14,7 +14,8 @@ import Vision
 @MainActor enum ShaarDevToolsSmoke {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
     guard let pageURL, pageURL.host == "127.0.0.1", pageURL.scheme == "http" else { return 2 }
-    let root = outputURL.deletingLastPathComponent().appending(path: "profile")
+    let smokeRoot = outputURL.deletingLastPathComponent()
+    let root = pageURL.query == "vitalsOnly=1" ? smokeRoot : smokeRoot.appending(path: "profile")
     let keys = ShaarDevToolsSmokeKeys()
     do {
       let guardWindow = try ShaarDevToolsSmokeWindowGuard.install()
@@ -79,6 +80,10 @@ import Vision
       return
     }
     report.pass("page", target.url.absoluteString)
+    if pageURL.query == "vitalsOnly=1" {
+      await exerciseVitalsOnly(host: host, context: context, target: target, report: report)
+      return
+    }
     guard await openWithF12(context: context, report: report) else { return }
     guard let shell = context.engine.shaarDevTools[target.tabID],
       let inspector = context.engine.inspectors[target.tabID]
@@ -128,6 +133,76 @@ import Vision
       report.pass("quit-open", "DevTools is still open when the app quits")
     } else {
       report.fail("quit-open", "DevTools closed before quit")
+    }
+  }
+
+  private static func exerciseVitalsOnly(
+    host: NativeBrowserHost, context: NativeBrowserContext, target: SiteControlTarget,
+    report: ShaarDevToolsSmokeReport
+  ) async {
+    guard let runtime = context.engine.runtime as? ARCShaarRuntime else {
+      report.fail("performance-vitals", "The Shaar runtime is unavailable")
+      return
+    }
+    let developer = context.engine.developerModel(for: target)
+    do {
+      developer.setPerformanceEnabled(true)
+      _ = await wait(attempts: 30) { !developer.applying }
+      try await developer.refreshPerformance()
+      _ = try await developer.evaluate(
+        "document.getElementById('performance-input').scrollIntoView({block:'center'})")
+      await settle(context)
+      var clicked = false
+      var trusted = false
+      for _ in 0..<3 {
+        clicked = await withCheckedContinuation { continuation in
+          runtime.submitTrustedProbeClick(
+            inTabID: target.tabID.uuidString, elementID: "performance-input"
+          ) { continuation.resume(returning: $0) }
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        trusted = try await developer.evaluate("window.__qaTrustedInput===true") as? Bool == true
+        if trusted { break }
+      }
+      try await developer.refreshPerformance()
+      let snapshot = developer.performanceSnapshot
+      guard await openWithF12(context: context, report: report),
+        let shell = context.engine.shaarDevTools[target.tabID]
+      else {
+        report.fail("performance-vitals", "The Performance panel did not open")
+        return
+      }
+      _ = await wait(attempts: 80) { shell.phase2.available || shell.nativePhase2Failure != nil }
+      let selected = ShaarDevToolsSmokeAccess.press(
+        identifier: "shaar.devtools.performance", in: context.hosting)
+      if !selected || shell.section != .performance { shell.section = .performance }
+      await settle(context)
+      if shell.phase2.available { await shell.performance.refresh() }
+      if let snapshot { shell.performance.updatePageSnapshot(snapshot) }
+      let capture = report.directory.appending(path: "panel-performance-vitals.png")
+      if !ShaarDevToolsSmokeAccess.capture(context.hosting, to: capture) {
+        report.fail("capture-Performance", "Offscreen Performance capture failed")
+      }
+      let lcp = shell.performance.lcpMilliseconds
+      let inp = shell.performance.inpMilliseconds
+      if clicked, trusted, let lcp, let inp, shell.phase2.available {
+        report.pass("performance-vitals", "LCP=\(lcp)ms INP=\(inp)ms trusted=true")
+      } else {
+        let lcpText = lcp.map { String($0) } ?? "unavailable"
+        let inpText = inp.map { String($0) } ?? "unavailable"
+        let detail =
+          "LCP=\(lcpText) INP=\(inpText) clicked=\(clicked) trusted=\(trusted) "
+          + "phase2=\(shell.phase2.available)"
+        report.fail(
+          "performance-vitals", detail)
+      }
+      if windowsHidden(host) {
+        report.pass("windows", "Every window stayed hidden")
+      } else {
+        report.fail("windows", "A window became visible")
+      }
+    } catch {
+      report.fail("performance-vitals", error.localizedDescription)
     }
   }
 
@@ -1527,6 +1602,7 @@ enum ShaarDevToolsSmokeSeverity: String {
     switch name {
     case "page": return ("Session", "Open fixture")
     case "f12": return ("Session", "Press F12")
+    case "performance-vitals": return ("Performance", "Measure LCP and INP")
     case "stream": return ("Session", "Live stream")
     case "phase2": return ("Session", "Phase 2 lease")
     case "fixture": return ("Session", "Fixture ready")

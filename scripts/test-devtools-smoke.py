@@ -89,6 +89,7 @@ xhr.send();
   }
 })();
 </script></body></html>"""
+VITALS_BUTTON = b"""<button id="performance-input" style="position:fixed;left:240px;top:120px;z-index:10" onclick="window.__qaClickCount=(window.__qaClickCount||0)+1;window.__qaTrustedInput=event.isTrusted;const start=performance.now();while(performance.now()-start<80){}">Save changes</button>"""
 WORKER = b"""self.addEventListener("install", function (event) {
   event.waitUntil(caches.open("qa-cache").then(function (cache) {
     return cache.add("/pixel.png");
@@ -109,7 +110,10 @@ class Fixture(BaseHTTPRequestHandler):
         Fixture.hits.append(self.path.split("?", 1)[0])
         path = self.path.split("?", 1)[0]
         if path in {"/qa", "/qa/"}:
-            self.page(PAGE, "text/html; charset=utf-8", cookie=True)
+            body = PAGE
+            if self.path.endswith("?vitalsOnly=1"):
+                body = PAGE.replace(b"<body>", b"<body>" + VITALS_BUTTON, 1)
+            self.page(body, "text/html; charset=utf-8", cookie=True)
             return
         if path == "/away":
             self.page(AWAY, "text/html; charset=utf-8")
@@ -166,9 +170,14 @@ def relevant(names):
 
 
 @contextmanager
-def disposable_root():
-    root = Path(tempfile.mkdtemp(prefix="shaar-devtools-smoke-"))
+def disposable_root(vitals_only=False):
+    prefix = "arcusis-engine-probe-" if vitals_only else "shaar-devtools-smoke-"
+    root = Path(tempfile.mkdtemp(prefix=prefix))
     try:
+        if vitals_only:
+            marker = root / ".arcusis-probe"
+            marker.write_text("arcusis-engine-probe-v1\n")
+            marker.chmod(0o600)
         yield root
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -338,6 +347,7 @@ def main():
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/devtools-smoke/receipt.json")
     parser.add_argument("--screenshots", type=Path, default=ROOT / "build/devtools-smoke/screenshots")
     parser.add_argument("--rebuild", action="store_true")
+    parser.add_argument("--vitals-only", action="store_true")
     options = parser.parse_args()
     app = ensure_app(options.app.resolve(), options.rebuild)
     executable = app / "Contents/MacOS/ArcusisBrowser"
@@ -348,14 +358,19 @@ def main():
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        with disposable_root() as root:
+        with disposable_root(options.vitals_only) as root:
             home = root / "home"
             home.mkdir()
             report_path = root / "report.json"
             page = f"http://127.0.0.1:{server.server_port}/qa"
+            if options.vitals_only:
+                page += "?vitalsOnly=1"
             environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
             environment["SHAAR_COMPUTED_CAPTURE"] = "1"
-            environment.pop("SHAAR_ENGINE_TESTING", None)
+            if options.vitals_only:
+                environment["SHAAR_ENGINE_TESTING"] = "1"
+            else:
+                environment.pop("SHAAR_ENGINE_TESTING", None)
             stdout_path = root / "stdout.txt"
             stderr_path = root / "stderr.txt"
             stdout_handle = stdout_path.open("w")
@@ -396,9 +411,10 @@ def main():
             steps = report.get("steps", [])
             if not isinstance(steps, list):
                 steps = []
-            ensure_sidebar_title_row(steps)
-            ensure_css_overview_row(steps)
-            ensure_event_listeners_row(steps)
+            if not options.vitals_only:
+                ensure_sidebar_title_row(steps)
+                ensure_css_overview_row(steps)
+                ensure_event_listeners_row(steps)
             for name in crashes:
                 steps.append({
                     "panel": "Session",

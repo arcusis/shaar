@@ -12,7 +12,7 @@ import Foundation
   ) async {
     await roundTwoElements(shell, inspector: inspector, report: report)
     await roundTwoConsole(shell, inspector: inspector, context: context, report: report)
-    await roundTwoSources(shell, pageURL: pageURL, report: report)
+    await roundTwoSources(shell, context: context, pageURL: pageURL, report: report)
     await roundTwoNetwork(shell, pageURL: pageURL, report: report)
     await roundTwoSocketAndWorker(
       shell, inspector: inspector, context: context, pageURL: pageURL, report: report)
@@ -135,7 +135,8 @@ import Foundation
   }
 
   private static func roundTwoSources(
-    _ shell: ShaarDevToolsModel, pageURL: URL, report: ShaarDevToolsSmokeReport
+    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, pageURL: URL,
+    report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .sources
     await shell.sources.refresh()
@@ -160,6 +161,28 @@ import Foundation
     await shell.sources.select(chosen)
     let opened = shell.sources.content?.isEmpty == false && shell.sources.failure == nil
     record(opened, "world2-source-open", "Opened \(chosen.name) from Sources", report: report)
+    let original = shell.sources.resources.first { $0.type == "Original" }
+    if let original {
+      shell.sources.search = original.name
+      let isolated = shell.sources.visibleResources.map(\.url) == [original.url]
+      _ = ShaarDevToolsSmokeAccess.capture(
+        context.hosting, to: report.directory.appending(path: "world-round2-source-map-tree.png"))
+      let clicked = ShaarDevToolsSmokeAccess.pressVisibleText(
+        String(original.name.prefix(8)), in: context.hosting,
+        region: CGRect(x: 0.1, y: 0.05, width: 0.25, height: 0.5))
+      let openedOriginal = await wait(attempts: 80) {
+        shell.sources.selectedURL == original.url && shell.sources.content?.isEmpty == false
+      }
+      record(
+        isolated && clicked && openedOriginal && shell.sources.failure == nil,
+        "world2-source-map-content",
+        "Opened \(original.name) from Original sources: isolated=\(isolated), hiddenClick=\(clicked), content=\(openedOriginal), selected=\(shell.sources.selected?.name ?? "none"), failure=\(shell.sources.failure ?? "none")",
+        report: report)
+      shell.sources.search = ""
+      await shell.sources.select(chosen)
+    } else if shell.sources.content?.contains("sourceMappingURL=") == true {
+      report.fail("world2-source-map-content", "Mapped script has no original source in the tree")
+    }
     if shell.sources.canPrettyPrint {
       let before = shell.sources.displayedContent
       shell.sources.prettyPrint = true

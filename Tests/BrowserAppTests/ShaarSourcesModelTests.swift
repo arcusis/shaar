@@ -348,6 +348,65 @@ import Testing
     #expect(model.sourceFailure == nil)
     phase2.close()
   }
+
+  @Test func sourceMapsAddOriginalFilesWithEmbeddedContent() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://127.0.0.1:3211/")!)
+    let map = #"{"version":3,"sourceRoot":"webpack://_N_E/","sources":["./src/App.vue","./src/main.ts"],"sourcesContent":["<template>App</template>","export const answer: number = 42"]}"#
+    let inline = Data(map.utf8).base64EncodedString()
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return ["items": [["url": "http://127.0.0.1:3211/assets/app.js", "type": "Script"]]]
+      case .resourceContent:
+        return ["items": [], "body": "console.log(1);\n//# sourceMappingURL=data:application/json;base64,\(inline)", "base64Encoded": false]
+      default: return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(phase2: phase2)
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    #expect(model.treeRows.map(\.name).contains("Original sources"))
+    #expect(model.treeRows.map(\.name).contains("App.vue"))
+    #expect(model.treeRows.map(\.name).contains("main.ts"))
+    let original = try #require(model.resources.first { $0.name == "App.vue" })
+    await model.select(original)
+    #expect(model.content == "<template>App</template>")
+    await model.refresh()
+    #expect(model.resources.contains { $0.url == original.url })
+    #expect(model.content == "<template>App</template>")
+    phase2.close()
+  }
+
+  @Test func externalSourceMapLoadsOriginalTypeScript() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return ["items": [["url": "https://example.test/assets/main.js", "type": "Script"]]]
+      case .resourceContent:
+        return ["items": [], "body": "(()=>{})();\n//# sourceMappingURL=main.js.map", "base64Encoded": false]
+      default: return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(
+      phase2: phase2,
+      loadSourceData: { url in
+        #expect(url.absoluteString == "https://example.test/assets/main.js.map")
+        return Data(#"{"version":3,"sources":["../src/main.ts"],"sourcesContent":["const answer: number = 42"]}"#.utf8)
+      })
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    let original = try #require(model.resources.first { $0.name == "main.ts" })
+    await model.select(original)
+    #expect(model.content == "const answer: number = 42")
+    phase2.close()
+  }
 }
 
 @MainActor private func renderSources(

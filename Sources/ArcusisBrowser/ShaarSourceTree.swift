@@ -51,6 +51,7 @@ enum ShaarSourceTree {
   private static func pathParts(_ resource: ShaarSourceResource) -> [String] {
     guard let components = URLComponents(string: resource.url) else { return [resource.name] }
     var parts = components.path.split(separator: "/").map(String.init)
+    if components.scheme == "shaar-original" { parts.insert("Original sources", at: 0) }
     if let host = components.host, !host.isEmpty { parts.insert(host, at: 0) }
     if parts.isEmpty { parts = [resource.name] }
     return parts

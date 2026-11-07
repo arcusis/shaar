@@ -2096,6 +2096,7 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "world2-source-open": return ("Sources", "Open source")
     case "world2-source-pretty": return ("Sources", "Pretty print")
     case "world2-source-map": return ("Sources", "Source map")
+    case "world2-source-map-content": return ("Sources", "Open original source")
     case "world2-network-volume": return ("Network", "100+ requests")
     case "world2-network-filter": return ("Network", "Filter chip")
     case "world2-network-search": return ("Network", "Search")
@@ -2215,6 +2216,18 @@ enum ShaarDevToolsSmokeAccess {
   }
 
   @MainActor static func pressDisclosureText(_ label: String, in root: NSView) -> Bool {
+    pressText(label, onText: false, in: root)
+  }
+
+  @MainActor static func pressVisibleText(
+    _ label: String, in root: NSView, region: CGRect
+  ) -> Bool {
+    pressText(label, onText: true, in: root, region: region)
+  }
+
+  @MainActor private static func pressText(
+    _ label: String, onText: Bool, in root: NSView, region: CGRect? = nil
+  ) -> Bool {
     root.layoutSubtreeIfNeeded()
     guard let window = root.window, !window.isVisible,
       let bitmap = root.bitmapImageRepForCachingDisplay(in: root.bounds)
@@ -2226,11 +2239,18 @@ enum ShaarDevToolsSmokeAccess {
     request.usesLanguageCorrection = false
     let handler = VNImageRequestHandler(cgImage: image, options: [:])
     guard (try? handler.perform([request])) != nil,
-      let row = request.results?.first(where: {
-        $0.topCandidates(1).first?.string.localizedCaseInsensitiveContains(label) == true
+      let row = request.results?.first(where: { result in
+        let center = CGPoint(x: result.boundingBox.midX, y: result.boundingBox.midY)
+        return (region?.contains(center) ?? true)
+          && result.topCandidates(1).first?.string.localizedCaseInsensitiveContains(label) == true
       })
     else { return false }
-    let x = row.boundingBox.minX * root.bounds.width - 12
+    let x: CGFloat
+    if onText {
+      x = row.boundingBox.midX * root.bounds.width
+    } else {
+      x = row.boundingBox.minX * root.bounds.width - 12
+    }
     let imageY = row.boundingBox.midY * root.bounds.height
     let y = root.isFlipped ? root.bounds.height - imageY : imageY
     let point = root.convert(CGPoint(x: x, y: y), to: nil)

@@ -67,6 +67,7 @@ final class ShaarSourcesModel {
   @ObservationIgnored private var generation = 0
   @ObservationIgnored private var contentRevision = 0
   @ObservationIgnored private var lineCache: (revision: Int, pretty: Bool, lines: [Substring])?
+  @ObservationIgnored private var originalContent: [String: String] = [:]
 
   init(
     phase2: ShaarPhase2Model,
@@ -84,6 +85,7 @@ final class ShaarSourcesModel {
   var isDevelopmentPage: Bool {
     DevelopmentPage.detect(url: phase2.target.url).isDevelopmentPage
   }
+  var available: Bool { phase2.available }
   var truncated: Bool { listTruncated || contentTruncated }
 
   var visibleResources: [ShaarSourceResource] {
@@ -204,6 +206,7 @@ final class ShaarSourcesModel {
     contentRevision += 1
     lineCache = nil
     resources.removeAll()
+    originalContent.removeAll()
     selectedURL = nil
     content = nil
     binary = false
@@ -234,12 +237,13 @@ final class ShaarSourcesModel {
     do {
       let reply = try await phase2.execute(.resourceTree)
       guard generation == self.generation else { return }
-      resources = reply.items.compactMap { item in
+      let originals = resources.filter { $0.type == "Original" }
+      resources = (reply.items.compactMap { item in
         guard let url = item.text["url"] else { return nil }
         return ShaarSourceResource(
           url: url, type: item.text["type"] ?? "Other",
           mimeType: item.text["mimeType"] ?? "")
-      }
+      } + originals)
       .sorted { $0.url.localizedStandardCompare($1.url) == .orderedAscending }
       if !resources.contains(where: { $0.url == selectedURL }) {
         selectedURL = resources.first?.url
@@ -366,6 +370,12 @@ final class ShaarSourcesModel {
       binary = loaded.base64Encoded
       contentTruncated = loaded.truncated
       failure = nil
+      if let body = loaded.body, !loaded.base64Encoded,
+        let selected, selected.type.caseInsensitiveCompare("Script") == .orderedSame,
+        let resourceURL = URL(string: url)
+      {
+        await addOriginalSources(from: body, resourceURL: resourceURL, generation: generation)
+      }
     } catch is CancellationError {
       return
     } catch {
@@ -407,6 +417,9 @@ final class ShaarSourcesModel {
   }
 
   private func loadResourceText(url: String) async throws -> LoadedResourceText {
+    if let body = originalContent[url] {
+      return LoadedResourceText(body: body, base64Encoded: false, truncated: false)
+    }
     do {
       let reply = try await phase2.execute(.resourceContent(url: url))
       let decoded = Self.readableText(body: reply.body, base64Encoded: reply.base64Encoded == true)
@@ -423,6 +436,22 @@ final class ShaarSourcesModel {
       return LoadedResourceText(
         body: decoded.body, base64Encoded: decoded.binary, truncated: false)
     }
+  }
+
+  private func addOriginalSources(from body: String, resourceURL: URL, generation: Int) async {
+    guard let originals = try? await ShaarSourceMap.load(
+      from: body, resourceURL: resourceURL, fetch: loadSourceData),
+      generation == self.generation
+    else { return }
+    for original in originals {
+      let isNew = originalContent[original.url] == nil
+      originalContent[original.url] = original.content
+      if isNew {
+        resources.append(ShaarSourceResource(
+          url: original.url, type: "Original", mimeType: original.mimeType))
+      }
+    }
+    resources.sort { $0.url.localizedStandardCompare($1.url) == .orderedAscending }
   }
 
   private func stepContentMatch(_ delta: Int) {

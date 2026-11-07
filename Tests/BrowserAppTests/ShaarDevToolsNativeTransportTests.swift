@@ -85,6 +85,34 @@ import Testing
     #expect(requester.operations.contains(.panelGetResponseBody))
   }
 
+  @Test func sameTabNavigationKeepsPanelLease() async throws {
+    let requester = PanelRequesterFixture()
+    requester.supportsPhase2 = true
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    var stream = transport.messages(for: target).makeAsyncIterator()
+    #expect(await stream.next() == .streamAvailable)
+    let navigated = SiteControlTarget(
+      tabID: target.tabID, profileID: target.profileID,
+      url: URL(string: "https://example.com/details")!)
+    #expect(transport.activeLease(for: navigated) == 7)
+    var phase2 = transport.phase2Messages(for: navigated).makeAsyncIterator()
+    guard case .available? = await phase2.next() else {
+      Issue.record("Navigated tab did not receive the shared Phase 2 lease")
+      return
+    }
+    let reply = try await transport.phase2Command(.resourceTree, for: navigated)
+    #expect(reply.commandID == ShaarDevToolsPhase2Command.resourceTree.id)
+    var dom = transport.domSignals(for: navigated).makeAsyncIterator()
+    guard case .lease(7) = await dom.next() else {
+      Issue.record("Navigated tab did not receive the shared DOM lease")
+      return
+    }
+    let otherProfile = SiteControlTarget(
+      tabID: target.tabID, profileID: UUID(), url: navigated.url)
+    #expect(transport.activeLease(for: otherProfile) == nil)
+  }
+
   @Test func networkHeadersReachTheRequestModel() async throws {
     let transport = ShaarDevToolsNativeTransport(
       requester: PanelRequesterFixture(), windowID: UUID().uuidString)

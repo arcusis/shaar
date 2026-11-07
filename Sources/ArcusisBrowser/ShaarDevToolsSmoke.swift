@@ -13,7 +13,8 @@ import Vision
 /// Walks Shaar DevTools in the shipping app. Windows stay unordered and offscreen.
 @MainActor enum ShaarDevToolsSmoke {
   static func run(
-    frameworkURL: URL, outputURL: URL, pageURL: URL?, realWorld: Bool = false
+    frameworkURL: URL, outputURL: URL, pageURL: URL?, realWorld: Bool = false,
+    spaOnly: Bool = false
   ) -> Int32 {
     guard let pageURL,
       realWorld && ["http", "https"].contains(pageURL.scheme ?? "")
@@ -40,7 +41,7 @@ import Vision
         Task {
           await exercise(
             host: host, pageURL: pageURL, outputURL: outputURL, keys: keys,
-            realWorld: realWorld)
+            realWorld: realWorld, spaOnly: spaOnly)
         }
       }
       return withExtendedLifetime(host) {
@@ -58,7 +59,7 @@ import Vision
 
   private static func exercise(
     host: NativeBrowserHost, pageURL: URL, outputURL: URL, keys: ShaarDevToolsSmokeKeys,
-    realWorld: Bool
+    realWorld: Bool, spaOnly: Bool
   ) async {
     let report = ShaarDevToolsSmokeReport(directory: outputURL.deletingLastPathComponent())
     report.note(
@@ -114,6 +115,11 @@ import Vision
     } else {
       report.fail("phase2", shell.nativePhase2Failure ?? "Phase 2 lease did not connect")
     }
+    if spaOnly {
+      await exerciseSPANavigation(
+        shell: shell, inspector: inspector, context: context, report: report)
+      return
+    }
     if realWorld {
       await exerciseRealWorld(
         shell: shell, inspector: inspector, context: context, host: host,
@@ -148,6 +154,32 @@ import Vision
       report.pass("quit-open", "DevTools is still open when the app quits")
     } else {
       report.fail("quit-open", "DevTools closed before quit")
+    }
+  }
+
+  private static func exerciseSPANavigation(
+    shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
+    report: ShaarDevToolsSmokeReport
+  ) async {
+    let clicked = (try? await inspector.evaluate(
+      "(()=>{const link=document.querySelector('#spa-link');if(!link)return false;link.click();return true})()"))
+      as? Bool == true
+    let navigated = await wait(attempts: 100) {
+      context.engine.siteControlTarget?.url.path == "/details"
+    }
+    let available = await wait(attempts: 100) { shell.phase2.available }
+    if clicked && navigated && available {
+      report.pass("spa-nav", "Next.js Link reached /details and kept the Phase 2 lease")
+    } else {
+      report.fail(
+        "spa-nav",
+        "Link clicked=\(clicked), path changed=\(navigated), lease=\(available), stream=\(shell.streamAvailable), target=\(shell.target.url.absoluteString), phase2 error=\(shell.nativePhase2Failure ?? "none")")
+    }
+    await shell.sources.refresh()
+    if available && shell.sources.failure == nil {
+      report.pass("spa-sources", "Sources command succeeded after Link navigation")
+    } else {
+      report.fail("spa-sources", shell.sources.failure ?? "Sources command lost its lease")
     }
   }
 

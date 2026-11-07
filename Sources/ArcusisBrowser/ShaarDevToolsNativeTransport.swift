@@ -92,7 +92,8 @@ private struct ShaarDOMPanelObserver {
   }
 
   func activeLease(for target: SiteControlTarget) -> UInt32? {
-    guard let session, !session.closed, session.target == target else { return nil }
+    guard let session, !session.closed, session.target.sharesPanelTab(with: target)
+    else { return nil }
     return session.leaseID
   }
 
@@ -199,7 +200,7 @@ private struct ShaarDOMPanelObserver {
     return AsyncStream { continuation in
       domObserver = ShaarDOMPanelObserver(
         token: token, target: target, continuation: continuation)
-      if let session, session.target == target, let leaseID = session.leaseID {
+      if let session, session.target.sharesPanelTab(with: target), let leaseID = session.leaseID {
         continuation.yield(.lease(leaseID))
       }
       continuation.onTermination = { @Sendable [weak self] _ in
@@ -235,8 +236,8 @@ private struct ShaarDOMPanelObserver {
       tabID: tabID, leaseID: leaseID, afterSequence: session.sequence)
     {
       session.sequence = sequence
-      if domObserver?.target == session.target {
-        domObserver?.continuation.yield(.event(dom))
+      if let observer = domObserver, observer.target.sharesPanelTab(with: session.target) {
+        observer.continuation.yield(.event(dom))
       }
       return
     }
@@ -281,8 +282,8 @@ private struct ShaarDOMPanelObserver {
       session.leaseID = leaseID
       failure = nil
       phase2Failure = nil
-      if domObserver?.target == session.target {
-        domObserver?.continuation.yield(.lease(leaseID))
+      if let observer = domObserver, observer.target.sharesPanelTab(with: session.target) {
+        observer.continuation.yield(.lease(leaseID))
       }
       emit(.streamAvailable, to: session)
       emitPhase2(.available, for: session.target)
@@ -336,8 +337,8 @@ private struct ShaarDOMPanelObserver {
   private func close(_ session: ShaarPanelSession) {
     guard !session.closed else { return }
     session.closed = true
-    if domObserver?.target == session.target {
-      domObserver?.continuation.yield(.unavailable)
+    if let observer = domObserver, observer.target.sharesPanelTab(with: session.target) {
+      observer.continuation.yield(.unavailable)
     }
     recordingAvailable = false
     recordingStarting = false
@@ -359,7 +360,7 @@ private struct ShaarDOMPanelObserver {
   }
 
   private func emitPhase2(_ message: ShaarPhase2Message, for target: SiteControlTarget) {
-    for (scope, continuation) in phase2Observers.values where scope == target {
+    for (scope, continuation) in phase2Observers.values where scope.sharesPanelTab(with: target) {
       continuation.yield(message)
     }
   }

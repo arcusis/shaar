@@ -23,6 +23,9 @@ struct SiteControlTarget: Equatable {
   let url: URL
 
   var origin: String? { SiteOrigin.string(for: url) }
+  func sharesPanelTab(with other: Self) -> Bool {
+    tabID == other.tabID && profileID == other.profileID
+  }
   var host: String {
     guard let host = url.host(percentEncoded: false) else { return url.absoluteString }
     guard let port = url.port else { return host }

@@ -26,10 +26,13 @@ public enum BrowserLaunch {
       let framework = frameworks.appending(path: "Chromium Framework.framework")
       let output = URL(fileURLWithPath: arguments[index + 1])
       let page = URL(string: arguments[index + 2])
-      let realWorld = arguments.indices.contains(index + 3) && arguments[index + 3] == "real-world"
+      let mode = arguments.indices.contains(index + 3) ? arguments[index + 3] : "fixture"
+      let spaOnly = mode == "spa-only"
+      let realWorld = mode == "real-world" || spaOnly
       exit(
         ShaarDevToolsSmoke.run(
-          frameworkURL: framework, outputURL: output, pageURL: page, realWorld: realWorld))
+          frameworkURL: framework, outputURL: output, pageURL: page,
+          realWorld: realWorld, spaOnly: spaOnly))
     }
     if let index = arguments.firstIndex(of: "--devtools-capability-probe"),
       arguments.indices.contains(index + 2),

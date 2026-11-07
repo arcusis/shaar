@@ -116,7 +116,7 @@ final class DevToolsRouteProbe {
     }
     if nodePayload["nodeInspectPort"] != nil {
       try await wait("Node frontend attaches to local inspector target") {
-        await self.nodeFrontendTitle(nodeTab)?.contains("shaar-node-inspect-fixture.js") == true
+        await self.nodeFrontendTitle(nodeTab)?.contains("next-dev-server.js") == true
       }
       checks.append("Node frontend attaches to a live local node --inspect target")
     }

@@ -13,6 +13,7 @@ import Testing
 @MainActor final class DOMFixtureTransport: ShaarDOMTransport {
   var continuation: AsyncStream<ShaarDOMMessage>.Continuation?
   var commands: [ShaarDOMCommand] = []
+  var undoDocuments: [[String: Any]] = []
   var searchNodeIDs: [Int] = [4]
   var describedNodes: [Int: [String: Any]] = [:]
   var document: [String: Any] = [
@@ -102,6 +103,15 @@ import Testing
       if let node = describedNodes[id] { return ["node": node] }
       return [:]
     case .outerHTML: return ["outerHTML": "<main id=\"app\">Dashboard</main>"]
+    case .move(let id, let parent, let before):
+      if let next = ShaarDOMFixtureDocument.moving(document, id: id, to: parent, before: before) {
+        undoDocuments.append(document)
+        document = next
+      }
+      return [:]
+    case .undo:
+      if let previous = undoDocuments.popLast() { document = previous }
+      return [:]
     default: return [:]
     }
   }
@@ -120,6 +130,85 @@ import Testing
   }
 }
 
+enum ShaarDOMFixtureDocument {
+  static func moving(_ document: [String: Any], id: Int, to parent: Int, before: Int?)
+    -> [String: Any]?
+  {
+    guard var root = document["root"] as? [String: Any] else { return nil }
+    guard let node = detach(from: &root, id: id) else { return nil }
+    guard attach(&root, node: node, parent: parent, before: before) else { return nil }
+    var copy = document
+    copy["root"] = root
+    return copy
+  }
+
+  private static func detach(from fields: inout [String: Any], id: Int) -> [String: Any]? {
+    if let node = detach(list: "children", from: &fields, id: id) { return node }
+    if let node = detach(list: "shadowRoots", from: &fields, id: id) { return node }
+    guard var frame = fields["contentDocument"] as? [String: Any] else { return nil }
+    guard let node = detach(from: &frame, id: id) else { return nil }
+    fields["contentDocument"] = frame
+    return node
+  }
+
+  private static func detach(list key: String, from fields: inout [String: Any], id: Int)
+    -> [String: Any]?
+  {
+    guard var list = fields[key] as? [[String: Any]] else { return nil }
+    if let index = list.firstIndex(where: { ($0["nodeId"] as? Int) == id }) {
+      let node = list.remove(at: index)
+      fields[key] = list
+      return node
+    }
+    for index in list.indices {
+      if let node = detach(from: &list[index], id: id) {
+        fields[key] = list
+        return node
+      }
+    }
+    return nil
+  }
+
+  private static func attach(
+    _ fields: inout [String: Any], node: [String: Any], parent: Int, before: Int?
+  ) -> Bool {
+    if (fields["nodeId"] as? Int) == parent {
+      var children = fields["children"] as? [[String: Any]] ?? []
+      if let before, let index = children.firstIndex(where: { ($0["nodeId"] as? Int) == before }) {
+        children.insert(node, at: index)
+      } else {
+        children.append(node)
+      }
+      fields["children"] = children
+      return true
+    }
+    if attach(list: "children", in: &fields, node: node, parent: parent, before: before) {
+      return true
+    }
+    if attach(list: "shadowRoots", in: &fields, node: node, parent: parent, before: before) {
+      return true
+    }
+    guard var frame = fields["contentDocument"] as? [String: Any] else { return false }
+    guard attach(&frame, node: node, parent: parent, before: before) else { return false }
+    fields["contentDocument"] = frame
+    return true
+  }
+
+  private static func attach(
+    list key: String, in fields: inout [String: Any], node: [String: Any], parent: Int,
+    before: Int?
+  ) -> Bool {
+    guard var list = fields[key] as? [[String: Any]] else { return false }
+    for index in list.indices {
+      if attach(&list[index], node: node, parent: parent, before: before) {
+        fields[key] = list
+        return true
+      }
+    }
+    return false
+  }
+}
+
 @Suite @MainActor struct ShaarDOMTreeModelTests {
   @Test func twentyThousandNodeFixtureIsVisible() async {
     let fixture = DOMFixtureTransport()
@@ -131,6 +220,13 @@ import Testing
     #expect(model.nodes.count == 20_000)
     #expect(model.rows.count == 20_000)
     model.close()
+  }
+
+  private func moveCount(_ commands: [ShaarDOMCommand]) -> Int {
+    commands.reduce(0) { count, command in
+      if case .move = command { return count + 1 }
+      return count
+    }
   }
 
   private func target() -> SiteControlTarget {
@@ -173,10 +269,54 @@ import Testing
     await model.move(5, to: 4, before: 7)
     #expect(fixture.commands.contains(.setHTML(4, "<main>Updated</main>")))
     #expect(fixture.commands.contains(.move(5, 4, 7)))
+    #expect(model.nodes[5]?.parentID == 4)
     await model.undo()
     #expect(!model.canUndo)
     model.updateTarget(target(), committed: true)
     #expect(model.nodes.isEmpty && model.selectedID == nil)
+    model.close()
+  }
+
+  @Test func dropInsideMovesToTheNewParentAndUndoRestoresIt() async {
+    let fixture = DOMFixtureTransport()
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    #expect(model.nodes[5]?.parentID == 4)
+    let inside = ShaarDOMDrop.destination(
+      draggedID: 5, rowID: 3, kind: .inside, nodes: model.nodes)
+    #expect(inside?.parentID == 3)
+    #expect(inside?.before == nil)
+    await model.move(5, to: 3)
+    #expect(fixture.commands.contains(.move(5, 3, nil)))
+    #expect(model.nodes[5]?.parentID == 3)
+    #expect(model.nodes[3]?.childrenIDs.contains(5) == true)
+    #expect(model.nodes[4]?.childrenIDs.contains(5) == false)
+    #expect(model.nodes[6]?.parentID == 5)
+    await model.undo()
+    #expect(model.nodes[5]?.parentID == 4)
+    #expect(model.nodes[3]?.childrenIDs.contains(5) == false)
+    model.close()
+  }
+
+  @Test func dropRejectsANodeInsideItsDescendant() async {
+    let fixture = DOMFixtureTransport()
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    #expect(ShaarDOMDrop.kind(nodeType: 1, height: 24, y: 12) == .inside)
+    #expect(ShaarDOMDrop.kind(nodeType: 1, height: 24, y: 2) == .before)
+    #expect(ShaarDOMDrop.kind(nodeType: 3, height: 24, y: 12) == .before)
+    let before = ShaarDOMDrop.destination(
+      draggedID: 8, rowID: 5, kind: .before, nodes: model.nodes)
+    #expect(before?.parentID == 4)
+    #expect(before?.before == 5)
+    #expect(
+      ShaarDOMDrop.destination(draggedID: 4, rowID: 5, kind: .inside, nodes: model.nodes) == nil)
+    let movesBefore = moveCount(fixture.commands)
+    await model.move(4, to: 5)
+    #expect(moveCount(fixture.commands) == movesBefore)
+    #expect(model.nodes[4]?.parentID == 3)
     model.close()
   }
 

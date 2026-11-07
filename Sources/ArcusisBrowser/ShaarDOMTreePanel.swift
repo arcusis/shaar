@@ -22,7 +22,8 @@ struct ShaarDOMTreePanel: View {
 
   init(
     model: ShaarDOMTreeModel, inspector: InspectorModel, openChromium: @escaping () -> Void,
-    listeners: ShaarEventListenersModel? = nil
+    listeners: ShaarEventListenersModel? = nil,
+    dropPreview: ShaarDOMDropPreview? = nil
   ) {
     self.model = model
     self.inspector = inspector
@@ -31,7 +32,9 @@ struct ShaarDOMTreePanel: View {
       listeners
       ?? ShaarEventListenersModel(
         target: model.target, transport: ShaarEventListenersPendingTransport())
+    _dropPreview = State(initialValue: dropPreview)
   }
+  @State private var dropPreview: ShaarDOMDropPreview?
   @State private var editor: DOMEditor?
   @State private var attributeName = ""
   @State private var editorValue = ""
@@ -241,7 +244,7 @@ struct ShaarDOMTreePanel: View {
         }
         .lineLimit(1)
         .font(.system(size: 10, design: .monospaced))
-        .frame(height: 24)
+        .frame(height: ShaarDOMDrop.rowHeight)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
@@ -265,20 +268,44 @@ struct ShaarDOMTreePanel: View {
             Color.primary, lineWidth: colorSchemeContrast == .increased ? 2 : 1)
       }
     }
+    .overlay(alignment: .top) { dropLine(row) }
+    .overlay { dropInside(row) }
     .onHover { hovering in Task { await model.highlight(hovering ? row.id : nil) } }
     .contextMenu { rowMenu(row.node) }
     .onDrag { NSItemProvider(object: String(row.id) as NSString) }
-    .onDrop(of: [UTType.plainText], isTargeted: nil) { providers in
-      guard let provider = providers.first else { return false }
-      _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-        guard let text = object as? String, let id = Int(text) else { return }
-        guard id != row.id else { return }
-        let parent = row.node.parentID ?? row.id
-        Task { @MainActor in await model.move(id, to: parent, before: row.id) }
-      }
-      return true
-    }
+    .onDrop(
+      of: [UTType.plainText],
+      delegate: ShaarDOMRowDropDelegate(
+        row: row.node, nodes: model.nodes, preview: $dropPreview,
+        move: { id, parent, before in
+          Task { await model.move(id, to: parent, before: before) }
+        })
+    )
+    .accessibilityHint(dropAccessibilityHint(row))
     .accessibilityIdentifier("shaar.devtools.domRow")
+  }
+
+  @ViewBuilder private func dropLine(_ row: ShaarDOMRow) -> some View {
+    if dropPreview == ShaarDOMDropPreview(rowID: row.id, kind: .before) {
+      Rectangle()
+        .fill(Color.accentColor)
+        .frame(height: 2)
+        .accessibilityIdentifier("shaar.devtools.domDrop.before")
+    }
+  }
+
+  @ViewBuilder private func dropInside(_ row: ShaarDOMRow) -> some View {
+    if dropPreview == ShaarDOMDropPreview(rowID: row.id, kind: .inside) {
+      RoundedRectangle(cornerRadius: 3)
+        .strokeBorder(Color.accentColor, lineWidth: 2)
+        .accessibilityIdentifier("shaar.devtools.domDrop.inside")
+    }
+  }
+
+  private func dropAccessibilityHint(_ row: ShaarDOMRow) -> String {
+    guard let dropPreview, dropPreview.rowID == row.id else { return "" }
+    if dropPreview.kind == .inside { return ShellL10n.string("Drop inside") }
+    return ShellL10n.string("Drop before")
   }
 
   private func nodeLabel(_ node: ShaarDOMNode) -> String {

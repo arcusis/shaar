@@ -159,6 +159,8 @@
     "Error": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Error"}},"he":{"stringUnit":{"state":"translated","value":"שגיאה"}}}},
     "Expand node": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Expand node"}},"he":{"stringUnit":{"state":"translated","value":"הרחבת צומת"}}}},
     "Collapse node": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Collapse node"}},"he":{"stringUnit":{"state":"translated","value":"כיווץ צומת"}}}},
+    "Drop before": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Drop before"}},"he":{"stringUnit":{"state":"translated","value":"שחרור לפני"}}}},
+    "Drop inside": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Drop inside"}},"he":{"stringUnit":{"state":"translated","value":"שחרור לתוך"}}}},
     "Cookie. Use Up and Down Arrow to change selection.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Cookie. Use Up and Down Arrow to change selection."}},"he":{"stringUnit":{"state":"translated","value":"קובץ Cookie. השתמשו בחצים למעלה ולמטה לשינוי הבחירה."}}}},
     "Use Left and Right Arrow to move through application areas.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Use Left and Right Arrow to move through application areas."}},"he":{"stringUnit":{"state":"translated","value":"השתמשו בחצים שמאלה וימינה כדי לעבור בין אזורי היישום."}}}},
     "Technical details": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Technical details"}},"he":{"stringUnit":{"state":"translated","value":"פרטים טכניים"}}}},

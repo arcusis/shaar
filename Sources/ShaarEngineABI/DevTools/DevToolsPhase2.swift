@@ -26,6 +26,8 @@ public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
   case resourceContent(url: String)
   case longTasks
   case vitalsInputs
+  case parsedScripts(skip: Int, count: Int)
+  case scriptSource(id: String)
 
   public var id: Int {
     switch self {
@@ -47,6 +49,8 @@ public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
     case .resourceContent: 16
     case .longTasks: 17
     case .vitalsInputs: 18
+    case .parsedScripts: 19
+    case .scriptSource: 20
     }
   }
 
@@ -91,6 +95,12 @@ public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
     case .resourceContent(let url):
       guard Self.validWebURL(url) else { return nil }
       return ["resourceURL": url]
+    case .parsedScripts(let skip, let count):
+      guard Self.validPage(skip, count) else { return nil }
+      return ["skipCount": skip, "pageSize": count]
+    case .scriptSource(let id):
+      guard Self.validText(id, maximum: 128) else { return nil }
+      return ["scriptID": id]
     }
   }
 
@@ -131,8 +141,8 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
   public let truncated: Bool
 
   public static func decode(_ data: Data, command: ShaarDevToolsPhase2Command) -> Self? {
-    let bodyLimit = command.id == 16 ? 5 * 1_048_576 : 1_048_576
-    let replyLimit = command.id == 16 ? 32 * 1_048_576 : 1_050_624
+    let bodyLimit = command.id == 16 || command.id == 20 ? 5 * 1_048_576 : 1_048_576
+    let replyLimit = command.id == 16 || command.id == 20 ? 32 * 1_048_576 : 1_050_624
     guard data.count <= replyLimit,
       let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       root["schemaVersion"] as? Int == 1,
@@ -154,7 +164,7 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
     if root["body"] != nil && (body == nil || body!.utf8.count > bodyLimit) { return nil }
     let encoded = root["base64Encoded"] as? Bool
     if (body == nil) != (encoded == nil) { return nil }
-    if body != nil && command.id != 10 && command.id != 16 { return nil }
+    if body != nil && command.id != 10 && command.id != 16 && command.id != 20 { return nil }
     let hasMore = root["hasMore"] as? Bool
     if root["hasMore"] != nil && hasMore == nil { return nil }
     var counters: [String: Int] = [:]
@@ -182,6 +192,7 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
     case 9: allowed = ["url", "method", "status"]
     case 13: allowed = ["name", "value"]
     case 15: allowed = ["url", "type", "mimeType"]
+    case 19: allowed = ["url", "scriptID", "sourceMapURL"]
     case 17: allowed = ["name", "startTime", "duration"]
     case 18: allowed = ["name", "value", "startTime", "duration", "interactionID"]
     default: allowed = []
@@ -217,6 +228,7 @@ public enum ShaarDevToolsPhase2EventID: Int, Sendable {
   case workerVersion = 17
   case workerError = 18
   case timeline = 19
+  case scriptParsed = 20
 }
 
 public struct ShaarDevToolsPhase2Event: Equatable, Sendable {
@@ -311,6 +323,8 @@ public enum ShaarDevToolsPhase2EventRouter {
         return number["value"] != nil && flag["hadRecentInput"] != nil
       }
       return false
+    case .scriptParsed:
+      return text["url"] != nil && text["scriptID"] != nil
     }
   }
 
@@ -326,6 +340,7 @@ public enum ShaarDevToolsPhase2EventRouter {
         "type", "name", "time", "duration", "renderTime", "loadTime",
         "size", "value", "hadRecentInput", "truncated",
       ]
+    case .scriptParsed: ["url", "scriptID", "sourceMapURL", "truncated"]
     }
   }
 

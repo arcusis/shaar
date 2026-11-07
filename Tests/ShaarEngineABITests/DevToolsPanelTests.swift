@@ -352,6 +352,28 @@ struct DevToolsPanelTests {
         .items.last?.number["interactionID"] == 1)
   }
 
+  @Test func parsedScriptCommandsAndEventsStayScoped() throws {
+    let page = ShaarDevToolsPhase2Command.parsedScripts(skip: 50, count: 50)
+    #expect(page.id == 19)
+    #expect(page.parameters?["skipCount"] as? Int == 50)
+    #expect(ShaarDevToolsPhase2Command.parsedScripts(skip: 0, count: 51).parameters == nil)
+    let source = ShaarDevToolsPhase2Command.scriptSource(id: "42")
+    #expect(source.id == 20)
+    #expect(source.parameters?["scriptID"] as? String == "42")
+    let scripts = #"{"schemaVersion":1,"commandID":19,"items":[{"url":"https://example.test/App.vue","scriptID":"42","sourceMapURL":"App.vue.map"}],"hasMore":false,"truncated":false}"#
+    #expect(ShaarDevToolsPhase2Reply.decode(Data(scripts.utf8), command: page)?
+      .items.first?.text["scriptID"] == "42")
+    let body = #"{"schemaVersion":1,"commandID":20,"items":[],"body":"export const app = 1;","base64Encoded":false,"truncated":false}"#
+    #expect(ShaarDevToolsPhase2Reply.decode(Data(body.utf8), command: source)?.body
+      == "export const app = 1;")
+    let payload = #"{"schemaVersion":1,"kind":"panelEvent","eventID":20,"leaseID":42,"data":{"url":"https://example.test/App.vue","scriptID":"42","truncated":false}}"#
+    let parsed = ShaarDevToolsPhase2EventRouter.decode(
+      event(payload, scope: privateScope), scope: privateScope,
+      windowID: "window-a", tabID: "tab-a", leaseID: 42)
+    #expect(parsed?.id == .scriptParsed)
+    #expect(parsed?.text["scriptID"] == "42")
+  }
+
   @Test func phase2EventsRejectOtherSessionAndUnknownFields() {
     let payload =
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":12,"leaseID":42,"data":{"isLocalStorage":true,"key":"k","value":"v","truncated":false}}"#

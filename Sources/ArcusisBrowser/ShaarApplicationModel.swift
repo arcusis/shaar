@@ -216,7 +216,7 @@ final class ShaarApplicationModel {
         receiveWorker(event)
       case .workerError:
         failure = event.text["text"]
-      case .timeline: break
+      case .timeline, .scriptParsed: break
       }
     }
   }

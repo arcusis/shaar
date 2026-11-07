@@ -318,6 +318,9 @@ import Foundation
       else { throw Failure("Elements attribute edit did not reach the page") }
       return "DOM insertion appeared through the live stream; attribute edit reached the page"
     }
+    await check("elements-scale") {
+      try await DevToolsDOMScaleProof(shell: shell, inspector: inspector).run()
+    }
     return try results.finish(
       root: root, phase: phase, engine: engine.runtime.chromiumVersion,
       hidden: NSApp.windows.allSatisfy { !$0.isVisible })
@@ -398,7 +401,7 @@ import Foundation
     "console-network", "application-cookie", "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",
     "application-service-worker", "network-rules", "source-bytes", "viewports",
-    "masked-repro", "elements-live",
+    "masked-repro", "elements-live", "elements-scale",
   ]
 
   private var entries: [String: [String: Any]] = [:]

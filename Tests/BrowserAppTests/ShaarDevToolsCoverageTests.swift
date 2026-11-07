@@ -152,6 +152,53 @@ import Testing
     #expect(gapped.map(\.usedBytes) == [20])
   }
 
+  @Test func probeEnablesCollectionWhenThePageAcceptsCoverage() async {
+    let model = ShaarDevToolsCoverageModel()
+    var methods: [String] = []
+    model.send = { method, _ in
+      methods.append(method)
+      return [:]
+    }
+    await model.probeCollection()
+    #expect(model.collectionReady)
+    #expect(
+      methods == [
+        "Profiler.startPreciseCoverage",
+        "Profiler.stopPreciseCoverage",
+        "CSS.enable",
+        "CSS.startRuleUsageTracking",
+        "CSS.stopRuleUsageTracking",
+      ])
+    await model.probeCollection()
+    #expect(methods.count == 5)
+  }
+
+  @Test func probeLeavesCollectionWaitingWhenTheEngineRejectsIt() async {
+    let model = ShaarDevToolsCoverageModel()
+    var methods: [String] = []
+    model.send = { method, _ in
+      methods.append(method)
+      throw DeveloperModeFailure("unknown DevTools capability or command")
+    }
+    await model.probeCollection()
+    #expect(!model.collectionReady)
+    #expect(methods.contains("Profiler.startPreciseCoverage"))
+    #expect(methods.contains("Profiler.stopPreciseCoverage"))
+    #expect(!methods.contains("CSS.startRuleUsageTracking"))
+  }
+
+  @Test func detachRequiresAFreshProbe() async {
+    let model = ShaarDevToolsCoverageModel()
+    model.send = { _, _ in [:] }
+    await model.probeCollection()
+    #expect(model.collectionReady)
+    model.detach()
+    #expect(!model.collectionReady)
+    model.send = { _, _ in [:] }
+    await model.probeCollection()
+    #expect(model.collectionReady)
+  }
+
   @Test func coveragePanelRendersOffscreenForEachState() async throws {
     _ = NSApplication.shared
     let defaults = UserDefaults(suiteName: "ShaarDevToolsCoverage.render.\(UUID().uuidString)")!

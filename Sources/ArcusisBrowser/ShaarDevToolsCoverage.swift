@@ -280,12 +280,14 @@ enum ShaarDevToolsCoverage {
   private(set) var rows: [ShaarDevToolsCoverageRow] = []
   private(set) var recording = false
   private(set) var notice: ShaarCoverageNotice?
-  /// shaar.20 rejects the coverage commands. The engine patch owns live collection.
+  /// Turns on after the page accepts the coverage commands. Stays off when the engine rejects them.
   var collectionReady = false
   @ObservationIgnored var transport: (any ShaarCoverageTransport)?
   @ObservationIgnored var send: (@MainActor (String, [String: Any]) async throws -> [String: Any])?
   @ObservationIgnored private weak var engine: BrowserEngine?
   @ObservationIgnored private var target: SiteControlTarget?
+  @ObservationIgnored private var probeFinished = false
+  @ObservationIgnored private var probeInFlight = false
 
   func present(
     scripts: [ShaarDevToolsCoverageScript], sheets: [ShaarDevToolsCoverageSheet]
@@ -324,6 +326,52 @@ enum ShaarDevToolsCoverage {
     }
   }
 
+  /// Asks the page once. Start stays disabled only when the engine rejects the commands.
+  func probeCollection() async {
+    guard !probeFinished, !probeInFlight else { return }
+    guard let send else { return }
+    probeInFlight = true
+    defer { probeInFlight = false }
+    do {
+      try await probePair(
+        send,
+        start: "Profiler.startPreciseCoverage",
+        startParams: ["callCount": false, "detailed": false],
+        stop: "Profiler.stopPreciseCoverage")
+      _ = try await send("CSS.enable", [:])
+      try await probePair(
+        send,
+        start: "CSS.startRuleUsageTracking",
+        startParams: [:],
+        stop: "CSS.stopRuleUsageTracking")
+      collectionReady = true
+      probeFinished = true
+    } catch {
+      if error is CancellationError || Task.isCancelled { return }
+      if ShaarDevToolsSensorCapability.targetGone(error) { return }
+      await stopProbeQuietly(send)
+      collectionReady = !ShaarDevToolsSensorCapability.isMissing(error)
+      probeFinished = true
+    }
+  }
+
+  private func probePair(
+    _ send: @MainActor (String, [String: Any]) async throws -> [String: Any],
+    start: String,
+    startParams: [String: Any],
+    stop: String
+  ) async throws {
+    _ = try await send(start, startParams)
+    _ = try? await send(stop, [:])
+  }
+
+  private func stopProbeQuietly(
+    _ send: @MainActor (String, [String: Any]) async throws -> [String: Any]
+  ) async {
+    _ = try? await send("Profiler.stopPreciseCoverage", [:])
+    _ = try? await send("CSS.stopRuleUsageTracking", [:])
+  }
+
   func retarget(_ target: SiteControlTarget) {
     self.target = target
     reset()
@@ -333,6 +381,9 @@ enum ShaarDevToolsCoverage {
     engine = nil
     send = nil
     reset()
+    collectionReady = false
+    probeFinished = false
+    probeInFlight = false
   }
 
   func start() async {
@@ -402,6 +453,7 @@ struct ShaarDevToolsCoveragePanel: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .accessibilityIdentifier("shaar.devtools.coverage")
+    .task { await model.probeCollection() }
   }
 
   private var controls: some View {
@@ -426,6 +478,7 @@ struct ShaarDevToolsCoveragePanel: View {
           .font(.system(size: 11))
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
+          .accessibilityIdentifier("shaar.devtools.coverage.engineGate")
       }
       notice
     }

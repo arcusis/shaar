@@ -181,7 +181,32 @@ import Testing
       return
     }
     #expect(console.message == "still live")
+    #expect(console.stack.isEmpty)
     #expect(!requester.operations.contains(.panelClose))
+  }
+
+  @Test func consoleStackMapsOntoTheRow() async throws {
+    let requester = PanelRequesterFixture()
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    var shell = transport.messages(for: target).makeAsyncIterator()
+    #expect(await shell.next() == .streamAvailable)
+    transport.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(
+        1,
+        data: [
+          "text": "boom", "level": "error", "truncated": false,
+          "stack": [["function": "loadOrders", "source": "orders.ts:17"]],
+        ]), sequence: 1)
+    guard case .event(.console(let console)) = await shell.next() else {
+      Issue.record("Console stack did not reach the shell stream")
+      return
+    }
+    #expect(console.message == "boom")
+    #expect(console.level == .error)
+    #expect(console.source == "orders.ts:17")
+    #expect(console.stack == [ShaarConsoleFrame(function: "loadOrders", source: "orders.ts:17")])
   }
 
   private func event(_ id: Int, data: [String: Any]) throws -> Data {

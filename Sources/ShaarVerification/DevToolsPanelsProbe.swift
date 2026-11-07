@@ -523,6 +523,7 @@ import Foundation
       errors.contains(where: { $0.event.message.contains("shaar19-live-console") })
     else { throw Failure("Error level filter did not keep only console errors") }
     shell.console.level = nil
+    let stackNote = try await liveConsoleStackNote(shell, inspector: inspector)
     guard shell.console.history.contains("({probe:1124, ok:true})") else {
       throw Failure("Command history did not keep the evaluation")
     }
@@ -544,7 +545,28 @@ import Foundation
     guard shell.console.history == history else { throw Failure("Clear dropped command history") }
     shell.console.preserveLog = false
     return
-      "Evaluation expanded, regex and level filters matched, preserve log survived navigation, and clear kept history"
+      "Evaluation expanded, regex and level filters matched, preserve log survived navigation, and clear kept history. "
+      + stackNote
+  }
+
+  private func liveConsoleStackNote(
+    _ shell: ShaarDevToolsModel, inspector: InspectorModel
+  ) async throws -> String {
+    _ = try await inspector.evaluate(
+      "(function shaarStackProbe(){ console.error('shaar-stack-probe'); return true })()")
+    try await wait("console stack probe") {
+      shell.console.rows(from: shell.consoleEvents).contains {
+        $0.event.message.contains("shaar-stack-probe")
+      }
+    }
+    guard
+      let frame = shell.console.rows(from: shell.consoleEvents).first(where: {
+        $0.event.message.contains("shaar-stack-probe")
+      })?.event.stack.first
+    else {
+      return "Live stack is absent on this engine. Ready for engine build."
+    }
+    return "Live stack \(frame.function) \(frame.source)."
   }
 
   private func check(_ name: String, _ operation: () async throws -> String) async {

@@ -365,6 +365,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0030-shaar-devtools-network-cache-disabled.patch",
       "sha256": "11d552df5da1ab4a068f3d59b389598822d7c91339ef19a382f5412199a8ef68"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0031-shaar-devtools-console-stack.patch",
+      "sha256": "3f594403e07d7306d7bd2883f80446c34bb071e8ee56574d00394059ff792dc2"
     }
   ],
   "requiredExports": [

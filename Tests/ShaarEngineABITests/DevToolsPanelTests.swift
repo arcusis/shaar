@@ -104,6 +104,41 @@ struct DevToolsPanelTests {
         tabID: "tab-a", leaseID: 42)?.data.droppedCount == 3)
   }
 
+  @Test func consoleStackIsOptionalAndBounded() {
+    let framed =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"boom","level":"error","truncated":false,"stack":[{"function":"loadOrders","source":"orders.ts:17"}]}}"#
+    let decoded = decodePanel(framed)
+    #expect(decoded?.data.text == "boom")
+    #expect(decoded?.data.stack == [
+      ShaarDevToolsConsoleFrame(function: "loadOrders", source: "orders.ts:17")
+    ])
+    let plain =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"hello","level":"log","truncated":false}}"#
+    #expect(decodePanel(plain)?.data.stack.isEmpty == true)
+    let thrown =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":2,"leaseID":42,"data":{"text":"Error","truncated":true,"stack":[{"function":"raise","source":"app.js:1"}]}}"#
+    #expect(decodePanel(thrown)?.data.stack.first?.function == "raise")
+    #expect(decodePanel(thrown)?.data.stack.first?.source == "app.js:1")
+    let extraKey =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"boom","level":"error","truncated":false,"stack":[{"function":"loadOrders","source":"orders.ts:17","scriptId":"secret"}]}}"#
+    #expect(decodePanel(extraKey) == nil)
+    let oversized = String(repeating: "f", count: 129)
+    let tooLong =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"boom","level":"error","truncated":false,"stack":[{"function":"\#(oversized)","source":"app.js:1"}]}}"#
+    #expect(decodePanel(tooLong) == nil)
+    let frames = (0..<9).map { _ in #"{"function":"frame","source":"app.js:1"}"# }
+      .joined(separator: ",")
+    let tooMany =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"many","level":"log","truncated":true,"stack":[\#(frames)]}}"#
+    #expect(decodePanel(tooMany) == nil)
+  }
+
+  private func decodePanel(_ payload: String) -> ShaarDevToolsPanelEvent? {
+    ShaarDevToolsPanelEventRouter.decode(
+      event(payload, scope: regular), scope: regular, windowID: "window-a",
+      tabID: "tab-a", leaseID: 42)
+  }
+
   @Test func screencastFramesRequireMaskAndExactTabLease() {
     let jpeg = Data([0xFF, 0xD8, 0xFF, 0xD9]).base64EncodedString()
     let payload =

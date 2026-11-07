@@ -1,0 +1,160 @@
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -57,6 +57,9 @@
+ constexpr size_t kMaxPhase2ReplyBytes = 128 * 1024;
+ constexpr size_t kMaxRuleInputBytes = 2 * 1024 * 1024;
+ constexpr size_t kMaxRules = 100;
++constexpr size_t kMaxConsoleFrames = 8;
++constexpr size_t kMaxConsoleFunctionBytes = 128;
++constexpr size_t kMaxConsoleSourceBytes = 512;
+ 
+ struct NetworkRule {
+   std::string method;
+@@ -364,6 +367,58 @@
+     }
+   }
+   return text;
++}
++
++std::string ClipTo(std::string value, size_t limit, bool* truncated) {
++  if (value.size() <= limit)
++    return value;
++  *truncated = true;
++  value.resize(limit);
++  while (!value.empty() &&
++         (static_cast<unsigned char>(value.back()) & 0xc0) == 0x80)
++    value.pop_back();
++  return value;
++}
++
++void CopyConsoleStack(base::DictValue* data, const base::DictValue* trace,
++                      bool* truncated) {
++  if (!trace)
++    return;
++  const auto* frames = trace->FindList("callFrames");
++  if (!frames)
++    return;
++  base::ListValue stack;
++  for (const auto& item : *frames) {
++    if (stack.size() == kMaxConsoleFrames) {
++      *truncated = true;
++      break;
++    }
++    if (!item.is_dict()) {
++      *truncated = true;
++      continue;
++    }
++    const auto& frame = item.GetDict();
++    const auto* name = frame.FindString("functionName");
++    std::string function = name && !name->empty() ? *name : "(anonymous)";
++    function = ClipTo(std::move(function), kMaxConsoleFunctionBytes, truncated);
++    if (function.empty())
++      function = "(anonymous)";
++    const auto* url = frame.FindString("url");
++    std::string source = url && !url->empty() ? *url : "(unknown)";
++    if (auto line = frame.FindInt("lineNumber");
++        line && *line >= 0 && *line < 1000000) {
++      source += ":" + std::to_string(*line + 1);
++    }
++    source = ClipTo(std::move(source), kMaxConsoleSourceBytes, truncated);
++    if (source.empty())
++      continue;
++    base::DictValue copy;
++    copy.Set("function", function);
++    copy.Set("source", source);
++    stack.Append(std::move(copy));
++  }
++  if (!stack.empty())
++    data->Set("stack", std::move(stack));
+ }
+ 
+ bool CopyDOMNode(const base::DictValue* node, base::DictValue* copy,
+@@ -478,11 +533,14 @@
+     result->id = SHAAR_DEVTOOLS_PANEL_CONSOLE_API_CALLED;
+     PutString(&data, "level", params.FindString("type"), &result->truncated);
+     data.Set("text", ConsoleText(params.FindList("args"), &result->truncated));
++    CopyConsoleStack(&data, params.FindDict("stackTrace"), &result->truncated);
+   } else if (method == "Runtime.exceptionThrown") {
+     result->id = SHAAR_DEVTOOLS_PANEL_EXCEPTION_THROWN;
+     const auto* detail = params.FindDict("exceptionDetails");
+     PutString(&data, "text", detail ? detail->FindString("text") : nullptr,
+               &result->truncated);
++    if (detail)
++      CopyConsoleStack(&data, detail->FindDict("stackTrace"), &result->truncated);
+   } else if (method == "Log.entryAdded") {
+     result->id = SHAAR_DEVTOOLS_PANEL_LOG_ENTRY_ADDED;
+     const auto* entry = params.FindDict("entry");
+@@ -490,6 +548,8 @@
+               &result->truncated);
+     PutString(&data, "level", entry ? entry->FindString("level") : nullptr,
+               &result->truncated);
++    if (entry)
++      CopyConsoleStack(&data, entry->FindDict("stackTrace"), &result->truncated);
+   } else if (method == "Network.requestWillBeSent") {
+     result->id = SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT;
+     const auto* request = params.FindDict("request");
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -1142,6 +1142,62 @@
+       std::string(257 * 1024, 'x'), 1, &output));
+ }
+ 
++TEST(ShaarDevToolsPanelTest, ProjectsBoundedConsoleStack) {
++  std::string output;
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Runtime.consoleAPICalled","params":{"type":"log","args":[{"value":"plain"}]}})",
++      4, &output));
++  EXPECT_EQ(std::string::npos, output.find("stack"));
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Runtime.consoleAPICalled","params":{"type":"error","args":[{"value":"boom"}],"stackTrace":{"callFrames":[{"functionName":"loadOrders","url":"http://127.0.0.1/orders.ts","lineNumber":16,"columnNumber":2,"scriptId":"secret"},{"functionName":"","url":"","lineNumber":3}],"parent":{"secret":"not-projected"}},"secret":"not-projected"}})",
++      4, &output));
++  EXPECT_EQ(std::string::npos, output.find("not-projected"));
++  EXPECT_EQ(std::string::npos, output.find("columnNumber"));
++  EXPECT_EQ(std::string::npos, output.find("scriptId"));
++  auto parsed = base::JSONReader::Read(output, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(parsed && parsed->is_dict());
++  const auto* data = parsed->GetDict().FindDict("data");
++  ASSERT_NE(nullptr, data);
++  const auto* stack = data->FindList("stack");
++  ASSERT_NE(nullptr, stack);
++  ASSERT_EQ(2u, stack->size());
++  EXPECT_EQ("loadOrders", *stack->front().GetDict().FindString("function"));
++  EXPECT_EQ("http://127.0.0.1/orders.ts:17",
++            *stack->front().GetDict().FindString("source"));
++  EXPECT_EQ("(anonymous)", *stack->back().GetDict().FindString("function"));
++  EXPECT_EQ("(unknown):4", *stack->back().GetDict().FindString("source"));
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Runtime.exceptionThrown","params":{"exceptionDetails":{"text":"Error","stackTrace":{"callFrames":[{"functionName":"raise","url":"app.js","lineNumber":0}]}}}})",
++      4, &output));
++  EXPECT_NE(std::string::npos, output.find("raise"));
++  EXPECT_NE(std::string::npos, output.find("app.js:1"));
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Log.entryAdded","params":{"entry":{"text":"late","level":"warning","stackTrace":{"callFrames":[{"functionName":"logLine","url":"log.js","lineNumber":8}]}}}})",
++      4, &output));
++  EXPECT_NE(std::string::npos, output.find("logLine"));
++  EXPECT_NE(std::string::npos, output.find("log.js:9"));
++  std::string frames = R"([)";
++  for (int index = 0; index < 9; ++index) {
++    if (index)
++      frames += ",";
++    frames += R"({"functionName":"frame","url":"app.js","lineNumber":)" +
++              std::to_string(index) + "}";
++  }
++  frames += "]";
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Runtime.consoleAPICalled","params":{"type":"log","args":[{"value":"many"}],"stackTrace":{"callFrames":)" +
++          frames + "}}}",
++      4, &output));
++  parsed = base::JSONReader::Read(output, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(parsed && parsed->is_dict());
++  data = parsed->GetDict().FindDict("data");
++  ASSERT_NE(nullptr, data);
++  stack = data->FindList("stack");
++  ASSERT_NE(nullptr, stack);
++  EXPECT_EQ(8u, stack->size());
++  EXPECT_EQ(true, data->FindBool("truncated"));
++}
++
+ TEST(ShaarDevToolsPanelTest, Phase2CommandsHaveFixedMethodsAndBoundedPages) {
+   std::string output;
+   EXPECT_TRUE(BuildPhase2CommandForTesting(

@@ -213,7 +213,7 @@ final class ReloadWindowProbe {
         }
       }
       throw Failure(
-        "\(name) destination missing; gesture=\(gestureResult ?? "nil") source=\(sourceDocument ?? [:]) tabs=\(models)"
+        "\(name) page-created tab was not adopted; gesture=\(gestureResult ?? "nil") source=\(sourceDocument ?? [:]) tabs=\(models)"
       )
     }
     return try require(found, "\(name) did not produce a destination tab")

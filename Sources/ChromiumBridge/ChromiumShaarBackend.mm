@@ -17,6 +17,12 @@
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 
+// Optional until the engine that emits tab "opened" events is published.
+// The layer header stays on the previous minor so shaar.21 still loads.
+extern "C" shaar_error_code shaar_tab_find(
+    shaar_engine *engine, shaar_bytes window_id, shaar_bytes tab_id,
+    shaar_tab **out, shaar_error *error);
+
 namespace {
 
 NSError *ShaarError(NSString *message) {
@@ -61,6 +67,7 @@ struct Symbols {
   decltype(&shaar_window_host_resize) window_host_resize = nullptr;
   decltype(&shaar_window_native_window) window_native_window = nullptr;
   decltype(&shaar_tab_open) tab_open = nullptr;
+  decltype(&shaar_tab_find) tab_find = nullptr;
   decltype(&shaar_tab_close) tab_close = nullptr;
   decltype(&shaar_tab_favicon_png) tab_favicon_png = nullptr;
   decltype(&shaar_tab_host_view) tab_host_view = nullptr;
@@ -126,6 +133,9 @@ struct Symbols {
   NSString *_shaarStartupNotice;
 }
 - (void)receiveEvent:(const shaar_event *)event;
+- (void)adoptOpenedTabFromEvent:(const shaar_event *)event
+                        payload:(NSDictionary *)payload
+                      profileID:(NSString *)profileID;
 - (BOOL)submitTabID:(NSString *)tabID operation:(shaar_operation)operation
             payload:(NSDictionary *)payload;
 - (BOOL)submitWindowID:(NSString *)windowID profileID:(NSString *)profileID
@@ -181,6 +191,8 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     return nil;
   }
   _shaarMediaConsentAvailable = _symbols.abi_minor() >= 8;
+  _symbols.tab_find = reinterpret_cast<decltype(_symbols.tab_find)>(
+      dlsym(_shaarLibrary, "shaar_tab_find"));
   return self;
 }
 
@@ -373,6 +385,10 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   }
   if (event->kind == SHAAR_EVENT_WINDOW && [kind isEqualToString:@"closed"]) {
     [self finishWindowID:String(event->window_id)];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"opened"]) {
+    [self adoptOpenedTabFromEvent:event payload:payload profileID:profileID];
     return;
   }
   if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"closed"]) {
@@ -572,6 +588,38 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
                                         size.width, size.height, &error);
   }];
   return view;
+}
+
+- (void)adoptOpenedTabFromEvent:(const shaar_event *)event
+                        payload:(NSDictionary *)payload
+                      profileID:(NSString *)profileID {
+  if (!_symbols.tab_find || !_shaarEngine || event->session_id.size) return;
+  if ([payload[@"schemaVersion"] intValue] != 1) return;
+  NSString *tabID = String(event->tab_id);
+  NSString *windowID = String(event->window_id);
+  if (!tabID.length || !windowID.length || _shaarTabs[tabID]) return;
+  NSString *openerID = [payload[@"openerTabID"] isKindOfClass:NSString.class]
+      ? payload[@"openerTabID"] : nil;
+  NSString *storedProfile = openerID.length ? _shaarTabProfiles[openerID] : nil;
+  if (storedProfile.length) profileID = storedProfile;
+  shaar_tab *tab = nullptr;
+  shaar_error error = EmptyError();
+  if (_symbols.tab_find(_shaarEngine, Bytes(windowID), Bytes(tabID), &tab, &error) != SHAAR_OK ||
+      !tab) return;
+  if (!_shaarWindows[windowID] || !_shaarProfiles[profileID]) {
+    _shaarTabs[tabID] = [NSValue valueWithPointer:tab];
+    [self closeTabID:tabID];
+    return;
+  }
+  _shaarTabs[tabID] = [NSValue valueWithPointer:tab];
+  _shaarTabWindows[tabID] = windowID;
+  _shaarTabProfiles[tabID] = profileID;
+  NSString *url = [payload[@"url"] isKindOfClass:NSString.class] ? payload[@"url"] : @"";
+  if (self.onNewTab) {
+    self.onNewTab(tabID, profileID, url, openerID, [payload[@"foreground"] boolValue]);
+  } else {
+    [self closeTabID:tabID];
+  }
 }
 
 - (NSString *)windowIDForTabID:(NSString *)tabID { return _shaarTabWindows[tabID]; }

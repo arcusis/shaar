@@ -29,7 +29,8 @@ import Foundation
         Task { await inspect(host: host, runtime: runtime, pageURL: pageURL, outputURL: outputURL) }
       }
       return withExtendedLifetime(host) {
-        let code = runtime.run(withDataDirectory: root.appending(path: "Chromium"), testing: false)
+        // A hidden window cannot answer a login-keychain prompt before the page loads.
+        let code = runtime.run(withDataDirectory: root.appending(path: "Chromium"), testing: true)
         host.detach()
         return code
       }

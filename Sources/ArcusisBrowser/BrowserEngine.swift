@@ -153,6 +153,7 @@ final class BrowserEngine {
         self.events.router.client(forTab: tab.uuidString, nativeWindowID: self.windowID)
           === self.callbacks
       else { return false }
+      self.shaarDevTools[tab]?.beginNavigation()
       return self.runtime.navigateTabID(
         tab.uuidString, profileID: profile.uuidString, windowID: self.windowID,
         url: url.absoluteString)
@@ -442,7 +443,6 @@ final class BrowserEngine {
         let id = UUID(uuidString: identity)
       else { return }
       let startedLoading = loading && self.pages[id]?.loading != true
-      if startedLoading { self.shaarDevTools[id]?.beginNavigation() }
       if startedLoading && self.store?.pageFind?.tabID == id {
         self.store?.dismissPageFind()
       }

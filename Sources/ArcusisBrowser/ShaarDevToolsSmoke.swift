@@ -475,12 +475,17 @@ import Vision
     report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .network
-    let initial = shell.network.requests(from: shell.events)
     let targetPath = shell.target.url.path
-    let hasDocument = initial.contains {
-      $0.method == "GET" && URL(string: $0.url)?.path == targetPath
+    _ = await wait(attempts: 300) {
+      guard let target = context.engine.siteControlTarget,
+        context.engine.pages[target.tabID]?.loading == false
+      else { return false }
+      let rows = loadTimeDocumentRows(shell: shell, path: targetPath)
+      return !rows.isEmpty && rows.allSatisfy { $0.method == "GET" }
     }
-    let documentRows = initial.filter { URL(string: $0.url)?.path == targetPath }
+    let initial = shell.network.requests(from: shell.events)
+    let documentRows = loadTimeDocumentRows(shell: shell, path: targetPath)
+    let hasDocument = !documentRows.isEmpty && documentRows.allSatisfy { $0.method == "GET" }
     let documentDetails = documentRows.map {
       "id=\($0.id) method=\($0.method.isEmpty ? "<empty>" : $0.method) status=\($0.status.map(String.init) ?? "-")"
     }.joined(separator: "; ")
@@ -531,6 +536,14 @@ import Vision
       shell.network.requests(from: shell.events).first { $0.id == request.id }?.duration != nil
     }
     reportRealWorld(completed, "world-timing", "Timing for \(request.name)", report: report)
+  }
+
+  private static func loadTimeDocumentRows(
+    shell: ShaarDevToolsModel, path: String
+  ) -> [ShaarNetworkRequest] {
+    shell.network.requests(from: shell.events).filter {
+      $0.resource == .document && URL(string: $0.url)?.path == path
+    }
   }
 
   private static func inspectRealWorldStorage(

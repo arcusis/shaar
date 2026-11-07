@@ -70,6 +70,31 @@ import Testing
     #expect(model.visibleRequests(from: events).isEmpty)
   }
 
+  @Test func responseOnlyDocumentUsesUnambiguousSameURLMethod() {
+    let model = ShaarNetworkModel()
+    let url = "https://example.com/en-US"
+    let events: [ShaarDevToolsEvent] = [
+      .network(.init(id: UUID(), method: "GET", url: url, status: 200,
+                     requestID: "document-request", phase: .response,
+                     mimeType: "text/html")),
+      .network(.init(id: UUID(), method: "", url: url, status: 200,
+                     requestID: "document-response", phase: .response,
+                     mimeType: "text/html")),
+      .network(.init(id: UUID(), method: "", url: "https://example.com/api",
+                     status: 200, requestID: "api-response", phase: .response,
+                     mimeType: "application/json")),
+    ]
+    let rows = model.requests(from: events)
+    #expect(rows.map(\.method) == ["GET", "GET", ""])
+
+    let ambiguous = events + [
+      .network(.init(id: UUID(), method: "POST", url: url, status: 200,
+                     requestID: "posted-document", phase: .response,
+                     mimeType: "text/html"))
+    ]
+    #expect(model.requests(from: ambiguous)[1].method.isEmpty)
+  }
+
   @Test func copiesEscapeCommandsAndRedactSensitiveHeaders() {
     let model = ShaarNetworkModel()
     let event = ShaarNetworkEvent(

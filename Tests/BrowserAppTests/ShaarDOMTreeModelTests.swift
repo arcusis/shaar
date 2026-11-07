@@ -2,8 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
 import ShaarEngineABI
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -285,6 +287,64 @@ import Testing
         ],
       ]
     ]
+  }
+
+  @Test func copyPathLoadsMissingChildrenAndRendersOffscreen() async throws {
+    _ = NSApplication.shared
+    let complete = DOMFixtureTransport()
+    let populated = ShaarDOMTreeModel(target: target(), transport: complete)
+    populated.open()
+    for _ in 0..<20 where populated.rootID == nil { await Task.yield() }
+    await populated.prepareCopyPath(for: 6)
+    #expect(!complete.commands.contains(.children(1)))
+    #expect(!complete.commands.contains(.children(2)))
+    #expect(!complete.commands.contains(.children(3)))
+    #expect(!complete.commands.contains(.children(4)))
+    #expect(!complete.commands.contains(.children(5)))
+
+    let inspector = InspectorModel(target: target(), engine: nil)
+    defer { inspector.close() }
+    #expect(await inspector.pathsForDOMNode(5) == nil)
+    inspector.open()
+    #expect(await inspector.pathsForDOMNode(0) == nil)
+    #expect(await inspector.pathsForDOMNode(5) == nil)
+    let wide = try VisualCapture.pngOffscreen(
+      ShaarDOMTreePanel(model: populated, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 720, height: 480))
+    let narrow = try VisualCapture.pngOffscreen(
+      ShaarDOMTreePanel(model: populated, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 400, height: 640))
+    #expect(!wide.isEmpty)
+    #expect(!narrow.isEmpty)
+    populated.close()
+
+    let partialTransport = DOMFixtureTransport()
+    partialTransport.document = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+            "children": [
+              [
+                "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+                "childNodeCount": 4,
+                "children": [
+                  ["nodeId": 5, "nodeType": 1, "nodeName": "SECTION", "nodeValue": ""]
+                ],
+              ]
+            ],
+          ]
+        ],
+      ]
+    ]
+    let partial = ShaarDOMTreeModel(target: target(), transport: partialTransport)
+    partial.open()
+    for _ in 0..<20 where partial.rootID == nil { await Task.yield() }
+    await partial.prepareCopyPath(for: 5)
+    #expect(partialTransport.commands.contains(.children(3)))
+    #expect(partial.selector(for: 5).isEmpty)
+    partial.close()
   }
 
   @Test func malformedDocumentShowsErrorInsteadOfBlankTree() async {

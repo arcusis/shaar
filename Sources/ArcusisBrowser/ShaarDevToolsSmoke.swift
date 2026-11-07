@@ -1536,7 +1536,9 @@ import Vision
     case .coverage: ["Coverage collection", "No coverage recorded"]
     case .audits: ["Run an audit", "Entire page"]
     case .sources: ["Filter resources", "Find in source"]
-    case .cssOverview: ["style sheets", "This page has no style", "Colors", "declarations"]
+    case .cssOverview: [
+      "style sheets", "This page has no style", "Colors", "Fonts", "Sheets", "declaration",
+    ]
     case .security: ["Not Secure", "loaded over HTTP"]
     case .sensors: ["Touch emulation", "Clear location"]
     case .repro: ["REPRO BUNDLE", "Create .shaarrepro"]

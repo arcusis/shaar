@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -141,6 +143,93 @@ import Testing
     let summary = ShaarDevToolsCSSOverview.summarize(try #require(batch).sheets)
     #expect(summary.sheets(matching: .color("#336699")) == ["site.css"])
     #expect(!summary.contributingSheets.contains("empty.css"))
+  }
+
+  @Test @MainActor func cssOverviewRendersOffscreenForEachState() async throws {
+    _ = NSApplication.shared
+    let emptyShell = cssShell()
+    let empty = try VisualCapture.pngOffscreen(
+      ShaarDevToolsCSSOverviewPanel(model: emptyShell), size: NSSize(width: 640, height: 280))
+    emptyShell.cssOverview.present([])
+    let none = try VisualCapture.pngOffscreen(
+      ShaarDevToolsCSSOverviewPanel(model: emptyShell), size: NSSize(width: 640, height: 280))
+    let blankShell = cssShell()
+    blankShell.cssOverview.present([
+      ShaarDevToolsCSSSheet(
+        name: "blank.css", url: "https://example.com/blank.css", text: "a{margin:0}")
+    ])
+    let blank = try VisualCapture.pngOffscreen(
+      ShaarDevToolsCSSOverviewPanel(model: blankShell), size: NSSize(width: 640, height: 280))
+    let richShell = cssShell()
+    richShell.cssOverview.present([
+      ShaarDevToolsCSSSheet(name: "site.css", url: "https://example.com/site.css", text: siteSheet),
+      ShaarDevToolsCSSSheet(name: "type.css", url: "https://example.com/type.css", text: typeSheet),
+    ])
+    richShell.cssOverview.choose(.color("#336699"))
+    let colors = try VisualCapture.pngOffscreen(
+      ShaarDevToolsCSSOverviewPanel(model: richShell), size: NSSize(width: 640, height: 520))
+    richShell.cssOverview.choose(.font("Iowan Old Style"))
+    let fonts = try VisualCapture.pngOffscreen(
+      ShaarDevToolsCSSOverviewPanel(model: richShell), size: NSSize(width: 640, height: 520))
+    richShell.cssOverview.failure = "Could not read style sheets."
+    let failed = try VisualCapture.pngOffscreen(
+      ShaarDevToolsCSSOverviewPanel(model: richShell), size: NSSize(width: 640, height: 520))
+    let clipped = try await clippedOverview()
+    let clippedImage = try VisualCapture.pngOffscreen(
+      ShaarDevToolsCSSOverviewPanel(model: clipped), size: NSSize(width: 640, height: 360))
+    let inspector = InspectorModel(target: richShell.target, engine: nil)
+    richShell.open(inspector: inspector)
+    richShell.section = .cssOverview
+    let panel = try VisualCapture.pngOffscreen(
+      ShaarDevToolsPanel(model: richShell, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 850, height: 620))
+    #expect(!empty.isEmpty)
+    #expect(!none.isEmpty)
+    #expect(!blank.isEmpty)
+    #expect(!colors.isEmpty)
+    #expect(!fonts.isEmpty)
+    #expect(!failed.isEmpty)
+    #expect(!clippedImage.isEmpty)
+    #expect(clipped.cssOverview.summary.clipped)
+    #expect(!panel.isEmpty)
+    richShell.close()
+    clipped.phase2.close()
+  }
+
+  @MainActor private func cssShell() -> ShaarDevToolsModel {
+    let defaults = UserDefaults(suiteName: "ShaarDevToolsCSS.\(UUID().uuidString)")!
+    return ShaarDevToolsModel(target: cssTarget(), layoutDefaults: defaults)
+  }
+
+  private func cssTarget() -> SiteControlTarget {
+    SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
+  }
+
+  @MainActor private func clippedOverview() async throws -> ShaarDevToolsModel {
+    let urls = (0..<33).map { "https://example.com/sheet-\($0).css" }
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return [
+          "items": urls.map { url in
+            ["url": url, "type": "Stylesheet", "mimeType": "text/css"]
+          }
+        ]
+      case .resourceContent:
+        return ["items": [], "body": "a{color:#336699}", "base64Encoded": false]
+      default:
+        return ["items": []]
+      }
+    }
+    let defaults = UserDefaults(suiteName: "ShaarDevToolsCSS.\(UUID().uuidString)")!
+    let shell = ShaarDevToolsModel(
+      target: cssTarget(), phase2Transport: fixture, layoutDefaults: defaults)
+    shell.phase2.open()
+    for _ in 0..<40 where !shell.phase2.available { await Task.yield() }
+    #expect(shell.phase2.available)
+    await shell.cssOverview.reload()
+    return shell
   }
 
   private let siteSheet = """

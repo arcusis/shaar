@@ -71,6 +71,9 @@ import Foundation
     await check("shell-defaults") {
       try self.proveShellDefaults(shell)
     }
+    await check("security") {
+      try await self.proveSecurity(shell: shell)
+    }
     await check("console-network") {
       _ = try await inspector.evaluate(
         "console.error('shaar19-live-console'); fetch('/profile-privacy-cache', {cache:'no-store'}).then(r=>r.text())"
@@ -451,6 +454,38 @@ import Foundation
       && chromium?.modifiers == [.command, .option, .shift]
   }
 
+  private func proveSecurity(shell: ShaarDevToolsModel) async throws -> String {
+    let previous = shell.section
+    defer { shell.section = previous }
+    shell.section = .security
+    let level = engineLevel(shell)
+    await shell.refreshSecurity()
+    guard level == "insecure", shell.securitySummary.connection == .http,
+      shell.securitySummary.certificate == nil
+    else {
+      throw Failure(
+        "Security summary level=\(level ?? "nil") connection=\(connectionName(shell.securitySummary.connection)) certificate=\(shell.securitySummary.certificate != nil)"
+      )
+    }
+    return "HTTP page is not secure. Engine level insecure. No certificate on this connection."
+  }
+
+  private func engineLevel(_ shell: ShaarDevToolsModel) -> String? {
+    let info = engine.runtime.securityInfo(
+      forTabID: shell.target.tabID.uuidString, profileID: shell.target.profileID.uuidString)
+    return info?["level"] as? String
+  }
+
+  private func connectionName(_ connection: ShaarPageConnection) -> String {
+    switch connection {
+    case .secure: "secure"
+    case .http: "http"
+    case .certificateError: "certificateError"
+    case .mixedContent: "mixedContent"
+    case .unavailable: "unavailable"
+    }
+  }
+
   private func finishedPrivacyRow(_ shell: ShaarDevToolsModel) -> ShaarNetworkRequest? {
     shell.network.requests(from: shell.events).first { row in
       row.url.contains("/profile-privacy-cache")
@@ -646,7 +681,7 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "f12-route", "shell-defaults", "console-network", "network-row",
+    "f12-route", "shell-defaults", "security", "console-network", "network-row",
     "console-repeat", "issues", "split-shell", "application-cookie",
     "application-local-storage",
     "application-session-storage", "application-indexed-db", "application-cache-storage",

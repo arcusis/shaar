@@ -366,9 +366,10 @@ private struct ShaarDOMPanelObserver {
       case "info": level = .info
       default: level = .log
       }
-      let frames = data.stack.map {
-        ShaarConsoleFrame(function: $0.function, source: $0.source)
-      }
+      let frames =
+        data.stack.isEmpty
+        ? ShaarConsoleLocations.frames(in: text)
+        : data.stack.map { ShaarConsoleFrame(function: $0.function, source: $0.source) }
       return .console(
         ShaarConsoleEvent(
           id: UUID(), level: level, message: text,

@@ -1,0 +1,13 @@
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -742,8 +742,9 @@
+       else {
+         method = "Runtime.evaluate";
+         if (command_id == SHAAR_DEVTOOLS_PHASE2_LONG_TASKS) {
++          // Long tasks never enter the timeline buffer, so getEntriesByType stays empty.
+           params.Set("expression",
+-                     "JSON.stringify(performance.getEntriesByType('longtask').slice(-50).map(e=>({name:e.name,startTime:e.startTime,duration:e.duration})))");
++                     "(()=>{const g=globalThis;const push=e=>{g.__shaarLongTasks.push({name:e.name,startTime:e.startTime,duration:e.duration});if(g.__shaarLongTasks.length>50)g.__shaarLongTasks.splice(0,g.__shaarLongTasks.length-50);};if(!g.__shaarLongTasks){g.__shaarLongTasks=[];g.__shaarLongTaskObserver=new PerformanceObserver(list=>{for(const e of list.getEntries())push(e);});g.__shaarLongTaskObserver.observe({type:'longtask',buffered:true});}for(const e of g.__shaarLongTaskObserver.takeRecords())push(e);return JSON.stringify(g.__shaarLongTasks);})()");
+         } else {
+           params.Set("expression",
+                      "JSON.stringify({ttfb:performance.getEntriesByType('navigation')[0]?.responseStart,fcp:performance.getEntriesByName('first-contentful-paint')[0]?.startTime,events:performance.getEntriesByType('event').slice(-50).map(e=>({duration:e.duration,startTime:e.startTime,interactionId:e.interactionId}))})");

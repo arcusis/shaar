@@ -312,7 +312,8 @@ struct ShaarDevToolsPanel: View {
       if model.consoleAvailable {
         ShaarConsolePanel(
           model: model.console, events: model.consoleEvents,
-          droppedCount: model.droppedConsoleCount, inspector: inspector)
+          droppedCount: model.droppedConsoleCount, inspector: inspector,
+          openSource: openConsoleSource)
       } else {
         unavailablePanel
       }
@@ -470,6 +471,18 @@ struct ShaarDevToolsPanel: View {
       try await ShaarNetworkConditions.applyCacheDisabled(disabled) { method, params in
         _ = try await developer.call(method, params: params)
       }
+    }
+  }
+
+  private func openConsoleSource(_ frame: ShaarConsoleFrame) {
+    guard let location = ShaarConsoleLocations.parse(frame.source) else { return }
+    model.section = .sources
+    Task {
+      let loaded = model.sources.resources.contains {
+        ShaarSourceTree.sameResource($0.url, location.url)
+      }
+      if !loaded { await model.sources.refresh() }
+      _ = await model.sources.reveal(url: location.url, line: location.line)
     }
   }
 

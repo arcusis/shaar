@@ -26,6 +26,30 @@ struct ShaarPerformanceRoute: Identifiable, Equatable {
   let lcpMilliseconds: Double?
 }
 
+enum ShaarPerformanceCapture: Equatable {
+  case idle
+  case recording
+  case stopped
+}
+
+enum ShaarPerformanceTimeline {
+  static func lanes(for tasks: [ShaarPerformanceTask]) -> [[ShaarPerformanceTask]] {
+    var lanes: [[ShaarPerformanceTask]] = []
+    for task in tasks.sorted(by: { $0.start < $1.start }) {
+      let index = lanes.firstIndex { lane in
+        guard let last = lane.last else { return true }
+        return last.start + last.duration <= task.start + 0.01
+      }
+      if let index {
+        lanes[index].append(task)
+      } else {
+        lanes.append([task])
+      }
+    }
+    return lanes
+  }
+}
+
 @MainActor @Observable
 final class ShaarPerformanceModel {
   private(set) var path: String
@@ -46,10 +70,15 @@ final class ShaarPerformanceModel {
   private(set) var resourcesTruncated = false
   private(set) var samples: [ShaarPerformanceSample] = []
   private(set) var routes: [ShaarPerformanceRoute] = []
+  private(set) var capture: ShaarPerformanceCapture = .idle
+  private(set) var recordedTasks: [ShaarPerformanceTask] = []
   private(set) var loading = false
+  /// Refreshes that passed the in-flight guard. A no-op refresh leaves this unchanged.
+  private(set) var completedRefreshes = 0
   var failure: String?
   @ObservationIgnored private let phase2: ShaarPhase2Model
   @ObservationIgnored private var generation = 0
+  @ObservationIgnored private var recordingGeneration = 0
   @ObservationIgnored private var lastSequence: UInt64 = 0
 
   init(target: SiteControlTarget, phase2: ShaarPhase2Model) {
@@ -58,6 +87,10 @@ final class ShaarPerformanceModel {
   }
 
   var taskMilliseconds: Double { tasks.reduce(0) { $0 + $1.duration } }
+  var timelineTasks: [ShaarPerformanceTask] {
+    if capture == .idle { return tasks }
+    return recordedTasks
+  }
   var latestSample: ShaarPerformanceSample? { samples.last }
   var resourceCount: Int { resourceTypes.values.reduce(0, +) }
   var budgetResult: ShaarPerformanceBudgetResult? {
@@ -113,12 +146,26 @@ final class ShaarPerformanceModel {
     publishBudgetStatus()
   }
 
+  func startRecording() {
+    recordingGeneration += 1
+    capture = .recording
+    recordedTasks = []
+  }
+
+  func stopRecording() {
+    guard capture == .recording else { return }
+    recordingGeneration += 1
+    capture = .stopped
+  }
+
   func refresh() async {
     guard phase2.available, !loading else { return }
     let generation = generation
+    let recordingToken = recordingGeneration
     loading = true
     defer {
       if generation == self.generation { loading = false }
+      completedRefreshes += 1
     }
     do {
       let metricReply = try await phase2.execute(.performanceMetrics)
@@ -133,13 +180,16 @@ final class ShaarPerformanceModel {
           return (name, value)
         }, uniquingKeysWith: { _, latest in latest })
       counters = counterReply.counters
-      tasks = taskReply.items.enumerated().compactMap { index, item in
+      tasks = taskReply.items.compactMap { item in
         guard let start = item.number["startTime"],
           let duration = item.number["duration"]
         else { return nil }
+        let name = item.text["name"] ?? "Long task"
         return ShaarPerformanceTask(
-          id: "\(index)-\(start)", name: item.text["name"] ?? "Long task",
-          start: start, duration: duration)
+          id: "\(name)|\(start)|\(duration)", name: name, start: start, duration: duration)
+      }
+      if capture == .recording, recordingToken == self.recordingGeneration {
+        mergeRecorded(tasks)
       }
       resourceTypes = Dictionary(
         resourceReply.items.compactMap { $0.text["type"] }.map { ($0, 1) },
@@ -205,6 +255,9 @@ final class ShaarPerformanceModel {
     metrics.removeAll()
     counters.removeAll()
     tasks.removeAll()
+    capture = .idle
+    recordedTasks.removeAll()
+    recordingGeneration += 1
     resourceTypes.removeAll()
     javascriptBytes = nil
     pageRequestCount = nil
@@ -212,6 +265,15 @@ final class ShaarPerformanceModel {
     samples.removeAll()
     loading = false
     failure = nil
+  }
+
+  private func mergeRecorded(_ incoming: [ShaarPerformanceTask]) {
+    var seen = Set(recordedTasks.map(\.id))
+    for task in incoming where seen.insert(task.id).inserted {
+      recordedTasks.append(task)
+    }
+    recordedTasks.sort { $0.start < $1.start }
+    if recordedTasks.count > 50 { recordedTasks.removeFirst(recordedTasks.count - 50) }
   }
 
   private static func path(for url: URL) -> String {

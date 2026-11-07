@@ -85,10 +85,13 @@ import XCTest
           text: ["type": "layout-shift"], number: ["value": 0.02],
           flag: ["hadRecentInput": false], items: [], truncated: false),
       ])
+      live.performance.startRecording()
+      await live.performance.refresh()
+      live.performance.stopRecording()
       try capture(
         ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
-        named: "after-performance-results-\(suffix)", scheme: scheme,
-        appearance: appearance, root: root)
+        named: "after-performance-recording-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root, height: 640)
       live.close()
     }
     XCTAssertTrue(NSApp.keyWindow === previous)
@@ -96,17 +99,17 @@ import XCTest
 
   private func capture<V: View>(
     _ panel: V, named name: String, scheme: ColorScheme, appearance: NSAppearance.Name,
-    root: URL
+    root: URL, height: CGFloat = 440
   ) throws {
     let view =
       panel
-      .frame(width: 1040, height: 440)
+      .frame(width: 1040, height: height)
       .background(Color(nsColor: .windowBackgroundColor))
       .environment(\.colorScheme, scheme)
     let image = try VisualCapture.renderOffscreen(
-      view, size: NSSize(width: 1040, height: 440), appearance: appearance,
+      view, size: NSSize(width: 1040, height: height), appearance: appearance,
       to: root.appending(path: "\(name).png"))
     XCTAssertEqual(image.pixelsWide, 1040)
-    XCTAssertEqual(image.pixelsHigh, 440)
+    XCTAssertEqual(image.pixelsHigh, Int(height))
   }
 }

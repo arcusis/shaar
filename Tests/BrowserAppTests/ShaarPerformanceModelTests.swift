@@ -75,6 +75,47 @@ import Testing
     phase2.close()
   }
 
+  @Test func recordingFreezesMainThreadTasks() async {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
+    var includeSecond = false
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .longTasks:
+        var items: [[String: Any]] = [
+          ["name": "script evaluation", "startTime": 1130, "duration": 84]
+        ]
+        if includeSecond {
+          items.append(["name": "event dispatch", "startTime": 1570, "duration": 56])
+        }
+        return ["items": items]
+      case .vitalsInputs:
+        return ["items": [["name": "ttfb", "value": 90], ["name": "fcp", "value": 400]]]
+      default:
+        return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarPerformanceModel(target: target, phase2: phase2)
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    model.startRecording()
+    await model.refresh()
+    #expect(model.capture == .recording)
+    #expect(model.timelineTasks.map(\.name) == ["script evaluation"])
+    #expect(model.inpMilliseconds == nil)
+    includeSecond = true
+    await model.refresh()
+    #expect(model.timelineTasks.map(\.name) == ["script evaluation", "event dispatch"])
+    #expect(ShaarPerformanceTimeline.lanes(for: model.timelineTasks).count == 1)
+    model.stopRecording()
+    #expect(model.capture == .stopped)
+    #expect(model.timelineTasks.count == 2)
+    model.startRecording()
+    #expect(model.recordedTasks.isEmpty)
+    phase2.close()
+  }
+
   @Test func unavailableTransportKeepsPerformanceEmpty() async {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)

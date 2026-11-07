@@ -149,6 +149,103 @@ import Testing
     phase2.close()
   }
 
+  @Test func fileTreeSearchPrettyPrintAndLineReveal() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return [
+          "items": [
+            ["url": "https://example.com/app.js", "type": "Script", "mimeType": "text/javascript"],
+            [
+              "url": "https://example.com/src/panel.js", "type": "Script",
+              "mimeType": "text/javascript",
+            ],
+            [
+              "url": "https://example.com/config.json", "type": "Other",
+              "mimeType": "application/json",
+            ],
+          ]
+        ]
+      case .resourceContent(let url):
+        if url.hasSuffix("config.json") {
+          return ["items": [], "body": "{\"enabled\":true}", "base64Encoded": false]
+        }
+        if url.hasSuffix("panel.js") {
+          return [
+            "items": [],
+            "body": "function panel(){const label=\"a;b\";return label;}\n",
+            "base64Encoded": false,
+          ]
+        }
+        return [
+          "items": [],
+          "body": "const answer = 42;\nexport function render(){return answer;}\n",
+          "base64Encoded": false,
+        ]
+      default: return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(phase2: phase2)
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    let names = model.treeRows.map(\.name)
+    let sourceFolder = try #require(names.firstIndex(of: "src"))
+    let panelFile = try #require(names.firstIndex(of: "panel.js"))
+    #expect(names.contains("example.com"))
+    #expect(sourceFolder < panelFile)
+    let panel = try #require(model.resources.first { $0.name == "panel.js" })
+    await model.select(panel)
+    model.prettyPrint = true
+    #expect(model.displayedContent?.contains("\n") == true)
+    #expect(model.displayedContent?.contains("\"a;b\"") == true)
+    model.contentQuery = "label"
+    model.revealCurrentMatch()
+    #expect(model.matchLines.count == 2)
+    #expect(model.highlightedLine == model.matchLines.first)
+    let revealed = await model.reveal(url: "https://example.com/app.js?build=1", line: 2)
+    #expect(revealed)
+    #expect(model.prettyPrint == false)
+    #expect(model.selectedURL == "https://example.com/app.js")
+    #expect(model.highlightedLine == 1)
+    #expect(model.displayedLines?[1].contains("render") == true)
+    model.contentQuery = ""
+    model.revealCurrentMatch()
+    #expect(model.highlightedLine == 1)
+    let missing = await model.reveal(url: "https://other.test/app.js", line: 1)
+    #expect(!missing)
+    phase2.close()
+  }
+
+  @Test func consoleStackFramesExposeDocumentLines() {
+    let message = """
+      Error: shaar-source-jump
+          at shaarThrowForSources (http://127.0.0.1:9/inspector-tools:8:40)
+          at http://127.0.0.1:9/inspector-source-sample.js:1:1
+          at <anonymous>:1:1
+      """
+    let frames = ShaarConsoleLocations.frames(in: message)
+    #expect(frames.count == 2)
+    #expect(frames[0].function == "shaarThrowForSources")
+    let location = ShaarConsoleLocations.parse(frames[0].source)
+    #expect(location?.url == "http://127.0.0.1:9/inspector-tools")
+    #expect(location?.line == 8)
+    #expect(location?.column == 40)
+    let sample = ShaarConsoleLocations.parse(frames[1].source)
+    #expect(sample?.url == "http://127.0.0.1:9/inspector-source-sample.js")
+    #expect(sample?.line == 1)
+    #expect(sample?.column == 1)
+    #expect(ShaarConsoleLocations.parse("/app/main.ts:8") == nil)
+    #expect(ShaarConsoleLocations.parse("http://127.0.0.1:9") == nil)
+    let formatted = ShaarSourceFormatter.layout(
+      "for (let i = 0; i < 2; i++) { work(); }")
+    #expect(formatted.contains("for (let i = 0; i < 2; i++)"))
+    #expect(formatted.contains("work();"))
+  }
+
   @Test func productionPendingTransportShowsNoResources() async {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)

@@ -60,18 +60,25 @@ struct ShaarSourcesPanel: View {
       } else {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(folders, id: \.self) { folder in
-              Text(folder.isEmpty ? ShellL10n.string("Resources") : folder)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .padding(.horizontal, 12).padding(.top, 11).padding(.bottom, 5)
-              ForEach(model.visibleResources.filter { $0.folder == folder }) { resource in
-                resourceRow(resource)
+            ForEach(model.treeRows) { row in
+              if let url = row.resourceURL,
+                let resource = model.visibleResources.first(where: { $0.url == url })
+              {
+                resourceRow(resource, depth: row.depth)
+              } else {
+                Text(row.name)
+                  .font(.system(size: 9, weight: .semibold))
+                  .foregroundStyle(.primary)
+                  .lineLimit(1)
+                  .padding(.leading, 12 + CGFloat(row.depth) * 12)
+                  .padding(.trailing, 12)
+                  .padding(.top, 11)
+                  .padding(.bottom, 5)
               }
             }
           }
         }
+        .accessibilityIdentifier("shaar.devtools.sourceTree")
         .onMoveCommand { direction in
           guard focusedURL != nil else { return }
           Task {
@@ -91,14 +98,7 @@ struct ShaarSourcesPanel: View {
     .background(Color.primary.opacity(0.025))
   }
 
-  private var folders: [String] {
-    Array(Set(model.visibleResources.map(\.folder))).sorted {
-      if $0.hasPrefix("/") != $1.hasPrefix("/") { return !$0.hasPrefix("/") }
-      return $0 < $1
-    }
-  }
-
-  private func resourceRow(_ resource: ShaarSourceResource) -> some View {
+  private func resourceRow(_ resource: ShaarSourceResource, depth: Int) -> some View {
     Button {
       focusedURL = resource.url
       Task { await model.select(resource) }
@@ -110,7 +110,8 @@ struct ShaarSourcesPanel: View {
         Spacer(minLength: 0)
       }
       .font(.system(size: 10))
-      .padding(.horizontal, 12)
+      .padding(.leading, 12 + CGFloat(depth) * 12)
+      .padding(.trailing, 12)
       .frame(height: 27)
       .background(
         model.selectedURL == resource.url
@@ -164,6 +165,7 @@ struct ShaarSourcesPanel: View {
         .padding(.horizontal, 12).padding(.vertical, 7)
         Divider()
       }
+      findBar
       if let failure = model.failure {
         HStack(spacing: 8) {
           Image(systemName: "exclamationmark.triangle").foregroundStyle(.primary)
@@ -200,9 +202,9 @@ struct ShaarSourcesPanel: View {
       Text(model.selected?.name ?? ShellL10n.string("Sources"))
         .font(.system(size: 11, weight: .semibold)).lineLimit(1)
       Spacer(minLength: 4)
-      Toggle(ShellL10n.string("Pretty JSON"), isOn: $model.prettyPrint)
+      Toggle(ShellL10n.string("Pretty print"), isOn: $model.prettyPrint)
         .toggleStyle(.checkbox).controlSize(.small)
-        .disabled(!model.isJSON)
+        .disabled(!model.canPrettyPrint)
       if model.isDevelopmentPage {
         Button(ShellL10n.string("Find local files")) {
           localSourceStatus = nil
@@ -252,6 +254,42 @@ struct ShaarSourcesPanel: View {
     .padding(.horizontal, 12).frame(height: 36)
   }
 
+  private var findBar: some View {
+    HStack(spacing: 8) {
+      TextField(ShellL10n.string("Find in source"), text: $model.contentQuery)
+        .textFieldStyle(.roundedBorder)
+        .font(.system(size: 10))
+        .onSubmit { model.revealCurrentMatch() }
+        .accessibilityIdentifier("shaar.devtools.sourceSearch")
+      if !model.contentQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if model.matchLines.isEmpty {
+          Text(ShellL10n.string("No matches in this file"))
+            .font(.system(size: 10))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+        } else {
+          Text("\(model.matchCursor + 1)/\(model.matchLines.count)")
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.primary)
+          Button(action: model.showPreviousContentMatch) {
+            Image(systemName: "chevron.up")
+          }
+          .help(ShellL10n.string("Previous match"))
+          .accessibilityLabel(ShellL10n.string("Previous match"))
+          Button(action: model.showNextContentMatch) {
+            Image(systemName: "chevron.down")
+          }
+          .help(ShellL10n.string("Next match"))
+          .accessibilityLabel(ShellL10n.string("Next match"))
+        }
+      }
+    }
+    .buttonStyle(.plain)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 6)
+    .onChange(of: model.contentQuery) { _, _ in model.revealCurrentMatch() }
+  }
+
   private func openLocalFile(_ location: InspectorSourceLocation) {
     let editor = InspectorSourceEditor(rawValue: sourceEditor) ?? .vscode
     if editor == .showOnly {
@@ -289,7 +327,12 @@ struct ShaarSourcesPanel: View {
                 .textSelection(.enabled)
             }
             .font(.system(size: 10, design: .monospaced))
+            .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 18)
+            .background(lineBackground(index))
+            .accessibilityIdentifier(
+              index == model.highlightedLine
+                ? "shaar.devtools.sourceLine" : "shaar.devtools.sourceText")
           }
         }
         .padding(.vertical, 8).padding(.trailing, 12)
@@ -301,6 +344,14 @@ struct ShaarSourcesPanel: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityIdentifier("shaar.devtools.sourceCode")
+  }
+
+  private func lineBackground(_ index: Int) -> Color {
+    if index == model.highlightedLine {
+      return Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.35 : 0.22)
+    }
+    if model.matchLines.contains(index) { return Color.yellow.opacity(0.35) }
+    return .clear
   }
 
   private var sourcePager: some View {

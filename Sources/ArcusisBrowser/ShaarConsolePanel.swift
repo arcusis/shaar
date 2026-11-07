@@ -10,6 +10,7 @@ struct ShaarConsolePanel: View {
   let events: [ShaarDevToolsEvent]
   let droppedCount: Int
   let inspector: InspectorModel?
+  var openSource: (ShaarConsoleFrame) -> Void = { _ in }
   @FocusState private var focusedEntry: UUID?
   @FocusState private var focusedFilter: Int?
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -273,7 +274,9 @@ struct ShaarConsolePanel: View {
           Text(ShellL10n.string(row.event.origin.rawValue))
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(.primary)
-          if let source = row.event.source { sourceLink(source, title: source) }
+          if let source = row.event.source {
+            sourceLink(source, title: source, frame: row.event.stack.first)
+          }
           if row.event.objectID != nil || !row.event.previewProperties.isEmpty {
             objectPreview(row.event)
           }
@@ -282,7 +285,7 @@ struct ShaarConsolePanel: View {
               .font(.system(size: 10, weight: .semibold))
               .foregroundStyle(.primary)
             ForEach(row.event.stack, id: \.self) { frame in
-              sourceLink(frame.source, title: "\(frame.function) · \(frame.source)")
+              sourceLink(frame.source, title: "\(frame.function) · \(frame.source)", frame: frame)
             }
           }
         }
@@ -323,8 +326,20 @@ struct ShaarConsolePanel: View {
     }
   }
 
-  @ViewBuilder private func sourceLink(_ source: String, title: String) -> some View {
-    if let location = InspectorSourceLocation.parse(source) {
+  @ViewBuilder private func sourceLink(
+    _ source: String, title: String, frame: ShaarConsoleFrame? = nil
+  ) -> some View {
+    if let location = ShaarConsoleLocations.parse(frame?.source ?? source),
+      location.url.hasPrefix("http://") || location.url.hasPrefix("https://")
+    {
+      Button {
+        openSource(frame ?? ShaarConsoleFrame(function: "(anonymous)", source: location.source))
+      } label: {
+        Text(title).font(.system(size: 10, design: .monospaced)).lineLimit(2)
+      }
+      .buttonStyle(.link)
+      .help(ShellL10n.string("Show this line in Sources"))
+    } else if let location = InspectorSourceLocation.parse(source) {
       Button {
         let editor =
           InspectorSourceEditor(

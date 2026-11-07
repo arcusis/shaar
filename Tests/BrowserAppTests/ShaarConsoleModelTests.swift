@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -173,14 +175,41 @@ import Testing
     model.onClear = { cleared = true }
     model.command = "1 + 1"
     await model.submit { _ in
-      ShaarConsoleEvaluation(message: "2", objectID: "obj-1", previewProperties: [
-        ShaarConsoleProperty(name: "n", value: "2")
-      ])
+      ShaarConsoleEvaluation(
+        message: "2", objectID: "obj-1",
+        previewProperties: [
+          ShaarConsoleProperty(name: "n", value: "2")
+        ])
     }
     #expect(model.rows(from: []).contains { $0.event.objectID == "obj-1" })
     model.clearEntries()
     #expect(cleared)
     #expect(model.rows(from: []).isEmpty)
     #expect(model.history == ["1 + 1"])
+  }
+
+  @Test func consoleToolsRenderOffscreen() throws {
+    _ = NSApplication.shared
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
+    let error = ShaarConsoleEvent(
+      id: UUID(), level: .error, message: "GET /api/orders failed: 503",
+      source: "/app/api/orders.ts:17")
+    let shell = ShaarDevToolsModel(
+      target: target,
+      transport: ShaarDevToolsFixtureTransport(fixture: [.console(error)]),
+      layoutDefaults: UserDefaults(suiteName: "ShaarConsoleTools.\(UUID().uuidString)")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    shell.open(inspector: inspector)
+    shell.section = .console
+    shell.console.searchUsesRegex = true
+    shell.console.search = "("
+    shell.console.preserveLog = true
+    #expect(shell.console.regexIsInvalid)
+    let image = try VisualCapture.pngOffscreen(
+      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 850, height: 620))
+    #expect(!image.isEmpty)
+    shell.close()
   }
 }

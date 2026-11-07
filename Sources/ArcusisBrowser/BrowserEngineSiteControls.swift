@@ -83,22 +83,17 @@ extension BrowserEngine: SiteControlBackend {
     }
   }
 
-  /// The chain the site presents, accepted only when its leaf is the certificate Chromium
-  /// loaded the page with.
+  /// The chain Chromium recorded for the selected tab's committed navigation.
   func certificateChain(for target: SiteControlTarget) async throws -> [SecCertificate] {
+    guard siteControlTarget == target else {
+      throw SiteControlFailure("This page has no certificate to show.")
+    }
     let info = runtime.securityInfo(
       forTabID: target.tabID.uuidString, profileID: target.profileID.uuidString)
-    let summary = info?["certificate"] as? [String: Any]
-    guard let fingerprint = summary?["sha256"] as? String,
-      let host = target.url.host(percentEncoded: false)
-    else { throw SiteControlFailure("This page has no certificate to show.") }
-    let chain = try await SiteCertificateChain.fetch(
-      host: host, port: UInt16(target.url.port ?? 443))
-    guard let leaf = chain.first, SiteCertificateChain.fingerprint(fingerprint, matches: leaf)
-    else {
-      throw SiteControlFailure("The site presented a different certificate than this page uses.")
+    guard let details = SiteCertificateChain.read(info) else {
+      throw SiteControlFailure("This page has no certificate to show.")
     }
-    return chain.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
+    return details.certificates
   }
 
   /// Reloads through the store so renderer-failure state and stale-target checks stay shared.

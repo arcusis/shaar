@@ -123,11 +123,13 @@ extension BrowserEngine {
 
   private func certificateIdentity(for target: SiteControlTarget) async -> ShaarCertificateIdentity?
   {
-    guard target.url.scheme?.lowercased() == "https" else { return nil }
-    guard let chain = try? await certificateChain(for: target), let leaf = chain.first else {
+    guard target.url.scheme?.lowercased() == "https", siteControlTarget == target else {
       return nil
     }
-    return ShaarCertificateIdentityReader.leaf(from: leaf)
+    let info = runtime.securityInfo(
+      forTabID: target.tabID.uuidString, profileID: target.profileID.uuidString)
+    guard let details = SiteCertificateChain.read(info) else { return nil }
+    return ShaarCertificateIdentityReader.read(details)
   }
 
   @discardableResult

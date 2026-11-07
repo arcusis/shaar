@@ -1,0 +1,83 @@
+--- a/chrome/browser/shaar/site_data/shaar_site_data.cc
++++ b/chrome/browser/shaar/site_data/shaar_site_data.cc
+@@ -17,6 +17,7 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "base/base64.h"
+ #include "base/functional/bind.h"
+ #include "base/json/json_reader.h"
+ #include "base/json/json_writer.h"
+@@ -45,7 +46,10 @@
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/ssl_status.h"
+ #include "content/public/browser/web_contents.h"
++#include "net/base/ip_address.h"
+ #include "net/cert/cert_status_flags.h"
++#include "net/cert/x509_certificate.h"
++#include "third_party/boringssl/src/include/openssl/pool.h"
+ #include "net/cookies/canonical_cookie.h"
+ #include "net/cookies/cookie_options.h"
+ #include "net/cookies/cookie_partition_key.h"
+@@ -821,8 +825,50 @@
+   if (certificate_error)
+     return "certificateError";
+   return url.SchemeIs("https") ? "secure" : "insecure";
++}
++
++namespace {
++
++std::optional<base::DictValue> PageCertificate(
++    const net::X509Certificate& certificate) {
++  constexpr size_t kMaxCertificates = 16;
++  constexpr size_t kMaxCertificateBytes = 64 * 1024;
++  constexpr size_t kMaxChainBytes = 256 * 1024;
++  const auto& buffers = certificate.cert_buffers();
++  if (buffers.empty() || buffers.size() > kMaxCertificates)
++    return std::nullopt;
++  size_t total_bytes = 0;
++  base::ListValue der_chain;
++  for (const auto& buffer : buffers) {
++    const size_t size = CRYPTO_BUFFER_len(buffer.get());
++    if (!size || size > kMaxCertificateBytes ||
++        total_bytes > kMaxChainBytes - size)
++      return std::nullopt;
++    total_bytes += size;
++    der_chain.Append(base::Base64Encode(
++        base::span<const uint8_t>(CRYPTO_BUFFER_data(buffer.get()), size)));
++  }
++  base::DictValue result;
++  result.Set("derChain", std::move(der_chain));
++  std::vector<std::string> dns_names;
++  std::vector<std::string> ip_addresses;
++  certificate.GetSubjectAltName(&dns_names, &ip_addresses);
++  base::ListValue names;
++  for (const auto& name : dns_names) {
++    if (names.size() == 128) break;
++    if (name.size() <= 255) names.Append(name);
++  }
++  for (const auto& address : ip_addresses) {
++    if (names.size() == 128) break;
++    if (address.size() == 4 || address.size() == 16)
++      names.Append(net::IPAddress(base::as_byte_span(address)).ToString());
++  }
++  result.Set("subjectAltNames", std::move(names));
++  return result;
+ }
+ 
++}  // namespace
++
+ extern "C" SHAAR_EXPORT shaar_error_code shaar_site_security_info(
+     shaar_engine *engine, shaar_scope scope, shaar_window *window,
+     shaar_tab *tab, shaar_bytes *out_json, shaar_error *error) {
+@@ -856,6 +902,10 @@
+   payload.Set("origin", url::Origin::Create(url).Serialize());
+   payload.Set("level",
+               SiteSecurityLevelForTesting(url.spec(), certificate_error));
++  if (url.SchemeIs("https") && entry && entry->GetSSL().certificate) {
++    if (auto certificate = PageCertificate(*entry->GetSSL().certificate))
++      payload.Set("certificate", std::move(*certificate));
++  }
+   static thread_local std::string response;
+   base::JSONWriter::Write(base::Value(std::move(payload)), &response);
+   *out_json = {response.data(), response.size()};

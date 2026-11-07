@@ -56,6 +56,24 @@ import Testing
     #expect(abs(identity.notBefore.timeIntervalSince(SecurityCertificateFixture.notBefore)) < 1)
     #expect(abs(identity.notAfter.timeIntervalSince(SecurityCertificateFixture.notAfter)) < 1)
   }
+
+  @Test func selectedNavigationCertificateSuppliesIdentitySANsAndViewerChain() throws {
+    let info: [String: Any] = [
+      "certificate": [
+        "derChain": [SecurityCertificateFixture.der.base64EncodedString()],
+        "subjectAltNames": ["localhost", "127.0.0.1"],
+      ]
+    ]
+    let details = try #require(SiteCertificateChain.read(info))
+    let identity = try #require(ShaarCertificateIdentityReader.read(details))
+    #expect(details.certificates.count == 1)
+    #expect(identity.subject.contains("localhost"))
+    #expect(identity.subjectAltNames == ["localhost", "127.0.0.1"])
+    #expect(identity.chainSubjects.contains { $0.contains("localhost") })
+    #expect(SiteCertificateChain.read([
+      "certificate": ["derChain": ["not DER"], "subjectAltNames": []]
+    ]) == nil)
+  }
 }
 
 @Suite @MainActor struct ShaarDevToolsSecurityModelTests {

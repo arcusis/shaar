@@ -1,0 +1,56 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import importlib.util
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location(
+    "check_packaged_resources", ROOT / "scripts/check-packaged-resources.py")
+check = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(check)
+
+ALLOWED = """
+let bundle = PackagedResourceBundle.resolve(
+  named: "ArcusisBrowser_ArcusisBrowser", in: host, fallback: fallback ?? { .module })
+"""
+DIRECT = """
+let url = Bundle.module.url(forResource: "runner", withExtension: "js")
+"""
+COMMENTED = """
+/// A missing bundle must not call Bundle.module.
+let bundle = PackagedResourceBundle.resolve(
+  named: "Example", in: host, fallback: { .module }) // .module stays in the fallback
+"""
+BARE = """
+func resourceBundle() -> Bundle { .module }
+"""
+
+
+class PackagedResourceSourceTests(unittest.TestCase):
+    def test_repository_keeps_module_inside_the_packaged_helper(self):
+        self.assertEqual(check.violations_in_tree(ROOT), [])
+
+    def test_helper_fallback_is_allowed_and_direct_use_is_not(self):
+        self.assertEqual(check.violations_in_source(ALLOWED, "Sources/ArcusisBrowser/Example.swift"), [])
+        self.assertEqual(check.violations_in_source(COMMENTED, "Sources/BrowserCore/Example.swift"), [])
+        direct = check.violations_in_source(DIRECT, "Sources/ArcusisBrowser/Example.swift")
+        bare = check.violations_in_source(BARE, "Sources/BrowserCore/Example.swift")
+        self.assertEqual(len(direct), 1)
+        self.assertEqual(len(bare), 1)
+        self.assertIn("PackagedResourceBundle.resolve", direct[0])
+
+    def test_shipping_scan_skips_verification_sources(self):
+        roots = set(check.SHIPPING_SOURCE_ROOTS)
+        self.assertNotIn("Sources/ShaarVerification", roots)
+        self.assertNotIn("Sources/ChromiumBridgeVerification", roots)
+        files = [path.relative_to(ROOT).as_posix() for path in check.shipping_swift_files(ROOT)]
+        self.assertTrue(any(path.startswith("Sources/ArcusisBrowser/") for path in files))
+        self.assertFalse(any(path.startswith("Sources/ShaarVerification/") for path in files))
+
+
+if __name__ == "__main__":
+    unittest.main()

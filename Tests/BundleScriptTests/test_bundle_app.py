@@ -88,6 +88,11 @@ class BundleAppTests(unittest.TestCase):
         (resource_bundle / "Resources").mkdir(parents=True)
         shutil.copyfile(PSL, resource_bundle / "Resources" / "public_suffix_list.dat")
         (resource_bundle / "Info.plist").write_text("fixture plist")
+        audit = self.binary_dir / "ArcusisBrowser_ArcusisBrowser.bundle" / "Contents"
+        (audit / "Resources" / "InspectorAudit").mkdir(parents=True)
+        (audit / "Info.plist").write_text("audit plist")
+        (audit / "Resources" / "InspectorAudit" / "axe.min.js").write_text("axe")
+        (audit / "Resources" / "InspectorAudit" / "runner.js").write_text("runner")
         sparkle = self.binary_dir / "Sparkle.framework" / "Versions" / "B"
         (sparkle / "XPCServices" / "Installer.xpc").mkdir(parents=True)
         (sparkle / "Sparkle").write_text("stub sparkle")
@@ -183,6 +188,9 @@ class BundleAppTests(unittest.TestCase):
             (REPO / "Resources" / "Privacy" / "tracker-domains.json").read_bytes(),
         )
         self.assertEqual((bundle / "Info.plist").read_text(), "fixture plist")
+        audit = resources / "ArcusisBrowser_ArcusisBrowser.bundle" / "Contents/Resources/InspectorAudit"
+        self.assertEqual((audit / "axe.min.js").read_text(), "axe")
+        self.assertEqual((audit / "runner.js").read_text(), "runner")
         for language in ("en", "he"):
             localized = bundle / "Resources" / f"{language}.lproj"
             for table in ("Core", "Bridge", "Shell", "Settings", "Panels"):
@@ -504,6 +512,18 @@ class BundleAppTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("BrowserCore resource hash mismatch", result.stderr)
+        self.assertNotIn("codesign", self._log())
+
+    def test_unstaged_swiftpm_bundle_stops_before_signing(self):
+        extra = self.binary_dir / "ArcusisBrowser_Future.bundle"
+        extra.mkdir()
+        (extra / "Info.plist").write_text("future")
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("was not staged into the app", result.stderr)
+        self.assertIn("ArcusisBrowser_Future.bundle", result.stderr)
         self.assertNotIn("codesign", self._log())
 
     def test_invalid_duplicate_and_malformed_options_fail_before_build(self):

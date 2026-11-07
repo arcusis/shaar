@@ -27,6 +27,26 @@ import Testing
   #expect(selected.bundleURL.standardizedFileURL == package.standardizedFileURL)
 }
 
+@Test func packagedAppSkipsSwiftPMFallbackWhenResourceBundleIsMissing() throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let app = root.appendingPathComponent("Fixture.app")
+  let contents = app.appendingPathComponent("Contents")
+  try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+  let info = try PropertyListSerialization.data(
+    fromPropertyList: ["CFBundleIdentifier": "test.resources", "CFBundlePackageType": "APPL"],
+    format: .xml, options: 0)
+  try info.write(to: contents.appendingPathComponent("Info.plist"))
+  let host = try #require(Bundle(url: app))
+  var usedFallback = false
+  let selected = PackagedResourceBundle.resolve(named: "ArcusisBrowser_BrowserCore", in: host) {
+    usedFallback = true
+    return .main
+  }
+  #expect(selected == nil)
+  #expect(!usedFallback)
+}
+
 @Test func developmentCoreResourcesUseSwiftPMFallbackWhenHostHasNoPackage() {
   var usedFallback = false
   let selected = BrowserLocalization.resourceBundle(in: Bundle(for: NSObject.self)) {

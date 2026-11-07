@@ -1321,6 +1321,7 @@ final class EngineProbe {
     {
       return 180
     }
+    if devtoolsPanelsOnlyMode { return 360 }
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }

@@ -157,7 +157,7 @@ final class ShaarApplicationModel {
     clearRows()
     guard phase2.available else { return }
     guard let command = command(skip: 0) else {
-      if area == .workers { receive(phase2.events) }
+      if area == .workers { rebuildWorkers() }
       return
     }
     await load(command, append: false)
@@ -221,6 +221,37 @@ final class ShaarApplicationModel {
     }
   }
 
+  private func rebuildWorkers() {
+    workers.removeAll()
+    for event in phase2.events {
+      switch event.id {
+      case .workerRegistration, .workerVersion:
+        receiveWorker(event)
+      case .workerError:
+        failure = event.text["text"]
+      default:
+        break
+      }
+    }
+  }
+
+  private func assignBody(_ reply: ShaarDevToolsPhase2Reply) {
+    if let text = Self.readableText(reply) {
+      body = text
+      bodyEncoded = false
+      return
+    }
+    body = reply.body
+    bodyEncoded = reply.base64Encoded == true
+  }
+
+  private static func readableText(_ reply: ShaarDevToolsPhase2Reply) -> String? {
+    guard reply.base64Encoded == true, let encoded = reply.body,
+      let data = Data(base64Encoded: encoded), !data.contains(0)
+    else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
   private func receiveWorker(_ event: ShaarDevToolsPhase2Event) {
     for item in event.items {
       guard let id = item.text["registrationID"] else { continue }
@@ -273,8 +304,7 @@ final class ShaarApplicationModel {
       guard revision == self.revision, key == selectionKey else { return }
       let incoming = reply.items.compactMap(row)
       if append { rows += incoming } else { rows = incoming }
-      body = reply.body
-      bodyEncoded = reply.base64Encoded == true
+      assignBody(reply)
       hasMore = reply.hasMore == true
       failure = nil
     } catch is CancellationError {

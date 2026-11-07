@@ -116,7 +116,6 @@ final class ShaarPhase2Model {
       available = false
       events.removeAll()
     case .event(let event):
-      guard available else { return }
       events.append(event)
       if events.count > 2_000 { events.removeFirst(events.count - 2_000) }
     }

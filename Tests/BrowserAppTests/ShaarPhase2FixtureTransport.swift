@@ -15,11 +15,15 @@ struct ShaarPhase2FixtureTransport: ShaarPhase2Transport {
   }()
 
   var available = true
+  var events: [ShaarDevToolsPhase2Event] = []
   var response: (ShaarDevToolsPhase2Command) throws -> [String: Any]
 
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarPhase2Message> {
     AsyncStream { continuation in
       continuation.yield(available ? .available : .unavailable)
+      if available {
+        for event in events { continuation.yield(.event(event)) }
+      }
       continuation.finish()
     }
   }

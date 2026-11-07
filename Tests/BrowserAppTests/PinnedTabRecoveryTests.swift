@@ -113,6 +113,49 @@ struct PinnedTabRecoveryTests {
     #expect(runtime.opened.isEmpty)
   }
 
+  @Test func rejectedReloadOfLivePinRecreatesTheDocument() async throws {
+    let (store, tab) = try makeStore()
+    let runtime = PinRecoveryRuntime()
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false)
+    defer { engine.suspensionTask?.cancel() }
+    store.library.onLoad = nil
+    engine.reconcile()
+    for _ in 0..<100 where runtime.opened.isEmpty {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    runtime.rejectReload = true
+    runtime.onRendererGone?(
+      tab.id.uuidString, store.session.selectedSpace.profileID.uuidString, "renderer_gone", 0)
+    let failure = try #require(store.rendererFailures[tab.id])
+    #expect(store.reloadFailedPage(failure.id))
+    #expect(runtime.reloaded == [tab.id.uuidString])
+    #expect(!engine.liveTabs.contains(tab.id))
+    for _ in 0..<100 where runtime.opened.count < 2 {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(runtime.opened == [tab.id.uuidString, tab.id.uuidString])
+    #expect(engine.liveTabs.contains(tab.id))
+    #expect(store.session.selectedPage?.tab == tab)
+    #expect(store.session.closedTabs.isEmpty)
+  }
+
+  @Test func rejectedReloadWithoutRendererFailureLeavesTheLiveTab() throws {
+    let (store, tab) = try makeStore()
+    let runtime = PinRecoveryRuntime()
+    runtime.rejectReload = true
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false)
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs.insert(tab.id)
+    runtime.owners[tab.id.uuidString] = engine.windowID
+    #expect(engine.events.router.bindTab(tab.id.uuidString, windowID: engine.windowID))
+    #expect(!store.reloadCurrentPage())
+    #expect(runtime.reloaded == [tab.id.uuidString])
+    #expect(runtime.opened.isEmpty)
+    #expect(engine.liveTabs.contains(tab.id))
+  }
+
   @Test func reloadNeverReopensTabInRetiredNativeWindow() async throws {
     let (store, tab) = try makeStore()
     let runtime = PinRecoveryRuntime()
@@ -214,6 +257,7 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var closeDuringOpen = false
   nonisolated(unsafe) var windowOpen = true
   nonisolated(unsafe) var openReturnsNotFound = false
+  nonisolated(unsafe) var rejectReload = false
 
   override func isWindowOpenID(_ windowID: String) -> Bool { windowOpen }
 
@@ -242,7 +286,7 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime {
 
   override func reloadTabID(_ tabID: String, profileID: String, mode: ARCPageReloadMode) -> Bool {
     reloaded.append(tabID)
-    return true
+    return !rejectReload
   }
 
   override func closeTabID(_ tabID: String) {

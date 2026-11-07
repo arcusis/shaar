@@ -21,11 +21,19 @@ When an unsolicited close destroys the native tab, the engine drops its live
 state and shows recovery while retaining the saved pin, selection, and profile.
 It waits for Reload rather than repeatedly reopening during reconciliation.
 Reload recreates missing native tabs from their saved URL; failed startup opens
-can be retried the same way. Live crashed renderers still use native reload.
+can be retried the same way. Live crashed renderers still use native reload when
+that call succeeds. `WebContentsDestroyed` unbinds the document immediately and
+posts the closed event later. Reload during that gap still sees a live tab, the
+native reload fails, and the saved pin would stay on the crashed document.
+Reload then discards the stale target and recreates the pin once the close
+event arrives. A rejected reload with no renderer failure leaves the live tab
+alone.
 
 `PinnedTabRecoveryTests` covers unsolicited closes, explicit close/reopen,
-renderer loss, startup-open failures (including a close callback during open),
-disk persistence, and shared window pins using a fake runtime without windows.
+renderer loss, a rejected native reload of a still-live pin, a rejected reload
+with no renderer failure, startup-open failures (including a close callback
+during open), disk persistence, and shared window pins using a fake runtime
+without windows.
 These tests do not replay the original shaar.11/12 launch or prove native page
 painting. Existing archived pins can be restored using [[Closed_Tab_Recovery]];
 there is no blanket migration because older entries do not record close intent.

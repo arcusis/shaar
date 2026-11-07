@@ -451,6 +451,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0050-shaar-media-capture-events.patch",
       "sha256": "6c485d588af89a7c76c229bf1c329f6e3f558ea64de255f64a5b160adc75a5c3"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0051-shaar-devtools-wide-dom-children.patch",
+      "sha256": "b1ea0508fc01aad8fd62bce9832f3e6ff05209f3b5139b74273e2852a65b33b4"
     }
   ],
   "requiredExports": [

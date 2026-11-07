@@ -114,6 +114,28 @@ struct DevToolsDOMTests {
         unknown, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7) == nil)
   }
 
+  @Test func projectedChildrenAcceptOneHundredTwentyRows() throws {
+    let nodes: [[String: Any]] = (0..<120).map { index in
+      ["nodeId": index + 10, "nodeType": 1, "nodeName": "DIV", "nodeValue": ""]
+    }
+    let envelope: [String: Any] = [
+      "schemaVersion": 1, "kind": "panelEvent", "eventID": 25, "leaseID": 7,
+      "data": ["parentNodeId": 4, "nodes": nodes, "truncated": false],
+    ]
+    let event = ShaarCopiedEvent(
+      sequence: 1, kind: 14, profileID: Data("profile-a".utf8), sessionID: Data(),
+      windowID: Data("window-a".utf8), tabID: Data("tab-a".utf8),
+      payloadJSON: try JSONSerialization.data(withJSONObject: envelope))
+    let decoded = try #require(ShaarDOMEventRouter.decode(
+      event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7))
+    guard case .childrenSet(let parent, let children) = decoded.mutation else {
+      Issue.record("Expected child set")
+      return
+    }
+    #expect(parent == 4)
+    #expect(children.count == 120)
+  }
+
   @Test func fixedDOMCommandsUseInspectorCapability() throws {
     let submitting = DOMSubmitting()
     let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: submitting))

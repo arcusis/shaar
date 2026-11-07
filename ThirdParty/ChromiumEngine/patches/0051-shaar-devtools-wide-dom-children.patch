@@ -1,0 +1,33 @@
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -46,6 +46,7 @@
+ constexpr size_t kMaxEventInputBytes = 256 * 1024;
+ constexpr size_t kMaxFieldBytes = 4 * 1024;
+ constexpr size_t kMaxEventBytes = 32 * 1024;
++constexpr size_t kMaxDOMChildrenEventBytes = 64 * 1024;
+ constexpr size_t kMaxFrameBytes = 384 * 1024;
+ constexpr size_t kMaxFrameBase64Bytes = 340 * 1024;
+ constexpr size_t kMaxBodyBytes = 1024 * 1024;
+@@ -487,7 +488,7 @@
+     data.Set("parentNodeId", *parent);
+     base::ListValue copies;
+     for (const auto& value : *nodes) {
+-      if (!value.is_dict() || copies.size() == 64) {
++      if (!value.is_dict() || copies.size() == 256) {
+         result->truncated = true;
+         break;
+       }
+@@ -623,8 +624,11 @@
+ 
+ bool EncodeProjectedEvent(Projection projection, int lease_id,
+                           std::string* output) {
+-  const size_t limit = projection.id == SHAAR_DEVTOOLS_PANEL_SCREENCAST_FRAME
+-                           ? kMaxFrameBytes : kMaxEventBytes;
++  size_t limit = kMaxEventBytes;
++  if (projection.id == SHAAR_DEVTOOLS_PANEL_SCREENCAST_FRAME)
++    limit = kMaxFrameBytes;
++  if (projection.id == SHAAR_DEVTOOLS_PANEL_DOM_CHILDREN_SET)
++    limit = kMaxDOMChildrenEventBytes;
+   base::DictValue envelope;
+   envelope.Set("schemaVersion", 1);
+   envelope.Set("kind", "panelEvent");

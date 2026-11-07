@@ -11,37 +11,91 @@ import json
 import os
 from pathlib import Path
 import re
-import select
 import subprocess
 import tempfile
 import threading
+import time
 from http.server import ThreadingHTTPServer
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from engine_fixture import Fixture
 
+NEXT_DEV_SERVER = (
+    Path(__file__).resolve().parents[1] / "Tests/Fixtures/NodeInspector/next-dev-server.js"
+)
+NODE_TARGET_NAME = "next-dev-server.js"
+
+
+def drain(stream, lines, lock):
+    for line in stream:
+        with lock:
+            lines.append(line)
+
+
+def wait_for(lines, lock, pattern, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with lock:
+            snapshot = list(lines)
+        for line in snapshot:
+            match = pattern.search(line)
+            if match:
+                return match
+        time.sleep(0.05)
+    return None
+
+
+def published_node_target(port):
+    with urlopen(f"http://127.0.0.1:{port}/json/list", timeout=5) as response:
+        targets = json.load(response)
+    for target in targets:
+        title = target.get("title", "")
+        frontend = target.get("devtoolsFrontendUrl", "")
+        if (target.get("type") == "node" and NODE_TARGET_NAME in title
+                and "js_app.html" in frontend and "v8only=true" in frontend):
+            return target
+    raise RuntimeError("Node inspector did not publish the Next.js-style target")
+
+
+def attach_frontend_url(app_port):
+    request = Request(
+        f"http://127.0.0.1:{app_port}/__nextjs_attach-nodejs-inspector",
+        data=b"", method="POST")
+    with urlopen(request, timeout=5) as response:
+        return json.load(response)
+
 
 @contextmanager
-def node_inspector(root: Path):
-    fixture = root / "shaar-node-inspect-fixture.js"
-    fixture.write_text("setInterval(() => {}, 1000);\n")
+def node_inspector():
+    if not NEXT_DEV_SERVER.is_file():
+        raise RuntimeError(f"Missing committed Next.js fixture: {NEXT_DEV_SERVER}")
     process = subprocess.Popen(
-        ["node", "--inspect=127.0.0.1:0", str(fixture)],
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE, text=True, start_new_session=True,
+        ["node", "--inspect=127.0.0.1:0", str(NEXT_DEV_SERVER)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, start_new_session=True,
     )
+    stdout_lines, stderr_lines = [], []
+    output_lock = threading.Lock()
+    threading.Thread(
+        target=drain, args=(process.stdout, stdout_lines, output_lock), daemon=True).start()
+    threading.Thread(
+        target=drain, args=(process.stderr, stderr_lines, output_lock), daemon=True).start()
     try:
-        ready, _, _ = select.select([process.stderr], [], [], 10)
-        line = process.stderr.readline() if ready else ""
-        match = re.search(r"ws://127\.0\.0\.1:(\d+)/", line)
-        if not match:
-            raise RuntimeError(f"Node inspector did not start: {line.strip()}")
-        port = int(match.group(1))
-        with urlopen(f"http://127.0.0.1:{port}/json/list", timeout=5) as response:
-            targets = json.load(response)
-        if not any(fixture.name in target.get("title", "") for target in targets):
-            raise RuntimeError("Node inspector did not publish the fixture target")
-        yield port
+        inspector = wait_for(
+            stderr_lines, output_lock, re.compile(r"ws://127\.0\.0\.1:(\d+)/"), 10)
+        ready = wait_for(
+            stdout_lines, output_lock,
+            re.compile(r"ready - started server on 127\.0\.0\.1:(\d+)"), 10)
+        if not inspector or not ready:
+            with output_lock:
+                detail = "".join(stderr_lines + stdout_lines).strip()
+            raise RuntimeError(f"Next.js-style inspector did not start: {detail}")
+        port = int(inspector.group(1))
+        target = published_node_target(port)
+        attached = attach_frontend_url(int(ready.group(1)))
+        if attached != target["devtoolsFrontendUrl"]:
+            raise RuntimeError("Attach route did not return the live DevTools frontend URL")
+        yield {"port": port, "target": target}
     finally:
         process.terminate()
         try:
@@ -49,6 +103,7 @@ def node_inspector(root: Path):
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        process.stdout.close()
         process.stderr.close()
 
 
@@ -88,9 +143,11 @@ def main() -> None:
                                                            "stderr": str(error)}) + "\n")
                     raise
 
+            node_target = None
             if options.with_node_inspector:
-                with node_inspector(root) as port:
-                    environment["SHAAR_NODE_INSPECTOR_PORT"] = str(port)
+                with node_inspector() as started:
+                    node_target = started["target"]
+                    environment["SHAAR_NODE_INSPECTOR_PORT"] = str(started["port"])
                     process = run_probe()
             else:
                 process = run_probe()
@@ -98,7 +155,7 @@ def main() -> None:
             detail_path = root / "initial-devtools-route.json"
             detail = json.loads(detail_path.read_text()) if detail_path.exists() else None
             receipt = {"exitCode": process.returncode, "report": evidence,
-                       "devToolsRoute": detail,
+                       "devToolsRoute": detail, "nodeTarget": node_target,
                        "stderrTail": process.stderr[-4000:]}
             options.receipt.parent.mkdir(parents=True, exist_ok=True)
             options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")

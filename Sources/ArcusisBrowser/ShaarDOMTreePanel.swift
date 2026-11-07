@@ -16,8 +16,22 @@ private enum DOMEditor: String, Identifiable {
 
 struct ShaarDOMTreePanel: View {
   @Bindable var model: ShaarDOMTreeModel
+  @Bindable var listeners: ShaarEventListenersModel
   let inspector: InspectorModel
   let openChromium: () -> Void
+
+  init(
+    model: ShaarDOMTreeModel, inspector: InspectorModel, openChromium: @escaping () -> Void,
+    listeners: ShaarEventListenersModel? = nil
+  ) {
+    self.model = model
+    self.inspector = inspector
+    self.openChromium = openChromium
+    self.listeners =
+      listeners
+      ?? ShaarEventListenersModel(
+        target: model.target, transport: ShaarEventListenersPendingTransport())
+  }
   @State private var editor: DOMEditor?
   @State private var attributeName = ""
   @State private var editorValue = ""
@@ -92,6 +106,9 @@ struct ShaarDOMTreePanel: View {
         .devToolsDataDirection()
       }
       Divider()
+      ShaarEventListenersPane(model: listeners)
+        .frame(height: 220)
+      Divider()
       breadcrumbs
       if let selected = model.selected, selected.nodeType == 1 {
         classControls(selected)
@@ -100,6 +117,16 @@ struct ShaarDOMTreePanel: View {
     .background(Color(nsColor: .windowBackgroundColor))
     .onMoveCommand(perform: moveSelection)
     .onDeleteCommand { if model.selectedID != nil { deleting = true } }
+    .onChange(of: listenerChainKey, initial: true) { _, _ in
+      let ancestors = ShaarEventListenerAncestors.chain(from: model.selectedID, nodes: model.nodes)
+      Task { await listeners.load(nodeID: model.selectedID, ancestors: ancestors) }
+    }
+  }
+
+  private var listenerChainKey: String {
+    let chain = ShaarEventListenerAncestors.chain(from: model.selectedID, nodes: model.nodes)
+    let ids = [model.selectedID].compactMap { $0 } + chain
+    return ids.map(String.init).joined(separator: "/")
   }
 
   private var header: some View {

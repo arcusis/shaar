@@ -238,21 +238,24 @@ final class PrivatePageSession {
     }
     let viewportsTransport: any ShaarViewportsTransport
     let renderingTransport: any ShaarRenderingTransport
+    let listenersTransport: any ShaarEventListenersTransport
     if let shaar = runtime as? ARCShaarRuntime {
       viewportsTransport = ShaarViewportsNativeTransport(
         requester: ShaarViewportRuntimeRequester(
           runtime: shaar, windowID: windowID, contextID: contextID))
       renderingTransport = ShaarRenderingNativeTransport(
         runtime: shaar, windowID: windowID, contextID: contextID)
+      listenersTransport = ShaarEventListenersLiveTransport(session: self)
     } else {
       viewportsTransport = ShaarViewportsPendingTransport()
       renderingTransport = ShaarRenderingPendingTransport()
+      listenersTransport = ShaarEventListenersPendingTransport()
     }
     let shell =
       shaarDevTools[target.tabID]
       ?? ShaarDevToolsModel(
         target: target, viewportsTransport: viewportsTransport,
-        renderingTransport: renderingTransport)
+        renderingTransport: renderingTransport, listenersTransport: listenersTransport)
     let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, privateSession: self)
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector

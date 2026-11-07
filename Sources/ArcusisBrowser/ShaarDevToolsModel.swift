@@ -364,6 +364,7 @@ final class ShaarDevToolsModel {
   let network = ShaarNetworkModel()
   let rules: ShaarNetworkRulesModel
   let dom: ShaarDOMTreeModel
+  let listeners: ShaarEventListenersModel
   let phase2: ShaarPhase2Model
   let application: ShaarApplicationModel
   let cookies = ShaarCookieModel()
@@ -431,6 +432,7 @@ final class ShaarDevToolsModel {
     localTransports: [any ShaarLocalConsoleTransport] = [],
     rulesTransport: any ShaarNetworkRulesTransport = ShaarNetworkRulesPendingTransport(),
     domTransport: any ShaarDOMTransport = ShaarDOMPendingTransport(),
+    listenersTransport: any ShaarEventListenersTransport = ShaarEventListenersPendingTransport(),
     rulesStore: ShaarNetworkRuleStore = ShaarNetworkRuleStore(),
     layoutDefaults: UserDefaults = .standard,
     allowsWebKitComparison: Bool = false,
@@ -461,6 +463,7 @@ final class ShaarDevToolsModel {
     rules = ShaarNetworkRulesModel(
       target: target, store: rulesStore, transport: rulesTransport)
     dom = ShaarDOMTreeModel(target: target, transport: domTransport)
+    listeners = ShaarEventListenersModel(target: target, transport: listenersTransport)
     let phase2 = ShaarPhase2Model(target: target, transport: phase2Transport)
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
@@ -751,6 +754,7 @@ final class ShaarDevToolsModel {
     rendering.updateTarget(target, committed: committed)
     comparison.updateTarget(target, committed: committed)
     dom.updateTarget(target, committed: committed)
+    listeners.updateTarget(target)
     application.reset()
     cookies.reset()
     sources.reset()

@@ -298,7 +298,8 @@ struct ShaarDevToolsPanel: View {
     case .elements:
       if let inspector, inspector.isOpen {
         ShaarDOMTreePanel(
-          model: model.dom, inspector: inspector, openChromium: openChromium)
+          model: model.dom, inspector: inspector, openChromium: openChromium,
+          listeners: model.listeners)
       } else {
         unavailablePanel
       }

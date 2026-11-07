@@ -413,6 +413,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0042-shaar-devtools-long-tasks.patch",
       "sha256": "eeff5716337fa1723dd34dc10f9152ebc532a2e07c63523069626bd5faae8f6d"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0043-shaar-devtools-event-listeners.patch",
+      "sha256": "471c7bcd05cc6563a44fa222207c99eae61f9740c778e74dae1cb514fa98669e"
     }
   ],
   "requiredExports": [

@@ -164,6 +164,44 @@ import XCTest
     XCTAssertTrue(NSApp.keyWindow === previous)
   }
 
+  func testHiddenElementRowRendersOffscreen() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_DOM_TREE_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen DOM capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1278")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    inspector.open()
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+    defer { inspector.close() }
+    let fixture = DOMFixtureTransport()
+    let live = ShaarDevToolsModel(target: target, domTransport: fixture)
+    live.open(inspector: inspector)
+    for _ in 0..<30 where live.dom.rootID == nil { await Task.yield() }
+    XCTAssertTrue(live.dom.available)
+    live.dom.select(4)
+    await live.dom.toggleVisibility()
+    let hidden = try XCTUnwrap(live.dom.nodes[4])
+    XCTAssertTrue(live.dom.showsHidden(hidden))
+    for scheme in [ColorScheme.light, .dark] {
+      let suffix = scheme == .dark ? "dark" : "light"
+      let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
+      let panel = ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {})
+        .frame(width: 1200, height: 520)
+        .environment(\.colorScheme, scheme)
+      try capture(
+        panel, named: "hidden-row-\(suffix)", appearance: appearance, root: root,
+        size: NSSize(width: 1200, height: 520))
+    }
+    live.close()
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   private func capture<V: View>(
     _ view: V, named name: String, appearance: NSAppearance.Name, root: URL,
     size: NSSize = NSSize(width: 1040, height: 500)

@@ -124,6 +124,12 @@ struct ShaarDOMTreePanel: View {
       let ancestors = ShaarEventListenerAncestors.chain(from: model.selectedID, nodes: model.nodes)
       Task { await listeners.load(nodeID: model.selectedID, ancestors: ancestors) }
     }
+    .onKeyPress(characters: CharacterSet(charactersIn: "hH"), phases: .down) { press in
+      respond(press)
+    }
+    .onKeyPress(.return, phases: .down) { press in
+      respond(press)
+    }
   }
 
   private var listenerChainKey: String {
@@ -234,6 +240,17 @@ struct ShaarDOMTreePanel: View {
         HStack(spacing: 5) {
           Text(nodeLabel(row.node))
             .foregroundStyle(.primary)
+          if model.showsHidden(row.node) {
+            Text(ShellL10n.string("hidden"))
+              .font(.system(size: 9, weight: .semibold))
+              .foregroundStyle(.primary)
+              .padding(.horizontal, 4)
+              .background(
+                Color.primary.opacity(colorSchemeContrast == .increased ? 0.16 : 0.08),
+                in: Capsule()
+              )
+              .accessibilityIdentifier("shaar.devtools.domHidden")
+          }
           if !row.node.attributeSummary.isEmpty {
             Text(row.node.attributeSummary).foregroundStyle(.primary)
           }
@@ -355,11 +372,7 @@ struct ShaarDOMTreePanel: View {
       editor = .text
     }
     Button(ShellL10n.string("Edit as HTML…")) {
-      model.select(node.id)
-      Task {
-        editorValue = await model.outerHTML(for: node.id) ?? ""
-        editor = .html
-      }
+      openHTMLEditor(node)
     }
     Divider()
     Button(ShellL10n.string("Delete node"), role: .destructive) {
@@ -459,6 +472,37 @@ struct ShaarDOMTreePanel: View {
     }
   }
 
+  private func respond(_ press: KeyPress) -> KeyPress.Result {
+    guard editor == nil, !deleting else { return .ignored }
+    let context: ShaarElementsShortcutContext = searchFieldFocused ? .searchField : .tree
+    guard
+      let action = ShaarElementsShortcuts.action(
+        for: ShaarElementsKeyPress(press), context: context)
+    else { return .ignored }
+    switch action {
+    case .toggleVisibility:
+      Task { await model.toggleVisibility() }
+      return .handled
+    case .editAsHTML:
+      guard let node = model.selected, node.nodeType == 1 else { return .ignored }
+      openHTMLEditor(node)
+      return .handled
+    case .focusSearch:
+      searchFieldFocused = true
+      return .handled
+    case .nudgeLength:
+      return .ignored
+    }
+  }
+
+  private func openHTMLEditor(_ node: ShaarDOMNode) {
+    model.select(node.id)
+    Task {
+      editorValue = await model.outerHTML(for: node.id) ?? ""
+      editor = .html
+    }
+  }
+
   private func moveSelection(_ direction: MoveCommandDirection) {
     let rows = model.rows
     guard focusedNode != nil, !rows.isEmpty else { return }
@@ -485,9 +529,9 @@ struct ShaarDOMTreePanel: View {
   }
 
   private func rowAccessibilityLabel(_ row: ShaarDOMRow) -> String {
-    [nodeLabel(row.node), row.node.attributeSummary]
-      .filter { !$0.isEmpty }
-      .joined(separator: ", ")
+    var parts = [nodeLabel(row.node), row.node.attributeSummary].filter { !$0.isEmpty }
+    if model.showsHidden(row.node) { parts.append(ShellL10n.string("hidden")) }
+    return parts.joined(separator: ", ")
   }
 
   private func copiedPath(for id: Int) async -> (css: String, xpath: String) {

@@ -404,6 +404,71 @@ enum ShaarDOMFixtureDocument {
     model.close()
   }
 
+  @Test func hHidesTheSelectedElementAndHShowsItAgain() async {
+    let fixture = DOMFixtureTransport()
+    fixture.document = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 4, "nodeType": 1, "nodeName": "MAIN", "nodeValue": "",
+            "attributes": ["style", "color: red"],
+            "children": [
+              ["nodeId": 6, "nodeType": 3, "nodeName": "#text", "nodeValue": "Dashboard"]
+            ],
+          ]
+        ],
+      ]
+    ]
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<20 where model.rootID == nil { await Task.yield() }
+    await model.toggleVisibility()
+    #expect(
+      !fixture.commands.contains {
+        if case .setAttribute = $0 { return true }
+        return false
+      })
+
+    model.select(6)
+    let beforeText = fixture.commands.count
+    await model.toggleVisibility()
+    #expect(fixture.commands.count == beforeText)
+
+    model.select(4)
+    #expect(model.showsHidden(model.nodes[4]!) == false)
+    await model.toggleVisibility()
+    #expect(fixture.commands.contains(.setAttribute(4, "style", "color: red; visibility: hidden")))
+    #expect(model.showsHidden(model.nodes[4]!))
+    #expect(model.canUndo)
+    await model.toggleVisibility()
+    #expect(fixture.commands.contains(.setAttribute(4, "style", "color: red")))
+    #expect(model.showsHidden(model.nodes[4]!) == false)
+
+    let hidden = DOMFixtureTransport()
+    hidden.document = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 4, "nodeType": 1, "nodeName": "MAIN", "nodeValue": "",
+            "attributes": ["style", "visibility: hidden"],
+          ]
+        ],
+      ]
+    ]
+    let again = ShaarDOMTreeModel(target: target(), transport: hidden)
+    again.open()
+    for _ in 0..<20 where again.rootID == nil { await Task.yield() }
+    again.select(4)
+    #expect(again.showsHidden(again.nodes[4]!))
+    await again.toggleVisibility()
+    #expect(hidden.commands.contains(.removeAttribute(4, "style")))
+    #expect(again.showsHidden(again.nodes[4]!) == false)
+    again.close()
+    model.close()
+  }
+
   private func counted(_ index: Int, of count: Int) -> String {
     ShellL10n.format("%d of %d", arguments: [.integer(index), .integer(count)])
   }

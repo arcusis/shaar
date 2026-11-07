@@ -398,6 +398,27 @@ import Foundation
       guard shell.dom.selectedID == selected, shell.dom.matchOrder.contains(selected) else {
         throw Failure("DOM search did not keep the current hit after wrapping")
       }
+      guard let beforeHide = shell.dom.nodes[selected], !shell.dom.showsHidden(beforeHide) else {
+        throw Failure("Live element was already marked hidden")
+      }
+      await shell.dom.toggleVisibility()
+      guard let hiddenNode = shell.dom.nodes[selected], shell.dom.showsHidden(hiddenNode) else {
+        throw Failure("Tree did not mark the element hidden: \(shell.dom.failure ?? "none")")
+      }
+      guard
+        let hidden = try await inspector.evaluate(
+          "getComputedStyle(document.getElementById('shaar-live-element')).visibility") as? String,
+        hidden == "hidden"
+      else { throw Failure("H did not set visibility:hidden on the page") }
+      await shell.dom.toggleVisibility()
+      guard let shownNode = shell.dom.nodes[selected], !shell.dom.showsHidden(shownNode) else {
+        throw Failure("Second H left the hidden mark on the tree")
+      }
+      guard
+        let restored = try await inspector.evaluate(
+          "getComputedStyle(document.getElementById('shaar-live-element')).visibility") as? String,
+        restored == "visible"
+      else { throw Failure("Second H did not restore visibility") }
       _ = try await inspector.evaluate(
         "(()=>{const host=document.createElement('div');host.id='shaar-copy-host';const first=document.createElement('em');const second=document.createElement('em');host.append(first,second);document.body.appendChild(host);return true})()"
       )
@@ -435,7 +456,7 @@ import Foundation
         )
       }
       return
-        "DOM insertion appeared through the live stream; attribute edit reached the page; search reported \(label); copy paths matched \(css)"
+        "DOM insertion appeared through the live stream; attribute edit reached the page; search reported \(label); H toggled visibility; copy paths matched \(css)"
     }
     await check("elements-inspector") {
       guard shell.section == .elements, inspector.isOpen, inspector.target.tabID == tab,

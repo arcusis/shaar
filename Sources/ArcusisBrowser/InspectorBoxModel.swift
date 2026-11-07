@@ -164,6 +164,9 @@ struct InspectorBoxModel: View {
       .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.primary.opacity(0.35)))
       .accessibilityLabel(InspectorL10n.string("Edit box model value"))
       .focused($fieldFocused)
+      .onKeyPress(keys: [.upArrow, .downArrow], phases: [.down, .repeat]) { press in
+        nudgeBox(press)
+      }
       .onAppear {
         if wantsFocus { fieldFocused = true }
       }
@@ -181,6 +184,16 @@ struct InspectorBoxModel: View {
           apply(key: key, typed: typed)
         }
       }
+  }
+
+  private func nudgeBox(_ press: KeyPress) -> KeyPress.Result {
+    guard
+      case .nudgeLength(let delta) = ShaarElementsShortcuts.action(
+        for: ShaarElementsKeyPress(press), context: .lengthField
+      ), let next = ShaarCSSLength.nudged(draft, caret: (draft as NSString).length, by: delta)
+    else { return .ignored }
+    draft = next
+    return .handled
   }
 
   private func tip(region: String, index: Int, raw: String) -> String {

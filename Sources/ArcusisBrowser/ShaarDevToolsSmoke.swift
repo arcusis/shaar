@@ -2213,9 +2213,8 @@ enum ShaarDevToolsSmokeAccess {
     guard let down = mouseEvent(.leftMouseDown, at: point, window: window),
       let up = mouseEvent(.leftMouseUp, at: point, window: window)
     else { return false }
-    let hit = root.hitTest(CGPoint(x: x, y: y)) ?? root
-    hit.mouseDown(with: down)
-    hit.mouseUp(with: up)
+    window.sendEvent(down)
+    window.sendEvent(up)
     return true
   }
 

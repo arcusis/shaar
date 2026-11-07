@@ -200,11 +200,11 @@ import Foundation
       "world2-network-filter", "JS chip shows \(scripts.count) scripts", report: report)
     shell.network.filter = .all
     if let first = rows.first(where: { $0.url.contains("/api/item/") }) ?? rows.first {
-      shell.network.search = first.name
+      shell.network.search = first.url
       let searched = shell.network.visibleRequests(from: shell.events)
       record(
-        !searched.isEmpty && searched.allSatisfy { $0.url.contains(first.name) },
-        "world2-network-search", "Search for \(first.name) shows \(searched.count) rows",
+        !searched.isEmpty && searched.allSatisfy { $0.url.contains(first.url) },
+        "world2-network-search", "Search for \(first.url) shows \(searched.count) rows",
         report: report)
       shell.network.search = ""
       let fetch = shell.network.fetchCommand(for: first)

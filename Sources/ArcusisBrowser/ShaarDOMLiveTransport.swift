@@ -29,6 +29,9 @@ struct ShaarDOMRequest {
     case .describe(let id):
       method = "DOM.describeNode"
       params = ["nodeId": id]
+    case .describeBackend(let id):
+      method = "DOM.describeNode"
+      params = ["backendNodeId": id]
     case .highlight(let id):
       method = "Overlay.highlightNode"
       params = [

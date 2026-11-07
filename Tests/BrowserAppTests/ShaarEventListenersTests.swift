@@ -234,6 +234,60 @@ import Testing
     #expect(released.contains("handler-1"))
   }
 
+  @Test func liveTransportRebindsAMissingNodeAndReadsItsListeners() async throws {
+    let calls = ListenerCallLog()
+    let transport = ShaarEventListenersLiveTransport { method, params, _ in
+      calls.entries.append((method, params))
+      if method == "DOM.resolveNode" {
+        let id = params["nodeId"] as? Int
+        if id == 8 || id == 3 {
+          throw NSError(
+            domain: "test", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "No node with given id found"])
+        }
+        return ["object": ["objectId": "node-\(id ?? 0)"]]
+      }
+      if method == "DOMDebugger.getEventListeners" {
+        return [
+          "listeners": [
+            ["type": "qa-ping", "useCapture": false, "passive": false, "once": false]
+          ]
+        ]
+      }
+      return [:]
+    }
+    transport.rebind = { ids, _ in
+      calls.rebound = ids
+      return Dictionary(uniqueKeysWithValues: ids.map { ($0, $0 + 10) })
+    }
+    let found = try await transport.listeners(
+      nodeID: 8, ancestors: [3], target: listenerTarget())
+    #expect(found.contains { $0.type == "qa-ping" && $0.onAncestor == false })
+    #expect(calls.rebound == [8, 3])
+    #expect(calls.entries.contains { $0.0 == "DOM.resolveNode" && ($0.1["nodeId"] as? Int) == 18 })
+  }
+
+  @Test func liveTransportLeavesOtherResolveErrorsAlone() async {
+    let calls = ListenerCallLog()
+    let transport = ShaarEventListenersLiveTransport { method, params, _ in
+      calls.entries.append((method, params))
+      throw NSError(
+        domain: "test", code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "DevTools protocol request timed out"])
+    }
+    transport.rebind = { ids, _ in
+      calls.rebound = ids
+      return [:]
+    }
+    do {
+      _ = try await transport.listeners(nodeID: 8, ancestors: [], target: listenerTarget())
+      Issue.record("A timeout should stay a timeout")
+    } catch {
+      #expect(error.localizedDescription.contains("timed out"))
+    }
+    #expect(calls.rebound.isEmpty)
+  }
+
   @Test func liveTransportEditsAncestorFlagsAndRejectsAMissingNode() async throws {
     let calls = ListenerCallLog()
     let transport = ShaarEventListenersLiveTransport { method, params, _ in
@@ -414,6 +468,7 @@ private func listenerTarget() -> SiteControlTarget {
 @MainActor private final class ListenerCallLog {
   var entries: [(String, [String: Any])] = []
   var resolves = 0
+  var rebound: [Int] = []
 }
 
 @MainActor private final class ListenerHoldTransport: ShaarEventListenersTransport {

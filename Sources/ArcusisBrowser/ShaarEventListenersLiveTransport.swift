@@ -88,15 +88,15 @@ enum ShaarEventListenerRequest {
   }
 }
 
-/// Reads listeners through the Inspector session. shaar.20 rejects
-/// `DOMDebugger.getEventListeners` until the engine patch is built; the fixture
-/// transport covers the pane until then.
+/// Reads listeners through the Inspector session.
 @MainActor
 final class ShaarEventListenersLiveTransport: ShaarEventListenersTransport {
   typealias Call =
     @MainActor (String, [String: Any], SiteControlTarget) async throws -> [String: Any]
 
   private let call: Call
+  /// Reloads the document and maps stale frontend ids onto the ids that replace them.
+  var rebind: (@MainActor ([Int], SiteControlTarget) async -> [Int: Int])?
 
   convenience init(engine: BrowserEngine) {
     self.init { [weak engine] method, params, target in
@@ -119,10 +119,33 @@ final class ShaarEventListenersLiveTransport: ShaarEventListenersTransport {
   func listeners(nodeID: Int, ancestors: [Int], target: SiteControlTarget) async throws
     -> [ShaarEventListener]
   {
-    var found: [ShaarEventListener] = []
-    found += try await listeners(on: nodeID, ancestor: false, target: target)
+    do {
+      return try await collect(
+        nodeID: nodeID, ancestors: ancestors, target: target, tolerateMissingAncestors: false)
+    } catch {
+      guard ShaarEventListenerNodeLookup.isMissingNode(error), let rebind else { throw error }
+      let mapped = await rebind([nodeID] + ancestors, target)
+      guard let rebound = mapped[nodeID] else { throw error }
+      let reboundAncestors = ancestors.compactMap { mapped[$0] }
+      return try await collect(
+        nodeID: rebound, ancestors: reboundAncestors, target: target,
+        tolerateMissingAncestors: true)
+    }
+  }
+
+  private func collect(
+    nodeID: Int, ancestors: [Int], target: SiteControlTarget, tolerateMissingAncestors: Bool
+  ) async throws -> [ShaarEventListener] {
+    var found = try await listeners(on: nodeID, ancestor: false, target: target)
     for ancestor in ancestors {
-      found += try await listeners(on: ancestor, ancestor: true, target: target)
+      do {
+        found += try await listeners(on: ancestor, ancestor: true, target: target)
+      } catch {
+        if tolerateMissingAncestors, ShaarEventListenerNodeLookup.isMissingNode(error) {
+          continue
+        }
+        throw error
+      }
     }
     return found
   }
@@ -180,5 +203,11 @@ final class ShaarEventListenersLiveTransport: ShaarEventListenersTransport {
   private func release(_ objectID: String, target: SiteControlTarget) async {
     let request = ShaarEventListenerRequest.release(objectID: objectID)
     _ = try? await call(request.0, request.1, target)
+  }
+}
+
+enum ShaarEventListenerNodeLookup {
+  static func isMissingNode(_ error: Error) -> Bool {
+    error.localizedDescription.localizedCaseInsensitiveContains("no node with given id")
   }
 }

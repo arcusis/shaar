@@ -515,6 +515,7 @@ for(const action of ['play','pause','previoustrack','nexttrack']){
 PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://trackertest.org:* http://localhost:*"
 INSPECTOR_TOOLS_CSP = (
     PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self' 'unsafe-inline'")
+    .replace("style-src 'unsafe-inline'", "style-src 'self' 'unsafe-inline'")
     + "; worker-src 'self'"
 )
 MEDIA_SESSION_CSP = PAGE_CSP + "; media-src blob:"
@@ -587,6 +588,22 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         if path == '/shaar-issues-missing':
             self.send_error(404, 'Shaar issues fixture')
             return
+        if path == '/shaar-css-overview.css':
+            self.stylesheet(b""".shaar-overview {
+  color: #5b21b6;
+  background-color: rgb(91, 33, 182);
+  font-family: "Shaar Overview", Georgia;
+}
+@media (min-width: 840px) {
+  .shaar-overview { outline-color: #5b21b6; }
+}
+""")
+            return
+        if path == '/shaar-css-empty.css':
+            self.stylesheet(b"""/* This sheet contributes nothing. */
+div { display: block; }
+""")
+            return
         if path == '/profile-privacy-cache':
             body = str(time.time_ns()).encode('ascii')
             self.send_response(200)
@@ -637,7 +654,7 @@ document.addEventListener('wheel',function(){document.getElementById('marker').s
         if path == '/inspector-tools':
             self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">
-<title>Page tools fixture</title><style>body{font:18px Arial;padding:32px;background:white;color:#172033}button{padding:14px}#shift{padding:20px;padding-top:env(safe-area-inset-top);background:#eef2ff}</style>
+<title>Page tools fixture</title><link rel="stylesheet" href="/shaar-css-overview.css"><link rel="stylesheet" href="/shaar-css-empty.css"><style>body{font:18px Arial;padding:32px;background:white;color:#172033}button{padding:14px}#shift{padding:20px;padding-top:env(safe-area-inset-top);background:#eef2ff}</style>
 <h1>Measure the real page.</h1><button id="performance-input" onclick="window.clicked=(window.clicked||0)+1;const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div><input id="private-fixture" type="password" value="password-private-fixture">
 <script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');
 (async()=>{try{const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('shaar-notes',1);request.onupgradeneeded=()=>{request.result.createObjectStore('entries');};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});const tx=db.transaction('entries','readwrite');const store=tx.objectStore('entries');for(let i=0;i!==60;i+=1){const id=String(i).padStart(3,'0');store.put('value-'+id,'id-'+id);}await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});const cache=await caches.open('shaar-app');await cache.put('/inspector-cached.txt',new Response('shaar-cached-body',{status:200,headers:{'Content-Type':'text/plain'}}));window.shaarApplicationReady=true;}catch(error){window.shaarApplicationError=String(error);}})();
@@ -805,6 +822,18 @@ console.log('shaar-agent-console-other');
             return
         self.html(
             body, csp=PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self'"))
+
+    def stylesheet(self, body):
+        data = body if isinstance(body, bytes) else body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/css; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def html(self, body, csp=PAGE_CSP, cookie=None):
         self.send_response(200)

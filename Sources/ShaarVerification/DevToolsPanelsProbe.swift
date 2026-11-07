@@ -240,6 +240,9 @@ import Foundation
         shell: shell, inspector: inspector, fixture: self.fixture
       ).run()
     }
+    await check("css") {
+      try await self.proveCSS(shell: shell)
+    }
     await check("viewports") {
       shell.section = .viewports
       do {
@@ -485,7 +488,8 @@ import Foundation
     guard har.contains("profile-privacy-cache"), har.contains(body) else {
       throw Failure("HAR export missed the request or its body")
     }
-    return "Type, status, and text filters, response body, cURL, fetch, and HAR matched the live fetch"
+    return
+      "Type, status, and text filters, response body, cURL, fetch, and HAR matched the live fetch"
   }
 
   private func responseBody(_ shell: ShaarDevToolsModel, requestID: String) async throws -> String {
@@ -676,6 +680,76 @@ import Foundation
       )
     }
     return "HTTP page is not secure. Engine level insecure. No certificate on this connection."
+  }
+
+  private func proveCSS(shell: ShaarDevToolsModel) async throws -> String {
+    let previous = shell.section
+    defer { shell.section = previous }
+    shell.section = .cssOverview
+    try await wait("phase 2 for CSS") { shell.phase2.available }
+    var matched = false
+    for _ in 0..<8 {
+      await shell.cssOverview.reload(force: true)
+      if cssOverviewMatches(shell.cssOverview.summary) {
+        matched = true
+        break
+      }
+      try await Task.sleep(for: .milliseconds(150))
+    }
+    guard matched else {
+      let detail = await cssDiagnostic(shell)
+      throw Failure("CSS overview missed the fixture sheets. \(detail)")
+    }
+    let summary = shell.cssOverview.summary
+    guard let color = summary.colors.first(where: { $0.label.lowercased().contains("5b21b6") }),
+      color.sheets.contains(where: { $0.contains("shaar-css-overview.css") }),
+      color.sheets.allSatisfy({ !$0.contains("shaar-css-empty.css") }),
+      summary.examined > Set(summary.contributingSheets).count
+    else {
+      let detail = await cssDiagnostic(shell)
+      throw Failure("CSS sheet filter is wrong. \(detail)")
+    }
+    shell.cssOverview.pick = .color(color.label)
+    let filtered = summary.sheets(matching: .color(color.label))
+    guard !filtered.isEmpty, filtered.allSatisfy({ $0.contains("shaar-css-overview.css") }) else {
+      throw Failure("Selecting #5b21b6 did not filter sheets. \(filtered)")
+    }
+    return
+      "CSS overview counted \(color.label) \(color.count) times across \(summary.examined) sheets and left the empty sheet out of that color."
+  }
+
+  private func cssOverviewMatches(_ summary: ShaarDevToolsCSSSummary) -> Bool {
+    guard summary.examined >= 2,
+      let color = summary.colors.first(where: { $0.label.lowercased().contains("5b21b6") }),
+      color.count >= 2
+    else { return false }
+    let rgb = summary.colors.contains { normalizedColor($0.label) == "rgb(91,33,182)" }
+    let font = summary.fonts.contains { $0.label == "Shaar Overview" }
+    let media = summary.media.contains { $0.label.contains("min-width: 840px") }
+    return rgb && font && media
+  }
+
+  private func normalizedColor(_ label: String) -> String {
+    label.lowercased().filter { !$0.isWhitespace }
+  }
+
+  private func cssDiagnostic(_ shell: ShaarDevToolsModel) async -> String {
+    let summary = shell.cssOverview.summary
+    let colors = summary.colors.prefix(8).map { "\($0.label)x\($0.count)" }.joined(separator: ", ")
+    let fonts = summary.fonts.prefix(8).map(\.label).joined(separator: ", ")
+    let media = summary.media.prefix(4).map(\.label).joined(separator: ", ")
+    let sheets = summary.contributingSheets.prefix(8).joined(separator: ", ")
+    var tree = ""
+    if let reply = try? await shell.phase2.execute(.resourceTree) {
+      tree = reply.items.prefix(12).map { item in
+        let type = item.text["type"] ?? ""
+        let mime = item.text["mimeType"] ?? ""
+        let url = item.text["url"] ?? ""
+        return "\(type) \(mime) \(url)"
+      }.joined(separator: " | ")
+    }
+    return
+      "examined=\(summary.examined) colors=[\(colors)] fonts=[\(fonts)] media=[\(media)] sheets=[\(sheets)] failure=\(shell.cssOverview.failure ?? "") tree=[\(tree)]"
   }
 
   private func engineLevel(_ shell: ShaarDevToolsModel) -> String? {
@@ -893,7 +967,7 @@ import Foundation
     "network-throttle", "network-row", "console-repeat", "issues", "application-cookie",
     "application-local-storage", "application-session-storage", "application-indexed-db",
     "application-cache-storage", "application-service-worker", "network-rules", "source-bytes",
-    "viewports", "masked-repro", "elements-live", "elements-inspector", "elements-scale",
+    "css", "viewports", "masked-repro", "elements-live", "elements-inspector", "elements-scale",
     "split-shell", "console-tools",
   ]
 

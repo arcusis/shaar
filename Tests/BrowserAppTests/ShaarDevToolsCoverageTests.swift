@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -107,6 +109,206 @@ import Testing
     #expect(startParams?["detailed"] as? Bool == true)
     #expect(model.recording == false)
   }
+
+  @Test func coverageRepliesCoverMissingIdentifiersAndNumericBoxes() {
+    let scripts = ShaarDevToolsCoverage.scripts(from: scriptReply())
+    #expect(scripts.map(\.url) == ["script 9", "script 2", "script 3"])
+    #expect(scripts[0].ranges == [ShaarDevToolsCoverageCountedSpan(start: 2, end: 6, count: 1)])
+    #expect(scripts[2].ranges == [ShaarDevToolsCoverageCountedSpan(start: 0, end: 0, count: 0)])
+
+    let listed = ShaarDevToolsCoverage.sheets(from: listedSheetReply())
+    #expect(listed.map(\.url) == ["http://localhost:3000/blank.css"])
+    #expect(listed[0].totalBytes == 8)
+    #expect(listed[0].usedRanges.isEmpty)
+
+    let grouped = ShaarDevToolsCoverage.sheets(from: groupedRuleReply())
+    #expect(grouped.map(\.url) == ["http://localhost:3000/partial.css", "sheet-2"])
+    #expect(grouped[0].totalBytes == 40)
+    #expect(
+      grouped[0].usedRanges == [
+        ShaarDevToolsCoverageSpan(start: 0, end: 40),
+        ShaarDevToolsCoverageSpan(start: 20, end: 30),
+      ])
+    #expect(grouped[1].totalBytes == 10)
+    #expect(grouped[1].usedRanges.isEmpty)
+    #expect(ShaarDevToolsCoverage.sizeLabel(12) == "12 B")
+    #expect(ShaarDevToolsCoverage.sizeLabel(2_048) == "2.0 KB")
+    #expect(ShaarDevToolsCoverage.displayName("http://localhost:3000/app.js") == "/app.js")
+    #expect(ShaarDevToolsCoverage.displayName("http://localhost:3000/") == "localhost")
+    #expect(ShaarDevToolsCoverage.displayName("not a url") == "not a url")
+    #expect(ShaarDevToolsCoverageKind.script.title == "Script")
+    #expect(ShaarDevToolsCoverageKind.stylesheet.title == "Style sheet")
+    let gapped = ShaarDevToolsCoverage.summarize(
+      scripts: [
+        ShaarDevToolsCoverageScript(
+          url: "http://localhost:3000/gap.js",
+          ranges: [
+            ShaarDevToolsCoverageCountedSpan(start: 0, end: 10, count: 1),
+            ShaarDevToolsCoverageCountedSpan(start: 20, end: 30, count: 1),
+            ShaarDevToolsCoverageCountedSpan(start: 8, end: 4, count: 1),
+          ])
+      ],
+      sheets: [])
+    #expect(gapped.map(\.usedBytes) == [20])
+  }
+
+  @Test func coveragePanelRendersOffscreenForEachState() async throws {
+    _ = NSApplication.shared
+    let defaults = UserDefaults(suiteName: "ShaarDevToolsCoverage.render.\(UUID().uuidString)")!
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
+    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    let inspector = InspectorModel(target: target, engine: nil)
+    shell.open(inspector: inspector)
+    let model = shell.coverage
+    #expect(!model.collectionReady)
+    let waiting = try renderCoverage(model, height: 420)
+
+    model.collectionReady = true
+    await model.start()
+    #expect(model.notice == .needsPage)
+    let needsPage = try renderCoverage(model, height: 420)
+
+    model.send = { _, _ in throw ShaarCoverageFailure("Coverage was rejected.") }
+    await model.start()
+    #expect(model.notice == .failed("Coverage was rejected."))
+    #expect(!model.recording)
+    let failed = try renderCoverage(model, height: 420)
+
+    model.send = { _, _ in [:] }
+    await model.start()
+    #expect(model.recording)
+    let recording = try renderCoverage(model, height: 420)
+    model.send = nil
+    await model.stop()
+    #expect(model.notice == .needsPage)
+    #expect(!model.recording)
+
+    let taken = CoverageCallLog()
+    model.send = { method, params in
+      taken.record(method, params: params)
+      if method == "Profiler.takePreciseCoverage" {
+        throw ShaarCoverageFailure("Coverage could not be read.")
+      }
+      return [:]
+    }
+    await model.start()
+    await model.stop()
+    #expect(taken.methods.contains("Profiler.takePreciseCoverage"))
+    #expect(model.notice == .failed("Coverage could not be read."))
+
+    let next = SiteControlTarget(tabID: UUID(), profileID: target.profileID, url: target.url)
+    model.retarget(next)
+    #expect(model.rows.isEmpty)
+    #expect(model.notice == nil)
+    model.present(scripts: renderedScripts, sheets: renderedSheets)
+    #expect(model.rows.map(\.percent) == [50, 40, 0])
+    let rows = try renderCoverage(model, height: 520)
+    shell.section = .coverage
+    let panel = try VisualCapture.pngOffscreen(
+      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
+      size: NSSize(width: 850, height: 620))
+    #expect(!waiting.isEmpty)
+    #expect(!needsPage.isEmpty)
+    #expect(!failed.isEmpty)
+    #expect(!recording.isEmpty)
+    #expect(!rows.isEmpty)
+    #expect(!panel.isEmpty)
+    shell.close()
+  }
+}
+
+@MainActor private func renderCoverage(_ model: ShaarDevToolsCoverageModel, height: CGFloat) throws
+  -> Data
+{
+  try VisualCapture.pngOffscreen(
+    ShaarDevToolsCoveragePanel(model: model), size: NSSize(width: 640, height: height))
+}
+
+private let renderedScripts = [
+  ShaarDevToolsCoverageScript(
+    url: "http://localhost:3000/app.js",
+    ranges: [
+      ShaarDevToolsCoverageCountedSpan(start: 0, end: 40, count: 1),
+      ShaarDevToolsCoverageCountedSpan(start: 40, end: 100, count: 0),
+    ])
+]
+
+private let renderedSheets = [
+  ShaarDevToolsCoverageSheet(
+    url: "http://localhost:3000/site.css", totalBytes: 2_048,
+    usedRanges: [ShaarDevToolsCoverageSpan(start: 0, end: 1_024)]),
+  ShaarDevToolsCoverageSheet(
+    url: "http://localhost:3000/", totalBytes: 0, usedRanges: []),
+]
+
+private func scriptReply() -> [String: Any] {
+  return [
+    "result": [
+      [
+        "scriptId": "9",
+        "functions": [
+          [
+            "ranges": [
+              [
+                "startOffset": NSNumber(value: 2),
+                "endOffset": NSNumber(value: 6),
+                "count": NSNumber(value: 1),
+              ] as [String: Any]
+            ]
+          ] as [String: Any]
+        ],
+      ] as [String: Any],
+      ["url": "", "functions": []] as [String: Any],
+      [
+        "functions": [
+          ["ranges": [["count": "no"] as [String: Any]]] as [String: Any]
+        ]
+      ] as [String: Any],
+    ] as [[String: Any]]
+  ]
+}
+
+private func listedSheetReply() -> [String: Any] {
+  return [
+    "sheets": [
+      ["totalBytes": 12] as [String: Any],
+      ["url": "", "totalBytes": 4] as [String: Any],
+      [
+        "url": "http://localhost:3000/blank.css",
+        "totalBytes": NSNumber(value: 8),
+        "ruleUsage": [
+          ["used": NSNumber(value: false), "startOffset": 1, "endOffset": 2] as [String: Any]
+        ],
+      ] as [String: Any],
+    ] as [[String: Any]]
+  ]
+}
+
+private func groupedRuleReply() -> [String: Any] {
+  return [
+    "ruleUsage": [
+      [
+        "url": "http://localhost:3000/partial.css",
+        "startOffset": 0,
+        "endOffset": 40,
+        "used": true,
+      ] as [String: Any],
+      [
+        "url": "http://localhost:3000/partial.css",
+        "startOffset": 20.0,
+        "endOffset": 30.0,
+        "used": NSNumber(value: true),
+      ] as [String: Any],
+      [
+        "styleSheetId": "sheet-2",
+        "startOffset": 0,
+        "endOffset": 10,
+        "used": false,
+      ] as [String: Any],
+      ["startOffset": 0, "endOffset": 4] as [String: Any],
+    ] as [[String: Any]]
+  ]
 }
 
 @MainActor private final class ShaarCoverageFixture: ShaarCoverageTransport {

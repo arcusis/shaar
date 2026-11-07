@@ -256,6 +256,23 @@ extension ShaarDevToolsModel {
     deliver(choice.command)
   }
 
+  func probeTouchState() async {
+    guard !touchProbeFinished, !touchProbeInFlight else { return }
+    guard let send = sendSensorCommand else { return }
+    touchProbeInFlight = true
+    defer { touchProbeInFlight = false }
+    do {
+      try await send(.touch(false))
+      sensorTouchReady = true
+      touchProbeFinished = true
+    } catch {
+      if error is CancellationError || Task.isCancelled { return }
+      if ShaarDevToolsSensorCapability.targetGone(error) { return }
+      sensorTouchReady = !ShaarDevToolsSensorCapability.isMissing(error)
+      touchProbeFinished = true
+    }
+  }
+
   func probeIdleState() async {
     guard !idleProbeFinished, !idleProbeInFlight else { return }
     guard let engine = sensorEngine else { return }
@@ -268,6 +285,7 @@ extension ShaarDevToolsModel {
       sensorIdleReady = true
       idleProbeFinished = true
     } catch {
+      if error is CancellationError || Task.isCancelled { return }
       if ShaarDevToolsSensorCapability.targetGone(error) { return }
       sensorIdleReady = !ShaarDevToolsSensorCapability.isMissing(error)
       idleProbeFinished = true
@@ -307,6 +325,12 @@ extension ShaarDevToolsModel {
     resetSensorForm()
     sensorEngine = nil
     sendSensorCommand = nil
+    sensorTouchReady = false
+    sensorIdleReady = false
+    touchProbeFinished = false
+    touchProbeInFlight = false
+    idleProbeFinished = false
+    idleProbeInFlight = false
   }
 
   private func deliver(_ command: ShaarDevToolsSensorCommand) {
@@ -368,7 +392,10 @@ struct ShaarDevToolsSensorsPanel: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .accessibilityIdentifier("shaar.devtools.sensors")
-    .task { await model.probeIdleState() }
+    .task {
+      await model.probeTouchState()
+      await model.probeIdleState()
+    }
   }
 
   private var location: some View {
@@ -431,6 +458,7 @@ struct ShaarDevToolsSensorsPanel: View {
           .font(.system(size: 11))
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
+          .accessibilityIdentifier("shaar.devtools.sensorTouch.engineGate")
       }
     }
   }

@@ -19,6 +19,11 @@ public enum ShaarDevToolsPanelEventID: Int, CaseIterable, Sendable {
   case performanceMetrics = 10
   case eventsDropped = 11
   case screencastFrame = 29
+  case webSocketCreated = 31
+  case webSocketHandshake = 32
+  case webSocketFrameSent = 33
+  case webSocketFrameReceived = 34
+  case webSocketClosed = 35
 }
 
 public struct ShaarDevToolsPanelFrame: Equatable, Sendable {
@@ -51,6 +56,8 @@ public struct ShaarDevToolsPanelData: Equatable, Sendable {
   public let url: String?
   public let method: String?
   public let status: Double?
+  public let opcode: Int?
+  public let payload: String?
   public let mimeType: String?
   public let encodedBytes: Double?
   public let name: String?
@@ -131,7 +138,8 @@ public enum ShaarDevToolsPanelEventRouter {
       else { return nil }
       return ShaarDevToolsPanelData(
         text: nil, level: nil, objectID: nil, requestID: nil, url: nil, method: nil,
-        status: nil, mimeType: nil, encodedBytes: nil, name: nil,
+        status: nil, opcode: nil, payload: nil,
+        mimeType: nil, encodedBytes: nil, name: nil,
         metrics: nil, droppedCount: nil,
         frame: ShaarDevToolsPanelFrame(jpeg: jpeg, sessionID: sessionID),
         stack: [], requestHeaders: [], responseHeaders: [], truncated: false)
@@ -143,7 +151,8 @@ public enum ShaarDevToolsPanelEventRouter {
       else { return nil }
       return ShaarDevToolsPanelData(
         text: nil, level: nil, objectID: nil, requestID: nil, url: nil, method: nil,
-        status: nil, mimeType: nil, encodedBytes: nil, name: nil,
+        status: nil, opcode: nil, payload: nil,
+        mimeType: nil, encodedBytes: nil, name: nil,
         metrics: nil, droppedCount: value, frame: nil, stack: [],
         requestHeaders: [], responseHeaders: [], truncated: false)
     }
@@ -153,16 +162,26 @@ public enum ShaarDevToolsPanelEventRouter {
       validString(fields["objectID"]),
       validString(fields["requestID"], limit: 128),
       validString(fields["url"]), validString(fields["method"]),
+      validString(fields["payload"]),
       validString(fields["mimeType"]), validString(fields["name"])
     else { return nil }
     let requestID = fields["requestID"] as? String
     if [
       .requestWillBeSent, .responseReceived, .loadingFinished,
-      .loadingFailed, .dataReceived,
+      .loadingFailed, .dataReceived, .webSocketCreated,
+      .webSocketHandshake, .webSocketFrameSent, .webSocketFrameReceived,
+      .webSocketClosed,
     ].contains(id) && (requestID?.isEmpty ?? true) {
       return nil
     }
     let status = fields["status"] as? Double
+    let opcode = fields["opcode"] as? Int
+    if fields["opcode"] != nil && (opcode == nil || !(0...15).contains(opcode!)) {
+      return nil
+    }
+    if [.webSocketFrameSent, .webSocketFrameReceived].contains(id) && opcode == nil {
+      return nil
+    }
     let encodedBytes = fields["encodedBytes"] as? Double
     if fields["status"] != nil && (status == nil || !status!.isFinite) { return nil }
     if fields["encodedBytes"] != nil
@@ -194,6 +213,7 @@ public enum ShaarDevToolsPanelEventRouter {
       objectID: fields["objectID"] as? String,
       requestID: requestID, url: fields["url"] as? String,
       method: fields["method"] as? String, status: status,
+      opcode: opcode, payload: fields["payload"] as? String,
       mimeType: fields["mimeType"] as? String, encodedBytes: encodedBytes,
       name: fields["name"] as? String, metrics: metrics,
       droppedCount: nil, frame: nil, stack: stack,
@@ -249,6 +269,11 @@ public enum ShaarDevToolsPanelEventRouter {
       fields.formUnion(["requestID", "url", "status", "mimeType", "responseHeaders"])
     case .loadingFinished, .dataReceived: fields.formUnion(["requestID", "encodedBytes"])
     case .loadingFailed: fields.formUnion(["requestID", "text"])
+    case .webSocketCreated: fields.formUnion(["requestID", "url"])
+    case .webSocketHandshake: fields.formUnion(["requestID", "status"])
+    case .webSocketFrameSent, .webSocketFrameReceived:
+      fields.formUnion(["requestID", "opcode", "payload"])
+    case .webSocketClosed: fields.insert("requestID")
     case .pageLifecycle: fields.insert("name")
     case .performanceMetrics: fields.insert("metrics")
     case .eventsDropped: break

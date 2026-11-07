@@ -34,6 +34,7 @@ struct ShaarNetworkRequest: Identifiable, Equatable, Sendable {
   var responseBody: String?
   var responseIsBinary = false
   var previewData: Data?
+  var frames: [ShaarWebSocketFrame] = []
 
   var name: String {
     guard let url = URL(string: url) else { return self.url }
@@ -101,6 +102,7 @@ final class ShaarNetworkModel {
     case response = "Response"
     case preview = "Preview"
     case timing = "Timing"
+    case messages = "Messages"
   }
 
   func clearSelection() {
@@ -159,7 +161,9 @@ final class ShaarNetworkModel {
 
   func loadResponseBody(id: String) async {
     guard responseBodies[id] == nil, !loadingBodyIDs.contains(id), let loadBody else { return }
-    if requests(from: lastEvents).first(where: { $0.id == id })?.responseBody != nil { return }
+    guard let request = requests(from: lastEvents).first(where: { $0.id == id }),
+      request.resource != .socket, request.responseBody == nil
+    else { return }
     loadingBodyIDs.insert(id)
     defer { loadingBodyIDs.remove(id) }
     do {
@@ -310,6 +314,17 @@ final class ShaarNetworkModel {
     case .failed:
       row.completedAt = event.time
       row.failure = event.failure ?? failureLabel
+    case .webSocketCreated:
+      row.startedAt = event.time
+    case .webSocketHandshake:
+      row.respondedAt = event.time
+    case .webSocketFrame:
+      if let frame = event.frame {
+        if row.frames.count == 500 { row.frames.removeFirst() }
+        row.frames.append(frame)
+      }
+    case .webSocketClosed:
+      row.completedAt = event.time
     }
   }
 

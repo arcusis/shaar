@@ -189,6 +189,42 @@ import Testing
     #expect(child == [ShaarConsoleProperty(name: "b", value: "2")])
   }
 
+  @Test func webSocketEventsReachMessagesTabModel() async throws {
+    let transport = ShaarDevToolsNativeTransport(
+      requester: PanelRequesterFixture(), windowID: UUID().uuidString)
+    var stream = transport.messages(for: target).makeAsyncIterator()
+    #expect(await stream.next() == .streamAvailable)
+    let tabID = target.tabID.uuidString
+    let profileID = target.profileID.uuidString
+    let payloads: [(Int, [String: Any])] = [
+      (31, ["requestID": "ws-1", "url": "ws://example.test/ws", "truncated": false]),
+      (32, ["requestID": "ws-1", "status": 101, "truncated": false]),
+      (33, ["requestID": "ws-1", "opcode": 1, "payload": "hello", "truncated": false]),
+      (34, ["requestID": "ws-1", "opcode": 1, "payload": "echo-ready", "truncated": false]),
+      (35, ["requestID": "ws-1", "truncated": false]),
+    ]
+    for (index, data) in payloads {
+      transport.receive(
+        tabID: tabID, profileID: profileID,
+        payload: try event(index, data: data), sequence: UInt64(index))
+    }
+    var events: [ShaarDevToolsEvent] = []
+    for _ in payloads {
+      guard case .event(let value)? = await stream.next() else {
+        Issue.record("Missing WebSocket event")
+        return
+      }
+      events.append(value)
+    }
+    let model = ShaarNetworkModel()
+    model.filter = .socket
+    let rows = model.visibleRequests(from: events)
+    #expect(rows.count == 1)
+    #expect(rows.first?.status == 101)
+    #expect(rows.first?.frames.map(\.payload) == ["hello", "echo-ready"])
+    #expect(rows.first?.completedAt != nil)
+  }
+
   @Test func consoleMessageKeepsStackFramesForSources() async throws {
     let requester = PanelRequesterFixture()
     let transport = ShaarDevToolsNativeTransport(

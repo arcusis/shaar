@@ -9,6 +9,68 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor final class ShaarNetworkVisualTests: XCTestCase {
+  func testWebSocketMessagesRenderOffscreen() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_WEBSOCKET_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen WebSocket capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1441")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://127.0.0.1:3212/")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    let requestID = "fixture-ws"
+    let url = "ws://127.0.0.1:3212/ws"
+    let frame = ShaarWebSocketFrame(
+      direction: .received, opcode: 1, payload: "echo-ready", time: 1.2)
+    let cases: [(String, [ShaarDevToolsEvent])] = [
+      ("before-websocket", []),
+      (
+        "after-websocket",
+        [
+          .network(
+            .init(
+              id: UUID(), method: "GET", url: url, status: nil,
+              requestID: requestID, phase: .webSocketCreated, time: 1)),
+          .network(
+            .init(
+              id: UUID(), method: "", url: "", status: 101,
+              requestID: requestID, phase: .webSocketHandshake, time: 1.1)),
+          .network(
+            .init(
+              id: UUID(), method: "", url: "", status: nil,
+              requestID: requestID, phase: .webSocketFrame, time: 1.2,
+              frame: frame)),
+        ]
+      ),
+    ]
+    for (name, fixture) in cases {
+      let shell = ShaarDevToolsModel(
+        target: target, transport: ShaarDevToolsFixtureTransport(fixture: fixture))
+      shell.open(inspector: inspector)
+      for _ in 0..<30 where !shell.streamAvailable { await Task.yield() }
+      for _ in 0..<30 where shell.events.count < fixture.count { await Task.yield() }
+      XCTAssertTrue(shell.streamAvailable)
+      XCTAssertEqual(shell.events.count, fixture.count)
+      shell.section = .network
+      shell.network.filter = .socket
+      if !fixture.isEmpty {
+        shell.network.selectedID = requestID
+        shell.network.detailTab = .messages
+      }
+      let image = try VisualCapture.renderOffscreen(
+        ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {})
+          .frame(width: 1040, height: 620),
+        size: NSSize(width: 1040, height: 620), appearance: .aqua,
+        to: root.appending(path: "\(name).png"))
+      XCTAssertEqual(image.pixelsWide, 1040)
+      shell.close()
+    }
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   func testHeaderDetailsBeforeAfterRenderOffscreen() async throws {
     guard ProcessInfo.processInfo.environment["SHAAR_NETWORK_CAPTURE"] == "1" else {
       throw XCTSkip("Offscreen Network capture requires explicit opt-in")

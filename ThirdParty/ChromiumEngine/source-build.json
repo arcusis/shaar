@@ -487,6 +487,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0059-shaar-devtools-console-objects.patch",
       "sha256": "4bd602b9e9392280575cf39cce9f14f9f250808cab96fb6c4e29b06dcb3e567b"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0060-shaar-devtools-websocket-events.patch",
+      "sha256": "d5eb8044fbe3a3ad01c9e64696ccd3a3457fc3a76f4dda33111379150209c952"
     }
   ],
   "requiredExports": [

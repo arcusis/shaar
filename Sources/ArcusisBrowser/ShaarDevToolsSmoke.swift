@@ -339,6 +339,7 @@ import Vision
       }
     case .network:
       provePainted(name, section: section, root: panelRoot(section), painted: painted, in: context, report: report)
+      await proveLoadRequests(shell, report: report)
       if shell.network.requests(from: shell.events).isEmpty {
         report.fail(
           "network-stale",
@@ -355,6 +356,31 @@ import Vision
     default:
       provePainted(name, section: section, root: panelRoot(section), painted: painted, in: context, report: report)
     }
+  }
+
+  private static func proveLoadRequests(
+    _ shell: ShaarDevToolsModel, report: ShaarDevToolsSmokeReport
+  ) async {
+    let expected: Set<String> = [
+      "/qa", "/qa.css", "/frameworks.js", "/pixel.png", "/api/items", "/api/xhr",
+    ]
+    let complete = await wait(attempts: 50) {
+      expected.isSubset(of: loadRequestPaths(shell))
+    }
+    let seen = loadRequestPaths(shell)
+    if complete {
+      report.pass("network-load", "Document, stylesheet, script, image, fetch, and XHR arrived")
+    } else {
+      let missing = expected.subtracting(seen).sorted().joined(separator: ", ")
+      let present = seen.sorted().joined(separator: ", ")
+      report.fail(
+        "network-load", "Missing load-time requests: \(missing). Seen: \(present)",
+        severity: .wrong)
+    }
+  }
+
+  private static func loadRequestPaths(_ shell: ShaarDevToolsModel) -> Set<String> {
+    Set(shell.network.requests(from: shell.events).compactMap { URL(string: $0.url)?.path })
   }
 
   private static func showsBanner(_ sentence: String, painted: String, in root: NSView) -> Bool {
@@ -1467,6 +1493,7 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "console-stack": return ("Console", "Stack trace")
     case "console-clear": return ("Console", "Clear")
     case "network-rows": return ("Network", "Request rows")
+    case "network-load": return ("Network", "Load-time requests")
     case "network-stale": return ("Network", "Request list")
     case "issues-badge": return ("Issues", "Badge count")
     case "painted-text": return ("Session", "How panels are read")

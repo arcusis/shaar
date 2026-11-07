@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import SwiftUI
 
 enum ShaarDevToolsCoverageKind: String, Equatable, Sendable {
@@ -453,18 +454,20 @@ struct ShaarDevToolsCoveragePanel: View {
   private var controls: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 8) {
-        Button(ShellL10n.string("Start")) {
+        ShaarCoverageActionButton(
+          title: ShellL10n.string("Start"),
+          identifier: "shaar.devtools.coverageStart",
+          enabled: model.collectionReady && !model.recording
+        ) {
           Task { await model.start() }
         }
-        .controlSize(.small)
-        .disabled(!model.collectionReady || model.recording)
-        .accessibilityIdentifier("shaar.devtools.coverageStart")
-        Button(ShellL10n.string("Stop")) {
+        ShaarCoverageActionButton(
+          title: ShellL10n.string("Stop"),
+          identifier: "shaar.devtools.coverageStop",
+          enabled: model.recording
+        ) {
           Task { await model.stop() }
         }
-        .controlSize(.small)
-        .disabled(!model.recording)
-        .accessibilityIdentifier("shaar.devtools.coverageStop")
         Spacer(minLength: 0)
       }
       if !model.collectionReady {
@@ -514,6 +517,39 @@ struct ShaarDevToolsCoveragePanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
+  }
+}
+
+private struct ShaarCoverageActionButton: NSViewRepresentable {
+  let title: String
+  let identifier: String
+  let enabled: Bool
+  let action: () -> Void
+
+  func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+  func makeNSView(context: Context) -> NSButton {
+    let button = NSButton(
+      title: title, target: context.coordinator, action: #selector(Coordinator.press))
+    button.bezelStyle = .rounded
+    button.controlSize = .small
+    button.setContentHuggingPriority(.required, for: .horizontal)
+    return button
+  }
+
+  func updateNSView(_ button: NSButton, context: Context) {
+    context.coordinator.action = action
+    button.title = title
+    button.setAccessibilityIdentifier(identifier)
+    button.isEnabled = enabled
+  }
+
+  final class Coordinator: NSObject {
+    var action: () -> Void
+
+    init(action: @escaping () -> Void) { self.action = action }
+
+    @objc func press() { action() }
   }
 }
 

@@ -419,7 +419,10 @@ import Vision
     }
     let pressedStart = ShaarDevToolsSmokeAccess.press(
       identifier: "shaar.devtools.coverageStart", in: context.hosting)
-    if !pressedStart { await shell.coverage.start() }
+    guard pressedStart else {
+      report.fail("coverage-record", "Start could not be pressed in the hidden panel")
+      return
+    }
     let started = await wait(attempts: 40) {
       shell.coverage.recording || shell.coverage.notice != nil
     }
@@ -431,14 +434,19 @@ import Vision
     }
     let pressedStop = ShaarDevToolsSmokeAccess.press(
       identifier: "shaar.devtools.coverageStop", in: context.hosting)
-    if !pressedStop { await shell.coverage.stop() }
+    guard pressedStop else {
+      report.fail("coverage-record", "Stop could not be pressed in the hidden panel")
+      return
+    }
     let stopped = await wait(attempts: 40) { !shell.coverage.recording }
-    if stopped, shell.coverage.notice == nil {
+    if stopped, shell.coverage.notice == nil,
+      shell.coverage.rows.contains(where: { $0.totalBytes > 0 && $0.usedBytes > 0 })
+    {
       report.pass("coverage-record", "Start and Stop ran. Rows \(shell.coverage.rows.count)")
     } else {
       report.fail(
         "coverage-record",
-        shell.coverage.notice.map(String.init(describing:)) ?? "Stop did not finish")
+        shell.coverage.notice.map(String.init(describing:)) ?? "No used coverage row after Stop")
     }
   }
 
@@ -1543,6 +1551,10 @@ enum ShaarDevToolsSmokeAccess {
   }
 
   @MainActor private static func press(_ object: NSObject) -> Bool {
+    if let button = object as? NSButton, button.isEnabled {
+      button.performClick(nil)
+      return true
+    }
     if let view = object as? NSView {
       if view.accessibilityPerformPress() { return true }
       return pressHidden(view)

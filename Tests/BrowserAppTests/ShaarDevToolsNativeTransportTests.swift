@@ -85,6 +85,30 @@ import Testing
     #expect(requester.operations.contains(.panelGetResponseBody))
   }
 
+  @Test func consoleMessageKeepsStackFramesForSources() async throws {
+    let requester = PanelRequesterFixture()
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    let stream = transport.messages(for: target)
+    var iterator = stream.makeAsyncIterator()
+    _ = await iterator.next()
+    let text = """
+      Error: shaar-source-jump
+          at shaarThrowForSources (http://127.0.0.1:9/inspector-tools:8:40)
+      """
+    transport.receive(
+      tabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
+      payload: try event(1, data: ["text": text, "level": "error", "truncated": false]),
+      sequence: 1)
+    guard case .event(.console(let console)) = await iterator.next() else {
+      Issue.record("Missing console stack")
+      return
+    }
+    #expect(console.stack.count == 1)
+    #expect(console.stack[0].function == "shaarThrowForSources")
+    #expect(console.source?.contains("inspector-tools:8:40") == true)
+  }
+
   @Test func unavailablePanelKeepsStreamGated() async {
     let requester = PanelRequesterFixture()
     requester.failOpen = true

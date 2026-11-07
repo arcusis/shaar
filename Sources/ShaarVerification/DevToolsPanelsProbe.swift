@@ -442,6 +442,100 @@ import Foundation
     await check("memory") {
       try await self.proveMemory(shell, target: target)
     }
+    await check("performance-recording") {
+      shell.section = .performance
+      try await self.wait("phase 2 lease") { shell.phase2.available }
+      // The long-task command installs its observer on the first read. Tasks
+      // that already finished are not in the timeline buffer, so that read has
+      // to finish before the page timer runs.
+      try await self.refreshPerformance(shell.performance)
+      shell.performance.startRecording()
+      let observed = try await inspector.evaluate("window.__shaarRunLongTask()") as? String
+      var refreshes = 0
+      while shell.performance.recordedTasks.isEmpty && refreshes < 8 {
+        try await self.refreshPerformance(shell.performance)
+        refreshes += 1
+        if shell.performance.recordedTasks.isEmpty {
+          try await Task.sleep(for: .milliseconds(50))
+        }
+      }
+      _ = try await inspector.evaluate(
+        "document.getElementById('shift').style.paddingTop='200px'")
+      try await self.wait("buffered vitals or a layout shift", attempts: 40) {
+        shell.performance.fcpMilliseconds != nil || shell.performance.ttfbMilliseconds != nil
+          || shell.performance.cls > 0 || shell.performance.lcpMilliseconds != nil
+      }
+      try await self.refreshPerformance(shell.performance)
+      shell.performance.stopRecording()
+      guard shell.performance.capture == .stopped else {
+        throw Failure("Performance recording did not stop")
+      }
+      guard shell.performance.failure == nil else {
+        throw Failure("Performance refresh failed: \(shell.performance.failure ?? "")")
+      }
+      guard !shell.performance.recordedTasks.isEmpty else {
+        throw Failure(
+          "No main-thread long tasks were recorded. pageTimer=\(observed ?? "nil") refreshes=\(refreshes) metrics=\(shell.performance.metrics)"
+        )
+      }
+      let inp = shell.performance.inpMilliseconds.map { String($0) } ?? "unavailable"
+      return
+        "Recorded \(shell.performance.recordedTasks.count) main-thread tasks; LCP=\(shell.performance.lcpMilliseconds.map { String($0) } ?? "unavailable") CLS=\(shell.performance.cls) INP=\(inp)"
+    }
+    await check("sources-lite") {
+      shell.section = .sources
+      try await self.wait("phase 2 lease for sources") { shell.phase2.available }
+      await shell.sources.refresh()
+      guard shell.sources.failure == nil else {
+        throw Failure("Resource tree failed: \(shell.sources.failure ?? "")")
+      }
+      guard
+        shell.sources.resources.contains(where: { $0.url.contains("inspector-source-sample.js") }),
+        shell.sources.treeRows.contains(where: { $0.resourceURL == nil })
+      else {
+        throw Failure(
+          "File tree missed the sample script: \(shell.sources.resources.map(\.url))")
+      }
+      guard let sample = shell.sources.resources.first(where: {
+        $0.name == "inspector-source-sample.js"
+      }) else { throw Failure("Sample script row disappeared") }
+      await shell.sources.select(sample)
+      shell.sources.prettyPrint = true
+      guard shell.sources.displayedContent?.contains("shaarSample") == true,
+        shell.sources.displayedContent?.contains("\n") == true
+      else {
+        throw Failure("Pretty print did not format the sample script")
+      }
+      shell.sources.contentQuery = "shaarSample"
+      shell.sources.revealCurrentMatch()
+      guard shell.sources.matchLines.isEmpty == false else {
+        throw Failure("In-file search missed shaarSample")
+      }
+      _ = try await inspector.evaluate("shaarThrowForSources()")
+      try await self.wait("console stack for the fixture function") {
+        shell.events.contains { event in
+          guard case .console(let row) = event else { return false }
+          return row.message.contains("shaar-source-jump") && !row.stack.isEmpty
+        }
+      }
+      guard
+        let frame = shell.events.compactMap({ event -> ShaarConsoleFrame? in
+          guard case .console(let row) = event else { return nil }
+          return row.stack.first { $0.source.contains("inspector-source-sample.js") }
+        }).first,
+        let location = ShaarConsoleLocations.parse(frame.source)
+      else { throw Failure("Console stack did not include the sample script") }
+      let revealed = await shell.sources.reveal(url: location.url, line: location.line)
+      guard revealed, let line = shell.sources.highlightedLine,
+        shell.sources.displayedLines?[line].contains("shaarThrowForSources") == true
+      else {
+        let lines = shell.sources.displayedLines?.count ?? -1
+        throw Failure(
+          "Sources did not open \(location.source): \(shell.sources.sourceFailure ?? "no error"); lines=\(lines) binary=\(shell.sources.binary) load=\(shell.sources.failure ?? "none")"
+        )
+      }
+      return "File tree, pretty print, search, and console line \(location.line) opened read-only"
+    }
     return try results.finish(
       root: root, phase: phase, engine: engine.runtime.chromiumVersion,
       hidden: NSApp.windows.allSatisfy { !$0.isVisible })
@@ -1112,6 +1206,24 @@ import Foundation
     return "Docked to the right. Unavailable copy does not name an engine version."
   }
 
+  private func refreshPerformance(_ model: ShaarPerformanceModel) async throws {
+    var attempts = 0
+    while attempts < 5 {
+      try await wait("performance idle") { !model.loading }
+      let before = model.completedRefreshes
+      await model.refresh()
+      if model.completedRefreshes > before {
+        if let failure = model.failure {
+          throw Failure("Performance refresh failed: \(failure)")
+        }
+        return
+      }
+      attempts += 1
+      try await Task.sleep(for: .milliseconds(20))
+    }
+    throw Failure("Performance refresh did not run")
+  }
+
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
   }
@@ -1155,7 +1267,7 @@ import Foundation
     "application-local-storage", "application-session-storage", "application-indexed-db",
     "application-cache-storage", "application-service-worker", "network-rules", "source-bytes",
     "css", "viewports", "masked-repro", "elements-live", "elements-inspector", "elements-scale",
-    "split-shell", "console-tools", "memory",
+    "split-shell", "console-tools", "memory", "performance-recording", "sources-lite",
   ]
 
   private var entries: [String: [String: Any]] = [:]

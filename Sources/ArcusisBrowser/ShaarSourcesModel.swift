@@ -45,10 +45,21 @@ final class ShaarSourcesModel {
   var sourceFailure: String?
   var failure: String?
   var search = ""
+  var contentQuery = "" {
+    didSet { if contentQuery != oldValue { matchCursor = 0 } }
+  }
   var prettyPrint = false {
-    didSet { if prettyPrint != oldValue { sourcePage = 0 } }
+    didSet {
+      if prettyPrint != oldValue {
+        sourcePage = 0
+        highlightedLine = nil
+        matchCursor = 0
+      }
+    }
   }
   private(set) var sourcePage = 0
+  private(set) var highlightedLine: Int?
+  private(set) var matchCursor = 0
   static let linesPerPage = 500
   @ObservationIgnored private let phase2: ShaarPhase2Model
   @ObservationIgnored private let inspectorContent: InspectorContent?
@@ -84,10 +95,12 @@ final class ShaarSourcesModel {
     }
   }
 
+  var treeRows: [ShaarSourceTreeRow] { ShaarSourceTree.rows(for: visibleResources) }
+
   var displayedContent: String? {
     guard let content, !binary else { return nil }
-    guard prettyPrint, isJSON else { return content }
-    return Self.prettyJSON(content) ?? content
+    guard prettyPrint, let kind = prettyKind else { return content }
+    return ShaarSourceFormatter.format(content, kind: kind)
   }
 
   var displayedLines: [Substring]? {
@@ -121,8 +134,69 @@ final class ShaarSourcesModel {
     if sourcePage > 0 { sourcePage -= 1 }
   }
 
-  var isJSON: Bool {
-    selected?.mimeType.contains("json") == true || selected?.url.hasSuffix(".json") == true
+  var isJSON: Bool { prettyKind == .json }
+  var canPrettyPrint: Bool { prettyKind != nil }
+
+  var prettyKind: ShaarSourceKind? {
+    guard let selected else { return nil }
+    let mime = selected.mimeType.lowercased()
+    let name = selected.name.lowercased()
+    if mime.contains("json") || name.hasSuffix(".json") { return .json }
+    if mime.contains("javascript") || mime.contains("ecmascript") || name.hasSuffix(".js")
+      || name.hasSuffix(".mjs")
+    {
+      return .script
+    }
+    if mime.contains("css") || name.hasSuffix(".css") { return .style }
+    return nil
+  }
+
+  var matchLines: [Int] {
+    let needle = contentQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let lines = displayedLines, !needle.isEmpty else { return [] }
+    return lines.indices.filter { lines[$0].localizedStandardContains(needle) }
+  }
+
+  func revealCurrentMatch() {
+    let lines = matchLines
+    guard lines.indices.contains(matchCursor) else {
+      // An empty query is not a failed search. Keep a console jump highlight.
+      if !contentQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        highlightedLine = nil
+      }
+      return
+    }
+    showLine(lines[matchCursor])
+  }
+
+  func showNextContentMatch() { stepContentMatch(1) }
+  func showPreviousContentMatch() { stepContentMatch(-1) }
+
+  func reveal(url: String, line: Int) async -> Bool {
+    if prettyPrint { prettyPrint = false }
+    guard let resource = resources.first(where: { ShaarSourceTree.sameResource($0.url, url) })
+    else {
+      sourceFailure = ShellL10n.string("This stack frame is not in the loaded resources")
+      return false
+    }
+    if selectedURL != resource.url {
+      await select(resource)
+    } else if content == nil {
+      await loadSelected()
+    }
+    guard line >= 1 else { return false }
+    let index = line - 1
+    guard let lines = displayedLines else {
+      sourceFailure = failure ?? ShellL10n.string("That line is outside the loaded source")
+      return false
+    }
+    guard lines.indices.contains(index) else {
+      sourceFailure = ShellL10n.string("That line is outside the loaded source")
+      return false
+    }
+    sourceFailure = nil
+    showLine(index)
+    return true
   }
 
   func reset() {
@@ -143,8 +217,11 @@ final class ShaarSourcesModel {
     sourceFailure = nil
     failure = nil
     search = ""
+    contentQuery = ""
     prettyPrint = false
     sourcePage = 0
+    highlightedLine = nil
+    matchCursor = 0
   }
 
   func refresh() async {
@@ -181,6 +258,8 @@ final class ShaarSourcesModel {
     guard resource.url != selectedURL else { return }
     selectedURL = resource.url
     sourcePage = 0
+    highlightedLine = nil
+    matchCursor = 0
     content = nil
     contentRevision += 1
     lineCache = nil
@@ -243,14 +322,25 @@ final class ShaarSourcesModel {
   }
 
   func selectAdjacent(forward: Bool) async {
-    let visible = visibleResources
+    let visible = treeRows.compactMap(\.resourceURL)
     guard !visible.isEmpty else { return }
-    let index = visible.firstIndex { $0.url == selectedURL }
+    let index = visible.firstIndex { $0 == selectedURL }
     let next =
       forward
       ? min(visible.count - 1, (index ?? -1) + 1)
       : max(0, (index ?? 1) - 1)
-    await select(visible[next])
+    guard let resource = resources.first(where: { $0.url == visible[next] }) else { return }
+    await select(resource)
+  }
+
+  /// Text resources sometimes arrive base64-encoded. Images stay binary.
+  private static func readableText(body: String?, base64Encoded: Bool) -> (
+    body: String?, binary: Bool
+  ) {
+    guard base64Encoded, let body, let data = Data(base64Encoded: body),
+      let text = String(data: data, encoding: .utf8)
+    else { return (body, base64Encoded) }
+    return (text, false)
   }
 
   private func loadSelected() async {
@@ -319,25 +409,32 @@ final class ShaarSourcesModel {
   private func loadResourceText(url: String) async throws -> LoadedResourceText {
     do {
       let reply = try await phase2.execute(.resourceContent(url: url))
+      let decoded = Self.readableText(body: reply.body, base64Encoded: reply.base64Encoded == true)
       return LoadedResourceText(
-        body: reply.body, base64Encoded: reply.base64Encoded == true, truncated: reply.truncated)
+        body: decoded.body, base64Encoded: decoded.binary, truncated: reply.truncated)
     } catch {
       guard !(error is CancellationError), let inspectorContent,
         let resourceURL = URL(string: url),
         DevelopmentSourceResolver.sameOrigin(resourceURL, phase2.target.url)
       else { throw error }
       let fallback = try await inspectorContent(url, phase2.target)
+      let decoded = Self.readableText(
+        body: fallback.body, base64Encoded: fallback.base64Encoded)
       return LoadedResourceText(
-        body: fallback.body, base64Encoded: fallback.base64Encoded, truncated: false)
+        body: decoded.body, base64Encoded: decoded.binary, truncated: false)
     }
   }
 
-  private static func prettyJSON(_ value: String) -> String? {
-    guard let data = value.data(using: .utf8),
-      let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
-      let formatted = try? JSONSerialization.data(
-        withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .fragmentsAllowed])
-    else { return nil }
-    return String(data: formatted, encoding: .utf8)
+  private func stepContentMatch(_ delta: Int) {
+    let lines = matchLines
+    guard !lines.isEmpty else { return }
+    matchCursor = (matchCursor + delta + lines.count) % lines.count
+    showLine(lines[matchCursor])
+  }
+
+  private func showLine(_ line: Int) {
+    highlightedLine = line
+    let page = line / Self.linesPerPage
+    if page != sourcePage { sourcePage = page }
   }
 }

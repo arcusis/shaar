@@ -54,7 +54,8 @@ struct ShaarPerformancePanel: View {
           try? await developer.refreshPerformance()
           if let snapshot = developer.performanceSnapshot { model.updatePageSnapshot(snapshot) }
         }
-        try? await Task.sleep(for: .seconds(5))
+        let interval: Duration = model.capture == .recording ? .seconds(1) : .seconds(5)
+        try? await Task.sleep(for: interval)
       }
     }
     .onChange(of: phase2.events) { _, events in model.receive(events) }
@@ -214,12 +215,20 @@ struct ShaarPerformancePanel: View {
 
   private var header: some View {
     HStack(spacing: 8) {
-      Text(ShellL10n.string("This page load"))
+      Text(captureTitle)
         .font(.system(size: 11, weight: .semibold))
       Text(model.path).font(.system(size: 10, design: .monospaced))
         .foregroundStyle(.primary).lineLimit(1)
       Spacer()
       if model.loading { ProgressView().controlSize(.mini) }
+      Button(action: toggleCapture) {
+        Label(captureAction, systemImage: model.capture == .recording ? "stop.fill" : "record.circle")
+          .font(.system(size: 11, weight: .medium))
+      }
+      .buttonStyle(.plain)
+      .help(captureHelp)
+      .accessibilityLabel(captureAction)
+      .accessibilityIdentifier("shaar.devtools.performanceRecord")
       Button {
         Task { await model.refresh() }
       } label: {
@@ -231,6 +240,35 @@ struct ShaarPerformancePanel: View {
     }
     .padding(.horizontal, 13)
     .frame(height: 36)
+  }
+
+  private var captureTitle: String {
+    switch model.capture {
+    case .idle: ShellL10n.string("This page load")
+    case .recording: ShellL10n.string("Recording")
+    case .stopped: ShellL10n.string("Recording stopped")
+    }
+  }
+
+  private var captureAction: String {
+    if model.capture == .recording { return ShellL10n.string("Stop") }
+    return ShellL10n.string("Record")
+  }
+
+  private var captureHelp: String {
+    if model.capture == .recording {
+      return ShellL10n.string("Stop recording main-thread tasks")
+    }
+    return ShellL10n.string("Record main-thread tasks")
+  }
+
+  private func toggleCapture() {
+    if model.capture == .recording {
+      model.stopRecording()
+      return
+    }
+    model.startRecording()
+    Task { await model.refresh() }
   }
 
   private func errorBanner(_ failure: String) -> some View {
@@ -278,22 +316,23 @@ struct ShaarPerformancePanel: View {
 
   private var timeline: some View {
     VStack(alignment: .leading, spacing: 0) {
-      sectionHeader("Timeline")
-      if model.lcpMilliseconds == nil && model.fcpMilliseconds == nil && model.tasks.isEmpty {
+      sectionHeader("Main thread")
+      if model.timelineTasks.isEmpty && model.lcpMilliseconds == nil && model.fcpMilliseconds == nil {
         emptyState("No performance entries for this page yet")
       } else {
         timelineRow("FCP", start: 0, duration: model.fcpMilliseconds, color: .blue)
         timelineRow("LCP", start: 0, duration: model.lcpMilliseconds, color: .blue)
-        ForEach(model.tasks.prefix(8)) { task in
-          timelineRow(task.name, start: task.start, duration: task.duration, color: .orange)
-        }
+        ShaarPerformanceFlameChart(tasks: model.timelineTasks)
+          .padding(.horizontal, 13)
+          .padding(.vertical, 6)
+          .accessibilityIdentifier("shaar.devtools.performanceFlame")
       }
       Divider().padding(.top, 8)
       sectionHeader("Long tasks")
-      if model.tasks.isEmpty {
+      if model.timelineTasks.isEmpty {
         emptyState("No long tasks observed")
       } else {
-        ForEach(model.tasks.prefix(10)) { task in
+        ForEach(model.timelineTasks.prefix(10)) { task in
           HStack {
             Text(task.name).lineLimit(1)
             Spacer()
@@ -415,6 +454,61 @@ struct ShaarPerformancePanel: View {
     let digits = ["ms", "bytes"].contains(unit) ? 0 : 2
     return String(format: "%.*f %@", digits, value, unit)
       .trimmingCharacters(in: .whitespaces)
+  }
+}
+
+private struct ShaarPerformanceFlameChart: View {
+  let tasks: [ShaarPerformanceTask]
+
+  var body: some View {
+    let lanes = ShaarPerformanceTimeline.lanes(for: tasks)
+    let origin = tasks.map(\.start).min() ?? 0
+    let end = tasks.map { $0.start + $0.duration }.max() ?? origin + 1
+    let span = max(end - origin, 1)
+    VStack(alignment: .leading, spacing: 4) {
+      if lanes.isEmpty {
+        Text(ShellL10n.string("No long tasks observed"))
+          .font(.system(size: 10))
+          .foregroundStyle(.primary)
+      } else {
+        ForEach(Array(lanes.enumerated()), id: \.offset) { _, lane in
+          flameLane(lane, origin: origin, span: span)
+        }
+        HStack {
+          Text(axisLabel(origin))
+          Spacer()
+          Text(axisLabel(end))
+        }
+        .font(.system(size: 9, design: .monospaced))
+        .foregroundStyle(.primary)
+      }
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(ShellL10n.string("Main thread"))
+    .accessibilityValue(tasks.map { "\($0.name) \(Int($0.duration)) ms" }.joined(separator: ", "))
+  }
+
+  private func flameLane(
+    _ lane: [ShaarPerformanceTask], origin: Double, span: Double
+  ) -> some View {
+    GeometryReader { proxy in
+      ForEach(lane) { task in
+        let width = max(4, proxy.size.width * task.duration / span)
+        let x = proxy.size.width * (task.start - origin) / span
+        Text(task.name)
+          .lineLimit(1)
+          .font(.system(size: 9, design: .monospaced))
+          .padding(.horizontal, 4)
+          .frame(width: width, height: 16, alignment: .leading)
+          .background(Color.orange.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
+          .offset(x: min(max(0, x), max(0, proxy.size.width - width)))
+      }
+    }
+    .frame(height: 16)
+  }
+
+  private func axisLabel(_ milliseconds: Double) -> String {
+    String(format: "%.0f ms", milliseconds)
   }
 }
 

@@ -101,6 +101,16 @@ import XCTest
       await live.sources.select(script)
       await live.sources.findLocalFiles(framework: .nextJS)
       XCTAssertEqual(live.sources.localFiles.map(\.path), [localFile.path])
+      live.sources.prettyPrint = true
+      live.sources.contentQuery = "Dashboard"
+      live.sources.revealCurrentMatch()
+      try capture(
+        ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
+        named: "after-sources-reader-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
+      live.sources.prettyPrint = false
+      live.sources.contentQuery = ""
+      _ = await live.sources.reveal(url: script.url, line: 3)
       try capture(
         ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
         named: "after-sources-local-files-\(suffix)", scheme: scheme,

@@ -651,12 +651,23 @@ document.addEventListener('wheel',function(){document.getElementById('marker').s
             self.end_headers()
             self.wfile.write(body)
             return
+
+        if path == '/inspector-source-sample.js':
+            body = b'function shaarSample(){const value={"probe":true,"count":2};return value.count;}\nfunction shaarThrowForSources(){console.error(new Error(\'shaar-source-jump\'));}\n'
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == '/inspector-tools':
             self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">
 <title>Page tools fixture</title><link rel="stylesheet" href="/shaar-css-overview.css"><link rel="stylesheet" href="/shaar-css-empty.css"><style>body{font:18px Arial;padding:32px;background:white;color:#172033}button{padding:14px}#shift{padding:20px;padding-top:env(safe-area-inset-top);background:#eef2ff}</style>
 <h1>Measure the real page.</h1><button id="performance-input" onclick="window.clicked=(window.clicked||0)+1;const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div><input id="private-fixture" type="password" value="password-private-fixture">
-<script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');
+<script src="/inspector-source-sample.js"></script>
+<script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');window.__shaarRunLongTask=function(){return new Promise(function(resolve){setTimeout(function(){var start=performance.now();while(performance.now()-start<80){}setTimeout(function(){resolve('ran');},0);},0);});};
 (async()=>{try{const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('shaar-notes',1);request.onupgradeneeded=()=>{request.result.createObjectStore('entries');};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});const tx=db.transaction('entries','readwrite');const store=tx.objectStore('entries');for(let i=0;i!==60;i+=1){const id=String(i).padStart(3,'0');store.put('value-'+id,'id-'+id);}await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});const cache=await caches.open('shaar-app');await cache.put('/inspector-cached.txt',new Response('shaar-cached-body',{status:200,headers:{'Content-Type':'text/plain'}}));window.shaarApplicationReady=true;}catch(error){window.shaarApplicationError=String(error);}})();
 </script></html>""", csp=INSPECTOR_TOOLS_CSP, cookie='inspector-http-only=original; Path=/; HttpOnly; SameSite=Lax')
             return

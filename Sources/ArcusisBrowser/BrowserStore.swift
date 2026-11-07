@@ -395,6 +395,13 @@ final class BrowserStore {
 
   func updatePageFindQuery(_ query: String) {
     guard var current = pageFind, current.matches(session), current.query != query else { return }
+    if !current.unavailable,
+      current.query.compare(query, options: .caseInsensitive) == .orderedSame
+    {
+      current.query = query
+      pageFind = current
+      return
+    }
     current.query = query
     current.matchCount = nil
     current.activeMatch = 0

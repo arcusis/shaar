@@ -1309,6 +1309,12 @@
         }
       }
     },
+    "Show the winning rule": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Show the winning rule" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הצגת הכלל המנצח" } }
+      }
+    },
     "All computed properties": {
       "localizations": {
         "en": {

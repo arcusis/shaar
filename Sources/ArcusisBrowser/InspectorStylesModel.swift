@@ -32,6 +32,10 @@ struct InspectorRule: Identifiable {
   var editable = false
   var matchText = ""
   var note = ""
+  var specificity = InspectorSpecificity()
+  var cascadeOrder = 0
+  /// Zero is the selected element. Larger values are ancestors, parent first.
+  var distance = 0
 }
 
 @MainActor @Observable
@@ -147,7 +151,9 @@ final class InspectorStylesModel {
           (pseudo["matches"] as? [[String: Any]]) ?? [], note: name, limit: 4,
           into: &nextRules, inspector: inspector)
       }
-      for ancestor in ((matched["inherited"] as? [[String: Any]]) ?? []).prefix(4) {
+      let ancestors = ((matched["inherited"] as? [[String: Any]]) ?? []).prefix(4)
+      for (index, ancestor) in ancestors.enumerated() {
+        let distance = index + 1
         if let inline = ancestor["inlineStyle"] as? [String: Any], !declarations(inline).isEmpty,
           nextRules.count < 120
         {
@@ -156,11 +162,11 @@ final class InspectorStylesModel {
             InspectorRule(
               id: nextRules.count, selector: inherited.selector, source: inherited.source,
               declarations: inherited.declarations, origin: .inline, editable: false,
-              note: "Inherited"))
+              note: "Inherited", distance: distance))
         }
         await appendMatches(
           (ancestor["matchedCSSRules"] as? [[String: Any]]) ?? [], note: "Inherited", limit: 4,
-          into: &nextRules, inspector: inspector)
+          distance: distance, into: &nextRules, inspector: inspector)
       }
       if let muted = try? await inspector.evaluate(
         "globalThis.__shaarInspectorStyles.mutedRows()") as? [[String: String]]
@@ -220,10 +226,13 @@ final class InspectorStylesModel {
   }
 
   private func appendMatches(
-    _ rows: [[String: Any]], note: String, limit: Int, into rules: inout [InspectorRule],
-    inspector: InspectorModel
+    _ rows: [[String: Any]], note: String, limit: Int, distance: Int = 0,
+    into rules: inout [InspectorRule], inspector: InspectorModel
   ) async {
-    for row in rows.suffix(limit).reversed() {
+    let kept = Array(rows.suffix(limit))
+    let start = rows.count - kept.count
+    for offset in stride(from: kept.count - 1, through: 0, by: -1) {
+      let row = kept[offset]
       guard rules.count < 120, let rule = row["rule"] as? [String: Any],
         let style = rule["style"] as? [String: Any],
         let selectors = rule["selectorList"] as? [String: Any],
@@ -247,7 +256,9 @@ final class InspectorStylesModel {
         InspectorRule(
           id: rules.count, selector: String(selector.prefix(2048)), source: location,
           declarations: declarations(style), origin: origin,
-          editable: origin == .author && !matchText.isEmpty, matchText: matchText, note: note))
+          editable: origin == .author && !matchText.isEmpty, matchText: matchText, note: note,
+          specificity: InspectorCascade.specificity(matching: row),
+          cascadeOrder: start + offset, distance: distance))
     }
   }
 

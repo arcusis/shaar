@@ -868,6 +868,7 @@ NSString *ARCProbePrivateQuitDialogResult(BOOL ownerCurrent, NSString *dialogErr
 BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
   if ([elementID isEqualToString:@"blank"]) return YES;
   if ([elementID isEqualToString:@"popup"]) return YES;
+  if ([elementID isEqualToString:@"performance-input"]) return YES;
   return [elementID isEqualToString:@"arcusis-private-quit-activation"];
 }
 

@@ -184,6 +184,29 @@ import Testing
     phase2.close()
   }
 
+  @Test func pageSnapshotSuppliesWebVitals() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
+    let phase2 = ShaarPhase2Model(target: target, transport: ShaarPhase2PendingTransport())
+    let model = ShaarPerformanceModel(target: target, phase2: phase2)
+    let payload = Data(#"{"lcp":320.5,"inp":88,"requests":2,"bytes":20}"#.utf8)
+    let page = try #require(JSONSerialization.jsonObject(with: payload) as? [String: Any])
+    model.updatePageSnapshot(PagePerformanceSnapshot(page: page, engineMetrics: []))
+    #expect(model.lcpMilliseconds == 320.5)
+    #expect(model.inpMilliseconds == 88)
+    #expect(model.pageRequestCount == 2)
+    model.receive([
+      timeline(sequence: 1, type: "largest-contentful-paint", number: ["renderTime": 1.8])
+    ])
+    #expect(model.lcpMilliseconds == 320.5)
+    let later: [String: Any] = ["inp": 40.0, "requests": 3.0]
+    model.updatePageSnapshot(PagePerformanceSnapshot(page: later, engineMetrics: []))
+    #expect(model.lcpMilliseconds == 320.5)
+    #expect(model.inpMilliseconds == 88)
+    #expect(model.pageRequestCount == 3)
+    phase2.close()
+  }
+
   @Test func unavailableTransportKeepsPerformanceEmpty() async {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)

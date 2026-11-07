@@ -40,8 +40,20 @@ struct PagePerformanceSnapshot: Equatable {
 
   init(page: [String: Any], engineMetrics: [[String: Any]]) {
     func number(_ value: Any?) -> Double? {
-      guard let value = value as? Double, value.isFinite, value >= 0 else { return nil }
-      return value
+      let parsed: Double?
+      if let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() {
+        return nil
+      } else if let value = value as? Double {
+        parsed = value
+      } else if let value = value as? Int {
+        parsed = Double(value)
+      } else if let value = value as? NSNumber {
+        parsed = value.doubleValue
+      } else {
+        parsed = nil
+      }
+      guard let parsed, parsed.isFinite, parsed >= 0 else { return nil }
+      return parsed
     }
     timeOrigin = number(page["timeOrigin"]) ?? 0
     lcp = number(page["lcp"])

@@ -119,6 +119,12 @@ final class ShaarPerformanceModel {
       javascriptBytes = nil
     }
     pageRequestCount = snapshot.requests
+    if let lcp = snapshot.lcp {
+      lcpMilliseconds = lcp
+    }
+    if let inp = snapshot.inp {
+      inpMilliseconds = max(inpMilliseconds ?? inp, inp)
+    }
     publishBudgetStatus()
   }
 
@@ -215,7 +221,7 @@ final class ShaarPerformanceModel {
     for event in events where event.sequence > lastSequence {
       lastSequence = event.sequence
       guard event.id == .timeline else { continue }
-      if event.text["type"] == "largest-contentful-paint" {
+      if event.text["type"] == "largest-contentful-paint", lcpMilliseconds == nil {
         let renderTime = event.number["renderTime"] ?? 0
         lcpMilliseconds = renderTime > 0 ? renderTime : event.number["loadTime"]
       } else if event.text["type"] == "layout-shift",

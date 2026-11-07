@@ -193,6 +193,7 @@ import Testing
   @Test func trustedClickAllowlistIncludesTheQuitActivationButton() {
     #expect(ARCProbeTrustedClickElementAllowed("blank"))
     #expect(ARCProbeTrustedClickElementAllowed("popup"))
+    #expect(ARCProbeTrustedClickElementAllowed("performance-input"))
     #expect(ARCProbeTrustedClickElementAllowed("arcusis-private-quit-activation"))
     #expect(!ARCProbeTrustedClickElementAllowed("quit"))
     #expect(!ARCProbeTrustedClickElementAllowed(""))

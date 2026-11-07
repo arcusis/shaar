@@ -15,15 +15,13 @@ public enum BrowserFormatArgument: Sendable {
 public enum BrowserLocalization {
   public static let resourceBundleURL = bundle.bundleURL
 
-  private static let bundle = resourceBundle(in: .main) { .module }
+  private static let bundle =
+    PackagedResourceBundle.resolve(
+      named: "ArcusisBrowser_BrowserCore", in: .main, fallback: { .module }) ?? .main
 
   static func resourceBundle(in host: Bundle, fallback: () -> Bundle) -> Bundle {
-    if let url = host.url(forResource: "ArcusisBrowser_BrowserCore", withExtension: "bundle"),
-      let packaged = Bundle(url: url)
-    {
-      return packaged
-    }
-    return fallback()
+    PackagedResourceBundle.resolve(
+      named: "ArcusisBrowser_BrowserCore", in: host, fallback: fallback) ?? host
   }
 
   private static func localizedBundle(_ language: BrowserLanguage) -> Bundle {

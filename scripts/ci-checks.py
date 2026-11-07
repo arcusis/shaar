@@ -57,6 +57,7 @@ def main() -> int:
         ("sensitive-files", [sys.executable, "scripts/check-sensitive-files.py"]),
         ("format", ["swift", "format", "lint", "--strict", "--recursive", "Package.swift", "Sources", "Tests"]),
         ("license", [sys.executable, "scripts/check-license-headers.py"]),
+        ("packaged-resources", [sys.executable, "scripts/check-packaged-resources.py"]),
         ("notebook", [sys.executable, "scripts/check-notebook-links.py"]),
         ("localization", [sys.executable, "scripts/check-localization.py", "--write-inventory"]),
         ("actionlint", ["actionlint", "-color"]),

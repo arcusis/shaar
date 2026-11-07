@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Stage the verified SwiftPM BrowserCore bundle and its PSL notices."""
+"""Stage shipping SwiftPM resource bundles and the Public Suffix notices."""
 import hashlib
 import json
 import shutil
@@ -14,22 +14,80 @@ from pathlib import Path
 from typing import Optional
 
 BUNDLE = "ArcusisBrowser_BrowserCore.bundle"
+AUDIT_BUNDLE = "ArcusisBrowser_ArcusisBrowser.bundle"
+AUDIT_FILES = ("InspectorAudit/axe.min.js", "InspectorAudit/runner.js")
+STAGED_BUNDLE_NAMES = (BUNDLE, AUDIT_BUNDLE)
 DATA_HASH = "4155611645690529d1bbea0cfe653b0c45f63b028e0ba039de29a97edc3204ca"
 LICENSE_HASH = "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+AUDIT_LABEL = "ArcusisBrowser resource input"
 
 
-def read_bounded(path: Path) -> bytes:
+def read_bounded(path: Path, label: str = "BrowserCore resource input") -> bytes:
     if path.is_symlink() or not path.is_file():
-        raise ValueError("BrowserCore resource input is not a regular file")
+        raise ValueError(f"{label} is not a regular file")
     with path.open("rb") as source:
         data = source.read(2_000_001)
     if len(data) > 2_000_000:
-        raise ValueError("BrowserCore resource input exceeds size limit")
+        raise ValueError(f"{label} exceeds size limit")
     return data
 
 
 def digest(path: Path) -> str:
     return hashlib.sha256(read_bounded(path)).hexdigest()
+
+
+def shipping_resource_bundles(binary_dir: Path) -> list[Path]:
+    bundles = []
+    for path in sorted(binary_dir.glob("ArcusisBrowser_*.bundle")):
+        if path.is_symlink() or not path.is_dir():
+            raise ValueError(f"SwiftPM resource bundle is not a directory: {path.name}")
+        bundles.append(path)
+    return bundles
+
+
+def audit_resource_root(source: Path) -> Path:
+    contents = source / "Contents"
+    if contents.exists():
+        if (source / "InspectorAudit").exists() or (source / "Info.plist").exists():
+            raise ValueError("ArcusisBrowser resource bundle layout is ambiguous")
+        info = contents / "Info.plist"
+        if info.is_symlink() or not info.is_file():
+            raise ValueError("ArcusisBrowser resource bundle Info.plist missing")
+        read_bounded(info, AUDIT_LABEL)
+        return contents / "Resources"
+    return source
+
+
+def validate_inspector_audit(source: Path) -> None:
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError("ArcusisBrowser resource bundle is missing")
+    if any(path.is_symlink() for path in source.rglob("*")):
+        raise ValueError("ArcusisBrowser resource bundle contains symlink")
+    root = audit_resource_root(source)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("ArcusisBrowser resource bundle resources are missing")
+    for relative in AUDIT_FILES:
+        data = read_bounded(root.joinpath(*relative.split("/")), AUDIT_LABEL)
+        if not data:
+            raise ValueError("ArcusisBrowser resource input is empty")
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            data = read_bounded(path, AUDIT_LABEL)
+            if not data:
+                raise ValueError("ArcusisBrowser resource input is empty")
+        elif not path.is_dir():
+            raise ValueError("ArcusisBrowser resource input is not a regular file")
+
+
+def require_staged_shipping_bundles(binary_dir: Path, resources: Path) -> None:
+    missing = []
+    for path in shipping_resource_bundles(binary_dir):
+        staged = resources / path.name
+        if staged.is_symlink() or not staged.is_dir():
+            missing.append(path.name)
+    if missing:
+        raise ValueError(
+            "SwiftPM resource bundle was not staged into the app: " + ", ".join(missing))
 
 
 def compile_catalog(catalog: Path, output: Path) -> None:
@@ -70,6 +128,15 @@ def stage(
         raise ValueError("BrowserCore resource hash mismatch")
     if digest(pin_dir / "LICENSE") != LICENSE_HASH:
         raise ValueError("PublicSuffix license hash mismatch")
+    validate_inspector_audit(binary_dir / AUDIT_BUNDLE)
+    unexpected = [
+        path.name
+        for path in shipping_resource_bundles(binary_dir)
+        if path.name not in STAGED_BUNDLE_NAMES
+    ]
+    if unexpected:
+        raise ValueError(
+            "SwiftPM resource bundle was not staged into the app: " + ", ".join(unexpected))
     resources.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=resources, prefix=".browser-resources-") as temporary:
         tmp = Path(temporary)
@@ -80,6 +147,7 @@ def stage(
             compiled_resources = staged_bundle
         for catalog in sorted(catalog_dir.glob("*.xcstrings")):
             compile_catalog(catalog, compiled_resources)
+        shutil.copytree(binary_dir / AUDIT_BUNDLE, tmp / AUDIT_BUNDLE)
         notices = tmp / "PublicSuffix"
         notices.mkdir()
         shutil.copyfile(pin_dir / "LICENSE", notices / "LICENSE")
@@ -87,7 +155,7 @@ def stage(
         localizations = root / "Resources/Localizations"
         for catalog in sorted(localizations.glob("*.xcstrings")):
             compile_catalog(catalog, tmp)
-        for name in (BUNDLE, "PublicSuffix"):
+        for name in (BUNDLE, AUDIT_BUNDLE, "PublicSuffix"):
             target = resources / name
             if target.is_symlink() or (target.exists() and not target.is_dir()):
                 target.unlink()
@@ -101,6 +169,7 @@ def stage(
             elif target.exists():
                 shutil.rmtree(target)
             (tmp / f"{language}.lproj").rename(target)
+    require_staged_shipping_bundles(binary_dir, resources)
 
 
 def main() -> None:
@@ -110,7 +179,7 @@ def main() -> None:
     try:
         stage(Path(sys.argv[1]), Path(sys.argv[2]), root / "ThirdParty/PublicSuffix")
     except (OSError, ValueError) as error:
-        raise SystemExit(f"BrowserCore resource staging failed: {error}") from error
+        raise SystemExit(f"Resource staging failed: {error}") from error
 
 
 if __name__ == "__main__":

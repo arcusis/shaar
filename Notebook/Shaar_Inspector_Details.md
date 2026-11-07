@@ -16,7 +16,7 @@ Roles, computed accessible names, ignored status and exposed properties come fro
 
 Tab position is an explicit document estimate over up to 5,000 candidates. Shadow roots, nested frames, radio groups and browser focus rules can change actual sequential order. The loopback fixture verifies the common order using trusted renderer Tab input in the headless contract. This selected-element view is not a complete page accessibility audit.
 
-The A11y panel also runs the pinned axe-core 4.14.0 audit against the current page or locked element on demand. It reports at most 300 affected elements, clears results on navigation, and clears selected-element results when the selection changes. Results are an audit aid, not a complete accessibility certification. Inactive CSS declarations show layout-based hints in the matched rules list. Both features render in the existing Inspector panel.
+The A11y panel also runs the pinned axe-core 4.14.0 audit against the current page or locked element on demand. It reports at most 300 affected elements, clears results on navigation, and clears selected-element results when the selection changes. Results are an audit aid, not a complete accessibility certification. The audit scripts ship in `ArcusisBrowser_ArcusisBrowser.bundle`. The panel reads that bundle from the packaged app. A missing script shows "The accessibility audit is unavailable." and does not terminate the process. `swift test` still reads the SwiftPM bundle when the host is not a packaged app. Inactive CSS declarations show layout-based hints in the matched rules list. Both features render in the existing Inspector panel.
 
 ## Assets
 

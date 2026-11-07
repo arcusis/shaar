@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import Foundation
 import Observation
 
@@ -159,13 +160,22 @@ final class InspectorAuditModel {
     } catch { return }
   }
 
-  static func resourceText(_ name: String, extension fileExtension: String) throws -> String {
+  static func resourceText(
+    _ name: String,
+    extension fileExtension: String,
+    host: Bundle = .main,
+    fallback: (() -> Bundle)? = nil
+  ) throws -> String {
+    let bundle = PackagedResourceBundle.resolve(
+      named: "ArcusisBrowser_ArcusisBrowser", in: host, fallback: fallback ?? { .module })
     guard
-      let url = Bundle.module.url(
+      let bundle,
+      let url = bundle.url(
         forResource: name, withExtension: fileExtension, subdirectory: "InspectorAudit"),
       let value = try? String(contentsOf: url, encoding: .utf8), !value.isEmpty
     else {
-      throw InspectorFailure(InspectorDetailsL10n.string("The accessibility audit is unavailable."))
+      throw InspectorFailure(
+        InspectorDetailsL10n.string("The accessibility audit is unavailable."))
     }
     return value
   }

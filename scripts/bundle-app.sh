@@ -167,6 +167,8 @@ load_commands=$(otool -l "$app/Contents/MacOS/$executable")
 if [[ "$load_commands" == *"path $package_rpath "* ]]; then
   install_name_tool -delete_rpath "$package_rpath" "$app/Contents/MacOS/$executable"
 fi
+# Stage every shipping SwiftPM resource bundle, including the Audits scripts.
+# A produced ArcusisBrowser_*.bundle that is not copied into Contents/Resources fails the build.
 "${PYTHON:-python3}" scripts/stage-browser-resources.py \
   "$binary_dir" "$app/Contents/Resources"
 cp Resources/Branding/Shaar.icns "$app/Contents/Resources/Shaar.icns"

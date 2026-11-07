@@ -83,6 +83,37 @@ import Testing
     }
   }
 
+  @Test func packagedAuditBundleLoadsAndAMissingAppBundleDoesNotTrap() throws {
+    let present = try fixtureApp(includeAudit: true)
+    defer { try? FileManager.default.removeItem(at: present.deletingLastPathComponent()) }
+    let presentHost = try #require(Bundle(url: present))
+    var usedFallback = false
+    let runner = try InspectorAuditModel.resourceText(
+      "runner", extension: "js", host: presentHost,
+      fallback: {
+        usedFallback = true
+        return .main
+      })
+    #expect(runner == "packaged runner")
+    #expect(!usedFallback)
+
+    let missing = try fixtureApp(includeAudit: false)
+    defer { try? FileManager.default.removeItem(at: missing.deletingLastPathComponent()) }
+    let missingHost = try #require(Bundle(url: missing))
+    let error = #expect(throws: InspectorFailure.self) {
+      try InspectorAuditModel.resourceText(
+        "runner", extension: "js", host: missingHost,
+        fallback: {
+          usedFallback = true
+          return .main
+        })
+    }
+    #expect(
+      error?.errorDescription
+        == InspectorDetailsL10n.string("The accessibility audit is unavailable."))
+    #expect(!usedFallback)
+  }
+
   @Test func pinnedAxeRunnerHasNoPersistentPageScriptNode() throws {
     let runnerURL = try #require(
       try? InspectorAuditModel.resourceText("runner", extension: "js"))
@@ -105,5 +136,24 @@ import Testing
 
   private func suffix(_ scheme: ColorScheme) -> String {
     scheme == .dark ? "dark" : "light"
+  }
+
+  private func fixtureApp(includeAudit: Bool) throws -> URL {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let app = root.appendingPathComponent("Fixture.app")
+    let resources = app.appendingPathComponent("Contents/Resources")
+    try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+    let info = try PropertyListSerialization.data(
+      fromPropertyList: ["CFBundleIdentifier": "test.audit", "CFBundlePackageType": "APPL"],
+      format: .xml, options: 0)
+    try info.write(to: app.appendingPathComponent("Contents/Info.plist"))
+    guard includeAudit else { return app }
+    let audit = resources.appendingPathComponent(
+      "ArcusisBrowser_ArcusisBrowser.bundle/InspectorAudit")
+    try FileManager.default.createDirectory(at: audit, withIntermediateDirectories: true)
+    try info.write(
+      to: resources.appendingPathComponent("ArcusisBrowser_ArcusisBrowser.bundle/Info.plist"))
+    try Data("packaged runner".utf8).write(to: audit.appendingPathComponent("runner.js"))
+    return app
   }
 }

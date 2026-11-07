@@ -74,6 +74,7 @@ struct InspectorDesignView: View {
             }
           }
         }
+        InspectorLayoutSection(model: model.layout, generation: model.documentGeneration)
         if !selection.typography.preview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
           InspectorSection(
             InspectorL10n.string("Typography"), id: "Typography",

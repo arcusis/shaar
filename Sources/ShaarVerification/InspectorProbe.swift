@@ -69,6 +69,7 @@ final class InspectorProbe {
       return after.width > 0 && after.height > 0
         && (after.width < before.width || after.height < before.height)
     }
+    try await proveLayoutOverlays(model)
     try expect(
       await pointer(model, selector: "#save", click: false),
       "trusted pointer hovers the authored element")
@@ -495,6 +496,73 @@ final class InspectorProbe {
       overlay["badgeFill"] as? String == fill
     else { return false }
     return text.contains("div#overlay-name.alpha.bravo.charlie.delta +1") && text.contains("×")
+  }
+
+  private func proveLayoutOverlays(_ model: InspectorModel) async throws {
+    // Notes stays up while the commands run so the Design list is not polling beside them.
+    model.tab = .notes
+    _ = try await model.evaluate(
+      """
+      (() => {
+        const grid = document.querySelector('#grid');
+        grid.style.gridTemplateAreas = '"alpha bravo"';
+        grid.children[0].style.gridArea = 'alpha';
+        grid.children[1].style.gridArea = 'bravo';
+        return true;
+      })()
+      """)
+    _ = try await model.evaluate(
+      "globalThis.__shaarInspectorV2.select(document.querySelector('#save'))")
+    try await wait("layout list locks a selection") { model.selection?.locked == true }
+    try await wait("fixture lists both grids and the flex container") {
+      await model.layout.refresh()
+      let containers = model.layout.containers
+      return containers.contains { $0.key == "#grid" && $0.kind == .grid }
+        && containers.contains { $0.key == "#other" && $0.kind == .grid }
+        && containers.contains { $0.key == "#flex" && $0.kind == .flex }
+    }
+    try expect(!model.layout.showAreaNames, "area names stay off until asked")
+    await model.layout.toggle("#grid")
+    try expect(
+      model.layout.isOn("#grid") && !model.layout.isOn("#other") && model.layout.failure == nil,
+      "one grid overlay can be on alone")
+    await model.layout.setAreaNames(true)
+    try expect(
+      model.layout.showAreaNames && model.layout.isOn("#grid") && model.layout.failure == nil,
+      "area names are sent when asked")
+    await model.layout.toggle("#grid")
+    await model.layout.toggle("#other")
+    try expect(
+      model.layout.isOn("#other") && !model.layout.isOn("#grid") && model.layout.failure == nil,
+      "the other grid can take the overlay")
+    await model.layout.toggle("#flex")
+    try expect(
+      model.layout.isOn("#flex") && model.layout.failure == nil, "flex overlay is accepted")
+    await model.layout.toggle("#flex")
+    await model.layout.toggle("#other")
+    await model.layout.toggle("#grid")
+    try expect(
+      model.layout.isOn("#grid") && model.layout.showAreaNames && !model.layout.isOn("#other")
+        && !model.layout.isOn("#flex"),
+      "the list capture shows one grid with area names")
+    model.tab = .design
+    try await capture(model, stem: "\(phase)-inspector-flex-grid")
+    await model.layout.disableAll()
+    try expect(
+      !model.layout.isOn("#grid") && !model.layout.showAreaNames,
+      "closing the overlays resets area names")
+    _ = try await model.evaluate(
+      """
+      (() => {
+        const grid = document.querySelector('#grid');
+        grid.style.removeProperty('grid-template-areas');
+        grid.children[0].style.removeProperty('grid-area');
+        grid.children[1].style.removeProperty('grid-area');
+        return true;
+      })()
+      """)
+    await model.pick()?.value
+    try await wait("layout probe returns to picking") { model.mode == .picking }
   }
 
   private func styles(_ model: InspectorModel) async throws {

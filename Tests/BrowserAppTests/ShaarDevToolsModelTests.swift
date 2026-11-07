@@ -183,7 +183,7 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     #expect(shell.consoleCount == 1 && shell.networkCount == 1)
     let next = SiteControlTarget(
       tabID: target.tabID, profileID: target.profileID,
-      url: URL(string: "https://example.com/one")!)
+      url: URL(string: "https://example.com/two")!)
     shell.updateTarget(next, committed: true)
     #expect(shell.events.isEmpty)
     #expect(shell.streamAvailable)
@@ -193,6 +193,7 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     transport.emit(
       .network(ShaarNetworkEvent(id: UUID(), method: "GET", url: "/api/xhr", status: 200)))
     for _ in 0..<20 where shell.consoleCount < 1 || shell.networkCount < 1 { await Task.yield() }
+    #expect(shell.streamAvailable)
     #expect(shell.console.rows(from: shell.consoleEvents).contains {
       $0.event.message == "qa-error"
     })

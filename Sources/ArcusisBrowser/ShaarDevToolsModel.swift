@@ -963,7 +963,7 @@ final class ShaarDevToolsModel {
     let generation = streamGeneration
     eventTask = Task { [weak self, transport] in
       for await message in transport.messages(for: target) {
-        guard let self, self.isOpen, self.target == target,
+        guard let self, self.isOpen, self.target.sharesPanelTab(with: target),
           self.streamGeneration == generation
         else { return }
         self.receive(message)
@@ -983,7 +983,7 @@ final class ShaarDevToolsModel {
     localTokens[id] = token
     let task = Task { [weak self] in
       for await message in transport.messages(for: target) {
-        guard let self, self.isOpen, self.target == target,
+        guard let self, self.isOpen, self.target.sharesPanelTab(with: target),
           self.streamGeneration == generation, self.localTokens[id] == token
         else { return }
         self.receiveLocal(message, from: transport)

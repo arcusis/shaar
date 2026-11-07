@@ -27,6 +27,7 @@ def main():
     parser.add_argument("--name", required=True)
     parser.add_argument("--app", type=Path, default=fixture.DEFAULT_APP)
     parser.add_argument("--rebuild", action="store_true")
+    parser.add_argument("--spa-only", action="store_true")
     args = parser.parse_args()
     output = ROOT / "build/devtools-world" / args.name
     output.mkdir(parents=True, exist_ok=True)
@@ -43,7 +44,8 @@ def main():
         with (output / "stdout.txt").open("w") as stdout, (output / "stderr.txt").open("w") as stderr:
             try:
                 result = subprocess.run(
-                    [str(executable), "--devtools-smoke", str(report_path), args.url, "real-world"],
+                    [str(executable), "--devtools-smoke", str(report_path), args.url,
+                     "spa-only" if args.spa_only else "real-world"],
                     env=environment, stdout=stdout, stderr=stderr, timeout=600, check=False,
                 )
             except subprocess.TimeoutExpired:

@@ -365,6 +365,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0030-shaar-hidden-trusted-click.patch",
       "sha256": "53e70f0d6c9d4af7419c3aef20566eb38a265fe168c060b3afd998a5e1ab9175"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0031-shaar-quit-dialog-hold.patch",
+      "sha256": "a183a14b37e5865981ac3a2e6b002dd78db9529e0f5f5f125db0892c3da7a087"
     }
   ],
   "requiredExports": [

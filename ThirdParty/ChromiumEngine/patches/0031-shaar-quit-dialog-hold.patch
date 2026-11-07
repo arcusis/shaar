@@ -1,0 +1,410 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+index a3ebdc2..457f4e5 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -213,6 +213,9 @@ constexpr CommandEntry kCommands[] = {
+      true},
+     {SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE,
+      "Emulation.setSafeAreaInsetsOverride", false, true},
++    {SHAAR_DEVTOOLS_PAGE_DISABLE, "Page.disable", true, true},
++    {SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG,
++     "Page.handleJavaScriptDialog", false, true},
+ };
+ 
+ struct ReplyContext {
+@@ -387,6 +390,7 @@ bool ValidateParams(shaar_devtools_command command,
+     case SHAAR_DEVTOOLS_DOM_ENABLE:
+     case SHAAR_DEVTOOLS_CSS_ENABLE:
+     case SHAAR_DEVTOOLS_PAGE_ENABLE:
++    case SHAAR_DEVTOOLS_PAGE_DISABLE:
+     case SHAAR_DEVTOOLS_PAGE_GET_RESOURCE_TREE:
+     case SHAAR_DEVTOOLS_OVERLAY_ENABLE:
+     case SHAAR_DEVTOOLS_OVERLAY_DISABLE:
+@@ -482,6 +486,8 @@ bool ValidateParams(shaar_devtools_command command,
+     case SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES:
+       return ParamsHaveOnly(params,
+                             {"name", "url", "domain", "path", "partitionKey"});
++    case SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG:
++      return ParamsHaveOnly(params, {"accept", "promptText"});
+   }
+   return false;
+ }
+@@ -585,6 +591,8 @@ bool HasRequiredFields(shaar_devtools_command command,
+       return HasRequiredString(params, "name") &&
+              (HasRequiredString(params, "url") ||
+               HasRequiredString(params, "domain"));
++    case SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG:
++      return HasRequiredBoolean(params, "accept");
+     default:
+       return true;
+   }
+@@ -633,7 +641,7 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+     if (!parsed || !parsed->is_dict() ||
+         parsed->GetDict().FindInt("id") != static_cast<int>(request.request_id))
+       return false;
+-    if (visibility_lease && !pending_.empty())
++    if (visibility_lease && (!pending_.empty() || parked_))
+       return false;
+     pending_.push_back({request, json, std::move(main_frame_id),
+                         std::move(visibility_lease)});
+@@ -675,6 +683,8 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+       }
+       return;
+     }
++    if (CompleteParkedReply(dict))
++      return;
+     if (!active_)
+       return;
+     if (dict.FindInt("id") == -1) {
+@@ -695,12 +705,7 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+       Finish(SHAAR_CHROMIUM_ERROR, {}, "protocol response has no result");
+       return;
+     }
+-    base::DictValue wrapped;
+-    wrapped.Set("schemaVersion", 1);
+-    wrapped.Set("result", result->Clone());
+-    std::string output;
+-    base::JSONWriter::Write(base::Value(std::move(wrapped)), &output);
+-    Finish(SHAAR_OK, std::move(output), {});
++    Finish(SHAAR_OK, SuccessPayload(*result), {});
+   }
+ 
+   void AgentHostClosed(content::DevToolsAgentHost*) override {
+@@ -712,7 +717,15 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+     if (closing_)
+       return;
+     closing_ = true;
++    timer_.Stop();
++    hold_timer_.Stop();
+     ProtocolClients().erase(host_.get());
++    if (parked_) {
++      Pending held = std::move(*parked_);
++      parked_.reset();
++      held.visibility_lease.RunAndReset();
++      Reply(held.request, SHAAR_NOT_FOUND, {}, "DevTools target closed");
++    }
+     auto pending = std::move(pending_);
+     for (auto& request : pending) {
+       request.visibility_lease.RunAndReset();
+@@ -764,11 +777,89 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+     if (context == contexts_.end())
+       return;
+     auto command = base::JSONReader::Read(pending.json, base::JSON_PARSE_RFC);
+-    command->GetDict().FindDict("params")->Set("contextId", context->second);
++    auto* params = command->GetDict().FindDict("params");
++    params->Set("contextId", context->second);
++    const bool hold =
++        !parked_ && params->FindBool("awaitPromise").value_or(false);
+     std::string json;
+     base::JSONWriter::Write(*command, &json);
+     awaiting_context_ = false;
++    base::WeakPtr<ProtocolClient> weak;
++    if (hold) {
++      ParkFront();
++      weak = weak_factory_.GetWeakPtr();
++    }
+     host_->DispatchProtocolMessage(this, base::as_byte_span(json));
++    if (!hold || !weak)
++      return;
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&ProtocolClient::StartNext, weak));
++  }
++
++  void ParkFront() {
++    parked_ = std::move(pending_.front());
++    pending_.pop_front();
++    active_ = false;
++    timer_.Stop();
++    hold_timer_.Start(FROM_HERE, base::Seconds(35), this,
++                      &ProtocolClient::OnHoldTimeout);
++  }
++
++  void OnHoldTimeout() {
++    if (!parked_)
++      return;
++    CompleteParked(SHAAR_NOT_READY, {}, "DevTools protocol request timed out");
++  }
++
++  bool CompleteParkedReply(const base::DictValue& dict) {
++    if (!parked_)
++      return false;
++    const std::optional<int> id = dict.FindInt("id");
++    if (!id || *id != static_cast<int>(parked_->request.request_id))
++      return false;
++    if (const auto* error = dict.FindDict("error")) {
++      const auto* detail = error->FindString("message");
++      CompleteParked(SHAAR_CHROMIUM_ERROR, {},
++                     detail && !detail->empty() ? *detail
++                                                : "protocol command failed");
++      return true;
++    }
++    const auto* result = dict.FindDict("result");
++    if (!result) {
++      CompleteParked(SHAAR_CHROMIUM_ERROR, {},
++                     "protocol response has no result");
++      return true;
++    }
++    CompleteParked(SHAAR_OK, SuccessPayload(*result), {});
++    return true;
++  }
++
++  void CompleteParked(shaar_error_code code, std::string payload,
++                      std::string message) {
++    if (!parked_)
++      return;
++    hold_timer_.Stop();
++    Pending held = std::move(*parked_);
++    parked_.reset();
++    auto lease = std::move(held.visibility_lease);
++    const ReplyContext request = held.request;
++    const bool resume = !active_;
++    auto weak = weak_factory_.GetWeakPtr();
++    lease.RunAndReset();
++    Reply(request, code, std::move(payload), std::move(message));
++    if (!weak || !resume)
++      return;
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&ProtocolClient::StartNext, weak));
++  }
++
++  static std::string SuccessPayload(const base::DictValue& result) {
++    base::DictValue wrapped;
++    wrapped.Set("schemaVersion", 1);
++    wrapped.Set("result", result.Clone());
++    std::string output;
++    base::JSONWriter::Write(base::Value(std::move(wrapped)), &output);
++    return output;
+   }
+ 
+   void OnTimeout() {
+@@ -796,8 +887,10 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+ 
+   scoped_refptr<content::DevToolsAgentHost> host_;
+   std::deque<Pending> pending_;
++  std::optional<Pending> parked_;
+   std::map<std::string, int> contexts_;
+   base::OneShotTimer timer_;
++  base::OneShotTimer hold_timer_;
+   bool closing_ = false;
+   bool active_ = false;
+   bool awaiting_context_ = false;
+@@ -805,6 +898,15 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+   base::WeakPtrFactory<ProtocolClient> weak_factory_{this};
+ };
+ 
++bool KnownDevToolsCommand(int id) {
++  constexpr int kLayerEnd = static_cast<int>(
++      SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE);
++  if (id >= 1 && id <= kLayerEnd)
++    return true;
++  return id == SHAAR_DEVTOOLS_PAGE_DISABLE ||
++         id == SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG;
++}
++
+ shaar_error_code DecodeOperation(shaar_operation operation,
+                                  shaar_bytes args_json,
+                                  shaar_devtools_capability* capability,
+@@ -834,7 +936,7 @@ shaar_error_code DecodeOperation(shaar_operation operation,
+   }
+   const int cap = *root.FindInt("capability");
+   const int id = *root.FindInt("command");
+-  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 44) {
++  if ((cap != kInspector && cap != kDeveloper) || !KnownDevToolsCommand(id)) {
+     *reason = "unknown DevTools capability or command";
+     return SHAAR_INVALID_ARGUMENT;
+   }
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+index 7496b19..352683a 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -8,7 +8,9 @@
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ 
+ #include <memory>
++#include <optional>
+ #include <string>
++#include <vector>
+ 
+ #include "base/containers/span.h"
+ #include "base/scoped_environment_variable_override.h"
+@@ -432,6 +434,47 @@ TEST(ShaarDevToolsTest, SafeAreaInsetsAreBoundedAndDeveloperOnly) {
+   }
+ }
+ 
++TEST(ShaarDevToolsTest, PageDisableAndJavaScriptDialogStayOutsideTheDomTreeIds) {
++  for (const std::string args : {
++           R"({"schemaVersion":1,"capability":2,"command":62,"params":{}})",
++           R"({"schemaVersion":1,"capability":1,"command":62,"params":{}})"}) {
++    std::string output;
++    std::string reason;
++    EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 62, &output, &reason))
++        << reason;
++    EXPECT_NE(std::string::npos, output.find("Page.disable"));
++  }
++  std::string output;
++  std::string reason;
++  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":62,"params":{"extra":true}})"),
++      62, &output, &reason));
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":63,"params":{"accept":false}})"),
++      63, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("Page.handleJavaScriptDialog"));
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":63,"params":{"accept":false,"promptText":""}})"),
++      63, &output, &reason)) << reason;
++  EXPECT_EQ(nullptr, ProtocolMethod(
++      SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
++      SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG));
++  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":1,"command":63,"params":{"accept":false}})"),
++      63, &output, &reason));
++  EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":63,"params":{}})"),
++      63, &output, &reason));
++  EXPECT_EQ("DevTools command is missing required parameters", reason);
++  for (const char* args : {
++           R"({"schemaVersion":1,"capability":2,"command":45,"params":{}})",
++           R"({"schemaVersion":1,"capability":2,"command":61,"params":{}})"}) {
++    EXPECT_EQ(SHAAR_INVALID_ARGUMENT,
++              EncodeProtocolRequest(Bytes(args), 45, &output, &reason));
++    EXPECT_EQ("unknown DevTools capability or command", reason);
++  }
++}
++
+ TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
+   const std::string args =
+       R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";
+@@ -819,6 +862,116 @@ TEST(ShaarDevToolsTest, ProtocolReleasesVisibilityLeaseOnTimeoutAndClose) {
+   }
+ }
+ 
++class HoldingEvaluateHost final : public content::MockDevToolsAgentHost {
++ public:
++  void DispatchProtocolMessage(content::DevToolsAgentHostClient* client,
++                               base::span<const uint8_t> message) override {
++    client_ = client;
++    auto parsed = base::JSONReader::Read(
++        std::string_view(reinterpret_cast<const char*>(message.data()),
++                         message.size()),
++        base::JSON_PARSE_RFC);
++    ASSERT_TRUE(parsed && parsed->is_dict());
++    const auto& command = parsed->GetDict();
++    const auto* method = command.FindString("method");
++    ASSERT_NE(nullptr, method);
++    if (*method == "Runtime.enable") {
++      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE, base::BindOnce(&HoldingEvaluateHost::SendContext,
++                                    base::WrapRefCounted(this)));
++      return;
++    }
++    methods_.push_back(*method);
++    if (*method == "Runtime.evaluate") {
++      evaluate_id_ = command.FindInt("id");
++      return;
++    }
++    const int id = command.FindInt("id").value_or(0);
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&HoldingEvaluateHost::SendResult,
++                                  base::WrapRefCounted(this), id));
++  }
++
++  void ReplyToEvaluate() {
++    if (evaluate_id_)
++      SendResult(*evaluate_id_);
++  }
++
++  const std::vector<std::string>& methods() const { return methods_; }
++
++ private:
++  ~HoldingEvaluateHost() override = default;
++
++  void SendContext() {
++    if (!client_)
++      return;
++    const std::string message =
++        R"({"method":"Runtime.executionContextCreated","params":{"context":{"id":27,"auxData":{"frameId":"main-frame","isDefault":true}}}})";
++    client_->DispatchProtocolMessage(this, base::as_byte_span(message));
++  }
++
++  void SendResult(int id) {
++    if (!client_)
++      return;
++    const std::string message =
++        "{\"id\":" + std::to_string(id) + ",\"result\":{}}";
++    client_->DispatchProtocolMessage(this, base::as_byte_span(message));
++  }
++
++  content::DevToolsAgentHostClient* client_ = nullptr;
++  std::vector<std::string> methods_;
++  std::optional<int> evaluate_id_;
++};
++
++TEST(ShaarDevToolsTest, AwaitPromiseEvaluateParksSoTheNextCommandCanRun) {
++  base::test::TaskEnvironment tasks;
++  auto host = base::MakeRefCounted<HoldingEvaluateHost>();
++  CapturedReply hold;
++  CapturedReply next;
++  ASSERT_TRUE(StartProtocolRequest(
++      host, 7, &CaptureReply, &hold,
++      R"({"id":7,"method":"Runtime.evaluate","params":{"expression":"new Promise(()=>{})","awaitPromise":true}})",
++      "main-frame"));
++  ASSERT_TRUE(StartProtocolRequest(
++      host, 8, &CaptureReply, &next,
++      R"({"id":8,"method":"Page.disable","params":{}})"));
++  tasks.RunUntilIdle();
++  ASSERT_EQ(2u, host->methods().size());
++  EXPECT_EQ("Runtime.evaluate", host->methods()[0]);
++  EXPECT_EQ("Page.disable", host->methods()[1]);
++  EXPECT_EQ(SHAAR_OK, next.code);
++  EXPECT_EQ(SHAAR_CHROMIUM_ERROR, hold.code);
++  host->ReplyToEvaluate();
++  tasks.RunUntilIdle();
++  EXPECT_EQ(SHAAR_OK, hold.code);
++  CloseProtocolSessionForTesting(host.get());
++}
++
++TEST(ShaarDevToolsTest, EvaluateWithoutAwaitPromiseStaysSerial) {
++  base::test::TaskEnvironment tasks;
++  auto host = base::MakeRefCounted<HoldingEvaluateHost>();
++  CapturedReply hold;
++  CapturedReply next;
++  ASSERT_TRUE(StartProtocolRequest(
++      host, 7, &CaptureReply, &hold,
++      R"({"id":7,"method":"Runtime.evaluate","params":{"expression":"1"}})",
++      "main-frame"));
++  ASSERT_TRUE(StartProtocolRequest(
++      host, 8, &CaptureReply, &next,
++      R"({"id":8,"method":"Page.disable","params":{}})"));
++  tasks.RunUntilIdle();
++  ASSERT_EQ(1u, host->methods().size());
++  EXPECT_EQ("Runtime.evaluate", host->methods()[0]);
++  EXPECT_EQ(SHAAR_CHROMIUM_ERROR, next.code);
++  host->ReplyToEvaluate();
++  tasks.RunUntilIdle();
++  EXPECT_EQ(SHAAR_OK, hold.code);
++  ASSERT_EQ(2u, host->methods().size());
++  EXPECT_EQ("Page.disable", host->methods()[1]);
++  EXPECT_EQ(SHAAR_OK, next.code);
++  CloseProtocolSessionForTesting(host.get());
++}
++
+ TEST_F(ShaarPrivateDevToolsPageTargetTest, RendererVisibilityRejectsOverlappingLease) {
+   web_contents()->WasHidden();
+   auto first = StartHiddenProbeCapture(web_contents());
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index 18af1fa..42505d5 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -350,7 +350,10 @@ typedef enum {
+   SHAAR_DEVTOOLS_NETWORK_GET_COOKIES = 41,
+   SHAAR_DEVTOOLS_NETWORK_SET_COOKIE = 42,
+   SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES = 43,
+-  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44
++  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44,
++  // 45-61 belong to the DOM-tree patch. Keep these explicit so both can land.
++  SHAAR_DEVTOOLS_PAGE_DISABLE = 62,
++  SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 63
+ } shaar_devtools_command;
+ typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
+ // END devtools command and module IDs.

@@ -317,8 +317,9 @@ struct ShaarDevToolsPanel: View {
         ShaarNetworkPanel(
           model: model.network, rules: model.rules, events: model.events,
           droppedCount: model.droppedNetworkCount,
-          openChromium: openChromium)
-          .task { bindNetworkConditions() }
+          openChromium: openChromium
+        )
+        .task { bindNetworkConditions() }
       } else {
         unavailablePanel
       }

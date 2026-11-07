@@ -164,4 +164,37 @@ import Testing
       PrivatePrivacyEvidence.permissions(timeout)["privatePermissionRequestsRejected"] == false)
     #expect(PrivatePrivacyEvidence.permissions([:]).values.allSatisfy { !$0 })
   }
+
+  @Test func quitHoldRejectsAnUnknownDevToolsCommandBeforeArming() {
+    #expect(ARCProbeDevToolsCommandIsUnknown("unknown DevTools capability or command"))
+    #expect(!ARCProbeDevToolsCommandIsUnknown("No dialog is showing"))
+    #expect(!ARCProbeDevToolsCommandIsUnknown("protocol command failed"))
+    #expect(!ARCProbeDevToolsCommandIsUnknown(""))
+  }
+
+  @Test func quitHoldRequiresALoopbackDocument() {
+    #expect(ARCProbeLoopbackDocumentURL("http://127.0.0.1:49195/account"))
+    #expect(ARCProbeLoopbackDocumentURL("http://localhost/fixture"))
+    #expect(!ARCProbeLoopbackDocumentURL("https://127.0.0.1/account"))
+    #expect(!ARCProbeLoopbackDocumentURL("http://example.com/"))
+    #expect(!ARCProbeLoopbackDocumentURL("about:blank"))
+    #expect(!ARCProbeLoopbackDocumentURL(""))
+  }
+
+  @Test func quitDialogResultNamesTheEngineOutcome() {
+    #expect(ARCProbePrivateQuitDialogResult(true, nil) == "cancelled")
+    #expect(ARCProbePrivateQuitDialogResult(false, nil) == "owner-stale")
+    #expect(ARCProbePrivateQuitDialogResult(true, "No dialog is showing") == "no-dialog")
+    #expect(
+      ARCProbePrivateQuitDialogResult(true, "unknown DevTools capability or command")
+        == "devtools-error")
+  }
+
+  @Test func trustedClickAllowlistIncludesTheQuitActivationButton() {
+    #expect(ARCProbeTrustedClickElementAllowed("blank"))
+    #expect(ARCProbeTrustedClickElementAllowed("popup"))
+    #expect(ARCProbeTrustedClickElementAllowed("arcusis-private-quit-activation"))
+    #expect(!ARCProbeTrustedClickElementAllowed("quit"))
+    #expect(!ARCProbeTrustedClickElementAllowed(""))
+  }
 }

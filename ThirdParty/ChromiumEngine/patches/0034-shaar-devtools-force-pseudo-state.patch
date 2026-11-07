@@ -1,0 +1,145 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+index 4f04e8d..5dd63b7 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -221,6 +221,8 @@ constexpr CommandEntry kCommands[] = {
+     {SHAAR_DEVTOOLS_PAGE_DISABLE, "Page.disable", true, true},
+     {SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG,
+      "Page.handleJavaScriptDialog", false, true},
++    {SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE, "CSS.forcePseudoState", true,
++     false},
+ };
+ 
+ struct ReplyContext {
+@@ -510,6 +512,41 @@ bool ParamsHaveOnly(const base::DictValue& params,
+   return ExactKeys(params, keys);
+ }
+ 
++bool ForcedPseudoClassListIsValid(const base::DictValue& params) {
++  const base::ListValue* classes = params.FindList("forcedPseudoClasses");
++  if (!classes)
++    return true;
++  if (classes->size() > 5)
++    return false;
++  bool seen_hover = false;
++  bool seen_active = false;
++  bool seen_focus = false;
++  bool seen_focus_visible = false;
++  bool seen_focus_within = false;
++  for (const base::Value& item : *classes) {
++    if (!item.is_string())
++      return false;
++    const std::string& name = item.GetString();
++    bool* seen = nullptr;
++    if (name == "hover")
++      seen = &seen_hover;
++    else if (name == "active")
++      seen = &seen_active;
++    else if (name == "focus")
++      seen = &seen_focus;
++    else if (name == "focus-visible")
++      seen = &seen_focus_visible;
++    else if (name == "focus-within")
++      seen = &seen_focus_within;
++    else
++      return false;
++    if (*seen)
++      return false;
++    *seen = true;
++  }
++  return true;
++}
++
+ bool ValidateParams(shaar_devtools_command command,
+                     const base::DictValue& params) {
+   switch (command) {
+@@ -627,6 +664,9 @@ bool ValidateParams(shaar_devtools_command command,
+                             {"name", "url", "domain", "path", "partitionKey"});
+     case SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG:
+       return ParamsHaveOnly(params, {"accept", "promptText"});
++    case SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE:
++      return ParamsHaveOnly(params, {"nodeId", "forcedPseudoClasses"}) &&
++             ForcedPseudoClassListIsValid(params);
+   }
+   return false;
+ }
+@@ -732,6 +772,9 @@ bool HasRequiredFields(shaar_devtools_command command,
+               HasRequiredString(params, "domain"));
+     case SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG:
+       return HasRequiredBoolean(params, "accept");
++    case SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE:
++      return HasRequiredInteger(params, "nodeId") &&
++             params.FindList("forcedPseudoClasses") != nullptr;
+     default:
+       return true;
+   }
+@@ -1043,7 +1086,8 @@ bool KnownDevToolsCommand(int id) {
+   if (id >= 1 && id <= kLayerEnd)
+     return true;
+   return id == SHAAR_DEVTOOLS_PAGE_DISABLE ||
+-         id == SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG;
++         id == SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG ||
++         id == SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE;
+ }
+ 
+ shaar_error_code DecodeOperation(shaar_operation operation,
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+index 28d6678..db46d32 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -504,6 +504,41 @@ TEST(ShaarDevToolsTest, PageDisableAndJavaScriptDialogStayOutsideTheDomTreeIds)
+   }
+ }
+ 
++TEST(ShaarDevToolsTest, ForcePseudoStateIsInspectorOnlyAndCommand64) {
++  std::string output;
++  std::string reason;
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":1,"command":64,"params":{"nodeId":7,"forcedPseudoClasses":["hover","focus-visible"]}})"),
++      64, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("CSS.forcePseudoState"));
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":1,"command":64,"params":{"nodeId":7,"forcedPseudoClasses":[]}})"),
++      64, &output, &reason)) << reason;
++  EXPECT_STREQ("CSS.forcePseudoState",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
++                              SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE));
++  EXPECT_EQ(nullptr,
++            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                           SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE));
++  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":1,"command":62,"params":{}})"),
++      62, &output, &reason)) << reason;
++  EXPECT_NE(std::string::npos, output.find("Page.disable"));
++  EXPECT_EQ(std::string::npos, output.find("CSS.forcePseudoState"));
++  for (const char* args : {
++           R"({"schemaVersion":1,"capability":2,"command":64,"params":{"nodeId":7,"forcedPseudoClasses":["hover"]}})",
++           R"({"schemaVersion":1,"capability":1,"command":64,"params":{"nodeId":7,"forcedPseudoClasses":["target"]}})",
++           R"({"schemaVersion":1,"capability":1,"command":64,"params":{"nodeId":7,"forcedPseudoClasses":["hover","hover"]}})",
++           R"({"schemaVersion":1,"capability":1,"command":64,"params":{"nodeId":7,"forcedPseudoClasses":["hover","active","focus","focus-visible","focus-within","hover"]}})",
++           R"({"schemaVersion":1,"capability":1,"command":64,"params":{"forcedPseudoClasses":["hover"]}})",
++           R"({"schemaVersion":1,"capability":1,"command":64,"params":{"nodeId":7}})",
++           R"({"schemaVersion":1,"capability":1,"command":64,"params":{"nodeId":7,"forcedPseudoClasses":["hover"],"extra":true}})",
++           R"({"schemaVersion":1,"capability":1,"command":62,"params":{"nodeId":7,"forcedPseudoClasses":["hover"]}})"}) {
++    EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 64, &output, &reason))
++        << args;
++  }
++}
++
+ TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
+   const std::string args =
+       R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index 8f66d4f..c57c029 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -356,7 +356,8 @@ typedef enum {
+   SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44,
+   // 45-61 belong to the DOM-tree patch. Keep these explicit so both can land.
+   SHAAR_DEVTOOLS_PAGE_DISABLE = 62,
+-  SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 63
++  SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 63,
++  SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE = 64
+ } shaar_devtools_command;
+ typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
+ // END devtools command and module IDs.

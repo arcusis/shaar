@@ -106,7 +106,7 @@ struct DevToolsTests {
       windowID: "window-a", tabID: "tab-a", completion: { _ in })
     let request = try #require(fake.request)
     let root = try #require(JSONSerialization.jsonObject(with: request.payload) as? [String: Any])
-    #expect(root["command"] as? UInt32 == 62)
+    #expect(root["command"] as? UInt32 == 69)
     #expect(root["capability"] as? UInt32 == ShaarDevToolsCapability.developer.rawValue)
     #expect((root["params"] as? [String: Bool])?["cacheDisabled"] == true)
     #expect(throws: ShaarEngineError.self) {

@@ -61,6 +61,16 @@ enum VisualCapture {
     host.layoutSubtreeIfNeeded()
     return try render(host, to: url)
   }
+
+  /// Renders into a temporary PNG and returns the bytes. The window stays offscreen.
+  @MainActor
+  static func pngOffscreen<V: View>(_ view: V, size: NSSize) throws -> Data {
+    let url = FileManager.default.temporaryDirectory.appending(
+      path: "shaar-offscreen-\(UUID().uuidString).png")
+    defer { try? FileManager.default.removeItem(at: url) }
+    _ = try renderOffscreen(view, size: size, appearance: .aqua, to: url)
+    return try Data(contentsOf: url)
+  }
 }
 
 enum VisualCaptureError: Error {

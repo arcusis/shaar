@@ -1,0 +1,266 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+index ed64ffe..7380fed 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -7,6 +7,7 @@
+ #include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
+ #include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
+ #include "chrome/browser/devtools/devtools_settings.h"
++#include "chrome/browser/shaar/extensions/shaar_extensions.h"
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ 
+ #include <stddef.h>
+@@ -1278,6 +1279,53 @@ bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y) {
+   return true;
+ }
+ 
++bool LowercasePopupID(std::string_view popup_id) {
++  if (popup_id.size() != 36)
++    return false;
++  for (size_t index = 0; index < popup_id.size(); ++index) {
++    const char character = popup_id[index];
++    const bool dash_slot = index == 8 || index == 13 || index == 18 || index == 23;
++    if (dash_slot) {
++      if (character != '-')
++        return false;
++      continue;
++    }
++    if (character < '0' || (character > '9' && character < 'a') || character > 'f')
++      return false;
++  }
++  return true;
++}
++
++bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
++                              std::string* popup_id, std::string* expression) {
++  if (!popup_id || (evaluate && !expression) || !args_json.data ||
++      args_json.size == 0 || args_json.size > 16384)
++    return false;
++  auto value = base::JSONReader::Read(
++      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
++  if (!value || !value->is_dict() ||
++      value->GetDict().FindInt("schemaVersion") != 1)
++    return false;
++  const base::DictValue& dict = value->GetDict();
++  if (evaluate) {
++    if (!ExactKeys(dict, {"schemaVersion", "popupId", "expression"}))
++      return false;
++  } else if (!ExactKeys(dict, {"schemaVersion", "popupId"})) {
++    return false;
++  }
++  const std::string* id = dict.FindString("popupId");
++  if (!id || !LowercasePopupID(*id))
++    return false;
++  *popup_id = *id;
++  if (!evaluate)
++    return true;
++  const std::string* script = dict.FindString("expression");
++  if (!script || script->empty() || script->size() > 8192)
++    return false;
++  *expression = *script;
++  return true;
++}
++
+ bool ParseNodeProbePort(shaar_bytes args_json, int* port) {
+   if (!port || !args_json.data || args_json.size > 128)
+     return false;
+@@ -1435,6 +1483,53 @@ shaar_error_code HandleDevToolsOperation(
+         ->Start(contents);
+     return SHAAR_OK;
+   }
++  if (operation == SHAAR_OP_PROBE_POPUP_EVALUATE ||
++      operation == SHAAR_OP_PROBE_POPUP_CAPTURE) {
++    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
++    const bool selected = context->browser_tabs->IsSelectedWebContents(
++        engine, window, tab, contents);
++    const bool evaluate = operation == SHAAR_OP_PROBE_POPUP_EVALUATE;
++    if (!ProbeWindowAllowed(testing && std::strcmp(testing, "1") == 0,
++                           shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
++                           shaar::windows_tabs::HasNeverShownPageHost(window, contents),
++                           contents->GetLastCommittedURL()) || !scope.profile ||
++        scope.private_session)
++      return Fail(error, SHAAR_POLICY_BLOCKED, "popup probe is unavailable");
++    if (request_id > static_cast<uint64_t>(INT_MAX))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid popup probe request");
++    std::string popup_id;
++    std::string expression;
++    if (!ParseProbePopupArguments(args_json, evaluate, &popup_id,
++                                  evaluate ? &expression : nullptr))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid popup probe arguments");
++    content::WebContents* popup = shaar::extensions_host::ProbePopupContents(
++        engine, scope.profile, window, tab, popup_id);
++    if (!popup)
++      return Fail(error, SHAAR_NOT_FOUND, "popup probe target is unavailable");
++    if (!evaluate) {
++      base::MakeRefCounted<ProbeCaptureRequest>(
++          ReplyContext{request_id, reply, reply_context})->Start(popup);
++      return SHAAR_OK;
++    }
++    auto* frame = popup->GetPrimaryMainFrame();
++    if (!frame)
++      return Fail(error, SHAAR_NOT_READY, "popup probe frame is unavailable");
++    base::DictValue params;
++    params.Set("expression", expression);
++    params.Set("returnByValue", true);
++    base::DictValue protocol;
++    protocol.Set("id", static_cast<int>(request_id));
++    protocol.Set("method", "Runtime.evaluate");
++    protocol.Set("params", std::move(params));
++    std::string request_json;
++    if (!base::JSONWriter::Write(base::Value(std::move(protocol)), &request_json))
++      return Fail(error, SHAAR_CHROMIUM_ERROR, "could not serialize popup probe");
++    if (!StartProtocolRequest(ProtocolAgentHostFor(popup), request_id, reply,
++                              reply_context, request_json,
++                              frame->GetDevToolsFrameToken().ToString(), {}))
++      return Fail(error, SHAAR_NOT_READY, "popup probe attach was denied");
++    return SHAAR_OK;
++  }
+   if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
+       operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
+     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.h b/chrome/browser/shaar/devtools/shaar_devtools.h
+index a40c437..1daad95 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools.h
+@@ -64,6 +64,8 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
+ // Strict testing-only click schema and policy. Coordinates are viewport pixels.
+ bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y);
+ bool ParseNodeProbePort(shaar_bytes args_json, int* port);
++bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
++                              std::string* popup_id, std::string* expression);
+ bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
+                        bool never_shown, const GURL& url);
+ void EmitFrontendStateEvent(shaar_engine* engine,
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+index 2e46ad0..d0b36b7 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+@@ -17,6 +17,8 @@ extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
+                      &shaar::devtools::HandleDevToolsOperation);
+   registry->Register(SHAAR_OP_PROBE_TRUSTED_CLICK, SHAAR_OP_PROBE_NODE_LIVE,
+                      &shaar::devtools::HandleDevToolsOperation);
++  registry->Register(SHAAR_OP_PROBE_POPUP_EVALUATE, SHAAR_OP_PROBE_POPUP_CAPTURE,
++                     &shaar::devtools::HandleDevToolsOperation);
+   registry->Register(SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL,
+                      SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED,
+                      &shaar::devtools::HandleDevToolsOperation);
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+index 7496b19..681b268 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -120,6 +120,35 @@ TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
+                                  GURL("https://example.com/")));
+ }
+ 
++TEST(ShaarDevToolsTest, PopupProbeArgumentsStayBoundToOneHiddenPopup) {
++  const char* popup = "11111111-2222-4333-8444-555555555555";
++  std::string id;
++  std::string expression;
++  EXPECT_TRUE(ParseProbePopupArguments(
++      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup +
++            R"(","expression":"window.probeState"})"),
++      true, &id, &expression));
++  EXPECT_EQ(popup, id);
++  EXPECT_EQ("window.probeState", expression);
++  EXPECT_TRUE(ParseProbePopupArguments(
++      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup + "}"),
++      false, &id, nullptr));
++  EXPECT_FALSE(ParseProbePopupArguments(
++      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup +
++            R"(","expression":"window.probeState","awaitPromise":true})"),
++      true, &id, &expression));
++  EXPECT_FALSE(ParseProbePopupArguments(
++      Bytes(R"({"schemaVersion":1,"popupId":"NOT-A-POPUP","expression":"1"})"),
++      true, &id, &expression));
++  EXPECT_FALSE(ParseProbePopupArguments(
++      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup +
++            R"(","expression":""})"),
++      true, &id, &expression));
++  EXPECT_FALSE(ParseProbePopupArguments(
++      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup + "}"),
++      true, &id, &expression));
++}
++
+ 
+ class FakeDevToolsRuntime final : public DevToolsRuntimeServices {
+  public:
+diff --git a/chrome/browser/shaar/extensions/shaar_extension_views.mm b/chrome/browser/shaar/extensions/shaar_extension_views.mm
+index 0b5cd35..21962b0 100644
+--- a/chrome/browser/shaar/extensions/shaar_extension_views.mm
++++ b/chrome/browser/shaar/extensions/shaar_extension_views.mm
+@@ -160,6 +160,34 @@ bool ValidPopupOrigin(std::string_view extension_id, const GURL& url) {
+   return popup_id;
+ }
+ 
++content::WebContents* ProbePopupContents(shaar_engine* engine,
++                                         shaar_profile* profile,
++                                         shaar_window* window,
++                                         shaar_tab* tab,
++                                         std::string_view popup_id) {
++  if (!engine || !profile || !window || !tab || popup_id.empty())
++    return nullptr;
++  auto entry = Popups().find(std::string(popup_id));
++  if (entry == Popups().end())
++    return nullptr;
++  PopupHost& host = entry->second;
++  if (host.engine != engine || host.profile != profile ||
++      host.window != window || host.owner_tab != tab)
++    return nullptr;
++  if (shaar::windows_tabs::Registry().FindTabWindow(tab) != window)
++    return nullptr;
++  content::WebContents* contents = host.host ? host.host->host_contents() : nullptr;
++  if (!contents)
++    return nullptr;
++  Profile* page_profile = Profile::FromBrowserContext(contents->GetBrowserContext());
++  if (!page_profile || page_profile->IsOffTheRecord())
++    return nullptr;
++  NSView* view = contents->GetNativeView().GetNativeNSView();
++  if (!view || !view.window || view.window.isVisible)
++    return nullptr;
++  return contents;
++}
++
+ bool ClosePopup(shaar_engine* engine,
+                 shaar_profile* profile,
+                 std::string_view popup_id) {
+diff --git a/chrome/browser/shaar/extensions/shaar_extensions.h b/chrome/browser/shaar/extensions/shaar_extensions.h
+index b3ccda5..1e6d9e5 100644
+--- a/chrome/browser/shaar/extensions/shaar_extensions.h
++++ b/chrome/browser/shaar/extensions/shaar_extensions.h
+@@ -18,6 +18,9 @@
+ class Browser;
+ class Profile;
+ class GURL;
++namespace content {
++class WebContents;
++}
+ namespace extensions {
+ class Extension;
+ }
+@@ -68,6 +71,12 @@ bool RegisterBundledFrameworkDevTools(Profile*, std::string* failure);
+ void ClosePopupsForWindow(shaar_engine*, shaar_window*);
+ void ClosePopupsForTab(shaar_engine*, shaar_tab*);
+ void ClosePopupsForBrowser(shaar_engine*, Browser*);
++// The owned popup document, only while its native window stays offscreen.
++content::WebContents* ProbePopupContents(shaar_engine*,
++                                         shaar_profile*,
++                                         shaar_window*,
++                                         shaar_tab*,
++                                         std::string_view popup_id);
+ }  // namespace shaar::extensions_host
+ 
+ extern "C" void shaar_extensions_register(ShaarModuleRegistry* registry);
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index 18af1fa..4b7cb06 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -211,6 +211,9 @@ typedef enum {
+   SHAAR_OP_PROBE_TRUSTED_CLICK = 1093,
+   // Testing only: open Node frontend against a local inspector fixture.
+   SHAAR_OP_PROBE_NODE_LIVE = 1094,
++  // Testing only: read or capture an owned extension popup that stays offscreen.
++  SHAAR_OP_PROBE_POPUP_EVALUATE = 1095,
++  SHAAR_OP_PROBE_POPUP_CAPTURE = 1096,
+   // END devtools operation IDs.
+ 
+   // BEGIN media

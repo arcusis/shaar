@@ -33,12 +33,17 @@ extension ShaarDevToolsSection {
     case .elements: "square.dashed.inset.filled"
     case .components: "square.stack.3d.up"
     case .console: "terminal"
+    case .issues: "exclamationmark.triangle"
     case .network: "network"
     case .application: "externaldrive"
     case .performance: "speedometer"
+    case .audits: "checkmark.shield"
     case .sources: "curlybraces"
+    case .security: "lock"
+    case .sensors: "location"
     case .repro: "record.circle"
     case .viewports: "rectangle.on.rectangle"
+    case .rendering: "paintbrush"
     case .comparison: "square.split.2x1"
     }
   }
@@ -48,12 +53,17 @@ extension ShaarDevToolsSection {
     case .elements: "Elements"
     case .components: "Comps"
     case .console: "Console"
+    case .issues: "Issues"
     case .network: "Network"
     case .application: "App"
     case .performance: "Perf"
+    case .audits: "Audits"
     case .sources: "Sources"
+    case .security: "Security"
+    case .sensors: "Sensors"
     case .repro: "Repro"
     case .viewports: "Views"
+    case .rendering: "Render"
     case .comparison: "WebKit"
     }
   }
@@ -94,15 +104,18 @@ struct ShaarDevToolsPanel: View {
       }
     }
     .accessibilityIdentifier("shaar.devtools.shell")
+    .overlay(alignment: .top) { commandMenuOverlay }
+    .overlay { settingsOverlay }
   }
 
   private var toolbar: some View {
     GeometryReader { geometry in
       let showsLabels = geometry.size.width >= 700
       let visible = visibleSections(width: geometry.size.width, showsLabels: showsLabels)
+      let issueCount = model.issues.count
       HStack(spacing: 3) {
         ForEach(visible, id: \.self) { section in
-          sectionButton(section, showsLabel: showsLabels)
+          sectionButton(section, showsLabel: showsLabels, issueCount: issueCount)
         }
         if visible.count < model.sections.count {
           Menu {
@@ -119,6 +132,7 @@ struct ShaarDevToolsPanel: View {
           .accessibilityLabel(ShellL10n.string("More panels"))
         }
         Spacer(minLength: 0)
+        commandMenuButton
         optionsMenu
         Button {
           model.close()
@@ -139,7 +153,7 @@ struct ShaarDevToolsPanel: View {
 
   private func visibleSections(width: CGFloat, showsLabels: Bool) -> [ShaarDevToolsSection] {
     let tabWidth: CGFloat = showsLabels ? 73 : 33
-    let room = max(0, width - 82)
+    let room = max(0, width - 112)
     let all = model.sections
     let fit = min(all.count, max(1, Int(room / tabWidth)))
     if fit == all.count { return all }
@@ -149,7 +163,9 @@ struct ShaarDevToolsPanel: View {
     return Array(first.dropLast()) + [model.section]
   }
 
-  private func sectionButton(_ section: ShaarDevToolsSection, showsLabel: Bool) -> some View {
+  private func sectionButton(
+    _ section: ShaarDevToolsSection, showsLabel: Bool, issueCount: Int
+  ) -> some View {
     Button {
       model.section = section
       focusedSection = section
@@ -161,6 +177,11 @@ struct ShaarDevToolsPanel: View {
           Text(ShellL10n.string(section.shortLabel))
             .font(.system(size: 10, weight: .medium))
             .lineLimit(1)
+          if section == .issues, issueCount > 0 {
+            Text(verbatim: ShaarDevToolsIssues.countText(issueCount))
+              .font(.system(size: 10, weight: .semibold))
+              .lineLimit(1)
+          }
         }
       }
       .foregroundStyle(.primary)
@@ -184,13 +205,63 @@ struct ShaarDevToolsPanel: View {
     .focused($focusedSection, equals: section)
     .help(ShaarDevToolsAccessibility.sectionHelp(section))
     .accessibilityLabel(ShaarDevToolsAccessibility.sectionLabel(section))
-    .accessibilityValue(model.section == section ? ShellL10n.string("Selected") : "")
+    .accessibilityValue(sectionValue(section, issueCount: issueCount))
     .accessibilityAddTraits(model.section == section ? .isSelected : [])
     .accessibilityIdentifier("shaar.devtools.\(section.rawValue.lowercased())")
   }
 
+  private func sectionValue(_ section: ShaarDevToolsSection, issueCount: Int) -> String {
+    var parts: [String] = []
+    if model.section == section { parts.append(ShellL10n.string("Selected")) }
+    if section == .issues, issueCount > 0 {
+      parts.append(ShaarDevToolsIssues.countText(issueCount))
+    }
+    return parts.joined(separator: ", ")
+  }
+
+  private var commandMenuButton: some View {
+    Button(action: model.toggleCommandMenu) {
+      Image(systemName: "magnifyingglass")
+        .font(.system(size: 12, weight: .medium))
+        .frame(width: 27, height: 28)
+    }
+    .buttonStyle(.plain)
+    .help(ShellL10n.string("Open the command menu. Command-Shift-P."))
+    .accessibilityLabel(ShellL10n.string("Command menu"))
+    .accessibilityIdentifier("shaar.devtools.commandMenuButton")
+  }
+
+  @ViewBuilder private var commandMenuOverlay: some View {
+    if model.commandMenuOpen {
+      ZStack(alignment: .top) {
+        Color.clear
+          .contentShape(Rectangle())
+          .onTapGesture(perform: model.closeCommandMenu)
+          .accessibilityIdentifier("shaar.devtools.commandMenuDismiss")
+        ShaarDevToolsCommandMenu(model: model)
+          .padding(.top, 44)
+          .padding(.horizontal, 16)
+      }
+    }
+  }
+
+  @ViewBuilder private var settingsOverlay: some View {
+    if model.settingsOpen {
+      ZStack {
+        Color.primary.opacity(0.04)
+          .contentShape(Rectangle())
+          .onTapGesture(perform: model.closeSettings)
+          .accessibilityIdentifier("shaar.devtools.settingsDismiss")
+        ShaarDevToolsSettings(model: model)
+      }
+    }
+  }
+
   private var optionsMenu: some View {
     Menu {
+      Button(ShellL10n.string("Settings"), action: model.showSettings)
+        .accessibilityIdentifier("shaar.devtools.settingsButton")
+      Divider()
       ForEach(ShaarDevToolsDock.allCases, id: \.self) { dock in
         Button(ShellL10n.string(dock.rawValue)) { model.dock = dock }
       }
@@ -237,6 +308,8 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .issues:
+      ShaarDevToolsIssuesPanel(model: model)
     case .network:
       if model.streamAvailable {
         ShaarNetworkPanel(
@@ -262,12 +335,18 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .audits:
+      ShaarDevToolsAuditsPanel(model: model, inspector: inspector)
     case .sources:
       if model.phase2.available {
         ShaarSourcesPanel(model: model.sources, inspector: inspector)
       } else {
         unavailablePanel
       }
+    case .security:
+      ShaarDevToolsSecurityPanel(model: model)
+    case .sensors:
+      ShaarDevToolsSensorsPanel(model: model)
     case .repro:
       ShaarReproPanel(
         model: model.repro,
@@ -284,6 +363,8 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .rendering:
+      ShaarRenderingPanel(model: model.rendering)
     case .comparison:
       if model.allowsWebKitComparison {
         ShaarWebKitComparisonPanel(
@@ -406,6 +487,7 @@ struct ShaarDevToolsPanel: View {
         ? "Components are scoped to this tab"
         : "Component tools read only localhost until you turn them on for a site."
     }
+    if model.section == .issues { return "Issues are scoped to this tab" }
     if model.section == .application {
       if model.application.area == .cookies { return "Cookies are scoped to this page" }
       return model.phase2.available
@@ -417,17 +499,21 @@ struct ShaarDevToolsPanel: View {
         ? "Performance data is scoped to this tab"
         : "Performance data is unavailable for this tab"
     }
+    if model.section == .audits { return "Audits are scoped to this tab" }
     if model.section == .sources {
       return model.phase2.available
         ? "Source resources are scoped to this tab"
         : "Sources are unavailable for this tab"
     }
+    if model.section == .security { return "Security details are scoped to this tab" }
+    if model.section == .sensors { return "Sensors are scoped to this tab" }
     if model.section == .repro { return "Repro data is scoped to this tab" }
     if model.section == .viewports {
       return model.viewports.available
         ? "Viewports are scoped to this tab"
         : "Viewports need engine support"
     }
+    if model.section == .rendering { return "Rendering changes are scoped to this tab" }
     if model.section == .comparison { return "WebKit comparison is scoped to this tab" }
     guard model.streamAvailable else { return "Console commands are unavailable for this tab" }
     if model.section == .network { return "Network requests are scoped to this tab" }
@@ -455,6 +541,14 @@ struct ShaarDevToolsPanel: View {
   }
 
   private func handleExitCommand() {
+    if model.settingsOpen {
+      model.closeSettings()
+      return
+    }
+    if model.commandMenuOpen {
+      model.closeCommandMenu()
+      return
+    }
     switch model.section {
     case .elements where !model.dom.search.isEmpty:
       model.dom.search = ""

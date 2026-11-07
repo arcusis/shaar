@@ -474,6 +474,21 @@ def bump_inspector_service_worker():
         return SW_GENERATION
 
 
+SCALE_SOURCE_BYTES = 5 * 1024 * 1024
+_SCALE_SOURCE_BODY = None
+
+
+def scale_source_body():
+    """A comment-only script of exactly 5 MiB. The phase 2 route caps bodies at 1 MiB."""
+    global _SCALE_SOURCE_BODY
+    if _SCALE_SOURCE_BODY is None:
+        prefix = b'/* shaar-scale-source\n'
+        suffix = b'\nshaar-scale-end */\n'
+        padding = SCALE_SOURCE_BYTES - len(prefix) - len(suffix)
+        _SCALE_SOURCE_BODY = prefix + (b'x' * padding) + suffix
+    return _SCALE_SOURCE_BODY
+
+
 # A silent canvas stream: no network or audio device. The handlers log each Media Session
 # action so the probe can confirm what reached the page. The clip is a 40 second silent
 # WebM loaded as a blob, so it has a duration to skip within.
@@ -559,6 +574,18 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+        if path == '/scale-source.js':
+            body = scale_source_body()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == '/shaar-issues-missing':
+            self.send_error(404, 'Shaar issues fixture')
             return
         if path == '/profile-privacy-cache':
             body = str(time.time_ns()).encode('ascii')
@@ -662,10 +689,11 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
 #next{background:white;color:#111827;border-color:#d1d5db}iframe{width:340px;height:160px;border:2px solid #ddd}
 #transparent{color:rgba(0,0,0,.5);background:white;padding:12px}
 #gradient{background:linear-gradient(white,black);color:white;padding:12px}
-</style><h1>Inspect the details.</h1><main id="card"><button id="save" data-testid="save" onclick="window.clicked=(window.clicked||0)+1"><span id="label">Save changes</span></button><button id="next">Cancel</button>
+</style><h1>Inspect the details.</h1><main id="card"><button id="save" data-testid="save" onclick="window.clicked=(window.clicked||0)+1"><span id="label">Save changes</span></button><button id="next">Cancel</button><button id="labelled" aria-label="Apply the form">Apply</button>
 <p id="transparent">Transparent text</p><p id="gradient">Gradient contrast</p>
 <iframe id="frame" src="/inspector-frame"></iframe>
 <section id="grid" style="display:grid;grid-template-columns:1fr 2fr;gap:12px;padding:8px;background:#eef2ff"><div>First track</div><div>Second track</div></section>
+<section id="other" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px"><div>Left</div><div>Right</div></section>
 <section id="flex" style="display:flex;gap:16px;padding:8px;background:#fef3c7"><div>First item</div><div>Second item</div></section></main></html>""",
                       csp=PAGE_CSP + "; frame-src 'self'")
             return

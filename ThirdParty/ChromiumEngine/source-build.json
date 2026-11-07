@@ -363,11 +363,39 @@
       "sha256": "e9c8cf7d9c8ec55be7d58e8f319296688df41e3045f9ec2d172d1f862b08d15d"
     },
     {
-      "file": "ThirdParty/ChromiumEngine/patches/0030-shaar-devtools-network-cache-disabled.patch",
-      "sha256": "11d552df5da1ab4a068f3d59b389598822d7c91339ef19a382f5412199a8ef68"
+      "file": "ThirdParty/ChromiumEngine/patches/0030-shaar-hidden-trusted-click.patch",
+      "sha256": "53e70f0d6c9d4af7419c3aef20566eb38a265fe168c060b3afd998a5e1ab9175"
     },
     {
-      "file": "ThirdParty/ChromiumEngine/patches/0031-shaar-devtools-console-stack.patch",
+      "file": "ThirdParty/ChromiumEngine/patches/0031-shaar-quit-dialog-hold.patch",
+      "sha256": "a183a14b37e5865981ac3a2e6b002dd78db9529e0f5f5f125db0892c3da7a087"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0032-shaar-popup-probe.patch",
+      "sha256": "50318524c15907e3ce8d39bf49a39272cde4f1785c2952557147920a62b66dad"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0033-shaar-lazy-framework-devtools.patch",
+      "sha256": "bd8d6ae51041e9057dad6fba4eb566ceb76290fd6d2ea6a6d21192b422900357"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0034-shaar-devtools-force-pseudo-state.patch",
+      "sha256": "af75d129ce2e163f0a6a3d373b13fa458a80d3b8986a7a6fca1f518dba6719ed"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0035-shaar-devtools-touch-emulation.patch",
+      "sha256": "f79b5e7f77ac1cef74a0458d1a0b97fc962541c7aa775cb04d5cbeed55ee4ff7"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0036-shaar-devtools-rendering-overlay.patch",
+      "sha256": "9d526f95adcbd17b3272eac36e8aebcd34471eaaf3810888ea87273ddb873124"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0037-shaar-devtools-network-cache-disabled.patch",
+      "sha256": "69a2423552d0ff1283ddee3474339758680d4db2cbcf1268755a1355b1e2368f"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0038-shaar-devtools-console-stack.patch",
       "sha256": "3f594403e07d7306d7bd2883f80446c34bb071e8ee56574d00394059ff792dc2"
     }
   ],

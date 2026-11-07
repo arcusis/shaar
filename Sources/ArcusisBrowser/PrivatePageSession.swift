@@ -221,6 +221,15 @@ final class PrivatePageSession {
     if model.isOpen { model.close() } else { model.open() }
   }
 
+  @discardableResult
+  func toggleDevToolsCommandMenu() -> Bool {
+    guard let target = inspectorTarget,
+      let shell = shaarDevTools[target.tabID], shell.isOpen
+    else { return false }
+    shell.toggleCommandMenu()
+    return true
+  }
+
   func toggleDeveloperTools() {
     guard let target = inspectorTarget else { return }
     if let shell = shaarDevTools[target.tabID], shell.isOpen {
@@ -228,16 +237,22 @@ final class PrivatePageSession {
       return
     }
     let viewportsTransport: any ShaarViewportsTransport
+    let renderingTransport: any ShaarRenderingTransport
     if let shaar = runtime as? ARCShaarRuntime {
       viewportsTransport = ShaarViewportsNativeTransport(
         requester: ShaarViewportRuntimeRequester(
           runtime: shaar, windowID: windowID, contextID: contextID))
+      renderingTransport = ShaarRenderingNativeTransport(
+        runtime: shaar, windowID: windowID, contextID: contextID)
     } else {
       viewportsTransport = ShaarViewportsPendingTransport()
+      renderingTransport = ShaarRenderingPendingTransport()
     }
     let shell =
       shaarDevTools[target.tabID]
-      ?? ShaarDevToolsModel(target: target, viewportsTransport: viewportsTransport)
+      ?? ShaarDevToolsModel(
+        target: target, viewportsTransport: viewportsTransport,
+        renderingTransport: renderingTransport)
     let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, privateSession: self)
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector

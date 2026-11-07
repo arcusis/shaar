@@ -28,8 +28,24 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
   BOOL ownerCurrent, NSString * _Nullable dialogError, void (^releaseHold)(void), void (^reject)(void));
 
+/// The pinned engine rejects a command id it does not know with this phrase.
+FOUNDATION_EXPORT BOOL ARCProbeDevToolsCommandIsUnknown(NSString * _Nullable message);
+/// The quit hold may run only against an http loopback document.
+FOUNDATION_EXPORT BOOL ARCProbeLoopbackDocumentURL(NSString * _Nullable href);
+/// Names the dialog outcome recorded on private probe contexts.
+FOUNDATION_EXPORT NSString *ARCProbePrivateQuitDialogResult(
+  BOOL ownerCurrent, NSString * _Nullable dialogError);
+/// Trusted clicks are limited to authored fixture element ids.
+FOUNDATION_EXPORT BOOL ARCProbeTrustedClickElementAllowed(NSString * _Nullable elementID);
+
 /// Decode a bounded PNG returned by Page.captureScreenshot; reject missing or malformed evidence.
 FOUNDATION_EXPORT NSData * _Nullable ARCProbePNGFromDevToolsResult(NSDictionary * _Nullable result);
+/// A popup id is the lowercase UUID the engine assigns to one extension host.
+FOUNDATION_EXPORT BOOL ARCProbePopupIdentifier(NSString * _Nullable popupID);
+/// Popup scripts stay short enough to send as one DevTools evaluate.
+FOUNDATION_EXPORT BOOL ARCProbePopupExpression(NSString * _Nullable script);
+/// JSON-encode a returnByValue evaluate result the same way tab evaluation does.
+FOUNDATION_EXPORT NSString * _Nullable ARCProbeEvaluationJSON(NSDictionary * _Nullable result);
 
 /// The shipped media reporter, for deterministic JavaScript event-order tests without an engine.
 FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);

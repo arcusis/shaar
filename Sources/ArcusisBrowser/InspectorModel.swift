@@ -36,6 +36,7 @@ final class InspectorModel {
   let presentation = InspectorPresentation()
   @ObservationIgnored lazy var styles = InspectorStylesModel(inspector: self)
   @ObservationIgnored lazy var details = InspectorDetailsModel(inspector: self)
+  @ObservationIgnored lazy var layout = InspectorLayoutModel(inspector: self)
   @ObservationIgnored lazy var aiCopy = InspectorAICopyModel(inspector: self)
   @ObservationIgnored lazy var sourceActions = InspectorSourceActions(inspector: self)
   var documentGeneration: Int { generation }
@@ -81,6 +82,16 @@ final class InspectorModel {
     }
   }
 
+  /// Hide Inspector immediately. Page commands still run until `close()`.
+  func stopPresenting() {
+    presentation.dismiss()
+    mode = .closed
+    pollTask?.cancel()
+    pollTask = nil
+    fontTask?.cancel()
+    fontTask = nil
+  }
+
   func close() {
     presentation.dismiss()
     aiCopy.cancel()
@@ -96,6 +107,7 @@ final class InspectorModel {
     panelMode = .element
     styles.reset()
     details.reset()
+    layout.reset()
     selection = nil
     installed = false
     connection?.end(target)
@@ -118,6 +130,7 @@ final class InspectorModel {
       generation += 1
       styles.reset()
       details.reset()
+      layout.reset()
       pageTools?.documentChanged()
       target = next
       installed = false
@@ -314,6 +327,7 @@ final class InspectorModel {
     lastFonts = Date()
     mode = next.locked ? .locked : .picking
     failure = nil
+    layout.selectionLocked(next.locked ? next.id : nil)
   }
 
   private func fonts(for nodeID: Int) async throws -> [String] {

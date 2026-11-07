@@ -48,12 +48,32 @@ import Foundation
       self.engine.liveTabs.contains(tab) && self.engine.pages[tab]?.loading == false
         && self.engine.runtime.view(forTabID: tab.uuidString)?.superview != nil
     }
-    guard let target = engine.siteControlTarget, target.tabID == tab,
-      engine.showDeveloperTools(for: target),
-      let shell = engine.shaarDevTools[tab], let inspector = engine.inspectors[tab]
-    else { throw Failure("Shaar panel shell did not open for the selected tab") }
+    guard let target = engine.siteControlTarget, target.tabID == tab else {
+      throw Failure("No selected page for Shaar DevTools")
+    }
+    engine.toggleDeveloperTools()
+    guard let shell = engine.shaarDevTools[tab], shell.isOpen,
+      let inspector = engine.inspectors[tab]
+    else { throw Failure("Shaar DevTools menu did not open the Shaar shell") }
+    let chromiumDockClosed = engine.runtime.devToolsView(forTabID: tab.uuidString) == nil
     try await wait("live panel lease") { shell.streamAvailable }
 
+    await check("f12-route") {
+      guard shell.isOpen, chromiumDockClosed else {
+        throw Failure("The Shaar DevTools command opened the Chromium dock")
+      }
+      guard Self.f12OpensShaarDevTools() else {
+        throw Failure("F12 no longer maps to Shaar DevTools")
+      }
+      return "Shaar DevTools opened the Shaar shell and left the Chromium dock closed. "
+        + "F12 maps to that command."
+    }
+    await check("shell-defaults") {
+      try self.proveShellDefaults(shell)
+    }
+    await check("security") {
+      try await self.proveSecurity(shell: shell)
+    }
     await check("console-network") {
       _ = try await inspector.evaluate(
         "console.error('shaar19-live-console'); fetch('/profile-privacy-cache', {cache:'no-store'}).then(r=>r.text())"
@@ -66,6 +86,39 @@ import Foundation
     await check("network-tools") { try await self.proveNetworkTools(shell) }
     await check("network-throttle") {
       try await self.proveNetworkThrottle(target, inspector: inspector)
+    }
+    await check("network-row") {
+      try await self.wait("live network row columns") {
+        self.finishedPrivacyRow(shell) != nil
+      }
+      guard let row = self.finishedPrivacyRow(shell) else {
+        throw Failure("Live network row lost its columns")
+      }
+      let size = row.encodedBytes ?? 0
+      let millis = Int(((row.duration ?? 0) * 1_000).rounded())
+      return "\(row.method) \(row.name) \(row.resource.rawValue) \(size) bytes \(millis) ms"
+    }
+    await check("console-repeat") {
+      _ = try await inspector.evaluate(
+        "console.error('shaar-repeat-copy'); console.error('shaar-repeat-copy'); true"
+      )
+      try await self.wait("repeated console row") {
+        self.repeatedCopyRow(shell) != nil
+      }
+      guard let row = self.repeatedCopyRow(shell) else {
+        throw Failure("Repeated console row disappeared")
+      }
+      let copy = shell.console.agentCopyText(for: row)
+      guard copy.contains("shaar-repeat-copy"),
+        copy.contains("Repeated \(row.count) times")
+      else {
+        throw Failure("Copy for agent missed the repeated console row")
+      }
+      let flat = copy.replacingOccurrences(of: "\n", with: " | ")
+      return "Repeated \(row.count) times. Stack frames \(row.event.stack.count). \(flat)"
+    }
+    await check("issues") {
+      try await self.proveIssues(shell: shell, inspector: inspector)
     }
     await check("application-cookie") {
       shell.cookies.configure(store: self.engine, target: target)
@@ -175,8 +228,17 @@ import Foundation
         shell.rules.draft?.enabled = false
         try await shell.rules.saveDraft()
       }
+      let remainder = try await DevToolsNetworkRulesProof(
+        engine: self.engine, store: self.store, shell: shell, inspector: inspector,
+        space: space, tab: tab, root: self.root, fixture: self.fixture
+      ).run()
       return
-        "Mock, redirect, 450 ms delay, and request/response headers changed real page fetches; delay observed \(Int(elapsed)) ms"
+        "Mock, redirect, 450 ms delay, and request/response headers changed real page fetches; delay observed \(Int(elapsed)) ms. \(remainder)"
+    }
+    await check("source-bytes") {
+      try await DevToolsSourceBytesProof(
+        shell: shell, inspector: inspector, fixture: self.fixture
+      ).run()
     }
     await check("viewports") {
       shell.section = .viewports
@@ -313,7 +375,27 @@ import Foundation
       else { throw Failure("Elements attribute edit did not reach the page") }
       return "DOM insertion appeared through the live stream; attribute edit reached the page"
     }
-    await check("console-tools") { try await self.proveConsoleTools(shell, inspector: inspector) }
+    await check("elements-inspector") {
+      guard shell.section == .elements, inspector.isOpen, inspector.target.tabID == tab,
+        self.engine.inspectors[tab] === inspector, shell.dom.available,
+        shell.dom.nodes.values.contains(where: { $0.name == "BODY" })
+      else { throw Failure("Elements is not using this tab's Inspector") }
+      let marker =
+        try await inspector.evaluate(
+          "document.getElementById('shaar-live-element') !== null") as? Bool
+      guard marker == true else { throw Failure("This tab's Inspector lost the Elements node") }
+      let path = inspector.target.url.path
+      return "Elements is open on this tab's Inspector at \(path)"
+    }
+    await check("elements-scale") {
+      try await DevToolsDOMScaleProof(shell: shell, inspector: inspector).run()
+    }
+    await check("split-shell") {
+      try await self.proveSplitShells(firstTab: tab, firstShell: shell)
+    }
+    await check("console-tools") {
+      try await self.proveConsoleTools(shell, inspector: inspector)
+    }
     return try results.finish(
       root: root, phase: phase, engine: engine.runtime.chromiumVersion,
       hidden: NSApp.windows.allSatisfy { !$0.isVisible })
@@ -461,7 +543,7 @@ import Foundation
       return "Disable cache was accepted by this engine."
     } catch {
       return
-        "Disable cache is not in this engine (command 62): \(error.localizedDescription). Ready for engine build."
+        "Disable cache is not in this engine (command 69): \(error.localizedDescription). Ready for engine build."
     }
   }
 
@@ -569,6 +651,221 @@ import Foundation
     return "Live stack \(frame.function) \(frame.source)."
   }
 
+  private static func f12OpensShaarDevTools() -> Bool {
+    let f12 = ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: [])
+    let chord = ShaarDevToolsShortcut.isF12(
+      keyCode: 111, modifiers: [.command, .option, .shift])
+    let shaar = ShortcutCatalog.shortcut(for: .developerTools)
+    let chromium = ShortcutCatalog.shortcut(for: .chromiumDeveloperTools)
+    guard f12, !chord, shaar?.key == "i", chromium?.key == "i" else { return false }
+    return shaar?.modifiers == [.command, .option]
+      && chromium?.modifiers == [.command, .option, .shift]
+  }
+
+  private func proveSecurity(shell: ShaarDevToolsModel) async throws -> String {
+    let previous = shell.section
+    defer { shell.section = previous }
+    shell.section = .security
+    let level = engineLevel(shell)
+    await shell.refreshSecurity()
+    guard level == "insecure", shell.securitySummary.connection == .http,
+      shell.securitySummary.certificate == nil
+    else {
+      throw Failure(
+        "Security summary level=\(level ?? "nil") connection=\(connectionName(shell.securitySummary.connection)) certificate=\(shell.securitySummary.certificate != nil)"
+      )
+    }
+    return "HTTP page is not secure. Engine level insecure. No certificate on this connection."
+  }
+
+  private func engineLevel(_ shell: ShaarDevToolsModel) -> String? {
+    let info = engine.runtime.securityInfo(
+      forTabID: shell.target.tabID.uuidString, profileID: shell.target.profileID.uuidString)
+    return info?["level"] as? String
+  }
+
+  private func connectionName(_ connection: ShaarPageConnection) -> String {
+    switch connection {
+    case .secure: "secure"
+    case .http: "http"
+    case .certificateError: "certificateError"
+    case .mixedContent: "mixedContent"
+    case .unavailable: "unavailable"
+    }
+  }
+
+  private func finishedPrivacyRow(_ shell: ShaarDevToolsModel) -> ShaarNetworkRequest? {
+    shell.network.requests(from: shell.events).first { row in
+      row.url.contains("/profile-privacy-cache")
+        && row.method == "GET"
+        && row.name == "profile-privacy-cache"
+        && row.encodedBytes != nil
+        && row.duration != nil
+    }
+  }
+
+  private func proveIssues(shell: ShaarDevToolsModel, inspector: InspectorModel) async throws
+    -> String
+  {
+    let previous = shell.section
+    defer { shell.section = previous }
+    _ = try await inspector.evaluate(
+      "console.error('shaar-issue-copy'); console.error('shaar-issue-copy'); fetch('/shaar-issues-missing',{cache:'no-store'}); true"
+    )
+    do {
+      try await wait("grouped issue and failed request") { self.issuesReady(shell) }
+    } catch {
+      throw Failure("Issues not ready: \(self.issueSummary(shell))")
+    }
+    let rows = shell.issues
+    guard
+      let consoleIssue = rows.first(where: { $0.title == "shaar-issue-copy" && $0.count >= 2 }),
+      case .console(let consoleID, _) = consoleIssue.kind,
+      let networkIssue = rows.first(where: { self.isMissingRequest($0) }),
+      case .network(let networkID, _, _) = networkIssue.kind
+    else { throw Failure("Issue rows disappeared: \(issueSummary(shell))") }
+    shell.openIssue(consoleIssue)
+    guard shell.section == .console, shell.console.selectedID == consoleID else {
+      throw Failure("Choosing a console issue did not open Console")
+    }
+    shell.openIssue(networkIssue)
+    guard shell.section == .network, shell.network.selectedID == networkID else {
+      throw Failure("Choosing a network issue did not open Network")
+    }
+    return
+      "Identical console errors counted as 1 issue (\(consoleIssue.count) times). Failed request listed. Choosing a row opened Console, then Network. Tab count \(rows.count)."
+  }
+
+  private func issuesReady(_ shell: ShaarDevToolsModel) -> Bool {
+    let rows = shell.issues
+    let grouped = rows.contains { $0.title == "shaar-issue-copy" && $0.count >= 2 }
+    return grouped && rows.contains { self.isMissingRequest($0) }
+  }
+
+  private func isMissingRequest(_ issue: ShaarDevToolsIssue) -> Bool {
+    guard case .network = issue.kind else { return false }
+    return issue.title.contains("shaar-issues-missing")
+  }
+
+  private func issueSummary(_ shell: ShaarDevToolsModel) -> String {
+    shell.issues
+      .map { "\($0.count)x \(String($0.title.prefix(80)))" }
+      .joined(separator: " | ")
+  }
+
+  private func repeatedCopyRow(_ shell: ShaarDevToolsModel) -> ShaarConsoleRow? {
+    shell.console.rows(from: shell.consoleEvents).first { row in
+      row.event.message == "shaar-repeat-copy" && row.count >= 2
+    }
+  }
+
+  private func proveSplitShells(
+    firstTab: UUID, firstShell: ShaarDevToolsModel
+  ) async throws -> String {
+    let existing = Set(store.session.selectedSpace.tabs.map(\.id))
+    store.perform(.open(url("/account")))
+    do {
+      try await wait("second pane page") { self.secondPaneTab(existing: existing) != nil }
+    } catch {
+      throw Failure(secondPaneFailure(existing: existing))
+    }
+    guard let second = secondPaneTab(existing: existing) else {
+      throw Failure("Second pane tab disappeared")
+    }
+    store.splitTabs(firstTab, second)
+    guard let split = store.selectedSplit, split.tabIDs.contains(firstTab),
+      split.tabIDs.contains(second)
+    else { throw Failure("The two pages did not share a split") }
+    store.focusSplitTab(second)
+    try await wait("second pane selected") { self.engine.siteControlTarget?.tabID == second }
+    guard let secondTarget = engine.siteControlTarget, secondTarget.tabID == second else {
+      throw Failure("Second pane was not the selected page")
+    }
+    guard engine.showDeveloperTools(for: secondTarget),
+      let secondShell = engine.shaarDevTools[second], secondShell.isOpen,
+      let secondInspector = engine.inspectors[second]
+    else { throw Failure("Second pane did not open its own shell") }
+    guard firstShell.isOpen, firstShell !== secondShell else {
+      throw Failure("Split panes shared one shell")
+    }
+    try await wait("second pane shell stream") { secondShell.streamAvailable }
+    _ = try await secondInspector.evaluate("console.error('shaar-split-pane'); true")
+    try await wait("second pane console event") { self.splitMarker(secondShell) }
+    guard !splitMarker(firstShell) else {
+      throw Failure("Split pane console event crossed shells")
+    }
+    secondShell.close()
+    guard !secondShell.isOpen, firstShell.isOpen else {
+      throw Failure("Closing one pane shell closed the other")
+    }
+    return "Two split panes kept separate shells"
+  }
+
+  private func secondPaneTab(existing: Set<UUID>) -> UUID? {
+    store.session.selectedSpace.tabs.map(\.id).first { id in
+      guard !existing.contains(id), engine.liveTabs.contains(id),
+        engine.pages[id]?.loading == false
+      else { return false }
+      return engine.runtime.windowID(forTabID: id.uuidString) == engine.windowID
+    }
+  }
+
+  private func secondPaneFailure(existing: Set<UUID>) -> String {
+    let described = store.session.selectedSpace.tabs.map(\.id).filter { !existing.contains($0) }
+      .map { id -> String in
+        let loading = engine.pages[id]?.loading == true
+        let live = engine.liveTabs.contains(id)
+        let window = engine.runtime.windowID(forTabID: id.uuidString) ?? "none"
+        return "\(id.uuidString.prefix(8)) live=\(live) loading=\(loading) window=\(window)"
+      }
+    return "Second pane did not load: \(described.joined(separator: "; "))"
+  }
+
+  private func splitMarker(_ shell: ShaarDevToolsModel) -> Bool {
+    shell.events.contains { event in
+      guard case .console(let entry) = event else { return false }
+      return entry.message.contains("shaar-split-pane")
+    }
+  }
+
+  private static let unavailableCopy = [
+    "Live DOM tree is unavailable for this tab",
+    "Live component tree is unavailable for this tab",
+    "Live Application is unavailable for this tab",
+    "Live Performance is unavailable for this tab",
+    "Live Sources are unavailable for this tab",
+    "Repro capture needs engine support",
+    "Live Viewports need engine support",
+    "WebKit comparison is unavailable for this tab",
+    "Live console and network are unavailable for this tab",
+    "Use Chromium DevTools until the live stream is available.",
+    "Open Chromium DevTools",
+    "Application data is unavailable for this tab",
+    "Performance data is unavailable for this tab",
+    "Sources are unavailable for this tab",
+    "Console commands are unavailable for this tab",
+  ]
+
+  private static func namesEngineVersion(_ text: String) -> Bool {
+    if text.range(of: #"\d+\.\d+"#, options: .regularExpression) != nil { return true }
+    return text.range(of: #"shaar\.\d+"#, options: .regularExpression) != nil
+  }
+
+  private func proveShellDefaults(_ shell: ShaarDevToolsModel) throws -> String {
+    guard shell.dock == .right else {
+      throw Failure("Shaar DevTools opened docked to \(shell.dock.rawValue)")
+    }
+    for language in BrowserLanguage.allCases {
+      for line in Self.unavailableCopy {
+        let text = BrowserLocalization.string(line, table: "Shell", language: language)
+        if Self.namesEngineVersion(text) {
+          throw Failure("Unavailable copy names an engine version: \(text)")
+        }
+      }
+    }
+    return "Docked to the right. Unavailable copy does not name an engine version."
+  }
+
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
   }
@@ -592,10 +889,12 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "console-network", "network-tools", "network-throttle", "application-cookie",
+    "f12-route", "shell-defaults", "security", "console-network", "network-tools",
+    "network-throttle", "network-row", "console-repeat", "issues", "application-cookie",
     "application-local-storage", "application-session-storage", "application-indexed-db",
-    "application-cache-storage", "application-service-worker", "network-rules", "viewports",
-    "masked-repro", "elements-live", "console-tools",
+    "application-cache-storage", "application-service-worker", "network-rules", "source-bytes",
+    "viewports", "masked-repro", "elements-live", "elements-inspector", "elements-scale",
+    "split-shell", "console-tools",
   ]
 
   private var entries: [String: [String: Any]] = [:]

@@ -913,6 +913,38 @@
         }
       }
     },
+    "Force state": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force state"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כפיית מצב"
+          }
+        }
+      }
+    },
+    "Edit box model value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit box model value"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עריכת ערך במודל התיבה"
+          }
+        }
+      }
+    },
     "Box model. Content %@ by %@ pixels.": {
       "localizations": {
         "en": {
@@ -989,6 +1021,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Flex"
+          }
+        }
+      }
+    },
+    "Flex and grid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flex and grid"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flex ו-Grid"
+          }
+        }
+      }
+    },
+    "No flex or grid containers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No flex or grid containers"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אין מכולות Flex או Grid בדף"
+          }
+        }
+      }
+    },
+    "Line numbers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Line numbers"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מספרי קווים"
+          }
+        }
+      }
+    },
+    "Track sizes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track sizes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גודל מסילות"
+          }
+        }
+      }
+    },
+    "Area names": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Area names"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שמות אזורים"
           }
         }
       }
@@ -1307,6 +1419,12 @@
             "value": "העתקת הסגנונות המחושבים כמחלקות Tailwind למאפייני CSS שרירותיים"
           }
         }
+      }
+    },
+    "Show the winning rule": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Show the winning rule" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הצגת הכלל המנצח" } }
       }
     },
     "All computed properties": {

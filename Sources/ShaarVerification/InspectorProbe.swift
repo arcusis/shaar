@@ -69,6 +69,8 @@ final class InspectorProbe {
       return after.width > 0 && after.height > 0
         && (after.width < before.width || after.height < before.height)
     }
+    try await proveLayoutOverlays(model)
+    try await proveAccessibleName(model)
     try expect(
       await pointer(model, selector: "#save", click: false),
       "trusted pointer hovers the authored element")
@@ -80,8 +82,10 @@ final class InspectorProbe {
       overlay?["painted"] as? Bool == true && (overlay?["colors"] as? [String])?.count == 4,
       "hover paints margin, border, padding, and content shading")
     try expect(
-      (overlay?["badge"] as? String)?.contains("×") == true,
-      "hover badge contains tag and dimensions")
+      (overlay?["badge"] as? String)?.contains("span#label") == true
+        && (overlay?["badge"] as? String)?.contains("×") == true,
+      "hover badge names the element and its border box")
+    try await proveNamedOverlay(model)
     try expect(
       await pointer(model, selector: "#save", click: true),
       "trusted click locks the hovered element")
@@ -417,6 +421,216 @@ final class InspectorProbe {
     }
   }
 
+  private func proveNamedOverlay(_ model: InspectorModel) async throws {
+    let install = """
+      (()=>{
+        document.getElementById('overlay-proof')?.remove();
+        const plate=document.createElement('div');
+        plate.id='overlay-proof';
+        plate.style.cssText='position:fixed;left:8px;bottom:8px;width:340px;height:160px;background:#ffffff;z-index:5';
+        const named=document.createElement('div');
+        named.id='overlay-name';
+        named.className='alpha bravo charlie delta echo';
+        named.textContent='Named';
+        named.style.cssText='position:absolute;left:16px;top:64px;width:200px;height:36px;background:#ffffff';
+        plate.append(named);
+        document.body.append(plate);
+        return true;
+      })()
+      """
+    try expect(
+      try await model.evaluate(install) as? Bool == true,
+      "overlay fixture adds a named element with five classes")
+    try expect(
+      await pointer(model, selector: "#overlay-name", click: false),
+      "trusted pointer hovers the named overlay fixture")
+    try await wait(
+      "hover badge shows the id, more than two classes, a hidden count, and the border box"
+    ) {
+      self.namedBadge(
+        try await model.evaluate("globalThis.__shaarInspectorV2.overlay()"), fill: "dark")
+    }
+    let darken = """
+      (()=>{
+        const plate=document.getElementById('overlay-proof');
+        const named=document.getElementById('overlay-name');
+        if(!plate||!named)return false;
+        plate.style.background='#111111';
+        named.style.background='#111111';
+        return true;
+      })()
+      """
+    try expect(
+      try await model.evaluate(darken) as? Bool == true, "overlay fixture switches to a dark page")
+    try expect(
+      await pointer(model, selector: "#save", click: false),
+      "pointer leaves the named fixture before the dark sample")
+    try expect(
+      await pointer(model, selector: "#overlay-name", click: false),
+      "trusted pointer hovers the named fixture on a dark page")
+    try await wait("hover badge uses a light fill on a dark page") {
+      self.namedBadge(
+        try await model.evaluate("globalThis.__shaarInspectorV2.overlay()"), fill: "light")
+    }
+    try expect(
+      await pointer(model, selector: "#overlay-name", click: true),
+      "named overlay fixture can be locked")
+    try await wait("named element stays locked for capture") {
+      model.selection?.identifier == "overlay-name" && model.mode == .locked
+    }
+    try await capture(model, stem: "\(phase)-inspector-overlay-name")
+    try expect(
+      try await model.evaluate("document.getElementById('overlay-proof')?.remove(); true") as? Bool
+        == true, "overlay fixture is removed")
+    await model.pick()?.value
+    try expect(
+      await pointer(model, selector: "#save", click: false),
+      "trusted pointer returns to the authored button")
+    try await wait("hover returns to the button label") {
+      model.selection?.tag == "span" && model.mode == .picking
+    }
+  }
+
+  private func namedBadge(_ value: Any?, fill: String) -> Bool {
+    guard let overlay = value as? [String: Any], let text = overlay["badge"] as? String,
+      overlay["painted"] as? Bool == true, (overlay["colors"] as? [String])?.count == 4,
+      overlay["badgeFill"] as? String == fill
+    else { return false }
+    return text.contains("div#overlay-name.alpha.bravo.charlie.delta +1") && text.contains("×")
+  }
+
+  private func proveLayoutOverlays(_ model: InspectorModel) async throws {
+    // Notes stays up while the commands run so the Design list is not polling beside them.
+    model.tab = .notes
+    _ = try await model.evaluate(
+      """
+      (() => {
+        const grid = document.querySelector('#grid');
+        grid.style.gridTemplateAreas = '"alpha bravo"';
+        grid.children[0].style.gridArea = 'alpha';
+        grid.children[1].style.gridArea = 'bravo';
+        return true;
+      })()
+      """)
+    _ = try await model.evaluate(
+      "globalThis.__shaarInspectorV2.select(document.querySelector('#save'))")
+    try await wait("layout list locks a selection") { model.selection?.locked == true }
+    try await wait("fixture lists both grids and the flex container") {
+      await model.layout.refresh()
+      let containers = model.layout.containers
+      return containers.contains { $0.key == "#grid" && $0.kind == .grid }
+        && containers.contains { $0.key == "#other" && $0.kind == .grid }
+        && containers.contains { $0.key == "#flex" && $0.kind == .flex }
+    }
+    try expect(!model.layout.showAreaNames, "area names stay off until asked")
+    await model.layout.toggle("#grid")
+    try expect(
+      model.layout.isOn("#grid") && !model.layout.isOn("#other") && model.layout.failure == nil,
+      "one grid overlay can be on alone")
+    await model.layout.setAreaNames(true)
+    try expect(
+      model.layout.showAreaNames && model.layout.isOn("#grid") && model.layout.failure == nil,
+      "area names are sent when asked")
+    await model.layout.toggle("#grid")
+    await model.layout.toggle("#other")
+    try expect(
+      model.layout.isOn("#other") && !model.layout.isOn("#grid") && model.layout.failure == nil,
+      "the other grid can take the overlay")
+    await model.layout.toggle("#flex")
+    try expect(
+      model.layout.isOn("#flex") && model.layout.failure == nil, "flex overlay is accepted")
+    await model.layout.toggle("#flex")
+    await model.layout.toggle("#other")
+    await model.layout.toggle("#grid")
+    try expect(
+      model.layout.isOn("#grid") && model.layout.showAreaNames && !model.layout.isOn("#other")
+        && !model.layout.isOn("#flex"),
+      "the list capture shows one grid with area names")
+    model.tab = .design
+    try await capture(model, stem: "\(phase)-inspector-flex-grid")
+    await model.layout.disableAll()
+    try expect(
+      !model.layout.isOn("#grid") && !model.layout.showAreaNames,
+      "closing the overlays resets area names")
+    _ = try await model.evaluate(
+      """
+      (() => {
+        const grid = document.querySelector('#grid');
+        grid.style.removeProperty('grid-template-areas');
+        grid.children[0].style.removeProperty('grid-area');
+        grid.children[1].style.removeProperty('grid-area');
+        return true;
+      })()
+      """)
+    await model.pick()?.value
+    try await wait("layout probe returns to picking") { model.mode == .picking }
+  }
+
+  private func proveAccessibleName(_ model: InspectorModel) async throws {
+    model.tab = .accessibility
+    try await lockForName(model, selector: "h1")
+    try await wait("heading locks for its accessible name") {
+      model.selection?.locked == true && model.selection?.tag == "h1"
+    }
+    await model.details.refresh(force: true)
+    let heading = model.details.accessibility
+    try expect(
+      model.details.failure == nil && heading?.name == "Inspect the details."
+        && heading?.nameSource == "From the element's text",
+      "heading name comes from its text (name \(heading?.name ?? "none"), source \(heading?.nameSource ?? "none"), \(model.details.failure ?? "ok"))"
+    )
+    try await lockForName(model, selector: "#labelled")
+    try await wait("labelled button locks") {
+      model.selection?.locked == true && model.selection?.identifier == "labelled"
+    }
+    await model.details.refresh(force: true)
+    let labelled = model.details.accessibility
+    let labelledRatio = model.selection?.contrast
+    try expect(
+      model.details.failure == nil && labelled?.name == "Apply the form"
+        && labelled?.nameSource == "From aria-label"
+        && labelled?.nameSource != heading?.nameSource,
+      "aria-label button names a different source (name \(labelled?.name ?? "none"), source \(labelled?.nameSource ?? "none"), \(model.details.failure ?? "ok"))"
+    )
+    try await lockForName(model, selector: "#save")
+    try await wait("save button locks for contrast") {
+      model.selection?.locked == true && model.selection?.identifier == "save"
+    }
+    let saveText = model.selection?.contrast.map(InspectorContrastLine.ratioText)
+    let labelledText = labelledRatio.map(InspectorContrastLine.ratioText)
+    try expect(
+      model.selection?.contrastLimit == nil && saveText == labelledText && saveText == "5.17:1"
+        && model.selection?.contrastGrade == "AA",
+      "solid button contrast matches Design (\(saveText ?? "none"))")
+    try await lockForName(model, selector: "#gradient")
+    try await wait("gradient locks") {
+      model.selection?.locked == true && model.selection?.identifier == "gradient"
+    }
+    try expect(
+      model.selection?.contrast == nil
+        && model.selection?.contrastLimit == "Image or gradient behind text",
+      "gradient contrast is the Design limitation")
+    try await lockForName(model, selector: "#labelled")
+    try await wait("labelled button returns for capture") {
+      model.selection?.locked == true && model.selection?.identifier == "labelled"
+    }
+    await model.details.refresh(force: true)
+    try expect(
+      model.details.accessibility?.nameSource == "From aria-label"
+        && model.selection?.contrast != nil
+        && model.selection?.contrastLimit == nil,
+      "the accessibility capture shows the name source and contrast")
+    try await capture(model, stem: "\(phase)-inspector-name")
+    model.tab = .design
+    await model.pick()?.value
+    try await wait("name probe returns to picking") { model.mode == .picking }
+  }
+
+  private func lockForName(_ model: InspectorModel, selector: String) async throws {
+    _ = try await model.evaluate(
+      "globalThis.__shaarInspectorV2.select(document.querySelector(\(json(selector))))")
+  }
+
   private func styles(_ model: InspectorModel) async throws {
     engine.runtime.window(forID: engine.windowID)?.contentView?.layoutSubtreeIfNeeded()
     let pageID = model.target.tabID.uuidString
@@ -552,7 +766,7 @@ final class InspectorProbe {
 
   private func loaded(host: String) async throws {
     try await wait("page loads at \(host)") {
-      guard let target = self.engine.siteControlTarget, target.host == host,
+      guard let target = self.engine.siteControlTarget, target.url.host == host,
         self.engine.pages[target.tabID]?.loading == false
       else { return false }
       return self.engine.runtime.view(forTabID: target.tabID.uuidString)?.superview != nil

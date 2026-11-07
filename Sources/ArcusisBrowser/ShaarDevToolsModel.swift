@@ -10,12 +10,17 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case elements = "Elements"
   case components = "Components"
   case console = "Console"
+  case issues = "Issues"
   case network = "Network"
   case application = "Application"
   case performance = "Performance"
+  case audits = "Audits"
   case sources = "Sources"
+  case security = "Security"
+  case sensors = "Sensors"
   case repro = "Repro"
   case viewports = "Viewports"
+  case rendering = "Rendering"
   case comparison = "Comparison"
 }
 
@@ -303,6 +308,7 @@ final class ShaarDevToolsModel {
         section = oldValue
         return
       }
+      rememberSectionIfNeeded()
       guard isOpen, section != oldValue else { return }
       if section == .viewports { viewports.open() } else { viewports.close() }
       if section == .elements { dom.open() } else { dom.close() }
@@ -332,6 +338,15 @@ final class ShaarDevToolsModel {
   var leftWidth: CGFloat = 420 {
     didSet { layoutDefaults.set(Double(leftWidth), forKey: "shaar.devtools.leftWidth") }
   }
+  var commandMenuOpen = false
+  var settingsOpen = false
+  var commandQuery = "" {
+    didSet {
+      guard commandQuery != oldValue else { return }
+      commandSelection = 0
+    }
+  }
+  var commandSelection = 0
   @ObservationIgnored private let layoutDefaults: UserDefaults
   @ObservationIgnored var floatingWindow: ShaarDevToolsFloatingWindow?
   private(set) var streamAvailable = false
@@ -352,9 +367,32 @@ final class ShaarDevToolsModel {
   let sources: ShaarSourcesModel
   let repro: ShaarReproModel
   let viewports: ShaarViewportsModel
+  let rendering: ShaarRenderingModel
   let framework = ShaarFrameworkComponentsModel()
   let comparison: ShaarWebKitComparisonModel
+  let pageAudit = InspectorAuditModel(inspector: nil)
+  private var auditFixture: AuditFixture?
   let allowsWebKitComparison: Bool
+  var securitySummary: ShaarDevToolsSecuritySummary
+  @ObservationIgnored var loadSecurity:
+    (@MainActor (SiteControlTarget) async -> ShaarDevToolsSecuritySummary)?
+  @ObservationIgnored var presentCertificate: @MainActor () -> Void = {}
+  @ObservationIgnored private var securityGeneration = 0
+  var sensorLocation: ShaarDevToolsSensorLocation = .system
+  var sensorLatitude = ""
+  var sensorLongitude = ""
+  var sensorAccuracy = ""
+  var sensorTimezone: ShaarDevToolsSensorTimezone = .system
+  var sensorLocale: ShaarDevToolsSensorLocale = .system
+  var sensorTouch = false
+  /// shaar.20 rejects Emulation.setTouchEmulationEnabled. The engine patch owns the live toggle.
+  var sensorTouchReady = false
+  var sensorNotice: ShaarDevToolsSensorNotice?
+  @ObservationIgnored var sensorFixture: (@MainActor (ShaarDevToolsSensorCommand) -> Void)?
+  @ObservationIgnored var sendSensorCommand:
+    (@MainActor (ShaarDevToolsSensorCommand) async throws -> Void)?
+  @ObservationIgnored weak var sensorEngine: BrowserEngine?
+  @ObservationIgnored var sensorGeneration = 0
   var sections: [ShaarDevToolsSection] {
     ShaarDevToolsSection.allCases.filter { $0 != .comparison || allowsWebKitComparison }
   }
@@ -376,6 +414,7 @@ final class ShaarDevToolsModel {
     sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load,
     reproTransport: any ShaarReproTransport = ShaarReproPendingTransport(),
     viewportsTransport: any ShaarViewportsTransport = ShaarViewportsPendingTransport(),
+    renderingTransport: any ShaarRenderingTransport = ShaarRenderingPendingTransport(),
     localTransports: [any ShaarLocalConsoleTransport] = [],
     rulesTransport: any ShaarNetworkRulesTransport = ShaarNetworkRulesPendingTransport(),
     domTransport: any ShaarDOMTransport = ShaarDOMPendingTransport(),
@@ -385,6 +424,8 @@ final class ShaarDevToolsModel {
     comparisonPreview: ShaarWebKitComparisonPreview? = nil
   ) {
     self.target = target
+    securitySummary = ShaarDevToolsSecuritySummary.make(
+      url: target.url, engineLevel: nil, certificate: nil)
     self.allowsWebKitComparison = allowsWebKitComparison
     comparison = ShaarWebKitComparisonModel(target: target, preview: comparisonPreview)
     self.layoutDefaults = layoutDefaults
@@ -393,9 +434,13 @@ final class ShaarDevToolsModel {
     {
       self.dock = dock
     }
-    bottomHeight = Self.savedSize("shaar.devtools.bottomHeight", fallback: 380, in: layoutDefaults)
-    rightWidth = Self.savedSize("shaar.devtools.rightWidth", fallback: 420, in: layoutDefaults)
-    leftWidth = Self.savedSize("shaar.devtools.leftWidth", fallback: 420, in: layoutDefaults)
+    bottomHeight = Self.savedSize(
+      "shaar.devtools.bottomHeight", fallback: ShaarDevToolsMetrics.bottomHeight, in: layoutDefaults
+    )
+    rightWidth = Self.savedSize(
+      "shaar.devtools.rightWidth", fallback: ShaarDevToolsMetrics.sideWidth, in: layoutDefaults)
+    leftWidth = Self.savedSize(
+      "shaar.devtools.leftWidth", fallback: ShaarDevToolsMetrics.sideWidth, in: layoutDefaults)
     self.transport = transport
     self.localTransports = Dictionary(
       uniqueKeysWithValues: localTransports.map { ($0.sourceID, $0) })
@@ -411,7 +456,9 @@ final class ShaarDevToolsModel {
       loadSourceData: sourceLoader)
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
+    rendering = ShaarRenderingModel(target: target, transport: renderingTransport)
     framework.updateAccess(url: target.url)
+    section = resolvedOpeningSection()
     console.onClear = { [weak self] in
       self?.eventBuffer.removeConsole()
     }
@@ -433,9 +480,12 @@ final class ShaarDevToolsModel {
 
   func open(inspector: InspectorModel) {
     guard !isOpen else { return }
+    applyPinnedOpeningSection()
     frameworkClose?.cancel()
     frameworkClose = nil
     comparisonInspector = inspector
+    pageAudit.inspector = inspector
+    attachSensorSender(inspector)
     if !inspector.isOpen {
       inspector.open()
       ownedInspector = inspector
@@ -473,6 +523,7 @@ final class ShaarDevToolsModel {
     rules.close()
     phase2.close()
     viewports.close()
+    rendering.restore()
     comparison.close()
     comparisonInspector = nil
     dom.close()
@@ -480,8 +531,14 @@ final class ShaarDevToolsModel {
     cookies.reset()
     performance.reset()
     sources.reset()
+    pageAudit.reset()
+    pageAudit.inspector = nil
+    auditFixture = nil
     let inspector = ownedInspector
     ownedInspector = nil
+    // The component highlight still needs this page. Stop presenting now so
+    // ownership is restored before the highlight clear finishes.
+    inspector?.stopPresenting()
     let hide = framework.beginHide()
     frameworkClose?.cancel()
     frameworkClose = Task { @MainActor in
@@ -489,11 +546,172 @@ final class ShaarDevToolsModel {
       guard !Task.isCancelled, !isOpen else { return }
       inspector?.close()
     }
+    closeCommandMenu()
+    closeSettings()
+    resetSensors()
     isOpen = false
+  }
+
+  func toggleCommandMenu() {
+    if commandMenuOpen {
+      closeCommandMenu()
+    } else {
+      closeSettings()
+      commandMenuOpen = true
+      commandQuery = ""
+      commandSelection = 0
+    }
+  }
+
+  func closeCommandMenu() {
+    commandMenuOpen = false
+    commandQuery = ""
+    commandSelection = 0
+  }
+
+  var commandMatches: [ShaarDevToolsCommandMatch] {
+    let entries = consoleEvents.compactMap { event -> ShaarConsoleEvent? in
+      guard case .console(let entry) = event else { return nil }
+      return entry
+    }
+    return ShaarDevToolsCommandIndex.matches(
+      query: commandQuery, sections: sections, console: entries,
+      network: network.requests(from: events), sources: sources.resources,
+      nodes: Array(dom.nodes.values))
+  }
+
+  var clampedCommandSelection: Int {
+    let count = commandMatches.count
+    guard count > 0 else { return 0 }
+    return min(commandSelection, count - 1)
+  }
+
+  func moveCommandSelection(forward: Bool) {
+    let count = commandMatches.count
+    guard count > 0 else { return }
+    let next = commandSelection + (forward ? 1 : -1)
+    commandSelection = min(count - 1, max(0, next))
+  }
+
+  var issues: [ShaarDevToolsIssue] {
+    let console = consoleEvents.compactMap { event -> ShaarConsoleEvent? in
+      if case .console(let entry) = event { return entry }
+      return nil
+    }
+    return ShaarDevToolsIssues.list(console: console, requests: network.requests(from: events))
+  }
+
+  func openIssue(_ issue: ShaarDevToolsIssue) {
+    switch issue.kind {
+    case .console(let id, _):
+      section = .console
+      console.level = nil
+      console.origin = nil
+      console.search = ""
+      console.selectedID = id
+    case .network(let id, _, _):
+      section = .network
+      network.filter = .all
+      network.search = ""
+      network.selectedID = id
+    }
+  }
+
+  func performSelectedCommand() {
+    let matches = commandMatches
+    guard matches.indices.contains(clampedCommandSelection) else { return }
+    perform(matches[clampedCommandSelection])
+  }
+
+  func perform(_ match: ShaarDevToolsCommandMatch) {
+    closeCommandMenu()
+    switch match.hit {
+    case .section(let section):
+      self.section = section
+    case .dock(let dock):
+      self.dock = dock
+    case .console(let id):
+      section = .console
+      console.level = nil
+      console.origin = nil
+      console.search = ""
+      console.selectedID = id
+    case .network(let id):
+      section = .network
+      network.filter = .all
+      network.search = ""
+      network.selectedID = id
+    case .source(let url):
+      section = .sources
+      sources.search = ""
+      guard let resource = sources.resources.first(where: { $0.url == url }) else { return }
+      let sources = sources
+      Task { await sources.select(resource) }
+    case .element(let id):
+      section = .elements
+      dom.search = ""
+      dom.select(id)
+    case .settings:
+      showSettings()
+    }
+  }
+
+  var opening: ShaarDevToolsOpening { ShaarDevToolsOpening.load(layoutDefaults) }
+
+  func chooseOpening(_ opening: ShaarDevToolsOpening) {
+    layoutDefaults.set(opening.storageValue, forKey: ShaarDevToolsOpening.key)
+    switch opening {
+    case .last:
+      layoutDefaults.set(section.rawValue, forKey: ShaarDevToolsOpening.lastSectionKey)
+    case .panel:
+      section = resolvedOpeningSection()
+    }
+  }
+
+  func restoreDefaultDockSizes() {
+    bottomHeight = ShaarDevToolsMetrics.bottomHeight
+    rightWidth = ShaarDevToolsMetrics.sideWidth
+    leftWidth = ShaarDevToolsMetrics.sideWidth
+  }
+
+  func showSettings() {
+    closeCommandMenu()
+    settingsOpen = true
+  }
+
+  func closeSettings() {
+    settingsOpen = false
+  }
+
+  func resolvedOpeningSection() -> ShaarDevToolsSection {
+    let candidate = openingCandidate(opening)
+    guard sections.contains(candidate) else { return .elements }
+    return candidate
+  }
+
+  private func applyPinnedOpeningSection() {
+    guard case .panel = opening else { return }
+    section = resolvedOpeningSection()
+  }
+
+  private func rememberSectionIfNeeded() {
+    guard opening == .last else { return }
+    layoutDefaults.set(section.rawValue, forKey: ShaarDevToolsOpening.lastSectionKey)
+  }
+
+  private func openingCandidate(_ opening: ShaarDevToolsOpening) -> ShaarDevToolsSection {
+    switch opening {
+    case .last:
+      let saved = layoutDefaults.string(forKey: ShaarDevToolsOpening.lastSectionKey) ?? ""
+      return ShaarDevToolsSection(rawValue: saved) ?? .elements
+    case .panel(let panel):
+      return panel
+    }
   }
 
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
+    let tabChanged = self.target.tabID != target.tabID
     if self.target.host != target.host { disconnectLogTap() }
     self.target = target
     performance.updateTarget(target, committed: committed)
@@ -508,12 +726,19 @@ final class ShaarDevToolsModel {
     rules.updateTarget(target, committed: committed)
     phase2.updateTarget(target, committed: committed)
     viewports.updateTarget(target, committed: committed)
+    rendering.updateTarget(target, committed: committed)
     comparison.updateTarget(target, committed: committed)
     dom.updateTarget(target, committed: committed)
     application.reset()
     cookies.reset()
     sources.reset()
+    pageAudit.reset()
+    auditFixture = nil
     framework.updateAccess(url: target.url)
+    replaceSecuritySummary()
+    if tabChanged { resetSensorForm() }
+    closeCommandMenu()
+    closeSettings()
     repro.updateTarget(target, committed: committed)
     streamGeneration += 1
     eventTask?.cancel()
@@ -526,6 +751,71 @@ final class ShaarDevToolsModel {
       startLocalStreams()
       rules.resume()
     }
+  }
+
+  private struct AuditFixture {
+    var report: InspectorAuditModel.Report?
+    var budget: ShaarPerformanceBudgetResult?
+  }
+
+  var auditCounts: ShaarDevToolsAuditCounts {
+    ShaarDevToolsAuditCounts.make(report: displayedAuditReport, budget: displayedAuditBudget)
+  }
+
+  var auditRows: [ShaarDevToolsAuditRow] {
+    ShaarDevToolsAudits.rows(from: displayedAuditReport)
+  }
+
+  var auditRoute: String? { displayedAuditBudget?.route }
+
+  var auditFailure: String? {
+    if auditFixture != nil { return nil }
+    return pageAudit.failure
+  }
+
+  var auditBusy: Bool {
+    if auditFixture != nil { return false }
+    return pageAudit.busy
+  }
+
+  func presentAuditFixture(
+    report: InspectorAuditModel.Report?, budget: ShaarPerformanceBudgetResult?
+  ) {
+    auditFixture = AuditFixture(report: report, budget: budget)
+  }
+
+  func openAuditFinding(_ id: String) {
+    guard let finding = pageAudit.report?.findings.first(where: { $0.id == id }) else { return }
+    pageAudit.select(finding)
+  }
+
+  private var displayedAuditReport: InspectorAuditModel.Report? {
+    if let auditFixture { return auditFixture.report }
+    return pageAudit.report
+  }
+
+  private var displayedAuditBudget: ShaarPerformanceBudgetResult? {
+    if let auditFixture { return auditFixture.budget }
+    return performance.budgetResult
+  }
+
+  var securityReloadToken: String {
+    "\(securityGeneration)|\(target.url.absoluteString)"
+  }
+
+  func refreshSecurity() async {
+    guard let loadSecurity else { return }
+    let generation = securityGeneration
+    let requested = target
+    let summary = await loadSecurity(requested)
+    guard generation == securityGeneration, target == requested else { return }
+    securitySummary = summary
+  }
+
+  private func replaceSecuritySummary() {
+    securityGeneration += 1
+    securitySummary = ShaarDevToolsSecuritySummary.make(
+      url: target.url, engineLevel: nil, certificate: nil)
   }
 
   func refreshFrameworkComponents() {

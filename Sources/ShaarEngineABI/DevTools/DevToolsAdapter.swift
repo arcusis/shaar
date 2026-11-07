@@ -112,7 +112,7 @@ public enum ShaarDevToolsCommand: UInt32, CaseIterable, Sendable {
   case domResolveNode = 59
   case runtimeCallFunctionOn = 60
   case domGetOuterHTML = 61
-  case networkSetCacheDisabled = 62
+  case networkSetCacheDisabled = 69
 
   fileprivate func permits(_ capability: ShaarDevToolsCapability) -> Bool {
     switch capability {

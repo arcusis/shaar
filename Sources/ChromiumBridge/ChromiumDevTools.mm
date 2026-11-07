@@ -96,9 +96,36 @@ const NSArray<NSString *> *ShaarMethods() {
       @"DOM.markUndoableState", @"DOM.undo", @"DOM.performSearch",
       @"DOM.getSearchResults", @"DOM.discardSearchResults", @"Overlay.highlightNode",
       @"Overlay.hideHighlight", @"DOM.resolveNode", @"Runtime.callFunctionOn",
-      @"DOM.getOuterHTML", @"Network.setCacheDisabled"];
+      @"DOM.getOuterHTML", @"CSS.forcePseudoState",
+      @"Emulation.setTouchEmulationEnabled",
+      @"Overlay.setShowPaintRects", @"Overlay.setShowLayoutShiftRegions",
+      @"Overlay.setShowFPSCounter", @"Network.setCacheDisabled"];
   });
   return methods;
+}
+
+// CSS.forcePseudoState is command 64. Its place in this list would otherwise
+// send 62, which the engine uses for Page.disable. 63 is Page.handleJavaScriptDialog.
+// Emulation.setTouchEmulationEnabled is command 65. Appending it would otherwise send 63.
+// The rendering overlay commands are 66-68 for the same reason.
+// Network.setCacheDisabled is command 69. Appending it would otherwise send 67.
+NSUInteger ShaarDevToolsCommandID(NSString *method) {
+  NSUInteger index = [ShaarMethods() indexOfObject:method];
+  if (index == NSNotFound)
+    return NSNotFound;
+  if ([method isEqualToString:@"CSS.forcePseudoState"])
+    return 64;
+  if ([method isEqualToString:@"Emulation.setTouchEmulationEnabled"])
+    return 65;
+  if ([method isEqualToString:@"Overlay.setShowPaintRects"])
+    return 66;
+  if ([method isEqualToString:@"Overlay.setShowLayoutShiftRegions"])
+    return 67;
+  if ([method isEqualToString:@"Overlay.setShowFPSCounter"])
+    return 68;
+  if ([method isEqualToString:@"Network.setCacheDisabled"])
+    return 69;
+  return index + 1;
 }
 
 BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
@@ -244,14 +271,14 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
               capability:(NSUInteger)capability tabID:(NSString *)tabID
                profileID:(NSString *)profileID windowID:(NSString *)windowID
               completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
-  NSUInteger index = [ShaarMethods() indexOfObject:method];
-  if (index == NSNotFound || (capability != SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR &&
+  NSUInteger command = ShaarDevToolsCommandID(method);
+  if (command == NSNotFound || (capability != SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR &&
                              capability != SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER)) {
     completion(nil, ShaarDevToolsError(@"This DevTools command is unavailable."));
     return;
   }
   NSDictionary *payload = @{@"schemaVersion": @1, @"capability": @(capability),
-                            @"command": @(index + 1), @"params": params ?: @{}};
+                            @"command": @(command), @"params": params ?: @{}};
   [self shaarDevToolsSubmit:SHAAR_OP_DEVTOOLS_CALL tabID:tabID profileID:profileID
                    windowID:windowID payload:payload completion:completion];
 }
@@ -261,14 +288,14 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
                        windowID:(NSString *)windowID contextID:(NSString *)contextID
                      completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
   NSAssert(NSThread.isMainThread, @"Shaar DevTools requires the main thread");
-  NSUInteger index = [ShaarMethods() indexOfObject:method];
-  if (index == NSNotFound || (capability != SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR &&
+  NSUInteger command = ShaarDevToolsCommandID(method);
+  if (command == NSNotFound || (capability != SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR &&
                              capability != SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER)) {
     completion(nil, ShaarDevToolsError(@"This DevTools command is unavailable."));
     return;
   }
   NSDictionary *payload = @{@"schemaVersion": @1, @"capability": @(capability),
-                            @"command": @(index + 1), @"params": params ?: @{}};
+                            @"command": @(command), @"params": params ?: @{}};
   [self shaarPrivateDevToolsSubmit:SHAAR_OP_DEVTOOLS_CALL tabID:tabID
                          windowID:windowID contextID:contextID payload:payload completion:completion];
 }

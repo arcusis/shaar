@@ -96,7 +96,7 @@ const NSArray<NSString *> *ShaarMethods() {
       @"DOM.markUndoableState", @"DOM.undo", @"DOM.performSearch",
       @"DOM.getSearchResults", @"DOM.discardSearchResults", @"Overlay.highlightNode",
       @"Overlay.hideHighlight", @"DOM.resolveNode", @"Runtime.callFunctionOn",
-      @"DOM.getOuterHTML"];
+      @"DOM.getOuterHTML", @"Network.setCacheDisabled"];
   });
   return methods;
 }
@@ -165,6 +165,7 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
       operation != SHAAR_OP_DEVTOOLS_PANEL_CLOSE &&
       operation != SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND &&
       operation != SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST &&
+      operation != SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY &&
       operation != 1080 /* SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES in patch 0024 */) {
     completion(nil, ShaarDevToolsError(@"This panel operation is unavailable."));
     return;

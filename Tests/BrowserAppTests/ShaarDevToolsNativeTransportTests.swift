@@ -10,6 +10,7 @@ import Testing
 
 @MainActor private final class PanelRequesterFixture: ShaarPanelRequesting {
   var operations: [ShaarDevToolsOperation] = []
+  var payloads: [[String: Any]] = []
   var failOpen = false
   var supportsPhase2 = false
 
@@ -17,8 +18,12 @@ import Testing
     _ operation: ShaarDevToolsOperation, target: SiteControlTarget, payload: [String: Any]
   ) async throws -> [String: Any] {
     operations.append(operation)
+    payloads.append(payload)
     if failOpen && operation == .panelOpen { throw CancellationError() }
     if operation == .panelOpen { return ["schemaVersion": 1, "leaseID": 7] }
+    if operation == .panelGetResponseBody {
+      return ["schemaVersion": 1, "body": "shaar-body", "base64Encoded": false]
+    }
     if operation == .panelPhase2Command {
       if !supportsPhase2 { throw CancellationError() }
       return [
@@ -64,6 +69,20 @@ import Testing
       await Task.yield()
     }
     #expect(requester.operations.filter({ $0 == .panelScreencast }).count >= 2)
+  }
+
+  @Test func responseBodyUsesTheOpenPanelLease() async throws {
+    let requester = PanelRequesterFixture()
+    let transport = ShaarDevToolsNativeTransport(
+      requester: requester, windowID: UUID().uuidString)
+    var iterator = transport.messages(for: target).makeAsyncIterator()
+    #expect(await iterator.next() == .streamAvailable)
+    let stored = try await transport.responseBody(requestID: "req-9", for: target)
+    #expect(stored.body == "shaar-body")
+    #expect(!stored.base64Encoded)
+    let payload = try #require(requester.payloads.last { $0["requestID"] as? String == "req-9" })
+    #expect(payload["leaseID"] as? UInt32 == 7)
+    #expect(requester.operations.contains(.panelGetResponseBody))
   }
 
   @Test func unavailablePanelKeepsStreamGated() async {

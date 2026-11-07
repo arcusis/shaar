@@ -157,6 +157,7 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     #expect(shell.repro.history.snapshot().network.count == 1)
 
     shell.close()
+    for _ in 0..<30 where inspector.isOpen { await Task.yield() }
     #expect(!shell.isOpen && !inspector.isOpen)
     #expect(shell.repro.history.snapshot().console.isEmpty)
     let next = SiteControlTarget(
@@ -164,6 +165,41 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
       url: URL(string: "https://example.com/two")!)
     shell.updateTarget(next)
     #expect(shell.target == next && shell.events.isEmpty)
+  }
+
+  @Test func preserveLogKeepsConsoleAcrossNavigationAndClearDropsOnlyConsole() async {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/one")!)
+    let warning = ShaarConsoleEvent(id: UUID(), level: .warning, message: "Slow render", source: nil)
+    let network = ShaarNetworkEvent(id: UUID(), method: "GET", url: "/api/items", status: 200)
+    let transport = OneShotDevToolsTransport(fixture: [.console(warning), .network(network)])
+    let inspector = InspectorModel(target: target, engine: nil)
+    let shell = ShaarDevToolsModel(target: target, transport: transport)
+    shell.open(inspector: inspector)
+    for _ in 0..<20 where shell.consoleCount < 1 || shell.networkCount < 1 { await Task.yield() }
+    #expect(shell.consoleCount == 1 && shell.networkCount == 1)
+    shell.console.preserveLog = true
+    let next = SiteControlTarget(
+      tabID: target.tabID, profileID: target.profileID,
+      url: URL(string: "https://example.com/two")!)
+    shell.updateTarget(next, committed: true)
+    #expect(shell.events.isEmpty)
+    #expect(shell.console.rows(from: shell.consoleEvents).map(\.event.message) == ["Slow render"])
+    shell.console.preserveLog = false
+    shell.console.clearEntries()
+    #expect(shell.console.rows(from: shell.consoleEvents).isEmpty)
+    #expect(shell.console.history.isEmpty)
+    var buffer = ShaarDevToolsEventBuffer()
+    buffer.append(.console(warning))
+    buffer.append(.network(network))
+    let before = buffer.retainedBytes
+    buffer.removeConsole()
+    #expect(buffer.consoleCount == 0)
+    #expect(buffer.networkCount == 1)
+    #expect(buffer.droppedConsoleCount == 0)
+    #expect(buffer.retainedBytes < before)
+    #expect(buffer.retainedBytes >= 0)
+    shell.close()
   }
 
   @Test func anAlreadyOpenInspectorSurvivesShellClose() {
@@ -295,5 +331,22 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     let snapshot = history.snapshot(at: now)
     #expect(snapshot.console.map(\.message) == ["current"])
     #expect(snapshot.network.isEmpty)
+  }
+}
+
+@MainActor private final class OneShotDevToolsTransport: ShaarDevToolsEventTransport {
+  let fixture: [ShaarDevToolsEvent]
+  private var delivered = false
+
+  init(fixture: [ShaarDevToolsEvent]) { self.fixture = fixture }
+
+  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
+    let events = delivered ? [ShaarDevToolsEvent]() : fixture
+    delivered = true
+    return AsyncStream { continuation in
+      continuation.yield(.streamAvailable)
+      for event in events { continuation.yield(.event(event)) }
+      continuation.finish()
+    }
   }
 }

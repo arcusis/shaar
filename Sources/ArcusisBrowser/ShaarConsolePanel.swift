@@ -15,13 +15,14 @@ struct ShaarConsolePanel: View {
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
   private var rows: [ShaarConsoleRow] {
-    if events.count <= 500 && model.projection.result == nil { return model.rows(from: events) }
+    if events.count <= 500 { return model.rows(from: events) }
     return model.projection.result ?? []
   }
 
   var body: some View {
     VStack(spacing: 0) {
       filters
+      consoleTools
       Divider()
       GeometryReader { geometry in
         HStack(spacing: 0) {
@@ -39,6 +40,36 @@ struct ShaarConsolePanel: View {
     .onChange(of: model.level) { _, _ in model.scheduleRows(from: events) }
     .onChange(of: model.origin) { _, _ in model.scheduleRows(from: events) }
     .onChange(of: model.search) { _, _ in model.scheduleRows(from: events) }
+    .onChange(of: model.searchUsesRegex) { _, _ in model.scheduleRows(from: events) }
+  }
+
+  private var consoleTools: some View {
+    HStack(spacing: 12) {
+      Toggle(ShellL10n.string("Regular expression"), isOn: $model.searchUsesRegex)
+        .toggleStyle(.checkbox)
+        .accessibilityIdentifier("shaar.devtools.consoleRegex")
+      Toggle(ShellL10n.string("Preserve log"), isOn: $model.preserveLog)
+        .toggleStyle(.checkbox)
+        .accessibilityIdentifier("shaar.devtools.consolePreserve")
+      if model.regexIsInvalid {
+        Text(ShellL10n.string("Invalid regular expression"))
+          .foregroundStyle(.red)
+          .accessibilityIdentifier("shaar.devtools.consoleRegexInvalid")
+      }
+      Spacer(minLength: 4)
+      Button(ShellL10n.string("Clear"), action: clearLog)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("shaar.devtools.consoleClear")
+    }
+    .font(.system(size: 11))
+    .padding(.horizontal, 12)
+    .frame(height: 28)
+  }
+
+  private func clearLog() {
+    model.clearEntries()
+    guard let inspector else { return }
+    inspector.releaseGroup(ShaarConsoleModel.objectGroup, target: inspector.target)
   }
 
   private var filters: some View {
@@ -384,8 +415,16 @@ struct ShaarConsoleCommandLine: View {
     guard let inspector else { return }
     Task {
       await model.submit { expression in
-        let value = try await inspector.evaluate(expression)
-        return String(describing: value ?? "undefined")
+        let reply = try await inspector.call(
+          "Runtime.evaluate",
+          params: [
+            "expression": expression,
+            "objectGroup": ShaarConsoleModel.objectGroup,
+            "generatePreview": true,
+            "awaitPromise": true,
+            "silent": true,
+          ])
+        return try ShaarConsoleModel.evaluation(from: reply)
       }
     }
   }

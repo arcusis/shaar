@@ -210,6 +210,17 @@ struct ShaarDevToolsEventBuffer {
     }
   }
 
+  mutating func removeConsole() {
+    var removedBytes = 0
+    events.removeAll { event in
+      guard case .console = event else { return false }
+      removedBytes += Self.estimatedBytes(event)
+      return true
+    }
+    consoleCount = 0
+    retainedBytes = max(0, retainedBytes - removedBytes)
+  }
+
   mutating func clear() {
     events.removeAll()
     consoleCount = 0
@@ -401,6 +412,15 @@ final class ShaarDevToolsModel {
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
     framework.updateAccess(url: target.url)
+    console.onClear = { [weak self] in
+      self?.eventBuffer.removeConsole()
+    }
+    network.loadBody = { [weak self] requestID in
+      guard let self, let transport = self.transport as? ShaarDevToolsNativeTransport else {
+        throw ShaarNetworkBodyError.unavailable
+      }
+      return try await transport.responseBody(requestID: requestID, for: self.target)
+    }
   }
 
   private static func savedSize(_ key: String, fallback: CGFloat, in defaults: UserDefaults)
@@ -449,7 +469,7 @@ final class ShaarDevToolsModel {
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
     console.clearEntries()
-    network.clearSelection()
+    network.resetLog()
     rules.close()
     phase2.close()
     viewports.close()
@@ -480,11 +500,11 @@ final class ShaarDevToolsModel {
     streamAvailable = false
     repro.history.stop()
     repro.stopFrames()
+    retainConsoleIfRequested()
     eventBuffer.clear()
     localEventsBySource.removeAll()
     localAvailableSources.removeAll()
-    console.clearEntries()
-    network.clearSelection()
+    network.resetLog()
     rules.updateTarget(target, committed: committed)
     phase2.updateTarget(target, committed: committed)
     viewports.updateTarget(target, committed: committed)
@@ -624,6 +644,14 @@ final class ShaarDevToolsModel {
     }
   }
 
+  private func retainConsoleIfRequested() {
+    if console.preserveLog {
+      console.retain(from: consoleEvents)
+    } else {
+      console.clearEntries()
+    }
+  }
+
   private func receive(_ message: ShaarDevToolsTransportMessage) {
     switch message {
     case .streamAvailable:
@@ -633,9 +661,9 @@ final class ShaarDevToolsModel {
       streamAvailable = false
       repro.history.clear()
       repro.stopFrames()
+      retainConsoleIfRequested()
       eventBuffer.clear()
-      console.clearEntries()
-      network.clearSelection()
+      network.resetLog()
     case .event(let event):
       guard streamAvailable else { return }
       repro.history.record(event, for: target)

@@ -130,6 +130,22 @@ private struct ShaarDOMPanelObserver {
     phase2Failure = error?.localizedDescription
   }
 
+  func responseBody(requestID: String, for target: SiteControlTarget) async throws
+    -> ShaarStoredResponseBody
+  {
+    guard let leaseID = activeLease(for: target), !requestID.isEmpty else {
+      throw ShaarNetworkBodyError.unavailable
+    }
+    let reply = try await requester.request(
+      .panelGetResponseBody, target: target,
+      payload: ["schemaVersion": 1, "leaseID": leaseID, "requestID": requestID])
+    guard activeLease(for: target) == leaseID,
+      let data = try? JSONSerialization.data(withJSONObject: reply),
+      let body = ShaarDevToolsResponseBody.decode(data)
+    else { throw ShaarNetworkBodyError.unavailable }
+    return ShaarStoredResponseBody(body: body.body, base64Encoded: body.base64Encoded)
+  }
+
   func setNetworkRules(_ rules: [ShaarResolvedNetworkRule], for target: SiteControlTarget)
     async throws
   {

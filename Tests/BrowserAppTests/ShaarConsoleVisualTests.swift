@@ -261,6 +261,14 @@ import XCTest
         ShaarDevToolsPanel(model: populated, inspector: inspector, openChromium: {}),
         named: "after-console-detail-\(suffix)", scheme: scheme,
         appearance: appearance, root: root)
+      populated.console.searchUsesRegex = true
+      populated.console.search = "orders"
+      populated.console.preserveLog = true
+      populated.console.command = "document.title"
+      try capture(
+        ShaarDevToolsPanel(model: populated, inspector: inspector, openChromium: {}),
+        named: "after-console-tools-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
       populated.close()
     }
     XCTAssertTrue(NSApp.keyWindow === previous)

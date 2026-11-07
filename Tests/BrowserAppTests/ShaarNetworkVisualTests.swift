@@ -93,6 +93,17 @@ import XCTest
         named: "after-network-results-\(suffix)", scheme: scheme,
         appearance: appearance, root: root)
       populated.network.selectedID = requestID
+      populated.network.statusFilter = .serverError
+      populated.network.conditions.throttle = .slow3G
+      populated.network.conditions.cacheDisabled = true
+      populated.network.detailTab = .preview
+      try capture(
+        ShaarDevToolsPanel(model: populated, inspector: inspector, openChromium: {}),
+        named: "after-network-tools-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
+      populated.network.statusFilter = .any
+      populated.network.conditions.throttle = .none
+      populated.network.conditions.cacheDisabled = false
       for tab in ShaarNetworkModel.DetailTab.allCases {
         populated.network.detailTab = tab
         try capture(

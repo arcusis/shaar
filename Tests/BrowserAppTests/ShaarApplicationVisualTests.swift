@@ -4,11 +4,11 @@
 
 import AppKit
 import BrowserCore
-import ShaarEngineABI
 import SwiftUI
 import XCTest
 
 @testable import ArcusisBrowser
+@testable import ShaarEngineABI
 
 @MainActor private final class ApplicationCookieFixture: ShaarCookieStore {
   let items: [ShaarSiteCookie]
@@ -48,18 +48,48 @@ import XCTest
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
-    let fixture = ShaarPhase2FixtureTransport { command in
+    let cacheBody = ApplicationVisualCacheBody(Data("shaar-cached-body".utf8).base64EncodedString())
+    let fixture = ShaarPhase2FixtureTransport(
+      events: [ApplicationWorkerFixtures.registration, ApplicationWorkerFixtures.version]
+    ) { command in
       switch command {
-      case .storageItems:
+      case .storageItems(let local, _, _):
+        if local {
+          return [
+            "items": [
+              ["key": "theme", "value": "dark"],
+              ["key": "locale", "value": "en-US"],
+              ["key": "feature.preview", "value": "enabled"],
+            ], "hasMore": false,
+          ]
+        }
         return [
           "items": [
-            ["key": "theme", "value": "dark"],
-            ["key": "locale", "value": "en-US"],
-            ["key": "feature.preview", "value": "enabled"],
+            ["key": "session-key", "value": "session-original"],
+            ["key": "draft", "value": "unsaved"],
           ], "hasMore": false,
         ]
       case .indexedDBNames: return ["items": [["name": "notes"]]]
-      case .cacheNames: return ["items": [["cacheID": "cache-1", "name": "v1"]]]
+      case .indexedDBSchema: return ["items": [["name": "entries"]]]
+      case .indexedDBData:
+        return [
+          "items": [
+            ["key": "id-000", "value": "value-000"],
+            ["key": "id-001", "value": "value-001"],
+            ["key": "id-002", "value": "value-002"],
+          ], "hasMore": true,
+        ]
+      case .cacheNames: return ["items": [["cacheID": "cache-1", "name": "shaar-app"]]]
+      case .cacheEntries:
+        return [
+          "items": [
+            [
+              "url": "https://example.com/inspector-cached.txt", "method": "GET", "status": 200,
+            ]
+          ]
+        ]
+      case .cacheResponse:
+        return ["items": [], "body": cacheBody.encoded, "base64Encoded": true]
       default: return ["items": []]
       }
     }
@@ -97,6 +127,47 @@ import XCTest
           model: live, inspector: inspector, openChromium: {}, cookieStore: cookieFixture),
         named: "after-application-cookie-items-\(suffix)", scheme: scheme,
         appearance: appearance, root: root)
+      live.application.selectArea(.session)
+      await live.application.refresh()
+      try capture(
+        ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
+        named: "after-application-session-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
+      live.application.selectArea(.indexedDB)
+      await live.application.refresh()
+      live.application.selectDatabase("notes")
+      await live.application.refresh()
+      live.application.selectStore("entries")
+      await live.application.refresh()
+      live.application.selectedID = live.application.rows.first?.id
+      try capture(
+        ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
+        named: "after-application-indexeddb-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
+      cacheBody.encoded = Data("shaar-cached-body".utf8).base64EncodedString()
+      live.application.selectArea(.cache)
+      await live.application.refresh()
+      live.application.selectCache("cache-1")
+      await live.application.refresh()
+      live.application.selectCacheEntry("https://example.com/inspector-cached.txt")
+      await live.application.refresh()
+      try capture(
+        ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
+        named: "after-application-cache-text-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
+      cacheBody.encoded = Data([0x00, 0xFF, 0xFE]).base64EncodedString()
+      await live.application.refresh()
+      try capture(
+        ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
+        named: "after-application-cache-binary-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
+      for _ in 0..<30 where live.phase2.events.count < 2 { await Task.yield() }
+      live.application.selectArea(.workers)
+      await live.application.refresh()
+      try capture(
+        ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
+        named: "after-application-workers-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
       live.close()
     }
     XCTAssertTrue(NSApp.keyWindow === previous)
@@ -117,4 +188,9 @@ import XCTest
     XCTAssertEqual(image.pixelsWide, 1040)
     XCTAssertEqual(image.pixelsHigh, 440)
   }
+}
+
+@MainActor private final class ApplicationVisualCacheBody {
+  var encoded: String
+  init(_ encoded: String) { self.encoded = encoded }
 }

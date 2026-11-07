@@ -52,11 +52,29 @@ final class AgentBridgeTests: XCTestCase {
     model.enable()
     XCTAssertTrue(model.isConnected)
     XCTAssertTrue(model.hasOneTimeToken)
+    let token = String(repeating: "a", count: 43)
+    XCTAssertEqual(model.connections.map(\.title), ["Local agent 1"])
     XCTAssertTrue(
       model.setupCommand(for: .claude)?.contains("--wsEndpoint=ws://127.0.0.1:9222") == true)
     XCTAssertTrue(
       model.setupCommand(for: .codex)?.contains("--wsHeaders='{\"Authorization\":\"Bearer ") == true
     )
+    let cursor = try XCTUnwrap(model.setupCommand(for: .cursor))
+    let cursorJSON = try XCTUnwrap(cursor.data(using: .utf8))
+    let cursorObject = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: cursorJSON) as? [String: Any])
+    let servers = try XCTUnwrap(cursorObject["mcpServers"] as? [String: Any])
+    let shaar = try XCTUnwrap(servers["shaar-agent"] as? [String: Any])
+    let args = try XCTUnwrap(shaar["args"] as? [String])
+    XCTAssertTrue(args.contains("--wsEndpoint=ws://127.0.0.1:9222/devtools/browser/id"))
+    XCTAssertTrue(args.contains { $0.contains(token) })
+    XCTAssertEqual(
+      model.documentedInvocation,
+      "npx -y chrome-devtools-mcp@latest --wsEndpoint=ws://127.0.0.1:9222/devtools/browser/id --wsHeaders='{\"Authorization\":\"Bearer <token>\"}'"
+    )
+    XCTAssertFalse(model.documentedInvocation?.contains(token) == true)
+    model.receive(enabled: true, connectionCount: 2)
+    XCTAssertEqual(model.connections.map(\.title), ["Local agent 1", "Local agent 2"])
     model.update(
       target: SiteControlTarget(
         tabID: first.tabID, profileID: first.profileID,
@@ -138,21 +156,29 @@ final class AgentBridgeTests: XCTestCase {
     }
     let before = try renderOffscreen(
       InspectorPanel(model: inspector), size: CGSize(width: 320, height: 500))
+    let consent = try renderOffscreen(
+      AgentBridgeControls(model: bridge), size: CGSize(width: 340, height: 180))
     bridge.enable()
     let after = try renderOffscreen(
-      AgentBridgeControls(model: bridge), size: CGSize(width: 320, height: 300))
+      AgentBridgeControls(model: bridge), size: CGSize(width: 340, height: 504))
     bridge.receive(enabled: true, connectionCount: 1)
+    let agents = try renderOffscreen(
+      AgentBridgeControls(model: bridge), size: CGSize(width: 340, height: 530))
     let banner = try renderOffscreen(
       AgentBridgeBanner(model: bridge), size: CGSize(width: 700, height: 34))
     XCTAssertGreaterThan(before.count, 2_000)
+    XCTAssertGreaterThan(consent.count, 2_000)
     XCTAssertGreaterThan(after.count, 2_000)
+    XCTAssertGreaterThan(agents.count, 2_000)
     XCTAssertGreaterThan(banner.count, 1_000)
     XCTAssertTrue(NSApp.keyWindow === previous)
     if let path = ProcessInfo.processInfo.environment["SHAAR_1085_SCREENSHOT_DIR"] {
       let directory = URL(fileURLWithPath: path, isDirectory: true)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
       try before.write(to: directory.appending(path: "before-inspector.png"))
+      try consent.write(to: directory.appending(path: "after-consent.png"))
       try after.write(to: directory.appending(path: "after-agent-controls.png"))
+      try agents.write(to: directory.appending(path: "after-connected-agents.png"))
       try banner.write(to: directory.appending(path: "after-connected-banner.png"))
     }
   }
@@ -163,6 +189,7 @@ final class AgentBridgeTests: XCTestCase {
       backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: .aqua)
+    window.backgroundColor = .windowBackgroundColor
     let hosting = NSHostingView(
       rootView: view.frame(width: size.width, height: size.height)
         .environment(\.colorScheme, .light))

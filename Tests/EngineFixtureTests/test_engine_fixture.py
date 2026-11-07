@@ -164,6 +164,35 @@ class SplitProbePhaseArgumentTests(unittest.TestCase):
 
 
 class DevelopmentModeRunnerTests(unittest.TestCase):
+    def test_inspector_tools_seeds_storage_and_service_worker_bytes_change(self):
+        fixture.SW_GENERATION = 1
+        server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        origin = f'http://127.0.0.1:{server.server_port}'
+        with urllib.request.urlopen(f'{origin}/inspector-tools') as response:
+            body = response.read()
+            policy = response.headers['Content-Security-Policy']
+            self.assertIn("script-src 'self' 'unsafe-inline'", policy)
+            self.assertIn("worker-src 'self'", policy)
+            self.assertIn(b"localStorage.setItem('inspector-key','original')", body)
+            self.assertIn(b"sessionStorage.setItem('session-key','session-original')", body)
+            self.assertIn(b"indexedDB.open('shaar-notes',1)", body)
+            self.assertIn(b"caches.open('shaar-app')", body)
+            self.assertIn(b'inspector-http-only=original', response.headers['Set-Cookie'].encode())
+        with urllib.request.urlopen(f'{origin}/inspector-sw.js') as first:
+            first_body = first.read()
+            self.assertIn(b'shaar-sw 1', first_body)
+            self.assertEqual(first.headers['Cache-Control'], 'no-store')
+        with urllib.request.urlopen(f'{origin}/inspector-sw-bump') as bump:
+            self.assertEqual(bump.read(), b'2')
+        with urllib.request.urlopen(f'{origin}/inspector-sw.js') as second:
+            second_body = second.read()
+            self.assertIn(b'shaar-sw 2', second_body)
+            self.assertNotEqual(first_body, second_body)
+
     def test_local_framework_resources_are_allowed_by_fixture_csp(self):
         server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

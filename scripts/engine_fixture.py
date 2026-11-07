@@ -453,6 +453,25 @@ WEB_STORE_FIT_PAGE = b"""<!doctype html><html data-arcusis-fixture="web-store-fi
 
 STALL_RELEASE = threading.Event()
 STALL_SECONDS = 120
+SW_LOCK = threading.Lock()
+SW_GENERATION = 1
+
+
+def inspector_service_worker_body():
+    with SW_LOCK:
+        generation = SW_GENERATION
+    return (
+        f"// shaar-sw {generation}\n"
+        "self.addEventListener('install', (event) => { self.skipWaiting(); });\n"
+        "self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()); });\n"
+    ).encode('utf-8')
+
+
+def bump_inspector_service_worker():
+    global SW_GENERATION
+    with SW_LOCK:
+        SW_GENERATION += 1
+        return SW_GENERATION
 
 
 # A silent canvas stream: no network or audio device. The handlers log each Media Session
@@ -479,6 +498,10 @@ for(const action of ['play','pause','previoustrack','nexttrack']){
 </script></html>"""
 
 PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://trackertest.org:* http://localhost:*"
+INSPECTOR_TOOLS_CSP = (
+    PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self' 'unsafe-inline'")
+    + "; worker-src 'self'"
+)
 MEDIA_SESSION_CSP = PAGE_CSP + "; media-src blob:"
 MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seekable-clip.webm'
 
@@ -553,12 +576,33 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 <script>document.addEventListener('click',function(){document.getElementById('marker').style.background='#dc2626'});
 document.addEventListener('wheel',function(){document.getElementById('marker').style.background='#7c3aed'});</script></html>""")
             return
+        if path == '/inspector-sw.js':
+            body = inspector_service_worker_body()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Service-Worker-Allowed', '/')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == '/inspector-sw-bump':
+            body = str(bump_inspector_service_worker()).encode('ascii')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == '/inspector-tools':
             self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">
 <title>Page tools fixture</title><style>body{font:18px Arial;padding:32px;background:white;color:#172033}button{padding:14px}#shift{padding:20px;padding-top:env(safe-area-inset-top);background:#eef2ff}</style>
 <h1>Measure the real page.</h1><button id="performance-input" onclick="window.clicked=(window.clicked||0)+1;const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div><input id="private-fixture" type="password" value="password-private-fixture">
-<script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');</script></html>""", csp=PAGE_CSP + "; connect-src 'self'", cookie='inspector-http-only=original; Path=/; HttpOnly; SameSite=Lax')
+<script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');
+(async()=>{try{const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('shaar-notes',1);request.onupgradeneeded=()=>{request.result.createObjectStore('entries');};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});const tx=db.transaction('entries','readwrite');const store=tx.objectStore('entries');for(let i=0;i!==60;i+=1){const id=String(i).padStart(3,'0');store.put('value-'+id,'id-'+id);}await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});const cache=await caches.open('shaar-app');await cache.put('/inspector-cached.txt',new Response('shaar-cached-body',{status:200,headers:{'Content-Type':'text/plain'}}));window.shaarApplicationReady=true;}catch(error){window.shaarApplicationError=String(error);}})();
+</script></html>""", csp=INSPECTOR_TOOLS_CSP, cookie='inspector-http-only=original; Path=/; HttpOnly; SameSite=Lax')
             return
         if path == '/inspector-slow':
             time.sleep(0.15)
@@ -648,6 +692,35 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+        if path == '/account/agent-bridge-network':
+            body = b'shaar-agent-network-granted'
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == '/account/agent-bridge':
+            self.html(b"""<!doctype html><html data-agent-bridge="granted"><meta charset="utf-8">
+<title>Agent bridge granted tab</title>
+<main id="shaar-agent-dom" data-role="granted">Granted tab DOM</main>
+<script>
+window.__shaarAgent = {role:'granted', console:['shaar-agent-console-granted'], network:null};
+console.log('shaar-agent-console-granted');
+fetch('/account/agent-bridge-network').then(function (response) { return response.text(); })
+  .then(function (body) { window.__shaarAgent.network = body; });
+</script></html>""")
+            return
+        if path == '/account/agent-bridge-other':
+            self.html(b"""<!doctype html><html data-agent-bridge="other"><meta charset="utf-8">
+<title>Agent bridge other tab</title>
+<main id="shaar-agent-dom" data-role="other">Other tab DOM</main>
+<script>
+window.__shaarAgent = {role:'other', console:['shaar-agent-console-other'], network:'shaar-agent-network-other'};
+console.log('shaar-agent-console-other');
+</script></html>""")
             return
         if path.startswith('/download/'):
             self.download(path.rsplit('/', 1)[-1])

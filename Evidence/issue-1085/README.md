@@ -1,37 +1,45 @@
 # Agent bridge app evidence
 
-The Inspector exposes agent control for a regular web tab. A connected agent adds a banner above that tab until the connection ends; Disconnect is available in both places. The engine currently returns `SHAAR_UNSUPPORTED_CAPABILITY` for the remote-control operations, so these offscreen captures demonstrate app UI and state only.
+Inspector asks before it allows a coding agent to read the selected regular tab. The consent names Console, Network, and DOM, and it stays limited to that tab. After the user allows it, Shaar shows the loopback MCP endpoint, one-time Claude, Codex, and Cursor setup commands, and the local agents attached to the tab. Revoke ends that tab's session for every attached agent. A connected agent also keeps a banner on the tab until Disconnect.
 
-| Before | After |
+The screenshots come from `AgentBridgeTests.testOffscreenBeforeAndAfterScreenshots`. The test creates an invisible `NSWindow`, checks that it never becomes visible or key, and renders its `NSHostingView` into a bitmap. No browser window was opened.
+
+| Before | Consent |
 | --- | --- |
-| ![Inspector before agent controls](before-inspector.png) | ![Agent controls with a one-time setup action](after-agent-controls.png) |
+| ![Inspector before agent consent](before-inspector.png) | ![Per-tab agent consent](after-consent.png) |
+
+![MCP endpoint and one-time setup](after-agent-controls.png)
+
+![Connected agents with revoke](after-connected-agents.png)
 
 ![Connected-tab banner](after-connected-banner.png)
 
-The screenshots come from `AgentBridgeTests.testOffscreenBeforeAndAfterScreenshots`. The test creates an invisible `NSWindow`, checks that it never becomes visible or key, and renders its `NSHostingView` into a bitmap. The connected state uses a fixture transport, not a live remote socket.
+## MCP endpoint
 
-## Setup after engine support lands
+Allow the bridge for one regular tab from Inspector. Shaar shows a loopback WebSocket endpoint:
 
-Enable the bridge for a regular tab from Inspector. Shaar's **Copy Claude setup** and **Copy Codex setup** actions fill in the short-lived token and exact loopback WebSocket endpoint. Paste the command locally, then connect the agent. Disconnect in Shaar when finished. A new enable rotates the token, so an old agent configuration must be replaced.
+```text
+ws://127.0.0.1:PORT/devtools/browser/OPAQUE_ID
+```
 
-The generated Claude Code command has this shape:
+`chrome-devtools-mcp` attaches with that endpoint and a bearer token. The documented command shape, with the token still redacted, is:
+
+```sh
+npx -y chrome-devtools-mcp@latest --wsEndpoint=ws://127.0.0.1:PORT/devtools/browser/OPAQUE_ID --wsHeaders='{"Authorization":"Bearer <token>"}'
+```
+
+Copy Claude setup fills this in:
 
 ```sh
 claude mcp add shaar-agent -- npx -y chrome-devtools-mcp@latest --wsEndpoint=ws://127.0.0.1:PORT/devtools/browser/OPAQUE_ID --wsHeaders='{"Authorization":"Bearer TOKEN"}'
 ```
 
-The Codex CLI equivalent is:
+Copy Codex setup:
 
 ```sh
 codex mcp add shaar-agent -- npx -y chrome-devtools-mcp@latest --wsEndpoint=ws://127.0.0.1:PORT/devtools/browser/OPAQUE_ID --wsHeaders='{"Authorization":"Bearer TOKEN"}'
 ```
 
-For a Codex `~/.codex/config.toml` entry, use:
+Copy Cursor setup writes a `mcp.json` server entry with the same `npx` arguments. The copied command contains the bearer token. Shaar forgets its copy after the action and clears an unchanged clipboard after two minutes. A new allow rotates the token. Never place the token in a repository or issue comment.
 
-```toml
-[mcp_servers.shaar-agent]
-command = "npx"
-args = ["-y", "chrome-devtools-mcp@latest", "--wsEndpoint=ws://127.0.0.1:PORT/devtools/browser/OPAQUE_ID", '--wsHeaders={"Authorization":"Bearer TOKEN"}']
-```
-
-Replace `PORT`, `OPAQUE_ID`, and `TOKEN` with the values from the current enable. The copied commands contain the bearer token; Shaar forgets its copy after the action and clears an unchanged clipboard after two minutes. Never place the token in a repository or issue comment.
+Get MCP in DevTools does not open a Chromium window. The menu entry stays hidden in the Shaar embedder, and a direct request for the MCP documentation URL opens an app-owned tab. Closing that tab leaves DevTools and the browser running.

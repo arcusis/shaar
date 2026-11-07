@@ -87,6 +87,13 @@ import Foundation
       }
       return "HttpOnly fixture cookie listed, edited, read back, deleted"
     }
+    let storage = ApplicationStorageProof(
+      application: shell.application, phase2: shell.phase2, inspector: inspector)
+    await check("application-local-storage") { try await storage.local() }
+    await check("application-session-storage") { try await storage.session() }
+    await check("application-indexed-db") { try await storage.indexedDB() }
+    await check("application-cache-storage") { try await storage.cache() }
+    await check("application-service-worker") { try await storage.serviceWorker() }
     await check("network-rules") {
       try await self.wait("network rules lease") { shell.rules.available }
       shell.rules.createNew()
@@ -379,7 +386,9 @@ import Foundation
 /// Stores every panel outcome before enforcing the native fixture gate.
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
-    "console-network", "application-cookie", "network-rules", "viewports", "masked-repro",
+    "console-network", "application-cookie", "application-local-storage",
+    "application-session-storage", "application-indexed-db", "application-cache-storage",
+    "application-service-worker", "network-rules", "viewports", "masked-repro",
     "elements-live",
   ]
 

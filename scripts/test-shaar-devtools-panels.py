@@ -10,6 +10,7 @@ from http.server import ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -26,8 +27,8 @@ def main() -> None:
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as temporary:
-            root = Path(temporary)
+        root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
+        try:
             (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
             (root / "home").mkdir()
             report = root / "initial.json"
@@ -45,7 +46,7 @@ def main() -> None:
             )
             process = subprocess.run(
                 command, env=environment, capture_output=True, text=True,
-                timeout=220, check=False,
+                timeout=400, check=False,
             )
             evidence = json.loads(report.read_text()) if report.exists() else None
             panel = json.loads(details.read_text()) if details.exists() else None
@@ -65,6 +66,9 @@ def main() -> None:
             }, indent=2))
             if process.returncode or not evidence or not evidence.get("passed"):
                 raise SystemExit(1)
+        finally:
+            # The app can still be writing its profile when this process exits.
+            shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
 
 

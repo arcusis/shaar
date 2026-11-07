@@ -14,6 +14,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case network = "Network"
   case application = "Application"
   case performance = "Performance"
+  case memory = "Memory"
   case coverage = "Coverage"
   case audits = "Audits"
   case sources = "Sources"
@@ -366,6 +367,7 @@ final class ShaarDevToolsModel {
   let application: ShaarApplicationModel
   let cookies = ShaarCookieModel()
   let performance: ShaarPerformanceModel
+  let memory: ShaarMemoryModel
   let coverage = ShaarDevToolsCoverageModel()
   let sources: ShaarSourcesModel
   let cssOverview: ShaarDevToolsCSSOverviewModel
@@ -430,7 +432,8 @@ final class ShaarDevToolsModel {
     rulesStore: ShaarNetworkRuleStore = ShaarNetworkRuleStore(),
     layoutDefaults: UserDefaults = .standard,
     allowsWebKitComparison: Bool = false,
-    comparisonPreview: ShaarWebKitComparisonPreview? = nil
+    comparisonPreview: ShaarWebKitComparisonPreview? = nil,
+    memoryTransport: any ShaarMemoryTransport = ShaarMemoryPendingTransport()
   ) {
     self.target = target
     securitySummary = ShaarDevToolsSecuritySummary.make(
@@ -460,6 +463,7 @@ final class ShaarDevToolsModel {
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
     performance = ShaarPerformanceModel(target: target, phase2: phase2)
+    memory = ShaarMemoryModel(transport: memoryTransport)
     sources = ShaarSourcesModel(
       phase2: phase2, inspectorContent: sourceInspectorContent,
       loadSourceData: sourceLoader)
@@ -541,6 +545,7 @@ final class ShaarDevToolsModel {
     application.reset()
     cookies.reset()
     performance.reset()
+    memory.reset()
     coverage.detach()
     sources.reset()
     cssOverview.reset()
@@ -746,6 +751,7 @@ final class ShaarDevToolsModel {
     cookies.reset()
     sources.reset()
     cssOverview.reset()
+    memory.reset()
     coverage.retarget(target)
     pageAudit.reset()
     auditFixture = nil

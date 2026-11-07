@@ -402,9 +402,45 @@ import Foundation
     await check("console-tools") {
       try await self.proveConsoleTools(shell, inspector: inspector)
     }
+    await check("memory") {
+      try await self.proveMemory(shell, target: target)
+    }
     return try results.finish(
       root: root, phase: phase, engine: engine.runtime.chromiumVersion,
       hidden: NSApp.windows.allSatisfy { !$0.isVisible })
+  }
+
+  private func proveMemory(_ shell: ShaarDevToolsModel, target: SiteControlTarget) async throws
+    -> String
+  {
+    let summary = try ShaarHeapSnapshotReader.summary(from: ShaarMemoryFixture.snapshotData())
+    guard summary.nodeCount == 5, summary.totalBytes == 4800,
+      summary.constructors.first?.name == "Window"
+    else { throw Failure("Heap fixture summary did not match") }
+    let allocated = try ShaarHeapSnapshotReader.allocations(
+      from: ShaarMemoryFixture.allocationProfileData())
+    guard allocated.first?.name == "HTMLDivElement", allocated.first?.selfBytes == 1500 else {
+      throw Failure("Allocation fixture did not match")
+    }
+    let developer = engine.developerModel(for: target)
+    shell.memory.adoptLiveTransport(developer)
+    await shell.memory.takeSnapshot()
+    if shell.memory.support == .needsEngine {
+      for language in BrowserLanguage.allCases {
+        let text = BrowserLocalization.string(
+          "Live heap snapshots need engine support", table: "Shell", language: language)
+        if Self.namesEngineVersion(text) {
+          throw Failure("Memory gate names an engine version")
+        }
+      }
+      return
+        "Heap fixture is 4800 bytes across 5 nodes. Live snapshot is waiting on the engine build."
+    }
+    guard let live = shell.memory.snapshot, live.nodeCount > 0 else {
+      throw Failure(shell.memory.failure ?? "Live heap snapshot was empty")
+    }
+    return
+      "Live heap snapshot has \(live.nodeCount) nodes and \(live.totalBytes) bytes. Fixture summary matched."
   }
 
   private func proveSyncedViewports(_ shell: ShaarDevToolsModel) async throws -> String {
@@ -1004,6 +1040,8 @@ import Foundation
     "Live component tree is unavailable for this tab",
     "Live Application is unavailable for this tab",
     "Live Performance is unavailable for this tab",
+    "Live heap snapshots need engine support",
+    "Memory tools are unavailable for this tab",
     "Live Sources are unavailable for this tab",
     "Repro capture needs engine support",
     "Live Viewports need engine support",
@@ -1065,7 +1103,7 @@ import Foundation
     "application-local-storage", "application-session-storage", "application-indexed-db",
     "application-cache-storage", "application-service-worker", "network-rules", "source-bytes",
     "css", "viewports", "masked-repro", "elements-live", "elements-inspector", "elements-scale",
-    "split-shell", "console-tools",
+    "split-shell", "console-tools", "memory",
   ]
 
   private var entries: [String: [String: Any]] = [:]

@@ -34,6 +34,12 @@ import Foundation
     _ shell: ShaarDevToolsModel, inspector: InspectorModel, report: ShaarDevToolsSmokeReport
   ) async {
     shell.section = .elements
+    let ready = await wait(attempts: 80) { shell.dom.available }
+    if !ready {
+      report.fail("world2-elements-search", "Elements DOM lease did not reconnect")
+      return
+    }
+    await shell.dom.loadDocument(depth: 2)
     let created = try? await inspector.evaluate(
       "(()=>{const node=document.createElement('div');node.id='shaar-round2-search';document.body.appendChild(node);return true})()")
     let live = try? await inspector.evaluate(

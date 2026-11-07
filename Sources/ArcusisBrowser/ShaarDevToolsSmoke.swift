@@ -404,9 +404,22 @@ import Vision
     let appeared = await wait(attempts: 40) {
       ShaarDevToolsSmokeAccess.element(identifier: disclosure, in: context.hosting) != nil
     }
-    let pressed = appeared
-      ? ShaarDevToolsSmokeAccess.press(identifier: disclosure, in: context.hosting)
-      : ShaarDevToolsSmokeAccess.pressDisclosureText("<body>", in: context.hosting)
+    var pressed = appeared
+      && ShaarDevToolsSmokeAccess.press(identifier: disclosure, in: context.hosting)
+    if !pressed {
+      for _ in 0..<4 {
+        guard ShaarDevToolsSmokeAccess.press(label: "Expand node", in: context.hosting) else {
+          break
+        }
+        pressed = true
+        await settle(context)
+        if shell.dom.expanded.contains(body.id) { break }
+      }
+    }
+    if !shell.dom.expanded.contains(body.id) {
+      pressed = ShaarDevToolsSmokeAccess.pressDisclosureText("<body>", in: context.hosting)
+        || pressed
+    }
     let loaded = await wait(attempts: 80) {
       (shell.dom.nodes[body.id]?.childrenIDs.count ?? 0) > 0
     }

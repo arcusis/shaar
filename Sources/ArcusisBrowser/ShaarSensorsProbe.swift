@@ -74,24 +74,30 @@ import Foundation
       "allWindowsHidden": host.contexts.values.allSatisfy { !$0.window.isVisible },
       "targetURL": target.url.absoluteString,
     ]
-    report["systemTimezone"] = await reading(timeZoneExpression, on: target, runtime: runtime, windowID: windowID)
-    report["systemLocale"] = await reading(localeExpression, on: target, runtime: runtime, windowID: windowID)
+    report["systemTimezone"] = await reading(
+      timeZoneExpression, on: target, runtime: runtime, windowID: windowID)
+    report["systemLocale"] = await reading(
+      localeExpression, on: target, runtime: runtime, windowID: windowID)
     report["tokyoError"] = await attempt(
       "Emulation.setTimezoneOverride", params: ["timezoneId": "Asia/Tokyo"],
       on: target, runtime: runtime, windowID: windowID)
-    report["tokyoTimezone"] = await reading(timeZoneExpression, on: target, runtime: runtime, windowID: windowID)
+    report["tokyoTimezone"] = await reading(
+      timeZoneExpression, on: target, runtime: runtime, windowID: windowID)
     report["emptyTimezoneError"] = await attempt(
       "Emulation.setTimezoneOverride", params: ["timezoneId": ""],
       on: target, runtime: runtime, windowID: windowID)
-    report["emptyTimezoneZone"] = await reading(timeZoneExpression, on: target, runtime: runtime, windowID: windowID)
+    report["emptyTimezoneZone"] = await reading(
+      timeZoneExpression, on: target, runtime: runtime, windowID: windowID)
     report["frenchError"] = await attempt(
       "Emulation.setLocaleOverride", params: ["locale": "fr-FR"],
       on: target, runtime: runtime, windowID: windowID)
-    report["frenchLocale"] = await reading(localeExpression, on: target, runtime: runtime, windowID: windowID)
+    report["frenchLocale"] = await reading(
+      localeExpression, on: target, runtime: runtime, windowID: windowID)
     report["emptyLocaleError"] = await attempt(
       "Emulation.setLocaleOverride", params: ["locale": ""],
       on: target, runtime: runtime, windowID: windowID)
-    report["emptyLocaleValue"] = await reading(localeExpression, on: target, runtime: runtime, windowID: windowID)
+    report["emptyLocaleValue"] = await reading(
+      localeExpression, on: target, runtime: runtime, windowID: windowID)
     let idleError = await attempt(
       "Emulation.clearIdleOverride", params: [:], on: target, runtime: runtime, windowID: windowID)
     report["idleError"] = idleError
@@ -142,7 +148,9 @@ import Foundation
   }
 
   private static func write(_ report: [String: Any], to url: URL) {
-    guard let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+    guard
+      let data = try? JSONSerialization.data(
+        withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
     else { return }
     try? data.write(to: url, options: .atomic)
   }

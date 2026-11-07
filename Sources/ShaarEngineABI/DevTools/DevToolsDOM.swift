@@ -36,7 +36,7 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
     attributes.prefix(3).map { "\($0.name)=\"\($0.value)\"" }.joined(separator: " ")
   }
 
-  static func decode(
+  public static func decode(
     _ fields: [String: Any], parentID: Int?, relation: ShaarDOMRelation,
     childrenIDs: [Int] = []
   ) -> Self? {

@@ -78,6 +78,7 @@
     "Sheets": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sheets"}},"he":{"stringUnit":{"state":"translated","value":"גיליונות"}}}},
     "Sheets with this color": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sheets with this color"}},"he":{"stringUnit":{"state":"translated","value":"גיליונות עם הצבע הזה"}}}},
     "Sheets with this font": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sheets with this font"}},"he":{"stringUnit":{"state":"translated","value":"גיליונות עם הגופן הזה"}}}},
+    "%1$@ declaration": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%1$@ declaration"}},"he":{"stringUnit":{"state":"translated","value":"%1$@ הצהרה"}}}},
     "%1$@ declarations": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%1$@ declarations"}},"he":{"stringUnit":{"state":"translated","value":"%1$@ הצהרות"}}}},
     "CSS overview is scoped to this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"CSS overview is scoped to this tab"}},"he":{"stringUnit":{"state":"translated","value":"סקירת ה־CSS חלה על הלשונית הזו"}}}},
     "Overview includes at most 32 style sheets and 512 KB of each one.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Overview includes at most 32 style sheets and 512 KB of each one."}},"he":{"stringUnit":{"state":"translated","value":"הסקירה כוללת עד 32 גיליונות סגנון, ו־512 KB מכל אחד."}}}},

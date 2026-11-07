@@ -14,6 +14,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case network = "Network"
   case application = "Application"
   case performance = "Performance"
+  case coverage = "Coverage"
   case audits = "Audits"
   case sources = "Sources"
   case cssOverview = "CSS overview"
@@ -365,6 +366,7 @@ final class ShaarDevToolsModel {
   let application: ShaarApplicationModel
   let cookies = ShaarCookieModel()
   let performance: ShaarPerformanceModel
+  let coverage = ShaarDevToolsCoverageModel()
   let sources: ShaarSourcesModel
   let cssOverview: ShaarDevToolsCSSOverviewModel
   let repro: ShaarReproModel
@@ -494,6 +496,7 @@ final class ShaarDevToolsModel {
     comparisonInspector = inspector
     pageAudit.inspector = inspector
     attachSensorSender(inspector)
+    coverage.attach(inspector, target: target)
     if !inspector.isOpen {
       inspector.open()
       ownedInspector = inspector
@@ -538,6 +541,7 @@ final class ShaarDevToolsModel {
     application.reset()
     cookies.reset()
     performance.reset()
+    coverage.detach()
     sources.reset()
     cssOverview.reset()
     pageAudit.reset()
@@ -742,6 +746,7 @@ final class ShaarDevToolsModel {
     cookies.reset()
     sources.reset()
     cssOverview.reset()
+    coverage.retarget(target)
     pageAudit.reset()
     auditFixture = nil
     framework.updateAccess(url: target.url)

@@ -100,7 +100,10 @@ const NSArray<NSString *> *ShaarMethods() {
       @"Emulation.setTouchEmulationEnabled",
       @"Overlay.setShowPaintRects", @"Overlay.setShowLayoutShiftRegions",
       @"Overlay.setShowFPSCounter", @"Network.setCacheDisabled",
-      @"Emulation.setIdleOverride", @"Emulation.clearIdleOverride"];
+      @"Emulation.setIdleOverride", @"Emulation.clearIdleOverride",
+      @"Profiler.startPreciseCoverage", @"Profiler.takePreciseCoverage",
+      @"Profiler.stopPreciseCoverage", @"CSS.startRuleUsageTracking",
+      @"CSS.stopRuleUsageTracking"];
   });
   return methods;
 }
@@ -111,6 +114,7 @@ const NSArray<NSString *> *ShaarMethods() {
 // The rendering overlay commands are 66-68 for the same reason.
 // Network.setCacheDisabled is command 69. Appending it would otherwise send 67.
 // Idle override is 70 and clear is 71. Appending either would send a lower command.
+// Coverage commands are 72-76. The running engine stops at 71, so the panel does not send them yet.
 NSUInteger ShaarDevToolsCommandID(NSString *method) {
   NSUInteger index = [ShaarMethods() indexOfObject:method];
   if (index == NSNotFound)
@@ -131,6 +135,16 @@ NSUInteger ShaarDevToolsCommandID(NSString *method) {
     return 70;
   if ([method isEqualToString:@"Emulation.clearIdleOverride"])
     return 71;
+  if ([method isEqualToString:@"Profiler.startPreciseCoverage"])
+    return 72;
+  if ([method isEqualToString:@"Profiler.takePreciseCoverage"])
+    return 73;
+  if ([method isEqualToString:@"Profiler.stopPreciseCoverage"])
+    return 74;
+  if ([method isEqualToString:@"CSS.startRuleUsageTracking"])
+    return 75;
+  if ([method isEqualToString:@"CSS.stopRuleUsageTracking"])
+    return 76;
   return index + 1;
 }
 

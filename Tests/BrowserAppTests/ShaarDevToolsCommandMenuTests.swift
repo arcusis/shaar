@@ -17,6 +17,7 @@ import Testing
     let titles = matches.map(\.title)
     #expect(titles.first == "Elements")
     #expect(titles.contains("Issues"))
+    #expect(titles.contains("Audits"))
     #expect(titles.contains("Security"))
     #expect(titles.contains("Dock to bottom"))
     #expect(titles.contains("Open in separate window"))

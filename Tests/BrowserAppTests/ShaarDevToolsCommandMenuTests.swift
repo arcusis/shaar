@@ -19,6 +19,7 @@ import Testing
     #expect(titles.contains("Issues"))
     #expect(titles.contains("Audits"))
     #expect(titles.contains("Security"))
+    #expect(titles.contains("Sensors"))
     #expect(titles.contains("Dock to bottom"))
     #expect(titles.contains("Open in separate window"))
     #expect(titles.contains("Settings"))

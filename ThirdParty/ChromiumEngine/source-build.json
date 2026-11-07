@@ -381,6 +381,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0034-shaar-devtools-force-pseudo-state.patch",
       "sha256": "af75d129ce2e163f0a6a3d373b13fa458a80d3b8986a7a6fca1f518dba6719ed"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0035-shaar-devtools-touch-emulation.patch",
+      "sha256": "f79b5e7f77ac1cef74a0458d1a0b97fc962541c7aa775cb04d5cbeed55ee4ff7"
     }
   ],
   "requiredExports": [

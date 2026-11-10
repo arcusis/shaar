@@ -4,6 +4,7 @@
 
 import BrowserCore
 import ChromiumBridge
+import ChromiumBridgeVerification
 import Foundation
 import Testing
 
@@ -42,8 +43,47 @@ struct ProfilePrivacyTests {
     #expect(runtime.loadedProfileID == id.uuidString)
   }
 
+  @Test func readableStoreWithoutAnHttpsOnlyKeyStillAppliesOn() async throws {
+    let store = BrowserPreferencesStore()
+    let id = UUID()
+    #expect(store.httpsOnlyChoice(for: id) == true)
+    let runtime = HttpsOnlyLoadSpy()
+    let backend = EngineProfileSettings(runtime: runtime) { store.httpsOnlyChoice(for: $0) }
+    try await backend.loadProfile(id)
+    #expect(runtime.appliedHttpsOnly == true)
+    #expect(runtime.loadedProfileID == id.uuidString)
+  }
+
+  @Test func unreadablePreferencesDoNotOverwriteAStoredHttpsOnlyOff() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let preferencesURL = root.appending(path: "preferences.json")
+    try Data("{".utf8).write(to: preferencesURL)
+    let store = BrowserPreferencesStore(fileURL: preferencesURL)
+    let id = UUID()
+    #expect(store.storageNotice != nil)
+    #expect(store.httpsOnlyChoice(for: id) == nil)
+    #expect(store.httpsOnlyModeEnabled(for: id))
+
+    let engineRoot = root.appending(path: "Chromium", directoryHint: .isDirectory)
+    #expect(ARCWriteHttpsOnlyPreference(engineRoot, id.uuidString, false))
+    let preferences = engineRoot.appending(
+      path: "Profile \(id.uuidString.lowercased())/Preferences")
+    let storedOff = try Data(contentsOf: preferences)
+
+    let runtime = HttpsOnlyLoadSpy()
+    let backend = EngineProfileSettings(runtime: runtime) { store.httpsOnlyChoice(for: $0) }
+    try await backend.loadProfile(id)
+    #expect(runtime.appliedHttpsOnly == nil)
+    #expect(runtime.loadedProfileID == id.uuidString)
+    #expect(ARCSeedHttpsOnlyPreference(engineRoot, id.uuidString, nil)?.boolValue == false)
+    #expect(try Data(contentsOf: preferences) == storedOff)
+  }
+
   @Test func unavailableEngineFailsClosedForProfileAndCookieMutations() async {
-    let backend = EngineProfileSettings(runtime: ARCChromiumRuntime())
+    let backend = EngineProfileSettings(runtime: ARCChromiumRuntime()) { _ in nil }
     let id = UUID()
     await #expect(throws: (any Error).self) { try await backend.loadProfile(id) }
     #expect(backend.thirdPartyCookiesBlocked(id) == nil)

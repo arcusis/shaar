@@ -11,6 +11,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// Stores the choice and writes Profile Preferences when the data directory is known.
 /// YES when this process applies the choice to the next navigation.
 - (BOOL)setHttpsOnlyModeEnabled:(BOOL)enabled forProfileID:(NSString *)profileID;
+
+/// File names in the profile directory immediately before this process opened it.
+/// Empty when this process has not opened that profile.
+- (NSArray<NSString *> *)profileDirectoryEntriesBeforeOpenForProfileID:(NSString *)profileID;
 @end
 
 NS_ASSUME_NONNULL_END

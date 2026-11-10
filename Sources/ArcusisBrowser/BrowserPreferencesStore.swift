@@ -120,9 +120,17 @@ final class BrowserPreferencesStore {
     save()
   }
 
-  /// Public HTTP upgrades to HTTPS unless this profile turned the warning off.
+  /// Stored choice for a profile open. Nil when the preferences file could not be read,
+  /// so an open must not invent on and overwrite a value already stored for the profile.
+  /// A readable file with no entry for this profile is on.
+  func httpsOnlyChoice(for profileID: UUID) -> Bool? {
+    guard !preservesExistingFile else { return nil }
+    return profileHttpsOnlyMode[profileID] ?? true
+  }
+
+  /// Switch value. An unreadable store shows on; that display is not a stored choice.
   func httpsOnlyModeEnabled(for profileID: UUID) -> Bool {
-    profileHttpsOnlyMode[profileID] ?? true
+    httpsOnlyChoice(for: profileID) ?? true
   }
 
   func setHttpsOnlyMode(_ enabled: Bool, for profileID: UUID) {

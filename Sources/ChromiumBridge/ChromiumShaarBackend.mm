@@ -155,6 +155,7 @@ struct Symbols {
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
+  NSMutableDictionary<NSString *, NSArray<NSString *> *> *_shaarProfileFilesBeforeOpen;
 }
 - (void)receiveEvent:(const shaar_event *)event;
 - (void)receiveDesktopCaptureRequest:(const shaar_event *)event
@@ -257,6 +258,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarMediaRequests = [NSMutableDictionary dictionary];
   _shaarHttpsOnly = [NSMutableDictionary dictionary];
   _shaarCaptureRequests = [NSMutableDictionary dictionary];
+  _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -576,6 +578,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   return YES;
 }
 
+- (NSArray<NSString *> *)profileDirectoryEntriesBeforeOpenForProfileID:(NSString *)profileID {
+  return _shaarProfileFilesBeforeOpen[profileID] ?: @[];
+}
+
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
   if ([self isPrivateIdentity:profileID]) {
     completion(ShaarError(@"Invalid profile identity or engine not ready."));
@@ -591,6 +597,15 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarProfileWaiters[profileID] = [NSMutableArray arrayWithObject:[completion copy]];
   NSString *canonicalID = profileID.lowercaseString;
   NSString *directory = [@"Profile " stringByAppendingString:canonicalID];
+  NSArray<NSString *> *entries = nil;
+  if (_shaarUserDataDirectory) {
+    NSURL *profileDirectory = [_shaarUserDataDirectory URLByAppendingPathComponent:directory
+                                                                       isDirectory:YES];
+    entries = [NSFileManager.defaultManager contentsOfDirectoryAtPath:profileDirectory.path
+                                                                 error:nil];
+  }
+  _shaarProfileFilesBeforeOpen[profileID] =
+      [entries sortedArrayUsingSelector:@selector(compare:)] ?: @[];
   __weak ARCShaarRuntime *weakSelf = self;
   void (^reply)(NSError *) = ^(NSError *failure) {
     if (failure) {

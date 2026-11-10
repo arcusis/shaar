@@ -197,8 +197,8 @@ struct BrowserSettingsView: View {
     onAddExtensions: @escaping (UUID) -> Void = { _ in },
     profileBackend: (any ProfileSettingsBackend)? = nil,
     clearHistory: ((UUID) async throws -> Void)? = nil,
-    httpsOnlyModeEnabled: @escaping (UUID) -> Bool = { _ in true },
-    onSetHttpsOnlyMode: @escaping (UUID, Bool) -> Bool = { _, _ in true },
+    httpsOnlyModeEnabled: @escaping (UUID) -> Bool,
+    onSetHttpsOnlyMode: @escaping (UUID, Bool) -> Bool,
     initialSection: BrowserSettingsSection = .general
   ) {
     self.profiles = profiles

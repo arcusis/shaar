@@ -33,7 +33,10 @@ import XCTest
         ],
         searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
         selectedProfileID: .constant(profileID), sidebarInitiallyVisible: .constant(true),
-        selectedSearchEngine: .constant("google"), initialSection: .privacy
+        selectedSearchEngine: .constant("google"),
+        httpsOnlyModeEnabled: { _ in true },
+        onSetHttpsOnlyMode: { _, _ in true },
+        initialSection: .privacy
       )
       .environment(\.colorScheme, scheme)
       let url = root.appending(path: "after-privacy-\(suffix).png")

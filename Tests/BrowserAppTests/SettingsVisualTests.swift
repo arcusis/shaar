@@ -91,6 +91,8 @@ final class SettingsVisualTests: XCTestCase {
           searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
           selectedProfileID: .constant(profileID), sidebarInitiallyVisible: .constant(true),
           selectedSearchEngine: .constant("google"), profileBackend: ProfileSettingsStub(),
+          httpsOnlyModeEnabled: { _ in true },
+          onSetHttpsOnlyMode: { _, _ in true },
           initialSection: section
         )
         .environment(\.colorScheme, scheme)

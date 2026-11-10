@@ -14,6 +14,7 @@ final class BrowserWorkspaceStore {
   @ObservationIgnored private(set) var stores: [UUID: BrowserStore] = [:]
   @ObservationIgnored private let file: WorkspaceFile?
   @ObservationIgnored private var maySave = true
+  @ObservationIgnored private var suppressBroadcast = false
   @ObservationIgnored private let snapshotScheduler = SnapshotSaveScheduler()
   @ObservationIgnored private let faviconCache: FaviconCache?
 
@@ -179,6 +180,78 @@ final class BrowserWorkspaceStore {
         tabs: spaces.reduce(0) { $0 + $1.tabs.count }, windows: spaces.count,
         favoritePages: favoritePages)
     }
+    stores[window.id]?.onTransferTabFromAnotherWindow = {
+      [weak self] tabID, sourceSpaceID, destinationSpaceID, beforeTabID, pinned, folderID in
+      self?.transferTab(
+        tabID, from: sourceSpaceID, to: destinationSpaceID, in: window.id,
+        before: beforeTabID, pinned: pinned, folderID: folderID) ?? false
+    }
+  }
+
+  private func transferTab(
+    _ tabID: UUID, from sourceSpaceID: UUID, to destinationSpaceID: UUID,
+    in destinationWindowID: UUID, before targetTabID: UUID?, pinned: Bool?, folderID: UUID?
+  ) -> Bool {
+    guard let destinationStore = stores[destinationWindowID],
+      let sourceWindow = workspace.windows.first(where: { window in
+        window.id != destinationWindowID
+          && window.session.spaces.contains { space in
+            space.id == sourceSpaceID && space.tabs.contains { $0.id == tabID }
+          }
+      }),
+      let sourceStore = stores[sourceWindow.id],
+      let sourceSpace = sourceWindow.session.spaces.first(where: { $0.id == sourceSpaceID }),
+      let targetSpace = destinationStore.session.spaces.first(where: {
+        $0.id == destinationSpaceID
+      })
+    else { return false }
+    guard sourceSpace.profileID == targetSpace.profileID else {
+      destinationStore.setSidebarNotice(
+        ShellL10n.string(
+          "Tabs can move only between spaces sharing a profile.")
+      )
+      return false
+    }
+
+    var sourceSession = sourceStore.session
+    var destinationSession = destinationStore.session
+    guard
+      sourceSession.transferTab(
+        tabID, from: sourceSpaceID, to: &destinationSession,
+        in: destinationSpaceID, before: targetTabID, pinned: pinned, folderID: folderID)
+    else { return false }
+
+    var updated = workspace
+    do {
+      try updated.updateWindow(sourceWindow.id, session: sourceSession)
+      try updated.updateWindow(destinationWindowID, session: destinationSession)
+      try updated.validate()
+    } catch {
+      return false
+    }
+
+    workspace = updated
+    suppressBroadcast = true
+    sourceStore.applyManagedSession(sourceSession, notice: storageNotice)
+    suppressBroadcast = false
+    scheduleSnapshot(deferred: false)
+    if let sourceEngine = sourceStore.engine {
+      Task { @MainActor [weak self, weak sourceEngine, weak destinationStore] in
+        let identity = tabID.uuidString
+        while let sourceEngine,
+          sourceEngine.runtime.windowID(forTabID: identity) != nil
+        {
+          try? await Task.sleep(for: .milliseconds(25))
+        }
+        guard let self, let destinationStore else { return }
+        destinationStore.setSidebarNotice(nil)
+        destinationStore.applyManagedSession(destinationSession, notice: self.storageNotice)
+      }
+    } else {
+      destinationStore.setSidebarNotice(nil)
+      destinationStore.applyManagedSession(destinationSession, notice: storageNotice)
+    }
+    return true
   }
 
   private func changed(_ id: UUID, session: BrowserSession, deferred: Bool)
@@ -199,7 +272,7 @@ final class BrowserWorkspaceStore {
           "The window change was rejected. %@", arguments: [.string(error.localizedDescription)]))
     }
     scheduleSnapshot(deferred: deferred)
-    if !deferred { broadcast(excluding: id) }
+    if !deferred && !suppressBroadcast { broadcast(excluding: id) }
     return ManagedSessionSaveResult(session: workspace.window(id)!.session, notice: storageNotice)
   }
 

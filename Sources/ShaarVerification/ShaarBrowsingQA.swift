@@ -316,12 +316,17 @@ import Foundation
       let accepted = destination.store.acceptSidebarDrop(
         payload, into: destination.store.session.selectedSpaceID)
       let stayed = context.store.session.spaces.flatMap(\.tabs).contains { $0.id == movedTab }
+      let engineMoved = await until(attempts: 100) {
+        destination.engine.liveTabs.contains(movedTab)
+          && destination.engine.runtime.windowID(forTabID: movedTab.uuidString)
+            == destination.engine.windowID
+      }
       rows.append(
         row(
-          "windows-drag", accepted && !stayed ? "pass" : "fail",
-          accepted
-            ? "The tab moved into the other window."
-            : "Dropping a tab on another window was rejected. The tab stayed in the source window."
+          "windows-drag", accepted && !stayed && engineMoved ? "pass" : "fail",
+          accepted && !stayed && engineMoved
+            ? "The tab moved into the other window and its live engine owner followed."
+            : "Drop accepted=\(accepted), stayed in source=\(stayed), live engine owner transferred=\(engineMoved)."
         ))
     } else {
       rows.append(

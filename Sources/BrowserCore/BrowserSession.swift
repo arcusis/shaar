@@ -681,6 +681,60 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     }
   }
 
+  /// Moves one tab between window sessions while preserving its identity and document record.
+  @discardableResult
+  public mutating func transferTab(
+    _ tabID: UUID, from sourceSpaceID: UUID, to destination: inout BrowserSession,
+    in destinationSpaceID: UUID, before targetID: UUID? = nil,
+    pinned: Bool? = nil, folderID: UUID? = nil
+  ) -> Bool {
+    guard let sourceSpace = spaces.first(where: { $0.id == sourceSpaceID }),
+      let tab = sourceSpace.tabs.first(where: { $0.id == tabID }),
+      !favoritePages.contains(where: { $0.tab.id == tabID }),
+      let targetSpace = destination.spaces.first(where: { $0.id == destinationSpaceID }),
+      sourceSpace.profileID == targetSpace.profileID,
+      destination.page(forTabID: tabID) == nil,
+      !destination.closedTabs.contains(where: { $0.id == tabID })
+    else { return false }
+
+    let targetFolder = folderID.flatMap { id in targetSpace.folders.first { $0.id == id } }
+    if folderID != nil && targetFolder == nil { return false }
+    let isPinned = targetFolder?.isPinned ?? pinned ?? tab.isPinned
+    let movedTab = BrowserTab(
+      id: tab.id, url: tab.url, title: tab.title,
+      isPinned: isPinned, folderID: folderID, keepAlive: tab.keepAlive)
+    if let targetID {
+      guard let target = targetSpace.tabs.first(where: { $0.id == targetID }),
+        target.isPinned == isPinned, target.folderID == folderID
+      else { return false }
+    }
+    var sourceDraft = self
+    var destinationDraft = destination
+    sourceDraft.closeTab(tabID)
+    sourceDraft.closedTabs.removeAll { $0.id == tabID }
+    guard
+      let destinationIndex = destinationDraft.spaces.firstIndex(where: {
+        $0.id == destinationSpaceID
+      })
+    else { return false }
+    var destinationTabs = destinationDraft.spaces[destinationIndex].tabs
+    let insertion =
+      targetID.flatMap { target in destinationTabs.firstIndex { $0.id == target } }
+      ?? destinationTabs.lastIndex(where: {
+        $0.isPinned == isPinned && $0.folderID == folderID
+      }).map { $0 + 1 }
+      ?? (isPinned ? destinationTabs.startIndex : destinationTabs.endIndex)
+    destinationTabs.insert(movedTab, at: insertion)
+    destinationDraft.spaces[destinationIndex].tabs = destinationTabs
+    destinationDraft.spaces[destinationIndex].selectedTabID = tabID
+    destinationDraft.spaces[destinationIndex].selectedFavoriteID = nil
+    destinationDraft.spaces[destinationIndex].expandFolderPath(folderID)
+    destinationDraft.selectedSpaceID = destinationSpaceID
+    self = sourceDraft
+    destination = destinationDraft
+    return true
+  }
+
   /// Native navigation changes metadata, never the immutable space/profile assignment.
   @discardableResult
   public mutating func updateTab(_ id: UUID, url: URL, title: String) -> Bool {

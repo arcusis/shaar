@@ -10,6 +10,26 @@ import Testing
 
 @Suite @MainActor
 struct BrowserWorkspaceStoreTests {
+  @Test func foreignWindowTabDropMovesTheSessionRecordAcrossStores() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let sourceSpaceID = source.session.selectedSpaceID
+    let destinationSpaceID = destination.session.selectedSpaceID
+    let tabID = try #require(source.session.selectedSpace.selectedTabID)
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: sourceSpaceID, tabID: tabID)
+
+    #expect(destination.acceptSidebarDrop(transfer, into: destinationSpaceID))
+    #expect(!source.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
+    #expect(destination.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
+    #expect(destination.session.selectedSpaceID == destinationSpaceID)
+    #expect(destination.session.selectedSpace.selectedTabID == tabID)
+    try manager.workspace.validate()
+  }
+
   @Test func removalImpactIncludesEveryManagedWindowBeforeGlobalDeletion() throws {
     let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let first = manager.workspace.windows[0].id

@@ -361,6 +361,15 @@ export function parseExchange(text: string): ExchangeResult {
   return parseExchangeValue(value);
 }
 
+/** A shared file is not installed. The user turns a rule on after import. */
+export function importRules(text: string): ExchangeResult {
+  const parsed = parseExchange(text);
+  if (!parsed.ok) {
+    return parsed;
+  }
+  return {ok: true, rules: parsed.rules.map(rule => ({...rule, enabled: false}))};
+}
+
 export function parseExchangeValue(value: unknown): ExchangeResult {
   if (!isRecord(value) || value.schemaVersion !== SCHEMA_VERSION || !Array.isArray(value.rules)) {
     return {ok: false, error: 'document'};

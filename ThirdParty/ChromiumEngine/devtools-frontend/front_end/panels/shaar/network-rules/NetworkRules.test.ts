@@ -67,6 +67,25 @@ describe('NetworkRules', () => {
     }
   });
 
+  it('turns every imported rule off before it can be installed', () => {
+    const file = document([{
+      ...row(),
+      enabled: true,
+      kind: 'redirect',
+      redirectURL: 'https://example.test/next',
+    }]);
+    const imported = Rules.importRules(file);
+    assert.isTrue(imported.ok);
+    if (!imported.ok) {
+      return;
+    }
+    assert.strictEqual(imported.rules.length, 1);
+    assert.isFalse(imported.rules[0].enabled);
+    assert.strictEqual(imported.rules[0].kind, 'redirect');
+    assert.strictEqual(imported.rules[0].redirectURL, 'https://example.test/next');
+    assert.deepEqual(Rules.importRules('[]'), {ok: false, error: 'document'});
+  });
+
   it('matches the Fetch lease actions', () => {
     const mock = enabled({kind: 'mock', status: 201, bodyText: 'ok', headers: [{name: 'X-Test', value: 'yes'}]});
     const redirect = enabled({id: OTHER, kind: 'redirect', redirectURL: 'https://example.test/next'});

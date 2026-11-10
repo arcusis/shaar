@@ -18,6 +18,7 @@ import {
   type FetchAgentLike,
   type HeaderEntry,
   installFetchRewrite,
+  importRules,
   interceptionPatterns,
   type NetworkRule,
   type RuleError,
@@ -29,7 +30,6 @@ import {
   MAX_HEADERS,
   METHODS,
   normalized,
-  parseExchange,
   parseExchangeValue,
   siteOrigin,
   stageCommand,
@@ -930,7 +930,7 @@ export class NetworkRulesView extends UI.Widget.VBox {
     const reader = new FileReader();
     reader.onload = () => {
       const text = typeof reader.result === 'string' ? reader.result : '';
-      const parsed = parseExchange(text);
+      const parsed = importRules(text);
       if (!parsed.ok) {
         this.#failure = this.#errorText(parsed.error);
         this.requestUpdate();

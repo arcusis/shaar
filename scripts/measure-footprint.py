@@ -66,6 +66,132 @@ def process_tree(root_pid):
     return [(pid, rows[pid]) for pid in members if pid in rows]
 
 
+ALLOWED_TAB_COUNTS = (1, 10, 30, 50, 100)
+WAIT_TRAPS = (
+    "mach_msg_trap",
+    "mach_msg2_trap",
+    "semaphore_wait_trap",
+    "semaphore_timedwait_trap",
+    "__psynch_cvwait",
+    "__ulock_wait",
+    "swtch_pri",
+)
+
+
+def parse_tab_counts(text):
+    counts = []
+    for part in text.split(","):
+        piece = part.strip()
+        if not piece:
+            continue
+        try:
+            count = int(piece)
+        except ValueError as error:
+            raise SystemExit(f"tab count is not an integer: {piece}") from error
+        if count not in ALLOWED_TAB_COUNTS:
+            allowed = ", ".join(str(item) for item in ALLOWED_TAB_COUNTS)
+            raise SystemExit(f"tab count must be one of {allowed}: {count}")
+        counts.append(count)
+    if not counts:
+        raise SystemExit("at least one tab count is required")
+    return counts
+
+
+def main_thread_sample(pid):
+    """Two-second sample of the Swift process main thread while the page is idle."""
+    handle = tempfile.NamedTemporaryFile(
+        prefix="shaar-main-thread-", suffix=".txt", delete=False)
+    path = handle.name
+    handle.close()
+    try:
+        completed = subprocess.run(
+            ["sample", str(pid), "2", "-mayDie", "-file", path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=12,
+            check=False,
+        )
+        if completed.returncode != 0 or not os.path.isfile(path):
+            return {
+                "mainThreadSample": "unavailable",
+                "mainThreadSampleError": (completed.stderr or "")[-500:],
+            }
+        return parse_main_thread_sample(Path(path).read_text(errors="replace"))
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return {"mainThreadSample": "unavailable", "mainThreadSampleError": str(error)}
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def next_sampled_thread(line, indent):
+    if len(line) - len(line.lstrip(" ")) != indent:
+        return False
+    body = line.strip()
+    return body[:1].isdigit() and "Thread_" in body
+
+
+def parse_main_thread_sample(text):
+    lines = text.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        if "com.apple.main-thread" in line:
+            start = index
+            break
+    if start is None:
+        return {
+            "mainThreadSample": "unavailable",
+            "mainThreadSampleError": "main thread missing",
+        }
+    header = lines[start].strip()
+    header_count = header.split(maxsplit=1)[0]
+    try:
+        total = int(header_count.lstrip("+!|:"))
+    except ValueError:
+        return {
+            "mainThreadSample": "unavailable",
+            "mainThreadSampleError": "main thread count missing",
+        }
+    indent = len(lines[start]) - len(lines[start].lstrip(" "))
+    wait_samples = 0
+    top_busy = 0
+    top_frame = ""
+    for line in lines[start + 1:]:
+        if not line.strip():
+            continue
+        if next_sampled_thread(line, indent):
+            break
+        stripped = line.strip().lstrip("+!|: ")
+        parts = stripped.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        try:
+            count = int(parts[0])
+        except ValueError:
+            continue
+        frame = parts[1]
+        if any(trap in frame for trap in WAIT_TRAPS):
+            wait_samples = max(wait_samples, count)
+            continue
+        if count > top_busy and "start" not in frame and "dyld" not in frame:
+            top_busy = count
+            top_frame = frame[:180]
+    busy = max(0, total - wait_samples)
+    return {
+        "mainThreadSample": "ok",
+        "mainThreadSamples": total,
+        "mainThreadWaitSamples": wait_samples,
+        "mainThreadBusyPercent": round(100 * busy / total, 1) if total else None,
+        "mainThreadTopFrame": top_frame,
+        # A hang here means the main thread stayed out of the run-loop wait for
+        # at least half of a 2 second idle sample (about one second of work).
+        "mainThreadHang": bool(total) and busy * 2 >= total,
+    }
+
+
 def measure_case(executable, port, tab_count, sample_seconds, eager):
     with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as temporary:
         root = Path(temporary)
@@ -85,7 +211,7 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
             command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
             start_new_session=True,
         )
-        deadline = started + 150
+        deadline = started + (240 if tab_count >= 50 else 150)
         try:
             while time.monotonic() < deadline:
                 if process.poll() is not None:
@@ -105,7 +231,7 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
                     or ready.get("placeholders") != tab_count - expected_live):
                 raise RuntimeError(f"unexpected materialization report: {ready}")
             cold_seconds = time.monotonic() - started
-            rss_samples, cpu_samples, process_samples = [], [], []
+            rss_samples, app_rss_samples, cpu_samples, process_samples = [], [], [], []
             sample_end = time.monotonic() + sample_seconds
             previous_time = time.monotonic()
             previous_cpu = sum(
@@ -117,13 +243,21 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
                 tree = process_tree(process.pid)
                 now = time.monotonic()
                 rss_samples.append(sum(row[1] for _pid, row in tree) / 1024)
+                app_row = next((row for pid, row in tree if pid == process.pid), None)
+                if app_row is not None:
+                    app_rss_samples.append(app_row[1] / 1024)
                 process_samples.append(len(tree))
                 cpu = sum(row[2] for _pid, row in tree)
                 elapsed = max(0.001, now - previous_time)
                 cpu_samples.append(max(0.0, cpu - previous_cpu) / elapsed * 100)
                 previous_time, previous_cpu = now, cpu
                 time.sleep(1)
-            return {
+            # Sample after the CPU window so the sampler's own cost stays out of idle CPU.
+            thread = main_thread_sample(process.pid) if process.poll() is None else {
+                "mainThreadSample": "unavailable",
+                "mainThreadSampleError": "probe exited before the main-thread sample",
+            }
+            result = {
                 "tabs": tab_count,
                 "mode": "eager" if eager else "lazy",
                 "coldLaunchToReadySeconds": round(cold_seconds, 3),
@@ -131,10 +265,14 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
                 "processTreeRSSMiBMean": round(sum(rss_samples) / len(rss_samples), 1),
                 "processTreeRSSMiBMin": round(min(rss_samples), 1),
                 "processTreeRSSMiBMax": round(max(rss_samples), 1),
+                "appRSSMiBMean": round(sum(app_rss_samples) / len(app_rss_samples), 1)
+                if app_rss_samples else None,
                 "processTreeCountMean": round(sum(process_samples) / len(process_samples), 1),
                 "idleCPUPercentMean": round(sum(cpu_samples) / len(cpu_samples), 2),
                 "samples": len(rss_samples),
             }
+            result.update(thread)
+            return result
         finally:
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGTERM)
@@ -145,6 +283,21 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
                     process.wait()
 
 
+def annotate_marginal_rss(cases):
+    """RSS added by each saved tab beyond the 1-tab case in this same run."""
+    baseline = next((case for case in cases if case["tabs"] == 1), None)
+    if baseline is None:
+        return
+    base = baseline["processTreeRSSMiBMean"]
+    for case in cases:
+        extra = case["tabs"] - 1
+        if extra <= 0:
+            case["marginalRSSMiBPerExtraTab"] = None
+            continue
+        case["marginalRSSMiBPerExtraTab"] = round(
+            (case["processTreeRSSMiBMean"] - base) / extra, 2)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path, default=Path("build/Shaar Verification.app"))
@@ -152,21 +305,30 @@ def main():
         "--output", type=Path, default=Path("build/performance-baseline.json")
     )
     parser.add_argument("--sample-seconds", type=int, default=15)
+    parser.add_argument(
+        "--tab-counts", default="1,10,30",
+        help="Comma-separated saved-tab counts. Allowed: 1, 10, 30, 50, 100.",
+    )
     parser.add_argument("--eager", action="store_true", help="measure the former eager probe mode")
     args = parser.parse_args()
+    tab_counts = parse_tab_counts(args.tab_counts)
     executable = args.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
         raise SystemExit(f"verification executable not found: {executable}")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FixtureHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        cases = [measure_case(executable, server.server_port, count, args.sample_seconds, args.eager)
-                 for count in (1, 10, 30)]
+        cases = [
+            measure_case(
+                executable, server.server_port, count, args.sample_seconds, args.eager)
+            for count in tab_counts
+        ]
     finally:
         server.shutdown()
         server.server_close()
+    annotate_marginal_rss(cases)
     result = {
-        "schema": 2,
+        "schema": 3,
         "scope": "Hidden verification app; fixed loopback fixture; app and descendant process RSS",
         "appBundleBytes": int(
             subprocess.check_output(["du", "-sk", str(args.app)], text=True).split()[0]

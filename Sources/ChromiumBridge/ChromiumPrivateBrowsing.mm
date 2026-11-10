@@ -314,6 +314,10 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
 - (void)probePrivateTabLifecycleForTabID:(NSString *)tabID windowID:(NSString *)windowID
                               contextID:(NSString *)contextID
                              completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    PrivateLifecycleFinish(completion, NO);
+    return;
+  }
   BOOL capable = [self privateTabOperation:kShaarOpPrivateTabLifecycleGet tabID:tabID
                                  windowID:windowID contextID:contextID
                                   payload:@{@"schemaVersion": @1}];
@@ -347,6 +351,10 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
 - (void)sleepPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
                contextID:(NSString *)contextID reason:(NSString *)reason
               completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    PrivateLifecycleFinish(completion, NO);
+    return;
+  }
   NSString *discardReason = reason.length ? reason : @"proactive";
   [self submitPrivateLifecycle:kShaarOpPrivateTabDiscard tabID:tabID windowID:windowID
                     contextID:contextID
@@ -358,6 +366,10 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
 
 - (void)wakePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
               contextID:(NSString *)contextID completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    PrivateLifecycleFinish(completion, NO);
+    return;
+  }
   [self submitPrivateLifecycle:kShaarOpPrivateTabWake tabID:tabID windowID:windowID
                     contextID:contextID payload:@{@"schemaVersion": @1}
                    completion:^(BOOL accepted, NSString *state) {

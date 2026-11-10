@@ -957,7 +957,17 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (void)discardTabID:(NSString *)tabID { [self closeTabID:tabID]; }
 
+- (BOOL)tabLifecycleSupported {
+  // Operations 208-211 arrive with ABI minor 11. An older engine must not
+  // discard or freeze, even if a submit would return unsupported.
+  return _symbols.abi_minor && _symbols.abi_minor() >= 11;
+}
+
 - (void)probeTabLifecycleForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    ShaarFinishOnMain(completion, NO);
+    return;
+  }
   BOOL capable = [self submitTabID:tabID operation:kShaarOpTabLifecycleGet
                            payload:@{@"schemaVersion": @1}];
   ShaarFinishOnMain(completion, capable);
@@ -965,6 +975,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (void)sleepTabID:(NSString *)tabID reason:(NSString *)reason
         completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    ShaarFinishOnMain(completion, NO);
+    return;
+  }
   NSString *discardReason = reason.length ? reason : @"proactive";
   [self submitTabID:tabID operation:kShaarOpTabDiscard
             payload:@{@"schemaVersion": @1, @"reason": discardReason}
@@ -974,6 +988,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (void)wakeTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    ShaarFinishOnMain(completion, NO);
+    return;
+  }
   [self submitTabID:tabID operation:kShaarOpTabWake payload:@{@"schemaVersion": @1}
          completion:^(NSDictionary *reply, NSError *error) {
     ShaarFinishOnMain(completion, ShaarLifecycleAccepted(reply, error, @[@"active"]));
@@ -981,6 +999,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (void)freezeTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    ShaarFinishOnMain(completion, NO);
+    return;
+  }
   [self submitTabID:tabID operation:kShaarOpTabFreeze payload:@{@"schemaVersion": @1}
          completion:^(NSDictionary *reply, NSError *error) {
     ShaarFinishOnMain(completion, ShaarLifecycleAccepted(reply, error, @[@"frozen", @"discarded"]));

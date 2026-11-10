@@ -5,15 +5,15 @@
 #include "chrome/browser/shaar/permissions/shaar_permission_prompt.h"
 
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/custom_handlers/protocol_handler.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
-#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "components/permissions/test/mock_permission_prompt_delegate.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar::permissions {
 namespace {

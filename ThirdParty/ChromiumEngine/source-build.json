@@ -49,9 +49,9 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "efe636474cb4f4691214e20884cd4ceff06589440600487b0c0c605ea3e1da7d",
+    "sha256": "ecc556d5db0cdb99c6eb474fc5034252f5e9a2961829c5f0bb256d512def6ad2",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "072af99f28e5dc1a8559c6ddbf414bf4276a7fb8af23d44566a3da2fa8379b41",
+      "chrome/browser/shaar/BUILD.gn": "a6553b7ca35a7a60d8afd26d365fad250f9a7ef59083879ecc9b814e0d720bc2",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.h": "15cd5f6fc6ee7c998f5c04e8e0bb9e6c9d5c276cd7ab810a22b83c6ef849cdb5",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_lifecycle_adapter.cc": "02f28526c3d8d14b9efc59973dd8269650d079613085f4d910c2901aba020de7",
@@ -150,9 +150,9 @@
       "chrome/browser/shaar/save_prompts/shaar_save_prompts.cc": "1fddac036386e6b980a45a6240129092f72878438b3817be4d93c92e82bee2da",
       "chrome/browser/shaar/save_prompts/shaar_save_prompts.h": "1bbec7c47d01a2c3dc33192e49a4bb212003b4723f079e3a1e84d134f7bd8d79",
       "chrome/browser/shaar/save_prompts/shaar_save_prompts_unittest.cc": "cd6608fa9deebfb76ac82965e4fd4229e0cc02ffec5ec0439bb68c2f97e80b13",
-      "chrome/browser/shaar/permissions/shaar_permission_prompt.cc": "9bdb3f0a5f23d5f0ae11446c345c31e453eaa944f3308a60b1b93b19559e6732",
-      "chrome/browser/shaar/permissions/shaar_permission_prompt.h": "5f88c510870d071ee5d2c0bd8e49d8bf81289ded26a9d0044de98a0973cbf1e5",
-      "chrome/browser/shaar/permissions/shaar_permission_prompt_unittest.cc": "1d08d071f12f745eff7e76440d4414d38629a372f8bd9dd77f03338ed8faa0fc"
+      "chrome/browser/shaar/permissions/shaar_permission_prompt.cc": "887a813abd5457feabf391f0b50889282b33d7c8dee2292dba7623b0b74cde35",
+      "chrome/browser/shaar/permissions/shaar_permission_prompt.h": "8d7732c764dd4db7be82f3a2869ccd80088e28412c0cd3766a26e62f8cea39e5",
+      "chrome/browser/shaar/permissions/shaar_permission_prompt_unittest.cc": "9fdb6a634a550e66004b17aa7f57ea14d573abeaf4a6f7beceb6bbfe547279e7"
     },
     "moduleGroups": {
       "private_sessions": [

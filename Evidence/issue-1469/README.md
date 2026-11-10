@@ -7,3 +7,5 @@ The `before-site-controls-*` images were rendered with the production label from
 The Console and Network screenshots show the retired legacy panels before deletion. `after-legacy-shell-issues.png` shows the remaining shell navigation without those panels; the Shaar Inspector remains in the page layout.
 
 The hidden route probe passed F12 and Option-Command-I opening Chromium DevTools, F12 closing the legacy shell, and the legacy-shell default route. All windows remained hidden and the probe found no new crash reports.
+
+The second retirement slice removes Application, Sources, Performance, Memory, and Coverage from legacy navigation. The `before-application.png`, `before-sources.png`, `before-performance.png`, `before-memory.png`, and `before-coverage.png` files are representative offscreen captures from the earlier panel work. `after-legacy-shell-issues.png` shows the remaining shell after those routes were removed; Shaar Inspector remains available.

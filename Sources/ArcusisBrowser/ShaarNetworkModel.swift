@@ -89,7 +89,6 @@ final class ShaarNetworkModel {
   var search = ""
   var selectedID: String?
   var detailTab = DetailTab.headers
-  let conditions = ShaarNetworkConditionsModel()
   let projection = ShaarDevToolsListProjection<ShaarNetworkProjection>()
   private(set) var responseBodies: [String: ShaarStoredResponseBody] = [:]
   @ObservationIgnored var loadBody: (@MainActor (String) async throws -> ShaarStoredResponseBody)?

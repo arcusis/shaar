@@ -99,10 +99,6 @@ import Vision
     }
     if realWorld { try? await Task.sleep(for: .seconds(2)) }
     report.pass("page", target.url.absoluteString)
-    if pageURL.query == "vitalsOnly=1" {
-      await exerciseVitalsOnly(host: host, context: context, target: target, report: report)
-      return
-    }
     guard await openWithF12(context: context, report: report) else { return }
     guard let shell = context.engine.shaarDevTools[target.tabID],
       let inspector = context.engine.inspectors[target.tabID]
@@ -120,7 +116,7 @@ import Vision
     }
     _ = await wait(attempts: 80) { shell.phase2.available || shell.nativePhase2Failure != nil }
     if shell.phase2.available {
-      report.pass("phase2", "Application, Performance, and Sources can use the live lease")
+      report.pass("phase2", "Shared protocol lease is connected")
     } else {
       report.fail("phase2", shell.nativePhase2Failure ?? "Phase 2 lease did not connect")
     }
@@ -187,82 +183,6 @@ import Vision
         "Link clicked=\(clicked), path changed=\(navigated), lease=\(available), stream=\(shell.streamAvailable), target=\(shell.target.url.absoluteString), phase2 error=\(shell.nativePhase2Failure ?? "none")"
       )
     }
-    await shell.sources.refresh()
-    if available && shell.sources.failure == nil {
-      report.pass("spa-sources", "Sources command succeeded after Link navigation")
-    } else {
-      report.fail("spa-sources", shell.sources.failure ?? "Sources command lost its lease")
-    }
-  }
-
-  private static func exerciseVitalsOnly(
-    host: NativeBrowserHost, context: NativeBrowserContext, target: SiteControlTarget,
-    report: ShaarDevToolsSmokeReport
-  ) async {
-    guard let runtime = context.engine.runtime as? ARCShaarRuntime else {
-      report.fail("performance-vitals", "The Shaar runtime is unavailable")
-      return
-    }
-    let developer = context.engine.developerModel(for: target)
-    do {
-      developer.setPerformanceEnabled(true)
-      _ = await wait(attempts: 30) { !developer.applying }
-      try await developer.refreshPerformance()
-      _ = try await developer.evaluate(
-        "document.getElementById('performance-input').scrollIntoView({block:'center'})")
-      await settle(context)
-      var clicked = false
-      var trusted = false
-      for _ in 0..<3 {
-        clicked = await withCheckedContinuation { continuation in
-          runtime.submitTrustedProbeClick(
-            inTabID: target.tabID.uuidString, elementID: "performance-input"
-          ) { continuation.resume(returning: $0) }
-        }
-        try await Task.sleep(for: .milliseconds(400))
-        trusted = try await developer.evaluate("window.__qaTrustedInput===true") as? Bool == true
-        if trusted { break }
-      }
-      try await developer.refreshPerformance()
-      let snapshot = developer.performanceSnapshot
-      guard await openWithF12(context: context, report: report),
-        let shell = context.engine.shaarDevTools[target.tabID]
-      else {
-        report.fail("performance-vitals", "The Performance panel did not open")
-        return
-      }
-      _ = await wait(attempts: 80) { shell.phase2.available || shell.nativePhase2Failure != nil }
-      let selected = ShaarDevToolsSmokeAccess.press(
-        identifier: "shaar.devtools.performance", in: context.hosting)
-      if !selected || shell.section != .performance { shell.section = .performance }
-      await settle(context)
-      if shell.phase2.available { await shell.performance.refresh() }
-      if let snapshot { shell.performance.updatePageSnapshot(snapshot) }
-      let capture = report.directory.appending(path: "panel-performance-vitals.png")
-      if !ShaarDevToolsSmokeAccess.capture(context.hosting, to: capture) {
-        report.fail("capture-Performance", "Offscreen Performance capture failed")
-      }
-      let lcp = shell.performance.lcpMilliseconds
-      let inp = shell.performance.inpMilliseconds
-      if clicked, trusted, let lcp, let inp, shell.phase2.available {
-        report.pass("performance-vitals", "LCP=\(lcp)ms INP=\(inp)ms trusted=true")
-      } else {
-        let lcpText = lcp.map { String($0) } ?? "unavailable"
-        let inpText = inp.map { String($0) } ?? "unavailable"
-        let detail =
-          "LCP=\(lcpText) INP=\(inpText) clicked=\(clicked) trusted=\(trusted) "
-          + "phase2=\(shell.phase2.available)"
-        report.fail(
-          "performance-vitals", detail)
-      }
-      if windowsHidden(host) {
-        report.pass("windows", "Every window stayed hidden")
-      } else {
-        report.fail("windows", "A window became visible")
-      }
-    } catch {
-      report.fail("performance-vitals", error.localizedDescription)
-    }
   }
 
   private static func exerciseRealWorld(
@@ -288,8 +208,6 @@ import Vision
     await walkRealWorldPanels(shell: shell, context: context, report: report)
     await inspectRealWorldElement(
       shell: shell, inspector: inspector, context: context, report: report)
-    await inspectRealWorldStorage(shell: shell, context: context, report: report)
-    await performanceRecord(shell, context: context, report: report)
     if roundTwo {
       await exerciseRealWorldRoundTwo(
         shell: shell, inspector: inspector, context: context, pageURL: pageURL,
@@ -464,49 +382,6 @@ import Vision
     } catch {
       report.fail("world-inspect", error.localizedDescription)
       report.fail("world-style", "No selected element for style edit")
-    }
-  }
-
-  private static func inspectRealWorldStorage(
-    shell: ShaarDevToolsModel, context: NativeBrowserContext,
-    report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .application
-    for area in ShaarApplicationArea.allCases {
-      shell.application.selectArea(area)
-      if area == .cookies {
-        await shell.cookies.refresh()
-      } else {
-        await shell.application.refresh()
-      }
-      let finished = await wait(attempts: 40) { !shell.application.loading }
-      await settle(context)
-      let painted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
-      let count: Int
-      switch area {
-      case .cookies: count = shell.cookies.cookies.count
-      case .workers: count = shell.application.workers.count
-      default: count = shell.application.rows.count
-      }
-      let empty: String
-      switch area {
-      case .cookies: empty = "No cookies for this page"
-      case .local, .session: empty = "No storage items for this page"
-      case .indexedDB: empty = "No IndexedDB data for this page"
-      case .cache: empty = "No cached resources for this page"
-      case .workers: empty = "No service workers for this page"
-      }
-      let visible = count > 0 || ShaarDevToolsSmokeAccess.shows(empty, in: painted)
-      let failure = area == .cookies ? shell.cookies.failure : shell.application.failure
-      if finished, failure == nil, visible {
-        report.pass(
-          "world-storage-\(area.rawValue)", "\(area.rawValue): \(count) rows or visible empty state"
-        )
-      } else {
-        report.fail(
-          "world-storage-\(area.rawValue)",
-          failure ?? "\(area.rawValue) stayed loading or lacked its empty state")
-      }
     }
   }
 
@@ -713,17 +588,6 @@ import Vision
   ) async {
     let name = "panel-\(section.rawValue)"
     switch section {
-    case .coverage:
-      await settle(context)
-      let sentence = "Coverage collection waits for the next engine build."
-      let showing = showsBanner(sentence, painted: painted, in: context.hosting)
-      if shell.coverage.collectionReady, !showing {
-        report.pass(name, "Start is enabled and the next-engine sentence is gone")
-      } else {
-        report.fail(
-          name,
-          "Start is disabled. The panel says “\(sentence)”")
-      }
     case .sensors:
       _ = await wait(attempts: 40) { shell.idleProbeFinished }
       await settle(context)
@@ -753,18 +617,6 @@ import Vision
         report.fail(
           name, shell.rendering.failure ?? "Rendering overlay still waits for an engine build")
       }
-    case .memory:
-      let gate =
-        ShaarDevToolsSmokeAccess.element(
-          identifier: "shaar.devtools.memory.engineGate", in: context.hosting) != nil
-        || ShaarDevToolsSmokeAccess.shows("Live heap snapshots need engine support", in: painted)
-      if gate {
-        report.fail(name, "Memory shows a needs-engine banner")
-      } else if panelIsPainted(section, in: painted) {
-        report.pass(name, "Memory does not show a needs-engine banner before the snapshot")
-      } else {
-        report.fail(name, "Memory panel did not render")
-      }
     case .audits:
       let panel = ShaarDevToolsSmokeAccess.element(
         identifier: "shaar.devtools.audits", in: context.hosting)
@@ -785,15 +637,6 @@ import Vision
           name, section: section, root: panelRoot(section), painted: painted, in: context,
           report: report)
       }
-    case .performance, .sources:
-      if !shell.phase2.available {
-        let reason = shell.nativePhase2Failure ?? "the live lease is not connected"
-        report.fail(name, "Shows the unavailable banner. \(reason)")
-        return
-      }
-      provePainted(
-        name, section: section, root: panelRoot(section), painted: painted, in: context,
-        report: report)
     default:
       provePainted(
         name, section: section, root: panelRoot(section), painted: painted, in: context,
@@ -839,59 +682,13 @@ import Vision
   ) async {
     await ShaarDevToolsSmokeExercise.run(
       shell: shell, inspector: inspector, context: context, report: report)
-    await coverageRoundTrip(shell, context: context, report: report)
     await touchRoundTrip(shell, context: context, report: report)
-    await memorySnapshot(shell, context: context, report: report)
-    await applicationStorage(shell, context: context, report: report)
-    await performanceRecord(shell, context: context, report: report)
     await recorderRoundTrip(shell, inspector: inspector, context: context, report: report)
     await renderingPaint(shell, context: context, report: report)
     await cssReload(shell, context: context, report: report)
     await ShaarDevToolsSmokeMedia.run(context: context, report: report)
     await chromeActions(
       shell: shell, context: context, host: host, pageURL: pageURL, report: report)
-  }
-
-  private static func coverageRoundTrip(
-    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .coverage
-    await settle(context)
-    guard shell.coverage.collectionReady else {
-      report.fail("coverage-record", "Start stayed disabled")
-      return
-    }
-    let pressedStart = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.coverageStart", in: context.hosting)
-    guard pressedStart else {
-      report.fail("coverage-record", "Start could not be pressed in the hidden panel")
-      return
-    }
-    let started = await wait(attempts: 40) {
-      shell.coverage.recording || shell.coverage.notice != nil
-    }
-    guard started, shell.coverage.recording else {
-      report.fail(
-        "coverage-record",
-        shell.coverage.notice.map(String.init(describing:)) ?? "Start did nothing")
-      return
-    }
-    let pressedStop = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.coverageStop", in: context.hosting)
-    guard pressedStop else {
-      report.fail("coverage-record", "Stop could not be pressed in the hidden panel")
-      return
-    }
-    let stopped = await wait(attempts: 40) { !shell.coverage.recording }
-    if stopped, shell.coverage.notice == nil,
-      shell.coverage.rows.contains(where: { $0.totalBytes > 0 && $0.usedBytes > 0 })
-    {
-      report.pass("coverage-record", "Start and Stop ran. Rows \(shell.coverage.rows.count)")
-    } else {
-      report.fail(
-        "coverage-record",
-        shell.coverage.notice.map(String.init(describing:)) ?? "No used coverage row after Stop")
-    }
   }
 
   private static func touchRoundTrip(
@@ -920,27 +717,6 @@ import Vision
       report.pass("touch", detail)
     } else {
       report.fail("touch", "Pressing Touch did not turn emulation on")
-    }
-  }
-
-  private static func memorySnapshot(
-    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .memory
-    await settle(context)
-    let pressed = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.memory.snapshot", in: context.hosting)
-    if !pressed { await shell.memory.takeSnapshot() }
-    let finished = await wait(attempts: 150) {
-      shell.memory.snapshot != nil || shell.memory.failure != nil
-        || shell.memory.support == .needsEngine
-    }
-    let gate = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.memory.engineGate", in: context.hosting)
-    if finished, shell.memory.snapshot != nil, gate == nil, shell.memory.support == .ready {
-      report.pass("memory-snapshot", "Heap snapshot completed")
-    } else {
-      report.fail("memory-snapshot", shell.memory.failure ?? "Heap snapshot did not finish")
     }
   }
 
@@ -1138,147 +914,6 @@ import Vision
       try? await Task.sleep(for: .milliseconds(100))
     }
     return false
-  }
-
-  private static func applicationStorage(
-    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .application
-    await settle(context)
-    await storageArea(
-      "Local Storage", area: .local, key: "qa-local", shell: shell, context: context,
-      report: report)
-    await storageArea(
-      "Session Storage", area: .session, key: "qa-session", shell: shell, context: context,
-      report: report)
-    await storageArea(
-      "IndexedDB", area: .indexedDB, key: "qa-db", shell: shell, context: context, report: report)
-    await storageArea(
-      "Cache Storage", area: .cache, key: "qa-cache", shell: shell, context: context,
-      report: report)
-    await proveWorkers(shell, context: context, report: report)
-    await proveCookies(shell, context: context, report: report)
-  }
-
-  private static func storageArea(
-    _ label: String, area: ShaarApplicationArea, key: String, shell: ShaarDevToolsModel,
-    context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    let pressed = ShaarDevToolsSmokeAccess.press(label: label, in: context.hosting)
-    if !pressed || shell.application.area != area {
-      if pressed {
-        report.fail("storage-\(area.rawValue)", "The \(label) button did not select that area")
-      }
-      shell.application.selectArea(area)
-    }
-    await shell.application.refresh()
-    if !shell.phase2.available {
-      report.fail(
-        "storage-\(area.rawValue)",
-        "\(label) is unavailable because the live lease is not connected")
-      return
-    }
-    let found = await wait(attempts: 40) {
-      !shell.application.loading
-        && (shell.application.failure != nil
-          || shell.application.rows.contains { $0.name.contains(key) })
-    }
-    let listed = shell.application.rows.contains { $0.name.contains(key) }
-    if found, shell.application.failure == nil, listed {
-      report.pass("storage-\(area.rawValue)", "\(label) lists \(key)")
-    } else if let failure = shell.application.failure {
-      report.fail("storage-\(area.rawValue)", failure)
-    } else if shell.application.loading {
-      report.fail("storage-\(area.rawValue)", "\(label) did not finish loading")
-    } else if shell.application.rows.isEmpty {
-      report.fail("storage-\(area.rawValue)", "\(label) did not list \(key)", severity: .wrong)
-      ShaarDevToolsSmokeLook.recordBlank(panel: "Application", in: context.hosting, report: report)
-    } else {
-      report.fail(
-        "storage-\(area.rawValue)", "\(label) loaded but did not list \(key)", severity: .wrong)
-    }
-  }
-
-  private static func proveWorkers(
-    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    let pressed = ShaarDevToolsSmokeAccess.press(label: "Service Workers", in: context.hosting)
-    if !pressed || shell.application.area != .workers {
-      if pressed {
-        report.fail("storage-workers", "The Service Workers button did not select that area")
-      }
-      shell.application.selectArea(.workers)
-    }
-    await shell.application.refresh()
-    if !shell.phase2.available {
-      report.fail(
-        "storage-workers",
-        "Service workers are unavailable because the live lease is not connected")
-      return
-    }
-    let found = await wait(attempts: 40) {
-      !shell.application.loading
-        && (shell.application.failure != nil || !shell.application.workers.isEmpty)
-    }
-    let registered = shell.application.workers.contains { $0.scriptURL.contains("sw.js") }
-    if found, shell.application.failure == nil, registered {
-      report.pass("storage-workers", "Service worker sw.js is registered")
-    } else if let failure = shell.application.failure {
-      report.fail("storage-workers", failure)
-    } else if shell.application.loading {
-      report.fail("storage-workers", "Service workers did not finish loading")
-    } else if shell.application.workers.isEmpty {
-      report.fail("storage-workers", "No service worker named sw.js", severity: .wrong)
-      ShaarDevToolsSmokeLook.recordBlank(panel: "Application", in: context.hosting, report: report)
-    } else {
-      report.fail(
-        "storage-workers", "Service workers loaded but none is sw.js", severity: .wrong)
-    }
-  }
-
-  private static func proveCookies(
-    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    let pressed = ShaarDevToolsSmokeAccess.press(label: "Cookies", in: context.hosting)
-    if !pressed || shell.application.area != .cookies {
-      if pressed {
-        report.fail("storage-cookies", "The Cookies button did not select that area")
-      }
-      shell.application.selectArea(.cookies)
-    }
-    await shell.cookies.refresh()
-    let found = shell.cookies.cookies.contains { $0.name == "qa-cookie" }
-    if shell.cookies.failure == nil, found {
-      report.pass("storage-cookies", "qa-cookie is listed")
-    } else if let failure = shell.cookies.failure {
-      report.fail("storage-cookies", failure)
-    } else if shell.cookies.cookies.isEmpty {
-      report.fail("storage-cookies", "qa-cookie was missing", severity: .wrong)
-      ShaarDevToolsSmokeLook.recordBlank(panel: "Application", in: context.hosting, report: report)
-    } else {
-      report.fail("storage-cookies", "Cookies loaded but qa-cookie was missing", severity: .wrong)
-    }
-  }
-
-  private static func performanceRecord(
-    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .performance
-    await settle(context)
-    let startedPress = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.performanceRecord", in: context.hosting)
-    if !startedPress { shell.performance.startRecording() }
-    let recording = await wait(attempts: 20) { shell.performance.capture == .recording }
-    let stoppedPress = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.performanceRecord", in: context.hosting)
-    if !stoppedPress { shell.performance.stopRecording() }
-    let idle = await wait(attempts: 20) { shell.performance.capture == .stopped }
-    if recording, idle, shell.performance.failure == nil {
-      report.pass("performance-record", "Record and Stop ran")
-    } else {
-      report.fail(
-        "performance-record", shell.performance.failure ?? "Record did not start and stop")
-    }
   }
 
   private static func recorderRoundTrip(
@@ -1525,8 +1160,7 @@ import Vision
 
   private static func contentIdentifier(_ section: ShaarDevToolsSection) -> String? {
     switch section {
-    case .memory: "shaar.devtools.memoryPanel"
-    case .coverage: "shaar.devtools.coverage"
+    case .memory, .coverage: nil
     case .audits: "shaar.devtools.audits"
     case .sensors: "shaar.devtools.sensors"
     case .rendering: "shaar.devtools.rendering.panel"
@@ -1539,10 +1173,7 @@ import Vision
   ) -> String? {
     switch section {
     case .elements: shell.dom.failure
-    case .memory: shell.memory.failure
     case .rendering: shell.rendering.failure
-    case .performance: shell.performance.failure
-    case .application: shell.application.failure
     case .cssOverview: shell.cssOverview.failure
     default: nil
     }
@@ -1570,16 +1201,13 @@ import Vision
     case .components: "shaar.devtools.componentTree"
     case .console, .network: nil
     case .issues: "shaar.devtools.issues"
-    case .application: "shaar.devtools.applicationPanel"
-    case .performance: "shaar.devtools.performancePanel"
-    case .sources: "shaar.devtools.sourcesPanel"
     case .cssOverview: "shaar.devtools.cssOverview"
     case .security: "shaar.devtools.security"
     case .repro: "shaar.devtools.reproPanel"
     case .recorder: "shaar.devtools.recorder"
     case .viewports: "shaar.devtools.viewports.panel"
     case .comparison: "shaar.devtools.comparison.panel"
-    case .memory, .coverage, .audits, .sensors, .rendering:
+    case .application, .performance, .sources, .memory, .coverage, .audits, .sensors, .rendering:
       nil
     }
   }
@@ -1636,12 +1264,7 @@ import Vision
     case .components: "Comps"
     case .console, .network: "Chromium DevTools"
     case .issues: "Issues"
-    case .application: "App"
-    case .performance: "Perf"
-    case .memory: "Memory"
-    case .coverage: "Coverage"
     case .audits: "Audits"
-    case .sources: "Sources"
     case .cssOverview: "CSS"
     case .security: "Security"
     case .sensors: "Sensors"
@@ -1650,6 +1273,7 @@ import Vision
     case .viewports: "Views"
     case .rendering: "Render"
     case .comparison: "WebKit"
+    default: "Chromium DevTools"
     }
   }
 
@@ -1663,12 +1287,7 @@ import Vision
     case .components: ["Component tree", "ReactCounter"]
     case .console, .network: []
     case .issues: ["No issues"]
-    case .application: ["Filter cookies", "Clear site data", "Local Storage"]
-    case .performance: ["Waiting for data", "Main thread"]
-    case .memory: ["Heap snapshot", "Take heap snapshot"]
-    case .coverage: ["Coverage collection", "No coverage recorded"]
     case .audits: ["Run an audit", "Entire page"]
-    case .sources: ["Filter resources", "Find in source"]
     case .cssOverview:
       [
         "style sheets", "This page has no style", "Colors", "Fonts", "Sheets", "declaration",
@@ -1680,6 +1299,7 @@ import Vision
     case .viewports: ["Add viewport", "Synced viewports"]
     case .rendering: ["Paint flashing", "Layout shift"]
     case .comparison: ["Refresh comparison", "Webkit-only", "WebKit comparison"]
+    default: []
     }
   }
 }
@@ -1769,29 +1389,16 @@ enum ShaarDevToolsSmokeSeverity: String {
     if let panel = prefixed(name, "tab-") { return (panel, "Select tab") }
     if let panel = prefixed(name, "capture-") { return (panel, "Offscreen capture") }
     if name == "probe-switches" { return ("Session", "Hidden probe switches") }
-    if name == "storage-workers" { return ("Application", "Service workers") }
-    if name == "storage-cookies" { return ("Application", "Cookies") }
-    if let area = prefixed(name, "storage-") { return ("Application", area) }
     if let panel = prefixed(name, "world-panel-") { return (panel, "Open panel") }
     if let panel = prefixed(name, "world-capture-") { return (panel, "Offscreen capture") }
-    if let area = prefixed(name, "world-storage-") { return ("Application", area) }
     switch name {
     case "page": return ("Session", "Open fixture")
     case "f12": return ("Session", "Press F12")
-    case "performance-vitals": return ("Performance", "Measure LCP and INP")
     case "world-inspect": return ("Elements", "Inspect body")
     case "world-style": return ("Elements", "Edit style")
     case "world2-elements-search": return ("Elements", "Search body")
     case "world2-elements-attribute": return ("Elements", "Edit attribute")
-    case "world2-source-open": return ("Sources", "Open source")
-    case "world2-source-pretty": return ("Sources", "Pretty print")
-    case "world2-source-map": return ("Sources", "Source map")
-    case "world2-source-map-content": return ("Sources", "Open original source")
     case "world2-websocket": return ("Network", "WebSocket")
-    case "world2-service-worker": return ("Application", "Service worker")
-    case "world2-cookie-edit": return ("Application", "Edit cookie")
-    case "world2-cookie-delete": return ("Application", "Delete cookie")
-    case "world2-performance-long-task": return ("Performance", "Long task")
     case "world2-dock-bottom": return ("Chrome", "Dock bottom")
     case "world2-dock-right": return ("Chrome", "Dock right")
     case "world2-theme-light": return ("Chrome", "Light mode")
@@ -1810,11 +1417,9 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "windows", "windows-final": return ("Session", "Windows stay hidden")
     case "quit-open": return ("Session", "Quit with DevTools open")
     case "restore": return ("Session", "Restore hidden window")
-    case "coverage-record": return ("Coverage", "Start and stop")
     case "media-capture": return ("Media", "Camera and microphone in use")
     case "media-stop": return ("Media", "Capture stops")
     case "touch": return ("Sensors", "Toggle touch")
-    case "memory-snapshot": return ("Memory", "Take heap snapshot")
     case "issues-badge": return ("Issues", "Badge count")
     case "painted-text": return ("Session", "How panels are read")
     case "inspector-styles": return ("Elements", "Styles")
@@ -1831,7 +1436,6 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "recorder-export": return ("Recorder", "Export")
     case "elements-listeners": return ("Elements", "Event listeners")
     case "elements-search": return ("Elements", "Search")
-    case "performance-record": return ("Performance", "Record and stop")
     case "recorder": return ("Recorder", "Record and stop")
     case "rendering-paint": return ("Rendering", "Paint flashing")
     case "css-overview": return ("CSS overview", "Reload")

@@ -89,37 +89,6 @@ import Foundation
     await check("issues") {
       try await self.proveIssues(shell: shell, inspector: inspector)
     }
-    await check("application-cookie") {
-      shell.cookies.configure(store: self.engine, target: target)
-      await shell.cookies.refresh()
-      guard let cookie = shell.cookies.cookies.first(where: { $0.name == "inspector-http-only" })
-      else {
-        throw Failure(
-          "Authored HttpOnly fixture cookie missing: \(shell.cookies.failure ?? "no error")")
-      }
-      shell.cookies.selectedID = cookie.id
-      await shell.cookies.save(
-        value: "shaar19-edited", secure: cookie.secure, httpOnly: cookie.httpOnly,
-        sameSite: cookie.sameSite)
-      guard
-        shell.cookies.cookies.first(where: { $0.id == cookie.id })?.value
-          == "shaar19-edited"
-      else {
-        throw Failure("Cookie edit did not read back: \(shell.cookies.failure ?? "no error")")
-      }
-      await shell.cookies.deleteSelected()
-      guard !shell.cookies.cookies.contains(where: { $0.id == cookie.id }) else {
-        throw Failure("Cookie delete did not read back")
-      }
-      return "HttpOnly fixture cookie listed, edited, read back, deleted"
-    }
-    let storage = ApplicationStorageProof(
-      application: shell.application, phase2: shell.phase2, inspector: inspector)
-    await check("application-local-storage") { try await storage.local() }
-    await check("application-session-storage") { try await storage.session() }
-    await check("application-indexed-db") { try await storage.indexedDB() }
-    await check("application-cache-storage") { try await storage.cache() }
-    await check("application-service-worker") { try await storage.serviceWorker() }
     await check("network-rules") {
       try await self.wait("network rules lease") { shell.rules.available }
       shell.rules.createNew()
@@ -203,11 +172,6 @@ import Foundation
       ).run()
       return
         "Mock, redirect, 450 ms delay, and request/response headers changed real page fetches; delay observed \(Int(elapsed)) ms. \(remainder)"
-    }
-    await check("source-bytes") {
-      try await DevToolsSourceBytesProof(
-        shell: shell, inspector: inspector, fixture: self.fixture
-      ).run()
     }
     await check("css") {
       try await self.proveCSS(shell: shell)
@@ -444,122 +408,9 @@ import Foundation
     await check("split-shell") {
       try await self.proveSplitShells(firstTab: tab, firstShell: shell)
     }
-    await check("memory") {
-      try await self.proveMemory(shell, target: target)
-    }
-    await check("performance-recording") {
-      // Split-shell closes the shared panel lease. Focus this tab and open it again.
-      try await self.restoreInspectorToolsLease(shell, tab: tab)
-      shell.section = .performance
-      // The long-task command installs its observer on the first read. Tasks
-      // that already finished are not in the timeline buffer, so that read has
-      // to finish before the page timer runs.
-      try await self.refreshPerformance(shell.performance)
-      shell.performance.startRecording()
-      let observed = try await inspector.evaluate("window.__shaarRunLongTask()") as? String
-      var refreshes = 0
-      while shell.performance.recordedTasks.isEmpty && refreshes < 8 {
-        try await self.refreshPerformance(shell.performance)
-        refreshes += 1
-        if shell.performance.recordedTasks.isEmpty {
-          try await Task.sleep(for: .milliseconds(50))
-        }
-      }
-      _ = try await inspector.evaluate(
-        "document.getElementById('shift').style.paddingTop='200px'")
-      try await self.wait("buffered vitals or a layout shift", attempts: 40) {
-        shell.performance.fcpMilliseconds != nil || shell.performance.ttfbMilliseconds != nil
-          || shell.performance.cls > 0 || shell.performance.lcpMilliseconds != nil
-      }
-      try await self.refreshPerformance(shell.performance)
-      shell.performance.stopRecording()
-      guard shell.performance.capture == .stopped else {
-        throw Failure("Performance recording did not stop")
-      }
-      guard shell.performance.failure == nil else {
-        throw Failure("Performance refresh failed: \(shell.performance.failure ?? "")")
-      }
-      guard !shell.performance.recordedTasks.isEmpty else {
-        throw Failure(
-          "No main-thread long tasks were recorded. pageTimer=\(observed ?? "nil") refreshes=\(refreshes) metrics=\(shell.performance.metrics)"
-        )
-      }
-      let vitals = await self.provePageVitals(
-        shell, target: target, tab: tab, inspector: inspector)
-      let inp = shell.performance.inpMilliseconds.map { String($0) } ?? "unavailable"
-      let lcp = shell.performance.lcpMilliseconds.map { String($0) } ?? "unavailable"
-      return
-        "Recorded \(shell.performance.recordedTasks.count) main-thread tasks; LCP=\(lcp) CLS=\(shell.performance.cls) INP=\(inp)\(vitals)"
-    }
-    await check("sources-lite") {
-      try await self.restoreInspectorToolsLease(shell, tab: tab)
-      shell.section = .sources
-      await shell.sources.refresh()
-      guard shell.sources.failure == nil else {
-        throw Failure("Resource tree failed: \(shell.sources.failure ?? "")")
-      }
-      guard
-        shell.sources.resources.contains(where: { $0.url.contains("inspector-source-sample.js") }),
-        shell.sources.treeRows.contains(where: { $0.resourceURL == nil })
-      else {
-        throw Failure(
-          "File tree missed the sample script: \(shell.sources.resources.map(\.url))")
-      }
-      guard
-        let sample = shell.sources.resources.first(where: {
-          $0.name == "inspector-source-sample.js"
-        })
-      else { throw Failure("Sample script row disappeared") }
-      await shell.sources.select(sample)
-      shell.sources.prettyPrint = true
-      guard shell.sources.displayedContent?.contains("shaarSample") == true,
-        shell.sources.displayedContent?.contains("\n") == true
-      else {
-        throw Failure("Pretty print did not format the sample script")
-      }
-      shell.sources.contentQuery = "shaarSample"
-      shell.sources.revealCurrentMatch()
-      guard shell.sources.matchLines.isEmpty == false else {
-        throw Failure("In-file search missed shaarSample")
-      }
-      return "File tree, pretty print, and search work for the sample script"
-    }
     return try results.finish(
       root: root, phase: phase, engine: engine.runtime.chromiumVersion,
       hidden: NSApp.windows.allSatisfy { !$0.isVisible })
-  }
-
-  private func proveMemory(_ shell: ShaarDevToolsModel, target: SiteControlTarget) async throws
-    -> String
-  {
-    let summary = try ShaarHeapSnapshotReader.summary(from: ShaarMemoryFixture.snapshotData())
-    guard summary.nodeCount == 5, summary.totalBytes == 4800,
-      summary.constructors.first?.name == "Window"
-    else { throw Failure("Heap fixture summary did not match") }
-    let allocated = try ShaarHeapSnapshotReader.allocations(
-      from: ShaarMemoryFixture.allocationProfileData())
-    guard allocated.first?.name == "HTMLDivElement", allocated.first?.selfBytes == 1500 else {
-      throw Failure("Allocation fixture did not match")
-    }
-    let developer = engine.developerModel(for: target)
-    shell.memory.adoptLiveTransport(developer)
-    await shell.memory.takeSnapshot()
-    if shell.memory.support == .needsEngine {
-      for language in BrowserLanguage.allCases {
-        let text = BrowserLocalization.string(
-          "Live heap snapshots need engine support", table: "Shell", language: language)
-        if Self.namesEngineVersion(text) {
-          throw Failure("Memory gate names an engine version")
-        }
-      }
-      return
-        "Heap fixture is 4800 bytes across 5 nodes. Live snapshot is waiting on the engine build."
-    }
-    guard let live = shell.memory.snapshot, live.nodeCount > 0 else {
-      throw Failure(shell.memory.failure ?? "Live heap snapshot was empty")
-    }
-    return
-      "Live heap snapshot has \(live.nodeCount) nodes and \(live.totalBytes) bytes. Fixture summary matched."
   }
 
   private func proveSyncedViewports(_ shell: ShaarDevToolsModel) async throws -> String {
@@ -971,21 +822,11 @@ import Foundation
   private static let unavailableCopy = [
     "Live DOM tree is unavailable for this tab",
     "Live component tree is unavailable for this tab",
-    "Live Application is unavailable for this tab",
-    "Live Performance is unavailable for this tab",
-    "Live heap snapshots need engine support",
-    "Memory tools are unavailable for this tab",
-    "Live Sources are unavailable for this tab",
     "Repro capture needs engine support",
     "Live Viewports need engine support",
     "WebKit comparison is unavailable for this tab",
-    "Live console and network are unavailable for this tab",
-    "Use Chromium DevTools until the live stream is available.",
+    "This panel is unavailable",
     "Open Chromium DevTools",
-    "Application data is unavailable for this tab",
-    "Performance data is unavailable for this tab",
-    "Sources are unavailable for this tab",
-    "Console commands are unavailable for this tab",
   ]
 
   private static func namesEngineVersion(_ text: String) -> Bool {
@@ -1040,58 +881,6 @@ import Foundation
   /// event buffer ignores the fixture's 80ms click. The page script already
   /// observes both. Read it after long tasks are recorded so a developer-session
   /// failure still leaves that recording in the result.
-  private func provePageVitals(
-    _ shell: ShaarDevToolsModel, target: SiteControlTarget, tab: UUID,
-    inspector: InspectorModel
-  ) async -> String {
-    do {
-      let developer = engine.developerModel(for: target)
-      try await wait("developer session idle") { !developer.applying }
-      developer.setPerformanceEnabled(true)
-      try await wait("developer performance session") { !developer.applying }
-      try await developer.refreshPerformance()
-      let clicked: Bool = await withCheckedContinuation { continuation in
-        self.engine.runtime.clickProbeElement(
-          inTabID: tab.uuidString, elementID: "performance-input"
-        ) { continuation.resume(returning: $0) }
-      }
-      try await Task.sleep(for: .milliseconds(100))
-      try await developer.refreshPerformance()
-      if let snapshot = developer.performanceSnapshot {
-        shell.performance.updatePageSnapshot(snapshot)
-      }
-      var note = clicked ? "" : " click=missed"
-      if shell.performance.lcpMilliseconds == nil || shell.performance.inpMilliseconds == nil {
-        let state = try await inspector.evaluate("document.visibilityState") as? String
-        let snapshotLCP = developer.performanceSnapshot?.lcp.map { String($0) } ?? "nil"
-        let snapshotINP = developer.performanceSnapshot?.inp.map { String($0) } ?? "nil"
-        note +=
-          " visibility=\(state ?? "nil") snapshotLCP=\(snapshotLCP) snapshotINP=\(snapshotINP)"
-      }
-      return note
-    } catch {
-      return " vitals=\(error.localizedDescription)"
-    }
-  }
-
-  private func refreshPerformance(_ model: ShaarPerformanceModel) async throws {
-    var attempts = 0
-    while attempts < 5 {
-      try await wait("performance idle") { !model.loading }
-      let before = model.completedRefreshes
-      await model.refresh()
-      if model.completedRefreshes > before {
-        if let failure = model.failure {
-          throw Failure("Performance refresh failed: \(failure)")
-        }
-        return
-      }
-      attempts += 1
-      try await Task.sleep(for: .milliseconds(20))
-    }
-    throw Failure("Performance refresh did not run")
-  }
-
   private func check(_ name: String, _ operation: () async throws -> String) async {
     await results.check(name, operation)
   }
@@ -1131,11 +920,9 @@ import Foundation
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
     "f12-route", "shell-defaults", "security", "audits", "event-stream", "issues",
-    "application-cookie",
-    "application-local-storage", "application-session-storage", "application-indexed-db",
-    "application-cache-storage", "application-service-worker", "network-rules", "source-bytes",
+    "network-rules",
     "css", "viewports", "masked-repro", "elements-live", "elements-inspector", "elements-scale",
-    "split-shell", "memory", "performance-recording", "sources-lite",
+    "split-shell",
   ]
 
   private var entries: [String: [String: Any]] = [:]

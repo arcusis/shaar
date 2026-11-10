@@ -118,72 +118,6 @@ import Testing
     phase2.close()
   }
 
-  @Test func performancePanelRendersOffscreenForEachCapture() async throws {
-    _ = NSApplication.shared
-    let idleTarget = SiteControlTarget(
-      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
-    let idlePhase = ShaarPhase2Model(target: idleTarget, transport: ShaarPhase2PendingTransport())
-    let idle = ShaarPerformanceModel(target: idleTarget, phase2: idlePhase)
-    let idleWide = try renderPerformance(idle, phase2: idlePhase, width: 900, height: 560)
-    let idleNarrow = try renderPerformance(idle, phase2: idlePhase, width: 420, height: 720)
-
-    let markedTarget = SiteControlTarget(
-      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
-    let markedPhase = ShaarPhase2Model(
-      target: markedTarget,
-      transport: ShaarPhase2FixtureTransport { command in
-        if case .vitalsInputs = command {
-          return ["items": [["name": "fcp", "value": 400]]]
-        }
-        return ["items": []]
-      })
-    let marked = ShaarPerformanceModel(target: markedTarget, phase2: markedPhase)
-    markedPhase.open()
-    for _ in 0..<20 where !markedPhase.available { await Task.yield() }
-    await marked.refresh()
-    #expect(marked.fcpMilliseconds == 400)
-    #expect(marked.timelineTasks.isEmpty)
-    let emptyChart = try renderPerformance(marked, phase2: markedPhase, width: 900, height: 560)
-    markedPhase.close()
-
-    let target = SiteControlTarget(
-      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
-    let phase2 = ShaarPhase2Model(
-      target: target,
-      transport: ShaarPhase2FixtureTransport { command in
-        switch command {
-        case .longTasks:
-          return [
-            "items": [
-              ["name": "script evaluation", "startTime": 1130, "duration": 84],
-              ["name": "event dispatch", "startTime": 1140, "duration": 70],
-            ]
-          ]
-        case .vitalsInputs:
-          return ["items": [["name": "fcp", "value": 400], ["name": "lcp", "value": 900]]]
-        default:
-          return ["items": []]
-        }
-      })
-    let model = ShaarPerformanceModel(target: target, phase2: phase2)
-    phase2.open()
-    #expect(await phase2.waitUntilAvailable())
-    model.startRecording()
-    await model.refresh()
-    #expect(model.capture == .recording)
-    #expect(model.timelineTasks.count == 2)
-    let recording = try renderPerformance(model, phase2: phase2, width: 900, height: 560)
-    model.stopRecording()
-    #expect(model.capture == .stopped)
-    let stopped = try renderPerformance(model, phase2: phase2, width: 900, height: 560)
-    #expect(!idleWide.isEmpty)
-    #expect(!idleNarrow.isEmpty)
-    #expect(!emptyChart.isEmpty)
-    #expect(!recording.isEmpty)
-    #expect(!stopped.isEmpty)
-    phase2.close()
-  }
-
   @Test func pageSnapshotSuppliesWebVitals() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
@@ -225,12 +159,4 @@ import Testing
       sequence: sequence, leaseID: 1, id: .timeline, localStorage: nil,
       text: ["type": type], number: number, flag: flag, items: [], truncated: false)
   }
-}
-
-@MainActor private func renderPerformance(
-  _ model: ShaarPerformanceModel, phase2: ShaarPhase2Model, width: CGFloat, height: CGFloat
-) throws -> Data {
-  try VisualCapture.pngOffscreen(
-    ShaarPerformancePanel(model: model, phase2: phase2),
-    size: NSSize(width: width, height: height))
 }

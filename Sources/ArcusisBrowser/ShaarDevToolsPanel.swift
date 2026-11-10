@@ -80,7 +80,6 @@ struct ShaarDevToolsPanel: View {
   @Bindable var model: ShaarDevToolsModel
   let inspector: InspectorModel?
   let openChromium: () -> Void
-  var cookieStore: (any ShaarCookieStore)? = nil
   var reproDirectory: URL? = nil
   @FocusState private var focusedSection: ShaarDevToolsSection?
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -102,13 +101,6 @@ struct ShaarDevToolsPanel: View {
     .onExitCommand(perform: handleExitCommand)
     .onChange(of: inspector?.isOpen) { _, open in
       if open == false && model.isOpen { model.close() }
-    }
-    .onChange(of: model.sources.localRoot) { _, root in
-      Task {
-        do { try await model.rules.useProjectRoot(root) } catch {
-          model.rules.failure = error.localizedDescription
-        }
-      }
     }
     .accessibilityIdentifier("shaar.devtools.shell")
     .overlay(alignment: .top) { commandMenuOverlay }
@@ -303,35 +295,10 @@ struct ShaarDevToolsPanel: View {
       unavailablePanel
     case .issues:
       ShaarDevToolsIssuesPanel(model: model, openChromium: openChromium)
-    case .application:
-      ShaarApplicationPanel(
-        model: model.application, cookies: model.cookies, phase2: model.phase2,
-        target: model.target, cookieStore: cookieStore ?? inspector?.engine,
-        openChromium: openChromium,
-        clearCookies: siteAction(.clearCookiesAndReload),
-        clearSiteData: siteAction(.clearSiteData))
-    case .performance:
-      if model.phase2.available {
-        ShaarPerformancePanel(
-          model: model.performance, phase2: model.phase2,
-          developer: inspector?.engine?.developerModel(for: model.target))
-      } else {
-        unavailablePanel
-      }
-    case .memory:
-      ShaarMemoryPanel(
-        model: model.memory,
-        developer: inspector?.engine?.developerModel(for: model.target))
-    case .coverage:
-      ShaarDevToolsCoveragePanel(model: model.coverage)
+    case .application, .performance, .memory, .coverage, .sources:
+      unavailablePanel
     case .audits:
       ShaarDevToolsAuditsPanel(model: model, inspector: inspector)
-    case .sources:
-      if model.phase2.available {
-        ShaarSourcesPanel(model: model.sources, inspector: inspector)
-      } else {
-        unavailablePanel
-      }
     case .cssOverview:
       ShaarDevToolsCSSOverviewPanel(model: model)
     case .security:
@@ -383,9 +350,6 @@ struct ShaarDevToolsPanel: View {
         .foregroundStyle(.primary)
       Text(ShellL10n.string(unavailableMessage))
         .font(.system(size: 12, weight: .medium))
-      Text(ShellL10n.string("Use Chromium DevTools until the live stream is available."))
-        .font(.system(size: 11))
-        .foregroundStyle(.primary)
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
         .help(ShellL10n.string("Open Chromium DevTools with Option-Shift-Command-I"))
         .controlSize(.small)
@@ -408,20 +372,19 @@ struct ShaarDevToolsPanel: View {
   private var unavailableMessage: String {
     if model.section == .elements { return "Live DOM tree is unavailable for this tab" }
     if model.section == .components { return "Live component tree is unavailable for this tab" }
-    if model.section == .application { return "Live Application is unavailable for this tab" }
-    if model.section == .performance { return "Live Performance is unavailable for this tab" }
-    if model.section == .memory { return "Live heap snapshots need engine support" }
-    if model.section == .sources { return "Live Sources are unavailable for this tab" }
+    if [.console, .network, .application, .sources, .performance, .memory, .coverage].contains(
+      model.section)
+    {
+      return "This panel is unavailable"
+    }
     if model.section == .repro { return "Repro capture needs engine support" }
     if model.section == .viewports { return "Live Viewports need engine support" }
     if model.section == .comparison { return "WebKit comparison is unavailable for this tab" }
-    return "Use Chromium DevTools for Console and Network"
+    return "This panel is unavailable"
   }
 
   private var nativeFailure: String? {
     switch model.section {
-    case .application, .performance, .sources:
-      return model.nativePhase2Failure ?? model.nativeStreamFailure
     default:
       return model.nativeStreamFailure
     }
@@ -455,32 +418,7 @@ struct ShaarDevToolsPanel: View {
         : "Component tools read only localhost until you turn them on for a site."
     }
     if model.section == .issues { return "Issues are scoped to this tab" }
-    if model.section == .application {
-      if model.application.area == .cookies { return "Cookies are scoped to this page" }
-      return model.phase2.available
-        ? "Application data is scoped to this tab"
-        : "Application data is unavailable for this tab"
-    }
-    if model.section == .performance {
-      return model.phase2.available
-        ? "Performance data is scoped to this tab"
-        : "Performance data is unavailable for this tab"
-    }
-    if model.section == .memory {
-      if model.memory.support == .needsEngine && model.memory.snapshot == nil
-        && model.memory.allocations == nil
-      {
-        return "Memory tools are unavailable for this tab"
-      }
-      return "Memory data is scoped to this tab"
-    }
-    if model.section == .coverage { return "Coverage is scoped to this tab" }
     if model.section == .audits { return "Audits are scoped to this tab" }
-    if model.section == .sources {
-      return model.phase2.available
-        ? "Source resources are scoped to this tab"
-        : "Sources are unavailable for this tab"
-    }
     if model.section == .cssOverview { return "CSS overview is scoped to this tab" }
     if model.section == .security { return "Security details are scoped to this tab" }
     if model.section == .sensors { return "Sensors are scoped to this tab" }
@@ -493,13 +431,7 @@ struct ShaarDevToolsPanel: View {
     }
     if model.section == .rendering { return "Rendering changes are scoped to this tab" }
     if model.section == .comparison { return "WebKit comparison is scoped to this tab" }
-    return "Open Chromium DevTools for Console and Network"
-  }
-
-  private func siteAction(_ action: SiteAction) -> (() async throws -> Void)? {
-    guard let engine = inspector?.engine else { return nil }
-    let target = model.target
-    return { try await engine.perform(action, for: target) }
+    return "Open Chromium DevTools"
   }
 
   private func moveSection(_ direction: MoveCommandDirection) {
@@ -528,15 +460,6 @@ struct ShaarDevToolsPanel: View {
     switch model.section {
     case .elements where !model.dom.search.isEmpty:
       model.dom.search = ""
-      return
-    case .application where model.application.area == .cookies && !model.cookies.search.isEmpty:
-      model.cookies.search = ""
-      return
-    case .application where !model.application.search.isEmpty:
-      model.application.search = ""
-      return
-    case .sources where !model.sources.search.isEmpty:
-      model.sources.search = ""
       return
     default:
       model.close()

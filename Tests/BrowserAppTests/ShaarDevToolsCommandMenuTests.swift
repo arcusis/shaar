@@ -15,7 +15,7 @@ import Testing
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
     let shell = ShaarDevToolsModel(target: target)
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "  ", sections: shell.sections, sources: [], nodes: [])
+      query: "  ", sections: shell.sections, nodes: [])
     let titles = matches.map(\.title)
     #expect(titles.first == "Elements")
     #expect(titles.contains("Issues"))
@@ -24,7 +24,11 @@ import Testing
     #expect(titles.contains("Sensors"))
     #expect(titles.contains("Rendering"))
     #expect(titles.contains("CSS overview"))
-    #expect(titles.contains("Coverage"))
+    #expect(!titles.contains("Coverage"))
+    #expect(!titles.contains("App"))
+    #expect(!titles.contains("Sources"))
+    #expect(!titles.contains("Perf"))
+    #expect(!titles.contains("Memory"))
     #expect(titles.contains("Recorder"))
     #expect(titles.contains("Dock to bottom"))
     #expect(titles.contains("Open in separate window"))
@@ -32,9 +36,7 @@ import Testing
     #expect(matches.allSatisfy { $0.hit.groupKey == nil })
   }
 
-  @Test func queryFiltersCommandsAndFindsPageContent() {
-    let source = ShaarSourceResource(
-      url: "http://localhost:3000/dashboard.js", type: "Script", mimeType: "text/javascript")
+  @Test func queryFindsPageElements() {
     let button = ShaarDOMNode(
       id: 4, parentID: 1, relation: .child, nodeType: 1, name: "BUTTON", value: "",
       attributes: [
@@ -43,9 +45,8 @@ import Testing
       ],
       childCount: 0, childrenIDs: [])
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "dash", sections: [.elements, .sources], sources: [source], nodes: [button])
-    #expect(matches.map(\.hit) == [.source(source.url)])
-    #expect(matches.map(\.detail) == ["Script"])
+      query: "save", sections: [.elements], nodes: [button])
+    #expect(matches.map(\.title) == ["button#save"])
   }
 
   @Test func elementQueryUsesTheTagAndIdentifier() {
@@ -60,7 +61,7 @@ import Testing
       id: 1, parentID: nil, relation: .child, nodeType: 9, name: "#document", value: "",
       attributes: [], childCount: 1, childrenIDs: [8])
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "save", sections: [], sources: [], nodes: [document, text, button])
+      query: "save", sections: [], nodes: [document, text, button])
     #expect(matches.map(\.title) == ["button#save", "Save changes"])
   }
 

@@ -64,9 +64,7 @@ import XCTest
           .environment(\.colorScheme, scheme).shellLocalization(),
         named: "after-issues-hebrew-\(suffix)", appearance: appearance, root: root)
       for (section, name) in [
-        (ShaarDevToolsSection.application, "application"),
-        (.performance, "performance"), (.sources, "sources"), (.repro, "repro"),
-        (.viewports, "viewports"),
+        (ShaarDevToolsSection.repro, "repro"), (.viewports, "viewports"),
       ] {
         shell.section = section
         try capture(

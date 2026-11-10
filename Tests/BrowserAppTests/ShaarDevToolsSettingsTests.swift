@@ -18,7 +18,7 @@ import Testing
     let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
     #expect(shell.opening == .panel(.elements))
     shell.open(inspector: inspector)
-    shell.chooseOpening(.panel(.application))
+    shell.chooseOpening(.panel(.security))
     shell.dock = .bottom
     shell.rightWidth = 470
     shell.leftWidth = 360
@@ -27,10 +27,10 @@ import Testing
     #expect(shell.rightWidth == ShaarDevToolsMetrics.sideWidth)
     #expect(shell.leftWidth == ShaarDevToolsMetrics.sideWidth)
     #expect(shell.bottomHeight == ShaarDevToolsMetrics.bottomHeight)
-    shell.section = .sources
+    shell.section = .issues
     shell.close()
     shell.open(inspector: inspector)
-    #expect(shell.section == .application)
+    #expect(shell.section == .security)
     #expect(shell.dock == .bottom)
     #expect(!shell.settingsOpen)
     shell.showSettings()
@@ -48,6 +48,11 @@ import Testing
     #expect(shell.section == .elements)
     #expect(!shell.sections.contains(.console))
     #expect(!shell.sections.contains(.network))
+    #expect(!shell.sections.contains(.application))
+    #expect(!shell.sections.contains(.sources))
+    #expect(!shell.sections.contains(.performance))
+    #expect(!shell.sections.contains(.memory))
+    #expect(!shell.sections.contains(.coverage))
   }
 
   @Test func lastPanelSurvivesANewShell() {
@@ -56,19 +61,19 @@ import Testing
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
     let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
     shell.chooseOpening(.last)
-    shell.section = .sources
+    shell.section = .issues
     let reopened = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
     #expect(reopened.opening == .last)
-    #expect(reopened.section == .sources)
+    #expect(reopened.section == .issues)
     #expect(reopened.dock == .right)
   }
 
   @Test func commandMenuIncludesSettings() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let shell = ShaarDevToolsModel(target: target)
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "set",
-      sections: ShaarDevToolsSection.allCases.filter {
-        $0 != .console && $0 != .network
-      }, sources: [], nodes: [])
+      query: "set", sections: shell.sections, nodes: [])
     #expect(matches.contains { $0.hit == .settings && $0.title == "Settings" })
     #expect(ShaarDevToolsCommandHit.settings.token == "settings")
     #expect(ShaarDevToolsCommandHit.settings.groupKey == nil)

@@ -30,6 +30,7 @@ devtools_entrypoint("meta") {
   # entrypoint is listed in the GRD file.
   deps = [ "viewports:css_files" ]
     "viewports:meta",
+    "hydration-diff:meta",
 
   visibility = [
     ":*",
@@ -53,4 +54,5 @@ group("unittests") {
   deps = [ "build-info:unittests" ]
   deps += [ "graphql-trpc:unittests" ]
     "viewports:unittests",
+    "hydration-diff:unittests",
 }

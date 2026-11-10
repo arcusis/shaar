@@ -409,6 +409,7 @@ final class ShaarDevToolsModel {
   let framework = ShaarFrameworkComponentsModel()
   let comparison: ShaarWebKitComparisonModel
   let pageAudit = InspectorAuditModel(inspector: nil)
+  let a11yOverlay = ShaarA11yOverlayModel()
   private var auditFixture: AuditFixture?
   let allowsWebKitComparison: Bool
   var securitySummary: ShaarDevToolsSecuritySummary
@@ -602,6 +603,7 @@ final class ShaarDevToolsModel {
     sources.reset()
     cssOverview.reset()
     recorder.detach()
+    a11yOverlay.stop(pageAudit.inspector)
     pageAudit.reset()
     pageAudit.inspector = nil
     auditFixture = nil

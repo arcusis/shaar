@@ -85,6 +85,8 @@ struct ShaarDevToolsAuditsPanel: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 14) {
         controls
+        ShaarA11yOverlayControls(model: model.a11yOverlay, inspector: inspector)
+        Divider()
         accessibilitySection(counts)
         Divider()
         budget(counts)

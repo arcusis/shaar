@@ -1,0 +1,70 @@
+{
+  "fixture": {
+    "exitCode": 0,
+    "report": {
+      "allWindowsHidden": true,
+      "contrast": [
+        {
+          "label": "4.48",
+          "snippet": "Low contrast"
+        }
+      ],
+      "f12": true,
+      "failure": "",
+      "fixture": true,
+      "focus": [
+        "1",
+        "2",
+        "3"
+      ],
+      "page": "http://127.0.0.1:57020/overlay",
+      "pageScreenshot": true,
+      "painted": true,
+      "passed": true,
+      "pressedToggle": false,
+      "summary": "3 tab stops \u00b7 1 contrast failure",
+      "trace": {
+        "backgroundColors": true,
+        "boxModel": true,
+        "partialAXTree": true
+      }
+    },
+    "screenshots": {
+      "panel-before.png": "Evidence/issue-1488/fixture/panel-before.png",
+      "panel-after.png": "Evidence/issue-1488/fixture/panel-after.png",
+      "page.png": "Evidence/issue-1488/fixture/page.png"
+    },
+    "stderrTail": "[24471:100169376:1110/073810.412760:ERROR:base/mac/process_requirement.cc:159] Unable to derive validation category for current process. Signature validation of current process failed: Error Domain=NSOSStatusErrorDomain Code=-67030 \"(null)\" (-67030)\n"
+  },
+  "example": {
+    "exitCode": 0,
+    "report": {
+      "allWindowsHidden": true,
+      "contrast": [],
+      "f12": true,
+      "failure": "",
+      "fixture": false,
+      "focus": [
+        "1"
+      ],
+      "page": "https://example.com/",
+      "pageScreenshot": true,
+      "painted": true,
+      "passed": true,
+      "pressedToggle": false,
+      "summary": "1 tab stop \u00b7 0 contrast failures",
+      "trace": {
+        "backgroundColors": true,
+        "boxModel": true,
+        "partialAXTree": true
+      }
+    },
+    "screenshots": {
+      "panel-before.png": "Evidence/issue-1488/example/panel-before.png",
+      "panel-after.png": "Evidence/issue-1488/example/panel-after.png",
+      "page.png": "Evidence/issue-1488/example/page.png"
+    },
+    "stderrTail": "[24872:100170939:1110/073812.249397:ERROR:net/cert/ev_root_ca_metadata.cc:158] Failed to decode OID: 0\n[24872:100170943:1110/073814.281854:ERROR:base/mac/process_requirement.cc:159] Unable to derive validation category for current process. Signature validation of current process failed: Error Domain=NSOSStatusErrorDomain Code=-67030 \"(null)\" (-67030)\n"
+  },
+  "crashReports": []
+}

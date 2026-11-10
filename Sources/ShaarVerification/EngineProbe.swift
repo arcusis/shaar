@@ -1156,7 +1156,7 @@ final class EngineProbe {
     while Date().timeIntervalSince(started) < seconds {
       try await Task.sleep(for: .seconds(1))
       let elapsed = Int(Date().timeIntervalSince(started).rounded())
-      let calls = await inspectorPollCalls(engine)
+      let calls = try await inspectorPollCalls(engine)
       samples.append(["elapsedSeconds": elapsed, "calls": calls])
       let payload: [String: Any] = ["samples": samples]
       if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) {
@@ -1165,14 +1165,23 @@ final class EngineProbe {
     }
   }
 
-  private func inspectorPollCalls(_ engine: BrowserEngine) async -> Int {
+  private func inspectorPollCalls(_ engine: BrowserEngine) async throws -> Int {
     guard let target = engine.siteControlTarget,
       let model = engine.inspectors[target.tabID], model.isOpen
-    else { return -1 }
+    else { throw ProbeFailure("Inspector poll counter was missing.") }
     let value = try? await model.evaluate("globalThis.__shaarInspectorPollCalls")
-    if let calls = value as? Int { return calls }
-    if let calls = value as? Double { return Int(calls) }
-    return -1
+    let calls: Int?
+    if let exact = value as? Int {
+      calls = exact
+    } else if let exact = value as? Double {
+      calls = Int(exact)
+    } else {
+      calls = nil
+    }
+    guard let calls, calls >= 0 else {
+      throw ProbeFailure("Inspector poll counter was missing.")
+    }
+    return calls
   }
 
   private static let inspectorPollCounter = """

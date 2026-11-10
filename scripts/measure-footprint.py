@@ -345,6 +345,10 @@ def measure_case(executable, port, tab_count, sample_seconds, eager, inspector):
                 last = samples[-1]
                 calls = last["calls"]
                 elapsed = last["elapsedSeconds"]
+                if not isinstance(calls, int) or isinstance(calls, bool) or calls < 0:
+                    raise RuntimeError(f"inspector poll counter was negative or missing: {calls}")
+                if not isinstance(elapsed, (int, float)) or isinstance(elapsed, bool) or elapsed < 0:
+                    raise RuntimeError(f"inspector poll elapsed time was invalid: {elapsed}")
                 result["inspectorPollCalls"] = calls
                 result["inspectorPollElapsedSeconds"] = elapsed
                 result["inspectorPollCallsPerSecond"] = (

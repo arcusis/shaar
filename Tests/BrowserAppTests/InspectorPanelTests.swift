@@ -32,28 +32,69 @@ import Testing
     #expect(cadence.delay == InspectorPollCadence.fastInterval)
   }
 
-  @Test func inspectorPollReadsAPickingClickWithinOneFastInterval() {
+  @Test func inspectorPollStaysFastWhilePicking() {
     var cadence = InspectorPollCadence()
+    cadence.picking = true
     for _ in 0..<20 { cadence.note(.unchanged) }
-    #expect(cadence.selectionLocked == false)
+    #expect(cadence.delay == .milliseconds(150))
+    for _ in 0..<4 { cadence.note(.unavailable) }
+    #expect(cadence.unavailableReads == 4)
     #expect(cadence.delay == .milliseconds(150))
     cadence.note(.changed)
+    cadence.picking = false
     cadence.selectionLocked = true
     #expect(cadence.delay == .milliseconds(150))
   }
 
   @Test func inspectorPollBacksOffWhenReadsMissThePage() {
     var cadence = InspectorPollCadence()
-    for _ in 0..<3 { cadence.note(.unavailable) }
+    cadence.picking = true
+    for _ in 0..<4 { cadence.note(.unavailable) }
     #expect(cadence.delay == .milliseconds(150))
-    cadence.note(.unavailable)
+    cadence.picking = false
     #expect(cadence.delay == .seconds(1))
     cadence.note(.unchanged)
     #expect(cadence.unavailableReads == 0)
     #expect(cadence.delay == .milliseconds(150))
   }
 
-  @Test func inspectorRefreshTreatsAMissingPageAsUnchanged() async {
+  @Test func inspectorPollBacksOffInThePagePanel() {
+    var cadence = InspectorPollCadence()
+    cadence.pagePanel = true
+    for _ in 0..<3 { cadence.note(.unchanged) }
+    #expect(cadence.delay == .milliseconds(150))
+    cadence.note(.unchanged)
+    #expect(cadence.delay == .seconds(1))
+  }
+
+  @Test func inspectorModelWakesThePollWhenTheUserMoves() throws {
+    let model = InspectorModel(target: target, engine: nil)
+    model.open()
+    defer { model.close() }
+    func idle() {
+      model.pollCadence.picking = false
+      model.pollCadence.selectionLocked = true
+      model.pollCadence.pagePanel = false
+      model.pollCadence.wake()
+      for _ in 0..<4 { model.pollCadence.note(.unchanged) }
+      #expect(model.pollCadence.delay == .seconds(1))
+    }
+    idle()
+    model.pick()
+    #expect(model.pollCadence.delay == .milliseconds(150))
+    idle()
+    model.setPanelMode(.page)
+    #expect(model.pollCadence.delay == .milliseconds(150))
+    idle()
+    model.documentChanged(url: URL(string: "https://example.com/next")!, committed: true)
+    #expect(model.pollCadence.delay == .milliseconds(150))
+    try model.receive(Self.fixtureSelection())
+    idle()
+    model.selectAncestor(1)
+    #expect(model.pollCadence.delay == .milliseconds(150))
+  }
+
+  @Test func inspectorRefreshTreatsAMissingPageAsUnavailable() async {
     let model = InspectorModel(target: target, engine: nil)
     model.open()
     defer { model.close() }

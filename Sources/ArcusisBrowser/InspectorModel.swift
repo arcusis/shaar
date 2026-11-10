@@ -51,7 +51,7 @@ final class InspectorModel {
   @ObservationIgnored private var pollTask: Task<Void, Never>?
   @ObservationIgnored private var pollWait: Task<Void, Never>?
   @ObservationIgnored private var pollEpoch = 0
-  @ObservationIgnored private var pollCadence = InspectorPollCadence()
+  @ObservationIgnored var pollCadence = InspectorPollCadence()
   @ObservationIgnored private var refreshing = false
   @ObservationIgnored private var fontTask: Task<Void, Never>?
   @ObservationIgnored private var cachedPageFonts: [String] = []
@@ -81,27 +81,49 @@ final class InspectorModel {
     pollCadence = InspectorPollCadence()
     pollTask = Task { [weak self] in
       while !Task.isCancelled {
-        guard let self, self.isOpen else { return }
-        let epoch = self.pollEpoch
-        let read = await self.refresh()
-        guard self.isOpen, !Task.isCancelled else { return }
-        if self.pollEpoch != epoch {
-          self.pollCadence.wake()
+        guard let pause = await self?.takePollPause() else { return }
+        switch pause {
+        case .stop:
+          return
+        case .immediately:
           continue
+        case .sleep(let wait):
+          await wait.value
+          if self?.pollWait == wait { self?.pollWait = nil }
         }
-        self.pollCadence.note(read)
-        self.pollCadence.selectionLocked = self.mode == .locked
-        let delay = self.pollCadence.delay
-        let wait = Task<Void, Never> { try? await Task.sleep(for: delay) }
-        self.pollWait = wait
-        if self.pollEpoch != epoch {
-          wait.cancel()
-          self.pollCadence.wake()
-        }
-        await wait.value
-        if self.pollWait == wait { self.pollWait = nil }
       }
     }
+  }
+
+  /// One read, then the wait that follows. The model stays retained only for this call.
+  private func takePollPause() async -> PollPause {
+    guard isOpen else { return .stop }
+    let epoch = pollEpoch
+    let read = await refresh()
+    guard isOpen, !Task.isCancelled else { return .stop }
+    if pollEpoch != epoch {
+      pollCadence.wake()
+      return .immediately
+    }
+    pollCadence.note(read)
+    pollCadence.picking = mode == .picking && panelMode != .page
+    pollCadence.selectionLocked = mode == .locked
+    pollCadence.pagePanel = panelMode == .page
+    let delay = pollCadence.delay
+    let wait = Task<Void, Never> { try? await Task.sleep(for: delay) }
+    pollWait = wait
+    if pollEpoch != epoch {
+      wait.cancel()
+      pollCadence.wake()
+      return .immediately
+    }
+    return .sleep(wait)
+  }
+
+  private enum PollPause {
+    case stop
+    case immediately
+    case sleep(Task<Void, Never>)
   }
 
   /// Cancel the in-flight wait so the next read happens now.
@@ -560,14 +582,20 @@ final class InspectorModel {
 }
 
 /// Decides how soon Inspector reads the page again.
-/// Picking stays on the fast interval so a click is read within 150 ms.
-/// A locked selection that stays still, or four reads that miss the page, wait one second.
+/// Picking an element stays at 150 ms, including when a read misses the page,
+/// so a click is read on the next pass. The Page panel and a locked selection
+/// that stays still wait one second after four unchanged reads. Four misses
+/// also wait one second, except while an element is being picked.
+/// Layout, styles, and details refresh on their own 500–700 ms loops, so this
+/// one-second pause does not delay those panels.
 struct InspectorPollCadence: Equatable {
   static let fastInterval: Duration = .milliseconds(150)
   static let idleInterval: Duration = .seconds(1)
   private(set) var unchangedReads = 0
   private(set) var unavailableReads = 0
   var selectionLocked = false
+  var pagePanel = false
+  var picking = false
 
   mutating func note(_ read: InspectorPollRead) {
     switch read {
@@ -591,8 +619,8 @@ struct InspectorPollCadence: Equatable {
   }
 
   var delay: Duration {
-    if unavailableReads >= 4 { return Self.idleInterval }
-    if selectionLocked && unchangedReads >= 4 { return Self.idleInterval }
+    if !picking && unavailableReads >= 4 { return Self.idleInterval }
+    if (selectionLocked || pagePanel) && unchangedReads >= 4 { return Self.idleInterval }
     return Self.fastInterval
   }
 }

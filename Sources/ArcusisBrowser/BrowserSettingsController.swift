@@ -384,6 +384,11 @@ final class BrowserSettingsController: NSObject {
   func createProfile(name: String) -> UUID? { state.createProfile(name: name) }
 
   @discardableResult
+  func applyDownloadDirectory(_ directory: URL?, for profileID: UUID) async -> Bool {
+    await state.applyDownloadDirectory(directory, for: profileID)
+  }
+
+  @discardableResult
   func renameProfile(_ id: UUID, name: String) -> Bool { state.renameProfile(id, name: name) }
 
   @discardableResult

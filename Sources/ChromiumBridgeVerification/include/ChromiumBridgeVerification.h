@@ -37,6 +37,14 @@ FOUNDATION_EXPORT BOOL ARCProbeLoopbackDocumentURL(NSString * _Nullable href);
 /// Names the dialog outcome recorded on private probe contexts.
 FOUNDATION_EXPORT NSString *ARCProbePrivateQuitDialogResult(
   BOOL ownerCurrent, NSString * _Nullable dialogError);
+/// A prepared native hold must be released when Swift will not own it.
+/// A refused prepare never armed a hold. A dead runtime is left alone.
+FOUNDATION_EXPORT BOOL ARCProbeNativePrepareShouldReleaseHold(
+  BOOL runtimeAlive, BOOL replyFailed, BOOL prepared, BOOL stillEligible,
+  BOOL existingOwnerIsForeign);
+/// Native audit is visible only while the current Swift owner is the native hold.
+FOUNDATION_EXPORT BOOL ARCProbeNativeHoldAuditVisible(
+  BOOL ownerCurrent, BOOL nativeHold);
 /// Trusted clicks are limited to authored fixture element ids.
 FOUNDATION_EXPORT BOOL ARCProbeTrustedClickElementAllowed(NSString * _Nullable elementID);
 

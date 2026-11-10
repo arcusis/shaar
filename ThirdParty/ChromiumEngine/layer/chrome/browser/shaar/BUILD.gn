@@ -6,6 +6,13 @@ assert(is_mac)
 
 import("//testing/test.gni")
 
+declare_args() {
+  # Private-quit activation and dialog hold. Leave this false for a release
+  # framework: the shaar_test_* quit symbols are neither linked nor exported.
+  # Unit tests still compile the glue. Set true only for a probe framework.
+  shaar_enable_quit_probe_hooks = false
+}
+
 source_set("engine") {
   public = [ "public/shaar_engine.h" ]
   sources = [
@@ -163,7 +170,35 @@ source_set("engine") {
     "//extensions/common",
     # END extensions
   ]
+  if (shaar_enable_quit_probe_hooks) {
+    deps += [ ":quit_probe_hooks" ]
+  }
 }
+
+# BEGIN quit_probe
+# Compiled into shaar_layer_unittests by default. A release framework does not
+# depend on this target unless shaar_enable_quit_probe_hooks is set.
+source_set("quit_probe_hooks") {
+  sources = [
+    "quit_probe/shaar_quit_probe.mm",
+    "quit_probe/shaar_quit_probe.h",
+  ]
+  cflags_objcc = [ "-fobjc-arc" ]
+  frameworks = [ "AppKit.framework" ]
+  deps = [
+    "//base",
+    "//chrome/browser:browser",
+    "//chrome/browser/lifetime",
+    "//chrome/browser/profiles",
+    "//chrome/browser/ui/browser_window",
+    "//content/browser",
+    "//content/public/browser",
+    "//third_party/blink/public/common",
+    "//ui/gfx",
+    "//url",
+  ]
+}
+# END quit_probe
 
 # BEGIN storage_keychain
 test("shaar_storage_keychain_unittests") {
@@ -269,6 +304,15 @@ test("shaar_media_unittests") {
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END media
+# BEGIN quit_probe
+test("shaar_quit_probe_unittests") {
+  sources = [ "quit_probe/shaar_quit_probe_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+  if (!shaar_enable_quit_probe_hooks) {
+    deps += [ ":quit_probe_hooks" ]
+  }
+}
+# END quit_probe
 
 test("shaar_layer_unittests") {
   data_deps = [ "//chrome:packed_resources" ]
@@ -284,6 +328,7 @@ test("shaar_layer_unittests") {
     "navigation/shaar_navigation_unittest.cc",
     "private_sessions/shaar_private_sessions_unittest.cc",
     "profiles/shaar_profiles_unittest.cc",
+    "quit_probe/shaar_quit_probe_unittest.cc",
     "site_data/shaar_site_data_unittest.cc",
     "storage_keychain/shaar_storage_keychain_unittest.cc",
     "storage_keychain/shaar_keychain_deadline_unittest.mm",
@@ -313,6 +358,9 @@ test("shaar_layer_unittests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
+  if (!shaar_enable_quit_probe_hooks) {
+    deps += [ ":quit_probe_hooks" ]
+  }
   ldflags = [
     "-Wl,--threads=4",
     "-Wl,--thinlto-jobs=4",
@@ -329,4 +377,9 @@ config("exports") {
     "-Wl,--thinlto-jobs=4",
     "-Wl,--read-workers=2",
   ]
+  if (shaar_enable_quit_probe_hooks) {
+    inputs += [ "shaar_engine_quit_probe.exports" ]
+    ldflags += [ "-Wl,-exported_symbols_list," + rebase_path(
+                     "shaar_engine_quit_probe.exports", root_build_dir) ]
+  }
 }

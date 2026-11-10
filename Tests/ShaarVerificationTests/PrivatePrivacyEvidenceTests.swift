@@ -190,6 +190,23 @@ import Testing
         == "devtools-error")
   }
 
+  @Test func nativePrepareReleasesAnArmedHoldWhenSwiftWillNotOwnIt() {
+    #expect(ARCProbeNativePrepareShouldReleaseHold(true, false, true, false, false))
+    #expect(ARCProbeNativePrepareShouldReleaseHold(true, true, true, true, false))
+    #expect(ARCProbeNativePrepareShouldReleaseHold(true, false, true, true, true))
+    #expect(!ARCProbeNativePrepareShouldReleaseHold(true, false, true, true, false))
+    #expect(!ARCProbeNativePrepareShouldReleaseHold(false, false, true, false, false))
+    #expect(!ARCProbeNativePrepareShouldReleaseHold(true, true, false, false, true))
+    #expect(!ARCProbeNativePrepareShouldReleaseHold(true, false, false, false, false))
+  }
+
+  @Test func nativeHoldAuditStaysHiddenWithoutASwiftOwner() {
+    #expect(!ARCProbeNativeHoldAuditVisible(false, true))
+    #expect(!ARCProbeNativeHoldAuditVisible(true, false))
+    #expect(!ARCProbeNativeHoldAuditVisible(false, false))
+    #expect(ARCProbeNativeHoldAuditVisible(true, true))
+  }
+
   @Test func trustedClickAllowlistIncludesTheQuitActivationButton() {
     #expect(ARCProbeTrustedClickElementAllowed("blank"))
     #expect(ARCProbeTrustedClickElementAllowed("popup"))

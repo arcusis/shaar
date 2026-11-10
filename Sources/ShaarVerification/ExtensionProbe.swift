@@ -39,6 +39,7 @@ final class ExtensionProbe {
     let profileB = spaces[1].profileID
     let fixtureURL = root.appending(path: "Extension")
     let extensionA = try runtime.loadProbeExtension(at: fixtureURL, profileID: profileA.uuidString)
+    ProbeExtensionFixture.rememberAccountIsolation(extensionA)
     try await checkExtensionManager(profileA, hiddenFixtureID: extensionA)
     store.perform(.space(spaces[0].id))
     engine.refreshExtensions()

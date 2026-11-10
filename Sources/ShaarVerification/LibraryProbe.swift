@@ -382,12 +382,14 @@ final class LibraryProbe {
   {
     store.perform(.space(space))
     engine.extensionPanel = nil
-    engine.refreshExtensions()
-    guard let fixture = engine.extensions.first(where: { $0.name == "Account isolation probe" })
-    else { throw LibraryProbeFailure("Library MV3 fixture missing.") }
-    engine.executeExtension(fixture.id)
-    guard case .popup(let popup) = engine.extensionPanel else {
+    let popup: ExtensionPopupContext
+    switch await ProbeExtensionFixture.openPopup(on: engine) {
+    case .unavailable:
+      throw LibraryProbeFailure("Library MV3 fixture missing.")
+    case .didNotOpen:
       throw LibraryProbeFailure("Library MV3 popup missing.")
+    case .opened(let opened):
+      popup = opened
     }
     defer { engine.extensionPanel = nil }
     if let page = runtime.view(forExtensionPopupID: popup.id) {

@@ -209,15 +209,18 @@ final class NativeSelectionProbe {
     {
       return context.id
     }
-    engine.refreshExtensions()
-    guard let id = engine.extensions.first(where: { $0.name == "Account isolation probe" })?.id
-    else {
+    let context: ExtensionPopupContext
+    switch await ProbeExtensionFixture.openPopup(on: engine) {
+    case .unavailable:
       throw NativeSelectionFailure("Activation extension fixture missing.")
+    case .didNotOpen:
+      throw NativeSelectionFailure("Activation extension popup missing.")
+    case .opened(let opened):
+      context = opened
     }
-    engine.executeExtension(id)
-    guard case .popup(let context) = engine.extensionPanel,
-      let view = runtime.view(forExtensionPopupID: context.id)
-    else { throw NativeSelectionFailure("Activation extension popup missing.") }
+    guard let view = runtime.view(forExtensionPopupID: context.id) else {
+      throw NativeSelectionFailure("Activation extension popup missing.")
+    }
     let host = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 420, height: 560), styleMask: .borderless,
       backing: .buffered, defer: false)

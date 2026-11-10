@@ -57,6 +57,16 @@ describeWithEnvironment('StackingPanel', () => {
     assert.deepEqual(selected, [6]);
   });
 
+  it('clears the page highlight when the panel hides or detaches', () => {
+    let cleared = 0;
+    const panel = mount(undefined, undefined, () => {
+      cleared += 1;
+    });
+    panel.willHide();
+    panel.onDetach();
+    assert.strictEqual(cleared, 2);
+  });
+
   it('says when the element cannot be selected', async () => {
     const panel = mount(async () => ({elements: fixture(), clipped: true}), () => Promise.resolve(false));
     await panel.capture();
@@ -71,8 +81,9 @@ describeWithEnvironment('StackingPanel', () => {
 function mount(
     collector?: () => Promise<Stacking.StackingModel.StackingSnapshot>,
     select?: (nodeId: number, backendNodeId: number|null) => Promise<boolean>,
+    hideHighlight?: () => void,
     ): Stacking.StackingPanel.StackingPanel {
-  const panel = new Stacking.StackingPanel.StackingPanel(collector, select);
+  const panel = new Stacking.StackingPanel.StackingPanel(collector, select, hideHighlight);
   openPanels.push(panel);
   return panel;
 }

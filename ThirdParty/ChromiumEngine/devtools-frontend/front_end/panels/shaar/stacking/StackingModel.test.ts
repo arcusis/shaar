@@ -66,6 +66,43 @@ describe('StackingModel', () => {
     assert.deepEqual(slabs.map(slab => slab.name), ['div#shown']);
   });
 
+  it('keeps a deep non-context below the next z-index step', () => {
+    const bounds = {x: 0, y: 0, width: 120, height: 80};
+    const chain = [
+      element(1, 'html', {bounds: {x: 0, y: 0, width: 400, height: 300}, depth: 0}),
+      element(2, 'div#d0', {parentId: 1, bounds, depth: 1}),
+      element(3, 'div#d1', {parentId: 2, bounds, depth: 2}),
+      element(4, 'div#d2', {parentId: 3, bounds, depth: 3}),
+      element(5, 'div#d3', {parentId: 4, bounds, depth: 4}),
+      element(6, 'div#d4', {parentId: 5, bounds, depth: 5}),
+      element(7, 'div#raised', {parentId: 1, bounds, depth: 1, position: 'absolute', zIndex: '1'}),
+    ];
+    const slabs = Model.slabsFrom(chain, 'z-index');
+    const deep = slabs.find(slab => slab.name === 'div#d4');
+    const raised = slabs.find(slab => slab.name === 'div#raised');
+    assert.strictEqual(slabs.find(slab => slab.name === 'div#d0')?.level, Model.INNER_STEP);
+    assert.isBelow(deep?.level ?? 0, Model.Z_STEP);
+    assert.strictEqual(raised?.level, Model.Z_STEP);
+    assert.isBelow(deep?.level ?? 0, raised?.level ?? 0);
+    const camera = {yaw: 0, pitch: 0, zoom: 1, panX: 0, panY: 0};
+    assert.strictEqual(Model.hitSlab({x: 40, y: 40}, slabs, camera)?.nodeId, 7);
+
+    const wrapped = [
+      element(1, 'html', {bounds: {x: 0, y: 0, width: 400, height: 300}, depth: 0}),
+      element(2, 'div#fade', {parentId: 1, bounds, depth: 1, opacity: '0.4'}),
+      element(3, 'div#a', {parentId: 2, bounds, depth: 2}),
+      element(4, 'div#b', {parentId: 3, bounds, depth: 3}),
+      element(5, 'div#c', {parentId: 4, bounds, depth: 4}),
+      element(6, 'div#d', {parentId: 5, bounds, depth: 5}),
+      element(7, 'div#raised', {parentId: 1, bounds, depth: 1, position: 'absolute', zIndex: '1'}),
+    ];
+    const wrappedSlabs = Model.slabsFrom(wrapped, 'z-index');
+    const wrappedDeep = wrappedSlabs.find(slab => slab.name === 'div#d');
+    const wrappedRaised = wrappedSlabs.find(slab => slab.name === 'div#raised');
+    assert.isBelow(wrappedDeep?.level ?? 0, wrappedRaised?.level ?? 0);
+    assert.strictEqual(Model.hitSlab({x: 40, y: 40}, wrappedSlabs, camera)?.nodeId, 7);
+  });
+
   it('picks the higher slab when the quads overlap', () => {
     const root = element(1, 'html', {bounds: {x: 0, y: 0, width: 200, height: 200}, depth: 0});
     const child = element(2, 'div#modal', {
@@ -160,6 +197,7 @@ describe('StackingModel', () => {
     }, new Map<number, {model?: Stacking.StackingModel.ProtocolBoxModel}>(), new Map());
     assert.strictEqual(snapshot.elements.length, Model.MAXIMUM_NODES);
     assert.strictEqual(snapshot.elements[0]?.name, 'html');
+    assert.strictEqual(snapshot.elements[Model.MAXIMUM_NODES - 1]?.nodeId, 181);
     assert.isTrue(snapshot.clipped);
   });
 });

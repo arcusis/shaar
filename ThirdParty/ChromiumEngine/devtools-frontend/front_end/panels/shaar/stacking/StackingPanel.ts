@@ -6,7 +6,12 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import {html, render, type TemplateResult} from '../../../ui/lit/lit.js';
 
-import {collectFromInspectedPage, revealInElements, StackingCaptureError} from './StackingCapture.js';
+import {
+  collectFromInspectedPage,
+  hideInspectedHighlight,
+  revealInElements,
+  StackingCaptureError,
+} from './StackingCapture.js';
 import stackingStyles from './stacking.css.js';
 import {
   fittedCamera,
@@ -129,10 +134,12 @@ const DRAG_DISTANCE = 6;
 
 type Collector = () => Promise<StackingSnapshot>;
 type Selector = (nodeId: number, backendNodeId: number|null) => Promise<boolean>;
+type HighlightHider = () => void;
 
 export class StackingPanel extends UI.Panel.Panel {
   #collector: Collector;
   #select: Selector;
+  #hideHighlight: HighlightHider;
   #elements: StackingElement[] = [];
   #mode: StackingMode = 'z-index';
   #camera: StackingCamera = orbitCamera();
@@ -145,12 +152,23 @@ export class StackingPanel extends UI.Panel.Panel {
   #needsFit = false;
   #drag: {x: number, y: number, yaw: number, pitch: number, moved: boolean}|null = null;
 
-  constructor(collector?: Collector, select?: Selector) {
+  constructor(collector?: Collector, select?: Selector, hideHighlight?: HighlightHider) {
     super('shaar-stacking', /* useShadowDom */ true);
     this.#collector = collector ?? collectFromInspectedPage;
     this.#select = select ?? revealInElements;
+    this.#hideHighlight = hideHighlight ?? hideInspectedHighlight;
     this.registerRequiredCSS(stackingStyles);
     this.requestUpdate();
+  }
+
+  override willHide(): void {
+    super.willHide();
+    this.#hideHighlight();
+  }
+
+  override onDetach(): void {
+    super.onDetach();
+    this.#hideHighlight();
   }
 
   override performUpdate(): void {

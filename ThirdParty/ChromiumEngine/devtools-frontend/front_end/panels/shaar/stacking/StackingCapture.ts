@@ -7,11 +7,11 @@ import * as SDK from '../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../generated/protocol.js';
 
 import {
+  type ElementBudget,
   elementsFromDocument,
-  MAXIMUM_NODES,
   type ProtocolComputedStyle,
-  type ProtocolDocument,
   type ProtocolNode,
+  retainElement,
   type StackingSnapshot,
 } from './StackingModel.js';
 
@@ -63,29 +63,30 @@ export async function revealInElements(nodeId: number, backendNodeId: number|nul
   return true;
 }
 
+export function hideInspectedHighlight(): void {
+  SDK.OverlayModel.OverlayModel.hideDOMNodeHighlight(SDK.TargetManager.TargetManager.instance());
+}
+
 async function snapshotFromDom(root: SDK.DOMModel.DOMNode, cssModel: SDK.CSSModel.CSSModel):
     Promise<StackingSnapshot> {
-  const protocol = domToProtocol(root);
-  const document: ProtocolDocument = {root: protocol};
-  const preliminary = elementsFromDocument(document, new Map(), new Map());
+  const budget: ElementBudget = {ids: new Set(), clipped: false};
+  const kept: SDK.DOMModel.DOMNode[] = [];
+  const protocol = domToProtocol(root, null, false, budget, kept);
+  if (!protocol) {
+    return {elements: [], clipped: budget.clipped};
+  }
   const boxes = new Map<number, {model?: {border?: number[], content?: number[]}}>();
   const styles = new Map<number, ProtocolComputedStyle>();
-  const byId = indexNodes(root);
-  const kept = preliminary.elements.slice(0, MAXIMUM_NODES);
-  for (const element of kept) {
-    const node = byId.get(element.nodeId);
-    if (!node) {
-      continue;
-    }
+  for (const node of kept) {
     const model = await node.boxModel();
     if (model) {
-      boxes.set(element.nodeId, {model: {border: model.border, content: model.content}});
+      boxes.set(node.id, {model: {border: model.border, content: model.content}});
     }
     const computed = await cssModel.getComputedStyle(node.id);
-    styles.set(element.nodeId, computedStyleReply(computed));
+    styles.set(node.id, computedStyleReply(computed));
   }
-  const snapshot = elementsFromDocument(document, boxes, styles);
-  return {elements: snapshot.elements, clipped: preliminary.clipped || snapshot.clipped};
+  const snapshot = elementsFromDocument({root: protocol}, boxes, styles);
+  return {elements: snapshot.elements, clipped: budget.clipped || snapshot.clipped};
 }
 
 function computedStyleReply(computed: Map<string, string>|null): ProtocolComputedStyle {
@@ -99,23 +100,43 @@ function computedStyleReply(computed: Map<string, string>|null): ProtocolCompute
   return {computedStyle};
 }
 
-function indexNodes(root: SDK.DOMModel.DOMNode): Map<number, SDK.DOMModel.DOMNode> {
-  const byId = new Map<number, SDK.DOMModel.DOMNode>();
-  const visit = (node: SDK.DOMModel.DOMNode): void => {
-    byId.set(node.id, node);
-    for (const child of node.children() ?? []) {
-      visit(child);
+function domToProtocol(
+    node: SDK.DOMModel.DOMNode, parentId: number|null, parentIsElement: boolean, budget: ElementBudget,
+    kept: SDK.DOMModel.DOMNode[]): ProtocolNode|null {
+  if (budget.clipped) {
+    return null;
+  }
+  const nodeId = node.id;
+  const nodeType = node.nodeType();
+  const nodeName = node.nodeName();
+  const isElement = nodeType === 1 && nodeId > 0;
+  const retained = retainElement(nodeId, nodeType, nodeName, parentId, parentIsElement, budget);
+  if (isElement && !retained) {
+    return null;
+  }
+  if (retained) {
+    kept.push(node);
+  }
+  const childParent = isElement ? nodeId : parentId;
+  const childParentIsElement = isElement ? true : parentIsElement;
+  const children: ProtocolNode[] = [];
+  for (const child of node.children() ?? []) {
+    if (budget.clipped) {
+      break;
     }
-    const content = node.contentDocument();
-    if (content) {
-      visit(content);
+    const converted = domToProtocol(child, childParent, childParentIsElement, budget, kept);
+    if (converted) {
+      children.push(converted);
     }
-  };
-  visit(root);
-  return byId;
-}
-
-function domToProtocol(node: SDK.DOMModel.DOMNode): ProtocolNode {
+  }
+  let contentDocument: ProtocolNode|undefined;
+  const content = node.contentDocument();
+  if (content && !budget.clipped) {
+    const converted = domToProtocol(content, childParent, childParentIsElement, budget, kept);
+    if (converted) {
+      contentDocument = converted;
+    }
+  }
   const attributes: string[] = [];
   const identifier = node.getAttribute('id');
   const className = node.getAttribute('class');
@@ -125,15 +146,14 @@ function domToProtocol(node: SDK.DOMModel.DOMNode): ProtocolNode {
   if (className !== undefined) {
     attributes.push('class', className);
   }
-  const content = node.contentDocument();
   return {
-    nodeId: node.id,
+    nodeId,
     backendNodeId: node.backendNodeId(),
-    nodeType: node.nodeType(),
-    nodeName: node.nodeName(),
+    nodeType,
+    nodeName,
     attributes,
-    children: (node.children() ?? []).map(child => domToProtocol(child)),
-    contentDocument: content ? domToProtocol(content) : undefined,
+    children,
+    contentDocument,
   };
 }
 

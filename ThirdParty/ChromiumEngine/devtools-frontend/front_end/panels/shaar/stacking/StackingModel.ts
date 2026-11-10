@@ -306,6 +306,32 @@ export function fittedCamera(slabs: StackingSlab[], width: number, height: numbe
   return camera;
 }
 
+export interface ElementBudget {
+  ids: Set<number>;
+  clipped: boolean;
+}
+
+/**
+ * Keeps one element toward MAXIMUM_NODES. Skipped tags and orphans are left
+ * out. A further element sets clipped and is not kept, so the walk can stop.
+ */
+export function retainElement(
+    nodeId: number, nodeType: number, nodeName: string, parentId: number|null, parentIsElement: boolean,
+    budget: ElementBudget): boolean {
+  if (nodeType !== 1 || nodeId <= 0 || SKIPPED_TAGS.has(nodeName.toUpperCase())) {
+    return false;
+  }
+  if (parentIsElement && parentId !== null && !budget.ids.has(parentId)) {
+    return false;
+  }
+  if (budget.ids.size >= MAXIMUM_NODES) {
+    budget.clipped = true;
+    return false;
+  }
+  budget.ids.add(nodeId);
+  return true;
+}
+
 export function elementsFromDocument(
     document: ProtocolDocument,
     boxes: Map<number, {model?: ProtocolBoxModel}>,
@@ -316,10 +342,9 @@ export function elementsFromDocument(
     return {elements: [], clipped: false};
   }
   const flat: RawNode[] = [];
-  flattenProtocol(root, null, false, 0, flat);
-  const eligible = prefixNodes(flat, Number.MAX_SAFE_INTEGER);
-  const kept = prefixNodes(flat, MAXIMUM_NODES);
-  return {elements: elementsFromRaw(kept, boxes, styles), clipped: eligible.length > kept.length};
+  const budget: ElementBudget = {ids: new Set(), clipped: false};
+  flattenProtocol(root, null, false, 0, flat, budget);
+  return {elements: elementsFromRaw(flat, boxes, styles), clipped: budget.clipped};
 }
 
 export function boundsFromQuad(quad: number[]|undefined): Rect|null {
@@ -384,7 +409,6 @@ interface RawNode {
   nodeId: number;
   backendNodeId: number|null;
   parentId: number|null;
-  parentIsElement: boolean;
   name: string;
   attributes: string[];
   depth: number;
@@ -424,18 +448,25 @@ function elementsFromRaw(
 }
 
 function flattenProtocol(
-    node: ProtocolNode, parentId: number|null, parentIsElement: boolean, depth: number, into: RawNode[]): void {
+    node: ProtocolNode, parentId: number|null, parentIsElement: boolean, depth: number, into: RawNode[],
+    budget: ElementBudget): void {
+  if (budget.clipped) {
+    return;
+  }
   const type = integer(node.nodeType) ?? 0;
   const nodeId = integer(node.nodeId) ?? 0;
   const name = node.nodeName ?? '';
   const isElement = type === 1 && nodeId > 0;
-  if (isElement && !SKIPPED_TAGS.has(name.toUpperCase())) {
+  const retained = retainElement(nodeId, type, name, parentId, parentIsElement, budget);
+  if (isElement && !retained) {
+    return;
+  }
+  if (retained) {
     const backend = integer(node.backendNodeId) ?? 0;
     into.push({
       nodeId,
       backendNodeId: backend > 0 ? backend : null,
       parentId,
-      parentIsElement,
       name,
       attributes: node.attributes ?? [],
       depth,
@@ -445,27 +476,14 @@ function flattenProtocol(
   const childParentIsElement = isElement ? true : parentIsElement;
   const childDepth = isElement ? depth + 1 : depth;
   for (const child of node.children ?? []) {
-    flattenProtocol(child, childParent, childParentIsElement, childDepth, into);
-  }
-  if (node.contentDocument) {
-    flattenProtocol(node.contentDocument, childParent, childParentIsElement, childDepth, into);
-  }
-}
-
-function prefixNodes(nodes: RawNode[], limit: number): RawNode[] {
-  const kept: RawNode[] = [];
-  const ids = new Set<number>();
-  for (const node of nodes) {
-    if (kept.length >= limit) {
-      break;
+    if (budget.clipped) {
+      return;
     }
-    if (node.parentIsElement && node.parentId !== null && !ids.has(node.parentId)) {
-      continue;
-    }
-    kept.push(node);
-    ids.add(node.nodeId);
+    flattenProtocol(child, childParent, childParentIsElement, childDepth, into, budget);
   }
-  return kept;
+  if (node.contentDocument && !budget.clipped) {
+    flattenProtocol(node.contentDocument, childParent, childParentIsElement, childDepth, into, budget);
+  }
 }
 
 function labelFor(node: RawNode): string {
@@ -509,7 +527,7 @@ function childIds(elements: StackingElement[]): Map<number, number[]> {
 }
 
 function walkSlab(
-    nodeId: number, parentContext: number, depthInContext: number, isRoot: boolean,
+    nodeId: number, parentPlane: number, depthInPlane: number, isRoot: boolean,
     children: Map<number, number[]>, byId: Map<number, StackingElement>, mode: StackingMode,
     order: {value: number}, slabs: StackingSlab[]): void {
   const element = byId.get(nodeId);
@@ -519,7 +537,7 @@ function walkSlab(
   const reasons = reasonsFor(element, isRoot);
   const creates = reasons.length > 0;
   const zIndex = parsedZIndex(element.style.zIndex);
-  const level = levelFor(creates, zIndex, element.depth, depthInContext, parentContext, isRoot, mode);
+  const level = levelFor(creates, zIndex, element.depth, depthInPlane, parentPlane, isRoot, mode);
   if (element.bounds && element.bounds.width >= 1 && element.bounds.height >= 1) {
     slabs.push({
       nodeId: element.nodeId,
@@ -534,29 +552,37 @@ function walkSlab(
     });
     order.value += 1;
   }
-  const nextContext = creates ? level : parentContext;
-  const nextDepth = creates ? 0 : depthInContext + 1;
+  const liftsPlane = mode === 'z-index' && !isRoot && creates && zIndex !== null && zIndex !== 0;
+  const nextPlane = liftsPlane ? level : parentPlane;
+  const nextDepth = isRoot || liftsPlane ? 0 : depthInPlane + 1;
   for (const child of children.get(nodeId) ?? []) {
-    walkSlab(child, nextContext, nextDepth, false, children, byId, mode, order, slabs);
+    walkSlab(child, nextPlane, nextDepth, false, children, byId, mode, order, slabs);
   }
 }
 
+// Offsets inside one z-index plane approach Z_STEP and stay strictly below it,
+// so a deep non-context cannot paint or hit above the next z-index step.
+function intraOffset(depthInPlane: number): number {
+  const span = Z_STEP - INNER_STEP;
+  return INNER_STEP + span * (depthInPlane / (depthInPlane + 1));
+}
+
 function levelFor(
-    creates: boolean, zIndex: number|null, depth: number, depthInContext: number, parentContext: number,
-    isRoot: boolean, mode: StackingMode): number {
+    creates: boolean, zIndex: number|null, depth: number, depthInPlane: number, parentPlane: number, isRoot: boolean,
+    mode: StackingMode): number {
   if (mode === 'dom') {
     return depth * DOM_STEP;
   }
   if (isRoot) {
     return 0;
   }
-  if (creates) {
-    if (zIndex !== null && zIndex !== 0) {
-      return parentContext + zIndex * Z_STEP;
-    }
-    return parentContext + INNER_STEP;
+  if (creates && zIndex !== null && zIndex !== 0) {
+    return parentPlane + zIndex * Z_STEP;
   }
-  return parentContext + INNER_STEP + depthInContext * INNER_STEP;
+  if (creates) {
+    return parentPlane + INNER_STEP;
+  }
+  return parentPlane + intraOffset(depthInPlane);
 }
 
 function appendEffect(name: string, value: string, reasons: string[]): void {

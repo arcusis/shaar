@@ -325,7 +325,7 @@ private final class BrowserSettingsWindowDelegate: NSObject, NSWindowDelegate {
 final class BrowserSettingsController: NSObject {
   enum Presentation { case visible, hiddenProbe }
 
-  private let state: BrowserSettingsState
+  let state: BrowserSettingsState
   let presentation: Presentation
   private var windowDelegate: BrowserSettingsWindowDelegate?
   private(set) var window: NSWindow?
@@ -382,11 +382,6 @@ final class BrowserSettingsController: NSObject {
 
   @discardableResult
   func createProfile(name: String) -> UUID? { state.createProfile(name: name) }
-
-  @discardableResult
-  func applyDownloadDirectory(_ directory: URL?, for profileID: UUID) async -> Bool {
-    await state.applyDownloadDirectory(directory, for: profileID)
-  }
 
   @discardableResult
   func renameProfile(_ id: UUID, name: String) -> Bool { state.renameProfile(id, name: name) }

@@ -664,7 +664,7 @@ import Foundation
     let armedState = await evaluate(
       runtime, tab: unloadID, script: "document.documentElement.dataset.armed==='1'?1:0")
     context.store.closeTab(unloadID)
-    let decision = await beforeUnloadDecision(context, tab: unloadID)
+    let decision = await beforeUnloadDecision(context, runtime: runtime, tab: unloadID)
     if context.store.session.page(forTabID: unloadID) != nil {
       _ = await evaluate(runtime, tab: unloadID, script: "window.onbeforeunload=null")
       orderOutVisibleWindows()
@@ -676,12 +676,13 @@ import Foundation
         context.store.session.page(forTabID: unloadID) == nil && windowsHidden()
       })
     let status = beforeUnloadStatus(
-      armed: armed, armedState: armedState, cancelledWhileHidden: decision.cancelledWhileHidden,
-      sawVisibleDialog: decision.sawVisibleDialog, dismissed: dismissed)
+      armed: armed, armedState: armedState, prompted: decision.prompted,
+      cancelled: decision.cancelled, sawVisibleDialog: decision.sawVisibleDialog,
+      dismissed: dismissed)
     rows.append(
       row(
         "dialogs-beforeunload", status,
-        "Armed=\(armedState ?? "nil"), cancelledWhileHidden=\(decision.cancelledWhileHidden), sawVisibleDialog=\(decision.sawVisibleDialog), dismissed=\(dismissed)."
+        "Armed=\(armedState ?? "nil"), prompted=\(decision.prompted), cancelled=\(decision.cancelled), sawVisibleDialog=\(decision.sawVisibleDialog), dismissed=\(dismissed)."
       ))
     return rows
   }
@@ -709,7 +710,7 @@ import Foundation
       return rows
     }
     let profileA = context.store.session.selectedSpace.profileID
-    let appliedA = await settings.applyDownloadDirectory(directoryA, for: profileA)
+    let appliedA = await settings.state.applyDownloadDirectory(directoryA, for: profileA)
     guard context.engine.navigateCurrentPage(to: url(base, path: "/file-a.txt")) else {
       rows.append(row("downloads-a", "fail", "The download navigation was rejected."))
       return rows
@@ -740,7 +741,7 @@ import Foundation
       rows.append(row("downloads-b", "fail", "The second profile page did not load."))
       return rows
     }
-    let appliedB = await settings.applyDownloadDirectory(directoryB, for: profileB)
+    let appliedB = await settings.state.applyDownloadDirectory(directoryB, for: profileB)
     guard context.engine.navigateCurrentPage(to: url(base, path: "/file-b.txt")) else {
       rows.append(row("downloads-b", "fail", "The second download navigation was rejected."))
       return rows
@@ -777,20 +778,22 @@ import Foundation
       return rows
     }
     let signaled = targets.filter { kill($0, SIGKILL) == 0 }
+    let stamp = rendererKillStamp(signaled)
     let failed = await until(
       attempts: 100, condition: { context.store.rendererFailures[tab] != nil })
     guard !signaled.isEmpty, failed, let failure = context.store.rendererFailures[tab] else {
       rows.append(
         row(
           "renderer-kill", "fail",
-          "Signaled \(signaled), sad tab \(failed), recorded \(context.store.rendererFailures.count), new \(appeared)."
-        ))
+          "Signaled \(signaled), sad tab \(failed), recorded \(context.store.rendererFailures.count), new \(appeared).",
+          stamp))
       return rows
     }
     rows.append(
       row(
         "renderer-kill", "pass",
-        "Signaled \(signaled) and the tab ended with \(failure.status) exit \(failure.exitCode)."))
+        "Signaled \(signaled) and the tab ended with \(failure.status) exit \(failure.exitCode).",
+        stamp))
     let reloaded = context.store.reloadFailedPage(failure.id)
     let recovered = await until(
       attempts: 150,
@@ -972,8 +975,10 @@ import Foundation
     return await click(runtime, tab: tab, element: element)
   }
 
+  private static let processListingTimeout: TimeInterval = 5
+
   /// The host process list is larger than a pipe, so `ps` writes a file. A full pipe stalls
-  /// `ps` and `waitUntilExit` never returns.
+  /// `ps` and an untimed wait never returns.
   private static func rendererPIDs() -> [Int32] {
     let listing = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("arcusis-renderer-ps-\(getpid()).txt")
@@ -984,15 +989,12 @@ import Foundation
     process.executableURL = URL(fileURLWithPath: "/bin/ps")
     process.arguments = ["-axo", "pid=,ppid=,rss=,command="]
     process.standardOutput = output
-    do { try process.run() } catch {
+    guard processFinished(process, within: processListingTimeout) else {
       try? output.close()
       return []
     }
-    process.waitUntilExit()
     try? output.close()
-    guard process.terminationStatus == 0,
-      let text = try? String(contentsOf: listing, encoding: .utf8)
-    else { return [] }
+    guard let text = try? String(contentsOf: listing, encoding: .utf8) else { return [] }
     var parents: [Int32: Int32] = [:]
     var rss: [Int32: Int] = [:]
     var commands: [Int32: String] = [:]
@@ -1017,6 +1019,34 @@ import Foundation
     }
     return descendants.filter { commands[$0]?.contains("--type=renderer") == true }
       .sorted { (rss[$0] ?? 0) > (rss[$1] ?? 0) }
+  }
+
+  private static func processFinished(_ process: Process, within seconds: TimeInterval) -> Bool {
+    let finished = DispatchSemaphore(value: 0)
+    process.terminationHandler = { _ in finished.signal() }
+    do {
+      try process.run()
+    } catch {
+      return false
+    }
+    if finished.wait(timeout: .now() + seconds) == .timedOut {
+      process.terminate()
+      if finished.wait(timeout: .now() + 1) == .timedOut {
+        kill(process.processIdentifier, SIGKILL)
+        _ = finished.wait(timeout: .now() + 1)
+      }
+      return false
+    }
+    return process.terminationStatus == 0
+  }
+
+  private static func rendererKillStamp(_ signaled: [Int32]) -> [String: Any] {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return [
+      "signaledPIDs": signaled.map { Int($0) },
+      "signaledAt": formatter.string(from: Date()),
+    ]
   }
 
   private static func url(_ base: URL, path: String, query: String? = nil) -> URL {
@@ -1057,28 +1087,29 @@ import Foundation
   }
 
   private static func beforeUnloadDecision(
-    _ context: NativeBrowserContext, tab: UUID
-  ) async -> (cancelledWhileHidden: Bool, sawVisibleDialog: Bool) {
+    _ context: NativeBrowserContext, runtime: ARCShaarRuntime, tab: UUID
+  ) async -> (prompted: Bool, cancelled: Bool, sawVisibleDialog: Bool) {
+    var prompted = false
     for _ in 0..<40 {
-      if !windowsHidden() {
-        return (false, true)
-      }
-      if context.store.session.page(forTabID: tab) == nil {
-        return (false, false)
-      }
+      if !windowsHidden() { return (prompted, false, true) }
+      if context.store.session.page(forTabID: tab) == nil { return (prompted, false, false) }
+      if prompted { return (true, true, false) }
+      let flag = await evaluate(
+        runtime, tab: tab, script: "document.documentElement.dataset.prompted==='1'?1:0")
+      if flag == "1" { prompted = true }
       try? await Task.sleep(for: .milliseconds(100))
     }
-    let visible = !windowsHidden()
-    let stayed = context.store.session.page(forTabID: tab) != nil && !visible
-    return (stayed, visible)
+    if !windowsHidden() { return (prompted, false, true) }
+    if prompted, context.store.session.page(forTabID: tab) != nil { return (true, true, false) }
+    return (prompted, false, false)
   }
 
   private static func beforeUnloadStatus(
-    armed: Bool, armedState: String?, cancelledWhileHidden: Bool, sawVisibleDialog: Bool,
+    armed: Bool, armedState: String?, prompted: Bool, cancelled: Bool, sawVisibleDialog: Bool,
     dismissed: Bool
   ) -> String {
     if sawVisibleDialog { return "blocked" }
-    if armed && armedState == "1" && cancelledWhileHidden && dismissed { return "pass" }
+    if armed && armedState == "1" && prompted && cancelled && dismissed { return "pass" }
     return "fail"
   }
 

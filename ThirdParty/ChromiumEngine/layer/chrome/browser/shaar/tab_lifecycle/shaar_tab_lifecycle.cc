@@ -12,16 +12,49 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/ui/recently_audible_helper.h"
 #include "components/performance_manager/public/decorators/page_live_state_decorator.h"
+#include "components/performance_manager/public/graph/page_node.h"
+#include "components/performance_manager/public/mojom/lifecycle.mojom.h"
 #include "components/performance_manager/public/performance_manager.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
+
+namespace shaar::tab_lifecycle {
+
+const char* TabSleepBlock(TabSleepSignals signals) {
+  if (signals.visible)
+    return "visible tab stays awake";
+  if (signals.audible)
+    return "audible tab stays awake";
+  if (signals.capturing)
+    return "capturing tab stays awake";
+  if (signals.form_entry)
+    return "a tab with unsaved form entry stays awake";
+  return nullptr;
+}
+
+const char* TabDiscardBlock(TabDiscardReason reason, TabSleepSignals signals) {
+  switch (reason) {
+    case TabDiscardReason::kProactive:
+    case TabDiscardReason::kUrgent:
+      break;
+    case TabDiscardReason::kExternal:
+    case TabDiscardReason::kSuggested:
+    case TabDiscardReason::kFrozenWithGrowingMemory:
+      return "discard reason is not available to the app";
+  }
+  return TabSleepBlock(signals);
+}
+
+}  // namespace shaar::tab_lifecycle
 
 namespace {
 
@@ -139,8 +172,11 @@ Snapshot ReadSnapshot(content::WebContents* contents, const char* forced_state) 
     return snapshot;
   }
   snapshot.auto_discardable = unit->IsAutoDiscardable();
-  const bool discarded = contents->WasDiscarded() ||
-                         unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED;
+  // Trust the lifecycle unit once it exists. WebContents::WasDiscarded stays
+  // true until the restored document commits, which would otherwise report a
+  // waking tab as still discarded.
+  const bool discarded =
+      unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED;
   snapshot.state = forced_state ? forced_state
                                 : StateName(unit->GetTabState(), discarded);
   if (snapshot.state && std::strcmp(snapshot.state, "discarded") == 0)
@@ -307,24 +343,81 @@ bool PageIsVisible(content::WebContents* contents) {
   return contents->GetVisibility() == content::Visibility::VISIBLE;
 }
 
-void UnfreezeIfHidden(content::WebContents* contents) {
-  if (PageIsVisible(contents) || contents->WasDiscarded())
+bool FormEntry(content::WebContents* contents) {
+  if (!contents || !performance_manager::PerformanceManager::IsAvailable())
+    return false;
+  base::WeakPtr<performance_manager::PageNode> page =
+      performance_manager::PerformanceManager::GetPrimaryPageNodeForWebContents(
+          contents);
+  if (!page)
+    return false;
+  return page->HadFormInteraction() || page->HadUserEdits();
+}
+
+shaar::tab_lifecycle::TabSleepSignals SignalsFor(content::WebContents* contents) {
+  shaar::tab_lifecycle::TabSleepSignals signals;
+  signals.visible = PageIsVisible(contents);
+  signals.audible = contents->IsCurrentlyAudible();
+  if (!signals.audible) {
+    if (RecentlyAudibleHelper* helper =
+            RecentlyAudibleHelper::FromWebContents(contents))
+      signals.audible = helper->WasRecentlyAudible();
+  }
+  signals.capturing = IsCapturing(contents);
+  signals.form_entry = FormEntry(contents);
+  return signals;
+}
+
+shaar::tab_lifecycle::TabDiscardReason ReasonKind(
+    mojom::LifecycleUnitDiscardReason reason) {
+  switch (reason) {
+    case mojom::LifecycleUnitDiscardReason::URGENT:
+      return shaar::tab_lifecycle::TabDiscardReason::kUrgent;
+    case mojom::LifecycleUnitDiscardReason::PROACTIVE:
+      return shaar::tab_lifecycle::TabDiscardReason::kProactive;
+    case mojom::LifecycleUnitDiscardReason::EXTERNAL:
+      return shaar::tab_lifecycle::TabDiscardReason::kExternal;
+    case mojom::LifecycleUnitDiscardReason::SUGGESTED:
+      return shaar::tab_lifecycle::TabDiscardReason::kSuggested;
+    case mojom::LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY:
+      return shaar::tab_lifecycle::TabDiscardReason::kFrozenWithGrowingMemory;
+  }
+  return shaar::tab_lifecycle::TabDiscardReason::kExternal;
+}
+
+bool AlreadyDiscarded(content::WebContents* contents, LifecycleUnit* unit) {
+  return contents->WasDiscarded() ||
+         unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED;
+}
+
+void Unfreeze(content::WebContents* contents) {
+  if (!contents || contents->WasDiscarded())
     return;
+  // SetPageFrozen DCHECKs while the page is visible. Hide for that call,
+  // then show the page again so a selected tab stays visible.
+  const bool visible = PageIsVisible(contents);
+  if (visible)
+    contents->WasHidden();
   contents->SetPageFrozen(false);
+  if (visible)
+    contents->WasShown();
 }
 
 shaar_error_code DiscardTab(content::WebContents* contents,
                             mojom::LifecycleUnitDiscardReason reason,
                             LifecycleUnit* unit,
                             const char** message) {
-  if (PageIsVisible(contents)) {
-    *message = "visible tab stays awake";
+  const char* blocked = shaar::tab_lifecycle::TabDiscardBlock(
+      ReasonKind(reason), SignalsFor(contents));
+  if (blocked) {
+    *message = blocked;
     return SHAAR_POLICY_BLOCKED;
   }
-  if (contents->WasDiscarded() ||
-      unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED) {
+  if (AlreadyDiscarded(contents, unit))
     return SHAAR_OK;
-  }
+  // Discard() does not consult DiscardEligibilityPolicy. The checks above
+  // are the policy. Report success once DiscardTab returns; the unit moves
+  // onto replacement contents and the previous WebContents is not reused.
   if (!unit->DiscardTab(reason, 0)) {
     *message = "Chromium refused to discard this tab";
     return SHAAR_POLICY_BLOCKED;
@@ -335,15 +428,19 @@ shaar_error_code DiscardTab(content::WebContents* contents,
 shaar_error_code FreezeTab(content::WebContents* contents,
                            LifecycleUnit* unit,
                            const char** message) {
-  if (PageIsVisible(contents)) {
-    *message = "visible tab cannot be frozen";
+  const char* blocked =
+      shaar::tab_lifecycle::TabSleepBlock(SignalsFor(contents));
+  if (blocked) {
+    *message = blocked;
     return SHAAR_POLICY_BLOCKED;
   }
-  if (contents->WasDiscarded() ||
-      unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED) {
+  if (AlreadyDiscarded(contents, unit))
     return SHAAR_OK;
-  }
   contents->SetPageFrozen(true);
+  if (unit->GetTabState() != mojom::LifecycleUnitState::FROZEN) {
+    unit->UpdateLifecycleState(
+        performance_manager::mojom::LifecycleState::kFrozen);
+  }
   return SHAAR_OK;
 }
 
@@ -364,6 +461,9 @@ void NoteDiscarded(shaar_engine* engine,
   identity.session_id = std::string(session_id);
   identity.window_id = std::string(window_id);
   identity.tab_id = std::string(tab_id);
+  // Chromium sets the discard reason and WasDiscarded before this observer
+  // runs. On the preserve path the lifecycle unit's tab state is updated
+  // just after the notification, so the event reports discarded explicitly.
   const std::string payload = PayloadJSON(ReadSnapshot(contents, "discarded"));
   EmitLater(engine, std::move(identity), payload);
 }
@@ -405,15 +505,24 @@ shaar_error_code HandleTabLifecycleOperation(
     return Fail(error, SHAAR_INVALID_ARGUMENT, "tab lifecycle arguments are invalid");
 
   shaar_error_code status = SHAAR_OK;
+  mojom::LifecycleUnitDiscardReason discard_reason =
+      mojom::LifecycleUnitDiscardReason::PROACTIVE;
   if (is_discard) {
     const auto reason = ParseReason(*args);
     if (!reason)
       return Fail(error, SHAAR_INVALID_ARGUMENT, "discard reason is invalid");
-    status = DiscardTab(contents, *reason, unit, &message);
+    discard_reason = *reason;
+    status = DiscardTab(contents, discard_reason, unit, &message);
+    // contents may now refer to a WebContents Chromium destroyed.
+    contents = nullptr;
   } else if (operation == SHAAR_OP_TAB_FREEZE) {
     status = FreezeTab(contents, unit, &message);
   } else if (operation == SHAAR_OP_TAB_WAKE) {
-    UnfreezeIfHidden(contents);
+    Unfreeze(contents);
+    if (unit->GetTabState() == mojom::LifecycleUnitState::FROZEN) {
+      unit->UpdateLifecycleState(
+          performance_manager::mojom::LifecycleState::kRunning);
+    }
     unit->MaybeLoad();
   } else if (operation != SHAAR_OP_TAB_LIFECYCLE_GET) {
     return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
@@ -422,23 +531,20 @@ shaar_error_code HandleTabLifecycleOperation(
   if (status != SHAAR_OK)
     return Fail(error, status, message);
 
-  // Replace-path discard destroys the WebContents pointer captured above.
-  // The lifecycle unit follows the contents Chromium kept.
-  content::WebContents* current = unit->GetWebContents();
-  if (!current)
-    return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
-
-  const char* forced_state = nullptr;
-  if (is_discard)
-    forced_state = "discarded";
-  else if (operation == SHAAR_OP_TAB_FREEZE)
-    forced_state = current->WasDiscarded() ? "discarded" : "frozen";
-  else if (operation == SHAAR_OP_TAB_WAKE)
-    forced_state = "active";
-
-  // Discard notifies WasDiscarded, which posts the lifecycle event. Freeze
-  // and wake post it here. Reading state only replies.
-  const std::string payload = PayloadJSON(ReadSnapshot(current, forced_state));
+  // The lifecycle unit follows replacement contents. A null contents pointer
+  // after a successful discard is still success; do not read the old one.
+  content::WebContents* current = is_discard ? unit->GetWebContents() : contents;
+  std::string payload;
+  if (!current) {
+    if (!is_discard)
+      return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
+    Snapshot snapshot;
+    snapshot.state = "discarded";
+    snapshot.discard_reason = ReasonName(discard_reason);
+    payload = PayloadJSON(snapshot);
+  } else {
+    payload = PayloadJSON(ReadSnapshot(current, nullptr));
+  }
   if (payload.empty())
     return Fail(error, SHAAR_IO_ERROR, "tab lifecycle state could not be written");
   if (operation == SHAAR_OP_TAB_FREEZE || operation == SHAAR_OP_TAB_WAKE)

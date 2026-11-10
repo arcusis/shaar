@@ -340,6 +340,7 @@ test("shaar_layer_unittests") {
     "site_data/shaar_site_data_unittest.cc",
     "storage_keychain/shaar_storage_keychain_unittest.cc",
     "storage_keychain/shaar_keychain_deadline_unittest.mm",
+    "tab_lifecycle/shaar_tab_lifecycle_unittest.cc",
     "testing/shaar_test_link_stubs.cc",
     "testing/shaar_test_main.cc",
     "windows_tabs/shaar_windows_tabs_handlers_unittest.cc",

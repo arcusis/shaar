@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Sleeping tabs live in the layer. Patch 0061 is the same change for a tree that copied the previous layer."""
+"""Sleeping tabs live in the layer. Patch 0062 is the same change for a tree that already applied patch 0058."""
 
 from pathlib import Path
 import hashlib
@@ -15,7 +15,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 LAYER = ROOT / "ThirdParty/ChromiumEngine/layer"
-PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0061-shaar-tab-lifecycle.patch"
+PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0062-shaar-tab-lifecycle.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 
 
@@ -40,13 +40,23 @@ class TabLifecyclePatchTests(unittest.TestCase):
         self.assertIn("AboutToBeDiscarded", source)
         self.assertIn('payload.Set("kind", "lifecycle")', source)
         self.assertIn("shaar_tab_lifecycle_register", source)
-        self.assertNotIn("SHAAR_ENGINE_ABI_MINOR", source)
+        self.assertIn("-#define SHAAR_ENGINE_ABI_MINOR 10u", source)
+        self.assertIn("+#define SHAAR_ENGINE_ABI_MINOR 11u", source)
+        self.assertIn("TabSleepBlock", source)
+        self.assertIn("TabDiscardBlock", source)
+        self.assertIn("discard reason is not available to the app", source)
+        self.assertIn("contents->WasHidden()", source)
+        self.assertIn("contents->SetPageFrozen(false)", source)
+        self.assertIn("UnbindTab", source)
+        self.assertIn("Observe(nullptr)", source)
+        self.assertIn("EmitInitialState", source)
         self.assertNotIn("RegisterModule", source)
 
     def test_patch_is_not_applied_twice(self):
         manifest = json.loads(MANIFEST.read_text())
         listed = [entry["file"] for entry in manifest["patches"]]
         self.assertNotIn(str(PATCH.relative_to(ROOT)), listed)
+        self.assertNotIn("0062-shaar-tab-lifecycle.patch", "\n".join(listed))
         self.assertNotIn("0061-shaar-tab-lifecycle.patch", "\n".join(listed))
 
     def test_layer_hashes_match_the_files(self):
@@ -54,6 +64,8 @@ class TabLifecyclePatchTests(unittest.TestCase):
         files = manifest["layer"]["files"]
         self.assertIn("chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc", files)
         self.assertIn("chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h", files)
+        self.assertIn(
+            "chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle_unittest.cc", files)
         for name, file_digest in files.items():
             path = LAYER / name
             self.assertTrue(path.is_file(), name)

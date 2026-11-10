@@ -15,6 +15,32 @@ class WebContents;
 
 namespace shaar::tab_lifecycle {
 
+// Facts the discard and freeze paths both refuse. Audible includes a tab
+// that played audio recently. Form entry is Chromium's HadFormInteraction
+// or HadUserEdits signal.
+struct TabSleepSignals {
+  bool visible = false;
+  bool audible = false;
+  bool capturing = false;
+  bool form_entry = false;
+};
+
+enum class TabDiscardReason {
+  kProactive,
+  kUrgent,
+  kExternal,
+  kSuggested,
+  kFrozenWithGrowingMemory,
+};
+
+// nullptr when freeze may proceed. Otherwise a stable log message.
+const char* TabSleepBlock(TabSleepSignals signals);
+
+// Discard accepts proactive and urgent only. External and
+// frozen-with-growing-memory skip Chromium's own eligibility checks, so
+// the app cannot request them. nullptr when discard may proceed.
+const char* TabDiscardBlock(TabDiscardReason reason, TabSleepSignals signals);
+
 // Posted after Chromium finishes a discard, including one Chrome started
 // itself. The WebContents pointer is only used while this call is on the
 // stack; the event is delivered on a later UI-thread task.

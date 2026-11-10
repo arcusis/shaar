@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
-index 97789b2..c7ebf14 100644
+index 97789b2..f648d15 100644
 --- a/chrome/browser/shaar/BUILD.gn
 +++ b/chrome/browser/shaar/BUILD.gn
 @@ -106,6 +106,10 @@ source_set("engine") {
@@ -24,6 +24,14 @@ index 97789b2..c7ebf14 100644
      "//chrome/browser:main_extra_parts",
      "//chrome/browser:chrome_content_browser_client",
      # BEGIN devtools
+@@ -287,6 +295,7 @@ test("shaar_layer_unittests") {
+     "site_data/shaar_site_data_unittest.cc",
+     "storage_keychain/shaar_storage_keychain_unittest.cc",
+     "storage_keychain/shaar_keychain_deadline_unittest.mm",
++    "tab_lifecycle/shaar_tab_lifecycle_unittest.cc",
+     "testing/shaar_test_link_stubs.cc",
+     "testing/shaar_test_main.cc",
+     "windows_tabs/shaar_windows_tabs_handlers_unittest.cc",
 diff --git a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
 index c571ecd..d54f7e2 100644
 --- a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
@@ -73,17 +81,21 @@ index 9d246e2..9a7aeb3 100644
      timer_.Stop();
      element_states.erase(contents_);
 diff --git a/chrome/browser/shaar/navigation/shaar_navigation.cc b/chrome/browser/shaar/navigation/shaar_navigation.cc
-index 1f762b6..664290e 100644
+index 1f762b6..2a71ca5 100644
 --- a/chrome/browser/shaar/navigation/shaar_navigation.cc
 +++ b/chrome/browser/shaar/navigation/shaar_navigation.cc
-@@ -388,6 +388,12 @@ void NavigationObserver::PrimaryMainFrameRenderProcessGone(
+@@ -388,6 +388,16 @@ void NavigationObserver::PrimaryMainFrameRenderProcessGone(
    Emit("failed", active_navigation_id_, false, nullptr, "renderer_gone");
  }
  
 +void NavigationObserver::AboutToBeDiscarded(content::WebContents* new_contents) {
 +  if (!new_contents || new_contents == web_contents())
 +    return;
++  active_navigation_id_.clear();
++  active_same_document_ = false;
++  active_navigation_failed_or_stopped_ = false;
 +  Observe(new_contents);
++  EmitInitialState();
 +}
 +
  void NavigationObserver::WebContentsDestroyed() {
@@ -102,16 +114,24 @@ index 5c0a5ec..fb63c55 100644
  
   private:
 diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
-index 0631adc..5bc04d3 100644
+index 0631adc..f01ff64 100644
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -131,6 +131,14 @@ typedef enum {
+@@ -13,7 +13,7 @@ extern "C" {
+ #endif
+ 
+ #define SHAAR_ENGINE_ABI_MAJOR 1u
+-#define SHAAR_ENGINE_ABI_MINOR 10u
++#define SHAAR_ENGINE_ABI_MINOR 11u
+ #define SHAAR_EXPORT __attribute__((visibility("default")))
+ 
+ typedef struct shaar_engine shaar_engine;
+@@ -131,6 +131,13 @@ typedef enum {
    SHAAR_OP_TAB_ACTIVATION_RESOLVE = 206,
    SHAAR_OP_WINDOW_SET_BOUNDS = 207,
  
-+  /* Sleeping tabs (#1467). An engine without this module returns
-+   * SHAAR_UNSUPPORTED_CAPABILITY. The base minor stays 8 so an existing
-+   * patch can still append it; do not treat these IDs as a minor bump. */
++  /* Sleeping tabs (#1467), ABI minor 11. An engine without this module
++   * returns SHAAR_UNSUPPORTED_CAPABILITY. */
 +  SHAAR_OP_TAB_DISCARD = 208,
 +  SHAAR_OP_TAB_FREEZE = 209,
 +  SHAAR_OP_TAB_WAKE = 210,
@@ -122,10 +142,10 @@ index 0631adc..5bc04d3 100644
    SHAAR_OP_TAB_RELOAD = 302,
 diff --git a/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc
 new file mode 100644
-index 0000000..4f256d0
+index 0000000..4de3b31
 --- /dev/null
 +++ b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc
-@@ -0,0 +1,456 @@
+@@ -0,0 +1,562 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -140,16 +160,49 @@ index 0000000..4f256d0
 +#include "base/functional/bind.h"
 +#include "base/json/json_reader.h"
 +#include "base/json/json_writer.h"
++#include "base/memory/weak_ptr.h"
 +#include "base/task/sequenced_task_runner.h"
 +#include "base/values.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
 +#include "chrome/browser/shaar/engine/shaar_engine_context.h"
 +#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
++#include "chrome/browser/ui/recently_audible_helper.h"
 +#include "components/performance_manager/public/decorators/page_live_state_decorator.h"
++#include "components/performance_manager/public/graph/page_node.h"
++#include "components/performance_manager/public/mojom/lifecycle.mojom.h"
 +#include "components/performance_manager/public/performance_manager.h"
 +#include "content/public/browser/visibility.h"
 +#include "content/public/browser/web_contents.h"
++
++namespace shaar::tab_lifecycle {
++
++const char* TabSleepBlock(TabSleepSignals signals) {
++  if (signals.visible)
++    return "visible tab stays awake";
++  if (signals.audible)
++    return "audible tab stays awake";
++  if (signals.capturing)
++    return "capturing tab stays awake";
++  if (signals.form_entry)
++    return "a tab with unsaved form entry stays awake";
++  return nullptr;
++}
++
++const char* TabDiscardBlock(TabDiscardReason reason, TabSleepSignals signals) {
++  switch (reason) {
++    case TabDiscardReason::kProactive:
++    case TabDiscardReason::kUrgent:
++      break;
++    case TabDiscardReason::kExternal:
++    case TabDiscardReason::kSuggested:
++    case TabDiscardReason::kFrozenWithGrowingMemory:
++      return "discard reason is not available to the app";
++  }
++  return TabSleepBlock(signals);
++}
++
++}  // namespace shaar::tab_lifecycle
 +
 +namespace {
 +
@@ -267,8 +320,11 @@ index 0000000..4f256d0
 +    return snapshot;
 +  }
 +  snapshot.auto_discardable = unit->IsAutoDiscardable();
-+  const bool discarded = contents->WasDiscarded() ||
-+                         unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED;
++  // Trust the lifecycle unit once it exists. WebContents::WasDiscarded stays
++  // true until the restored document commits, which would otherwise report a
++  // waking tab as still discarded.
++  const bool discarded =
++      unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED;
 +  snapshot.state = forced_state ? forced_state
 +                                : StateName(unit->GetTabState(), discarded);
 +  if (snapshot.state && std::strcmp(snapshot.state, "discarded") == 0)
@@ -435,24 +491,81 @@ index 0000000..4f256d0
 +  return contents->GetVisibility() == content::Visibility::VISIBLE;
 +}
 +
-+void UnfreezeIfHidden(content::WebContents* contents) {
-+  if (PageIsVisible(contents) || contents->WasDiscarded())
++bool FormEntry(content::WebContents* contents) {
++  if (!contents || !performance_manager::PerformanceManager::IsAvailable())
++    return false;
++  base::WeakPtr<performance_manager::PageNode> page =
++      performance_manager::PerformanceManager::GetPrimaryPageNodeForWebContents(
++          contents);
++  if (!page)
++    return false;
++  return page->HadFormInteraction() || page->HadUserEdits();
++}
++
++shaar::tab_lifecycle::TabSleepSignals SignalsFor(content::WebContents* contents) {
++  shaar::tab_lifecycle::TabSleepSignals signals;
++  signals.visible = PageIsVisible(contents);
++  signals.audible = contents->IsCurrentlyAudible();
++  if (!signals.audible) {
++    if (RecentlyAudibleHelper* helper =
++            RecentlyAudibleHelper::FromWebContents(contents))
++      signals.audible = helper->WasRecentlyAudible();
++  }
++  signals.capturing = IsCapturing(contents);
++  signals.form_entry = FormEntry(contents);
++  return signals;
++}
++
++shaar::tab_lifecycle::TabDiscardReason ReasonKind(
++    mojom::LifecycleUnitDiscardReason reason) {
++  switch (reason) {
++    case mojom::LifecycleUnitDiscardReason::URGENT:
++      return shaar::tab_lifecycle::TabDiscardReason::kUrgent;
++    case mojom::LifecycleUnitDiscardReason::PROACTIVE:
++      return shaar::tab_lifecycle::TabDiscardReason::kProactive;
++    case mojom::LifecycleUnitDiscardReason::EXTERNAL:
++      return shaar::tab_lifecycle::TabDiscardReason::kExternal;
++    case mojom::LifecycleUnitDiscardReason::SUGGESTED:
++      return shaar::tab_lifecycle::TabDiscardReason::kSuggested;
++    case mojom::LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY:
++      return shaar::tab_lifecycle::TabDiscardReason::kFrozenWithGrowingMemory;
++  }
++  return shaar::tab_lifecycle::TabDiscardReason::kExternal;
++}
++
++bool AlreadyDiscarded(content::WebContents* contents, LifecycleUnit* unit) {
++  return contents->WasDiscarded() ||
++         unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED;
++}
++
++void Unfreeze(content::WebContents* contents) {
++  if (!contents || contents->WasDiscarded())
 +    return;
++  // SetPageFrozen DCHECKs while the page is visible. Hide for that call,
++  // then show the page again so a selected tab stays visible.
++  const bool visible = PageIsVisible(contents);
++  if (visible)
++    contents->WasHidden();
 +  contents->SetPageFrozen(false);
++  if (visible)
++    contents->WasShown();
 +}
 +
 +shaar_error_code DiscardTab(content::WebContents* contents,
 +                            mojom::LifecycleUnitDiscardReason reason,
 +                            LifecycleUnit* unit,
 +                            const char** message) {
-+  if (PageIsVisible(contents)) {
-+    *message = "visible tab stays awake";
++  const char* blocked = shaar::tab_lifecycle::TabDiscardBlock(
++      ReasonKind(reason), SignalsFor(contents));
++  if (blocked) {
++    *message = blocked;
 +    return SHAAR_POLICY_BLOCKED;
 +  }
-+  if (contents->WasDiscarded() ||
-+      unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED) {
++  if (AlreadyDiscarded(contents, unit))
 +    return SHAAR_OK;
-+  }
++  // Discard() does not consult DiscardEligibilityPolicy. The checks above
++  // are the policy. Report success once DiscardTab returns; the unit moves
++  // onto replacement contents and the previous WebContents is not reused.
 +  if (!unit->DiscardTab(reason, 0)) {
 +    *message = "Chromium refused to discard this tab";
 +    return SHAAR_POLICY_BLOCKED;
@@ -463,15 +576,19 @@ index 0000000..4f256d0
 +shaar_error_code FreezeTab(content::WebContents* contents,
 +                           LifecycleUnit* unit,
 +                           const char** message) {
-+  if (PageIsVisible(contents)) {
-+    *message = "visible tab cannot be frozen";
++  const char* blocked =
++      shaar::tab_lifecycle::TabSleepBlock(SignalsFor(contents));
++  if (blocked) {
++    *message = blocked;
 +    return SHAAR_POLICY_BLOCKED;
 +  }
-+  if (contents->WasDiscarded() ||
-+      unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED) {
++  if (AlreadyDiscarded(contents, unit))
 +    return SHAAR_OK;
-+  }
 +  contents->SetPageFrozen(true);
++  if (unit->GetTabState() != mojom::LifecycleUnitState::FROZEN) {
++    unit->UpdateLifecycleState(
++        performance_manager::mojom::LifecycleState::kFrozen);
++  }
 +  return SHAAR_OK;
 +}
 +
@@ -492,6 +609,9 @@ index 0000000..4f256d0
 +  identity.session_id = std::string(session_id);
 +  identity.window_id = std::string(window_id);
 +  identity.tab_id = std::string(tab_id);
++  // Chromium sets the discard reason and WasDiscarded before this observer
++  // runs. On the preserve path the lifecycle unit's tab state is updated
++  // just after the notification, so the event reports discarded explicitly.
 +  const std::string payload = PayloadJSON(ReadSnapshot(contents, "discarded"));
 +  EmitLater(engine, std::move(identity), payload);
 +}
@@ -533,15 +653,24 @@ index 0000000..4f256d0
 +    return Fail(error, SHAAR_INVALID_ARGUMENT, "tab lifecycle arguments are invalid");
 +
 +  shaar_error_code status = SHAAR_OK;
++  mojom::LifecycleUnitDiscardReason discard_reason =
++      mojom::LifecycleUnitDiscardReason::PROACTIVE;
 +  if (is_discard) {
 +    const auto reason = ParseReason(*args);
 +    if (!reason)
 +      return Fail(error, SHAAR_INVALID_ARGUMENT, "discard reason is invalid");
-+    status = DiscardTab(contents, *reason, unit, &message);
++    discard_reason = *reason;
++    status = DiscardTab(contents, discard_reason, unit, &message);
++    // contents may now refer to a WebContents Chromium destroyed.
++    contents = nullptr;
 +  } else if (operation == SHAAR_OP_TAB_FREEZE) {
 +    status = FreezeTab(contents, unit, &message);
 +  } else if (operation == SHAAR_OP_TAB_WAKE) {
-+    UnfreezeIfHidden(contents);
++    Unfreeze(contents);
++    if (unit->GetTabState() == mojom::LifecycleUnitState::FROZEN) {
++      unit->UpdateLifecycleState(
++          performance_manager::mojom::LifecycleState::kRunning);
++    }
 +    unit->MaybeLoad();
 +  } else if (operation != SHAAR_OP_TAB_LIFECYCLE_GET) {
 +    return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
@@ -550,23 +679,20 @@ index 0000000..4f256d0
 +  if (status != SHAAR_OK)
 +    return Fail(error, status, message);
 +
-+  // Replace-path discard destroys the WebContents pointer captured above.
-+  // The lifecycle unit follows the contents Chromium kept.
-+  content::WebContents* current = unit->GetWebContents();
-+  if (!current)
-+    return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
-+
-+  const char* forced_state = nullptr;
-+  if (is_discard)
-+    forced_state = "discarded";
-+  else if (operation == SHAAR_OP_TAB_FREEZE)
-+    forced_state = current->WasDiscarded() ? "discarded" : "frozen";
-+  else if (operation == SHAAR_OP_TAB_WAKE)
-+    forced_state = "active";
-+
-+  // Discard notifies WasDiscarded, which posts the lifecycle event. Freeze
-+  // and wake post it here. Reading state only replies.
-+  const std::string payload = PayloadJSON(ReadSnapshot(current, forced_state));
++  // The lifecycle unit follows replacement contents. A null contents pointer
++  // after a successful discard is still success; do not read the old one.
++  content::WebContents* current = is_discard ? unit->GetWebContents() : contents;
++  std::string payload;
++  if (!current) {
++    if (!is_discard)
++      return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
++    Snapshot snapshot;
++    snapshot.state = "discarded";
++    snapshot.discard_reason = ReasonName(discard_reason);
++    payload = PayloadJSON(snapshot);
++  } else {
++    payload = PayloadJSON(ReadSnapshot(current, nullptr));
++  }
 +  if (payload.empty())
 +    return Fail(error, SHAAR_IO_ERROR, "tab lifecycle state could not be written");
 +  if (operation == SHAAR_OP_TAB_FREEZE || operation == SHAAR_OP_TAB_WAKE)
@@ -584,10 +710,10 @@ index 0000000..4f256d0
 +}
 diff --git a/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h
 new file mode 100644
-index 0000000..b66f3f6
+index 0000000..10ad7e9
 --- /dev/null
 +++ b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,62 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -604,6 +730,32 @@ index 0000000..b66f3f6
 +}
 +
 +namespace shaar::tab_lifecycle {
++
++// Facts the discard and freeze paths both refuse. Audible includes a tab
++// that played audio recently. Form entry is Chromium's HadFormInteraction
++// or HadUserEdits signal.
++struct TabSleepSignals {
++  bool visible = false;
++  bool audible = false;
++  bool capturing = false;
++  bool form_entry = false;
++};
++
++enum class TabDiscardReason {
++  kProactive,
++  kUrgent,
++  kExternal,
++  kSuggested,
++  kFrozenWithGrowingMemory,
++};
++
++// nullptr when freeze may proceed. Otherwise a stable log message.
++const char* TabSleepBlock(TabSleepSignals signals);
++
++// Discard accepts proactive and urgent only. External and
++// frozen-with-growing-memory skip Chromium's own eligibility checks, so
++// the app cannot request them. nullptr when discard may proceed.
++const char* TabDiscardBlock(TabDiscardReason reason, TabSleepSignals signals);
 +
 +// Posted after Chromium finishes a discard, including one Chrome started
 +// itself. The WebContents pointer is only used while this call is on the
@@ -624,8 +776,72 @@ index 0000000..b66f3f6
 +extern "C" void shaar_tab_lifecycle_register(ShaarModuleRegistry* registry);
 +
 +#endif  // CHROME_BROWSER_SHAAR_TAB_LIFECYCLE_SHAAR_TAB_LIFECYCLE_H_
+diff --git a/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle_unittest.cc b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle_unittest.cc
+new file mode 100644
+index 0000000..e497a93
+--- /dev/null
++++ b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle_unittest.cc
+@@ -0,0 +1,58 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this
++// file, You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#include "chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace shaar::tab_lifecycle {
++namespace {
++
++TabSleepSignals Audible() {
++  TabSleepSignals signals;
++  signals.audible = true;
++  return signals;
++}
++
++TEST(TabLifecycleTest, FreezeBlocksVisibleAudibleCaptureAndFormEntry) {
++  TabSleepSignals visible;
++  visible.visible = true;
++  EXPECT_STREQ("visible tab stays awake", TabSleepBlock(visible));
++
++  EXPECT_STREQ("audible tab stays awake", TabSleepBlock(Audible()));
++
++  TabSleepSignals capturing;
++  capturing.capturing = true;
++  EXPECT_STREQ("capturing tab stays awake", TabSleepBlock(capturing));
++
++  TabSleepSignals form_entry;
++  form_entry.form_entry = true;
++  EXPECT_STREQ("a tab with unsaved form entry stays awake",
++               TabSleepBlock(form_entry));
++
++  EXPECT_EQ(nullptr, TabSleepBlock(TabSleepSignals()));
++}
++
++TEST(TabLifecycleTest, DiscardAllowsOnlyProactiveAndUrgent) {
++  const TabSleepSignals clear;
++  EXPECT_EQ(nullptr, TabDiscardBlock(TabDiscardReason::kProactive, clear));
++  EXPECT_EQ(nullptr, TabDiscardBlock(TabDiscardReason::kUrgent, clear));
++  EXPECT_STREQ("discard reason is not available to the app",
++               TabDiscardBlock(TabDiscardReason::kExternal, clear));
++  EXPECT_STREQ("discard reason is not available to the app",
++               TabDiscardBlock(TabDiscardReason::kSuggested, clear));
++  EXPECT_STREQ(
++      "discard reason is not available to the app",
++      TabDiscardBlock(TabDiscardReason::kFrozenWithGrowingMemory, clear));
++  EXPECT_STREQ("audible tab stays awake",
++               TabDiscardBlock(TabDiscardReason::kUrgent, Audible()));
++
++  TabSleepSignals visible;
++  visible.visible = true;
++  EXPECT_STREQ("visible tab stays awake",
++               TabDiscardBlock(TabDiscardReason::kProactive, visible));
++}
++
++}  // namespace
++}  // namespace shaar::tab_lifecycle
 diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
-index 5b20e56..1330f91 100644
+index 5b20e56..dd5a89b 100644
 --- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
 +++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
 @@ -31,6 +31,7 @@
@@ -661,7 +877,7 @@ index 5b20e56..1330f91 100644
    void WebContentsDestroyed() override {
      favicon_observation.Reset();
      // Drop the WebContents pointer before a queued view update can request it.
-@@ -97,6 +111,28 @@ struct shaar_tab : content::WebContentsObserver,
+@@ -97,6 +111,34 @@ struct shaar_tab : content::WebContentsObserver,
    std::string favicon_png;
  };
  
@@ -679,11 +895,17 @@ index 5b20e56..1330f91 100644
 +  // The preserve path discards in place and passes the same WebContents.
 +  if (!tab || !new_contents || new_contents == tab->web_contents())
 +    return;
-+  tab->Observe(new_contents);
-+  if (tab->engine && tab->window && tab->browser && !tab->tab_id.empty()) {
-+    shaar::windows_tabs::Registry().BindTab(
-+        tab->engine, tab->window, tab, tab->tab_id, tab->browser, new_contents);
++  const bool can_bind =
++      tab->engine && tab->window && tab->browser && !tab->tab_id.empty();
++  if (!can_bind) {
++    shaar::windows_tabs::Registry().UnbindTab(tab->engine, tab->window, tab);
++    tab->Observe(nullptr);
++    tab->favicon_observation.Reset();
++    return;
 +  }
++  tab->Observe(new_contents);
++  shaar::windows_tabs::Registry().BindTab(
++      tab->engine, tab->window, tab, tab->tab_id, tab->browser, new_contents);
 +  tab->favicon_observation.Reset();
 +}
 +

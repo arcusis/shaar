@@ -125,11 +125,17 @@ void RetargetDiscardedTab(shaar_tab* tab, content::WebContents* new_contents) {
   // The preserve path discards in place and passes the same WebContents.
   if (!tab || !new_contents || new_contents == tab->web_contents())
     return;
-  tab->Observe(new_contents);
-  if (tab->engine && tab->window && tab->browser && !tab->tab_id.empty()) {
-    shaar::windows_tabs::Registry().BindTab(
-        tab->engine, tab->window, tab, tab->tab_id, tab->browser, new_contents);
+  const bool can_bind =
+      tab->engine && tab->window && tab->browser && !tab->tab_id.empty();
+  if (!can_bind) {
+    shaar::windows_tabs::Registry().UnbindTab(tab->engine, tab->window, tab);
+    tab->Observe(nullptr);
+    tab->favicon_observation.Reset();
+    return;
   }
+  tab->Observe(new_contents);
+  shaar::windows_tabs::Registry().BindTab(
+      tab->engine, tab->window, tab, tab->tab_id, tab->browser, new_contents);
   tab->favicon_observation.Reset();
 }
 

@@ -57,6 +57,52 @@ describe('AgentPacket', () => {
     assert.notInclude(redacted, 'ada:secret@');
   });
 
+  it('masks secret header names, query secrets, and a mid-line Authorization', () => {
+    const headers = redact([
+      'X-Api-Key: sk_live_secret',
+      'X-Auth-Token: tok_secret',
+      'Accept: text/html',
+      'boom Authorization: Basic abcdefghijklmnop',
+    ].join('\n'));
+    assert.include(headers, 'X-Api-Key: [redacted]');
+    assert.include(headers, 'X-Auth-Token: [redacted]');
+    assert.include(headers, 'Accept: text/html');
+    assert.include(headers, 'boom Authorization: [redacted]');
+    assert.notInclude(headers, 'sk_live_secret');
+    assert.notInclude(headers, 'tok_secret');
+    assert.notInclude(headers, 'abcdefghijklmnop');
+    assert.isFalse(packetAccepts('X-Api-Key: sk_live_secret\n'));
+    assert.isTrue(packetAccepts('X-Api-Key: [redacted]\n'));
+    const query = redact(
+        'https://example.com/a?key=abcdef&code=zzzzzzzz&session=sess&sig=abc&signature=longer' +
+        '&X-Amz-Signature=deadbeef&page=1');
+    assert.include(query, 'key=[redacted]');
+    assert.include(query, 'code=[redacted]');
+    assert.include(query, 'session=[redacted]');
+    assert.include(query, 'sig=[redacted]');
+    assert.include(query, 'signature=[redacted]');
+    assert.include(query, 'X-Amz-Signature=[redacted]');
+    assert.include(query, 'page=1');
+    assert.notInclude(query, 'deadbeef');
+    assert.isFalse(packetAccepts('https://example.com/?key=abcdef\n'));
+    assert.isTrue(packetAccepts('https://example.com/?key=[redacted]\n'));
+    assert.isFalse(packetAccepts('https://cdn.example/?X-Amz-Credential=AKIAEXAMPLE\n'));
+  });
+
+  it('redacts csrf meta content and token data attributes', () => {
+    const html = trimHTML(
+        '<meta name="csrf-token" content="csrf-secret-value">' +
+        '<div data-token="tokensecret" data-session="sess-secret" data-source="/src/Card.tsx:12">ok</div>');
+    assert.include(html, 'name="csrf-token"');
+    assert.include(html, 'content="[redacted]"');
+    assert.include(html, 'data-token="[redacted]"');
+    assert.include(html, 'data-session="[redacted]"');
+    assert.include(html, 'data-source="/src/Card.tsx:12"');
+    assert.notInclude(html, 'csrf-secret-value');
+    assert.notInclude(html, 'tokensecret');
+    assert.notInclude(html, 'sess-secret');
+  });
+
   it('trims HTML without letting a void input swallow the document', () => {
     const html = trimHTML(
         '<div class="card" onclick="nope()" data-source="/src/Card.tsx:12" data-shaar-agent="abc">' +
@@ -159,6 +205,7 @@ describe('AgentPacket', () => {
             status: 500,
             requestHeaders: [
               {name: 'Cookie', value: 'session=secret'},
+              {name: 'X-Api-Key', value: 'sk_live_secret'},
               {name: 'Accept', value: 'application/json'},
             ],
             responseHeaders: [{name: 'Set-Cookie', value: 'a=b'}],
@@ -195,8 +242,10 @@ describe('AgentPacket', () => {
     assert.include(packet.markdown, 'Bearer [redacted]');
     assert.include(packet.markdown, 'POST https://example.com/api?token=[redacted] — 500');
     assert.include(packet.markdown, 'Cookie: [redacted]');
+    assert.include(packet.markdown, 'X-Api-Key: [redacted]');
     assert.include(packet.markdown, 'Set-Cookie: [redacted]');
     assert.include(packet.markdown, 'Accept: application/json');
+    assert.notInclude(packet.markdown, 'sk_live_secret');
     assert.notInclude(packet.markdown, 'https://example.com/ok');
     assert.include(packet.markdown, 'PNG attached, 2700 bytes.');
     assert.notInclude(packet.markdown, 'session=secret');
@@ -310,6 +359,8 @@ describe('AgentPacket', () => {
     assert.isTrue(packetAccepts('Authorization: Bearer [redacted]\n'));
     assert.isFalse(packetAccepts('https://example.com/?token=abcdef\n'));
     assert.isTrue(packetAccepts('https://example.com/?token=[redacted]\n'));
+    assert.isFalse(packetAccepts('X-Api-Key: sk_live_secret\n'));
+    assert.isTrue(packetAccepts('X-Auth-Token: [redacted]\n'));
   });
 
   it('counts a PNG and ignores anything else', () => {

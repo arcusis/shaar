@@ -32,12 +32,24 @@ const VOID_TAGS: Record<string, true> = {
   input: true,
 };
 
-const SECRET_HEADERS: Record<string, true> = {
-  cookie: true,
-  authorization: true,
-  'set-cookie': true,
-  'proxy-authorization': true,
-};
+const SECRET_HEADER_WORD = /key|token|auth|secret|session|signature|csrf/;
+
+const SECRET_QUERY_NAME = [
+  'access_token',
+  'id_token',
+  'refresh_token',
+  'api[_-]?key',
+  'password',
+  'passwd',
+  'secret',
+  'signature',
+  'session',
+  'token',
+  'key',
+  'code',
+  'sig',
+  'x-amz-[a-z0-9_-]+',
+].join('|');
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -149,10 +161,7 @@ export function samePage(left: PageStamp, right: PageStamp): boolean {
 
 export function packetAccepts(markdown: string): boolean {
   for (const line of String(markdown || '').split('\n')) {
-    if (secretHeader(line) && !line.toLowerCase().includes('[redacted]')) {
-      return false;
-    }
-    if (bearerMissing(line) || tokenMissing(line)) {
+    if (leakedSecretHeader(line) || bearerMissing(line) || leakedSecretQuery(line)) {
       return false;
     }
   }
@@ -183,11 +192,11 @@ export function pngBytes(base64: string): number {
 export function redact(value: unknown): string {
   let text = value == null ? '' : String(value);
   text = text.replace(
-      /(^|\n)([ \t]*)(set-cookie|proxy-authorization|authorization|cookie)([ \t]*:[ \t]*)([^\n]*)/gi,
-      (_match, lead: string, indent: string, name: string) => `${lead}${indent}${name}: [redacted]`);
+      headerPattern(),
+      (_match, lead: string, name: string) => lead + name + ': [redacted]');
   text = text.replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [redacted]');
   text = text.replace(
-      /([?&])(access_token|id_token|refresh_token|api_key|apikey|api-key|password|passwd|secret|token)=([^&#\s]*)/gi,
+      new RegExp('([?&])(' + SECRET_QUERY_NAME + ')=([^&#\\s]*)', 'gi'),
       (_match, separator: string, name: string) => `${separator}${name}=[redacted]`);
   text = text.replace(/([a-z][a-z0-9+.-]*:\/\/)[^/\s:@]+:[^/\s@]+@/gi, '$1[redacted]@');
   text = text.replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '[redacted]');
@@ -196,6 +205,7 @@ export function redact(value: unknown): string {
 
 export function trimHTML(source: unknown): string {
   const input = String(source || '');
+  const lower = input.toLowerCase();
   let index = 0;
   let out = '';
   while (index < input.length && out.length < LIMITS.html) {
@@ -222,7 +232,6 @@ export function trimHTML(source: unknown): string {
         index = close + 1;
         continue;
       }
-      const lower = input.toLowerCase();
       const end = lower.indexOf('</' + name, close + 1);
       if (end < 0) {
         index = input.length;
@@ -394,10 +403,30 @@ export function buildPacket(input: PacketInput|null|undefined): Packet {
   };
 }
 
-function secretHeader(line: string): boolean {
-  const trimmed = line.trim().toLowerCase();
-  return trimmed.startsWith('cookie:') || trimmed.startsWith('authorization:') ||
-      trimmed.startsWith('set-cookie:') || trimmed.startsWith('proxy-authorization:');
+function secretWord(name: string): boolean {
+  return SECRET_HEADER_WORD.test(name.toLowerCase());
+}
+
+function secretHeaderName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower === 'cookie' || lower === 'set-cookie' || secretWord(lower);
+}
+
+function headerPattern(): RegExp {
+  const name = '(?:set-cookie|cookie)|[A-Za-z0-9-]*(?:key|token|auth|secret|session|signature|csrf)[A-Za-z0-9-]*';
+  return new RegExp('(^|[^\\w-])(' + name + ')([ \\t]*:[ \\t]*)([^\\n]*)', 'gi');
+}
+
+function leakedSecretHeader(line: string): boolean {
+  const pattern = headerPattern();
+  let match = pattern.exec(line);
+  while (match) {
+    if (secretHeaderName(match[2]) && !match[4].toLowerCase().includes('[redacted]')) {
+      return true;
+    }
+    match = pattern.exec(line);
+  }
+  return false;
 }
 
 function bearerMissing(line: string): boolean {
@@ -405,9 +434,8 @@ function bearerMissing(line: string): boolean {
   return lower.includes('bearer ') && !lower.includes('bearer [redacted]');
 }
 
-function tokenMissing(line: string): boolean {
-  const lower = line.toLowerCase();
-  return lower.includes('token=') && !lower.includes('token=[redacted]');
+function leakedSecretQuery(line: string): boolean {
+  return new RegExp('(?:^|[?&#\\s])(?:' + SECRET_QUERY_NAME + ')=(?!\\[redacted\\])', 'i').test(line);
 }
 
 function clip(value: unknown): string {
@@ -450,21 +478,28 @@ function cleanAttributes(raw: string): string {
   if (space < 0) {
     return body.toLowerCase();
   }
-  const name = body.slice(0, space).toLowerCase();
+  const tag = body.slice(0, space).toLowerCase();
   const rest = body.slice(space);
-  const kept: string[] = [];
+  const attrs: Array<{key: string, token: string, value: string}> = [];
   const pattern = /([A-Za-z_:][\w:.-]*)\s*=\s*"([^"]*)"/g;
   let match = pattern.exec(rest);
   while (match) {
-    const key = match[1].toLowerCase();
-    const dropped = key.startsWith('on') || key === 'value' || key === 'srcset' || key === 'style' ||
-        key === 'data-shaar-agent';
-    if (!dropped) {
-      kept.push(match[1] + '="' + escapeAttr(match[2]) + '"');
-    }
+    attrs.push({key: match[1].toLowerCase(), token: match[1], value: match[2]});
     match = pattern.exec(rest);
   }
-  return kept.length ? name + ' ' + kept.join(' ') : name;
+  const csrfMeta = tag === 'meta' && attrs.some(attr => attr.key === 'name' && secretWord(attr.value));
+  const kept: string[] = [];
+  for (const attr of attrs) {
+    const dropped = attr.key.startsWith('on') || attr.key === 'value' || attr.key === 'srcset' ||
+        attr.key === 'style' || attr.key === 'data-shaar-agent';
+    if (dropped) {
+      continue;
+    }
+    const mask = secretWord(attr.key) || (csrfMeta && attr.key === 'content');
+    const value = mask ? '[redacted]' : attr.value;
+    kept.push(attr.token + '="' + escapeAttr(value) + '"');
+  }
+  return kept.length ? tag + ' ' + kept.join(' ') : tag;
 }
 
 function tagName(raw: string): string {
@@ -571,7 +606,7 @@ function headerRows(value: PacketHeader[]|undefined): PacketHeader[] {
 
 function headerLine(row: PacketHeader): string {
   const name = String(row.name || '');
-  if (SECRET_HEADERS[name.toLowerCase()]) {
+  if (secretHeaderName(name)) {
     return name + ': [redacted]';
   }
   return name + ': ' + redact(clip(row.value || ''));

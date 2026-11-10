@@ -9,3 +9,5 @@ import './build-info/build-info-meta.js';
 import './network-rules/network-rules-meta.js';
 import './overflow/overflow-meta.js';
 import './focus-contrast/focus-contrast-meta.js';
+import './stacking-3d/stacking-3d-meta.js';
+import './stacking/stacking-meta.js';

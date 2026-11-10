@@ -24,6 +24,8 @@
 - [[Shaar_DevTools_Idle_Override]]
 - [[Shaar_DevTools_Touch_Emulation]]
 - [[Shaar_DevTools_Web_Vitals]]
+- [[Shaar_DevTools_Frontend_Panel]]
+- [[Shaar_DevTools_SwiftUI_Retirement]]
 - [[Shaar_Inspector]]
 - [[Shaar_Inspector_CSS]]
 - [[Shaar_Inspector_Details]]

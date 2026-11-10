@@ -25,7 +25,7 @@ import threading
 
 CRASHES = Path.home() / "Library/Logs/DiagnosticReports"
 BUTTON = (
-    '<button id="parity-action" style="position:fixed;left:8px;top:8px;'
+    '<button id="plain" style="position:fixed;left:8px;top:8px;'
     'width:180px;height:48px">Run</button>'
 )
 SCRIPT_HEAD = """
@@ -40,7 +40,7 @@ function fail(error) {
 """
 PAGES = {
     "media": """
-      document.getElementById('parity-action').onclick = () => {
+      document.getElementById('plain').onclick = () => {
         navigator.mediaDevices.getUserMedia({audio:true, video:true}).then(stream => {
           const audio = stream.getAudioTracks().length;
           const video = stream.getVideoTracks().length;
@@ -50,7 +50,7 @@ PAGES = {
       };
     """,
     "geolocation": """
-      document.getElementById('parity-action').onclick = () => {
+      document.getElementById('plain').onclick = () => {
         navigator.geolocation.getCurrentPosition(
           position => finish({outcome:'resolved', latitude:position.coords.latitude}),
           error => finish({outcome:'rejected', code:error.code, message:error.message}),
@@ -58,19 +58,19 @@ PAGES = {
       };
     """,
     "notifications": """
-      document.getElementById('parity-action').onclick = () => {
+      document.getElementById('plain').onclick = () => {
         Notification.requestPermission().then(state => finish({outcome:'resolved', state})).catch(fail);
       };
     """,
     "midi": """
-      document.getElementById('parity-action').onclick = () => {
+      document.getElementById('plain').onclick = () => {
         if (!navigator.requestMIDIAccess) { finish({outcome:'missing'}); return; }
         navigator.requestMIDIAccess({sysex:false})
           .then(access => finish({outcome:'resolved', inputs:access.inputs.size})).catch(fail);
       };
     """,
     "protocol": """
-      document.getElementById('parity-action').onclick = () => {
+      document.getElementById('plain').onclick = () => {
         try {
           navigator.registerProtocolHandler('web+shaarparity', location.origin + '/handled?u=%s');
           finish({outcome:'registered'});

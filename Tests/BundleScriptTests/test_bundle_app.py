@@ -489,6 +489,7 @@ class BundleAppTests(unittest.TestCase):
             "enum HttpsOnlyProbe {}\n"
             "enum SleepingTabsProbe {}\n"
             "enum DeviceChooserProbe {}\n"
+            "enum ShaarSavePromptProbe {}\n"
             "func evaluateDeviceChooserProbeInTabID() {}\n"
             "enum WebShareProbe {}\n"
             "let flag = \"--browsing-qa\"\n"
@@ -527,6 +528,8 @@ class BundleAppTests(unittest.TestCase):
             "--sleeping-tabs-probe",
             "--probe-device-choosers",
             "DeviceChooserProbe",
+            "ShaarSavePromptProbe",
+            "--save-prompt-probe",
             "evaluateDeviceChooserProbe",
             "shaar-chooser:",
         ):

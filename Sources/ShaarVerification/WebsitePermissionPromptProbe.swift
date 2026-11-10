@@ -238,7 +238,7 @@ final class WebsitePermissionPromptProbe {
   private func click() async -> Bool {
     await withCheckedContinuation { continuation in
       let gate = Once()
-      runtime.submitTrustedProbeClick(inTabID: tabID.uuidString, elementID: "parity-action") {
+      runtime.submitTrustedProbeClick(inTabID: tabID.uuidString, elementID: "plain") {
         ok in
         guard gate.claim() else { return }
         continuation.resume(returning: ok)

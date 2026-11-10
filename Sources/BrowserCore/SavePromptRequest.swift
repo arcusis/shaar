@@ -54,8 +54,9 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
   /// Never-save applies only to a new password. Card, address, and password updates dismiss.
   public var allowsNever: Bool { kind == .password && !update }
 
-  public func matches(_ session: BrowserSession) -> Bool {
-    guard session.selectedSpace.profileID == profileID,
+  public func matches(_ session: BrowserSession, inPrivateWindow: Bool = false) -> Bool {
+    guard !inPrivateWindow,
+      session.selectedSpace.profileID == profileID,
       session.selectedPage?.tab.id == tabID,
       session.profileID(forTabID: tabID) == profileID,
       let current = session.selectedPage?.tab.url
@@ -105,9 +106,18 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
   }
 
   private static func detail(_ value: Any?) -> String? {
-    guard let detail = value as? String, detail.utf8.count <= 120 else { return nil }
-    let safe = detail.unicodeScalars.allSatisfy { $0.value >= 32 && $0.value != 127 }
-    return safe ? detail : nil
+    guard let detail = value as? String, detail.utf8.count <= 120,
+      detail.unicodeScalars.allSatisfy(isPlainPageText)
+    else { return nil }
+    return detail
+  }
+
+  /// Page text is shown as a username, card label, or address. Format characters,
+  /// including bidi controls and zero-width marks, are rejected.
+  private static func isPlainPageText(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    if value < 32 || value == 127 { return false }
+    return scalar.properties.generalCategory != .format
   }
 
   private static func origin(_ value: Any?) -> URL? {
@@ -115,6 +125,9 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
     return url
   }
 
+  /// Queries and fragments can carry tokens, so the app accepts only an origin and a path.
+  /// Patch 0066 removes both before the offer is emitted, so a login page such as
+  /// `/login?next=` still arrives here as a path.
   private static func page(_ value: Any?) -> URL? {
     guard let url = webURL(value), url.user == nil, url.password == nil, url.query == nil,
       url.fragment == nil

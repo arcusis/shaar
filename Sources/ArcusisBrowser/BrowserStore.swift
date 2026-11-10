@@ -41,7 +41,9 @@ struct SpaceRemovalImpact {
 
 @MainActor @Observable
 final class BrowserStore {
-  var session: BrowserSession
+  var session: BrowserSession {
+    didSet { dismissSavePromptIfSelectionLeft(oldValue) }
+  }
   private(set) var isPrivate = false
   private var permissionFrames: [UUID: String] = [:]
   /// Tabs Chromium has discarded or frozen. Not saved with the session.
@@ -163,6 +165,7 @@ final class BrowserStore {
   @ObservationIgnored var onHTTPAuthDecision: ((HTTPAuthRequest, String?, String?) -> Void)?
   /// The Chromium save offer currently shown for this window. Only one is offered at a time.
   private(set) var savePrompt: SavePromptRequest?
+  @ObservationIgnored private var dismissingSavePrompt = false
   @ObservationIgnored var onSavePromptDecision: ((String, SavePromptRequest.Decision) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
@@ -1422,8 +1425,11 @@ final class BrowserStore {
 
   @discardableResult
   func requestSavePrompt(_ request: SavePromptRequest) -> Bool {
+    guard !isPrivate else { return false }
     if savePrompt?.id == request.id { return true }
-    guard savePrompt == nil, request.matches(session) else { return false }
+    guard savePrompt == nil, request.matches(session, inPrivateWindow: isPrivate) else {
+      return false
+    }
     dismissCommand()
     dismissPageFind()
     savePrompt = request
@@ -1433,7 +1439,19 @@ final class BrowserStore {
   func resolveSavePrompt(_ id: String, decision: SavePromptRequest.Decision) {
     guard let request = savePrompt, request.id == id else { return }
     savePrompt = nil
-    onSavePromptDecision?(id, request.decision(decision, matchesSession: request.matches(session)))
+    let matches = request.matches(session, inPrivateWindow: isPrivate)
+    onSavePromptDecision?(id, request.decision(decision, matchesSession: matches))
+  }
+
+  /// A Save click on another tab would reach Chromium as a silent dismiss.
+  /// Leaving the requesting tab consumes the offer immediately.
+  private func dismissSavePromptIfSelectionLeft(_ previous: BrowserSession) {
+    guard !dismissingSavePrompt, let prompt = savePrompt else { return }
+    let selected = session.selectedPage?.tab.id
+    guard selected != previous.selectedPage?.tab.id, prompt.tabID != selected else { return }
+    dismissingSavePrompt = true
+    resolveSavePrompt(prompt.id, decision: .dismiss)
+    dismissingSavePrompt = false
   }
 
   /// Clears a prompt Chromium already finished. Does not send another decision.

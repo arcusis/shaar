@@ -471,6 +471,7 @@ class BundleAppTests(unittest.TestCase):
             "enum ShaarBrowsingEdgeProbe {}\n"
             "enum HttpsOnlyProbe {}\n"
             "enum SleepingTabsProbe {}\n"
+            "enum DeviceChooserProbe {}\n"
             "let flag = \"--browsing-qa\"\n"
             "let elementID = \"parity-action\"\n"
             "if arguments.contains(\"--devtools-f12-route\") {}\n"

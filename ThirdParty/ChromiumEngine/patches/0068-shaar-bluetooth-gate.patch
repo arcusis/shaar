@@ -1249,7 +1249,7 @@ new file mode 100644
 index 0000000..511a7fc
 --- /dev/null
 +++ b/device/bluetooth/shaar_bluetooth_io_gate.mm
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,151 @@
 +// Copyright 2026 The Chromium Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1263,6 +1263,7 @@ index 0000000..511a7fc
 +
 +#include <optional>
 +
++#include "base/logging.h"
 +#include "base/task/thread_pool.h"
 +#include "device/bluetooth/bluetooth_adapter_mac_permission.h"
 +
@@ -1282,10 +1283,17 @@ index 0000000..511a7fc
 +  static dispatch_once_t once;
 +  dispatch_once(&once, ^{
 +    void* library = dlopen("/usr/lib/system/libquarantine.dylib", RTLD_LAZY);
-+    if (!library)
++    if (!library) {
++      LOG(ERROR) << "Could not load libquarantine; Bluetooth authorization "
++                    "will fail closed";
 +      return;
++    }
 +    function = reinterpret_cast<ResponsiblePIDFunction>(
 +        dlsym(library, "responsibility_get_pid_responsible_for_pid"));
++    if (!function) {
++      LOG(ERROR) << "libquarantine lacks the responsible-process API; "
++                    "Bluetooth authorization will fail closed";
++    }
 +  });
 +  return function;
 +}

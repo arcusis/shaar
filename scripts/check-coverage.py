@@ -22,6 +22,8 @@ UNIT_COVERAGE_EXCLUDES = {
     ("ShaarVerification", "ShaarFirstTabProbe.swift"),
     # The permission prompt probe needs a bundled engine and a loopback fixture.
     ("ShaarVerification", "WebsitePermissionPromptProbe.swift"),
+    # Hidden device-chooser proof needs the staged Chromium engine and a loopback page.
+    ("ShaarVerification", "DeviceChooserProbe.swift"),
     # This route requires a staged native Shaar engine and hidden host; Swift unit tests cannot run it.
     ("ShaarVerification", "DevToolsRouteProbe.swift"),
     # Idle discard needs a hidden engine window. Its pass and fail paths run there.

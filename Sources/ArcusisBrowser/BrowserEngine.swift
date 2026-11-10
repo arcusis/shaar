@@ -418,6 +418,9 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveExternalApp(id, windowID: self.windowID, accepted: accepted)
     }
+    store.onDeviceChooserDecision = { [weak self] request, index in
+      self?.settleDeviceChooser(request, optionIndex: index)
+    }
     callbacks.onExternalAppRequest = { [weak self] payload in self?.requestExternalApp(payload) }
     callbacks.onExternalAppDismissed = { [weak self] id in
       self?.store?.resolveExternalApp(id, accepted: false)
@@ -514,14 +517,16 @@ final class BrowserEngine {
         }
         self.developerDocumentChanged(id, url: url)
         self.updateDevelopmentPage(tabID: id, url: url, loading: loading)
+        let shownTitle = self.deviceChooserDisplayTitle(title)
         if let profile = self.store?.session.profileID(forTabID: id),
           self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true
         {
-          self.store?.nativeFavoritePageChanged(
-            id, profileID: profile, url: url, title: title)
+          self.store?.nativeFavoritePageChanged(id, profileID: profile, url: url, title: shownTitle)
         } else {
-          self.store?.nativeTabChanged(id, url: url, title: title)
+          self.store?.nativeTabChanged(id, url: url, title: shownTitle)
         }
+        self.noteDeviceChooserTitle(tabID: id, url: url, title: title)
+        if finishedLoading { self.installDeviceChooserHook(tabID: id, url: url) }
         self.withholdAutomaticPictureInPictureIfOff(id, url: url)
       }
       var icon: NSImage?

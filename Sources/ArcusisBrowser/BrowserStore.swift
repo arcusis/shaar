@@ -124,6 +124,12 @@ final class BrowserStore {
       return nil
     }
   }
+  var deviceChooserRequests: [DeviceChooserRequest] {
+    consentRequests.compactMap {
+      if case .deviceChooser(let request) = $0 { return request }
+      return nil
+    }
+  }
   private(set) var storageNotice: String?
 
   @ObservationIgnored private let sessionFile: SessionFile?
@@ -146,6 +152,7 @@ final class BrowserStore {
   @ObservationIgnored var onWebsitePermissionDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onDesktopCaptureDecision: ((String, String?) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
+  @ObservationIgnored var onDeviceChooserDecision: ((DeviceChooserRequest, Int?) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
@@ -1057,6 +1064,34 @@ final class BrowserStore {
     resolveConsent("external-\(id)", accepted: accepted)
   }
 
+  @discardableResult
+  func requestDeviceChooser(_ request: DeviceChooserRequest) -> Bool {
+    enqueueConsent(.deviceChooser(request))
+  }
+
+  func resolveDeviceChooser(_ id: String, optionIndex: Int?) {
+    let sheetID = "chooser-\(id)"
+    guard let request = consentRequests.first(where: { $0.id == sheetID }),
+      case .deviceChooser(let chooser) = request
+    else { return }
+    let presented = sheet?.id == sheetID && presentedConsentID == sheetID
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID { presentedConsentID = nil }
+    if presented { sheet = nil }
+    onDeviceChooserDecision?(chooser, grantedDeviceIndex(chooser, optionIndex: optionIndex, presented: presented))
+    presentNextConsent()
+  }
+
+  private func grantedDeviceIndex(
+    _ chooser: DeviceChooserRequest, optionIndex: Int?, presented: Bool
+  ) -> Int? {
+    guard presented, chooser.matches(session), rendererFailures[chooser.tabID] == nil,
+      chooser.canGrant, let optionIndex
+    else { return nil }
+    guard chooser.options.contains(where: { $0.index == optionIndex }) else { return nil }
+    return optionIndex
+  }
+
   private func enqueueConsent(_ request: BrowserSheet) -> Bool {
     guard request.isConsent, let tab = request.tabID, rendererFailures[tab] == nil,
       request.matches(session), consentRequests.count < 10,
@@ -1089,6 +1124,7 @@ final class BrowserStore {
       desktopCaptureSources[request.id] = nil
       onDesktopCaptureDecision?(request.id, nil)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
+    case .deviceChooser(let request): onDeviceChooserDecision?(request, nil)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }
   }

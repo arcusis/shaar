@@ -501,6 +501,8 @@ class BundleAppTests(unittest.TestCase):
             "testing: true",
             "SleepingTabsProbe",
             "--sleeping-tabs-probe",
+            "--probe-device-choosers",
+            "DeviceChooserProbe",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

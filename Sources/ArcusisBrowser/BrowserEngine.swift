@@ -66,6 +66,8 @@ final class BrowserEngine {
   @ObservationIgnored var liveTabs: Set<UUID> = []
   /// Tabs whose close call is on the stack.
   @ObservationIgnored private var closesInFlight: Set<UUID> = []
+  /// Reassigned tabs must wait for Chromium to release their old profile ownership.
+  @ObservationIgnored private var tabsAwaitingProfileReassignment: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   /// Crashed documents whose native reload failed before the close event arrived.
   @ObservationIgnored private var tabsAwaitingReload: Set<UUID> = []
@@ -538,6 +540,10 @@ final class BrowserEngine {
     }
     callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity) else { return }
+      if self.tabsAwaitingProfileReassignment.remove(id) != nil {
+        DispatchQueue.main.async { [weak self] in self?.reconcile() }
+        return
+      }
       self.sleepingTabs.forget(id)
       self.store?.noteTabAwake(id)
       guard self.liveTabs.contains(id) || self.pages[id] != nil else { return }
@@ -627,7 +633,7 @@ final class BrowserEngine {
       sleepingTabs.forget(id)
       store?.noteTabAwake(id)
       guard liveTabs.remove(id) != nil else { continue }
-      events.router.forgetTab(id.uuidString, windowID: windowID)
+      tabsAwaitingProfileReassignment.insert(id)
       pages[id] = nil
       shaarDevTools.removeValue(forKey: id)?.close()
       if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }
@@ -736,6 +742,7 @@ final class BrowserEngine {
     }
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !failedTabs.contains(tab.id) {
+        guard !tabsAwaitingProfileReassignment.contains(tab.id) else { continue }
         let decision = TabMaterializationPolicy.decision(
           isSelected: space.id == session.selectedSpaceID
             && (session.selectedPage?.tab.id == tab.id

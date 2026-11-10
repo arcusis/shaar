@@ -45,6 +45,24 @@ def painted(path):
     return len(data) > 20_000 and len(set(data)) > 150
 
 
+def text_of(value):
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+    return value
+
+
+def load_report(path):
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def crash_names():
     names = set()
     for directory in (CRASHES, CRASHES / "Retired"):
@@ -70,6 +88,11 @@ def main():
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
+        result = None
+        report = {}
+        shots = {}
+        timed_out = False
+        stderr = ""
         try:
             marker = root / ".arcusis-probe"
             marker.write_text("arcusis-engine-probe-v1\n")
@@ -80,15 +103,19 @@ def main():
             page = f"http://127.0.0.1:{server.server_port}/f12-route"
             environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
             environment["SHAAR_ENGINE_TESTING"] = "1"
-            result = subprocess.run(
-                [
-                    str(executable), "--devtools-f12-route", str(report_path), page,
-                    "--probe-data-dir", str(root),
-                ],
-                env=environment, capture_output=True, text=True, timeout=180, check=False,
-            )
-            report = json.loads(report_path.read_text()) if report_path.is_file() else {}
-            shots = {}
+            try:
+                result = subprocess.run(
+                    [
+                        str(executable), "--devtools-f12-route", str(report_path), page,
+                        "--probe-data-dir", str(root),
+                    ],
+                    env=environment, capture_output=True, text=True, timeout=180, check=False,
+                )
+                stderr = text_of(result.stderr)
+            except subprocess.TimeoutExpired as expired:
+                timed_out = True
+                stderr = text_of(expired.stderr)
+            report = load_report(report_path)
             evidence = ROOT / "Evidence/issue-1469"
             evidence.mkdir(parents=True, exist_ok=True)
             for name in ("f12", "option-command-i"):
@@ -101,18 +128,22 @@ def main():
             shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
     crashes = sorted(crash_names() - before)
+    exit_code = None if timed_out or result is None else result.returncode
     receipt = {
-        "verificationExecutable": str(executable), "exitCode": result.returncode,
+        "verificationExecutable": str(executable), "exitCode": exit_code, "timedOut": timed_out,
         "allWindowsHidden": report.get("allWindowsHidden"),
         "rows": report.get("rows", []), "snapshots": shots, "crashReports": crashes,
-        "passed": result.returncode == 0 and report.get("passed") is True and not crashes,
+        "passed": (
+            not timed_out and result is not None and result.returncode == 0
+            and report.get("passed") is True and not crashes
+        ),
     }
     options.receipt.parent.mkdir(parents=True, exist_ok=True)
     options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps(receipt, indent=2))
     if not receipt["passed"]:
-        if result.stderr:
-            print(result.stderr[-4000:])
+        if stderr:
+            print(stderr[-4000:])
         raise SystemExit(1)
 
 

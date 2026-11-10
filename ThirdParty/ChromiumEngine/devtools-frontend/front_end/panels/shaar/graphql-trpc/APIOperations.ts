@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Same naming rules as ShaarAPIOperation in the app. The DevTools network
-// request already carries the body, so nothing here stores that body.
+// Same naming rules as ShaarAPIOperation in the app. The stored operation is
+// the name, the call type, and an error flag. Post data and response text
+// are not stored. Error checks use the first 8000 characters of the response.
 
 export const APIKind = {
   GRAPHQL: 'graphql',
@@ -32,6 +33,8 @@ export interface APIOperation {
 export type APIFilter = 'all'|'graphql'|'trpc'|'errors';
 
 const NAME_LIMIT = 400;
+/** Characters of a response inspected for a JSON error. */
+export const RESPONSE_READ_LIMIT = 8000;
 const KEYWORDS: APICallType[] = [APICallType.QUERY, APICallType.MUTATION, APICallType.SUBSCRIPTION];
 
 export function columnText(operation: APIOperation): string {
@@ -466,8 +469,15 @@ function trpcErrors(value: unknown): boolean {
   return isRecord(value) && isRecord(value.error);
 }
 
+export function responseSample(body: string|null): string|null {
+  if (body === null || body.length <= RESPONSE_READ_LIMIT) {
+    return body;
+  }
+  return body.slice(0, RESPONSE_READ_LIMIT);
+}
+
 function responseHasErrors(kind: APIKind, body: string|null): boolean {
-  const value = jsonValue(body);
+  const value = jsonValue(responseSample(body));
   if (value === undefined) {
     return false;
   }

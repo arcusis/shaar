@@ -122,6 +122,15 @@ describe('APIOperations', () => {
     assert.isFalse(text!.hasErrors);
   });
 
+  it('inspects only the first 8000 characters of a response', () => {
+    const query = '{"query":"query GetUser { user { id } }"}';
+    const url = 'https://example.com/graphql';
+    const pastTheBound = `{"data":{"value":"${'x'.repeat(8000)}"},"errors":[{"message":"past the bound"}]}`;
+    const withinTheBound = '{"errors":[{"message":"no"}]}' + ' '.repeat(9000);
+    assert.isFalse(parseAPIOperation('POST', url, query, pastTheBound)!.hasErrors);
+    assert.isTrue(parseAPIOperation('POST', url, query, withinTheBound)!.hasErrors);
+  });
+
   it('bounds a long operation name', () => {
     const name = 'A'.repeat(450);
     const operation = parseAPIOperation('POST', 'https://example.com/graphql', `{"operationName":"${name}","query":"query ${name} { a }"}`, null);

@@ -6,7 +6,7 @@ import * as Common from '../../../core/common/common.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as TextUtils from '../../../core/text_utils/text_utils.js';
 
-import {keepAfterNavigation, parseAPIOperation, type APIOperation} from './APIOperations.js';
+import {keepAfterNavigation, parseAPIOperation, responseSample, type APIOperation} from './APIOperations.js';
 
 export const Events = {
   Changed: 'Changed',
@@ -20,7 +20,8 @@ export class APIOperationWatch extends Common.ObjectWrapper.ObjectWrapper<EventT
     SDK.TargetManager.SDKModelObserver<SDK.NetworkManager.NetworkManager> {
   static #instance: APIOperationWatch|null = null;
   readonly #rows = new Map<SDK.NetworkRequest.NetworkRequest, APIOperation>();
-  readonly #generation = new Map<SDK.NetworkRequest.NetworkRequest, number>();
+  // Weak so a finished parse cannot keep a request, and its post data, alive.
+  readonly #generation = new WeakMap<SDK.NetworkRequest.NetworkRequest, number>();
   readonly #owners = new WeakMap<SDK.NetworkRequest.NetworkRequest, SDK.NetworkManager.NetworkManager>();
   readonly #listeners = new Map<SDK.NetworkManager.NetworkManager, Common.EventTarget.EventDescriptor[]>();
   #installed = false;
@@ -171,7 +172,9 @@ async function operationFromRequest(request: SDK.NetworkRequest.NetworkRequest):
     return named;
   }
   // The response is only needed to see JSON errors, and only for a call we already named.
-  return parseAPIOperation(request.requestMethod, request.url(), body, await responseText(request));
+  // responseSample keeps the first 8000 characters. The text is not stored.
+  return parseAPIOperation(
+      request.requestMethod, request.url(), body, responseSample(await responseText(request)));
 }
 
 async function postText(request: SDK.NetworkRequest.NetworkRequest): Promise<string|null> {

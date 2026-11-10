@@ -599,8 +599,13 @@ SHAAR_EXPORT shaar_error_code shaar_submit(
     shaar_reply_fn, void *reply_context, shaar_error *immediate_error);
 SHAAR_EXPORT shaar_error_code shaar_cancel_request(
     shaar_engine *, shaar_request_id, shaar_error *error);
+<<<<<<< HEAD
 SHAAR_EXPORT shaar_error_code shaar_print_reply(const char *request_id,
                                                  int accepted);
+=======
+SHAAR_EXPORT shaar_error_code shaar_share_reply(const char *request_id,
+                                                  int shared);
+>>>>>>> 49a5bc8e5 (Add Chromium Web Share delegate patch 0072)
 
 #ifdef __cplusplus
 }

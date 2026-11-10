@@ -19,3 +19,25 @@ import Testing
   #expect(ShortcutCatalog.displayKeys(for: .developerTools) == "⌥⌘I")
   #expect(ShortcutCatalog.displayKeys(for: .chromiumDeveloperTools) == "⌥⇧⌘I")
 }
+
+@Test func smokeSuiteKeepsTheLegacyShellOffTheUserDefaults() throws {
+  let key = ShaarDevToolsRoute.legacyShellDefaultsKey
+  let previous = ShaarDevToolsRoute.defaults
+  let standardHadKey = UserDefaults.standard.object(forKey: key) != nil
+  let standardValue = UserDefaults.standard.bool(forKey: key)
+  let name = "shaar.devtools.route-smoke.\(UUID().uuidString)"
+  defer {
+    ShaarDevToolsRoute.restoreLegacyShellDefaults(suite: name)
+    ShaarDevToolsRoute.defaults = previous
+  }
+  let suite = try #require(ShaarDevToolsRoute.isolateLegacyShell(suite: name))
+
+  #expect(!ShaarDevToolsRoute.opensLegacyShell())
+  #expect(ShaarDevToolsRoute.f12Command() == .chromiumDeveloperTools)
+  suite.set(true, forKey: key)
+  #expect(ShaarDevToolsRoute.opensLegacyShell())
+  #expect(ShaarDevToolsRoute.opensLegacyShell(suite))
+  #expect(ShaarDevToolsRoute.f12Command() == .developerTools)
+  #expect(UserDefaults.standard.bool(forKey: key) == standardValue)
+  #expect((UserDefaults.standard.object(forKey: key) != nil) == standardHadKey)
+}

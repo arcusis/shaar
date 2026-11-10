@@ -70,10 +70,15 @@ import Foundation
         to: outputURL)
       host.events.quit()
     }
-    let defaultsKey = ShaarDevToolsRoute.legacyShellDefaultsKey
-    let previousDefault = UserDefaults.standard.object(forKey: defaultsKey)
-    defer { restoreDefault(defaultsKey, previous: previousDefault) }
-    UserDefaults.standard.removeObject(forKey: defaultsKey)
+    let suiteName = "shaar.devtools.f12-route-smoke"
+    guard let suite = ShaarDevToolsRoute.isolateLegacyShell(suite: suiteName) else {
+      rows.append([
+        "name": "setup", "passed": false,
+        "detail": "Could not isolate the legacy-shell default",
+      ])
+      return
+    }
+    defer { ShaarDevToolsRoute.restoreLegacyShellDefaults(suite: suiteName) }
     do {
       try host.restore()
       guard let context = host.contexts.values.first else { throw Failure("No hidden window") }
@@ -95,26 +100,19 @@ import Foundation
         await proveChromiumShortcut(
           name: "f12", context: context, host: host, tab: tab, outputURL: outputURL,
           fire: {
-            guard let event = f12Event(in: context.window) else { return false }
-            return host.performDeveloperToolsKey(event)
+            postToShortcutMonitor(host: host, event: f12Event(in: context.window))
           }))
       rows.append(
         await proveChromiumShortcut(
           name: "option-command-i", context: context, host: host, tab: tab, outputURL: outputURL,
-          fire: { routeOptionCommandI(host: host, window: context.window) }))
+          fire: {
+            postToShortcutMonitor(host: host, event: optionCommandIEvent(in: context.window))
+          }))
       rows.append(await proveF12ClosesOpenShell(context: context, host: host, tab: tab))
-      UserDefaults.standard.set(true, forKey: ShaarDevToolsRoute.legacyShellDefaultsKey)
+      suite.set(true, forKey: ShaarDevToolsRoute.legacyShellDefaultsKey)
       rows.append(await proveLegacyShell(context: context, host: host, tab: tab))
     } catch {
       rows.append(["name": "setup", "passed": false, "detail": error.localizedDescription])
-    }
-  }
-
-  private static func restoreDefault(_ key: String, previous: Any?) {
-    if let previous {
-      UserDefaults.standard.set(previous, forKey: key)
-    } else {
-      UserDefaults.standard.removeObject(forKey: key)
     }
   }
 
@@ -170,13 +168,7 @@ import Foundation
     }
     let shown = context.engine.showDeveloperTools(for: target)
     let shellBefore = context.engine.shaarDevTools[tab]?.isOpen == true
-    guard let event = f12Event(in: context.window) else {
-      return [
-        "name": "f12-closes-legacy-shell", "passed": false,
-        "detail": "Could not build an F12 event",
-      ]
-    }
-    let fired = host.performDeveloperToolsKey(event)
+    let fired = postToShortcutMonitor(host: host, event: f12Event(in: context.window))
     if context.window.isVisible { context.window.orderOut(nil) }
     let settled = await wait {
       context.engine.shaarDevTools[tab]?.isOpen != true
@@ -185,12 +177,16 @@ import Foundation
     let shellClosed = context.engine.shaarDevTools[tab]?.isOpen != true
     let dockOpen = chromiumDockIsOpen(context: context, tab: tab)
     let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
-    return [
+    var row: [String: Any] = [
       "name": "f12-closes-legacy-shell",
       "passed": shown && shellBefore && fired && settled && hidden,
       "fired": fired, "legacyShell": !shellClosed, "chromiumDock": dockOpen,
       "windowsHidden": hidden, "notice": context.engine.notice ?? "",
     ]
+    if !fired {
+      row["detail"] = fireDetail(name: "f12-closes-legacy-shell", context: context, host: host)
+    }
+    return row
   }
 
   private static func proveLegacyShell(
@@ -199,10 +195,7 @@ import Foundation
     if let detail = await closeChromiumDock(context: context, tab: tab) {
       return ["name": "legacy-shell", "passed": false, "detail": detail]
     }
-    guard let event = f12Event(in: context.window) else {
-      return ["name": "legacy-shell", "passed": false, "detail": "Could not build an F12 event"]
-    }
-    let fired = host.performDeveloperToolsKey(event)
+    let fired = postToShortcutMonitor(host: host, event: f12Event(in: context.window))
     if context.window.isVisible { context.window.orderOut(nil) }
     let shell = await wait { context.engine.shaarDevTools[tab]?.isOpen == true }
     try? await Task.sleep(for: .milliseconds(400))
@@ -273,12 +266,13 @@ import Foundation
     context.engine.runtime.devToolsView(forTabID: tab.uuidString) != nil
   }
 
-  private static func routeOptionCommandI(host: NativeBrowserHost, window: NSWindow) -> Bool {
-    guard let menu = host.menu, NSApp.mainMenu === menu, let event = optionCommandIEvent(in: window)
-    else { return false }
-    if host.performDeveloperToolsKey(event) { return true }
-    let responder = event.window?.firstResponder ?? window.firstResponder
-    return ShortcutPageRouting.route(event, menu: menu, responder: responder)
+  /// Posts through the local shortcut monitor installed with the menu.
+  /// `fired` means the event was eligible and posted. `sendEvent` does not
+  /// report whether the monitor consumed it.
+  private static func postToShortcutMonitor(host: NativeBrowserHost, event: NSEvent?) -> Bool {
+    guard let event, host.menu != nil, NSApp.mainMenu === host.menu else { return false }
+    NSApp.sendEvent(event)
+    return true
   }
 
   private static func f12Event(in window: NSWindow) -> NSEvent? {

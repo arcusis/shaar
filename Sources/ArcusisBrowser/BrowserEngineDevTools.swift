@@ -152,11 +152,11 @@ extension BrowserEngine {
 
   /// F12 and Option-Command-I. The Chromium dock is the public path.
   func togglePublicDeveloperTools() {
-    if ShaarDevToolsRoute.opensLegacyShell() {
-      toggleDeveloperTools()
-    } else {
-      toggleChromiumDeveloperTools()
-    }
+    let shell = siteControlTarget.flatMap { shaarDevTools[$0.tabID] }
+    ShaarDevToolsRoute.performPublicToggle(
+      shell: shell,
+      toggleShell: { self.toggleDeveloperTools() },
+      toggleChromium: { self.toggleChromiumDeveloperTools() })
   }
 
   @discardableResult
@@ -173,11 +173,7 @@ extension BrowserEngine {
 
   func toggleChromiumDeveloperTools() {
     guard let target = siteControlTarget else { return }
-    if !ShaarDevToolsRoute.opensLegacyShell(),
-      let shell = shaarDevTools[target.tabID], shell.isOpen
-    {
-      shell.close()
-    }
+    ShaarDevToolsRoute.closeOpenShell(shaarDevTools[target.tabID])
     let identity = target.tabID.uuidString
     runtime.toggleDevTools(forTabID: identity) { [weak self] error in
       if let error { self?.reportNotice(error.localizedDescription) }

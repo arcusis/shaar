@@ -24,11 +24,11 @@ import Vision
         || !realWorld && pageURL.host == "127.0.0.1" && pageURL.scheme == "http"
     else { return 2 }
     // F12 opens the Chromium dock unless this hidden default is set. The shell
-    // walk still posts F12, so the smoke turns the default on and puts it back.
-    let defaultsKey = ShaarDevToolsRoute.legacyShellDefaultsKey
-    let previousDefault = UserDefaults.standard.object(forKey: defaultsKey)
-    UserDefaults.standard.set(true, forKey: defaultsKey)
-    defer { restoreLegacyDefault(defaultsKey, previous: previousDefault) }
+    // walk still posts F12, so the smoke turns that default on in a private suite.
+    let suiteName = "shaar.devtools.shell-smoke"
+    guard let suite = ShaarDevToolsRoute.isolateLegacyShell(suite: suiteName) else { return 1 }
+    suite.set(true, forKey: ShaarDevToolsRoute.legacyShellDefaultsKey)
+    defer { ShaarDevToolsRoute.restoreLegacyShellDefaults(suite: suiteName) }
     let smokeRoot = outputURL.deletingLastPathComponent()
     let root = pageURL.query == "vitalsOnly=1" ? smokeRoot : smokeRoot.appending(path: "profile")
     let keys = ShaarDevToolsSmokeKeys()
@@ -1848,14 +1848,6 @@ import Vision
   ) {
     let url = report.directory.appending(path: "panel-css-overview.png")
     _ = ShaarDevToolsSmokeAccess.capture(context.hosting, to: url)
-  }
-
-  private static func restoreLegacyDefault(_ key: String, previous: Any?) {
-    if let previous {
-      UserDefaults.standard.set(previous, forKey: key)
-    } else {
-      UserDefaults.standard.removeObject(forKey: key)
-    }
   }
 
   private static func postedF12(_ context: NativeBrowserContext) -> Bool {

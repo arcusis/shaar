@@ -230,7 +230,7 @@ private func target(_ address: String) -> SiteControlTarget {
       panel, size: NSSize(width: 320, height: 740), appearance: appearance, to: url)
     #expect(bitmap.pixelsWide == 320)
     let text = try VisualTextRecognition.lines(in: url).joined(separator: " ")
-    #expect(text.contains("Shaar DevTools"))
+    #expect(text.contains("Developer Tools"))
   }
   #expect(model.isAllowed(.sound))
 }

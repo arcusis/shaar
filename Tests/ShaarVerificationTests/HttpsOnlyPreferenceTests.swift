@@ -48,6 +48,28 @@ import Testing
     #expect(try Data(contentsOf: preferences) == original)
   }
 
+  @Test func seedKeepsAStoredOffAndDefaultsOnOnlyWhenUnset() throws {
+    let root = try directory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let profile = UUID().uuidString
+    #expect(ARCWriteHttpsOnlyPreference(root, profile, false))
+    let preferences = root.appending(path: "Profile \(profile.lowercased())/Preferences")
+    let storedOff = try Data(contentsOf: preferences)
+
+    let kept = ARCSeedHttpsOnlyPreference(root, profile, nil)
+    #expect(kept?.boolValue == false)
+    #expect(try Data(contentsOf: preferences) == storedOff)
+
+    #expect(ARCSeedHttpsOnlyPreference(root, profile, false)?.boolValue == false)
+    #expect(ARCSeedHttpsOnlyPreference(root, profile, true)?.boolValue == true)
+    #expect(ARCReadHttpsOnlyPreference(root, profile)?.boolValue == true)
+
+    let fresh = UUID().uuidString
+    #expect(ARCSeedHttpsOnlyPreference(root, fresh, nil)?.boolValue == true)
+    #expect(ARCReadHttpsOnlyPreference(root, fresh)?.boolValue == true)
+    #expect(ARCSeedHttpsOnlyPreference(root, "not-a-profile", nil) == nil)
+  }
+
   @Test func refusesAnInvalidProfileAndAnUnreadableFile() throws {
     let root = try directory()
     defer { try? FileManager.default.removeItem(at: root) }

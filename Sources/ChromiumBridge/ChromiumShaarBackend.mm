@@ -534,9 +534,9 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (void)seedHttpsOnlyForProfileID:(NSString *)profileID {
   NSString *canonical = ARCCanonicalProfileID(profileID);
   if (!canonical || !_shaarUserDataDirectory) return;
-  NSNumber *stored = _shaarHttpsOnly[canonical];
-  BOOL enabled = stored ? stored.boolValue : YES;
-  ARCWriteHttpsOnlyPreference(_shaarUserDataDirectory, canonical, enabled);
+  NSNumber *applied = ARCSeedHttpsOnlyPreference(
+      _shaarUserDataDirectory, canonical, _shaarHttpsOnly[canonical]);
+  if (applied) _shaarHttpsOnly[canonical] = applied;
 }
 
 - (BOOL)setHttpsOnlyModeEnabled:(BOOL)enabled forProfileID:(NSString *)profileID {

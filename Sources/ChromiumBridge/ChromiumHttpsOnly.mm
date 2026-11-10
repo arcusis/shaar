@@ -70,3 +70,17 @@ NSNumber *ARCReadHttpsOnlyPreference(NSURL *userDataDirectory, NSString *profile
   id value = state[ARCHttpsOnlyPreferenceKey];
   return [value isKindOfClass:NSNumber.class] ? value : nil;
 }
+
+NSNumber *ARCSeedHttpsOnlyPreference(
+    NSURL *userDataDirectory, NSString *profileID, NSNumber *chosen) {
+  NSString *canonical = ARCCanonicalProfileID(profileID);
+  if (!canonical || !userDataDirectory.isFileURL) return nil;
+  if (chosen) {
+    if (!ARCWriteHttpsOnlyPreference(userDataDirectory, canonical, chosen.boolValue)) return nil;
+    return @(chosen.boolValue);
+  }
+  NSNumber *existing = ARCReadHttpsOnlyPreference(userDataDirectory, canonical);
+  if (existing) return existing;
+  if (!ARCWriteHttpsOnlyPreference(userDataDirectory, canonical, YES)) return nil;
+  return @YES;
+}

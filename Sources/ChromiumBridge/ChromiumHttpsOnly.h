@@ -21,6 +21,13 @@ FOUNDATION_EXPORT BOOL ARCWriteHttpsOnlyPreference(
 FOUNDATION_EXPORT NSNumber * _Nullable ARCReadHttpsOnlyPreference(
   NSURL *userDataDirectory, NSString *profileID);
 
+/// Choice to persist before a profile opens. `chosen` is this process's stored
+/// value, or nil when the load was not given one. An existing Preferences
+/// boolean is left unchanged in that case. A profile with no choice yet is
+/// seeded on. Returns the applied boolean, or nil when the id or file is unusable.
+FOUNDATION_EXPORT NSNumber * _Nullable ARCSeedHttpsOnlyPreference(
+  NSURL *userDataDirectory, NSString *profileID, NSNumber * _Nullable chosen);
+
 NS_ASSUME_NONNULL_END
 
 #ifdef __cplusplus

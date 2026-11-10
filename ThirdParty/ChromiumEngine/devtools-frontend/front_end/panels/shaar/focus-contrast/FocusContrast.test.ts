@@ -100,6 +100,8 @@ describe('FocusContrast', () => {
     assert.strictEqual(inventory?.texts[0].origin.y, 40);
     assert.strictEqual(inventory?.scrollY, 3);
     assert.isTrue(inventory?.truncated);
+    assert.isFalse(inventory?.textsCapped);
+    assert.isTrue(Contrast.decodeInventory({scrollX: 0, scrollY: 0, stops: [], texts: [], textsCapped: true})?.textsCapped);
     assert.isNull(Contrast.decodeInventory('nope'));
   });
 
@@ -133,10 +135,12 @@ describe('FocusContrast', () => {
     assert.include(Contrast.COLLECT_EXPRESSION, String.raw`/\s+/g`);
     assert.include(Contrast.COLLECT_EXPRESSION, 'selectNodeContents');
     assert.include(Contrast.COLLECT_EXPRESSION, 'maxNodes = 2000');
+    assert.include(Contrast.COLLECT_EXPRESSION, 'maxTexts = 30');
+    assert.include(Contrast.COLLECT_EXPRESSION, Contrast.badgePosition.toString());
+    assert.include(Contrast.COLLECT_EXPRESSION, 'requestAnimationFrame');
+    assert.include(Contrast.COLLECT_EXPRESSION, '__shaarNode');
     assert.strictEqual(Contrast.COLLECT_EXPRESSION.split('getComputedStyle').length - 1, 1);
     assert.doesNotThrow(() => new Function(`return ${Contrast.COLLECT_EXPRESSION}`));
-    assert.include(Contrast.COLLECT_EXPRESSION, 'y - 20');
-    assert.include(Contrast.COLLECT_EXPRESSION, 'right + 6');
     assert.notInclude(Contrast.COLLECT_EXPRESSION, '__shaarA11yOverlay.paint');
     const expression = Contrast.paintExpression([{
       kind: 'focus',
@@ -158,6 +162,12 @@ describe('FocusContrast', () => {
     assert.strictEqual(
         Contrast.summaryText(1, 0, 2, true),
         '1 tab stop · 0 contrast failures · 2 not scored · list limited');
+    assert.strictEqual(
+        Contrast.summaryText(1, 1, 0, false, true),
+        '1 tab stop · 1 contrast failure · scored the first 30 texts');
+    assert.strictEqual(
+        Contrast.summaryText(1, 0, 2, true, true),
+        '1 tab stop · 0 contrast failures · 2 not scored · scored the first 30 texts · list limited');
   });
 
   it('paints numbered stops and the failing pair', async () => {
@@ -248,6 +258,91 @@ describe('FocusContrast', () => {
     assert.deepEqual(caller.expressions, []);
   });
 
+  it('places page badges with badgePosition and keeps the node for the next frame', async () => {
+    const page = await openPage(
+        '<button style="position:absolute;left:10px;top:40px;width:80px;height:24px">Save</button>' +
+        '<p style="position:absolute;left:12px;top:90px;margin:0;font-size:16px">Low contrast</p>');
+    try {
+      const inventory = page.win.eval(Contrast.COLLECT_EXPRESSION) as PageInventory;
+      const stop = inventory.stops.find(item => item.name.includes('Save'));
+      const text = inventory.texts.find(item => item.snippet === 'Low contrast');
+      assert.exists(stop);
+      assert.exists(text);
+      const overlay = page.win.__shaarA11yOverlay;
+      assert.exists(overlay);
+      overlay.paint({
+        badges: [
+          {kind: 'focus', label: '1', marker: String(stop.id), group: 'focus', snippet: 'Save', x: stop.x, y: stop.y},
+          {
+            kind: 'contrast',
+            label: '4.48',
+            marker: String(text.id),
+            group: 'contrast',
+            snippet: 'Low contrast',
+            x: text.x,
+            y: text.y,
+          },
+        ],
+      });
+      const focusBadge = page.badge('.focus');
+      const contrastBadge = page.badge('.contrast');
+      const button = page.doc.querySelector('button');
+      const paragraph = page.doc.querySelector('p');
+      assert.exists(button);
+      assert.exists(paragraph);
+      const box = button.getBoundingClientRect();
+      assertSamePosition(readPosition(focusBadge), Contrast.badgePosition('focus', {left: box.left, top: box.top}, null, null));
+      const textBox = paragraph.getBoundingClientRect();
+      const range = page.doc.createRange();
+      range.selectNodeContents(paragraph);
+      const textRect = range.getBoundingClientRect();
+      assert.isAtLeast(textRect.width, 1);
+      assertSamePosition(
+          readPosition(contrastBadge),
+          Contrast.badgePosition('contrast', {left: textBox.left, top: textBox.top}, textRect.width, textRect.right));
+
+      button.removeAttribute('data-shaar-focus');
+      button.style.top = '140px';
+      const beforeTop = focusBadge.style.top;
+      const frames = {count: 0, callback: null as FrameRequestCallback | null};
+      page.win.requestAnimationFrame = (callback: FrameRequestCallback) => {
+        frames.count += 1;
+        frames.callback = callback;
+        return 1;
+      };
+      page.win.dispatchEvent(new Event('scroll'));
+      page.win.dispatchEvent(new Event('scroll'));
+      assert.strictEqual(frames.count, 1);
+      assert.strictEqual(focusBadge.style.top, beforeTop);
+      const scheduled = frames.callback;
+      if (!scheduled) {
+        throw new Error('scroll did not schedule a frame');
+      }
+      scheduled(0);
+      const moved = button.getBoundingClientRect();
+      assertSamePosition(
+          readPosition(focusBadge), Contrast.badgePosition('focus', {left: moved.left, top: moved.top}, null, null));
+    } finally {
+      page.frame.remove();
+    }
+  });
+
+  it('says when the page script stops scoring at 30 texts', async () => {
+    const lines = Array.from({length: Contrast.MAX_SCORED_TEXTS + 1}, (_, index) => `<p>line ${index}</p>`).join('');
+    const page = await openPage(lines);
+    try {
+      const inventory = page.win.eval(Contrast.COLLECT_EXPRESSION) as PageInventory;
+      assert.strictEqual(inventory.texts.length, Contrast.MAX_SCORED_TEXTS);
+      assert.isTrue(inventory.textsCapped);
+      assert.notInclude(inventory.texts.map(item => item.snippet), `line ${Contrast.MAX_SCORED_TEXTS}`);
+      assert.include(
+          Contrast.summaryText(inventory.stops.length, 0, 0, inventory.truncated, inventory.textsCapped),
+          'scored the first 30 texts');
+    } finally {
+      page.frame.remove();
+    }
+  });
+
   it('reports a page that did not list its tab stops', async () => {
     const caller = new FixtureCaller();
     caller.inventory = null;
@@ -255,6 +350,68 @@ describe('FocusContrast', () => {
     assert.strictEqual(result.failure, Contrast.NO_STOPS);
   });
 });
+
+interface PageInventory {
+  stops: Array<{id: number, name: string, x: number, y: number}>;
+  texts: Array<{id: number, snippet: string, x: number, y: number}>;
+  truncated: boolean;
+  textsCapped: boolean;
+}
+
+interface PageOverlay {
+  paint(payload: {badges: Array<Record<string, unknown>>}): boolean;
+}
+
+interface PageWindow extends Window {
+  eval(code: string): unknown;
+  __shaarA11yOverlay?: PageOverlay;
+}
+
+function readPosition(badge: HTMLElement): {left: number, top: number} {
+  return {left: parseFloat(badge.style.left), top: parseFloat(badge.style.top)};
+}
+
+function assertSamePosition(actual: {left: number, top: number}, expected: {left: number, top: number}): void {
+  // CSSOM serializes inline pixel lengths to three decimal places.
+  assert.approximately(actual.left, expected.left, 0.01);
+  assert.approximately(actual.top, expected.top, 0.01);
+}
+
+async function openPage(html: string): Promise<{
+  frame: HTMLIFrameElement,
+  doc: Document,
+  win: PageWindow,
+  badge: (selector: string) => HTMLElement,
+}> {
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;left:0;top:0;width:640px;height:480px;border:0;opacity:0;pointer-events:none';
+  document.body.append(frame);
+  if (!frame.contentDocument?.body) {
+    await new Promise(resolve => {
+      frame.addEventListener('load', () => resolve(undefined), {once: true});
+    });
+  }
+  const doc = frame.contentDocument;
+  const win = frame.contentWindow as PageWindow | null;
+  if (!doc?.body || !win) {
+    frame.remove();
+    throw new Error('The page frame has no document.');
+  }
+  doc.body.style.margin = '0';
+  doc.body.innerHTML = html;
+  return {
+    frame,
+    doc,
+    win,
+    badge(selector: string): HTMLElement {
+      const node = doc.getElementById('shaar-a11y-overlay')?.shadowRoot?.querySelector(selector);
+      if (!node || !('style' in node)) {
+        throw new Error(selector);
+      }
+      return node as HTMLElement;
+    },
+  };
+}
 
 function stop(id: number, tabIndex: number, order: number, name: string): Focus.FocusContrast.FocusStop {
   return {id, tabIndex, documentOrder: order, name, origin: {x: 0, y: 0}};

@@ -37,6 +37,8 @@ export interface Inventory {
   stops: FocusStop[];
   texts: TextSample[];
   truncated: boolean;
+  /** True when a later text was skipped because scoring stops at MAX_SCORED_TEXTS. */
+  textsCapped: boolean;
 }
 
 export interface ContrastDecision {
@@ -97,6 +99,9 @@ export interface FocusContrastCaller {
 /** Page walk and Elements walk stop after this many nodes. */
 export const MAX_WALK_NODES = 2000;
 
+/** Contrast scoring keeps this many text samples, then says so in the summary. */
+export const MAX_SCORED_TEXTS = 30;
+
 /** 14pt. WCAG counts bold text at least this size as large. 14 * 96 / 72 = 18.666... */
 export const LARGE_BOLD_PX = 18.66;
 
@@ -111,13 +116,17 @@ export function orderFocusStops(stops: FocusStop[]): FocusStop[] {
   return [...positive, ...natural];
 }
 
-export function summaryText(stops: number, failures: number, limited: number, truncated: boolean): string {
+export function summaryText(
+    stops: number, failures: number, limited: number, truncated: boolean, textsCapped = false): string {
   const parts = [
     counted(stops, 'tab stop', 'tab stops'),
     counted(failures, 'contrast failure', 'contrast failures'),
   ];
   if (limited > 0) {
     parts.push(`${limited} not scored`);
+  }
+  if (textsCapped) {
+    parts.push(`scored the first ${MAX_SCORED_TEXTS} texts`);
   }
   if (truncated) {
     parts.push('list limited');
@@ -209,6 +218,7 @@ export function decodeInventory(value: unknown): Inventory|null {
     stops: asArray(fields.stops).map(decodeStop).filter((stop): stop is FocusStop => stop !== null),
     texts: asArray(fields.texts).map(decodeText).filter((text): text is TextSample => text !== null),
     truncated: fields.truncated === true,
+    textsCapped: fields.textsCapped === true,
   };
 }
 
@@ -302,12 +312,13 @@ export function paintExpression(badges: FocusContrastBadge[]): string|null {
 export const CLEAR_EXPRESSION =
     '(globalThis.__shaarA11yOverlay ? globalThis.__shaarA11yOverlay.clear() : true)';
 
-export const COLLECT_EXPRESSION = `(() => {
+export const COLLECT_EXPRESSION: string = `(() => {
   const maxStops = 30;
-  const maxTexts = 30;
-  const maxNodes = 2000;
+  const maxTexts = ${MAX_SCORED_TEXTS};
+  const maxNodes = ${MAX_WALK_NODES};
   const selector = 'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"]';
   const blocked = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'OPTION', 'SVG']);
+  ${badgePosition.toString()}
 
   function install() {
     if (globalThis.__shaarA11yOverlay) return;
@@ -331,31 +342,36 @@ export const COLLECT_EXPRESSION = `(() => {
     document.documentElement.append(host);
     const place = (badge, item) => {
       const contrast = item.group === 'contrast' || item.kind === 'contrast';
-      const group = contrast ? 'data-shaar-contrast' : 'data-shaar-focus';
-      const node = document.querySelector('[' + group + '="' + item.marker + '"]');
+      const node = badge.__shaarNode || null;
       const rect = node ? node.getBoundingClientRect() : null;
       const x = rect ? rect.left : item.x;
       const y = rect ? rect.top : item.y;
-      if (contrast) {
-        let right = x;
-        if (node) {
-          const range = document.createRange();
-          range.selectNodeContents(node);
-          const textRect = range.getBoundingClientRect();
-          if (textRect.width >= 1) right = textRect.right;
-        }
-        badge.style.left = Math.max(0, right + 6) + 'px';
-        badge.style.top = Math.max(0, y) + 'px';
-        return;
+      let textWidth = null;
+      let textRight = null;
+      if (contrast && node) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const textRect = range.getBoundingClientRect();
+        textWidth = textRect.width;
+        textRight = textRect.right;
       }
-      badge.style.left = Math.max(0, x) + 'px';
-      badge.style.top = Math.max(0, y - 20) + 'px';
+      const pos = badgePosition(contrast ? 'contrast' : 'focus', {left: x, top: y}, textWidth, textRight);
+      badge.style.left = pos.left + 'px';
+      badge.style.top = pos.top + 'px';
     };
+    let placedFrame = 0;
     const reposition = () => {
       for (const badge of layer.children) place(badge, badge.__shaarItem || {});
     };
-    window.addEventListener('scroll', reposition, true);
-    window.addEventListener('resize', reposition);
+    const schedule = () => {
+      if (placedFrame) return;
+      placedFrame = requestAnimationFrame(() => {
+        placedFrame = 0;
+        reposition();
+      });
+    };
+    window.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
     globalThis.__shaarA11yOverlay = {
       paint(payload) {
         layer.replaceChildren();
@@ -368,14 +384,19 @@ export const COLLECT_EXPRESSION = `(() => {
           badge.dataset.snippet = item.snippet || '';
           badge.textContent = String(item.label || '');
           badge.__shaarItem = item;
+          const contrast = item.group === 'contrast' || item.kind === 'contrast';
+          const group = contrast ? 'data-shaar-contrast' : 'data-shaar-focus';
+          badge.__shaarNode = document.querySelector('[' + group + '="' + item.marker + '"]');
           place(badge, item);
           layer.append(badge);
         }
         return true;
       },
       clear() {
-        window.removeEventListener('scroll', reposition, true);
-        window.removeEventListener('resize', reposition);
+        if (placedFrame) cancelAnimationFrame(placedFrame);
+        placedFrame = 0;
+        window.removeEventListener('scroll', schedule, true);
+        window.removeEventListener('resize', schedule);
         host.remove();
         document.querySelectorAll('[data-shaar-focus]').forEach((node) => {
           node.removeAttribute('data-shaar-focus');
@@ -436,6 +457,7 @@ export const COLLECT_EXPRESSION = `(() => {
   const stops = [];
   const texts = [];
   let truncated = false;
+  let textsCapped = false;
   let order = 0;
   let seen = 0;
   function visit(node) {
@@ -465,7 +487,7 @@ export const COLLECT_EXPRESSION = `(() => {
     }
     const snippet = ownText(node);
     if (visible && snippet) {
-      if (texts.length >= maxTexts) truncated = true;
+      if (texts.length >= maxTexts) textsCapped = true;
       else {
         const rect = node.getBoundingClientRect();
         node.setAttribute('data-shaar-contrast', String(texts.length + 1));
@@ -484,7 +506,7 @@ export const COLLECT_EXPRESSION = `(() => {
     for (const child of node.children) visit(child);
   }
   if (document.body) visit(document.body);
-  return {scrollX: window.scrollX, scrollY: window.scrollY, stops, texts, truncated};
+  return {scrollX: window.scrollX, scrollY: window.scrollY, stops, texts, truncated, textsCapped};
 })()`;
 
 export async function refreshFocusContrast(
@@ -529,7 +551,8 @@ export async function refreshFocusContrast(
     return {
       cancelled: false,
       failure: null,
-      summary: summaryText(focus.length, scored.badges.length, scored.limited, inventory.truncated),
+      summary: summaryText(
+          focus.length, scored.badges.length, scored.limited, inventory.truncated, inventory.textsCapped),
       badges,
       rows: rowsFor(badges),
       trace,

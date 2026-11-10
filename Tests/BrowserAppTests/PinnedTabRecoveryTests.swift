@@ -36,6 +36,30 @@ struct PinnedTabRecoveryTests {
     #expect(store.session.selectedPage?.tab == recovered)
   }
 
+  @Test func rendererExitReportedByCloseArchivesThePin() async throws {
+    let (store, tab) = try makeStore()
+    let runtime = PinRecoveryRuntime()
+    runtime.reportRendererGoneOnClose = true
+    runtime.closeProfileID = store.session.selectedSpace.profileID.uuidString
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false)
+    defer { engine.suspensionTask?.cancel() }
+    store.library.onLoad = nil
+    engine.reconcile()
+    for _ in 0..<100 where runtime.opened.isEmpty {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(engine.liveTabs.contains(tab.id))
+    #expect(runtime.windowID(forTabID: tab.id.uuidString) == engine.windowID)
+    #expect(
+      engine.events.router.client(
+        forTab: tab.id.uuidString, nativeWindowID: engine.windowID) != nil)
+    store.closeTab(tab.id)
+    #expect(store.session.closedTabs.map(\.id) == [tab.id])
+    #expect(store.rendererFailures[tab.id] == nil)
+    #expect(!engine.liveTabs.contains(tab.id))
+  }
+
   @Test func rendererFailureRevokesPendingCloseIntent() throws {
     let (store, tab) = try makeStore()
     store.onCloseTab = { _ in }
@@ -249,7 +273,7 @@ struct PinnedTabRecoveryTests {
   }
 }
 
-private final class PinRecoveryRuntime: ARCChromiumRuntime {
+private final class PinRecoveryRuntime: ARCChromiumRuntime, @unchecked Sendable {
   nonisolated(unsafe) var opened: [String] = []
   nonisolated(unsafe) var reloaded: [String] = []
   nonisolated(unsafe) var owners: [String: String] = [:]
@@ -258,6 +282,8 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var windowOpen = true
   nonisolated(unsafe) var openReturnsNotFound = false
   nonisolated(unsafe) var rejectReload = false
+  nonisolated(unsafe) var reportRendererGoneOnClose = false
+  nonisolated(unsafe) var closeProfileID = ""
 
   override func isWindowOpenID(_ windowID: String) -> Bool { windowOpen }
 
@@ -290,6 +316,13 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime {
   }
 
   override func closeTabID(_ tabID: String) {
+    if reportRendererGoneOnClose {
+      let profileID = closeProfileID
+      // The product reports renderer exit on the main thread before close returns.
+      MainActor.assumeIsolated {
+        self.onRendererGone?(tabID, profileID, "renderer_gone", 0)
+      }
+    }
     owners[tabID] = nil
     onTabClosed?(tabID)
   }

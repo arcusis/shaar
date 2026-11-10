@@ -17,6 +17,8 @@ archival, but do not identify the native event that triggered those sessions.
 
 `BrowserStore` now requires an explicit tab-close request before archiving a
 pin. Renderer failure or a replacement document clears pending close intent.
+A renderer-exit signal delivered inside the close call is that close finishing,
+and the saved pin archives.
 When an unsolicited close destroys the native tab, the engine drops its live
 state and shows recovery while retaining the saved pin, selection, and profile.
 It waits for Reload rather than repeatedly reopening during reconciliation.
@@ -30,10 +32,10 @@ event arrives. A rejected reload with no renderer failure leaves the live tab
 alone.
 
 `PinnedTabRecoveryTests` covers unsolicited closes, explicit close/reopen,
-renderer loss, a rejected native reload of a still-live pin, a rejected reload
-with no renderer failure, startup-open failures (including a close callback
-during open), disk persistence, and shared window pins using a fake runtime
-without windows.
+renderer loss, a renderer exit nested inside the close call, a rejected native
+reload of a still-live pin, a rejected reload with no renderer failure,
+startup-open failures (including a close callback during open), disk
+persistence, and shared window pins using a fake runtime without windows.
 These tests do not replay the original shaar.11/12 launch or prove native page
 painting. Existing archived pins can be restored using [[Closed_Tab_Recovery]];
 there is no blanket migration because older entries do not record close intent.

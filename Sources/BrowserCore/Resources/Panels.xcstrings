@@ -1788,6 +1788,16 @@
         }
       }
     },
+    "this visit only": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לביקור הזה בלבד"
+          }
+        }
+      }
+    },
     "The site keeps this permission in this profile until you change it.": {
       "localizations": {
         "he": {

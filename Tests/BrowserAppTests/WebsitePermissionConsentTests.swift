@@ -119,4 +119,58 @@ struct WebsitePermissionConsentTests {
     #expect(!store.commandIsOpen)
     #expect(store.pendingSplitPlacement == nil)
   }
+
+  @Test func privateSheetSaysThisVisitOnlyAndDoesNotKeepTheGrant() throws {
+    let first = UUID()
+    let session = try BrowserSession.privateWindow(sourceProfileID: UUID(), firstTabID: first)
+    let store = BrowserStore(privateSession: session)
+    store.perform(.open(URL(string: "https://notes.example/private")!))
+    let tab = try #require(store.session.selectedPage?.tab)
+    let request = try #require(
+      WebsitePermissionRequest(
+        id: "private-note", profileID: store.session.selectedSpace.profileID,
+        tabID: tab.id, pageURL: tab.url, requestingOrigin: URL(string: "https://notes.example")!,
+        kinds: [.notifications], frameID: "0123456789abcdef0123456789abcdef"))
+    #expect(store.isPrivate)
+    #expect(
+      WebsitePermissionPersistence.forGrant(isPrivate: true, kinds: request.kinds) == .thisVisit)
+    #expect(
+      WebsitePermissionSheetCopy.allowButton(isPrivate: true, oneTime: false) == "this visit only")
+    #expect(
+      WebsitePermissionSheetCopy.duration(isPrivate: true, oneTime: false)
+        == "Only for this visit.")
+    #expect(WebsitePermissionSheetCopy.allowButton(isPrivate: false, oneTime: false) == "Allow")
+    store.rememberPermissionFrame(tab.id, frameID: try #require(request.frameID))
+    var decisions: [Bool] = []
+    store.onWebsitePermissionDecision = { _, accepted in decisions.append(accepted) }
+    #expect(store.requestWebsitePermission(request))
+    #expect(store.websitePermissionIsCurrent(request))
+    store.resolveWebsitePermission(request.id, accepted: true)
+    #expect(decisions == [true])
+    #expect(store.websitePermissionRequests.isEmpty)
+  }
+
+  @Test func aReplacedFrameCannotReceiveTheGrant() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedPage?.tab)
+    let request = try #require(
+      WebsitePermissionRequest(
+        id: "framed", profileID: store.session.selectedSpace.profileID,
+        tabID: tab.id, pageURL: tab.url, requestingOrigin: URL(string: "https://meet.google.com")!,
+        kinds: [.notifications], frameID: "0123456789abcdef0123456789abcdef"))
+    let replacement = String(repeating: "a", count: 32)
+    store.rememberPermissionFrame(tab.id, frameID: try #require(request.frameID))
+    var decisions: [Bool] = []
+    store.onWebsitePermissionDecision = { _, accepted in decisions.append(accepted) }
+    #expect(store.requestWebsitePermission(request))
+    store.nativeTabChanged(tab.id, url: tab.url, title: "Renamed")
+    #expect(store.websitePermissionIsCurrent(request))
+    store.rememberPermissionFrame(tab.id, frameID: replacement)
+    #expect(!store.websitePermissionIsCurrent(request))
+    store.resolveWebsitePermission(request.id, accepted: true)
+    #expect(decisions == [false])
+    store.nativeTabChanged(
+      tab.id, url: URL(string: "https://meet.google.com/moved")!, title: "Moved")
+    #expect(!store.websitePermissionIsCurrent(request))
+  }
 }

@@ -19,6 +19,19 @@ public enum WebsitePermissionKind: String, Sendable, CaseIterable {
   }
 }
 
+public enum WebsitePermissionPersistence: Equatable, Sendable {
+  case thisVisit
+  case profile
+
+  /// Private profiles never keep a grant. Camera, microphone, and location stay on this visit.
+  public static func forGrant(isPrivate: Bool, kinds: [WebsitePermissionKind]) -> Self {
+    if isPrivate { return .thisVisit }
+    if kinds.isEmpty { return .thisVisit }
+    if kinds.allSatisfy(\.supportsOneTimeGrant) { return .thisVisit }
+    return .profile
+  }
+}
+
 public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
   public let id: String
   public let profileID: UUID
@@ -26,16 +39,25 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
   public let pageURL: URL
   public let requestingOrigin: URL
   public let kinds: [WebsitePermissionKind]
+  /// Chromium frame token for prompts that name a frame. Camera and microphone may omit it.
+  public let frameID: String?
 
   public init?(
     id: String, profileID: UUID, tabID: UUID, pageURL: URL,
-    requestingOrigin: URL, kinds: [WebsitePermissionKind]
+    requestingOrigin: URL, kinds: [WebsitePermissionKind], frameID: String? = nil
   ) {
     let scheme = requestingOrigin.scheme?.lowercased()
     let secureOrigin =
       scheme == "https"
       || (scheme == "http"
         && Self.isLocalHTTPHost(requestingOrigin.host()?.lowercased() ?? ""))
+    let storedFrame: String?
+    if let frameID {
+      guard let normalized = Self.normalizedFrameID(frameID) else { return nil }
+      storedFrame = normalized
+    } else {
+      storedFrame = nil
+    }
     guard !id.isEmpty, id.utf8.count <= 128, NavigationInput.isWebURL(pageURL),
       NavigationInput.isWebURL(requestingOrigin), requestingOrigin.user == nil,
       requestingOrigin.password == nil, requestingOrigin.query == nil,
@@ -49,6 +71,16 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
     self.pageURL = pageURL
     self.requestingOrigin = requestingOrigin
     self.kinds = WebsitePermissionKind.allCases.filter(kinds.contains)
+    self.frameID = storedFrame
+  }
+
+  /// Chromium's `base::Token::ToString` is 32 hexadecimal characters.
+  public static func normalizedFrameID(_ value: String) -> String? {
+    guard value.count == 32 else { return nil }
+    let lowered = value.lowercased()
+    let hex = CharacterSet(charactersIn: "0123456789abcdef")
+    guard lowered.unicodeScalars.allSatisfy({ hex.contains($0) }) else { return nil }
+    return lowered
   }
 
   private static func isLocalHTTPHost(_ host: String) -> Bool {
@@ -75,5 +107,52 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
       && session.selectedPage?.tab.id == tabID
       && session.selectedPage?.tab.url == pageURL
       && session.profileID(forTabID: tabID) == profileID
+  }
+}
+
+public enum WebsitePermissionEvent {
+  /// Accepts one permission event. Unknown kinds, a repeated id, the wrong tab, or
+  /// schemaVersion other than 1 produce no request. Website permission prompts require a frame token.
+  public static func request(
+    from payload: [String: Any],
+    windowID: String,
+    outstandingIDs: Set<String>,
+    knownTabs: Set<UUID>
+  ) -> WebsitePermissionRequest? {
+    guard schemaVersion(payload) == 1,
+      let kind = payload["kind"] as? String,
+      kind == "websitePermissionRequested" || kind == "websiteMediaRequested",
+      let id = payload["id"] as? String,
+      !outstandingIDs.contains(id),
+      payload["windowID"] as? String == windowID,
+      let profileID = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
+      let tabID = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),
+      knownTabs.contains(tabID),
+      let pageURL = (payload["pageURL"] as? String).flatMap(URL.init(string:)),
+      let origin = (payload["origin"] as? String).flatMap(URL.init(string:)),
+      let rawKinds = payload["permissions"] as? [String],
+      !rawKinds.isEmpty,
+      rawKinds.allSatisfy({ WebsitePermissionKind(rawValue: $0) != nil })
+    else { return nil }
+    let frameID = suppliedFrameID(payload)
+    if payload["frameID"] != nil && frameID == nil { return nil }
+    if kind == "websitePermissionRequested" && frameID == nil { return nil }
+    return WebsitePermissionRequest(
+      id: id, profileID: profileID, tabID: tabID, pageURL: pageURL,
+      requestingOrigin: origin,
+      kinds: rawKinds.compactMap(WebsitePermissionKind.init(rawValue:)),
+      frameID: frameID)
+  }
+
+  private static func schemaVersion(_ payload: [String: Any]) -> Int? {
+    if let value = payload["schemaVersion"] as? Int { return value }
+    if let number = payload["schemaVersion"] as? NSNumber { return number.intValue }
+    return nil
+  }
+
+  private static func suppliedFrameID(_ payload: [String: Any]) -> String? {
+    guard let raw = payload["frameID"] else { return nil }
+    guard let text = raw as? String else { return nil }
+    return WebsitePermissionRequest.normalizedFrameID(text)
   }
 }

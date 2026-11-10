@@ -84,3 +84,97 @@ import Testing
       .camera, .microphone, .location,
     ])
 }
+
+private let permissionFrame = "0123456789ABCDEF0123456789ABCDEF"
+
+private func permissionPayload(
+  kind: String = "websitePermissionRequested",
+  schema: Any = 1,
+  id: String = "permission-1",
+  permissions: [String] = ["notifications"],
+  tabID: UUID,
+  windowID: String,
+  profileID: UUID,
+  frameID: Any? = permissionFrame
+) -> [String: Any] {
+  var payload: [String: Any] = [
+    "schemaVersion": schema,
+    "kind": kind,
+    "id": id,
+    "profileID": profileID.uuidString,
+    "tabID": tabID.uuidString,
+    "windowID": windowID,
+    "pageURL": "https://notes.example/a",
+    "origin": "https://notes.example/",
+    "permissions": permissions,
+  ]
+  if let frameID { payload["frameID"] = frameID }
+  return payload
+}
+
+@Test func websitePermissionEventsRejectUnknownKindDuplicateTabAndSchema() {
+  let profile = UUID()
+  let tab = UUID()
+  let window = UUID().uuidString
+  let known = Set([tab])
+  let valid = WebsitePermissionEvent.request(
+    from: permissionPayload(tabID: tab, windowID: window, profileID: profile),
+    windowID: window, outstandingIDs: [], knownTabs: known)
+  #expect(valid?.frameID == permissionFrame.lowercased())
+  #expect(valid?.kinds == [.notifications])
+
+  #expect(
+    WebsitePermissionEvent.request(
+      from: permissionPayload(
+        permissions: ["geolocation"], tabID: tab, windowID: window, profileID: profile),
+      windowID: window, outstandingIDs: [], knownTabs: known) == nil)
+  #expect(
+    WebsitePermissionEvent.request(
+      from: permissionPayload(tabID: tab, windowID: window, profileID: profile),
+      windowID: window, outstandingIDs: ["permission-1"], knownTabs: known) == nil)
+  #expect(
+    WebsitePermissionEvent.request(
+      from: permissionPayload(tabID: UUID(), windowID: window, profileID: profile),
+      windowID: window, outstandingIDs: [], knownTabs: known) == nil)
+  #expect(
+    WebsitePermissionEvent.request(
+      from: permissionPayload(tabID: tab, windowID: UUID().uuidString, profileID: profile),
+      windowID: window, outstandingIDs: [], knownTabs: known) == nil)
+  #expect(
+    WebsitePermissionEvent.request(
+      from: permissionPayload(schema: 2, tabID: tab, windowID: window, profileID: profile),
+      windowID: window, outstandingIDs: [], knownTabs: known) == nil)
+  #expect(
+    WebsitePermissionEvent.request(
+      from: permissionPayload(schema: "1", tabID: tab, windowID: window, profileID: profile),
+      windowID: window, outstandingIDs: [], knownTabs: known) == nil)
+  #expect(
+    WebsitePermissionEvent.request(
+      from: permissionPayload(tabID: tab, windowID: window, profileID: profile, frameID: nil),
+      windowID: window, outstandingIDs: [], knownTabs: known) == nil)
+  #expect(
+    WebsitePermissionEvent.request(
+      from: permissionPayload(
+        tabID: tab, windowID: window, profileID: profile, frameID: "not-a-frame"),
+      windowID: window, outstandingIDs: [], knownTabs: known) == nil)
+
+  let media = WebsitePermissionEvent.request(
+    from: permissionPayload(
+      kind: "websiteMediaRequested", permissions: ["camera", "microphone"],
+      tabID: tab, windowID: window, profileID: profile, frameID: nil),
+    windowID: window, outstandingIDs: [], knownTabs: known)
+  #expect(media?.frameID == nil)
+  #expect(media?.kinds == [.camera, .microphone])
+}
+
+@Test func privateGrantsStayOnThisVisit() {
+  #expect(
+    WebsitePermissionPersistence.forGrant(isPrivate: true, kinds: [.notifications]) == .thisVisit)
+  #expect(
+    WebsitePermissionPersistence.forGrant(isPrivate: true, kinds: [.protocolHandler]) == .thisVisit)
+  #expect(
+    WebsitePermissionPersistence.forGrant(isPrivate: false, kinds: [.notifications]) == .profile)
+  #expect(
+    WebsitePermissionPersistence.forGrant(isPrivate: false, kinds: [.camera, .microphone])
+      == .thisVisit)
+}

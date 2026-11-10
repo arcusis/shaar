@@ -7,9 +7,10 @@
 
 Camera and microphone must still show the existing sheet. Geolocation,
 notifications, MIDI, and protocol-handler registration are the same loopback
-pages used by the platform parity probe. Exit 0 when all four prompts appear.
-Exit 2 when the run completed and those prompts are still absent. Launch
-through shaar-heavy.
+pages used by the platform parity probe. Exit 0 when all four prompts appear
+from the engine. Exit 2 when the run completed and those prompts are still
+absent. A protocol result does not count without a protocolHandler request.
+Launch through shaar-heavy.
 """
 
 import argparse
@@ -107,6 +108,21 @@ class Fixture(BaseHTTPRequestHandler):
         return
 
 
+def dishonest_protocol(checks):
+    for check in checks:
+        if check.get("name") != "protocol" or not check.get("prompted"):
+            continue
+        kinds = set(check.get("kinds") or [])
+        if "protocolHandler" not in kinds:
+            return True
+        if check.get("externalScheme"):
+            return True
+        handled = str(check.get("handledURL") or "")
+        if handled.startswith("web+"):
+            return True
+    return False
+
+
 def crash_names():
     if not CRASHES.is_dir():
         return set()
@@ -178,9 +194,11 @@ def main():
             harness = (
                 process.returncode == 0 and not new_crashes
                 and payload.get("mediaPrompted") and payload.get("mediaTracks")
-                and payload.get("protocolSheetRendered") and payload.get("allWindowsHidden")
+                and payload.get("allWindowsHidden")
                 and not payload.get("unexpectedSurfaces"))
             if not harness:
+                raise SystemExit(1)
+            if dishonest_protocol(payload.get("checks") or []):
                 raise SystemExit(1)
             if required - prompted:
                 raise SystemExit(2)

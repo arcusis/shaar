@@ -7,7 +7,7 @@ import * as UI from '../../../ui/legacy/legacy.js';
 import {Directives, html, nothing, render, type TemplateResult} from '../../../ui/lit/lit.js';
 
 import viewportsStyles from './viewports.css.js';
-import {EmbedderViewportHost, type ViewportHost} from './ViewportsHost.js';
+import {SdkViewportHost, type ViewportHost} from './ViewportsHost.js';
 import {
   cardWidth,
   type ColorScheme,
@@ -198,7 +198,7 @@ export class ViewportsPanel extends UI.Panel.Panel {
   #resizeObserver: ResizeObserver|null = null;
   #stopListening: () => void;
 
-  constructor(host: ViewportHost = new EmbedderViewportHost()) {
+  constructor(host: ViewportHost = new SdkViewportHost()) {
     super('shaar-viewports', /* useShadowDom */ true);
     this.controller = new ViewportController(host);
     this.#stopListening = this.controller.listen(() => this.requestUpdate());
@@ -222,6 +222,8 @@ export class ViewportsPanel extends UI.Panel.Panel {
   }
 
   override onDetach(): void {
+    this.controller.stopPolling();
+    void this.controller.close();
     this.#resizeObserver?.disconnect();
     this.#stopListening();
     super.onDetach();

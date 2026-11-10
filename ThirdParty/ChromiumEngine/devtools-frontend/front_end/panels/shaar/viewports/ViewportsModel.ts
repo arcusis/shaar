@@ -186,7 +186,7 @@ export function pageUrlIsValid(value: string): boolean {
   if (url.username || url.password) {
     return false;
   }
-  return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'file:';
+  return url.protocol === 'http:' || url.protocol === 'https:';
 }
 
 function rotateInsets(insets: Insets, orientation: Orientation): Insets {

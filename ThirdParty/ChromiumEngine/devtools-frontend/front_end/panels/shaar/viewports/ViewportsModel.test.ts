@@ -67,6 +67,14 @@ describe('ViewportsModel', () => {
     assert.isTrue(Viewports.ViewportsModel.typingIsValid('a'.repeat(64)));
   });
 
+  it('accepts only http and https page urls', () => {
+    assert.isTrue(Viewports.ViewportsModel.pageUrlIsValid('https://example.com/a'));
+    assert.isTrue(Viewports.ViewportsModel.pageUrlIsValid('http://localhost:8080/'));
+    assert.isFalse(Viewports.ViewportsModel.pageUrlIsValid('file:///etc/passwd'));
+    assert.isFalse(Viewports.ViewportsModel.pageUrlIsValid('javascript:alert(1)'));
+    assert.isFalse(Viewports.ViewportsModel.pageUrlIsValid('https://user:pass@example.com/'));
+  });
+
   it('projects a point from the preview into the page', () => {
     assert.strictEqual(Viewports.ViewportsModel.projectPoint(10, 0, 100), 0);
     assert.strictEqual(Viewports.ViewportsModel.projectPoint(1, 2, 5), 2);

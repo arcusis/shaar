@@ -24,6 +24,7 @@ import {
   type RuleKind,
   headerEntries,
   KINDS,
+  MAX_BYTES,
   MAX_ENABLED,
   MAX_HEADERS,
   METHODS,
@@ -921,6 +922,11 @@ export class NetworkRulesView extends UI.Widget.VBox {
     }
     const file = input.files[0];
     input.value = '';
+    if (file.size > MAX_BYTES) {
+      this.#failure = i18nString(UIStrings.invalidDocument);
+      this.requestUpdate();
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const text = typeof reader.result === 'string' ? reader.result : '';

@@ -49,8 +49,22 @@ describe('NetworkRules', () => {
     assert.deepEqual(Rules.parseExchange(unknown), {ok: false, error: 'document'});
     const brokenHeader = document([{...row(), kind: 'requestHeaders', headers: [{name: 'X-Test', value: 'bad\r\nheader'}]}]);
     assert.deepEqual(Rules.parseExchange(brokenHeader), {ok: false, error: 'headers'});
-    const enabled = Array.from({length: 33}, (_, index) => ({...row(index), enabled: true}));
-    assert.deepEqual(Rules.parseExchange(document(enabled)), {ok: false, error: 'limit'});
+    const tooMany = Array.from({length: 33}, (_, index) => ({...row(index), enabled: true}));
+    assert.deepEqual(Rules.parseExchange(document(tooMany)), {ok: false, error: 'limit'});
+    const scriptURL = document([{...row(), url: 'javascript:alert(1)'}]);
+    assert.deepEqual(Rules.parseExchange(scriptURL), {ok: false, error: 'match'});
+    const fileURL = document([{...row(), url: 'file:///etc/passwd'}]);
+    assert.deepEqual(Rules.parseExchange(fileURL), {ok: false, error: 'match'});
+    const slow = document([{...row(), kind: 'delay', delayMilliseconds: 30_001}]);
+    assert.deepEqual(Rules.parseExchange(slow), {ok: false, error: 'action'});
+    const body = document([{...row(), bodyText: 'x'.repeat(1_048_577)}]);
+    assert.deepEqual(Rules.parseExchange(body), {ok: false, error: 'action'});
+    assert.deepEqual(Rules.parseExchange('x'.repeat(Rules.MAX_BYTES + 1)), {ok: false, error: 'document'});
+    const exported = Rules.exchangeText([enabled({kind: 'mock', bodyText: 'from-the-file'})]);
+    assert.isTrue(exported.ok);
+    if (exported.ok) {
+      assert.notInclude(exported.text, 'bodyFilePath');
+    }
   });
 
   it('matches the Fetch lease actions', () => {

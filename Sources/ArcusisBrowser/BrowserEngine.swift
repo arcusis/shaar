@@ -77,6 +77,8 @@ final class BrowserEngine {
   @ObservationIgnored private var loadingProfiles: Set<UUID> = []
   @ObservationIgnored private var failedProfiles: Set<UUID> = []
   @ObservationIgnored var liveTabs: Set<UUID> = []
+  /// Tabs whose close call is on the stack.
+  @ObservationIgnored private var closesInFlight: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   /// Crashed documents whose native reload failed before the close event arrived.
   @ObservationIgnored private var tabsAwaitingReload: Set<UUID> = []
@@ -247,6 +249,9 @@ final class BrowserEngine {
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let tab = UUID(uuidString: identity), let profile = UUID(uuidString: owner)
       else { return }
+      // Closing the document can report the renderer exiting with it.
+      // The close request stays in force and a saved pin archives.
+      if self.closesInFlight.contains(tab) { return }
       self.pages[tab]?.loading = false
       self.mediaAccess[tab] = nil
       self.forgetMedia(tab)
@@ -492,7 +497,9 @@ final class BrowserEngine {
     store.onCloseTab = { [weak self] id in
       guard let self else { return }
       if self.liveTabs.contains(id) {
+        self.closesInFlight.insert(id)
         self.runtime.closeTabID(id.uuidString)
+        self.closesInFlight.remove(id)
       } else {
         self.store?.nativeTabClosed(id)
       }

@@ -153,6 +153,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)retireClosedWindowID:(NSString *)windowID {}
 - (NSView *)hostViewForWindowID:(NSString *)windowID { return nil; }
 - (NSString *)windowIDForTabID:(NSString *)tabID { return nil; }
+- (NSString *)profileIDForTabID:(NSString *)tabID { return nil; }
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID { return -1; }
 - (void)clearActiveTabInWindowID:(NSString *)windowID {}
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID

@@ -795,6 +795,22 @@
         }
       }
     },
+    "This tab could not be reopened after its profile changed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This tab could not be reopened after its profile changed."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לפתוח מחדש לשונית זו לאחר שינוי הפרופיל שלה."
+          }
+        }
+      }
+    },
     "About %@": {
       "localizations": {
         "en": {

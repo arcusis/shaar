@@ -66,6 +66,8 @@ final class BrowserEngine {
   @ObservationIgnored var liveTabs: Set<UUID> = []
   /// Tabs whose close call is on the stack.
   @ObservationIgnored private var closesInFlight: Set<UUID> = []
+  /// Reassigned tabs must wait for Chromium to release their old profile ownership.
+  @ObservationIgnored private var tabsAwaitingProfileReassignment: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   /// Crashed documents whose native reload failed before the close event arrived.
   @ObservationIgnored private var tabsAwaitingReload: Set<UUID> = []
@@ -518,7 +520,10 @@ final class BrowserEngine {
     }
     callbacks.onTabChanged = { [weak self] identity, address, title, loading, back, forward in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
-        let id = UUID(uuidString: identity)
+        let id = UUID(uuidString: identity),
+        let ownerProfile = self.runtime.profileID(forTabID: identity),
+        let profile = self.store?.session.profileID(forTabID: id),
+        ownerProfile == profile.uuidString
       else { return }
       let document = URL(string: address)
       let documentHost = document?.host?.lowercased()
@@ -531,12 +536,10 @@ final class BrowserEngine {
       self.store?.nativePageLoading(id, loading: loading)
       if let url = document {
         self.inspectors[id]?.documentChanged(url: url)
-        if let profile = self.store?.session.profileID(forTabID: id) {
-          self.shaarDevTools[id]?.updateTarget(
-            SiteControlTarget(tabID: id, profileID: profile, url: url))
-          if !loading { self.shaarDevTools[id]?.refreshFrameworkComponents() }
-          if finishedLoading { self.shaarDevTools[id]?.pageDidFinishLoading() }
-        }
+        self.shaarDevTools[id]?.updateTarget(
+          SiteControlTarget(tabID: id, profileID: profile, url: url))
+        if !loading { self.shaarDevTools[id]?.refreshFrameworkComponents() }
+        if finishedLoading { self.shaarDevTools[id]?.pageDidFinishLoading() }
         self.developerDocumentChanged(id, url: url)
         self.updateDevelopmentPage(tabID: id, url: url, loading: loading)
         if let profile = self.store?.session.profileID(forTabID: id),
@@ -562,6 +565,11 @@ final class BrowserEngine {
     }
     callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity) else { return }
+      if self.tabsAwaitingProfileReassignment.remove(id) != nil {
+        self.pages[id] = nil
+        DispatchQueue.main.async { [weak self] in self?.reconcile() }
+        return
+      }
       self.sleepingTabs.forget(id)
       self.store?.noteTabAwake(id)
       guard self.liveTabs.contains(id) || self.pages[id] != nil else { return }
@@ -651,7 +659,7 @@ final class BrowserEngine {
       sleepingTabs.forget(id)
       store?.noteTabAwake(id)
       guard liveTabs.remove(id) != nil else { continue }
-      events.router.forgetTab(id.uuidString, windowID: windowID)
+      tabsAwaitingProfileReassignment.insert(id)
       pages[id] = nil
       shaarDevTools.removeValue(forKey: id)?.close()
       if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }
@@ -660,6 +668,29 @@ final class BrowserEngine {
       forgetMedia(id)
       clearFavicon(id)
       runtime.discardTabID(id.uuidString)
+      waitForProfileReassignmentClose(id)
+    }
+  }
+
+  private func waitForProfileReassignmentClose(_ id: UUID) {
+    Task { @MainActor [weak self] in
+      for _ in 0..<40 {
+        guard let self, !self.isClosed,
+          self.tabsAwaitingProfileReassignment.contains(id)
+        else { return }
+        if self.runtime.windowID(forTabID: id.uuidString) == nil {
+          self.tabsAwaitingProfileReassignment.remove(id)
+          self.events.router.forgetTab(id.uuidString, windowID: self.windowID)
+          self.reconcile()
+          return
+        }
+        do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+      }
+      guard let self, self.tabsAwaitingProfileReassignment.remove(id) != nil else { return }
+      self.events.router.forgetTab(id.uuidString, windowID: self.windowID)
+      self.failedTabs.insert(id)
+      self.notice = ShellL10n.string(
+        "This tab could not be reopened after its profile changed.")
     }
   }
 
@@ -760,6 +791,7 @@ final class BrowserEngine {
     }
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !failedTabs.contains(tab.id) {
+        guard !tabsAwaitingProfileReassignment.contains(tab.id) else { continue }
         let decision = TabMaterializationPolicy.decision(
           isSelected: space.id == session.selectedSpaceID
             && (session.selectedPage?.tab.id == tab.id

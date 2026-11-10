@@ -46,7 +46,7 @@ index f14537c..96a5a8c 100644
  };
  
 diff --git a/device/bluetooth/bluetooth_adapter_mac.mm b/device/bluetooth/bluetooth_adapter_mac.mm
-index efaadba..a69a667 100644
+index efaadba..c413ae9 100644
 --- a/device/bluetooth/bluetooth_adapter_mac.mm
 +++ b/device/bluetooth/bluetooth_adapter_mac.mm
 @@ -4,6 +4,10 @@
@@ -146,7 +146,24 @@ index efaadba..a69a667 100644
    IOBluetoothDevice* device = [IOBluetoothDevice
        deviceWithAddressString:base::SysUTF8ToNSString(device_address)];
    return device && [device isPaired];
-@@ -256,7 +290,11 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -217,7 +251,15 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+ 
+ // static
+ scoped_refptr<BluetoothAdapterMac> BluetoothAdapterMac::CreateAdapter() {
+-  return base::WrapRefCounted(new BluetoothAdapterMac());
++  // Read CBManager.authorization and the responsible bundle's Bluetooth usage
++  // description before a CBCentralManager or IOBluetoothDeviceInquiry exists.
++  // Callers require a non-null adapter. A refused process gets an object that
++  // never creates either one.
++  const bool blocked = ShaarBluetoothIOIsBlocked();
++  auto adapter = base::WrapRefCounted(new BluetoothAdapterMac());
++  if (blocked)
++    adapter->lazy_initialized_ = true;
++  return adapter;
+ }
+ 
+ // static
+@@ -256,7 +298,11 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  std::string BluetoothAdapterMac::GetName() const {
@@ -159,7 +176,7 @@ index efaadba..a69a667 100644
      return name_;
    }
  
-@@ -367,11 +405,42 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -367,11 +413,42 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  
  void BluetoothAdapterMac::OnConnectNotification(
      const std::string& device_address) {
@@ -204,7 +221,7 @@ index efaadba..a69a667 100644
      return;
    }
    DeviceConnected(
-@@ -399,7 +468,20 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -399,7 +476,20 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  bool BluetoothAdapterMac::SetPoweredImpl(bool powered) {
@@ -226,7 +243,7 @@ index efaadba..a69a667 100644
    return true;
  }
  
-@@ -409,25 +491,28 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -409,25 +499,28 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  void BluetoothAdapterMac::TriggerSystemPermissionPrompt() {
@@ -266,7 +283,7 @@ index efaadba..a69a667 100644
    BluetoothLowEnergyAdapterApple::LazyInitialize();
    connect_listener_bridge_ =
        base::MakeRefCounted<BluetoothDevicesConnectListenerBridge>(
-@@ -448,8 +533,10 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -448,8 +541,10 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  BluetoothAdapterMac::HostControllerState
@@ -278,7 +295,7 @@ index efaadba..a69a667 100644
    IOBluetoothHostController* controller =
        [IOBluetoothHostController defaultController];
    if (controller != nil) {
-@@ -462,6 +549,17 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -462,6 +557,17 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
    return state;
  }
  
@@ -296,7 +313,7 @@ index efaadba..a69a667 100644
  void BluetoothAdapterMac::SetPresentForTesting(bool present) {
    is_present_for_testing_ = present;
  }
-@@ -473,6 +571,7 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -473,6 +579,7 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  
  void BluetoothAdapterMac::SetPowerStateFunctionForTesting(
      SetControllerPowerStateFunction power_state_function) {
@@ -304,7 +321,7 @@ index efaadba..a69a667 100644
    power_state_function_ = std::move(power_state_function);
  }
  
-@@ -602,18 +701,118 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -602,18 +709,118 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  void BluetoothAdapterMac::AddPairedDevices() {
@@ -329,8 +346,7 @@ index efaadba..a69a667 100644
    }
 +  ApplyPairedDevices((__bridge_retained void*)kept);
 +}
- 
--  // Log if the paired device count changed.
++
 +scoped_refptr<base::SingleThreadTaskRunner> AdapterUIRunner(
 +    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner) {
 +  if (ui_task_runner)
@@ -359,7 +375,8 @@ index efaadba..a69a667 100644
 +  host_refresh_posted_ = false;
 +  cached_host_state_ = std::move(state);
 +}
-+
+ 
+-  // Log if the paired device count changed.
 +void BluetoothAdapterMac::ScheduleNameRefresh() const {
 +  if (name_refresh_posted_)
 +    return;
@@ -430,6 +447,171 @@ index efaadba..a69a667 100644
    if (!paired_count_.has_value() || paired_count_.value() != count) {
      BLUETOOTH_LOG(DEBUG) << "Paired devices: " << count;
      paired_count_ = count;
+diff --git a/device/bluetooth/bluetooth_adapter_mac_unittest.mm b/device/bluetooth/bluetooth_adapter_mac_unittest.mm
+index 3083f68..09927d1 100644
+--- a/device/bluetooth/bluetooth_adapter_mac_unittest.mm
++++ b/device/bluetooth/bluetooth_adapter_mac_unittest.mm
+@@ -4,16 +4,23 @@
+ 
+ #include "device/bluetooth/bluetooth_adapter_mac.h"
+ 
++#import <CoreBluetooth/CoreBluetooth.h>
+ #import <IOBluetooth/IOBluetooth.h>
+ 
++#include <objc/runtime.h>
++#include <pthread.h>
++
+ #include <memory>
+ 
++#include "base/functional/callback_helpers.h"
+ #include "base/memory/raw_ptr.h"
++#include "base/run_loop.h"
+ #import "base/task/sequenced_task_runner.h"
+ #include "base/task/thread_pool.h"
+ #include "base/test/bind.h"
+ #include "base/test/task_environment.h"
+ #include "base/test/test_simple_task_runner.h"
++#include "device/bluetooth/shaar_bluetooth_io_gate.h"
+ #include "device/bluetooth/bluetooth_classic_device_mac.h"
+ #include "device/bluetooth/test/mock_bluetooth_device.h"
+ #import "device/bluetooth/test/test_bluetooth_adapter_observer.h"
+@@ -166,4 +173,136 @@ void ClassicDeviceConnected(const std::string& device_address,
+   EXPECT_EQ(1, observer_.device_changed_count());
+ }
+ 
++namespace {
++
++int g_inquiry_inits = 0;
++bool g_inquiry_on_main = false;
++IMP g_inquiry_init_impl = nullptr;
++int g_central_inits = 0;
++IMP g_central_init_impl = nullptr;
++
++id CountInquiryInit(id self, SEL cmd, id delegate) {
++  g_inquiry_inits++;
++  g_inquiry_on_main = pthread_main_np() != 0;
++  return nil;
++}
++
++id CountCentralInit(id self, SEL cmd, id delegate, dispatch_queue_t queue) {
++  g_central_inits++;
++  return nil;
++}
++
++template <typename Task>
++void RunOffMainThread(Task task) {
++  base::RunLoop loop;
++  base::ThreadPool::PostTask(
++      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
++      base::BindLambdaForTesting([&loop, task]() mutable {
++        task();
++        loop.Quit();
++      }));
++  loop.Run();
++}
++
++}  // namespace
++
++class ShaarBluetoothGateTest : public testing::Test {
++ protected:
++  void SetUp() override {
++    g_inquiry_inits = 0;
++    g_inquiry_on_main = false;
++    g_central_inits = 0;
++    Class inquiry = NSClassFromString(@"IOBluetoothDeviceInquiry");
++    Class central = NSClassFromString(@"CBCentralManager");
++    ASSERT_TRUE(inquiry);
++    ASSERT_TRUE(central);
++    Method inquiry_method =
++        class_getInstanceMethod(inquiry, @selector(initWithDelegate:));
++    Method central_method = class_getInstanceMethod(
++        central, @selector(initWithDelegate:queue:));
++    ASSERT_TRUE(inquiry_method);
++    ASSERT_TRUE(central_method);
++    g_inquiry_init_impl =
++        method_setImplementation(inquiry_method, (IMP)CountInquiryInit);
++    g_central_init_impl =
++        method_setImplementation(central_method, (IMP)CountCentralInit);
++  }
++
++  void TearDown() override {
++    ShaarSetBluetoothGateForTesting(std::nullopt, std::nullopt);
++    if (g_inquiry_init_impl) {
++      Method method = class_getInstanceMethod(
++          NSClassFromString(@"IOBluetoothDeviceInquiry"),
++          @selector(initWithDelegate:));
++      method_setImplementation(method, g_inquiry_init_impl);
++      g_inquiry_init_impl = nullptr;
++    }
++    if (g_central_init_impl) {
++      Method method = class_getInstanceMethod(
++          NSClassFromString(@"CBCentralManager"),
++          @selector(initWithDelegate:queue:));
++      method_setImplementation(method, g_central_init_impl);
++      g_central_init_impl = nullptr;
++    }
++  }
++
++  base::test::TaskEnvironment task_environment_;
++};
++
++TEST_F(ShaarBluetoothGateTest, RefusedProcessDoesNotCreateTheAdapter) {
++  ShaarSetBluetoothGateForTesting(/*authorization_allowed=*/false,
++                                 /*has_usage_description=*/false);
++  auto adapter = BluetoothAdapterMac::CreateAdapter();
++  adapter->Initialize(base::DoNothing());
++  EXPECT_TRUE(adapter->GetAddress().empty());
++  EXPECT_FALSE(adapter->IsPowered());
++  EXPECT_TRUE(adapter->GetDevices().empty());
++  EXPECT_EQ(0, g_central_inits);
++  EXPECT_EQ(0, g_inquiry_inits);
++
++  RunOffMainThread([] {
++    EXPECT_TRUE(ShaarAllocateDeviceInquiry(nil) == nil);
++  });
++  EXPECT_EQ(0, g_inquiry_inits);
++}
++
++TEST_F(ShaarBluetoothGateTest, AuthorizedInquiryStaysOffTheMainThread) {
++  ShaarSetBluetoothGateForTesting(/*authorization_allowed=*/true,
++                                 /*has_usage_description=*/true);
++  EXPECT_TRUE(ShaarAllocateDeviceInquiry(nil) == nil);
++  EXPECT_EQ(0, g_inquiry_inits);
++
++  RunOffMainThread([] {
++    EXPECT_TRUE(ShaarAllocateDeviceInquiry(nil) == nil);
++    EXPECT_FALSE(pthread_main_np());
++  });
++  EXPECT_EQ(1, g_inquiry_inits);
++  EXPECT_FALSE(g_inquiry_on_main);
++  EXPECT_EQ(0, g_central_inits);
++}
++
++TEST_F(ShaarBluetoothGateTest, MissingUsageDescriptionRefusesTheInquiry) {
++  ShaarSetBluetoothGateForTesting(/*authorization_allowed=*/true,
++                                 /*has_usage_description=*/false);
++  RunOffMainThread([] {
++    EXPECT_TRUE(ShaarAllocateDeviceInquiry(nil) == nil);
++  });
++  EXPECT_EQ(0, g_inquiry_inits);
++  EXPECT_EQ(0, g_central_inits);
++}
++
++TEST_F(ShaarBluetoothGateTest, RealProcessGateMatchesTheInquiryAllocator) {
++  const bool blocked = ShaarBluetoothIOIsBlocked();
++  RunOffMainThread([] {
++    EXPECT_TRUE(ShaarAllocateDeviceInquiry(nil) == nil);
++  });
++  if (blocked) {
++    EXPECT_EQ(0, g_inquiry_inits);
++  } else {
++    EXPECT_EQ(1, g_inquiry_inits);
++    EXPECT_FALSE(g_inquiry_on_main);
++  }
++  EXPECT_EQ(0, g_central_inits);
++}
++
+ }  // namespace device
 diff --git a/device/bluetooth/bluetooth_classic_device_mac.mm b/device/bluetooth/bluetooth_classic_device_mac.mm
 index b9fa727..6fc96d9 100644
 --- a/device/bluetooth/bluetooth_classic_device_mac.mm
@@ -546,7 +728,7 @@ index b9fa727..6fc96d9 100644
  
  }  // namespace device
 diff --git a/device/bluetooth/bluetooth_discovery_manager_mac.mm b/device/bluetooth/bluetooth_discovery_manager_mac.mm
-index e7dae66..02b0058 100644
+index e7dae66..b8c958f 100644
 --- a/device/bluetooth/bluetooth_discovery_manager_mac.mm
 +++ b/device/bluetooth/bluetooth_discovery_manager_mac.mm
 @@ -6,9 +6,17 @@
@@ -593,7 +775,7 @@ index e7dae66..02b0058 100644
 +      return;
 +    }
 +    if (!inquiry_) {
-+      inquiry_ = [[IOBluetoothDeviceInquiry alloc] initWithDelegate:delegate_];
++      inquiry_ = ShaarAllocateDeviceInquiry(delegate_);
 +      if (!inquiry_) {
 +        NotifyStartFailed();
 +        return;
@@ -970,10 +1152,10 @@ index e7dae66..02b0058 100644
  @end
 diff --git a/device/bluetooth/shaar_bluetooth_io_gate.h b/device/bluetooth/shaar_bluetooth_io_gate.h
 new file mode 100644
-index 0000000..c7e2423
+index 0000000..b31864f
 --- /dev/null
 +++ b/device/bluetooth/shaar_bluetooth_io_gate.h
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,57 @@
 +// Copyright 2026 The Chromium Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -981,7 +1163,14 @@ index 0000000..c7e2423
 +#ifndef DEVICE_BLUETOOTH_SHAAR_BLUETOOTH_IO_GATE_H_
 +#define DEVICE_BLUETOOTH_SHAAR_BLUETOOTH_IO_GATE_H_
 +
++#include <optional>
++
 +#include "base/functional/callback.h"
++#include "device/bluetooth/bluetooth_export.h"
++
++#if defined(__OBJC__)
++@class IOBluetoothDeviceInquiry;
++#endif
 +
 +namespace device {
 +
@@ -1001,23 +1190,35 @@ index 0000000..c7e2423
 +  return true;
 +}
 +
-+bool ShaarMayCallIOBluetooth();
-+bool ShaarBluetoothIOIsBlocked();
++DEVICE_BLUETOOTH_EXPORT bool ShaarMayCallIOBluetooth();
++DEVICE_BLUETOOTH_EXPORT bool ShaarBluetoothIOIsBlocked();
 +
 +// Runs |task| now when this thread may call IOBluetooth. Posts it to a
 +// MayBlock worker when this is the UI thread and a background call would be
 +// allowed. Drops |task| when Bluetooth is not allowed. Never waits.
 +void ShaarPostIOBluetooth(base::OnceClosure task);
 +
++// Tests pass nullopt to read the real process. Production calls pass nothing.
++DEVICE_BLUETOOTH_EXPORT void ShaarSetBluetoothGateForTesting(
++    std::optional<bool> authorization_allowed,
++    std::optional<bool> has_usage_description);
++
++#if defined(__OBJC__)
++// Allocates IOBluetoothDeviceInquiry only when this thread may call
++// IOBluetooth. Returns nil when the gate refuses, before initWithDelegate:.
++DEVICE_BLUETOOTH_EXPORT IOBluetoothDeviceInquiry* ShaarAllocateDeviceInquiry(
++    id delegate);
++#endif
++
 +}  // namespace device
 +
 +#endif  // DEVICE_BLUETOOTH_SHAAR_BLUETOOTH_IO_GATE_H_
 diff --git a/device/bluetooth/shaar_bluetooth_io_gate.mm b/device/bluetooth/shaar_bluetooth_io_gate.mm
 new file mode 100644
-index 0000000..43ea286
+index 0000000..511a7fc
 --- /dev/null
 +++ b/device/bluetooth/shaar_bluetooth_io_gate.mm
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,125 @@
 +// Copyright 2026 The Chromium Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1029,13 +1230,19 @@ index 0000000..43ea286
 +#include <pthread.h>
 +#include <unistd.h>
 +
++#include <optional>
++
 +#include "base/task/thread_pool.h"
 +#include "device/bluetooth/bluetooth_adapter_mac_permission.h"
 +
 +#import <Foundation/Foundation.h>
++#import <IOBluetooth/IOBluetooth.h>
 +
 +namespace device {
 +namespace {
++
++std::optional<bool> g_authorization_override;
++std::optional<bool> g_usage_override;
 +
 +using ResponsiblePIDFunction = pid_t (*)(pid_t);
 +
@@ -1072,6 +1279,8 @@ index 0000000..43ea286
 +}
 +
 +bool ResponsibleProcessHasUsageDescription() {
++  if (g_usage_override.has_value())
++    return *g_usage_override;
 +  static bool has_description = false;
 +  static dispatch_once_t once;
 +  dispatch_once(&once, ^{
@@ -1087,6 +1296,8 @@ index 0000000..43ea286
 +}
 +
 +bool AuthorizationAllowed() {
++  if (g_authorization_override.has_value())
++    return *g_authorization_override;
 +  return GetMacBluetoothPermissionStatus() ==
 +         BluetoothAdapter::PermissionStatus::kAllowed;
 +}
@@ -1117,6 +1328,19 @@ index 0000000..43ea286
 +  base::ThreadPool::PostTask(
 +      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
 +      std::move(task));
++}
++
++void ShaarSetBluetoothGateForTesting(
++    std::optional<bool> authorization_allowed,
++    std::optional<bool> has_usage_description) {
++  g_authorization_override = authorization_allowed;
++  g_usage_override = has_usage_description;
++}
++
++IOBluetoothDeviceInquiry* ShaarAllocateDeviceInquiry(id delegate) {
++  if (!ShaarMayCallIOBluetooth())
++    return nil;
++  return [[IOBluetoothDeviceInquiry alloc] initWithDelegate:delegate];
 +}
 +
 +}  // namespace device

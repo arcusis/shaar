@@ -10,6 +10,7 @@ import http.server
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import tempfile
@@ -73,8 +74,12 @@ WAIT_TRAPS = (
     "semaphore_wait_trap",
     "semaphore_timedwait_trap",
     "__psynch_cvwait",
+    "__psynch_mutexwait",
     "__ulock_wait",
     "swtch_pri",
+    # kevent64, __psynch_cvwait, and __workq_kernreturn are waits in idle samples.
+    "kevent",
+    "__workq_kernreturn",
 )
 
 
@@ -134,6 +139,28 @@ def next_sampled_thread(line, indent):
     return body[:1].isdigit() and "Thread_" in body
 
 
+def sample_section_ended(line):
+    # These summaries follow every thread and repeat frames from the whole process.
+    text = line.strip()
+    return (
+        text.startswith("Total number in stack")
+        or text.startswith("Sort by top of stack")
+        or text.startswith("Binary Images:")
+    )
+
+
+def stack_frame(line):
+    # sample keeps every line at the same left margin. Depth is the column of the count.
+    match = re.search(r"(\d+)\s+(\S.*)$", line)
+    if match is None:
+        return None
+    return match.start(1), int(match.group(1)), match.group(2)
+
+
+def frame_is_wait(frame):
+    return any(trap in frame for trap in WAIT_TRAPS)
+
+
 def parse_main_thread_sample(text):
     lines = text.splitlines()
     start = None
@@ -156,29 +183,53 @@ def parse_main_thread_sample(text):
             "mainThreadSampleError": "main thread count missing",
         }
     indent = len(lines[start]) - len(lines[start].lstrip(" "))
-    wait_samples = 0
-    top_busy = 0
-    top_frame = ""
+    frames = []
     for line in lines[start + 1:]:
         if not line.strip():
             continue
-        if next_sampled_thread(line, indent):
+        if sample_section_ended(line) or next_sampled_thread(line, indent):
             break
-        stripped = line.strip().lstrip("+!|: ")
-        parts = stripped.split(maxsplit=1)
-        if len(parts) != 2:
+        parsed = stack_frame(line)
+        if parsed is None:
             continue
-        try:
-            count = int(parts[0])
-        except ValueError:
+        column, count, frame = parsed
+        frames.append({
+            "column": column,
+            "count": count,
+            "frame": frame,
+            "parent": None,
+            "waits": frame_is_wait(frame),
+        })
+    for index, frame in enumerate(frames):
+        for earlier in range(index - 1, -1, -1):
+            if frames[earlier]["column"] < frame["column"]:
+                frame["parent"] = earlier
+                break
+    for frame in reversed(frames):
+        parent = frame["parent"]
+        if frame["waits"] and parent is not None:
+            frames[parent]["waits"] = True
+    wait_samples = 0
+    for index, frame in enumerate(frames):
+        if not frame_is_wait(frame["frame"]):
             continue
-        frame = parts[1]
-        if any(trap in frame for trap in WAIT_TRAPS):
-            wait_samples = max(wait_samples, count)
+        nested = False
+        for later in frames[index + 1:]:
+            if later["column"] <= frame["column"]:
+                break
+            if frame_is_wait(later["frame"]):
+                nested = True
+                break
+        if not nested:
+            wait_samples += frame["count"]
+    top_busy = 0
+    top_frame = ""
+    for frame in frames:
+        if frame["waits"] or "start" in frame["frame"] or "dyld" in frame["frame"]:
             continue
-        if count > top_busy and "start" not in frame and "dyld" not in frame:
-            top_busy = count
-            top_frame = frame[:180]
+        if frame["count"] > top_busy:
+            top_busy = frame["count"]
+            top_frame = frame["frame"][:180]
     busy = max(0, total - wait_samples)
     return {
         "mainThreadSample": "ok",
@@ -207,15 +258,18 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
         if eager:
             command.append("--probe-measure-eager")
         started = time.monotonic()
+        stderr_path = root / "probe-stderr.txt"
+        stderr_file = stderr_path.open("w")
         process = subprocess.Popen(
-            command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            command, stdout=subprocess.DEVNULL, stderr=stderr_file,
             start_new_session=True,
         )
         deadline = started + (240 if tab_count >= 50 else 150)
         try:
             while time.monotonic() < deadline:
                 if process.poll() is not None:
-                    error = process.stderr.read().decode(errors="replace")[-3000:]
+                    stderr_file.flush()
+                    error = stderr_path.read_text(errors="replace")[-3000:]
                     raise RuntimeError(f"probe exited {process.returncode}: {error}")
                 if report.exists():
                     break
@@ -281,6 +335,7 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait()
+            stderr_file.close()
 
 
 def annotate_marginal_rss(cases):

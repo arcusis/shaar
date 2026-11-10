@@ -7,6 +7,8 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
+@testable import ArcusisBrowser
+
 /// Proves media emulation and paint overlay support on the pinned engine from a
 /// window that is never ordered on screen.
 @MainActor enum ShaarRenderingProbe {

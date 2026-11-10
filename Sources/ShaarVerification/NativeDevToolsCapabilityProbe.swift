@@ -7,7 +7,9 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
-/// Exercises the shipping executable and its bundled engine with a disposable,
+@testable import ArcusisBrowser
+
+/// Exercises the verification harness and its bundled engine with a disposable,
 /// never-ordered browser window. The caller supplies an authored loopback page.
 @MainActor enum NativeDevToolsCapabilityProbe {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {

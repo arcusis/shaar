@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import ChromiumBridgeVerification
 import Darwin
 import Foundation
 

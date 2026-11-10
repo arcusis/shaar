@@ -7,7 +7,6 @@
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #include <climits>
-#include <cstdlib>
 #include <dlfcn.h>
 #include <cstring>
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
@@ -214,68 +213,12 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
 
 }  // namespace
 
-extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
-  NSSet<NSString *> *allowed = [NSSet setWithArray:@[
-    @"blank", @"popup", @"plain", @"performance-input",
-    @"arcusis-download-probe", @"window-client-download",
-    @"external-consent-probe", @"arcusis-private-quit-activation",
-    @"parity-action"]];
-  return [allowed containsObject:elementID];
-}
-
 @interface ARCShaarRuntime (NativeFrontend)
 - (NSView *)shaarNativeFrontendViewForTabID:(NSString *)tabID
                                  profileID:(NSString *)profileID windowID:(NSString *)windowID;
 @end
 
 @implementation ARCShaarRuntime (DevToolsTransport)
-
-- (void)submitTrustedProbeClickInTabID:(NSString *)tabID elementID:(NSString *)elementID
-                            completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
-  if (!completion) return;
-  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
-  if (!testing || std::strcmp(testing, "1") != 0 ||
-      !ARCProbeTrustedClickElementAllowed(elementID)) {
-    completion(NO);
-    return;
-  }
-  NSView *view = [self viewForTabID:tabID];
-  if (!view.window || view.window.isVisible) {
-    completion(NO);
-    return;
-  }
-  for (NSWindow *window in NSApp.windows) {
-    if (window.isVisible) {
-      completion(NO);
-      return;
-    }
-  }
-  NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
-  NSString *windowID = [self windowIDForTabID:tabID];
-  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
-    completion(NO);
-    return;
-  }
-  NSString *script = [NSString stringWithFormat:
-      @"(()=>{const e=document.getElementById('%@');if(!e)return null;const r=e.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()",
-      elementID];
-  [self evaluateInTabID:tabID script:script completion:^(NSString *result) {
-    NSData *data = [result dataUsingEncoding:NSUTF8StringEncoding];
-    NSDictionary *point = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    NSNumber *x = [point isKindOfClass:NSDictionary.class] ? point[@"x"] : nil;
-    NSNumber *y = [point isKindOfClass:NSDictionary.class] ? point[@"y"] : nil;
-    if (![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class]) {
-      completion(NO);
-      return;
-    }
-    [self shaarDevToolsSubmit:1093 tabID:tabID profileID:profileID windowID:windowID
-                     payload:@{@"schemaVersion": @1, @"x": x, @"y": y}
-                  completion:^(NSDictionary *reply, NSError *error) {
-                    if (error) NSLog(@"Trusted probe click: %@", error.localizedDescription);
-                    completion(!error && [reply[@"submitted"] boolValue]);
-                  }];
-  }];
-}
 
 - (void)panelRequest:(NSUInteger)operation tabID:(NSString *)tabID
          profileID:(NSString *)profileID windowID:(NSString *)windowID

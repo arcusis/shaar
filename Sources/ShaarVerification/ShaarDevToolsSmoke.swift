@@ -5,12 +5,15 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import ChromiumBridgeVerification
 import Foundation
 import ObjectiveC.runtime
 import ShaarEngineABI
 import Vision
 
-/// Walks Shaar DevTools in the shipping app. Windows stay unordered and offscreen.
+@testable import ArcusisBrowser
+
+/// Walks Shaar DevTools in the verification harness. Windows stay unordered and offscreen.
 @MainActor enum ShaarDevToolsSmoke {
   static func run(
     frameworkURL: URL, outputURL: URL, pageURL: URL?, realWorld: Bool = false,

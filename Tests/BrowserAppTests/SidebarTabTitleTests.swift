@@ -5,6 +5,7 @@
 import AppKit
 import SwiftUI
 import Testing
+import Vision
 
 @testable import ArcusisBrowser
 
@@ -26,7 +27,7 @@ import Testing
   @Test func restingRowShowsTheFullDevToolsTitle() throws {
     let hosted = try host(title: pageTitle, closeIsVisible: false)
     defer { hosted.window.close() }
-    let painted = ShaarDevToolsSmokeAccess.renderedText(hosted.host)
+    let painted = renderedText(hosted.host)
     #expect(SidebarTabTitle.showsFullTitle(painted), "painted: \(painted)")
     #expect(!SidebarTabTitle.isMidwordClip(painted), "painted: \(painted)")
     #expect(!hosted.window.isVisible)
@@ -44,7 +45,7 @@ import Testing
     let hosted = try host(title: title, closeIsVisible: false)
     defer { hosted.window.close() }
     #expect(fits(hosted.host, width: contentWidth))
-    let painted = ShaarDevToolsSmokeAccess.renderedText(hosted.host)
+    let painted = renderedText(hosted.host)
     #expect(painted.contains("Long"))
     #expect(!painted.contains(title))
   }
@@ -77,6 +78,23 @@ import Testing
     RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     host.layoutSubtreeIfNeeded()
     return HostedTabRow(window: window, host: host)
+  }
+
+  private func renderedText(_ view: NSView) -> String {
+    view.layoutSubtreeIfNeeded()
+    guard view.bounds.width > 1, view.bounds.height > 1,
+      let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+    else { return "" }
+    view.cacheDisplay(in: view.bounds, to: bitmap)
+    guard let image = bitmap.cgImage else { return "" }
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = false
+    let handler = VNImageRequestHandler(cgImage: image, options: [:])
+    guard (try? handler.perform([request])) != nil else { return "" }
+    return (request.results ?? [])
+      .compactMap { $0.topCandidates(1).first?.string }
+      .joined(separator: "\n")
   }
 
   private func fits(_ view: NSView, width: CGFloat) -> Bool {

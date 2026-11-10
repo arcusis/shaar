@@ -7,7 +7,9 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
-/// Runs the Audits panel in the shipping executable against one loopback page.
+@testable import ArcusisBrowser
+
+/// Runs the Audits panel in the verification harness against one loopback page.
 /// The browser window stays hidden and the process does not become active.
 @MainActor enum InspectorAuditProbe {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {

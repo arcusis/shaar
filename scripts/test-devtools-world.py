@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Walk a real page in the hidden shipping app and save a DevTools receipt."""
+"""Walk a real page in the hidden verification app and save a DevTools receipt."""
 
 import argparse
 import importlib.util
@@ -36,7 +36,7 @@ def main():
     output = ROOT / "build/devtools-world" / args.name
     output.mkdir(parents=True, exist_ok=True)
     app = fixture.ensure_app(args.app.resolve(), args.rebuild)
-    executable = app / "Contents/MacOS/ArcusisBrowser"
+    executable = app / "Contents/MacOS/ShaarVerification"
     before = fixture.crash_names()
     with fixture.disposable_root() as root:
         home = root / "home"
@@ -81,7 +81,7 @@ def main():
         for artifact in root.glob("world-*.har"):
             shutil.copy2(artifact, output / artifact.name)
         crashes = [name for name in fixture.crash_names() - before
-                   if name.startswith(("ArcusisBrowser-", "Chromium Helper"))]
+                   if name.startswith(("ArcusisBrowser-", "ShaarVerification-", "Chromium Helper"))]
         crashes.sort()
         steps = report.get("steps", [])
         if not report_path.is_file():

@@ -8,6 +8,9 @@ import Foundation
 @main
 enum ShaarVerificationMain {
   @MainActor static func main() {
+    if let code = harnessExitCode(CommandLine.arguments) {
+      exit(code)
+    }
     if CommandLine.arguments.contains("--browsing-qa") {
       exit(ShaarBrowsingQA.run(arguments: CommandLine.arguments))
     }
@@ -50,6 +53,69 @@ enum ShaarVerificationMain {
       exit(InspectorIdleSmoke.run(frameworkURL: framework, outputURL: output, pageURL: page))
     }
     exit(EngineProbe.run(arguments: CommandLine.arguments))
+  }
+
+  private struct HarnessLaunch {
+    var framework: URL
+    var output: URL
+    var page: URL?
+    var remainder: String?
+  }
+
+  /// Launch arguments for one moved smoke or probe. Nil when the flag is absent or incomplete.
+  private static func harnessLaunch(_ flag: String, _ arguments: [String]) -> HarnessLaunch? {
+    guard let index = arguments.firstIndex(of: flag),
+      arguments.indices.contains(index + 2),
+      let frameworks = Bundle.main.privateFrameworksURL
+    else { return nil }
+    let remainder = arguments.indices.contains(index + 3) ? arguments[index + 3] : nil
+    return HarnessLaunch(
+      framework: frameworks.appending(path: "Chromium Framework.framework"),
+      output: URL(fileURLWithPath: arguments[index + 1]),
+      page: URL(string: arguments[index + 2]),
+      remainder: remainder)
+  }
+
+  /// Runs a harness that used to dispatch from the shipping executable.
+  @MainActor private static func harnessExitCode(_ arguments: [String]) -> Int32? {
+    if let launch = harnessLaunch("--tab-adoption-smoke", arguments) {
+      return ShaarTabAdoptionSmoke.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
+    }
+    if let launch = harnessLaunch("--devtools-smoke", arguments) {
+      let mode = launch.remainder ?? "fixture"
+      let spaOnly = mode == "spa-only"
+      let roundTwo = mode == "round-two"
+      return ShaarDevToolsSmoke.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page,
+        realWorld: mode == "real-world" || spaOnly || roundTwo,
+        spaOnly: spaOnly, roundTwo: roundTwo)
+    }
+    if let launch = harnessLaunch("--devtools-capability-probe", arguments) {
+      return NativeDevToolsCapabilityProbe.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
+    }
+    if let launch = harnessLaunch("--rendering-probe", arguments) {
+      return ShaarRenderingProbe.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
+    }
+    if let launch = harnessLaunch("--recorder-probe", arguments) {
+      return ShaarRecorderProbe.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
+    }
+    if let launch = harnessLaunch("--sensors-probe", arguments) {
+      return ShaarSensorsProbe.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
+    }
+    if let launch = harnessLaunch("--event-listeners-probe", arguments) {
+      return ShaarEventListenersProbe.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
+    }
+    if let launch = harnessLaunch("--audits-probe", arguments) {
+      return InspectorAuditProbe.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
+    }
+    return nil
   }
 
   static func storeLanguage(

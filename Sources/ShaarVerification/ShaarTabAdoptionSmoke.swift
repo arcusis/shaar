@@ -5,9 +5,12 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import ChromiumBridgeVerification
 import Foundation
 
-/// Exercises page-created tabs in the hidden shipping app, using native trusted clicks.
+@testable import ArcusisBrowser
+
+/// Exercises page-created tabs in the hidden verification harness, using native trusted clicks.
 @MainActor enum ShaarTabAdoptionSmoke {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
     guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else { return 2 }

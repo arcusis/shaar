@@ -6,6 +6,8 @@ import AppKit
 import Foundation
 import ShaarEngineABI
 
+@testable import ArcusisBrowser
+
 /// The packaged smoke's previously skipped DevTools actions. Windows stay hidden.
 @MainActor enum ShaarDevToolsSmokeExercise {
   /// True when a row expand did not reveal the node and getDocument(depth: 8) did.

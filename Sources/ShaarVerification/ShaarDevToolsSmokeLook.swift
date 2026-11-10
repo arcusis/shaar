@@ -4,6 +4,8 @@
 
 import AppKit
 
+@testable import ArcusisBrowser
+
 /// Small visual and keyboard defects in one DevTools panel. One row per kind.
 @MainActor enum ShaarDevToolsSmokeLook {
   static func survey(

@@ -7,6 +7,8 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
+@testable import ArcusisBrowser
+
 /// Proves timezone, locale, idle, and touch overrides from a window that is never ordered
 /// on screen. An empty error means the page accepted the command.
 @MainActor enum ShaarSensorsProbe {

@@ -21,6 +21,20 @@ struct BrowsingEdgeHiddenWindowsTests {
     #expect(detail == "Still visible: Shaar")
   }
 
+  @Test func aPrintPanelMatchesClassOrTitle() {
+    #expect(browsingEdgePrintSurface(["kind": "modal", "class": "NSPrintPanel", "title": ""]))
+    #expect(browsingEdgePrintSurface(["kind": "visible", "class": "NSWindow", "title": "Print"]))
+    #expect(!browsingEdgePrintSurface(["kind": "modal", "class": "NSWindow", "title": "Alert"]))
+    #expect(!browsingEdgePrintSurface(["kind": "sheet", "class": "NSPanel", "title": ""]))
+  }
+
+  @Test func aFileChooserMatchesOnlyAnOpenPanel() {
+    #expect(browsingEdgeFileChooserOpened(["kind": "open-panel"]))
+    #expect(!browsingEdgeFileChooserOpened(["kind": "save-panel"]))
+    #expect(!browsingEdgeFileChooserOpened(["kind": "modal"]))
+    #expect(!browsingEdgeFileChooserOpened(["kind": "sheet"]))
+  }
+
   @Test func anOpenPanelDoesNotFailTheRow() {
     let detail = browsingEdgeHiddenWindowsFailure(
       stillVisible: [],

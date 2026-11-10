@@ -3,6 +3,8 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -66,6 +68,36 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         harness = {"passed": True, "proven": True}
         self.assertTrue(PROBE.visible_notes_fail_their_row(rows, dialogs))
         self.assertTrue(PROBE.evaluate_gate(rows, dialogs, harness))
+
+    def test_unreadable_crash_report_is_owned(self):
+        self.assertTrue(PROBE.crash_is_owned({"unreadable": True}, 10, 20))
+        self.assertFalse(PROBE.crash_is_owned({}, 10, 20))
+        self.assertTrue(PROBE.crash_is_owned({"pid": 10, "parentPid": 1}, 10, 20))
+        self.assertFalse(PROBE.crash_is_owned({"pid": 99, "parentPid": 98}, 10, 20))
+
+    def test_unreadable_report_file_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "ShaarVerification-test.ips").write_text("header\nnot-json\n")
+            parsed = json.dumps({"pid": 10, "parentPid": 4, "exception": {"signal": "SIGSEGV"}})
+            (root / "ShaarVerification-owned.ips").write_text("header\n" + parsed + "\n")
+            original = PROBE.CRASHES
+            PROBE.CRASHES = root
+            try:
+                self.assertEqual(
+                    PROBE.crash_process("ShaarVerification-test.ips"), {"unreadable": True})
+                self.assertTrue(PROBE.owned_crash("ShaarVerification-test.ips", 1, 2))
+                self.assertTrue(PROBE.owned_crash("ShaarVerification-owned.ips", 10, 2))
+                self.assertFalse(PROBE.owned_crash("ShaarVerification-owned.ips", 99, 98))
+                self.assertEqual(PROBE.crash_process("missing.ips"), {})
+            finally:
+                PROBE.CRASHES = original
+
+    def test_quit_hang_fails_the_harness_row(self):
+        self.assertFalse(PROBE.process_stayed_up(True, 0, False, True))
+        self.assertTrue(PROBE.process_stayed_up(True, 0, False, False))
+        self.assertFalse(PROBE.process_stayed_up(True, 0, True, False))
+        self.assertFalse(PROBE.process_stayed_up(False, 0, False, False))
 
     def test_real_passes_are_accepted(self):
         rows = [

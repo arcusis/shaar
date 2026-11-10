@@ -22,6 +22,6 @@ Remove a projection patch from the Chromium 155 list only after the stock fronte
 
 `0017` `0022` `0026` `0028` `0035` `0036` `0037` `0038` `0039` `0040` `0041` `0042` `0043` `0044-shaar-devtools-heap-snapshot-limit.patch` `0046` `0049` `0051` `0052` `0053` `0054` `0056` `0058` `0059` `0060`
 
-`0044-shaar-quit-cancellation-callback.patch` stays. Keep `0010` (dock), `0014` (155 theme), `0061-shaar-devtools-theme-157.patch` (157 theme), `0015` and `0033` (framework extensions), `0016` (agent bridge), `0018` (owned-tab route), `0020` `0021` `0023` `0029` (safe area and viewports), `0024` (network rules), `0025` (repro screencast), and `0034` (force pseudo-state for the Inspector).
+`0044-shaar-quit-cancellation-callback.patch` stays. Keep `0010` (dock), `0014` (155 theme), `0064-shaar-devtools-theme-157.patch` (157 theme), `0015` and `0033` (framework extensions), `0016` (agent bridge), `0018` (owned-tab route), `0020` `0021` `0023` `0029` (safe area and viewports), `0024` (network rules), `0025` (repro screencast), and `0034` (force pseudo-state for the Inspector).
 
 Related: [[Shaar_DevTools_Frontend_Panel]], [[Shaar_Inspector]], [[Engine_Module_devtools]].

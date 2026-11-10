@@ -8,6 +8,7 @@ from pathlib import Path
 import hashlib
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 
@@ -21,6 +22,21 @@ REGISTRATION = (
 )
 PANEL = OVERLAY / "front_end/panels/shaar"
 FEATURE = PANEL / "build-info"
+FEATURE_IMPORT = re.compile(r"import '\./([A-Za-z0-9_-]+)/\1-meta\.js';\Z")
+
+
+def gn_block(source: str, header: str) -> str:
+    match = re.search(rf"{header}\s*\{{(.*?)\n\}}", source, re.DOTALL)
+    if match is None:
+        raise AssertionError(f"missing {header}")
+    return match.group(1)
+
+
+def gn_strings(block: str, name: str) -> list[str]:
+    match = re.search(rf"\b{name}\s*=\s*\[(.*?)\]", block, re.DOTALL)
+    if match is None:
+        raise AssertionError(f"missing {name}")
+    return re.findall(r'"([^"]+)"', match.group(1))
 
 
 def load_stage():
@@ -59,23 +75,36 @@ class DevToolsFrontend157Tests(unittest.TestCase):
         self.assertIn("ViewLocationValues.PANEL", meta)
 
     def test_each_feature_has_one_registration_line(self):
-        features = sorted(
+        registration = (PANEL / "shaar-meta.ts").read_text()
+        features = []
+        for line in registration.splitlines():
+            if not line.startswith("import './"):
+                continue
+            match = FEATURE_IMPORT.fullmatch(line)
+            self.assertIsNotNone(match, line)
+            features.append(match.group(1))
+        self.assertEqual(len(features), len(set(features)))
+        self.assertGreater(len(features), 0)
+        directories = sorted(
             path.name
             for path in PANEL.iterdir()
             if path.is_dir() and (path / "BUILD.gn").is_file()
         )
-        self.assertEqual(features, ["build-info"])
-        registration = (PANEL / "shaar-meta.ts").read_text()
-        imports = [
-            line
-            for line in registration.splitlines()
-            if line.startswith("import './")
-        ]
-        self.assertEqual(imports, ["import './build-info/build-info-meta.js';"])
+        self.assertEqual(sorted(features), directories)
+        for feature in features:
+            meta = PANEL / feature / f"{feature}-meta.ts"
+            self.assertTrue(meta.is_file(), str(meta))
         build = (PANEL / "BUILD.gn").read_text()
-        self.assertIn('"build-info:meta"', build)
-        self.assertIn('"build-info:unittests"', build)
-        self.assertEqual(registration.count("import './"), len(features))
+        meta_block = gn_block(build, r'devtools_entrypoint\("meta"\)')
+        unit_block = gn_block(build, r'group\("unittests"\)')
+        self.assertEqual(
+            gn_strings(meta_block, "ts_deps"),
+            [f"{feature}:meta" for feature in features],
+        )
+        self.assertEqual(
+            gn_strings(unit_block, "deps"),
+            [f"{feature}:unittests" for feature in features],
+        )
 
     def test_patches_are_pinned_for_the_157_checkout(self):
         manifest = json.loads(MANIFEST.read_text())

@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumRuntimeInternal.h"
-#import "ChromiumProbeRoot.h"
 #import <dlfcn.h>
 #import <objc/message.h>
 #include <string>

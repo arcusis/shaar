@@ -17,12 +17,6 @@ std::atomic<uint64_t> kPrivateRequestID{1ULL << 62};
 void Reply(void *context, const shaar_result *result) {
   void (^finish)(NSDictionary *) = (__bridge_transfer id)context;
   if (!result || result->error.code != SHAAR_OK) {
-    const char *testing = getenv("SHAAR_ENGINE_TESTING");
-    if (result && testing && std::strcmp(testing, "1") == 0) {
-      NSString *message = [[NSString alloc] initWithBytes:result->error.message.data ?: ""
-          length:result->error.message.size encoding:NSUTF8StringEncoding];
-      NSLog(@"Shaar private result error=%d message=%@", (int)result->error.code, message);
-    }
     finish(@{@"error": @"Shaar private operation failed."});
     return;
   }
@@ -72,10 +66,6 @@ BOOL ARCPrivateShaarSubmit(ARCShaarRuntime *runtime, shaar_scope scope,
                                  {(const char *)json.bytes, json.length},
                                  requestID, Reply, context, &error);
   if (code == SHAAR_OK) return YES;
-  const char *testing = getenv("SHAAR_ENGINE_TESTING");
-  if (testing && std::strcmp(testing, "1") == 0)
-    fprintf(stderr, "Shaar private operation %d rejected: status=%d error=%d\n",
-            (int)operation, (int)code, (int)error.code);
   CFBridgingRelease(context);
   return NO;
 }

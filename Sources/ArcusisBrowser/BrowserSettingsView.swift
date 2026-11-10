@@ -303,7 +303,6 @@ struct BrowserSettingsView: View {
         .accessibilityIdentifier("settings.section.\(section.rawValue)")
         .accessibilityLabel(section.title)
         .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
-        .frame(maxWidth: .infinity, alignment: .leading)
       }
       Spacer()
     }

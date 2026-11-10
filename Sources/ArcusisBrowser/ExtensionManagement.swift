@@ -145,6 +145,8 @@ enum ExtensionUnpackedFolder {
     else { return nil }
     let manifest = folder.appending(path: "manifest.json")
     guard
+      let sizeValues = try? manifest.resourceValues(forKeys: [.fileSizeKey]),
+      let manifestSize = sizeValues.fileSize, manifestSize <= 1_048_576,
       let values = try? manifest.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
       values.isRegularFile == true, values.isSymbolicLink != true,
       let data = try? Data(contentsOf: manifest), data.count <= 1_048_576,

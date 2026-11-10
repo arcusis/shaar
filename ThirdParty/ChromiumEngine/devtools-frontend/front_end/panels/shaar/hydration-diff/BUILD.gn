@@ -10,6 +10,7 @@ devtools_ui_module("hydration_diff") {
   sources = [
     "HydrationDiff.ts",
     "HydrationPanel.ts",
+    "HydrationSettle.ts",
   ]
 
   ts_deps = [
@@ -30,6 +31,7 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     ":*",
+    "..:*",
     "../*",
     "../../../entrypoints/*",
   ]
@@ -48,7 +50,7 @@ devtools_entrypoint("meta") {
 
   visibility = [
     ":*",
-    "../:meta",
+    "..:*",
     "../../../entrypoints/*",
   ]
 }

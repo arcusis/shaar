@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import {assert} from 'chai';
+import sinon from 'sinon';
 
 import * as Hydration from './hydration-diff.js';
 
@@ -147,10 +148,174 @@ describe('HydrationDiff', () => {
   it('agrees with DOMParser for a small document', () => {
     const html = '<!doctype html><html><head><script>bad()</script></head><body><p class="b a">Hi</p></body></html>';
     const server = Diff.treeFromHTML(html);
-    const hydrated = Diff.treeFromSnapshot(sampleSnapshot());
-    const report = Diff.diffHydrationTrees(server, hydrated);
+    assert.strictEqual(server.name, 'body');
+    assert.lengthOf(server.children, 1);
+    assert.strictEqual(server.children[0].name, 'p');
+    assert.strictEqual(server.children[0].attributes[0].name, 'class');
+    assert.strictEqual(server.children[0].attributes[0].value, 'a b');
+    assert.strictEqual(server.children[0].children[0].name, '#text');
+    assert.strictEqual(server.children[0].children[0].value, 'Hi');
+    const report = Diff.diffHydrationTrees(server, Diff.treeFromSnapshot(sampleSnapshot()));
     assert.isNull(report.notice);
     assert.deepEqual(report.mismatches, []);
+  });
+
+  it('does not call an image or svg mount a client shell', () => {
+    const image = Diff.bodyNode([
+      Diff.elementNode('div', [{name: 'id', value: 'root'}], [Diff.elementNode('img', [{name: 'src', value: 'hero.jpg'}])]),
+    ]);
+    assert.isNull(Diff.diffHydrationTrees(image, image).notice);
+
+    const server = Diff.bodyNode([
+      Diff.elementNode('div', [{name: 'id', value: 'root'}], [Diff.elementNode('svg', [], [Diff.elementNode('path')])]),
+    ]);
+    const page = Diff.bodyNode([
+      Diff.elementNode('div', [{name: 'id', value: 'root'}], [Diff.elementNode('p', [], [Diff.textNode('Hydrated')], 12)]),
+    ]);
+    const report = Diff.diffHydrationTrees(server, page);
+    assert.isNull(report.notice);
+    assert.isAtLeast(report.mismatches.length, 1);
+  });
+
+  it('keeps one insertion in a long sibling list as a single extra', () => {
+    const count = 5000;
+    const serverChildren = [];
+    const pageChildren = [];
+    for (let index = 0; index < count; index++) {
+      const id = 'n' + index;
+      serverChildren.push(Diff.elementNode('li', [{name: 'id', value: id}], [Diff.textNode(String(index))]));
+      pageChildren.push(Diff.elementNode('li', [{name: 'id', value: id}], [Diff.textNode(String(index))]));
+    }
+    pageChildren.splice(
+        2500, 0, Diff.elementNode('li', [{name: 'id', value: 'inserted'}], [Diff.textNode('x')], 7));
+    const report = Diff.diffHydrationTrees(Diff.bodyNode(serverChildren), Diff.bodyNode(pageChildren));
+    assert.deepEqual(report.mismatches.map(mismatch => mismatch.kind), ['extra']);
+    assert.strictEqual(report.mismatches[0].path, 'body > li#inserted');
+    assert.strictEqual(report.mismatches[0].backendNodeId, 7);
+  });
+});
+
+describe('HydrationSettle', () => {
+  const Settle = Hydration.HydrationSettle;
+
+  it('finds the document after a hash change or pushState', () => {
+    const documentResource = {
+      url: 'https://example.com/app',
+      isDocument: true,
+      loaderId: 'loader-1',
+      isRedirect: false,
+    };
+    const pushedFetch = {
+      url: 'https://example.com/app/2',
+      isDocument: false,
+      loaderId: 'loader-1',
+      isRedirect: false,
+    };
+    const hashed = Settle.pickDocumentResource(
+        'https://example.com/app#section', 'loader-1', [documentResource, pushedFetch]);
+    assert.strictEqual(hashed, documentResource);
+    const pushed = Settle.pickDocumentResource('https://example.com/app/2', 'loader-1', [pushedFetch, documentResource]);
+    assert.strictEqual(pushed, documentResource);
+  });
+
+  it('ignores a redirect and keeps the final document', () => {
+    const redirect = {url: 'https://example.com/old', isDocument: true, loaderId: 'loader-1', isRedirect: true};
+    const finalDocument = {url: 'https://example.com/new', isDocument: true, loaderId: 'loader-1', isRedirect: false};
+    const picked = Settle.pickDocumentResource('https://example.com/new', 'loader-1', [redirect, finalDocument]);
+    assert.strictEqual(picked, finalDocument);
+  });
+
+  it('drops the load listener and the timer when load never arrives', async () => {
+    let listeners = 0;
+    const loaded = await Settle.attachLoadWait(
+        () => {
+          listeners++;
+        },
+        () => {
+          listeners--;
+        },
+        15);
+    assert.isFalse(loaded);
+    assert.strictEqual(listeners, 0);
+  });
+
+  it('drops the load listener and the timer when the load arrives', async () => {
+    const clear = sinon.spy(globalThis, 'clearTimeout');
+    let fire = (): void => {};
+    let listeners = 0;
+    try {
+      const pending = Settle.attachLoadWait(
+          listener => {
+            listeners++;
+            fire = listener;
+          },
+          () => {
+            listeners--;
+          },
+          1000);
+      fire();
+      assert.isTrue(await pending);
+      assert.strictEqual(listeners, 0);
+      assert.isTrue(clear.called);
+    } finally {
+      clear.restore();
+    }
+  });
+
+  it('waits until a tracked fetch finishes and then stays quiet', async () => {
+    const tracker = new Settle.RequestSettleTracker();
+    const started = Date.now();
+    const pending = Settle.waitForQuiet(() => tracker.inflight(), listener => tracker.subscribe(listener), 30, 500);
+    tracker.start({id: 'fetch-1', settles: true});
+    setTimeout(() => {
+      tracker.finish({id: 'fetch-1', settles: true});
+    }, 40);
+    await pending;
+    assert.isAtLeast(Date.now() - started, 60);
+    assert.strictEqual(tracker.inflight(), 0);
+  });
+
+  it('does not let a socket hold the quiet window open', async () => {
+    const tracker = new Settle.RequestSettleTracker();
+    tracker.start({id: 'socket', settles: false});
+    assert.strictEqual(tracker.inflight(), 0);
+    await Settle.waitForQuiet(() => tracker.inflight(), listener => tracker.subscribe(listener), 20, 200);
+    assert.strictEqual(tracker.inflight(), 0);
+  });
+
+  it('stops waiting at the cap and unsubscribes', async () => {
+    const tracker = new Settle.RequestSettleTracker();
+    tracker.start({id: 'fetch-1', settles: true});
+    await Settle.waitForQuiet(() => tracker.inflight(), listener => tracker.subscribe(listener), 500, 30);
+    tracker.finish({id: 'fetch-1', settles: true});
+    assert.strictEqual(tracker.inflight(), 0);
+  });
+
+  it('extends the quiet window while the DOM is still changing', async () => {
+    const clock = sinon.useFakeTimers();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    try {
+      let settled = false;
+      const pending = Settle.pageDomSettle(40, 500, host).then(() => {
+        settled = true;
+      });
+      clock.tick(30);
+      await Promise.resolve();
+      assert.isFalse(settled);
+      host.textContent = 'hydrated';
+      await Promise.resolve();
+      await Promise.resolve();
+      clock.tick(39);
+      await Promise.resolve();
+      assert.isFalse(settled);
+      clock.tick(1);
+      await pending;
+      assert.isTrue(settled);
+    } finally {
+      host.remove();
+      clock.restore();
+    }
   });
 });
 

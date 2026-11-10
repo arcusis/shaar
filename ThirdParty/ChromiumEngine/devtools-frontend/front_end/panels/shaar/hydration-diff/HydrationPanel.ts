@@ -18,6 +18,13 @@ import {
   type HydrationReport,
   type SnapshotPayload,
 } from './HydrationDiff.js';
+import {
+  attachLoadWait,
+  pageDomSettle,
+  pickDocumentResource,
+  RequestSettleTracker,
+  waitForQuiet,
+} from './HydrationSettle.js';
 
 const UIStrings = {
   /**
@@ -140,6 +147,8 @@ const str_ = i18n.i18n.registerUIStrings('panels/shaar/hydration-diff/HydrationP
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 const LOAD_TIMEOUT_MS = 15000;
+const SETTLE_QUIET_MS = 400;
+const SETTLE_CAP_MS = 3000;
 
 export type DocumentSource = 'network'|'resource';
 type StatusTone = 'info'|'ok'|'error';
@@ -432,7 +441,7 @@ export async function readDocumentHTML(target: SDK.Target.Target): Promise<Docum
   if (!frame) {
     throw new DocumentBodyUnavailable();
   }
-  const resource = frame.resourceForURL(frame.url);
+  const resource = documentResource(frame);
   const request = resource?.request ?? null;
   if (request) {
     const html = textFromContent(await request.requestContentData());
@@ -458,14 +467,90 @@ export async function captureHydratedBody(target: SDK.Target.Target): Promise<Re
   return treeFromSnapshot(snapshot as SnapshotPayload);
 }
 
+function documentResource(frame: SDK.ResourceTreeModel.ResourceTreeFrame): SDK.Resource.Resource|null {
+  const candidates = frame.resources().map(resource => ({
+    url: resource.url,
+    isDocument: resource.contentType() === Common.ResourceType.resourceTypes.Document,
+    loaderId: resource.loaderId,
+    isRedirect: resource.request?.isRedirect() ?? false,
+    resource,
+  }));
+  return pickDocumentResource(frame.url, frame.loaderId, candidates)?.resource ?? null;
+}
+
 async function reloadPage(target: SDK.Target.Target): Promise<void> {
   const model = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
   if (!model) {
     return;
   }
-  const loaded = model.once(SDK.ResourceTreeModel.Events.Load);
-  model.reloadPage(true);
-  await Promise.race([loaded, wait(LOAD_TIMEOUT_MS)]);
+  const network = target.model(SDK.NetworkManager.NetworkManager);
+  const tracker = new RequestSettleTracker();
+  const stopNetwork = network ? watchNetwork(network, tracker) : null;
+  try {
+    const loaded = attachLoadWait(
+        listener => {
+          model.addEventListener(SDK.ResourceTreeModel.Events.Load, listener);
+        },
+        listener => {
+          model.removeEventListener(SDK.ResourceTreeModel.Events.Load, listener);
+        },
+        LOAD_TIMEOUT_MS);
+    model.reloadPage(true);
+    const didLoad = await loaded;
+    if (!didLoad) {
+      return;
+    }
+    // Load fires before client hydration and late fetches mutate the DOM.
+    await Promise.all([
+      settleDom(target),
+      waitForQuiet(() => tracker.inflight(), listener => tracker.subscribe(listener), SETTLE_QUIET_MS, SETTLE_CAP_MS),
+    ]);
+  } finally {
+    stopNetwork?.();
+  }
+}
+
+function watchNetwork(manager: SDK.NetworkManager.NetworkManager, tracker: RequestSettleTracker): () => void {
+  const descriptors: Common.EventTarget.EventDescriptor[] = [
+    manager.addEventListener(SDK.NetworkManager.Events.RequestStarted, event => {
+      tracker.start(settleRequest(event.data.request));
+    }),
+    manager.addEventListener(SDK.NetworkManager.Events.RequestFinished, event => {
+      tracker.finish(settleRequest(event.data));
+    }),
+  ];
+  return () => {
+    Common.EventTarget.removeEventListeners(descriptors);
+  };
+}
+
+function settleRequest(request: SDK.NetworkRequest.NetworkRequest): {id: string, settles: boolean} {
+  const type = request.resourceType();
+  const types = Common.ResourceType.resourceTypes;
+  const settles = type === types.Document || type === types.Script || type === types.Stylesheet ||
+      type === types.XHR || type === types.Fetch || type === types.Image || type === types.Font;
+  return {id: request.requestId(), settles};
+}
+
+async function settleDom(target: SDK.Target.Target): Promise<void> {
+  const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
+  const context = runtimeModel?.defaultExecutionContext() ?? null;
+  if (!context) {
+    return;
+  }
+  const expression = `(${pageDomSettle.toString()})(${SETTLE_QUIET_MS}, ${SETTLE_CAP_MS})`;
+  try {
+    await context.evaluate(
+        {
+          expression,
+          includeCommandLineAPI: false,
+          silent: true,
+          returnByValue: true,
+        },
+        false, true);
+  } catch {
+    // A second navigation can destroy the context before the quiet window ends.
+  }
 }
 
 async function revealBackendNode(backendNodeId: number): Promise<void> {
@@ -612,10 +697,4 @@ function rowTemplate(row: HydrationMismatch): ReturnType<typeof html> {
       </button>
     </li>
   `;
-}
-
-function wait(milliseconds: number): Promise<void> {
-  return new Promise(resolve => {
-    setTimeout(resolve, milliseconds);
-  });
 }

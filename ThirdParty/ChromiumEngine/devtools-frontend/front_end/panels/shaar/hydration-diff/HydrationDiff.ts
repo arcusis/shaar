@@ -22,6 +22,22 @@ const MOUNT_IDS = new Set([
   'q-app',
   '__sapper',
 ]);
+// These render with no text child. A mount that only holds them is not an empty shell.
+const RENDERED_TAGS = new Set([
+  'audio',
+  'canvas',
+  'embed',
+  'iframe',
+  'img',
+  'input',
+  'math',
+  'object',
+  'picture',
+  'select',
+  'svg',
+  'textarea',
+  'video',
+]);
 
 export type HydrationNotice = 'not-html'|'client-shell-empty'|'client-shell-mount';
 
@@ -216,6 +232,9 @@ function isEmptyElement(node: HydrationNode): boolean {
   if (node.kind !== 'element') {
     return false;
   }
+  if (RENDERED_TAGS.has(node.name)) {
+    return false;
+  }
   return node.children.every(isEmptyElement);
 }
 
@@ -321,6 +340,41 @@ function pushMismatch(report: HydrationReport, mismatch: HydrationMismatch): voi
 function alignByKey(left: HydrationNode[], right: HydrationNode[], key: (node: HydrationNode) => string): AlignPair[] {
   const leftKeys = left.map(key);
   const rightKeys = right.map(key);
+  let prefix = 0;
+  const shared = Math.min(leftKeys.length, rightKeys.length);
+  while (prefix < shared && leftKeys[prefix] === rightKeys[prefix]) {
+    prefix++;
+  }
+  let suffix = 0;
+  while (suffix < shared - prefix &&
+         leftKeys[leftKeys.length - 1 - suffix] === rightKeys[rightKeys.length - 1 - suffix]) {
+    suffix++;
+  }
+  const pairs: AlignPair[] = [];
+  for (let index = 0; index < prefix; index++) {
+    pairs.push({left: left[index], right: right[index]});
+  }
+  const middleLeft = left.slice(prefix, left.length - suffix);
+  const middleRight = right.slice(prefix, right.length - suffix);
+  if (middleLeft.length > 0 || middleRight.length > 0) {
+    const middle = alignMiddle(
+        middleLeft, middleRight, leftKeys.slice(prefix, leftKeys.length - suffix),
+        rightKeys.slice(prefix, rightKeys.length - suffix));
+    for (const pair of middle) {
+      pairs.push(pair);
+    }
+  }
+  for (let index = 0; index < suffix; index++) {
+    pairs.push({
+      left: left[left.length - suffix + index],
+      right: right[right.length - suffix + index],
+    });
+  }
+  return pairs;
+}
+
+function alignMiddle(
+    left: HydrationNode[], right: HydrationNode[], leftKeys: string[], rightKeys: string[]): AlignPair[] {
   const scores = alignmentScores(leftKeys, rightKeys);
   const pairs: AlignPair[] = [];
   let i = 0;

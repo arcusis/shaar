@@ -54,4 +54,5 @@ group("unittests") {
   deps = [ "build-info:unittests" ]
   deps += [ "graphql-trpc:unittests" ]
     "viewports:unittests",
+    "hydration-diff:unittests",
 }

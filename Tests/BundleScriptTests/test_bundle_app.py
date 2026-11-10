@@ -39,7 +39,10 @@ class BundleAppTests(unittest.TestCase):
 
         (self.root / "scripts").mkdir()
         shutil.copy2(SCRIPT, self.root / "scripts" / "bundle-app.sh")
-        for name in ("release-config.sh", "release_feed.py", "engine-signing.sh"):
+        for name in (
+            "release-config.sh", "release_feed.py", "engine-signing.sh",
+            "check-shipping-harness.py",
+        ):
             shutil.copy2(REPO / "scripts" / name, self.root / "scripts" / name)
         shutil.copy2(REPO / "scripts" / "stage-browser-resources.py", self.root / "scripts")
         shutil.copy2(REPO / "scripts" / "fetch-framework-devtools.py", self.root / "scripts")
@@ -457,6 +460,20 @@ class BundleAppTests(unittest.TestCase):
                 self.assertNotIn("ShaarVerification", self._log())
 
     def test_shipping_bundle_rejects_executable_with_verification_code(self):
+        planted = self.root / "Sources" / "ShaarVerification" / "HarnessMarkers.swift"
+        planted.parent.mkdir(parents=True)
+        planted.write_text(
+            "enum EngineProbe {}\n"
+            "enum ShaarBrowsingQA {}\n"
+            "enum InspectorIdleSmoke {}\n"
+            "enum ShaarDevToolsF12RouteSmoke {}\n"
+            "enum WebsitePermissionPromptProbe {}\n"
+            "enum ShaarBrowsingEdgeProbe {}\n"
+            "enum HttpsOnlyProbe {}\n"
+            "let flag = \"--browsing-qa\"\n"
+            "let elementID = \"parity-action\"\n"
+            "if arguments.contains(\"--devtools-f12-route\") {}\n"
+        )
         for marker in (
             "ShaarVerification",
             "EngineProbe",
@@ -480,15 +497,27 @@ class BundleAppTests(unittest.TestCase):
             "--probe-https-only",
             "HttpsOnlyProbe",
             "--probe-platform-prompts",
+            "testing: true",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)
                 (self.binary_dir / "ArcusisBrowser").write_text(f"stub binary {marker}")
                 result = self._run("--with-engine")
 
-                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.returncode, 1, result.stderr)
                 self.assertIn("Verification code found", result.stderr)
                 self.assertNotIn("codesign", self._log())
+
+    def test_shipping_sources_reject_a_planted_harness(self):
+        planted = self.root / "Sources" / "ArcusisBrowser" / "PlantedHarness.swift"
+        planted.parent.mkdir(parents=True)
+        planted.write_text('let launch = "--planted-probe"\n')
+        result = self._run("--with-engine")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Verification code found", result.stderr)
+        self.assertIn("--planted-probe", result.stderr)
+        self.assertNotIn("codesign", self._log())
 
     def test_verification_builds_separate_testable_harness_bundle(self):
         result = self._run("--with-engine", "--verification")

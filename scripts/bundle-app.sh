@@ -13,34 +13,7 @@ source scripts/engine-signing.sh
 adhoc_sign() { codesign --force --timestamp=none --sign - "$1"; }
 # Probes live only in the ShaarVerification harness; a shipped executable must not contain them.
 assert_no_verification_code() {
-  if LC_ALL=C grep -a -F -q \
-    -e ShaarVerification \
-    -e EngineProbe \
-    -e --engine-probe \
-    -e --probe-data-dir \
-    -e ShaarBrowsingQA \
-    -e --browsing-qa \
-    -e InspectorIdleSmoke \
-    -e --inspector-idle-smoke \
-    -e --probe-measure-inspector \
-    -e --probe-favicon-url \
-    -e --probe-favicon-restore \
-    -e ShaarDevToolsF12RouteSmoke \
-    -e --devtools-f12-route \
-    -e WebsitePermissionPromptProbe \
-    -e --probe-website-permission \
-    -e ShaarBrowsingEdgeProbe \
-    -e --browsing-edge-probe \
-    -e --platform-parity-probe \
-    -e parity-action \
-    -e --probe-https-only \
-    -e HttpsOnlyProbe \
-    -e --probe-platform-prompts \
-    "$1"
-  then
-    echo "Verification code found in $1." >&2
-    exit 1
-  fi
+  "${PYTHON:-python3}" scripts/check-shipping-harness.py --binary "$1"
 }
 configuration=release
 with_engine=false

@@ -1,0 +1,157 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+"""The shipping harness guard fails on a planted control and passes on this tree."""
+
+import importlib.util
+import tempfile
+import unittest
+from pathlib import Path
+
+
+REPO = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location(
+    "check_shipping_harness", REPO / "scripts" / "check-shipping-harness.py")
+GUARD = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(GUARD)
+
+
+class ShippingHarnessGuardTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="shipping-harness-guard-")
+        self.root = Path(self.temp.name)
+        verification = self.root / "Sources" / "ShaarVerification"
+        verification.mkdir(parents=True)
+        (verification / "PlantedHarnessProbe.swift").write_text(
+            "enum PlantedHarnessProbe {}\n"
+            "let flag = \"--browsing-qa\"\n"
+        )
+        self.binary = self.root / "ArcusisBrowser"
+        self.binary.write_bytes(b"clean shipping executable")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def plant(self, relative, text):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        return path
+
+    def test_repository_sources_have_no_shipping_harness(self):
+        self.assertEqual(GUARD.findings(REPO), [])
+
+    def test_clean_tree_passes(self):
+        self.plant("Sources/ArcusisBrowser/Browser.swift", "let title = \"Shaar\"\n")
+        self.assertEqual(GUARD.findings(self.root, self.binary), [])
+
+    def test_planted_probe_flag_fails(self):
+        self.plant(
+            "Sources/ArcusisBrowser/Planted.swift",
+            "let launch = \"--planted-probe\"\n",
+        )
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("--planted-probe" in item for item in found), found)
+
+    def test_planted_smoke_flag_in_the_bridge_fails(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "NSString *flag = @\"--bridge-smoke\";\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("--bridge-smoke" in item for item in found), found)
+
+    def test_planted_testing_true_fails(self):
+        self.plant(
+            "Sources/ArcusisBrowser/Planted.swift",
+            "let code = runtime.run(withDataDirectory: root, testing: true)\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("testing: true" in item for item in found), found)
+
+    def test_planted_verification_symbol_fails(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "return PlantedHarnessProbe();\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("PlantedHarnessProbe" in item for item in found), found)
+
+    def test_planted_binary_symbol_fails(self):
+        self.binary.write_bytes(b"prefix PlantedHarnessProbe suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("PlantedHarnessProbe" in item for item in found), found)
+
+    def test_product_launch_flag_is_allowed(self):
+        self.plant(
+            "Sources/ArcusisBrowser/Browser.swift",
+            "if arguments.contains(\"--render-preview\") {}\n",
+        )
+        self.assertEqual(GUARD.findings(self.root, self.binary), [])
+
+    def test_verification_only_qa_flag_fails_in_shipping_source(self):
+        self.plant(
+            "Sources/ArcusisBrowser/Browser.swift",
+            "let flag = \"--browsing-qa\"\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("--browsing-qa" in item for item in found), found)
+
+    def test_verification_dispatch_flag_fails_in_the_binary(self):
+        self.plant(
+            "Sources/ShaarVerification/Route.swift",
+            "if CommandLine.arguments.contains(\"--devtools-f12-route\") {}\n",
+        )
+        self.binary.write_bytes(b"prefix --devtools-f12-route suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("--devtools-f12-route" in item for item in found), found)
+
+    def test_verification_only_fixture_id_fails_in_the_binary(self):
+        self.plant(
+            "Sources/ShaarVerification/Click.swift",
+            "let elementID = \"parity-action\"\n",
+        )
+        self.binary.write_bytes(b"prefix parity-action suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("parity-action" in item for item in found), found)
+
+    def test_fixture_id_quoted_in_shipping_source_fails(self):
+        self.plant(
+            "Sources/ShaarVerification/Click.swift",
+            "let elementID = \"parity-action\"\n",
+        )
+        self.plant(
+            "Sources/ArcusisBrowser/Browser.swift",
+            "let elementID = \"parity-action\"\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("parity-action" in item for item in found), found)
+
+    def test_product_phrase_mentioned_by_shipping_stays_in_the_binary(self):
+        self.plant(
+            "Sources/ShaarVerification/Media.swift",
+            "let mode = \"picture-in-picture\"\n",
+        )
+        self.plant(
+            "Sources/ArcusisBrowser/Browser.swift",
+            "// picture-in-picture stays in the product\n",
+        )
+        self.binary.write_bytes(b"prefix picture-in-picture suffix")
+        self.assertEqual(GUARD.findings(self.root, self.binary), [])
+
+    def test_shared_product_dispatch_flag_is_allowed(self):
+        self.plant(
+            "Sources/ShaarVerification/Preview.swift",
+            "if CommandLine.arguments.contains(\"--render-preview\") {}\n",
+        )
+        self.plant(
+            "Sources/ArcusisBrowser/Browser.swift",
+            "if arguments.contains(\"--render-preview\") {}\n",
+        )
+        self.binary.write_bytes(b"prefix --render-preview suffix")
+        self.assertEqual(GUARD.findings(self.root, self.binary), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

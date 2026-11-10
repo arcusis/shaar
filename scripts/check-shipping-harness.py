@@ -3,15 +3,16 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Fail when the shipping app or its bridge still contains a verification harness.
+"""Fail when a shipping source or the shipping executable still contains a harness.
 
 The check is structural. It reads the verification sources, then rejects those
-symbols and harness launch flags in Sources/ArcusisBrowser, Sources/ChromiumBridge,
+symbols, harness launch flags, and fixture ids in every other Sources directory
 and, when asked, in the built shipping executable. Dispatch flags that do not
-contain probe or smoke, such as a route smoke, are included. A flag the shipping
-sources also use is left alone. A hyphenated fixture id quoted only by
-verification, such as a click target, is rejected too. There is no
-hand-maintained list of probe names.
+contain probe or smoke, such as a route smoke, are included. The only launch
+flag exempted on purpose is --render-preview. A hyphenated fixture id with a
+probe, parity, smoke, or harness segment is rejected too. Reads of
+SHAAR_ENGINE_TESTING are rejected outside the engine start that sets the
+variable. There is no hand-maintained list of probe names.
 """
 
 from __future__ import annotations
@@ -22,19 +23,32 @@ import sys
 from pathlib import Path
 
 
-SHIPPING_ROOTS = ("Sources/ArcusisBrowser", "Sources/ChromiumBridge")
 VERIFICATION_ROOTS = ("Sources/ShaarVerification", "Sources/ChromiumBridgeVerification")
+VERIFICATION_DIRS = {"ShaarVerification", "ChromiumBridgeVerification"}
 SOURCE_SUFFIXES = {".swift", ".m", ".mm", ".h", ".inc", ".c", ".cc", ".cpp"}
 MODULE_NAMES = ("ShaarVerification", "ChromiumBridgeVerification")
+# Product launch flags a harness may also mention. Anything else stays banned.
+PRODUCT_FLAGS = {"--render-preview"}
 TYPE_RE = re.compile(
-    r"^(?:@[A-Za-z0-9_]+(?:\([^)\n]*\))?\s+"
+    r"^[ \t]*(?:@[A-Za-z0-9_]+(?:\([^)\n]*\))?\s+"
     r"|public\s+|internal\s+|open\s+|private\s+|fileprivate\s+|final\s+|nonisolated\s+)*"
     r"(?:enum|struct|class|actor|protocol)\s+([A-Z][A-Za-z0-9_]+)\b",
     re.MULTILINE,
 )
-EXPORT_RE = re.compile(r"^FOUNDATION_EXPORT\s+.+?\b(ARC[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
+EXPORT_RE = re.compile(
+    r"^[ \t]*FOUNDATION_EXPORT\s+.+?\b(ARC[A-Za-z0-9_]+)\s*\(",
+    re.MULTILINE,
+)
 METHOD_RE = re.compile(
-    r"^[-+]\s*\([^;\n]*\)\s*((?:[A-Za-z_][A-Za-z0-9_]*)?(?:Probe|Smoke)[A-Za-z0-9_]*)",
+    r"^[ \t]*[-+]\s*\([^;\n]*\)\s*"
+    r"((?:[A-Za-z_][A-Za-z0-9_]*)?(?:[Pp]robe|[Ss]moke)[A-Za-z0-9_]*)",
+    re.MULTILINE,
+)
+SWIFT_FUNC_RE = re.compile(
+    r"^[ \t]*(?:@[A-Za-z0-9_]+(?:\([^)\n]*\))?\s+"
+    r"|public\s+|internal\s+|open\s+|private\s+|fileprivate\s+|final\s+"
+    r"|static\s+|override\s+|nonisolated\s+)*"
+    r"func\s+((?:[A-Za-z_][A-Za-z0-9_]*)?(?:[Pp]robe|[Ss]moke)[A-Za-z0-9_]*)\b",
     re.MULTILINE,
 )
 FLAG_RE = re.compile(r"--[A-Za-z0-9-]*(?:probe|smoke)(?:-[A-Za-z0-9-]+)?\b")
@@ -52,8 +66,23 @@ FLAG_BYTES = re.compile(br"--[A-Za-z0-9-]*(?:probe|smoke)(?:-[A-Za-z0-9-]+)?\b")
 HARNESS_ID_RE = re.compile(
     r"^(?:[a-z0-9]+-)*(?:probe|parity|smoke|harness)(?:-[a-z0-9]+)*$"
 )
-OBJC_STRING_RE = re.compile(r'@"([^"\\\n]*)"')
-SWIFT_STRING_RE = re.compile(r'(?<![A-Za-z0-9_\\@])"([^"\\\n]*)"')
+OBJC_STRING_RE = re.compile(r'@"((?:[^"\\\n]|\\.)*)"')
+SWIFT_STRING_RE = re.compile(r'(?<![A-Za-z0-9_\\@])"((?:[^"\\\n]|\\.)*)"')
+ENGINE_TESTING = "SHAAR_ENGINE_TESTING"
+ENGINE_TESTING_WRITE = re.compile(
+    r'\b(?:setenv|unsetenv)\s*\(\s*"SHAAR_ENGINE_TESTING"'
+)
+
+
+def shipping_roots(root: Path) -> list[str]:
+    sources = root / "Sources"
+    if not sources.is_dir():
+        return []
+    return sorted(
+        f"Sources/{path.name}"
+        for path in sources.iterdir()
+        if path.is_dir() and path.name not in VERIFICATION_DIRS
+    )
 
 
 def source_files(root: Path, relative: str) -> list[Path]:
@@ -73,9 +102,18 @@ def declared_types(text: str) -> set[str]:
 def method_names(name: str) -> set[str]:
     names = {name}
     stem = re.sub(r"(?:In|For|With|From)[A-Z].*$", "", name)
-    if stem != name and len(stem) >= 12 and re.search(r"Probe|Smoke", stem):
+    if stem != name and len(stem) >= 12 and re.search(r"[Pp]robe|[Ss]moke", stem):
         names.add(stem)
     return names
+
+
+def declared_symbols(text: str) -> set[str]:
+    found = set(declared_types(text))
+    found.update(match.group(1) for match in EXPORT_RE.finditer(text))
+    for pattern in (METHOD_RE, SWIFT_FUNC_RE):
+        for match in pattern.finditer(text):
+            found.update(method_names(match.group(1)))
+    return found
 
 
 def verification_symbols(root: Path) -> set[str]:
@@ -83,24 +121,21 @@ def verification_symbols(root: Path) -> set[str]:
     for relative in VERIFICATION_ROOTS:
         for path in source_files(root, relative):
             text = path.read_text(encoding="utf-8", errors="replace")
-            symbols.update(declared_types(text))
-            symbols.update(match.group(1) for match in EXPORT_RE.finditer(text))
-            for match in METHOD_RE.finditer(text):
-                symbols.update(method_names(match.group(1)))
+            symbols.update(declared_symbols(text))
     owned_by_shipping = set()
-    for relative in SHIPPING_ROOTS:
+    for relative in shipping_roots(root):
         for path in source_files(root, relative):
             text = path.read_text(encoding="utf-8", errors="replace")
-            owned_by_shipping.update(declared_types(text))
-            owned_by_shipping.update(match.group(1) for match in EXPORT_RE.finditer(text))
-            for match in METHOD_RE.finditer(text):
-                owned_by_shipping.update(method_names(match.group(1)))
+            owned_by_shipping.update(declared_symbols(text))
     return {symbol for symbol in symbols if symbol not in owned_by_shipping and len(symbol) >= 8}
 
 
 def quoted_strings(text: str) -> list[str]:
-    return [match.group(1) for match in OBJC_STRING_RE.finditer(text)] + [
-        match.group(1) for match in SWIFT_STRING_RE.finditer(text)
+    raw = [match.group(1) for match in OBJC_STRING_RE.finditer(text)]
+    raw += [match.group(1) for match in SWIFT_STRING_RE.finditer(text)]
+    return [
+        value.replace(r"\n", "\n").replace(r"\t", "\t").replace(r"\"", '"').strip()
+        for value in raw
     ]
 
 
@@ -125,13 +160,7 @@ def harness_flags(root: Path) -> set[str]:
                 if HARNESS_FLAG_RE.search(flag):
                     flags.add(flag)
             dispatch.update(DISPATCH_RE.findall(text))
-    # A product flag the harness also mentions stays legal in the shipping app.
-    shared = set()
-    for relative in SHIPPING_ROOTS:
-        for path in source_files(root, relative):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            shared.update(FLAG_LITERAL_RE.findall(text))
-    return flags | (dispatch - shared)
+    return (flags | dispatch) - PRODUCT_FLAGS
 
 
 def line_findings(
@@ -172,12 +201,31 @@ def line_findings(
     return found
 
 
+def engine_start_file(text: str) -> bool:
+    return "runWithDataDirectory:" in text and "testing:" in text
+
+
+def engine_testing_findings(path: Path, text: str) -> list[str]:
+    """The engine start may set the variable. Every other read is a harness leak."""
+    start = engine_start_file(text)
+    found = []
+    for number, line in enumerate(text.splitlines(), 1):
+        code = line.split("//", 1)[0]
+        if ENGINE_TESTING not in code:
+            continue
+        if start and ENGINE_TESTING_WRITE.search(code):
+            continue
+        found.append(f"{path}:{number}: {ENGINE_TESTING}")
+    return found
+
+
 def source_findings(root: Path, symbols: set[str], flags: set[str], ids: set[str]) -> list[str]:
     found = []
-    for relative in SHIPPING_ROOTS:
+    for relative in shipping_roots(root):
         for path in source_files(root, relative):
             text = path.read_text(encoding="utf-8", errors="replace")
             found.extend(line_findings(path, text, symbols, flags, ids))
+            found.extend(engine_testing_findings(path, text))
     return found
 
 
@@ -204,12 +252,46 @@ def first_bounded(data: bytes, needle: bytes, boundary=identifier_byte) -> bool:
     return False
 
 
+def symbol_present(data: bytes, name: bytes) -> bool:
+    """Match a bare name, an underscore prefix, or a Swift length prefix.
+
+    `118Name` does not match an 18-character name: the byte before the length
+    digits is another digit. A letter before the length, as in Swift mangling,
+    does match.
+    """
+    if first_bounded(data, name):
+        return True
+    underscored = b"_" + name
+    start = data.find(underscored)
+    while start != -1:
+        before = data[start - 1] if start else 0
+        end = start + len(underscored)
+        after = data[end] if end < len(data) else 0
+        if not identifier_byte(before) and not identifier_byte(after):
+            return True
+        start = data.find(underscored, start + 1)
+    prefix = str(len(name)).encode("ascii")
+    needle = prefix + name
+    start = data.find(needle)
+    while start != -1:
+        before = data[start - 1] if start else 0
+        end = start + len(needle)
+        after = data[end] if end < len(data) else 0
+        if not (48 <= before <= 57) and not identifier_byte(after):
+            return True
+        start = data.find(needle, start + 1)
+    return False
+
+
 def binary_findings(path: Path, symbols: set[str], flags: set[str], ids: set[str]) -> list[str]:
     if not path.is_file():
         return [f"{path}: shipping executable is missing"]
     data = path.read_bytes()
     found = []
-    for label in sorted(symbols | flags):
+    for label in sorted(symbols):
+        if symbol_present(data, label.encode("utf-8")):
+            found.append(f"{path}: {label}")
+    for label in sorted(flags):
         if first_bounded(data, label.encode("utf-8")):
             found.append(f"{path}: {label}")
     for label in sorted(ids):

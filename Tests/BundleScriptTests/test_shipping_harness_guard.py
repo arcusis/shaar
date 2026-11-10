@@ -140,6 +140,101 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         self.binary.write_bytes(b"prefix picture-in-picture suffix")
         self.assertEqual(GUARD.findings(self.root, self.binary), [])
 
+    def test_shared_non_product_dispatch_flag_fails(self):
+        self.plant(
+            "Sources/ShaarVerification/Route.swift",
+            "if CommandLine.arguments.contains(\"--secret-route\") {}\n",
+        )
+        self.plant(
+            "Sources/ArcusisBrowser/Browser.swift",
+            "if arguments.contains(\"--secret-route\") {}\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("--secret-route" in item for item in found), found)
+
+    def test_underscore_and_mangled_symbols_fail_in_the_binary(self):
+        name = b"PlantedHarnessProbe"
+        self.binary.write_bytes(b"prefix _" + name + b" suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("PlantedHarnessProbe" in item for item in found), found)
+
+        self.binary.write_bytes(b"prefix " + str(len(name)).encode() + name + b" suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("PlantedHarnessProbe" in item for item in found), found)
+
+        self.binary.write_bytes(b"prefix 1" + str(len(name)).encode() + name + b" suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertFalse(any("PlantedHarnessProbe" in item for item in found), found)
+
+    def test_indented_type_in_another_source_root_fails(self):
+        self.plant(
+            "Sources/ShaarVerification/Nested.swift",
+            "enum Outer {\n    enum NestedHarnessProbe {}\n}\n",
+        )
+        self.plant(
+            "Sources/BrowserCore/Use.swift",
+            "let value = NestedHarnessProbe()\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("NestedHarnessProbe" in item for item in found), found)
+
+    def test_lowercase_probe_method_in_the_engine_abi_fails(self):
+        self.plant(
+            "Sources/ChromiumBridgeVerification/Planted.mm",
+            "- (void)probePlantedFixture {\n}\n",
+        )
+        self.plant(
+            "Sources/ShaarEngineABI/Use.h",
+            "void probePlantedFixture(void);\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("probePlantedFixture" in item for item in found), found)
+
+    def test_lowercase_swift_probe_function_fails(self):
+        self.plant(
+            "Sources/ShaarVerification/Planted.swift",
+            "func probePlantedRoute() {}\n",
+        )
+        self.plant(
+            "Sources/Shaar/Call.swift",
+            "probePlantedRoute()\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("probePlantedRoute" in item for item in found), found)
+
+    def test_engine_testing_read_outside_start_fails(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "const char *testing = getenv(\"SHAAR_ENGINE_TESTING\");\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_engine_testing_start_write_is_allowed(self):
+        self.plant(
+            "Sources/ChromiumBridge/Backend.mm",
+            "- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {\n"
+            "  // The pinned engine reads SHAAR_ENGINE_TESTING.\n"
+            "  setenv(\"SHAAR_ENGINE_TESTING\", engineTesting, 1);\n"
+            "  unsetenv(\"SHAAR_ENGINE_TESTING\");\n"
+            "}\n",
+        )
+        self.assertEqual(GUARD.findings(self.root), [])
+
+    def test_engine_testing_read_in_the_start_file_fails(self):
+        self.plant(
+            "Sources/ChromiumBridge/Backend.mm",
+            "- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {\n"
+            "  const char *testing = getenv(\"SHAAR_ENGINE_TESTING\");\n"
+            "}\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_engine_testing_string_in_the_binary_is_allowed(self):
+        self.binary.write_bytes(b"prefix SHAAR_ENGINE_TESTING suffix")
+        self.assertEqual(GUARD.findings(self.root, self.binary), [])
+
     def test_shared_product_dispatch_flag_is_allowed(self):
         self.plant(
             "Sources/ShaarVerification/Preview.swift",

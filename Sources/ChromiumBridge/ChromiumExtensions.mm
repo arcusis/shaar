@@ -5,9 +5,6 @@
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumShaarExtensionsInternal.h"
 
-#include <cstdlib>
-#include <cstring>
-
 static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfafp";
 // Chromium 155 extensions/common/mojom/manifest.mojom ManifestLocation values.
 static const NSInteger ARCComponentExtensionLocation = 5;
@@ -112,33 +109,6 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
     }];
   }
   return state.lists[validated] ?: @[];
-}
-
-- (void)probeFrameworkDevToolsForProfileID:(NSString *)profileID
-    completion:(void (^)(NSDictionary<NSString *, id> *, NSError *))completion {
-  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
-  if (!testing || std::strcmp(testing, "1") != 0) {
-    completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
-    return;
-  }
-  NSString *validated = ARCValidatedProfileID(profileID);
-  if (!validated) {
-    completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
-    return;
-  }
-  BOOL accepted = [self shaarSubmitExtensionOperation:SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS
-      profileID:validated tabID:nil payload:@{@"schemaVersion": @1}
-      completion:^(NSString *json, shaar_error_code code) {
-        NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
-        NSDictionary *reply = data ? [NSJSONSerialization JSONObjectWithData:data
-            options:0 error:nil] : nil;
-        if (code != SHAAR_OK || ![reply isKindOfClass:NSDictionary.class]) {
-          completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
-        } else {
-          completion(reply, nil);
-        }
-      }];
-  if (!accepted) completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
 }
 
 - (NSString *)extensionActionTitleForID:(NSString *)extensionID tabID:(NSString *)tabID {

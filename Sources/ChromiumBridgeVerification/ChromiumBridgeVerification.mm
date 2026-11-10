@@ -3,8 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridgeVerification.h"
-#import "../ChromiumBridge/ChromiumProbeRoot.h"
+#import "ChromiumProbeRoot.h"
 #import "../ChromiumBridge/ChromiumRuntimeInternal.h"
+#import "../ChromiumBridge/ChromiumShaarExtensionsInternal.h"
 #import "../ChromiumBridge/ChromiumMediaSession.h"
 #import "../ChromiumBridge/ChromiumShaarPrivateSupport.h"
 #import <objc/runtime.h>
@@ -1174,6 +1175,37 @@ extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
     @"parity-action"]];
   return [allowed containsObject:elementID];
 }
+
+@implementation ARCShaarRuntime (FrameworkDevToolsVerification)
+
+- (void)probeFrameworkDevToolsForProfileID:(NSString *)profileID
+    completion:(void (^)(NSDictionary<NSString *, id> *, NSError *))completion {
+  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (!testing || std::strcmp(testing, "1") != 0) {
+    completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
+    return;
+  }
+  NSString *validated = ARCValidatedProfileID(profileID);
+  if (!validated) {
+    completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
+    return;
+  }
+  BOOL accepted = [self shaarSubmitExtensionOperation:SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS
+      profileID:validated tabID:nil payload:@{@"schemaVersion": @1}
+      completion:^(NSString *json, shaar_error_code code) {
+        NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+        NSDictionary *reply = data ? [NSJSONSerialization JSONObjectWithData:data
+            options:0 error:nil] : nil;
+        if (code != SHAAR_OK || ![reply isKindOfClass:NSDictionary.class]) {
+          completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
+        } else {
+          completion(reply, nil);
+        }
+      }];
+  if (!accepted) completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
+}
+
+@end
 
 @implementation ARCShaarRuntime (TrustedProbeClick)
 

@@ -282,12 +282,8 @@ shaar_error_code Query(HistoryContext *registry, shaar_scope scope,
              std::shared_ptr<base::CancelableTaskTracker> tracker,
              int max_urls, int max_visits, history::QueryResults results) {
         (void)tracker;
-        if (results.size() >= static_cast<size_t>(max_urls * max_visits)) {
-          ReplyError(
-              request, SHAAR_POLICY_BLOCKED,
-              "history exceeds the bounded query; continuation is unavailable");
-          return;
-        }
+        // QueryHistory's max_count is the caller's requested result bound.
+        // Reaching that bound is a valid full page, not a query failure.
         std::vector<QueryRow> rows;
         std::map<std::string, size_t> by_url;
         for (const history::URLResult &result : results) {

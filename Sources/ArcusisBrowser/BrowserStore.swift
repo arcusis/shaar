@@ -145,7 +145,7 @@ final class BrowserStore {
   @ObservationIgnored var sharedPinID: ((UUID) -> UUID?)?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
   @ObservationIgnored var onTransferTabFromAnotherWindow:
-    ((UUID, UUID, UUID, UUID?, Bool?, UUID?) -> Bool)?
+    ((UUID, UUID, UUID, UUID, UUID?, Bool?, UUID?) -> Bool)?
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
   /// The host's menu commands for the launcher's Actions; nil hides Actions.
   @ObservationIgnored var launcherActions: LauncherActions?
@@ -1307,7 +1307,7 @@ final class BrowserStore {
       if sessionID != dragSessionID {
         guard
           onTransferTabFromAnotherWindow?(
-            tab, source, space, targetTab, pinned, folderID) == true
+            sessionID, tab, source, space, targetTab, pinned, folderID) == true
         else { return false }
         tabDrag = nil
         return true

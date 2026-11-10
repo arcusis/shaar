@@ -22,6 +22,11 @@ struct BrowserWorkspaceStoreTests {
     let transfer = SidebarTransfer.tab(
       sessionID: source.dragSessionID, sourceSpaceID: sourceSpaceID, tabID: tabID)
 
+    let staleTransfer = SidebarTransfer.tab(
+      sessionID: UUID(), sourceSpaceID: sourceSpaceID, tabID: tabID)
+    #expect(!destination.acceptSidebarDrop(staleTransfer, into: destinationSpaceID))
+    #expect(source.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
+
     #expect(destination.acceptSidebarDrop(transfer, into: destinationSpaceID))
     #expect(!source.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
     #expect(destination.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })

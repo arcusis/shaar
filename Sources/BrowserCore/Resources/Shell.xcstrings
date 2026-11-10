@@ -3185,6 +3185,22 @@
         }
       }
     },
+    "The tab could not be moved. It remains in its original window.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The tab could not be moved. It remains in its original window."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להעביר את הלשונית. היא נשארת בחלון המקורי שלה."
+          }
+        }
+      }
+    },
     "The extension request could not be verified for this page and profile.": {
       "localizations": {
         "en": {

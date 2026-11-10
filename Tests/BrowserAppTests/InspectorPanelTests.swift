@@ -15,11 +15,49 @@ import Testing
     .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/inspect")!)
   }
 
-  @Test func idleInspectorPollBacksOffAfterUnchangedReads() {
-    #expect(InspectorModel.idlePollDelay(unchangedReads: 0) == .milliseconds(150))
-    #expect(InspectorModel.idlePollDelay(unchangedReads: 3) == .milliseconds(150))
-    #expect(InspectorModel.idlePollDelay(unchangedReads: 4) == .seconds(1))
-    #expect(InspectorModel.idlePollDelay(unchangedReads: 20) == .seconds(1))
+  @Test func inspectorPollBacksOffAfterUnchangedLockedReadsThenResets() {
+    var cadence = InspectorPollCadence()
+    cadence.selectionLocked = true
+    for _ in 0..<3 { cadence.note(.unchanged) }
+    #expect(cadence.delay == InspectorPollCadence.fastInterval)
+    cadence.note(.unchanged)
+    #expect(cadence.unchangedReads == 4)
+    #expect(cadence.delay == InspectorPollCadence.idleInterval)
+    cadence.note(.changed)
+    #expect(cadence.unchangedReads == 0)
+    #expect(cadence.delay == InspectorPollCadence.fastInterval)
+    for _ in 0..<4 { cadence.note(.unchanged) }
+    #expect(cadence.delay == InspectorPollCadence.idleInterval)
+    cadence.wake()
+    #expect(cadence.delay == InspectorPollCadence.fastInterval)
+  }
+
+  @Test func inspectorPollReadsAPickingClickWithinOneFastInterval() {
+    var cadence = InspectorPollCadence()
+    for _ in 0..<20 { cadence.note(.unchanged) }
+    #expect(cadence.selectionLocked == false)
+    #expect(cadence.delay == .milliseconds(150))
+    cadence.note(.changed)
+    cadence.selectionLocked = true
+    #expect(cadence.delay == .milliseconds(150))
+  }
+
+  @Test func inspectorPollBacksOffWhenReadsMissThePage() {
+    var cadence = InspectorPollCadence()
+    for _ in 0..<3 { cadence.note(.unavailable) }
+    #expect(cadence.delay == .milliseconds(150))
+    cadence.note(.unavailable)
+    #expect(cadence.delay == .seconds(1))
+    cadence.note(.unchanged)
+    #expect(cadence.unavailableReads == 0)
+    #expect(cadence.delay == .milliseconds(150))
+  }
+
+  @Test func inspectorRefreshTreatsAMissingPageAsUnchanged() async {
+    let model = InspectorModel(target: target, engine: nil)
+    model.open()
+    defer { model.close() }
+    #expect(await model.refresh() == .unavailable)
   }
 
   @Test func shippingPickerScriptParsesAsJavaScript() throws {

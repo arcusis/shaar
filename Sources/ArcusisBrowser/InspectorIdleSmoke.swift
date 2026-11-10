@@ -55,6 +55,11 @@ import Foundation
         throw Failure("Inspector page script did not install")
       }
       _ = try await model.evaluate(pollCounter)
+      let locked =
+        try await model.evaluate(
+          "globalThis.__shaarInspectorV2.select(document.querySelector('main') || document.body) === true"
+        ) as? Bool
+      guard locked == true else { throw Failure("Inspector did not lock an element") }
       try await Task.sleep(for: .seconds(2))
       _ = try await model.evaluate("globalThis.__shaarInspectorPollCalls = 0; true")
       try await Task.sleep(for: .seconds(5))
@@ -65,6 +70,7 @@ import Foundation
         [
           "passed": backedOff && hidden && model.isOpen,
           "calls": calls,
+          "locked": true,
           "allWindowsHidden": hidden,
           "inspectorOpen": model.isOpen,
           "targetURL": target.url.absoluteString,

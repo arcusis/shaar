@@ -84,6 +84,7 @@ def main():
         "shippingExecutable": str(executable),
         "exitCode": result.returncode,
         "calls": report.get("calls"),
+        "locked": report.get("locked"),
         "allWindowsHidden": report.get("allWindowsHidden"),
         "inspectorOpen": report.get("inspectorOpen"),
         "crashReports": crashes,

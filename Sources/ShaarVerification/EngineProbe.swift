@@ -623,6 +623,7 @@ final class EngineProbe {
             "liveTabs": browserEngine.liveTabs.count,
             "placeholders": measurementTabCount - browserEngine.liveTabs.count,
             "inspector": measurementInspector,
+            "inspectorLocked": measurementInspector,
             "readyAt": ProcessInfo.processInfo.systemUptime,
           ] as [String: Any]
         try JSONSerialization.data(withJSONObject: ready, options: [.sortedKeys])
@@ -1131,6 +1132,13 @@ final class EngineProbe {
         installed
       {
         _ = try await model.evaluate(Self.inspectorPollCounter)
+        let locked =
+          try await model.evaluate(
+            "globalThis.__shaarInspectorV2.select(document.querySelector('main') || document.body) === true"
+          ) as? Bool
+        guard locked == true else {
+          throw ProbeFailure("Measurement inspector did not lock an element.")
+        }
         try await Task.sleep(for: .seconds(2))
         _ = try await model.evaluate("globalThis.__shaarInspectorPollCalls = 0; true")
         return

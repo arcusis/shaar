@@ -49,6 +49,9 @@ final class InspectorModel {
   @ObservationIgnored private var lastRevision = -1
   @ObservationIgnored private var lastFonts = Date.distantPast
   @ObservationIgnored private var pollTask: Task<Void, Never>?
+  @ObservationIgnored private var pollWait: Task<Void, Never>?
+  @ObservationIgnored private var pollEpoch = 0
+  @ObservationIgnored private var pollCadence = InspectorPollCadence()
   @ObservationIgnored private var refreshing = false
   @ObservationIgnored private var fontTask: Task<Void, Never>?
   @ObservationIgnored private var cachedPageFonts: [String] = []
@@ -74,30 +77,52 @@ final class InspectorModel {
     installed = false
     lastRevision = -1
     failure = nil
+    pollEpoch = 0
+    pollCadence = InspectorPollCadence()
     pollTask = Task { [weak self] in
-      var unchangedReads = 0
       while !Task.isCancelled {
         guard let self, self.isOpen else { return }
-        if await self.refresh() { unchangedReads = 0 } else { unchangedReads += 1 }
-        let delay = Self.idlePollDelay(unchangedReads: unchangedReads)
-        do { try await Task.sleep(for: delay) } catch { return }
+        let epoch = self.pollEpoch
+        let read = await self.refresh()
+        guard self.isOpen, !Task.isCancelled else { return }
+        if self.pollEpoch != epoch {
+          self.pollCadence.wake()
+          continue
+        }
+        self.pollCadence.note(read)
+        self.pollCadence.selectionLocked = self.mode == .locked
+        let delay = self.pollCadence.delay
+        let wait = Task<Void, Never> { try? await Task.sleep(for: delay) }
+        self.pollWait = wait
+        if self.pollEpoch != epoch {
+          wait.cancel()
+          self.pollCadence.wake()
+        }
+        await wait.value
+        if self.pollWait == wait { self.pollWait = nil }
       }
     }
   }
 
-  /// Stay responsive while the selection is moving. After four unchanged reads,
-  /// an open inspector checks the page once a second instead of six times.
-  static func idlePollDelay(unchangedReads: Int) -> Duration {
-    if unchangedReads >= 4 { return .seconds(1) }
-    return .milliseconds(150)
+  /// Cancel the in-flight wait so the next read happens now.
+  private func wakePoll() {
+    pollEpoch += 1
+    pollCadence.wake()
+    pollWait?.cancel()
+  }
+
+  private func endPoll() {
+    pollWait?.cancel()
+    pollWait = nil
+    pollTask?.cancel()
+    pollTask = nil
   }
 
   /// Hide Inspector immediately. Page commands still run until `close()`.
   func stopPresenting() {
     presentation.dismiss()
     mode = .closed
-    pollTask?.cancel()
-    pollTask = nil
+    endPoll()
     fontTask?.cancel()
     fontTask = nil
   }
@@ -107,8 +132,7 @@ final class InspectorModel {
     aiCopy.cancel()
     sourceActions.cancel()
     generation += 1
-    pollTask?.cancel()
-    pollTask = nil
+    endPoll()
     fontTask?.cancel()
     fontTask = nil
     mode = .closed
@@ -150,7 +174,10 @@ final class InspectorModel {
       lastPageFontScan = .distantPast
       lastRevision = -1
       selection = nil
-      if isOpen { mode = .picking }
+      if isOpen {
+        mode = .picking
+        wakePoll()
+      }
       connection?.end(target)
     }
   }
@@ -158,6 +185,7 @@ final class InspectorModel {
   func setPanelMode(_ value: PanelMode) {
     guard isOpen else { return }
     guard value == .element || supportsPageTools else { return }
+    wakePoll()
     presentation.copyMenuOpen = false
     panelMode = value
     if value == .page, pageTools == nil, let engine {
@@ -181,21 +209,26 @@ final class InspectorModel {
       open()
       return nil
     }
+    wakePoll()
     let revision = generation
     return Task { [weak self] in
       guard let self, self.generation == revision, self.isOpen else { return }
       _ = try? await self.evaluate("globalThis.__shaarInspectorV2?.pick(); true")
       guard self.generation == revision, self.isOpen else { return }
       self.mode = .picking
+      await self.refresh()
     }
   }
 
   func selectAncestor(_ id: Int) {
     guard isOpen, selection?.ancestors.contains(where: { $0.id == id }) == true else { return }
+    wakePoll()
     let revision = generation
     Task { [weak self] in
       guard let self, self.generation == revision, self.isOpen else { return }
       _ = try? await self.evaluate("globalThis.__shaarInspectorV2?.choose(\(id)); true")
+      guard self.generation == revision, self.isOpen else { return }
+      await self.refresh()
     }
   }
 
@@ -203,10 +236,13 @@ final class InspectorModel {
     guard isOpen, panelMode == .element, ["up", "down", "left", "right"].contains(direction) else {
       return
     }
+    wakePoll()
     let revision = generation
     Task { [weak self] in
       guard let self, self.generation == revision, self.isOpen else { return }
       _ = try? await self.evaluate("globalThis.__shaarInspectorV2?.navigate('\(direction)'); true")
+      guard self.generation == revision, self.isOpen else { return }
+      await self.refresh()
     }
   }
 
@@ -237,12 +273,14 @@ final class InspectorModel {
     }
   }
 
-  /// True when the selection moved or the page was not ready for a stable read.
-  /// False when a read completed and the selection revision was unchanged.
+  /// Changed when the selection moved. Unavailable when the page could not be read.
+  /// Busy when another read is already in flight. Unchanged when the revision held.
   @discardableResult
-  func refresh() async -> Bool {
-    guard !refreshing, isOpen, let connection, connection.isReady(for: target)
-    else { return true }
+  func refresh() async -> InspectorPollRead {
+    if refreshing { return .busy }
+    guard isOpen, let connection, connection.isReady(for: target) else {
+      return isOpen ? .unavailable : .unchanged
+    }
     refreshing = true
     defer { refreshing = false }
     let revision = generation
@@ -258,31 +296,31 @@ final class InspectorModel {
         _ = try await call("DOM.enable")
         _ = try await call("DOM.getDocument", params: ["depth": 0])
         _ = try await call("CSS.enable")
-        guard revision == generation, isOpen else { return true }
+        guard revision == generation, isOpen else { return .unchanged }
         installed = true
         if panelMode == .page {
           _ = try await evaluate("globalThis.__shaarInspectorV2.suspend(true)")
         }
-        return true
+        return .changed
       }
-      if panelMode == .page { return false }
+      if panelMode == .page { return .unchanged }
       guard
         let state = try await evaluate("globalThis.__shaarInspectorV2?.read()") as? [String: Any],
         revision == generation, isOpen
-      else { return true }
+      else { return .unavailable }
       if state["closed"] as? Bool == true {
         close()
-        return true
+        return .changed
       }
       guard let value = state["selection"] as? [String: Any] else {
         let hadSelection = selection != nil
         selection = nil
         mode = .picking
-        return hadSelection
+        return hadSelection ? .changed : .unchanged
       }
       let valueRevision = value["revision"] as? Int ?? -1
       let revisionChanged = valueRevision != lastRevision
-      guard revisionChanged || Date().timeIntervalSince(lastFonts) > 2 else { return false }
+      guard revisionChanged || Date().timeIntervalSince(lastFonts) > 2 else { return .unchanged }
       let data = try JSONSerialization.data(withJSONObject: value)
       guard data.count <= 1_048_576 else {
         throw InspectorFailure(InspectorL10n.string("Element data exceeds the supported size."))
@@ -320,18 +358,18 @@ final class InspectorModel {
         }
       }
       let liveRevision = try await evaluate("globalThis.__shaarInspectorV2?.revision()") as? Int
-      guard revision == generation, isOpen, liveRevision == valueRevision else { return true }
+      guard revision == generation, isOpen, liveRevision == valueRevision else { return .changed }
       next.pageFonts = cachedPageFonts
       try receive(next)
       if fontTask == nil && Date().timeIntervalSince(lastPageFontScan) > 15 {
         fontTask = Task { [weak self] in await self?.scanPageFonts() }
       }
-      return revisionChanged
+      return revisionChanged ? .changed : .unchanged
     } catch {
       if revision == generation, !Task.isCancelled {
         failure = InspectorL10n.display(error.localizedDescription)
       }
-      return true
+      return .unavailable
     }
   }
 
@@ -515,9 +553,55 @@ final class InspectorModel {
   }
 
   isolated deinit {
+    pollWait?.cancel()
     pollTask?.cancel()
     fontTask?.cancel()
   }
+}
+
+/// Decides how soon Inspector reads the page again.
+/// Picking stays on the fast interval so a click is read within 150 ms.
+/// A locked selection that stays still, or four reads that miss the page, wait one second.
+struct InspectorPollCadence: Equatable {
+  static let fastInterval: Duration = .milliseconds(150)
+  static let idleInterval: Duration = .seconds(1)
+  private(set) var unchangedReads = 0
+  private(set) var unavailableReads = 0
+  var selectionLocked = false
+
+  mutating func note(_ read: InspectorPollRead) {
+    switch read {
+    case .changed:
+      unchangedReads = 0
+      unavailableReads = 0
+    case .unchanged:
+      unchangedReads += 1
+      unavailableReads = 0
+    case .unavailable:
+      unchangedReads += 1
+      unavailableReads += 1
+    case .busy:
+      break
+    }
+  }
+
+  mutating func wake() {
+    unchangedReads = 0
+    unavailableReads = 0
+  }
+
+  var delay: Duration {
+    if unavailableReads >= 4 { return Self.idleInterval }
+    if selectionLocked && unchangedReads >= 4 { return Self.idleInterval }
+    return Self.fastInterval
+  }
+}
+
+enum InspectorPollRead: Equatable {
+  case changed
+  case unchanged
+  case unavailable
+  case busy
 }
 
 struct InspectorFailure: LocalizedError {

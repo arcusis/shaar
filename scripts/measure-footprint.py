@@ -243,7 +243,7 @@ def parse_main_thread_sample(text):
     }
 
 
-def measure_case(executable, port, tab_count, sample_seconds, eager):
+def measure_case(executable, port, tab_count, sample_seconds, eager, inspector):
     with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as temporary:
         root = Path(temporary)
         (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
@@ -257,6 +257,8 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
         ]
         if eager:
             command.append("--probe-measure-eager")
+        if inspector:
+            command.append("--probe-measure-inspector")
         started = time.monotonic()
         stderr_path = root / "probe-stderr.txt"
         stderr_file = stderr_path.open("w")
@@ -284,6 +286,10 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
                     or ready.get("liveTabs") != expected_live
                     or ready.get("placeholders") != tab_count - expected_live):
                 raise RuntimeError(f"unexpected materialization report: {ready}")
+            if inspector and (
+                ready.get("inspector") is not True or ready.get("inspectorLocked") is not True
+            ):
+                raise RuntimeError(f"inspector was not locked for measurement: {ready}")
             cold_seconds = time.monotonic() - started
             rss_samples, app_rss_samples, cpu_samples, process_samples = [], [], [], []
             sample_end = time.monotonic() + sample_seconds
@@ -326,6 +332,24 @@ def measure_case(executable, port, tab_count, sample_seconds, eager):
                 "samples": len(rss_samples),
             }
             result.update(thread)
+            if inspector:
+                sidecar = root / "inspector-poll.json"
+                deadline = time.monotonic() + 2
+                while not sidecar.is_file() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                if not sidecar.is_file():
+                    raise RuntimeError("inspector poll sidecar missing")
+                samples = json.loads(sidecar.read_text()).get("samples") or []
+                if not samples:
+                    raise RuntimeError("inspector poll sidecar was empty")
+                last = samples[-1]
+                calls = last["calls"]
+                elapsed = last["elapsedSeconds"]
+                result["inspectorPollCalls"] = calls
+                result["inspectorPollElapsedSeconds"] = elapsed
+                result["inspectorPollCallsPerSecond"] = (
+                    round(calls / elapsed, 2) if elapsed else None
+                )
             return result
         finally:
             if process.poll() is None:
@@ -365,6 +389,10 @@ def main():
         help="Comma-separated saved-tab counts. Allowed: 1, 10, 30, 50, 100.",
     )
     parser.add_argument("--eager", action="store_true", help="measure the former eager probe mode")
+    parser.add_argument(
+        "--inspector", action="store_true",
+        help="open Inspector, lock the page, and record how often it reads",
+    )
     args = parser.parse_args()
     tab_counts = parse_tab_counts(args.tab_counts)
     executable = args.app / "Contents/MacOS/ShaarVerification"
@@ -373,10 +401,13 @@ def main():
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FixtureHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
+        counts = (1,) if args.inspector else tab_counts
         cases = [
             measure_case(
-                executable, server.server_port, count, args.sample_seconds, args.eager)
-            for count in tab_counts
+                executable, server.server_port, count, args.sample_seconds,
+                args.eager, args.inspector,
+            )
+            for count in counts
         ]
     finally:
         server.shutdown()

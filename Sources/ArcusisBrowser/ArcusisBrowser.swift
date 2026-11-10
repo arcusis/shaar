@@ -268,6 +268,8 @@ private struct SettingsPreview: View {
       profiles: withProfiles ? profiles : [], searchEngines: searchEngines,
       selectedProfileID: $selectedProfileID, sidebarInitiallyVisible: $sidebarInitiallyVisible,
       selectedSearchEngine: $selectedSearchEngine,
+      httpsOnlyModeEnabled: { _ in true },
+      onSetHttpsOnlyMode: { _, _ in true },
       initialSection: withProfiles ? .profiles : .general
     )
     .onAppear {

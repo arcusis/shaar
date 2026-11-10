@@ -82,6 +82,8 @@ import Testing
     searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
     selectedProfileID: selectedProfileID,
     sidebarInitiallyVisible: .constant(true), selectedSearchEngine: .constant("google"),
+    httpsOnlyModeEnabled: { _ in true },
+    onSetHttpsOnlyMode: { _, _ in true },
     initialSection: .profiles)
   let host = NSHostingView(rootView: view)
   host.frame = NSRect(x: 0, y: 0, width: 720, height: 560)

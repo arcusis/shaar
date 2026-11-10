@@ -27,11 +27,11 @@ extension ProfileSettingsBackend {
 
 extension ARCChromiumRuntime {
   /// Loads a profile after applying the stored HTTPS-only choice.
-  /// Settings and the browsing engine share this path.
+  /// Settings and the browsing engine share this path. Nil leaves a stored value unchanged.
   func loadProfileID(
-    _ profileID: UUID, httpsOnly enabled: Bool, completion: @escaping (Error?) -> Void
+    _ profileID: UUID, httpsOnly enabled: Bool?, completion: @escaping (Error?) -> Void
   ) {
-    if let shaar = self as? ARCShaarRuntime {
+    if let enabled, let shaar = self as? ARCShaarRuntime {
       _ = shaar.setHttpsOnlyModeEnabled(enabled, forProfileID: profileID.uuidString)
     }
     loadProfileID(profileID.uuidString, completion: completion)
@@ -41,7 +41,7 @@ extension ARCChromiumRuntime {
 @MainActor
 struct EngineProfileSettings: ProfileSettingsBackend {
   let runtime: ARCChromiumRuntime
-  var httpsOnlyMode: (UUID) -> Bool = { _ in true }
+  let httpsOnlyMode: (UUID) -> Bool?
 
   func loadProfile(_ id: UUID) async throws {
     try await withCheckedThrowingContinuation {

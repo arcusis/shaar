@@ -67,6 +67,11 @@ import Testing
     let fresh = UUID().uuidString
     #expect(ARCSeedHttpsOnlyPreference(root, fresh, nil)?.boolValue == true)
     #expect(ARCReadHttpsOnlyPreference(root, fresh)?.boolValue == true)
+    let freshDirectory = root.appending(path: "Profile \(fresh.lowercased())")
+    #expect(
+      try FileManager.default.contentsOfDirectory(atPath: freshDirectory.path) == [
+        "Preferences"
+      ])
     #expect(ARCSeedHttpsOnlyPreference(root, "not-a-profile", nil) == nil)
   }
 

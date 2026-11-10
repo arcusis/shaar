@@ -167,7 +167,10 @@ final class HebrewLocalizationVisualTests: XCTestCase {
           ],
           searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
           selectedProfileID: .constant(id), sidebarInitiallyVisible: .constant(true),
-          selectedSearchEngine: .constant("google"), initialSection: section
+          selectedSearchEngine: .constant("google"),
+          httpsOnlyModeEnabled: { _ in true },
+          onSetHttpsOnlyMode: { _, _ in true },
+          initialSection: section
         )
         .environment(\.colorScheme, theme)
         let sectionName = section == .general ? "settings" : "settings-\(section.rawValue)"

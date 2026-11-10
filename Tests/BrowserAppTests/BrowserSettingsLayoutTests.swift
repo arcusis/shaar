@@ -31,7 +31,10 @@ final class BrowserSettingsLayoutTests: XCTestCase {
         BrowserSettingsChoice(id: "duckDuckGo", title: "DuckDuckGo"),
         BrowserSettingsChoice(id: "bing", title: "Bing"),
       ], selectedProfileID: selectedProfileID, sidebarInitiallyVisible: sidebarInitiallyVisible,
-      selectedSearchEngine: selectedSearchEngine, initialSection: .profiles)
+      selectedSearchEngine: selectedSearchEngine,
+      httpsOnlyModeEnabled: { _ in true },
+      onSetHttpsOnlyMode: { _, _ in true },
+      initialSection: .profiles)
 
     let host = layout(view, size: NSSize(width: 620, height: 500))
 
@@ -50,6 +53,8 @@ final class BrowserSettingsLayoutTests: XCTestCase {
     let view = BrowserSettingsView(
       profiles: [], searchEngines: [], selectedProfileID: selectedProfileID,
       sidebarInitiallyVisible: sidebarInitiallyVisible, selectedSearchEngine: selectedSearchEngine,
+      httpsOnlyModeEnabled: { _ in true },
+      onSetHttpsOnlyMode: { _, _ in true },
       initialSection: .general)
 
     let host = layout(view, size: NSSize(width: 720, height: 650))
@@ -76,7 +81,10 @@ final class BrowserSettingsLayoutTests: XCTestCase {
       ],
       searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
       selectedProfileID: selectedProfileID, sidebarInitiallyVisible: sidebarInitiallyVisible,
-      selectedSearchEngine: selectedSearchEngine, initialSection: .profiles)
+      selectedSearchEngine: selectedSearchEngine,
+      httpsOnlyModeEnabled: { _ in true },
+      onSetHttpsOnlyMode: { _, _ in true },
+      initialSection: .profiles)
 
     let host = layout(view, size: NSSize(width: 620, height: 500))
 
@@ -92,6 +100,8 @@ final class BrowserSettingsLayoutTests: XCTestCase {
     let view = BrowserSettingsView(
       profiles: [], searchEngines: [], selectedProfileID: selectedProfileID,
       sidebarInitiallyVisible: sidebarInitiallyVisible, selectedSearchEngine: selectedSearchEngine,
+      httpsOnlyModeEnabled: { _ in true },
+      onSetHttpsOnlyMode: { _, _ in true },
       initialSection: .profiles)
 
     let host = layout(view, size: NSSize(width: 620, height: 500))

@@ -196,6 +196,8 @@ final class MarketingScreenshots {
       },
       selectedProfileID: .constant(profile), sidebarInitiallyVisible: .constant(true),
       selectedSearchEngine: .constant(BrowserSearchEngine.google.rawValue),
+      httpsOnlyModeEnabled: { _ in true },
+      onSetHttpsOnlyMode: { _, _ in true },
       initialSection: .profiles
     )
     .environment(\.colorScheme, .light)

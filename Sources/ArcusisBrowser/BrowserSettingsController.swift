@@ -46,7 +46,7 @@ final class BrowserSettingsState {
       ?? runtime.map { engine in
         EngineProfileSettings(
           runtime: engine,
-          httpsOnlyMode: { preferences.httpsOnlyModeEnabled(for: $0) })
+          httpsOnlyMode: { preferences.httpsOnlyChoice(for: $0) })
       }
     applyDownloadDirectoryToEngine = applyDownloadDirectory
     self.downloadDirectorySettingsEnabled =

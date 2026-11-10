@@ -21,7 +21,7 @@ final class ProfilePrivacyProbe {
   }
 
   func run() async throws -> [String] {
-    let backend = EngineProfileSettings(runtime: runtime)
+    let backend = EngineProfileSettings(runtime: runtime) { _ in nil }
     let first = UUID()
     let second = UUID()
     let firstTab = UUID()

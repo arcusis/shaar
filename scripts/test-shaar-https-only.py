@@ -96,16 +96,24 @@ def main() -> None:
             allowed = launch(app, root, url, upgrade=False)
         server.shutdown()
     new_crashes = sorted(crash_names() - before)
-    if new_crashes or not upgraded.get("passed") or not allowed.get("passed"):
+    first_open = ["Preferences"]
+    if (
+        new_crashes
+        or not upgraded.get("passed")
+        or not allowed.get("passed")
+        or upgraded.get("profileFilesBeforeOpen") != first_open
+        or allowed.get("profileFilesBeforeOpen") != first_open
+    ):
         raise SystemExit(
             json.dumps({
                 "upgraded": upgraded, "allowed": allowed, "newCrashes": new_crashes,
             }, indent=2))
     print(json.dumps({
         "upgraded": {key: upgraded.get(key) for key in (
-            "passed", "href", "seededHttpsOnly", "allWindowsHidden")},
+            "passed", "href", "seededHttpsOnly", "profileFilesBeforeOpen", "allWindowsHidden")},
         "allowed": {key: allowed.get(key) for key in (
-            "passed", "href", "seededHttpsOnly", "pageText", "allWindowsHidden")},
+            "passed", "href", "seededHttpsOnly", "profileFilesBeforeOpen", "pageText",
+            "allWindowsHidden")},
         "newCrashes": [],
     }, indent=2))
 

@@ -190,7 +190,14 @@ final class HttpsOnlyProbe {
   private func finish(passed: Bool = false, error: String? = nil) {
     guard !finished else { return }
     finished = true
+    let files = runtime.profileDirectoryEntriesBeforeOpen(forProfileID: profileID.uuidString)
+    var message = error
     self.passed = passed && error == nil
+    if self.passed && files != ["Preferences"] {
+      self.passed = false
+      let listed = files.isEmpty ? "nothing" : files.joined(separator: ", ")
+      message = "First-open profile directory contained \(listed)."
+    }
     let snippet = String(lastText.prefix(400))
     let report: [String: Any] = [
       "schemaVersion": 1,
@@ -200,9 +207,10 @@ final class HttpsOnlyProbe {
       "href": lastHref,
       "pageText": snippet,
       "seededHttpsOnly": seededValue(),
+      "profileFilesBeforeOpen": files,
       "allWindowsHidden": windowsHidden,
       "requestedURL": pageURL.absoluteString,
-      "error": error ?? "",
+      "error": message ?? "",
     ]
     do {
       try FileManager.default.createDirectory(

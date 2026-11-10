@@ -57,7 +57,10 @@ final class ProfileEditorVisualTests: XCTestCase {
       let view = BrowserSettingsView(
         profiles: profiles, searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
         selectedProfileID: .constant(workID), sidebarInitiallyVisible: .constant(true),
-        selectedSearchEngine: .constant("google"), initialSection: .profiles)
+        selectedSearchEngine: .constant("google"),
+        httpsOnlyModeEnabled: { _ in true },
+        onSetHttpsOnlyMode: { _, _ in true },
+        initialSection: .profiles)
       let url = output.appending(path: "settings-profile-editor-\(scheme.name).png")
       try VisualCapture.renderOffscreen(
         view, size: NSSize(width: 720, height: 760), appearance: scheme.appearance, to: url)

@@ -797,7 +797,7 @@ final class BrowserEngine {
       else { continue }
       loadingProfiles.insert(profile)
       runtime.loadProfileID(
-        profile, httpsOnly: store.preferences.httpsOnlyModeEnabled(for: profile)
+        profile, httpsOnly: store.preferences.httpsOnlyChoice(for: profile)
       ) { [weak self] error in
         Task { @MainActor [weak self] in
           await self?.finishLoadingProfile(profile, error: error)

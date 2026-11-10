@@ -167,6 +167,38 @@ private func permissionPayload(
   #expect(media?.kinds == [.camera, .microphone])
 }
 
+@Test func duplicatePermissionEventDoesNotDenyTheLiveRequest() throws {
+  let profile = UUID()
+  let tab = UUID()
+  let window = UUID().uuidString
+  let known = Set([tab])
+  let payload = permissionPayload(tabID: tab, windowID: window, profileID: profile)
+  let intake = WebsitePermissionEvent.intake(
+    from: payload, windowID: window, outstandingIDs: ["permission-1"], knownTabs: known)
+  #expect(intake == .ignoreDuplicate)
+}
+
+@Test func websitePermissionEventsRejectBooleanSchemaAndUnknownEventKind() throws {
+  let profile = UUID()
+  let tab = UUID()
+  let window = UUID().uuidString
+  let known = Set([tab])
+  let boolean = Data(
+    """
+    {"schemaVersion":true,"kind":"websitePermissionRequested","id":"permission-9","profileID":"\(profile.uuidString)","tabID":"\(tab.uuidString)","windowID":"\(window)","pageURL":"https://notes.example/a","origin":"https://notes.example/","permissions":["notifications"],"frameID":"\(permissionFrame)"}
+    """.utf8)
+  let parsed = try #require(
+    JSONSerialization.jsonObject(with: boolean) as? [String: Any])
+  #expect(
+    WebsitePermissionEvent.intake(
+      from: parsed, windowID: window, outstandingIDs: [], knownTabs: known) == .deny)
+  let unknown = WebsitePermissionEvent.intake(
+    from: permissionPayload(
+      kind: "notAPermissionEvent", tabID: tab, windowID: window, profileID: profile),
+    windowID: window, outstandingIDs: [], knownTabs: known)
+  #expect(unknown == .deny)
+}
+
 @Test func privateGrantsStayOnThisVisit() {
   #expect(
     WebsitePermissionPersistence.forGrant(isPrivate: true, kinds: [.notifications]) == .thisVisit)

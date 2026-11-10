@@ -1124,14 +1124,19 @@ final class BrowserEngine {
     let knownTabs = Set(
       store.session.spaces.flatMap(\.tabs).map(\.id) + store.session.favoritePages.map(\.tab.id))
     let outstanding = Set(store.websitePermissionRequests.map(\.id))
-    guard
-      let request = WebsitePermissionEvent.request(
-        from: payload, windowID: windowID, outstandingIDs: outstanding, knownTabs: knownTabs)
-    else {
+    let request: WebsitePermissionRequest
+    switch WebsitePermissionEvent.intake(
+      from: payload, windowID: windowID, outstandingIDs: outstanding, knownTabs: knownTabs)
+    {
+    case .ignoreDuplicate:
+      return
+    case .deny:
       events.resolveMedia(id, windowID: windowID, accepted: false)
       notice = ShellL10n.string(
         "This permission request is unavailable for the current page and profile.")
       return
+    case .show(let shown):
+      request = shown
     }
     if let frameID = request.frameID {
       store.rememberPermissionFrame(request.tabID, frameID: frameID)

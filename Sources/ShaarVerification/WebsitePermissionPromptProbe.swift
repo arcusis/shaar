@@ -11,6 +11,20 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+/// The run passes only when camera and microphone work and the four website prompts appear.
+enum WebsitePermissionProbeVerdict {
+  static let websitePrompts = ["geolocation", "notifications", "midi", "protocol"]
+
+  static func passed(
+    error: String?, mediaPrompted: Bool, mediaTracks: Bool, hidden: Bool,
+    unexpectedSurfaces: [String], promptedNames: [String]
+  ) -> Bool {
+    let appeared = websitePrompts.allSatisfy { promptedNames.contains($0) }
+    return error == nil && mediaPrompted && mediaTracks && hidden && unexpectedSurfaces.isEmpty
+      && appeared
+  }
+}
+
 /// Hidden loopback check for the website permission sheet.
 /// Camera and microphone must still arrive through the existing media event.
 /// Geolocation, notifications, MIDI, and protocol handlers are recorded either way.
@@ -28,7 +42,6 @@ final class WebsitePermissionPromptProbe {
   private var passed = false
   private var mediaPrompted = false
   private var mediaTracks = false
-  private var protocolSheetRendered = false
   private var unexpectedSurfaces: [String] = []
   private var checks: [Check] = []
   private var screenshots: [String] = []
@@ -156,7 +169,6 @@ final class WebsitePermissionPromptProbe {
           if (try? await capture(request, name: name)) != nil {
             check.captured = true
             screenshots.append(name)
-            if page.name == "protocol" { protocolSheetRendered = true }
           }
         }
         store.resolveWebsitePermission(request.id, accepted: page.allow)
@@ -323,12 +335,12 @@ final class WebsitePermissionPromptProbe {
     finished = true
     let hidden = windowsHidden()
     let prompts = checks.filter(\.prompted).map(\.name)
-    let websiteNames = ["geolocation", "notifications", "midi", "protocol"]
-    let websitePromptsAppeared = websiteNames.allSatisfy { name in
-      checks.contains { $0.name == name && $0.prompted }
+    let websitePromptsAppeared = WebsitePermissionProbeVerdict.websitePrompts.allSatisfy {
+      prompts.contains($0)
     }
-    passed =
-      error == nil && mediaPrompted && mediaTracks && hidden && unexpectedSurfaces.isEmpty
+    passed = WebsitePermissionProbeVerdict.passed(
+      error: error, mediaPrompted: mediaPrompted, mediaTracks: mediaTracks, hidden: hidden,
+      unexpectedSurfaces: unexpectedSurfaces, promptedNames: prompts)
     let report: [String: Any] = [
       "schemaVersion": 1,
       "probeMode": "website-permission-prompt",
@@ -336,7 +348,6 @@ final class WebsitePermissionPromptProbe {
       "websitePromptsAppeared": websitePromptsAppeared,
       "mediaPrompted": mediaPrompted,
       "mediaTracks": mediaTracks,
-      "protocolSheetRendered": protocolSheetRendered,
       "allWindowsHidden": hidden,
       "unexpectedSurfaces": unexpectedSurfaces,
       "prompts": prompts,

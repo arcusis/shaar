@@ -181,9 +181,9 @@ def main():
             required = {"geolocation", "notifications", "midi", "protocol"}
             summary = {
                 "exitCode": process.returncode,
+                "passed": payload.get("passed"),
                 "mediaPrompted": payload.get("mediaPrompted"),
                 "mediaTracks": payload.get("mediaTracks"),
-                "protocolSheetRendered": payload.get("protocolSheetRendered"),
                 "allWindowsHidden": payload.get("allWindowsHidden"),
                 "prompts": sorted(prompted),
                 "missingPrompts": sorted(required - prompted),
@@ -191,16 +191,17 @@ def main():
                 "error": payload.get("error", ""),
             }
             print(json.dumps(summary, indent=2))
-            harness = (
-                process.returncode == 0 and not new_crashes
+            completed = (
+                process.returncode in (0, 1) and not new_crashes
                 and payload.get("mediaPrompted") and payload.get("mediaTracks")
                 and payload.get("allWindowsHidden")
-                and not payload.get("unexpectedSurfaces"))
-            if not harness:
+                and not payload.get("unexpectedSurfaces")
+                and not payload.get("error"))
+            if not completed:
                 raise SystemExit(1)
             if dishonest_protocol(payload.get("checks") or []):
                 raise SystemExit(1)
-            if required - prompted:
+            if not payload.get("passed") or required - prompted:
                 raise SystemExit(2)
         server.shutdown()
 

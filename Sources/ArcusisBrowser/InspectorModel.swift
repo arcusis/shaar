@@ -75,11 +75,21 @@ final class InspectorModel {
     lastRevision = -1
     failure = nil
     pollTask = Task { [weak self] in
+      var unchangedReads = 0
       while !Task.isCancelled {
-        if let self, self.isOpen { await self.refresh() } else { return }
-        do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+        guard let self, self.isOpen else { return }
+        if await self.refresh() { unchangedReads = 0 } else { unchangedReads += 1 }
+        let delay = Self.idlePollDelay(unchangedReads: unchangedReads)
+        do { try await Task.sleep(for: delay) } catch { return }
       }
     }
+  }
+
+  /// Stay responsive while the selection is moving. After four unchanged reads,
+  /// an open inspector checks the page once a second instead of six times.
+  static func idlePollDelay(unchangedReads: Int) -> Duration {
+    if unchangedReads >= 4 { return .seconds(1) }
+    return .milliseconds(150)
   }
 
   /// Hide Inspector immediately. Page commands still run until `close()`.
@@ -227,9 +237,12 @@ final class InspectorModel {
     }
   }
 
-  func refresh() async {
+  /// True when the selection moved or the page was not ready for a stable read.
+  /// False when a read completed and the selection revision was unchanged.
+  @discardableResult
+  func refresh() async -> Bool {
     guard !refreshing, isOpen, let connection, connection.isReady(for: target)
-    else { return }
+    else { return true }
     refreshing = true
     defer { refreshing = false }
     let revision = generation
@@ -245,28 +258,31 @@ final class InspectorModel {
         _ = try await call("DOM.enable")
         _ = try await call("DOM.getDocument", params: ["depth": 0])
         _ = try await call("CSS.enable")
-        guard revision == generation, isOpen else { return }
+        guard revision == generation, isOpen else { return true }
         installed = true
         if panelMode == .page {
           _ = try await evaluate("globalThis.__shaarInspectorV2.suspend(true)")
         }
+        return true
       }
-      if panelMode == .page { return }
+      if panelMode == .page { return false }
       guard
         let state = try await evaluate("globalThis.__shaarInspectorV2?.read()") as? [String: Any],
         revision == generation, isOpen
-      else { return }
+      else { return true }
       if state["closed"] as? Bool == true {
         close()
-        return
+        return true
       }
       guard let value = state["selection"] as? [String: Any] else {
+        let hadSelection = selection != nil
         selection = nil
         mode = .picking
-        return
+        return hadSelection
       }
       let valueRevision = value["revision"] as? Int ?? -1
-      guard valueRevision != lastRevision || Date().timeIntervalSince(lastFonts) > 2 else { return }
+      let revisionChanged = valueRevision != lastRevision
+      guard revisionChanged || Date().timeIntervalSince(lastFonts) > 2 else { return false }
       let data = try JSONSerialization.data(withJSONObject: value)
       guard data.count <= 1_048_576 else {
         throw InspectorFailure(InspectorL10n.string("Element data exceeds the supported size."))
@@ -304,16 +320,18 @@ final class InspectorModel {
         }
       }
       let liveRevision = try await evaluate("globalThis.__shaarInspectorV2?.revision()") as? Int
-      guard revision == generation, isOpen, liveRevision == valueRevision else { return }
+      guard revision == generation, isOpen, liveRevision == valueRevision else { return true }
       next.pageFonts = cachedPageFonts
       try receive(next)
       if fontTask == nil && Date().timeIntervalSince(lastPageFontScan) > 15 {
         fontTask = Task { [weak self] in await self?.scanPageFonts() }
       }
+      return revisionChanged
     } catch {
       if revision == generation, !Task.isCancelled {
         failure = InspectorL10n.display(error.localizedDescription)
       }
+      return true
     }
   }
 

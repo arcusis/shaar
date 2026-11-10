@@ -15,6 +15,13 @@ import Testing
     .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/inspect")!)
   }
 
+  @Test func idleInspectorPollBacksOffAfterUnchangedReads() {
+    #expect(InspectorModel.idlePollDelay(unchangedReads: 0) == .milliseconds(150))
+    #expect(InspectorModel.idlePollDelay(unchangedReads: 3) == .milliseconds(150))
+    #expect(InspectorModel.idlePollDelay(unchangedReads: 4) == .seconds(1))
+    #expect(InspectorModel.idlePollDelay(unchangedReads: 20) == .seconds(1))
+  }
+
   @Test func shippingPickerScriptParsesAsJavaScript() throws {
     let context = try #require(JSContext())
     let parse = try #require(

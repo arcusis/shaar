@@ -106,16 +106,16 @@ extension PrivatePageSession {
   }
 
   private func sleepingCandidates(in store: BrowserStore) -> [SleepingTabScheduler.Candidate] {
-    let visible = store.visiblePageIDs
-    let selected = store.session.selectedPage?.tab.id
-    let tabs = store.session.spaces.flatMap(\.tabs) + store.session.favoritePages.map(\.tab)
+    let isProfileDownloading = profileIsDownloading
     return SleepingTabScheduler.candidates(
-      tabs: tabs, liveTabs: liveTabs, visible: visible,
-      isPrivateActive: { $0 == selected },
+      in: store, liveTabs: liveTabs,
       isPlaying: { store.media.sessions[$0]?.isPlaying == true },
       isCapturing: { self.mediaAccess[$0]?.isCapturing == true },
       hasInspector: { self.inspectors[$0] != nil },
       hasDeveloperTools: { self.shaarDevTools[$0] != nil },
-      profileIsDownloading: { _ in false })
+      profileIsDownloading: { id in
+        guard let profile = store.session.profileID(forTabID: id) else { return false }
+        return isProfileDownloading(profile)
+      })
   }
 }

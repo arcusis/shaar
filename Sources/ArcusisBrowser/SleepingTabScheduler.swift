@@ -12,7 +12,6 @@ final class SleepingTabScheduler {
     case unknown
     case probing
     case capable
-    case incapable
   }
 
   struct Candidate: Equatable, Sendable {
@@ -96,8 +95,11 @@ final class SleepingTabScheduler {
       capability = .probing
       probe(sample) { [weak self] capable in
         guard let self else { return }
-        self.capability = capable ? .capable : .incapable
-        guard capable else { return }
+        guard capable else {
+          self.capability = .unknown
+          return
+        }
+        self.capability = .capable
         let runUrgent = self.urgentPending
         self.urgentPending = false
         if runUrgent {
@@ -109,7 +111,7 @@ final class SleepingTabScheduler {
           candidates, now: now, sleeping: sleeping, urgent: false, probe: probe,
           evaluate: evaluate, sleep: sleep, fresh: fresh, onSlept: onSlept)
       }
-    case .probing, .incapable:
+    case .probing:
       return
     case .capable:
       if urgent { urgentPending = false }
@@ -173,11 +175,14 @@ final class SleepingTabScheduler {
   }
 
   static func candidates(
-    tabs: [BrowserTab], liveTabs: Set<UUID>, visible: Set<UUID>,
-    isPrivateActive: (UUID) -> Bool, isPlaying: (UUID) -> Bool, isCapturing: (UUID) -> Bool,
+    in store: BrowserStore, liveTabs: Set<UUID>,
+    isPlaying: (UUID) -> Bool, isCapturing: (UUID) -> Bool,
     hasInspector: (UUID) -> Bool, hasDeveloperTools: (UUID) -> Bool,
     profileIsDownloading: (UUID) -> Bool
   ) -> [Candidate] {
+    let visible = store.visiblePageIDs
+    let selected = store.session.selectedPage?.tab.id
+    let tabs = store.session.spaces.flatMap(\.tabs) + store.session.favoritePages.map(\.tab)
     var seen: Set<UUID> = []
     var candidates: [Candidate] = []
     for tab in tabs where seen.insert(tab.id).inserted {
@@ -185,7 +190,7 @@ final class SleepingTabScheduler {
         Candidate(
           id: tab.id, host: tab.url.host() ?? "", isPinned: tab.isPinned,
           keepAlive: tab.keepAlive, isVisible: visible.contains(tab.id),
-          isPrivateActive: isPrivateActive(tab.id), isPlaying: isPlaying(tab.id),
+          isPrivateActive: store.isPrivate && tab.id == selected, isPlaying: isPlaying(tab.id),
           isCapturing: isCapturing(tab.id), hasInspector: hasInspector(tab.id),
           hasDeveloperTools: hasDeveloperTools(tab.id),
           profileIsDownloading: profileIsDownloading(tab.id),

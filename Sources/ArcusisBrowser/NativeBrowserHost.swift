@@ -207,6 +207,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       runtime: events.runtime, presentsWindows: presentation == .visible,
       keyWindow: keyWindow,
       preferences: preferences,
+      profileIsDownloading: { [weak self] profileID in
+        self?.contexts.values.contains { context in
+          context.engine.downloads.items(in: profileID).contains { $0.state == .downloading }
+        } ?? false
+      },
       sourceProfileID: { [weak self] in
         self?.privateWindowSourceProfileID()
       })

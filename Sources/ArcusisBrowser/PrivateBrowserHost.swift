@@ -25,6 +25,7 @@ final class PrivateBrowserHost {
   private let sourceProfileID: () -> String?
   private let presentsWindows: Bool
   private let preferences: BrowserPreferencesStore
+  private let profileIsDownloading: (UUID) -> Bool
   private var owners: [String: Owner] = [:]
   private var contextsBySource: [String: String] = [:]
   private var windowsByContext: [String: Set<String>] = [:]
@@ -34,12 +35,14 @@ final class PrivateBrowserHost {
     runtime: ARCChromiumRuntime, presentsWindows: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
+    profileIsDownloading: @escaping (UUID) -> Bool = { _ in false },
     sourceProfileID: @escaping () -> String?
   ) {
     self.runtime = runtime
     self.presentsWindows = presentsWindows
     self.keyWindow = keyWindow
     self.preferences = preferences
+    self.profileIsDownloading = profileIsDownloading
     self.sourceProfileID = sourceProfileID
   }
 
@@ -345,7 +348,8 @@ final class PrivateBrowserHost {
     store.usePreferences(preferences)
     let page = PrivatePageSession(
       runtime: runtime, contextID: context, windowID: window,
-      firstTabID: firstTabID, store: store)
+      firstTabID: firstTabID, store: store,
+      profileIsDownloading: profileIsDownloading)
     let hosting = NSHostingView<BrowserWindow?>(rootView: BrowserWindow(store: store))
     hosting.frame = container.bounds
     hosting.autoresizingMask = [.width, .height]

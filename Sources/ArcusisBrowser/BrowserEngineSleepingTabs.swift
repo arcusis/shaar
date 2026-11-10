@@ -94,12 +94,8 @@ extension BrowserEngine {
   }
 
   func sleepingCandidates(in store: BrowserStore) -> [SleepingTabScheduler.Candidate] {
-    let visible = store.visiblePageIDs
-    let selected = store.session.selectedPage?.tab.id
-    let tabs = store.session.spaces.flatMap(\.tabs) + store.session.favoritePages.map(\.tab)
     return SleepingTabScheduler.candidates(
-      tabs: tabs, liveTabs: liveTabs, visible: visible,
-      isPrivateActive: { store.isPrivate && $0 == selected },
+      in: store, liveTabs: liveTabs,
       isPlaying: { store.media.sessions[$0]?.isPlaying == true },
       isCapturing: { self.mediaAccess[$0]?.isCapturing == true },
       hasInspector: { self.inspectors[$0] != nil },

@@ -20,6 +20,13 @@ private struct RendererRecoveryIdentity: Codable {
 /// Terminates authored renderers only. The browser process and original account pages stay alive.
 @MainActor
 final class RendererRecoveryProbe {
+  enum Status: String {
+    case pending
+    case blockedEngineCapabilityMissing = "blocked: engine capability missing"
+    case passed
+    case failed
+  }
+
   let runtime: ARCChromiumRuntime
   let engine: BrowserEngine
   let store: BrowserStore
@@ -27,6 +34,7 @@ final class RendererRecoveryProbe {
   let fixture: URL
   let phase: String
   private var checks: [String] = []
+  private(set) var status = Status.pending
   private var terminations: [[String: Any]] = []
   private var previewWindow: NSWindow?
 
@@ -43,11 +51,17 @@ final class RendererRecoveryProbe {
   }
 
   func run() async throws -> [String] {
+    guard runtime.supportsRendererCrashProbe() else {
+      status = .blockedEngineCapabilityMissing
+      return []
+    }
     do {
       try await exercise()
+      status = .passed
       try report(error: nil)
       return checks
     } catch {
+      status = .failed
       try? report(error: error)
       throw error
     }

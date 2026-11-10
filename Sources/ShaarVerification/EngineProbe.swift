@@ -51,6 +51,7 @@ final class EngineProbe {
   private var passed = false
   private var localFixturesPassed = false
   private var switchMetrics = SwitchProbeMetricsRecorder()
+  private var rendererRecoveryStatus = "not run"
   private let store: BrowserStore
   private var browserEngine: BrowserEngine?
   private var savedTabCapacityFixture: SavedTabCapacityFixture?
@@ -500,6 +501,23 @@ final class EngineProbe {
     throw ProbeFailure("Native tab \(tabID) was not selected; native selection audit: \(selection)")
   }
 
+  private func waitForFirstPaint(_ tabID: String) async throws {
+    let token = UUID().uuidString
+    let schedule = try await evaluate(
+      tabID,
+      "(()=>{requestAnimationFrame(()=>{window.__arcusisProbePaint='\(token)'});return true})()")
+    guard schedule as? Bool == true else {
+      throw ProbeFailure("Selected tab did not schedule its next animation frame.")
+    }
+    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+    repeat {
+      let painted = try await evaluate(tabID, "window.__arcusisProbePaint === '\(token)'")
+      if painted as? Bool == true { return }
+      try await Task.sleep(for: .milliseconds(1))
+    } while ContinuousClock.now < deadline
+    throw ProbeFailure("Selected tab did not acknowledge its next animation frame.")
+  }
+
   private func warmUpSameProfileSpaceSwitches(_ tabIDs: [String]) async throws {
     guard
       tabIDs.count == SwitchProbeMetrics.expectedSpaceWarmupCount,
@@ -521,20 +539,28 @@ final class EngineProbe {
       }
       let switchStart = ProcessInfo.processInfo.systemUptime
       store.perform(.space(space.id))
+      let storeUpdateSeconds = ProcessInfo.processInfo.systemUptime - switchStart
       try expect(
         store.session.selectedSpace.selectedTabID?.uuidString == tabID
           && store.session.selectedSpace.profileID.uuidString == profileA,
         "Space switch warm-up \(index + 1) selects its same-profile target")
       let nativeSelection = try await waitForNativeTabSelection(tabID)
+      let nativeSelectionSeconds = ProcessInfo.processInfo.systemUptime - switchStart
       try expect(
         nativeSelection["selectedNativeTab"] as? Bool == true,
         "Space switch warm-up \(index + 1) selects the native tab")
-      try switchMetrics.recordSpaceWarmup(
-        iteration: index + 1,
-        latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
-        residentMemoryBytes: NativeResidentMemory.currentBytes())
+      let firstPaintStart = ProcessInfo.processInfo.systemUptime
       try await waitForDisplayedNativeTab(
         tabID, "Space switch warm-up \(index + 1) displays the selected native tab")
+      try await waitForFirstPaint(tabID)
+      let firstPaintSeconds = ProcessInfo.processInfo.systemUptime - firstPaintStart
+      try switchMetrics.recordSpaceWarmup(
+        iteration: index + 1,
+        latencySeconds: nativeSelectionSeconds,
+        storeUpdateSeconds: storeUpdateSeconds,
+        engineSelectionSeconds: nativeSelectionSeconds - storeUpdateSeconds,
+        firstPaintSeconds: firstPaintSeconds,
+        residentMemoryBytes: NativeResidentMemory.currentBytes())
       // Prime the authored renderer snapshot before the timed switch loop.
       let state = try await snapshot(tabID)
       try expect(
@@ -892,20 +918,28 @@ final class EngineProbe {
         else { throw ProbeFailure("Native tab lost its owning Space.") }
         let switchStart = ProcessInfo.processInfo.systemUptime
         store.perform(.space(space.id))
+        let storeUpdateSeconds = ProcessInfo.processInfo.systemUptime - switchStart
         try expect(
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == profileA,
           "\(phase) Space switch \(iteration + 1) selects the correct native Space and profile")
         let nativeSelection = try await waitForNativeTabSelection(tab)
+        let nativeSelectionSeconds = ProcessInfo.processInfo.systemUptime - switchStart
         try expect(
           nativeSelection["selectedNativeTab"] as? Bool == true,
           "\(phase) Space switch \(iteration + 1) selects the native tab")
-        try switchMetrics.record(
-          kind: .space, iteration: iteration + 1,
-          latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
-          residentMemoryBytes: NativeResidentMemory.currentBytes())
+        let firstPaintStart = ProcessInfo.processInfo.systemUptime
         try await waitForDisplayedNativeTab(
           tab, "\(phase) Space switch \(iteration + 1) displays the selected native tab")
+        try await waitForFirstPaint(tab)
+        let firstPaintSeconds = ProcessInfo.processInfo.systemUptime - firstPaintStart
+        try switchMetrics.record(
+          kind: .space, iteration: iteration + 1,
+          latencySeconds: nativeSelectionSeconds,
+          storeUpdateSeconds: storeUpdateSeconds,
+          engineSelectionSeconds: nativeSelectionSeconds - storeUpdateSeconds,
+          firstPaintSeconds: firstPaintSeconds,
+          residentMemoryBytes: NativeResidentMemory.currentBytes())
         let state = try await snapshot(tab)
         let retainsAccountAndDocument =
           state["cookie"] as? String == "account=alpha"
@@ -930,20 +964,28 @@ final class EngineProbe {
         else { throw ProbeFailure("Native tab lost its owning Space.") }
         let switchStart = ProcessInfo.processInfo.systemUptime
         store.perform(.space(space.id))
+        let storeUpdateSeconds = ProcessInfo.processInfo.systemUptime - switchStart
         try expect(
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == (isA ? profileA : profileB),
           "\(phase) Profile switch \(iteration + 1) selects the correct Space and profile")
         let nativeSelection = try await waitForNativeTabSelection(tab)
+        let nativeSelectionSeconds = ProcessInfo.processInfo.systemUptime - switchStart
         try expect(
           nativeSelection["selectedNativeTab"] as? Bool == true,
           "\(phase) Profile switch \(iteration + 1) selects the native tab")
-        try switchMetrics.record(
-          kind: .profile, iteration: iteration + 1,
-          latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
-          residentMemoryBytes: NativeResidentMemory.currentBytes())
+        let firstPaintStart = ProcessInfo.processInfo.systemUptime
         try await waitForDisplayedNativeTab(
           tab, "\(phase) Profile switch \(iteration + 1) displays the selected native tab")
+        try await waitForFirstPaint(tab)
+        let firstPaintSeconds = ProcessInfo.processInfo.systemUptime - firstPaintStart
+        try switchMetrics.record(
+          kind: .profile, iteration: iteration + 1,
+          latencySeconds: nativeSelectionSeconds,
+          storeUpdateSeconds: storeUpdateSeconds,
+          engineSelectionSeconds: nativeSelectionSeconds - storeUpdateSeconds,
+          firstPaintSeconds: firstPaintSeconds,
+          residentMemoryBytes: NativeResidentMemory.currentBytes())
         let state = try await snapshot(tab)
         let original = isA ? firstA : firstB
         let retainsAccountAndDocument =
@@ -1042,10 +1084,11 @@ final class EngineProbe {
           phase: phase
         ).run()
         fixtureStage = "RendererRecovery"
-        checks += try await RendererRecoveryProbe(
+        let rendererRecovery = RendererRecoveryProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
-          phase: phase
-        ).run()
+          phase: phase)
+        checks += try await rendererRecovery.run()
+        rendererRecoveryStatus = rendererRecovery.status.rawValue
         fixtureStage = "NativeWindow"
         checks += try await NativeWindowProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
@@ -1558,6 +1601,7 @@ final class EngineProbe {
       "nativeFavoritesPassed": nativeFavoritesProbe?.passed ?? false,
       "bootstrapStage": bootstrapStage.rawValue,
       "fixtureStage": fixtureStage,
+      "rendererRecoveryStatus": rendererRecoveryStatus,
       "checkCount": checks.count,
       "checks": checks,
       "error": errorReport,

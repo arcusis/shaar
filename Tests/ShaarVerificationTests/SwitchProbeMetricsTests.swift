@@ -15,6 +15,9 @@ import Testing
       try recorder.record(
         kind: .space,
         iteration: iteration, latencySeconds: Double(iteration) / 1_000,
+        storeUpdateSeconds: Double(iteration) / 4_000,
+        engineSelectionSeconds: Double(iteration) / 2_000,
+        firstPaintSeconds: Double(iteration) / 500,
         residentMemoryBytes: UInt64(iteration * 1_024))
       try recorder.record(
         kind: .profile,
@@ -35,6 +38,10 @@ import Testing
     #expect(object["latencyBudgetMilliseconds"] as? Double == 100)
     #expect((object["spaceSwitchSamples"] as? [Any])?.count == 20)
     #expect((object["profileSwitchSamples"] as? [Any])?.count == 20)
+    let sample = try #require((object["spaceSwitchSamples"] as? [[String: Any]])?.first)
+    #expect(sample["storeUpdateMilliseconds"] as? Double == 0.25)
+    #expect(sample["engineSelectionMilliseconds"] as? Double == 0.5)
+    #expect(sample["firstPaintMilliseconds"] as? Double == 2)
     #expect(spaceLatencyJSON["count"] as? Int == 20)
     #expect(spaceLatencyJSON["p50Milliseconds"] as? Double == 10)
     #expect(spaceLatencyJSON["p95Milliseconds"] as? Double == 19)
@@ -49,7 +56,7 @@ import Testing
 
     let decoded = try JSONDecoder().decode(SwitchProbeMetrics.self, from: data)
     #expect(decoded.phase == "initial")
-    #expect(decoded.schema == 3)
+    #expect(decoded.schema == 4)
     #expect(decoded.spaceWarmupSamples.map(\.latencyMilliseconds) == [301, 966])
     #expect(decoded.spaceSwitchSamples.count == SwitchProbeMetrics.expectedSwitchCount)
     #expect(decoded.profileSwitchSamples.count == SwitchProbeMetrics.expectedSwitchCount)

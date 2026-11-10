@@ -282,6 +282,7 @@ final class ExtensionProbe {
 
   private func waitForPopup(_ id: String, expression: String) async throws -> [String: Any] {
     for _ in 0..<50 {
+      ProbeHiddenWindows.orderOutVisibleWindows()
       if let value = await evaluatePopup(id, expression: expression) as? [String: Any] {
         return value
       }

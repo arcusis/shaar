@@ -468,6 +468,7 @@ final class PrivateWindowProbe {
       checks["productNormalHistoryExcludesPrivateVisit"] == true
       && checks["productWorkspaceBytesUnchangedAfterClose"] == true
       && checks["productFinalCloseReleasesOwners"] == true
+    ProbeHiddenWindows.orderOutVisibleWindows()
     try writeReport(runID: runID)
     guard requiredChecksPassed, !Self.checkNames.isEmpty else {
       let failed = Self.checkNames.filter { checks[$0] != true }.joined(separator: ", ")

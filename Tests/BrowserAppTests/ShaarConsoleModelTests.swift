@@ -188,46 +188,4 @@ import Testing
     #expect(model.history == ["1 + 1"])
   }
 
-  @Test func consoleToolsRenderOffscreen() throws {
-    _ = NSApplication.shared
-    let target = SiteControlTarget(
-      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
-    let error = ShaarConsoleEvent(
-      id: UUID(), level: .error, message: "GET /api/orders failed: 503",
-      source: "/app/api/orders.ts:17")
-    let shell = ShaarDevToolsModel(
-      target: target,
-      transport: ShaarDevToolsFixtureTransport(fixture: [.console(error)]),
-      layoutDefaults: UserDefaults(suiteName: "ShaarConsoleTools.\(UUID().uuidString)")!)
-    let inspector = InspectorModel(target: target, engine: nil)
-    shell.open(inspector: inspector)
-    shell.section = .console
-    shell.console.searchUsesRegex = true
-    shell.console.search = "("
-    shell.console.preserveLog = true
-    #expect(shell.console.regexIsInvalid)
-    let image = try VisualCapture.pngOffscreen(
-      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
-      size: NSSize(width: 850, height: 620))
-    #expect(!image.isEmpty)
-    shell.close()
-  }
-
-  @Test func consoleSourceLinksRenderOffscreen() throws {
-    _ = NSApplication.shared
-    let http = ShaarConsoleFrame(
-      function: "shaarThrowForSources",
-      source: "http://127.0.0.1:9/inspector-tools:8:40")
-    let file = ShaarConsoleFrame(function: "local", source: "/app/main.ts:8:1")
-    let event = ShaarConsoleEvent(
-      id: UUID(), level: .error, message: "shaar-source-jump", source: http.source,
-      stack: [http, file])
-    let model = ShaarConsoleModel()
-    model.selectedID = event.id
-    let image = try VisualCapture.pngOffscreen(
-      ShaarConsolePanel(
-        model: model, events: [.console(event)], droppedCount: 0, inspector: nil),
-      size: NSSize(width: 820, height: 420))
-    #expect(!image.isEmpty)
-  }
 }

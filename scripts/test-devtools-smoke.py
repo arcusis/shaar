@@ -191,7 +191,6 @@ SMOKE_SOURCES = (
     ROOT / "Sources/ShaarVerification/ShaarDevToolsSmokeExercise.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSplitHandle.swift",
     ROOT / "Sources/ArcusisBrowser/InspectorPage.swift",
-    ROOT / "Sources/ArcusisBrowser/ShaarNetworkPanel.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarNetworkHAR.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDOMTreePanel.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDOMTreeModel.swift",

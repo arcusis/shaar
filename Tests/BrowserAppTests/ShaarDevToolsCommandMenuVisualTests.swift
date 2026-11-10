@@ -18,20 +18,15 @@ import XCTest
     let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appending(path: "Evidence/issue-1308")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    let consoleID = UUID()
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
     let inspector = InspectorModel(target: target, engine: nil)
     let defaults = UserDefaults(suiteName: "ShaarDevToolsCommandCapture.\(UUID().uuidString)")!
-    let shell = ShaarDevToolsModel(
-      target: target, transport: CommandMenuCaptureTransport(consoleID: consoleID),
-      layoutDefaults: defaults)
+    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
     shell.open(inspector: inspector)
-    for _ in 0..<40 where shell.events.count < 2 { await Task.yield() }
-    XCTAssertEqual(shell.events.count, 2)
-    shell.section = .console
+    shell.section = .issues
     shell.toggleCommandMenu()
-    shell.commandQuery = "dash"
+    shell.commandQuery = "Sources"
 
     for scheme in [ColorScheme.light, .dark] {
       let suffix = scheme == .dark ? "dark" : "light"
@@ -45,26 +40,5 @@ import XCTest
     }
     shell.close()
     XCTAssertTrue(NSApp.keyWindow === previous)
-  }
-}
-
-private struct CommandMenuCaptureTransport: ShaarDevToolsEventTransport {
-  let consoleID: UUID
-
-  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
-    AsyncStream { continuation in
-      continuation.yield(.streamAvailable)
-      continuation.yield(
-        .event(
-          .console(
-            ShaarConsoleEvent(
-              id: consoleID, level: .error, message: "Dashboard failed", source: "app.ts"))))
-      continuation.yield(
-        .event(
-          .network(
-            ShaarNetworkEvent(
-              id: UUID(), method: "GET", url: "http://localhost:3000/dashboard", status: 500))))
-      continuation.finish()
-    }
   }
 }

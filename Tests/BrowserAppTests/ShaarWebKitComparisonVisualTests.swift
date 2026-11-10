@@ -39,7 +39,7 @@ import XCTest
       let shell = ShaarDevToolsModel(
         target: target, allowsWebKitComparison: true, comparisonPreview: preview)
       shell.open(inspector: inspector)
-      shell.section = .console
+      shell.section = .issues
       let before = ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {})
         .frame(width: 1040, height: 680)
         .environment(\.colorScheme, scheme)

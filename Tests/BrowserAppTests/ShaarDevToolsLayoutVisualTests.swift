@@ -31,7 +31,7 @@ import XCTest
       ]),
       layoutDefaults: defaults)
     shell.open(inspector: inspector)
-    shell.section = .console
+    shell.section = .issues
     for _ in 0..<40 where shell.events.isEmpty { await Task.yield() }
     XCTAssertTrue(shell.streamAvailable && !shell.events.isEmpty)
 

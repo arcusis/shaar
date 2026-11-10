@@ -288,9 +288,6 @@ import Vision
     await walkRealWorldPanels(shell: shell, context: context, report: report)
     await inspectRealWorldElement(
       shell: shell, inspector: inspector, context: context, report: report)
-    await filterRealWorldConsole(
-      shell: shell, inspector: inspector, context: context, report: report)
-    await inspectRealWorldRequest(shell: shell, context: context, report: report)
     await inspectRealWorldStorage(shell: shell, context: context, report: report)
     await performanceRecord(shell, context: context, report: report)
     if roundTwo {
@@ -467,105 +464,6 @@ import Vision
     } catch {
       report.fail("world-inspect", error.localizedDescription)
       report.fail("world-style", "No selected element for style edit")
-    }
-  }
-
-  private static func filterRealWorldConsole(
-    shell: ShaarDevToolsModel, inspector: InspectorModel,
-    context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .console
-    _ = try? await inspector.evaluate("console.error('shaar-world-error')")
-    let arrived = await wait(attempts: 60) {
-      shell.console.rows(from: shell.consoleEvents).contains {
-        $0.event.message.contains("shaar-world-error")
-      }
-    }
-    reportRealWorld(arrived, "world-console", "Page error reached Console", report: report)
-    shell.console.level = .error
-    await settle(context)
-    let filtered = shell.console.rows(from: shell.consoleEvents).allSatisfy {
-      $0.event.level == .error
-    }
-    reportRealWorld(
-      filtered && arrived, "world-console-filter", "Errors filter retained the page error",
-      report: report)
-    shell.console.level = nil
-  }
-
-  private static func inspectRealWorldRequest(
-    shell: ShaarDevToolsModel, context: NativeBrowserContext,
-    report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .network
-    let targetPath = shell.target.url.path
-    _ = await wait(attempts: 300) {
-      guard let target = context.engine.siteControlTarget,
-        context.engine.pages[target.tabID]?.loading == false
-      else { return false }
-      let rows = loadTimeDocumentRows(shell: shell, path: targetPath)
-      return !rows.isEmpty && rows.allSatisfy { $0.method == "GET" }
-    }
-    let initial = shell.network.requests(from: shell.events)
-    let documentRows = loadTimeDocumentRows(shell: shell, path: targetPath)
-    let hasDocument = !documentRows.isEmpty && documentRows.allSatisfy { $0.method == "GET" }
-    let documentDetails = documentRows.map {
-      "id=\($0.id) method=\($0.method.isEmpty ? "<empty>" : $0.method) status=\($0.status.map(String.init) ?? "-")"
-    }.joined(separator: "; ")
-    let paths = initial.prefix(12).compactMap { URL(string: $0.url)?.path }.joined(separator: ", ")
-    reportRealWorld(
-      hasDocument, "world-network-load",
-      "Load-time document in \(initial.count) requests (rows: \(documentDetails); first paths: \(paths))",
-      report: report)
-    if let inspector = context.engine.siteControlTarget.flatMap({
-      context.engine.inspectors[$0.tabID]
-    }) {
-      _ = try? await inspector.evaluate(
-        "fetch(location.pathname + '?shaarWorld=1', {cache:'no-store'}).then(r=>r.text())")
-    }
-    let loaded = await wait(attempts: 80) {
-      shell.network.requests(from: shell.events).contains {
-        $0.url.contains("shaarWorld=1") && $0.status == 200
-      }
-    }
-    let rows = shell.network.requests(from: shell.events)
-    let har = report.directory.appending(path: "world-network.har")
-    _ = try? ShaarNetworkHAR.write(shell.network.exportRequests(from: shell.events), to: har)
-    guard loaded,
-      let request = rows.first(where: {
-        $0.url.contains("shaarWorld=1") && $0.status == 200
-      })
-    else {
-      report.fail("world-request", "No completed 200 request in Network")
-      return
-    }
-    shell.network.selectedID = request.id
-    await settle(context)
-    let headers = !request.requestHeaders.isEmpty && !request.responseHeaders.isEmpty
-    reportRealWorld(
-      headers, "world-headers",
-      "Request and response headers for \(request.name): \(request.requestHeaders.count)/\(request.responseHeaders.count)",
-      report: report)
-    await shell.network.loadResponseBody(id: request.id)
-    shell.network.detailTab = .response
-    await settle(context)
-    let selected = shell.network.exportRequests(from: shell.events).first { $0.id == request.id }
-    reportRealWorld(
-      selected?.responseBody?.isEmpty == false, "world-response",
-      "Response body for \(request.name)", report: report)
-    shell.network.detailTab = .timing
-    await settle(context)
-    let completed = await wait(attempts: 50) {
-      shell.network.requests(from: shell.events).first { $0.id == request.id }?.duration != nil
-    }
-    reportRealWorld(completed, "world-timing", "Timing for \(request.name)", report: report)
-  }
-
-  private static func loadTimeDocumentRows(
-    shell: ShaarDevToolsModel, path: String
-  ) -> [ShaarNetworkRequest] {
-    shell.network.requests(from: shell.events).filter {
-      $0.resource == .document && URL(string: $0.url)?.path == path
     }
   }
 
@@ -887,17 +785,6 @@ import Vision
           name, section: section, root: panelRoot(section), painted: painted, in: context,
           report: report)
       }
-    case .network:
-      provePainted(
-        name, section: section, root: panelRoot(section), painted: painted, in: context,
-        report: report)
-      await proveLoadRequests(shell, report: report)
-      if shell.network.requests(from: shell.events).isEmpty {
-        report.fail(
-          "network-stale",
-          "Network says there are no requests after the fixture loaded /qa, /api/items, and /api/xhr.",
-          severity: .wrong)
-      }
     case .performance, .sources:
       if !shell.phase2.available {
         let reason = shell.nativePhase2Failure ?? "the live lease is not connected"
@@ -912,31 +799,6 @@ import Vision
         name, section: section, root: panelRoot(section), painted: painted, in: context,
         report: report)
     }
-  }
-
-  private static func proveLoadRequests(
-    _ shell: ShaarDevToolsModel, report: ShaarDevToolsSmokeReport
-  ) async {
-    let expected: Set<String> = [
-      "/qa", "/qa.css", "/frameworks.js", "/pixel.png", "/api/items", "/api/xhr",
-    ]
-    let complete = await wait(attempts: 50) {
-      expected.isSubset(of: loadRequestPaths(shell))
-    }
-    let seen = loadRequestPaths(shell)
-    if complete {
-      report.pass("network-load", "Document, stylesheet, script, image, fetch, and XHR arrived")
-    } else {
-      let missing = expected.subtracting(seen).sorted().joined(separator: ", ")
-      let present = seen.sorted().joined(separator: ", ")
-      report.fail(
-        "network-load", "Missing load-time requests: \(missing). Seen: \(present)",
-        severity: .wrong)
-    }
-  }
-
-  private static func loadRequestPaths(_ shell: ShaarDevToolsModel) -> Set<String> {
-    Set(shell.network.requests(from: shell.events).compactMap { URL(string: $0.url)?.path })
   }
 
   private static func showsBanner(_ sentence: String, painted: String, in root: NSView) -> Bool {
@@ -980,9 +842,6 @@ import Vision
     await coverageRoundTrip(shell, context: context, report: report)
     await touchRoundTrip(shell, context: context, report: report)
     await memorySnapshot(shell, context: context, report: report)
-    await consoleEvaluate(shell, inspector: inspector, context: context, report: report)
-    await consoleFilters(shell, context: context, report: report)
-    await networkActions(shell, inspector: inspector, context: context, report: report)
     await applicationStorage(shell, context: context, report: report)
     await performanceRecord(shell, context: context, report: report)
     await recorderRoundTrip(shell, inspector: inspector, context: context, report: report)
@@ -1082,146 +941,6 @@ import Vision
       report.pass("memory-snapshot", "Heap snapshot completed")
     } else {
       report.fail("memory-snapshot", shell.memory.failure ?? "Heap snapshot did not finish")
-    }
-  }
-
-  private static func consoleEvaluate(
-    _ shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
-    report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .console
-    await settle(context)
-    shell.console.command = "6*7"
-    await shell.console.submit { expression in
-      let reply = try await inspector.call(
-        "Runtime.evaluate",
-        params: [
-          "expression": expression,
-          "objectGroup": ShaarConsoleModel.objectGroup,
-          "generatePreview": true,
-          "awaitPromise": true,
-          "silent": true,
-        ])
-      return try ShaarConsoleModel.evaluation(from: reply)
-    }
-    _ = await wait(attempts: 30) {
-      shell.console.rows(from: shell.consoleEvents).contains {
-        $0.event.message.contains("42")
-      }
-    }
-    let rows = shell.console.rows(from: shell.consoleEvents)
-    if rows.contains(where: { $0.event.message.contains("42") }) {
-      report.pass("console", "The command line evaluated 6*7")
-    } else if rows.contains(where: { $0.event.message.contains("> 6*7") }) {
-      report.fail("console", "Command ran but the result was not 42", severity: .wrong)
-    } else {
-      report.fail("console", "6*7 did not appear in the console")
-    }
-  }
-
-  private static func networkActions(
-    _ shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
-    report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .network
-    await settle(context)
-    _ = try? await inspector.evaluate(
-      "fetch('/api/items', {cache:'no-store'}).then(function(response){return response.text()})")
-    let row = await wait(attempts: 50) {
-      !shell.network.requests(from: shell.events).isEmpty
-    }
-    if row {
-      let count = shell.network.requests(from: shell.events).count
-      report.pass("network-rows", "\(count) requests")
-    } else {
-      report.fail("network-rows", "No network rows")
-      ShaarDevToolsSmokeLook.recordBlank(panel: "Network", in: context.hosting, report: report)
-    }
-    let pressedRow = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.networkRequest", in: context.hosting)
-    if !pressedRow, shell.network.selectedID == nil {
-      shell.network.selectedID = shell.network.requests(from: shell.events).first?.id
-    }
-    let pressedCache = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.networkCache", in: context.hosting)
-    if !pressedCache { await shell.network.conditions.setCacheDisabled(true) }
-    let cache = await wait(attempts: 30) {
-      shell.network.conditions.cacheDisabled || shell.network.conditions.failure != nil
-    }
-    if cache, shell.network.conditions.cacheDisabled, shell.network.conditions.failure == nil {
-      report.pass("network-cache", "Disable cache is on")
-    } else {
-      report.fail(
-        "network-cache", shell.network.conditions.failure ?? "Disable cache did not stick")
-    }
-    await ShaarNetworkMenuActions.chooseThrottle(.fast3G, conditions: shell.network.conditions)
-    if shell.network.conditions.throttle == .fast3G, shell.network.conditions.failure == nil {
-      await ShaarNetworkMenuActions.chooseThrottle(.none, conditions: shell.network.conditions)
-      report.pass("network-throttle", "The throttle menu selected Fast 3G and cleared it")
-    } else {
-      report.fail(
-        "network-throttle",
-        shell.network.conditions.failure ?? "The throttle menu did nothing")
-    }
-    let harPainted =
-      ShaarDevToolsSmokeAccess.element(
-        identifier: "shaar.devtools.networkHAR", in: context.hosting) != nil
-      || ShaarDevToolsSmokeAccess.shows(
-        "Export HAR", in: ShaarDevToolsSmokeAccess.renderedText(context.hosting))
-    let harURL = report.directory.appending(path: "qa-network.har")
-    let requests = shell.network.exportRequests(from: shell.events)
-    let wrote = (try? ShaarNetworkHAR.write(requests, to: harURL)) != nil
-    let entries = harEntryCount(at: harURL)
-    if harPainted, wrote, entries > 0 {
-      report.pass(
-        "network-har",
-        "Export HAR wrote \(entries) entries to a temp file. The save panel was not opened.")
-    } else if requests.isEmpty || entries == 0 {
-      report.fail("network-har", "Export HAR had nothing to write", severity: .wrong)
-    } else if !wrote {
-      report.fail("network-har", "Export HAR did not write the temp file")
-    } else {
-      report.fail("network-har", "Export HAR was missing")
-    }
-    let pressedRules = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.networkRules", in: context.hosting)
-    if !pressedRules { shell.rules.showingRules = true }
-    await settle(context)
-    let rulesPainted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
-    let rulesMissing =
-      ShaarDevToolsSmokeAccess.element(
-        identifier: "shaar.devtools.networkRulesUnavailable", in: context.hosting) != nil
-      || ShaarDevToolsSmokeAccess.shows("Network rules need engine support", in: rulesPainted)
-    let rulesOpen =
-      shell.rules.showingRules
-      && (ShaarDevToolsSmokeAccess.element(
-        identifier: "shaar.devtools.networkRulesEditor", in: context.hosting) != nil
-        || ShaarDevToolsSmokeAccess.shows("No saved rules", in: rulesPainted)
-        || ShaarDevToolsSmokeAccess.shows("Network rules", in: rulesPainted))
-    if rulesOpen, !rulesMissing {
-      report.pass("network-rules", "Rules editor opened")
-    } else if rulesMissing {
-      report.fail("network-rules", "Network rules still show the needs-engine state")
-    } else {
-      report.fail("network-rules", "Rules editor did not open")
-    }
-    if let selected = shell.network.selectedID,
-      let request = shell.network.requests(from: shell.events).first(where: { $0.id == selected })
-    {
-      let board = NSPasteboard(name: NSPasteboard.Name("shaar.devtools.smoke.curl"))
-      ShaarNetworkMenuActions.copyCurl(request, model: shell.network, to: board)
-      let copied = board.string(forType: .string) ?? ""
-      if copied.contains("curl"), copied.contains(request.url) {
-        report.pass("network-curl", "The Copy as cURL menu wrote the request")
-      } else if copied.contains("curl") {
-        report.fail(
-          "network-curl", "Copy as cURL omitted the request URL", severity: .wrong)
-      } else {
-        report.fail(
-          "network-curl", "The Copy as cURL menu did nothing", severity: .broken)
-      }
-    } else {
-      report.fail("network-curl", "No selected request to copy")
     }
   }
 
@@ -1419,70 +1138,6 @@ import Vision
       try? await Task.sleep(for: .milliseconds(100))
     }
     return false
-  }
-
-  private static func consoleFilters(
-    _ shell: ShaarDevToolsModel, context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .console
-    await settle(context)
-    let sawError = await wait(attempts: 40) {
-      shell.console.rows(from: shell.consoleEvents).contains {
-        $0.event.message.contains("qa-error")
-      }
-    }
-    let pressed = ShaarDevToolsSmokeAccess.press(label: "Errors", in: context.hosting)
-    if !pressed || shell.console.level != .error { shell.console.level = .error }
-    await settle(context)
-    let hidden = !shell.console.rows(from: shell.consoleEvents).contains {
-      $0.event.message.contains("42")
-    }
-    if shell.console.level == .error, hidden {
-      report.pass("console-filter", "Errors hid the 6*7 result")
-    } else if shell.console.level == .error {
-      report.fail("console-filter", "Errors still shows the 6*7 result", severity: .wrong)
-    } else {
-      report.fail("console-filter", "The Errors filter did not apply")
-    }
-    let pressedAll = ShaarDevToolsSmokeAccess.press(label: "All", in: context.hosting)
-    if !pressedAll { shell.console.level = nil }
-    await settle(context)
-    if shell.console.level == nil {
-      report.pass("console-filter-all", "All shows every console level")
-    } else {
-      report.fail("console-filter-all", "All did not clear the level filter")
-    }
-    _ = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.consoleEntry", in: context.hosting)
-    await settle(context)
-    let consoleRows = shell.console.rows(from: shell.consoleEvents)
-    let sawPageLog = consoleRows.contains { $0.event.message.contains("qa-log") }
-    let sawPageError = sawError || consoleRows.contains { $0.event.message.contains("qa-error") }
-    let stacked = consoleRows.contains {
-      $0.event.message.contains("qa-error") && !$0.event.stack.isEmpty
-    }
-    if stacked {
-      report.pass("console-stack", "The page error has a stack")
-    } else if sawPageError {
-      report.fail("console-stack", "qa-error is present but the stack is empty", severity: .wrong)
-    } else if sawPageLog {
-      report.fail("console-stack", "qa-log appeared and qa-error did not", severity: .wrong)
-    } else {
-      report.fail(
-        "console-stack",
-        "The fixture logged qa-log and qa-error. The console did not show them.")
-    }
-    let clearedPress = ShaarDevToolsSmokeAccess.press(
-      identifier: "shaar.devtools.consoleClear", in: context.hosting)
-    if !clearedPress { shell.console.clearEntries() }
-    let cleared = shell.console.rows(from: shell.consoleEvents).contains {
-      $0.event.message.contains("qa-error") || $0.event.message.contains("42")
-    }
-    if !cleared {
-      report.pass("console-clear", "Clear removed the page error and the 6*7 result")
-    } else {
-      report.fail("console-clear", "Clear left stale console rows", severity: .wrong)
-    }
   }
 
   private static func applicationStorage(
@@ -1889,7 +1544,6 @@ import Vision
     case .performance: shell.performance.failure
     case .application: shell.application.failure
     case .cssOverview: shell.cssOverview.failure
-    case .network: shell.network.conditions.failure
     default: nil
     }
   }
@@ -1914,9 +1568,8 @@ import Vision
     switch section {
     case .elements: "shaar.devtools.domTree"
     case .components: "shaar.devtools.componentTree"
-    case .console: "shaar.devtools.consolePanel"
+    case .console, .network: nil
     case .issues: "shaar.devtools.issues"
-    case .network: "shaar.devtools.networkPanel"
     case .application: "shaar.devtools.applicationPanel"
     case .performance: "shaar.devtools.performancePanel"
     case .sources: "shaar.devtools.sourcesPanel"
@@ -1981,9 +1634,8 @@ import Vision
     switch section {
     case .elements: "Elements"
     case .components: "Comps"
-    case .console: "Console"
+    case .console, .network: "Chromium DevTools"
     case .issues: "Issues"
-    case .network: "Network"
     case .application: "App"
     case .performance: "Perf"
     case .memory: "Memory"
@@ -2009,9 +1661,8 @@ import Vision
     switch section {
     case .elements: ["DOM tree", "Event listeners"]
     case .components: ["Component tree", "ReactCounter"]
-    case .console: ["No console messages yet", "Evaluate JavaScript", "Search console"]
+    case .console, .network: []
     case .issues: ["No issues"]
-    case .network: ["No network requests yet", "Export HAR", "Disable cache"]
     case .application: ["Filter cookies", "Clear site data", "Local Storage"]
     case .performance: ["Waiting for data", "Main thread"]
     case .memory: ["Heap snapshot", "Take heap snapshot"]
@@ -2130,27 +1781,12 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "performance-vitals": return ("Performance", "Measure LCP and INP")
     case "world-inspect": return ("Elements", "Inspect body")
     case "world-style": return ("Elements", "Edit style")
-    case "world-console": return ("Console", "Page error")
-    case "world-console-filter": return ("Console", "Errors filter")
-    case "world-request": return ("Network", "Select request")
-    case "world-network-load": return ("Network", "Load-time document")
-    case "world-headers": return ("Network", "Headers")
-    case "world-response": return ("Network", "Response")
-    case "world-timing": return ("Network", "Timing")
     case "world2-elements-search": return ("Elements", "Search body")
     case "world2-elements-attribute": return ("Elements", "Edit attribute")
-    case "world2-console-object": return ("Console", "Expand object")
-    case "world2-console-nested": return ("Console", "Expand nested object")
-    case "world2-console-multiline": return ("Console", "Multiline eval")
     case "world2-source-open": return ("Sources", "Open source")
     case "world2-source-pretty": return ("Sources", "Pretty print")
     case "world2-source-map": return ("Sources", "Source map")
     case "world2-source-map-content": return ("Sources", "Open original source")
-    case "world2-network-volume": return ("Network", "100+ requests")
-    case "world2-network-filter": return ("Network", "Filter chip")
-    case "world2-network-search": return ("Network", "Search")
-    case "world2-network-fetch": return ("Network", "Copy as fetch")
-    case "world2-network-har": return ("Network", "Export HAR")
     case "world2-websocket": return ("Network", "WebSocket")
     case "world2-service-worker": return ("Application", "Service worker")
     case "world2-cookie-edit": return ("Application", "Edit cookie")
@@ -2179,21 +1815,8 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "media-stop": return ("Media", "Capture stops")
     case "touch": return ("Sensors", "Toggle touch")
     case "memory-snapshot": return ("Memory", "Take heap snapshot")
-    case "console": return ("Console", "Evaluate 6*7")
-    case "console-filter": return ("Console", "Errors filter")
-    case "console-filter-all": return ("Console", "All filter")
-    case "console-stack": return ("Console", "Stack trace")
-    case "console-clear": return ("Console", "Clear")
-    case "network-rows": return ("Network", "Request rows")
-    case "network-load": return ("Network", "Load-time requests")
-    case "network-stale": return ("Network", "Request list")
     case "issues-badge": return ("Issues", "Badge count")
     case "painted-text": return ("Session", "How panels are read")
-    case "network-cache": return ("Network", "Disable cache")
-    case "network-throttle": return ("Network", "Throttle menu")
-    case "network-har": return ("Network", "HAR save")
-    case "network-rules": return ("Network", "Rules editor")
-    case "network-curl": return ("Network", "Copy as cURL menu")
     case "inspector-styles": return ("Elements", "Styles")
     case "inspector-computed": return ("Elements", "Computed")
     case "inspector-box": return ("Elements", "Box model")

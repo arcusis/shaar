@@ -67,34 +67,13 @@ import Testing
 }
 
 @Suite @MainActor struct ShaarDevToolsIssuesModelTests {
-  @Test func choosingARowSelectsTheRightPanel() async throws {
-    let errorID = UUID()
+  @Test func removedPanelsAreNotAvailableInTheLegacyShell() {
     let defaults = UserDefaults(suiteName: "ShaarDevToolsIssues.\(UUID().uuidString)")!
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
-    let shell = ShaarDevToolsModel(
-      target: target, transport: IssuesFixtureTransport(errorID: errorID), layoutDefaults: defaults)
-    shell.open(inspector: InspectorModel(target: target, engine: nil))
-    for _ in 0..<40 where shell.issues.count < 2 { await Task.yield() }
-    #expect(shell.issues.count == 2)
-    let consoleIssue = try #require(
-      shell.issues.first { issue in
-        if case .console = issue.kind { return true }
-        return false
-      })
-    shell.openIssue(consoleIssue)
-    #expect(shell.section == .console)
-    #expect(shell.console.selectedID == errorID)
-
-    let networkIssue = try #require(
-      shell.issues.first { issue in
-        if case .network = issue.kind { return true }
-        return false
-      })
-    shell.openIssue(networkIssue)
-    #expect(shell.section == .network)
-    #expect(shell.network.selectedID == "req-9")
-    shell.close()
+    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    #expect(!shell.sections.contains(.console))
+    #expect(!shell.sections.contains(.network))
   }
 
   @Test func issuesPanelRendersOffscreenEmptyAndPopulated() async throws {
@@ -104,7 +83,8 @@ import Testing
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
     let emptyShell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
     let empty = try VisualCapture.pngOffscreen(
-      ShaarDevToolsIssuesPanel(model: emptyShell), size: NSSize(width: 640, height: 240))
+      ShaarDevToolsIssuesPanel(model: emptyShell, openChromium: {}),
+      size: NSSize(width: 640, height: 240))
     let shell = ShaarDevToolsModel(
       target: target, transport: IssuesFixtureTransport(errorID: UUID()), layoutDefaults: defaults)
     let inspector = InspectorModel(target: target, engine: nil)
@@ -113,10 +93,15 @@ import Testing
     for _ in 0..<40 where shell.issues.count < 2 { await Task.yield() }
     #expect(shell.issues.count == 2)
     let populated = try VisualCapture.pngOffscreen(
-      ShaarDevToolsIssuesPanel(model: shell), size: NSSize(width: 640, height: 240))
+      ShaarDevToolsIssuesPanel(model: shell, openChromium: {}),
+      size: NSSize(width: 640, height: 240))
     let panel = try VisualCapture.pngOffscreen(
       ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
       size: NSSize(width: 850, height: 620))
+    let evidence = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1469", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: evidence, withIntermediateDirectories: true)
+    try panel.write(to: evidence.appending(path: "after-legacy-shell-issues.png"))
     #expect(!empty.isEmpty)
     #expect(!populated.isEmpty)
     #expect(!panel.isEmpty)

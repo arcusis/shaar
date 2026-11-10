@@ -18,7 +18,7 @@ import Testing
     let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
     #expect(shell.opening == .panel(.elements))
     shell.open(inspector: inspector)
-    shell.chooseOpening(.panel(.console))
+    shell.chooseOpening(.panel(.application))
     shell.dock = .bottom
     shell.rightWidth = 470
     shell.leftWidth = 360
@@ -27,16 +27,27 @@ import Testing
     #expect(shell.rightWidth == ShaarDevToolsMetrics.sideWidth)
     #expect(shell.leftWidth == ShaarDevToolsMetrics.sideWidth)
     #expect(shell.bottomHeight == ShaarDevToolsMetrics.bottomHeight)
-    shell.section = .network
+    shell.section = .sources
     shell.close()
     shell.open(inspector: inspector)
-    #expect(shell.section == .console)
+    #expect(shell.section == .application)
     #expect(shell.dock == .bottom)
     #expect(!shell.settingsOpen)
     shell.showSettings()
     #expect(shell.settingsOpen)
     shell.toggleCommandMenu()
     #expect(shell.commandMenuOpen && !shell.settingsOpen)
+  }
+
+  @Test func aSavedRetiredPanelFallsBackToElements() {
+    let defaults = UserDefaults(suiteName: "ShaarDevToolsSettings.\(UUID().uuidString)")!
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
+    defaults.set("Console", forKey: ShaarDevToolsOpening.key)
+    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    #expect(shell.section == .elements)
+    #expect(!shell.sections.contains(.console))
+    #expect(!shell.sections.contains(.network))
   }
 
   @Test func lastPanelSurvivesANewShell() {
@@ -54,8 +65,10 @@ import Testing
 
   @Test func commandMenuIncludesSettings() {
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "set", sections: ShaarDevToolsSection.allCases, console: [], network: [],
-      sources: [], nodes: [])
+      query: "set",
+      sections: ShaarDevToolsSection.allCases.filter {
+        $0 != .console && $0 != .network
+      }, sources: [], nodes: [])
     #expect(matches.contains { $0.hit == .settings && $0.title == "Settings" })
     #expect(ShaarDevToolsCommandHit.settings.token == "settings")
     #expect(ShaarDevToolsCommandHit.settings.groupKey == nil)

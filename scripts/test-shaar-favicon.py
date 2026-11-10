@@ -99,8 +99,9 @@ def main() -> None:
                 app, root, data, restore_report, page, ["--probe-favicon-restore"])
             assert (restored["passed"] and restored["restoredPinIcon"]
                     and restored["restoredFavoriteIcon"]
+                    and restored["restoredPinFromCache"]
                     and restored["restoredFavoriteDormant"]
-                    and restored["sidebarIconPixels"] >= 40
+                    and 640 <= restored["sidebarIconPixels"] <= 960
                     and restored["allWindowsHidden"]), restored
             evidence = Path("build/favicon-1045-evidence")
             evidence.mkdir(parents=True, exist_ok=True)
@@ -115,6 +116,7 @@ def main() -> None:
                 "favoriteFaviconCached": True,
                 "restoredPinIcon": True,
                 "restoredFavoriteIcon": True,
+                "restoredPinFromCache": True,
                 "restoredFavoriteDormant": True,
                 "sidebarIconPixels": restored["sidebarIconPixels"],
                 "allWindowsHidden": True,

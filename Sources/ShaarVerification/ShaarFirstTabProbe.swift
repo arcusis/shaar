@@ -37,6 +37,7 @@ final class ShaarFirstTabProbe {
   private var favoriteFaviconCached = false
   private var restoredPinIcon = false
   private var restoredFavoriteIcon = false
+  private var restoredPinFromCache = false
   private var restoredFavoriteDormant = false
   private var sidebarIconPixels = 0
   private var finished = false
@@ -410,50 +411,60 @@ final class ShaarFirstTabProbe {
   }
 
   private func checkRestoredFavicons() {
-    Task { @MainActor in
-      guard !self.finished else { return }
-      do {
-        guard let store = self.workspace.stores.values.first,
-          let pinned = store.session.selectedSpace.tabs.first(where: \.isPinned),
-          let profile = store.session.profileID(forTabID: pinned.id),
-          let pinIcon = store.favicon(for: pinned, profileID: profile),
-          let favorite = store.session.favorites.first,
-          let favoriteIcon = store.favicon(for: favorite),
-          let favoriteTab = store.session.favoritePage(for: favorite.id)?.tab.id
-        else {
-          self.finish(error: "Restarted sidebar is missing a saved pin or Favorite icon.")
-          return
-        }
-        let pixels = try self.renderedSidebarIconPixels(matching: [pinIcon, favoriteIcon])
-        self.sidebarIconPixels = pixels
-        self.restoredPinIcon = true
-        self.restoredFavoriteIcon = true
-        let engine = self.host.contexts.values.first?.engine
-        self.restoredFavoriteDormant = engine?.liveTabs.contains(favoriteTab) != true
-        guard self.restoredFavoriteDormant else {
-          self.finish(
-            error: "The restored Favorite was opened before its saved icon could be shown.")
-          return
-        }
-        guard pixels >= 40 else {
-          let sample = [pinIcon, favoriteIcon].compactMap(Self.centerColor(of:)).map {
-            String(format: "%.2f,%.2f,%.2f", $0.redComponent, $0.greenComponent, $0.blueComponent)
-          }.joined(separator: " ")
-          self.finish(error: "Restarted sidebar drew \(pixels) favicon pixels (icon \(sample)).")
-          return
-        }
-        guard NSApp.windows.allSatisfy({ !$0.isVisible }) else {
-          self.finish(error: "A window was visible during the favicon restore.")
-          return
-        }
-        let nativeID = self.host.contexts.values.first?.nativeID ?? ""
-        let view =
-          self.runtime.view(forTabID: pinned.id.uuidString)
-          ?? self.runtime.window(forID: nativeID)?.contentView
-        self.finish(tabID: pinned.id.uuidString, nativeView: view)
-      } catch {
-        self.finish(error: "Favicon restore failed: \(error.localizedDescription)")
+    guard !finished else { return }
+    do {
+      guard let store = workspace.stores.values.first,
+        let pinned = store.session.selectedSpace.tabs.first(where: \.isPinned),
+        let profile = store.session.profileID(forTabID: pinned.id),
+        let favorite = store.session.favorites.first,
+        let favoriteTab = store.session.favoritePage(for: favorite.id)?.tab.id,
+        let pinID = workspace.workspace.windows.first?.pins.first(where: {
+          $0.tabID == pinned.id
+        })?.pinID
+      else {
+        finish(error: "Restarted sidebar is missing a saved pin or Favorite.")
+        return
       }
+      let cache = FaviconCache(directory: dataRoot.appending(path: "favicons"))
+      guard let pinIcon = cache.icon(for: pinID, profileID: profile),
+        let favoriteIcon = cache.icon(for: favorite.id, profileID: favorite.profileID)
+      else {
+        finish(error: "Restarted sidebar is missing a saved pin or Favorite icon.")
+        return
+      }
+      let engine = host.contexts.values.first?.engine
+      restoredPinFromCache = engine?.favicons[pinned.id] == nil
+      guard restoredPinFromCache else {
+        finish(error: "The restored pin icon came from a live load, not the cache.")
+        return
+      }
+      let pixels = try renderedSidebarIconPixels(matching: [pinIcon, favoriteIcon])
+      sidebarIconPixels = pixels
+      restoredPinIcon = true
+      restoredFavoriteIcon = true
+      restoredFavoriteDormant = engine?.liveTabs.contains(favoriteTab) != true
+      guard restoredFavoriteDormant else {
+        finish(error: "The restored Favorite was opened before its saved icon could be shown.")
+        return
+      }
+      guard pixels >= Self.minimumIconPixels, pixels <= Self.maximumIconPixels else {
+        let sample = [pinIcon, favoriteIcon].compactMap(Self.centerColor(of:)).map {
+          String(format: "%.3f,%.3f,%.3f", $0.redComponent, $0.greenComponent, $0.blueComponent)
+        }.joined(separator: " ")
+        finish(error: "Restarted sidebar drew \(pixels) favicon pixels (icon \(sample)).")
+        return
+      }
+      guard NSApp.windows.allSatisfy({ !$0.isVisible }) else {
+        finish(error: "A window was visible during the favicon restore.")
+        return
+      }
+      let nativeID = host.contexts.values.first?.nativeID ?? ""
+      let view =
+        runtime.view(forTabID: pinned.id.uuidString)
+        ?? runtime.window(forID: nativeID)?.contentView
+      finish(tabID: pinned.id.uuidString, nativeView: view)
+    } catch {
+      finish(error: "Favicon restore failed: \(error.localizedDescription)")
     }
   }
 
@@ -494,6 +505,12 @@ final class ShaarFirstTabProbe {
     return Self.iconPixelCount(in: bitmap, matching: images)
   }
 
+  /// The 16-point pin and 22-point Favorite are 256 and 484 pixels. The band rejects
+  /// a handful of accent pixels and a large tinted region.
+  private static let minimumIconPixels = 640
+  private static let maximumIconPixels = 960
+  private static let iconColorDistance = 0.05
+
   private static func iconPixelCount(
     in bitmap: NSBitmapImageRep, matching images: [NSImage]
   ) -> Int {
@@ -506,7 +523,7 @@ final class ShaarFirstTabProbe {
           max(
             abs(pixel.redComponent - target.redComponent),
             abs(pixel.greenComponent - target.greenComponent),
-            abs(pixel.blueComponent - target.blueComponent)) < 0.12
+            abs(pixel.blueComponent - target.blueComponent)) < Self.iconColorDistance
         }
         if matched { count += 1 }
       }
@@ -514,12 +531,22 @@ final class ShaarFirstTabProbe {
     return count
   }
 
+  /// Samples the icon the same way the sidebar bitmap is captured, so the comparison
+  /// is not shifted by a different color space.
   private static func centerColor(of image: NSImage) -> NSColor? {
-    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
-      let color = NSBitmapImageRep(cgImage: cgImage).colorAt(
-        x: cgImage.width / 2, y: cgImage.height / 2)
+    let side = 16
+    guard
+      let bitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8,
+        samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+        bytesPerRow: 0, bitsPerPixel: 0)
     else { return nil }
-    return color.usingColorSpace(.sRGB)
+    bitmap.size = NSSize(width: CGFloat(side), height: CGFloat(side))
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+    image.draw(in: NSRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side)))
+    NSGraphicsContext.restoreGraphicsState()
+    return bitmap.colorAt(x: side / 2, y: side / 2)?.usingColorSpace(.sRGB)
   }
 
   static func matchesRequestedURL(_ actual: URL?, requested: URL) -> Bool {
@@ -547,6 +574,7 @@ final class ShaarFirstTabProbe {
       "favoriteFaviconCached": favoriteFaviconCached,
       "restoredPinIcon": restoredPinIcon,
       "restoredFavoriteIcon": restoredFavoriteIcon,
+      "restoredPinFromCache": restoredPinFromCache,
       "restoredFavoriteDormant": restoredFavoriteDormant,
       "sidebarIconPixels": sidebarIconPixels,
       "coreRoutesObserved": coreRoutesObserved,
@@ -569,17 +597,17 @@ final class ShaarFirstTabProbe {
       passed = false
       FileHandle.standardError.write(Data("Shaar first-tab report failed: \(error)\n".utf8))
     }
-    if passed {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-        guard let self else { return }
-        if self.systemQuit {
-          NSApp.terminate(nil)
-        } else {
-          self.runtime.quit()
-        }
+    // Profile load refreshes bookmarks on this window. Close after that submit.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+      guard let self else { return }
+      for context in self.host.contexts.values {
+        _ = self.runtime.closeWindowID(context.nativeID)
       }
-    } else {
-      runtime.quit()
+      if self.passed && self.systemQuit {
+        NSApp.terminate(nil)
+      } else {
+        self.runtime.quit()
+      }
     }
   }
 

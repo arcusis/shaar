@@ -280,6 +280,46 @@ struct FaviconCacheTests {
       store.favicon(for: favorite).map { FaviconFixture.matches($0, .red) } == true)
   }
 
+  @Test func hostChangeRemovesTheSavedPinFavoriteAndOrdinaryIcon() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let (session, favoriteID, pinnedID, ordinaryID) = sidebarSession()
+    let profileID = session.selectedSpace.profileID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let store = try #require(manager.stores[manager.workspace.windows[0].id])
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    let favoriteTab = try #require(store.session.favoritePage(for: favoriteID)?.tab.id)
+    let pinID = try #require(
+      manager.workspace.windows[0].pins.first { $0.tabID == pinnedID }?.pinID)
+    let icon = FaviconFixture.icon(.blue)
+
+    engine.noteDocumentFavicon(icon, for: pinnedID, host: "pinned.example")
+    engine.noteDocumentFavicon(icon, for: pinnedID, host: "pinned.example")
+    #expect(engine.persistedFaviconUpdates == 1)
+    engine.noteDocumentFavicon(nil, for: pinnedID, host: "pinned.example")
+    #expect(cache.icon(for: pinID, profileID: profileID) != nil)
+    engine.noteDocumentFavicon(nil, for: pinnedID, host: "other.example")
+    #expect(cache.icon(for: pinID, profileID: profileID) == nil)
+    #expect(engine.favicons[pinnedID] == nil)
+
+    engine.noteDocumentFavicon(icon, for: favoriteTab, host: "favorite.example")
+    #expect(cache.icon(for: favoriteID, profileID: profileID) != nil)
+    engine.noteDocumentFavicon(nil, for: favoriteTab, host: "other.example")
+    #expect(cache.icon(for: favoriteID, profileID: profileID) == nil)
+    #expect(engine.favicons[favoriteTab] == nil)
+
+    store.rememberFavicon(icon, forTab: ordinaryID)
+    #expect(cache.icon(for: ordinaryID, profileID: profileID) != nil)
+    let writes = engine.persistedFaviconUpdates
+    engine.noteDocumentFavicon(icon, for: ordinaryID, host: "ordinary.example")
+    #expect(engine.persistedFaviconUpdates == writes)
+    engine.noteDocumentFavicon(nil, for: ordinaryID, host: "other.example")
+    #expect(cache.icon(for: ordinaryID, profileID: profileID) == nil)
+    #expect(engine.favicons[ordinaryID] == nil)
+  }
+
   private func sidebarSession() -> (
     session: BrowserSession, favoriteID: UUID, pinnedID: UUID, ordinaryID: UUID
   ) {

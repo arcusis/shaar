@@ -43,13 +43,30 @@ extension BrowserStore {
     }
   }
 
-  /// Saves a page icon reported by the engine for a saved tab or Favorite.
+  /// Saves a page icon reported for a tab or Favorite.
   func rememberFavicon(_ image: NSImage, forTab tabID: UUID) {
     guard !isPrivate else { return }
     guard let itemID = faviconItemID(forTab: tabID),
       let profileID = session.profileID(forTabID: tabID)
     else { return }
     faviconCache?.store(image, for: itemID, profileID: profileID)
+  }
+
+  /// Drops the saved icon after the page moves to a site that has none.
+  func forgetFavicon(forTab tabID: UUID) {
+    guard !isPrivate else { return }
+    guard let itemID = faviconItemID(forTab: tabID),
+      let profileID = session.profileID(forTabID: tabID)
+    else { return }
+    faviconCache?.remove(itemID, profileID: profileID)
+  }
+
+  func remembersFavicon(forTab tabID: UUID) -> Bool {
+    switch session.page(forTabID: tabID) {
+    case .favorite: true
+    case .tab(let tab): tab.isPinned
+    default: false
+    }
   }
 
   /// Writes an icon captured before a pin or Favorite change onto the tab's current cache key.

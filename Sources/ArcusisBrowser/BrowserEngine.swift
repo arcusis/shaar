@@ -90,21 +90,45 @@ final class BrowserEngine {
   @ObservationIgnored private var suspendingTabs: Set<UUID> = []
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
   private(set) var favicons: [UUID: NSImage] = [:]
-  /// Site host last associated with each tab's icon. A later empty query for that host
-  /// leaves the icon in place; a different host replaces it.
+  /// Site host last associated with each tab's icon. An empty query for that host
+  /// leaves the icon in place. A different host drops the live icon and the saved file.
   @ObservationIgnored private var faviconHosts: [UUID: String] = [:]
+  private(set) var persistedFaviconUpdates = 0
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
     favicons[tabID] = image
   }
 
+  /// Records the icon Chromium returned for this document host.
+  func noteDocumentFavicon(_ icon: NSImage?, for tabID: UUID, host: String?) {
+    let documentHost = host?.lowercased()
+    if let icon {
+      let changed = faviconChanged(icon, for: tabID, host: documentHost)
+      favicons[tabID] = icon
+      faviconHosts[tabID] = documentHost
+      guard changed, store?.remembersFavicon(forTab: tabID) == true else { return }
+      persistedFaviconUpdates += 1
+      store?.rememberFavicon(icon, forTab: tabID)
+      return
+    }
+    guard let previous = faviconHosts[tabID] else {
+      faviconHosts[tabID] = documentHost
+      return
+    }
+    guard previous != documentHost else { return }
+    clearFavicon(tabID)
+    faviconHosts[tabID] = documentHost
+    store?.forgetFavicon(forTab: tabID)
+  }
+
+  private func faviconChanged(_ icon: NSImage, for tabID: UUID, host: String?) -> Bool {
+    guard let current = favicons[tabID], faviconHosts[tabID] == host else { return true }
+    return !FaviconCache.sameImage(current, icon)
+  }
+
   private func clearFavicon(_ id: UUID) {
     favicons[id] = nil
     faviconHosts[id] = nil
-  }
-
-  private var acceptsEngineRequests: Bool {
-    !isClosed && !runtime.isQuitting && runtime.isWindowOpenID(windowID)
   }
 
   func focusPage(_ tabID: UUID) {
@@ -249,7 +273,7 @@ final class BrowserEngine {
         tabID: identity, profileID: owner, payload: payload, sequence: sequence)
     }
     store.library.onLoad = { [weak self] key, limit, completion in
-      guard let self, self.acceptsEngineRequests else {
+      guard let self, !self.isClosed else {
         completion(.failure(LibraryDataError.invalidBookmarks))
         return
       }
@@ -485,17 +509,12 @@ final class BrowserEngine {
         }
         self.withholdAutomaticPictureInPictureIfOff(id, url: url)
       }
-      if let profile = self.store?.session.profileID(forTabID: id),
-        let icon = self.runtime.favicon(
+      var icon: NSImage?
+      if let profile = self.store?.session.profileID(forTabID: id) {
+        icon = self.runtime.favicon(
           forTabID: identity, profileID: profile.uuidString, windowID: self.windowID)
-      {
-        self.favicons[id] = icon
-        self.faviconHosts[id] = documentHost
-        self.store?.rememberFavicon(icon, forTab: id)
-      } else if self.faviconHosts[id] != documentHost {
-        self.clearFavicon(id)
-        self.faviconHosts[id] = documentHost
       }
+      self.noteDocumentFavicon(icon, for: id, host: documentHost)
     }
     callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity) else { return }
@@ -910,7 +929,7 @@ final class BrowserEngine {
 
   private func finishLoadingProfile(_ profile: UUID, error: Error?) async {
     loadingProfiles.remove(profile)
-    guard acceptsEngineRequests else { return }
+    guard !isClosed else { return }
     if let error {
       failedProfiles.insert(profile)
       notice = error.localizedDescription

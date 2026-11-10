@@ -34,6 +34,9 @@ final class FaviconCache {
   }
 
   func store(_ image: NSImage, for itemID: UUID, profileID: UUID) {
+    if let existing = entries[profileID]?[itemID], Self.sameImage(existing.image, image) {
+      return
+    }
     guard let data = Self.pngData(for: image) else { return }
     let profileEntries = entries[profileID, default: [:]]
     guard profileEntries[itemID]?.data != data else { return }
@@ -116,6 +119,14 @@ final class FaviconCache {
     guard let image = NSImage(data: data) else { return nil }
     image.size = NSSize(width: pointSide, height: pointSide)
     return Entry(image: image, data: data)
+  }
+
+  /// True when both images already have the same bitmap, so the cache can skip a redraw.
+  static func sameImage(_ lhs: NSImage, _ rhs: NSImage) -> Bool {
+    guard let left = lhs.tiffRepresentation, let right = rhs.tiffRepresentation else {
+      return false
+    }
+    return left == right
   }
 
   /// Redraws into a fixed-size sRGB bitmap so stored files stay small and independent of the

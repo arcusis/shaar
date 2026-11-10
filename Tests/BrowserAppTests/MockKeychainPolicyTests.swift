@@ -5,6 +5,7 @@
 import ChromiumBridge
 import Foundation
 import Testing
+import XCTest
 
 @Suite struct MockKeychainPolicyTests {
   @Test func requestRequiresAnAdHocSignature() {
@@ -35,24 +36,23 @@ import Testing
     let bundle = try #require(Bundle(url: copy))
     #expect(!ARCBundleIsAdHocSigned(bundle))
   }
+}
 
-  @Test func certificateSignedBundleIsNotAdHocWhenIdentityIsAvailable() throws {
-    let identities = try runOutput(
-      "/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"])
-    guard
-      let identity = identities.split(separator: "\n").compactMap({ line -> String? in
-        guard line.contains("\"") else { return nil }
-        let parts = line.split(separator: "\"")
-        return parts.count > 1 ? String(parts[1]) : nil
-      }).first
-    else { return }
+final class MockKeychainSigningIdentityTests: XCTestCase {
+  func testCertificateSignedBundleIsNotAdHocWhenIdentityIsAvailable() throws {
+    guard let identity = ProcessInfo.processInfo.environment["SHAAR_TEST_SIGNING_IDENTITY"],
+      !identity.isEmpty
+    else {
+      throw XCTSkip("Certificate signing fixture requires SHAAR_TEST_SIGNING_IDENTITY")
+    }
 
     let fixture = try FixtureApp.make(sign: false)
     defer { fixture.remove() }
-    let status = try run("/usr/bin/codesign", ["--force", "--sign", identity, fixture.root.path])
-    guard status == 0 else { return }
-    let bundle = try #require(Bundle(url: fixture.root))
-    #expect(!ARCBundleIsAdHocSigned(bundle))
+    let status = try runProcess(
+      "/usr/bin/codesign", ["--force", "--sign", identity, fixture.root.path])
+    XCTAssertEqual(status, 0)
+    let bundle = try XCTUnwrap(Bundle(url: fixture.root))
+    XCTAssertFalse(ARCBundleIsAdHocSigned(bundle))
   }
 }
 
@@ -66,7 +66,7 @@ private struct FixtureApp {
     try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
     let stub = macOS.appending(path: "stub")
     try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: stub)
-    _ = try run("/usr/bin/codesign", ["--remove-signature", stub.path])
+    _ = try runProcess("/usr/bin/codesign", ["--remove-signature", stub.path])
     let plist = """
       <?xml version="1.0" encoding="UTF-8"?>
       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -81,7 +81,7 @@ private struct FixtureApp {
       """
     try Data(plist.utf8).write(to: root.appending(path: "Contents/Info.plist"))
     if sign {
-      let status = try run("/usr/bin/codesign", ["--force", "--sign", "-", root.path])
+      let status = try runProcess("/usr/bin/codesign", ["--force", "--sign", "-", root.path])
       if status != 0 { throw FixtureError.signFailed }
     }
     return FixtureApp(root: root)
@@ -95,22 +95,11 @@ private struct FixtureApp {
 private enum FixtureError: Error { case signFailed }
 
 @discardableResult
-private func run(_ launchPath: String, _ arguments: [String]) throws -> Int32 {
+private func runProcess(_ launchPath: String, _ arguments: [String]) throws -> Int32 {
   let process = Process()
   process.executableURL = URL(fileURLWithPath: launchPath)
   process.arguments = arguments
   try process.run()
   process.waitUntilExit()
   return process.terminationStatus
-}
-
-private func runOutput(_ launchPath: String, _ arguments: [String]) throws -> String {
-  let process = Process()
-  let output = Pipe()
-  process.executableURL = URL(fileURLWithPath: launchPath)
-  process.arguments = arguments
-  process.standardOutput = output
-  try process.run()
-  process.waitUntilExit()
-  return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
 }

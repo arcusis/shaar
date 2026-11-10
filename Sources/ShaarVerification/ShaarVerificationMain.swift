@@ -41,6 +41,9 @@ enum ShaarVerificationMain {
     if CommandLine.arguments.contains("--probe-https-only") {
       exit(HttpsOnlyProbe.run(arguments: CommandLine.arguments))
     }
+    if CommandLine.arguments.contains("--probe-platform-prompts") {
+      exit(PlatformPromptProbe.run(arguments: CommandLine.arguments))
+    }
     if let result = storeLanguage(
       arguments: CommandLine.arguments, bundleIdentifier: Bundle.main.bundleIdentifier)
     {

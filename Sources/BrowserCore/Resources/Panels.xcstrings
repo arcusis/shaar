@@ -237,12 +237,12 @@
         }
       }
     },
-    "Looking for screens and windows…": {
+    "Looking for screens, windows, and tabs…": {
       "localizations": {
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "מחפש מסכים וחלונות…"
+            "value": "מחפש מסכים, חלונות ולשוניות…"
           }
         }
       }
@@ -257,12 +257,12 @@
         }
       }
     },
-    "No screens or windows are available": {
+    "No screens, windows, or tabs are available": {
       "localizations": {
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "אין מסכים או חלונות זמינים"
+            "value": "אין מסכים, חלונות או לשוניות זמינים"
           }
         }
       }
@@ -3118,6 +3118,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "חלון"
+          }
+        }
+      }
+    },
+    "Tab: %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשונית: %@"
+          }
+        }
+      }
+    },
+    "This Tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הלשונית הזו"
           }
         }
       }

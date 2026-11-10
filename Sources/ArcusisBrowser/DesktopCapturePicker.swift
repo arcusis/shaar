@@ -6,16 +6,18 @@ import CoreGraphics
 import ScreenCaptureKit
 import SwiftUI
 
-struct DesktopCaptureSource: Identifiable {
-  enum Kind: Equatable { case display, window }
+struct DesktopCaptureSource: Identifiable, Equatable {
+  enum Kind: Equatable { case display, window, tab }
   let id: String
   let name: String
   let kind: Kind
+  var isRequestingTab = false
 
   var systemImageName: String {
     switch kind {
     case .display: "display"
     case .window: "macwindow"
+    case .tab: "rectangle.on.rectangle"
     }
   }
 }
@@ -29,13 +31,12 @@ struct DesktopCapturePicker: View {
   @State private var sources: [DesktopCaptureSource] = []
   @State private var loading = true
   @State private var error: String?
+  @State private var note: String?
 
   init(
     request: DesktopCaptureRequest,
     store: BrowserStore,
-    hasScreenRecordingAccess: @escaping () -> Bool = {
-      CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
-    },
+    hasScreenRecordingAccess: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
     shareableContent: @escaping () async throws -> SCShareableContent = {
       try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     }
@@ -52,6 +53,7 @@ struct DesktopCapturePicker: View {
       sources: sources,
       loading: loading,
       error: error,
+      note: note,
       onSelect: { store.resolveDesktopCapture(request.id, sourceID: $0) },
       onCancel: { store.resolveDesktopCapture(request.id, sourceID: nil) }
     )
@@ -62,43 +64,49 @@ struct DesktopCapturePicker: View {
   }
 
   func loadSources() async {
-    if !hasScreenRecordingAccess() {
-      error = PanelsL10n.string(
-        "Screen Recording access is unavailable. Check Privacy & Security settings.")
-      loading = false
-      return
-    }
-    do {
-      let content = try await shareableContent()
-      let windows = content.windows.compactMap { window -> DesktopCaptureSource? in
-        guard window.windowID != 0, window.isOnScreen
-        else { return nil }
-        let owner = window.owningApplication?.applicationName ?? PanelsL10n.string("Window")
-        let title = window.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name: String
-        if let title, !title.isEmpty {
-          name = "\(owner) — \(title)"
-        } else {
-          name = owner
-        }
-        return DesktopCaptureSource(id: "window:\(window.windowID):0", name: name, kind: .window)
+    let tabs = DesktopCaptureCatalog.tabSources(
+      session: store.session, profileID: request.profileID, requestingTabID: request.tabID)
+    var screens: [DesktopCaptureSource] = []
+    var screenAccessFailed = !hasScreenRecordingAccess()
+    if !screenAccessFailed {
+      do {
+        screens = try await screenSources(from: shareableContent())
+      } catch {
+        screenAccessFailed = true
       }
-      sources =
-        content.displays.map { display in
-          let name: String
-          if display.displayID == CGMainDisplayID() {
-            name = PanelsL10n.string("Main Display")
-          } else {
-            name = PanelsL10n.format("Display %d", .integer(Int(display.displayID)))
-          }
-          return DesktopCaptureSource(
-            id: "screen:\(display.displayID):0", name: name, kind: .display)
-        } + windows
-    } catch {
-      self.error = PanelsL10n.string(
-        "Screen Recording access is unavailable. Check Privacy & Security settings.")
     }
+    let listing = DesktopCaptureCatalog.listing(
+      tabs: tabs, screens: screens, screenAccessFailed: screenAccessFailed)
+    sources = listing.sources
+    error = listing.error.map(PanelsL10n.string)
+    note = listing.note.map(PanelsL10n.string)
     loading = false
+  }
+
+  private func screenSources(from content: SCShareableContent) -> [DesktopCaptureSource] {
+    let windows = content.windows.compactMap { window -> DesktopCaptureSource? in
+      guard window.windowID != 0, window.isOnScreen else { return nil }
+      let owner = window.owningApplication?.applicationName ?? PanelsL10n.string("Window")
+      let title = window.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let name: String
+      if let title, !title.isEmpty {
+        name = "\(owner) — \(title)"
+      } else {
+        name = owner
+      }
+      return DesktopCaptureSource(id: "window:\(window.windowID):0", name: name, kind: .window)
+    }
+    let displays = content.displays.map { display in
+      let name: String
+      if display.displayID == CGMainDisplayID() {
+        name = PanelsL10n.string("Main Display")
+      } else {
+        name = PanelsL10n.format("Display %d", .integer(Int(display.displayID)))
+      }
+      return DesktopCaptureSource(
+        id: "screen:\(display.displayID):0", name: name, kind: .display)
+    }
+    return displays + windows
   }
 }
 
@@ -107,6 +115,7 @@ struct DesktopCapturePickerContent: View {
   let sources: [DesktopCaptureSource]
   let loading: Bool
   let error: String?
+  var note: String? = nil
   let onSelect: (String) -> Void
   let onCancel: () -> Void
 
@@ -120,14 +129,17 @@ struct DesktopCapturePickerContent: View {
       )
       .font(.callout).foregroundStyle(.secondary)
       .textSelection(.enabled)
+      if let note {
+        Text(note).font(.callout).foregroundStyle(.secondary)
+      }
       if loading {
-        ProgressView(PanelsL10n.string("Looking for screens and windows…"))
+        ProgressView(PanelsL10n.string("Looking for screens, windows, and tabs…"))
           .frame(maxWidth: .infinity, minHeight: 120)
       } else if let error {
         ContentUnavailableView(error, systemImage: "rectangle.dashed.badge.record")
       } else if sources.isEmpty {
         ContentUnavailableView(
-          PanelsL10n.string("No screens or windows are available"), systemImage: "display")
+          PanelsL10n.string("No screens, windows, or tabs are available"), systemImage: "display")
       } else {
         List(sources) { source in
           Button {
@@ -156,8 +168,13 @@ struct DesktopCapturePickerContent: View {
 extension DesktopCaptureSource {
   var label: String {
     switch kind {
-    case .display: PanelsL10n.format("Screen: %@", .string(name))
-    case .window: PanelsL10n.format("Window: %@", .string(name))
+    case .display:
+      return PanelsL10n.format("Screen: %@", .string(name))
+    case .window:
+      return PanelsL10n.format("Window: %@", .string(name))
+    case .tab:
+      if isRequestingTab { return PanelsL10n.string("This Tab") }
+      return PanelsL10n.format("Tab: %@", .string(name))
     }
   }
 }

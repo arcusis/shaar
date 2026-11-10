@@ -227,6 +227,11 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(nullable NSString *)sourceID;
+/// Installs the current-engine page prompt script. ABI minor 14 and newer skip it.
+- (void)installPagePromptsForTabID:(NSString *)tabID;
+- (void)rememberDesktopCaptureRequestID:(NSString *)requestID tabID:(NSString *)tabID;
+- (void)finishPagePromptInTabID:(NSString *)tabID requestID:(NSString *)requestID
+                       sourceID:(nullable NSString *)sourceID;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 /// Canonical browser-managed download directory for a regular profile.
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;

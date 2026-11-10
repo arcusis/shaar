@@ -198,6 +198,70 @@ struct DesktopCaptureConsentTests {
     #expect(rendererDecisions == [nil])
   }
 
+  @Test func pagePromptTitleKeepsThePreviousTabTitle() {
+    let id = UUID().uuidString
+    let title = "\u{2060}shaar-prompt\u{2060}display\u{2060}\(id)"
+    let signal = PagePromptSignal.parse(title)
+    #expect(signal == PagePromptSignal(kind: .display, id: id))
+    #expect(PagePromptSignal.visibleTitle(reported: "Meet", previous: "Keep") == "Meet")
+    #expect(PagePromptSignal.visibleTitle(reported: title, previous: "Keep") == "Keep")
+    #expect(PagePromptSignal.parse("Hello") == nil)
+    #expect(PagePromptSignal.parse("\u{2060}shaar-prompt\u{2060}nope\u{2060}\(id)") == nil)
+  }
+
+  @Test func displayPromptBuildsTheCaptureRequestFromThePage() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let id = UUID().uuidString
+    let signal = try #require(
+      PagePromptSignal.parse("\u{2060}shaar-prompt\u{2060}display\u{2060}\(id)"))
+    let request = try #require(
+      PagePromptCapture.request(
+        signal: signal, tabID: tab.id, profileID: store.session.selectedSpace.profileID,
+        pageURL: tab.url))
+    #expect(request.matches(store.session))
+    #expect(request.frameID == "main")
+
+    let page = try #require(URL(string: "http://127.0.0.1:9/screen?q=1#x"))
+    let origin = try #require(PagePromptCapture.origin(of: page))
+    #expect(origin.host() == "127.0.0.1")
+    #expect(origin.port == 9)
+    #expect(origin.query == nil)
+    #expect(origin.fragment == nil)
+    let share = PagePromptSignal(kind: .share, id: id)
+    #expect(
+      PagePromptCapture.request(
+        signal: share, tabID: tab.id, profileID: store.session.selectedSpace.profileID,
+        pageURL: tab.url) == nil)
+  }
+
+  @Test func tabSourcesStayAvailableWithoutScreenRecording() throws {
+    let store = store()
+    let capture = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let tabs = DesktopCaptureCatalog.tabSources(
+      session: store.session, profileID: capture.profileID, requestingTabID: capture.tabID)
+    let denied = DesktopCaptureCatalog.listing(tabs: tabs, screens: [], screenAccessFailed: true)
+    #expect(denied.error == nil)
+    #expect(denied.note == DesktopCaptureCatalog.screenAccessNote)
+    #expect(denied.sources.first?.id == "tab:\(tab.id.uuidString):0")
+    #expect(denied.sources.first?.label == PanelsL10n.string("This Tab"))
+
+    let screen = DesktopCaptureSource(id: "screen:1:0", name: "Main Display", kind: .display)
+    let window = DesktopCaptureSource(id: "window:4:0", name: "Notes", kind: .window)
+    let ready = DesktopCaptureCatalog.listing(
+      tabs: tabs, screens: [screen, window], screenAccessFailed: false)
+    #expect(ready.sources.map(\.kind) == [.tab, .display, .window])
+    #expect(ready.note == nil)
+    #expect(window.label.contains("Notes"))
+    let other = DesktopCaptureSource(id: "tab:other:0", name: "Mail", kind: .tab)
+    #expect(other.label == PanelsL10n.format("Tab: %@", .string("Mail")))
+
+    let empty = DesktopCaptureCatalog.listing(tabs: [], screens: [], screenAccessFailed: true)
+    #expect(empty.error == DesktopCaptureCatalog.screenAccessNote)
+    #expect(empty.sources.isEmpty)
+  }
+
   @Test func staleProfileAndNavigationInvalidateRequestOwnership() throws {
     let browser = store()
     let capture = try request(browser, id: UUID().uuidString)

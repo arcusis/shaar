@@ -77,6 +77,7 @@ final class BrowserEngine {
   @ObservationIgnored private var loadingProfiles: Set<UUID> = []
   @ObservationIgnored private var failedProfiles: Set<UUID> = []
   @ObservationIgnored var liveTabs: Set<UUID> = []
+  @ObservationIgnored private var pagePromptTabs: [String: UUID] = [:]
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   /// Crashed documents whose native reload failed before the close event arrived.
   @ObservationIgnored private var tabsAwaitingReload: Set<UUID> = []
@@ -402,6 +403,9 @@ final class BrowserEngine {
     }
     store.onDesktopCaptureDecision = { [weak self] id, sourceID in
       guard let self else { return }
+      if let tabID = self.pagePromptTabs.removeValue(forKey: id) {
+        self.finishPagePrompt(id, tabID: tabID, sourceID: sourceID)
+      }
       self.events.resolveDesktopCapture(id, windowID: self.windowID, sourceID: sourceID)
     }
     callbacks.onDesktopCaptureRequest = { [weak self] payload in
@@ -508,8 +512,12 @@ final class BrowserEngine {
         self.store?.dismissPageFind()
       }
       let finishedLoading = self.pages[id]?.loading == true && !loading
+      let prompt = PagePromptSignal.parse(title)
+      let visibleTitle = PagePromptSignal.visibleTitle(
+        reported: title, previous: self.keptTitle(for: id))
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       self.store?.nativePageLoading(id, loading: loading)
+      if finishedLoading { self.runtime.installPagePrompts(forTabID: identity) }
       if let url = document {
         self.inspectors[id]?.documentChanged(url: url)
         if let profile = self.store?.session.profileID(forTabID: id) {
@@ -523,11 +531,13 @@ final class BrowserEngine {
         if let profile = self.store?.session.profileID(forTabID: id),
           self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true
         {
-          self.store?.nativeFavoritePageChanged(id, profileID: profile, url: url, title: title)
+          self.store?.nativeFavoritePageChanged(
+            id, profileID: profile, url: url, title: visibleTitle)
         } else {
-          self.store?.nativeTabChanged(id, url: url, title: title)
+          self.store?.nativeTabChanged(id, url: url, title: visibleTitle)
         }
         self.withholdAutomaticPictureInPictureIfOff(id, url: url)
+        if let prompt { self.receivePagePrompt(prompt, tabID: id, url: url) }
       }
       var icon: NSImage?
       if let profile = self.store?.session.profileID(forTabID: id) {
@@ -542,6 +552,7 @@ final class BrowserEngine {
       guard self.liveTabs.contains(id) || self.pages[id] != nil else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
+      self.pagePromptTabs = self.pagePromptTabs.filter { $0.value != id }
       self.shaarDevTools.removeValue(forKey: id)?.close()
       if let inspector = self.inspectors.removeValue(forKey: id), inspector.isOpen {
         inspector.close()
@@ -634,6 +645,40 @@ final class BrowserEngine {
       guard now.timeIntervalSince(since) >= Self.tabSuspensionDelay else { continue }
       suspend(tab.id)
     }
+  }
+
+  private func keptTitle(for id: UUID) -> String {
+    guard let store else { return "" }
+    for space in store.session.spaces {
+      if let tab = space.tabs.first(where: { $0.id == id }) { return tab.title }
+    }
+    if let favorite = store.session.favoritePages.first(where: { $0.tab.id == id }) {
+      return favorite.tab.title
+    }
+    return ""
+  }
+
+  private func receivePagePrompt(_ signal: PagePromptSignal, tabID: UUID, url: URL) {
+    guard signal.kind == .display, let store else { return }
+    guard let profile = store.session.profileID(forTabID: tabID),
+      let request = PagePromptCapture.request(
+        signal: signal, tabID: tabID, profileID: profile, pageURL: url)
+    else {
+      finishPagePrompt(signal.id, tabID: tabID, sourceID: nil)
+      return
+    }
+    if pagePromptTabs[signal.id] != nil { return }
+    pagePromptTabs[signal.id] = tabID
+    runtime.rememberDesktopCaptureRequestID(signal.id, tabID: tabID.uuidString)
+    guard store.requestDesktopCapture(request) else {
+      pagePromptTabs.removeValue(forKey: signal.id)
+      finishPagePrompt(signal.id, tabID: tabID, sourceID: nil)
+      return
+    }
+  }
+
+  private func finishPagePrompt(_ id: String, tabID: UUID, sourceID: String?) {
+    runtime.finishPagePrompt(inTabID: tabID.uuidString, requestID: id, sourceID: sourceID)
   }
 
   private func canSuspend(_ tabID: UUID, in store: BrowserStore) -> Bool {

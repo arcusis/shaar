@@ -9,5 +9,7 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSString *const ARCDesktopCaptureRequestMessage;
 FOUNDATION_EXPORT NSString *const ARCDesktopCaptureResultMessage;
 FOUNDATION_EXPORT NSString *ARCDesktopCapturePageScript(void);
+/// Main-world installer for the current engine. ABI minor 14 owns the picker.
+FOUNDATION_EXPORT NSString *ARCPagePromptScript(void);
 
 NS_ASSUME_NONNULL_END

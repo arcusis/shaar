@@ -212,7 +212,7 @@ class ShippingHarnessGuardTests(unittest.TestCase):
 
     def test_engine_testing_start_write_is_allowed(self):
         self.plant(
-            "Sources/ChromiumBridge/Backend.mm",
+            "Sources/ChromiumBridge/ChromiumShaarBackend.mm",
             "- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {\n"
             "  // The pinned engine reads SHAAR_ENGINE_TESTING.\n"
             "  setenv(\"SHAAR_ENGINE_TESTING\", engineTesting, 1);\n"
@@ -223,13 +223,53 @@ class ShippingHarnessGuardTests(unittest.TestCase):
 
     def test_engine_testing_read_in_the_start_file_fails(self):
         self.plant(
-            "Sources/ChromiumBridge/Backend.mm",
+            "Sources/ChromiumBridge/ChromiumShaarBackend.mm",
             "- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {\n"
             "  const char *testing = getenv(\"SHAAR_ENGINE_TESTING\");\n"
             "}\n",
         )
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_engine_testing_after_url_string_is_not_hidden_as_comment(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            'NSString *url = @"https://example.test"; const char *value = getenv("SHAAR_ENGINE_TESTING");\n',
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_engine_testing_in_lookalike_start_method_is_not_allowed(self):
+        self.plant(
+            "Sources/ChromiumBridge/Backend.mm",
+            "- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {\n"
+            '  setenv("SHAAR_ENGINE_TESTING", "1", 1);\n'
+            "}\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_probe_operation_reference_fails_in_shipping_source_and_binary(self):
+        operation = "SHAAR_OP_PROBE_PLANTED_FIXTURE"
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            f"shaar_operation operation = {operation};\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any(operation in item for item in found), found)
+
+        self.plant("Sources/ChromiumBridge/Planted.mm", "// clean\n")
+        self.binary.write_bytes(b"prefix " + operation.encode() + b" suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any(operation in item for item in found), found)
+
+    def test_generic_verification_symbol_collision_is_ignored_in_binary(self):
+        self.plant(
+            "Sources/ShaarVerification/Framework.swift",
+            "enum FrameworkDevTools {}\n",
+        )
+        self.binary.write_bytes(b"prefix FrameworkDevTools suffix")
+        self.assertEqual(GUARD.findings(self.root, self.binary), [])
 
     def test_engine_testing_string_in_the_binary_is_allowed(self):
         self.binary.write_bytes(b"prefix SHAAR_ENGINE_TESTING suffix")

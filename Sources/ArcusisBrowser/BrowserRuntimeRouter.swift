@@ -19,6 +19,7 @@ final class BrowserRuntimeClient {
   var onWebsiteMediaDismissed: ((String) -> Void)?
   var onDesktopCaptureRequest: (([String: Any]) -> Void)?
   var onDesktopCaptureDismissed: ((String) -> Void)?
+  var onWebShareRequest: (([String: Any]) -> Void)?
   var onExternalAppRequest: (([String: Any]) -> Void)?
   var onExternalAppDismissed: ((String) -> Void)?
   var onDeviceChooserEvent: (([String: Any]) -> Void)?
@@ -60,7 +61,7 @@ enum BrowserRoutingError: Error, LocalizedError {
 @MainActor
 final class BrowserRuntimeRouter {
   enum Context: CaseIterable {
-    case popup, installation, media, desktopCapture, externalApp, deviceChooser
+    case popup, installation, media, desktopCapture, webShare, externalApp, deviceChooser
   }
 
   private struct Subscription {

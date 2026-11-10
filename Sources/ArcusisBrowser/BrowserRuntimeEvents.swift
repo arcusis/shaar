@@ -150,6 +150,19 @@ final class BrowserRuntimeEvents {
       }
       client.onDesktopCaptureDismissed?(id)
     }
+    runtime.onWebShareRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let client = self.router.claim(.webShare, id: id, payload: payload) else {
+        self.runtime.resolveWebShareRequestID(id, outcome: WebShareOutcome.cancelled.rawValue)
+        return
+      }
+      guard let receive = client.onWebShareRequest else {
+        _ = self.router.consume(.webShare, id: id, windowID: client.windowID)
+        self.runtime.resolveWebShareRequestID(id, outcome: WebShareOutcome.cancelled.rawValue)
+        return
+      }
+      receive(payload)
+    }
     runtime.onExternalAppRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard !self.router.owns(.externalApp, id: id) else { return }
@@ -258,6 +271,11 @@ final class BrowserRuntimeEvents {
   func resolveDesktopCapture(_ id: String, windowID: String, sourceID: String?) {
     guard router.consume(.desktopCapture, id: id, windowID: windowID) else { return }
     runtime.resolveDesktopCaptureRequestID(id, sourceID: sourceID)
+  }
+
+  func resolveWebShare(_ id: String, windowID: String, outcome: WebShareOutcome) {
+    guard router.consume(.webShare, id: id, windowID: windowID) else { return }
+    runtime.resolveWebShareRequestID(id, outcome: outcome.rawValue)
   }
 
   func resolveExternalApp(_ id: String, windowID: String, accepted: Bool) {

@@ -47,6 +47,9 @@ enum ShaarVerificationMain {
     if CommandLine.arguments.contains("--probe-device-choosers") {
       exit(DeviceChooserProbe.run(arguments: CommandLine.arguments))
     }
+    if CommandLine.arguments.contains("--probe-web-share") {
+      exit(WebShareProbe.run(arguments: CommandLine.arguments))
+    }
     if let result = storeLanguage(
       arguments: CommandLine.arguments, bundleIdentifier: Bundle.main.bundleIdentifier)
     {

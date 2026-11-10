@@ -27,6 +27,9 @@ extern "C" shaar_error_code shaar_tab_find(
     shaar_engine *engine, shaar_bytes window_id, shaar_bytes tab_id,
     shaar_tab **out, shaar_error *error);
 
+// Patch 0072. shaar.28 does not export this; a null pointer skips the reply.
+typedef shaar_error_code (*ShaarShareReplyFunction)(const char *request_id, int shared);
+
 namespace {
 
 NSError *ShaarError(NSString *message) {
@@ -179,6 +182,8 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarMediaRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarCaptureRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarDeviceChooserRequests;
+  NSMutableDictionary<NSString *, NSString *> *_shaarShareRequests;
+  ShaarShareReplyFunction _shaarShareReply;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
@@ -196,6 +201,10 @@ struct Symbols {
                                tabID:(NSString *)tabID
                            profileID:(NSString *)profileID;
 - (void)receiveDesktopCaptureDismissal:(NSDictionary *)payload tabID:(NSString *)tabID;
+- (void)receiveWebShareRequest:(const shaar_event *)event
+                       payload:(NSDictionary *)payload
+                         tabID:(NSString *)tabID
+                     profileID:(NSString *)profileID;
 - (void)adoptOpenedTabFromEvent:(const shaar_event *)event
                         payload:(NSDictionary *)payload
                       profileID:(NSString *)profileID;
@@ -322,6 +331,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarCaptureRequests = [NSMutableDictionary dictionary];
   _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
   _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
+  _shaarShareRequests = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -342,6 +352,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarDeviceChooserAvailable = _symbols.abi_minor() >= kShaarDeviceChooserABIMinor;
   _symbols.tab_find = reinterpret_cast<decltype(_symbols.tab_find)>(
       dlsym(_shaarLibrary, "shaar_tab_find"));
+  _shaarShareReply = reinterpret_cast<ShaarShareReplyFunction>(
+      dlsym(_shaarLibrary, "shaar_share_reply"));
   return self;
 }
 
@@ -526,6 +538,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     } else {
       [self resolveDeviceChooserRequestID:requestID index:nil];
     }
+  }
+  if (event->kind == SHAAR_EVENT_PERMISSION &&
+      [kind isEqualToString:@"webShareRequested"]) {
+    [self receiveWebShareRequest:event payload:payload tabID:tabID profileID:profileID];
     return;
   }
   if (event->kind == SHAAR_EVENT_DEVTOOLS && [kind isEqualToString:@"panelEvent"] &&
@@ -597,6 +613,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
     for (NSString *requestID in [_shaarDeviceChooserRequests allKeysForObject:tabID])
       [self resolveDeviceChooserRequestID:requestID index:nil];
+    for (NSString *requestID in [_shaarShareRequests allKeysForObject:tabID])
+      [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
     NSString *windowID = _shaarTabWindows[tabID];
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
@@ -1631,6 +1649,43 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   } mutableCopy];
   if (select) payload[@"index"] = @(index.integerValue);
   [self submitTabID:tabID operation:kShaarDeviceChooserDecision payload:payload];
+}
+
+- (void)receiveWebShareRequest:(const shaar_event *)event
+                       payload:(NSDictionary *)payload
+                         tabID:(NSString *)tabID
+                     profileID:(NSString *)profileID {
+  if (event->session_id.size) return;
+  NSString *windowID = String(event->window_id);
+  NSString *requestID = payload[@"id"];
+  if (![payload[@"schemaVersion"] isEqual:@1] ||
+      ![requestID isKindOfClass:NSString.class] ||
+      ![[NSUUID alloc] initWithUUIDString:requestID] ||
+      _shaarShareRequests[requestID] ||
+      !_shaarTabs[tabID] ||
+      ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+      ![windowID isEqualToString:_shaarTabWindows[tabID]] ||
+      ![self desktopCaptureField:payload[@"origin"] maxLength:2048] ||
+      ![self desktopCaptureField:payload[@"pageURL"] maxLength:4096] ||
+      ![self desktopCaptureField:payload[@"frameID"] maxLength:256]) return;
+  _shaarShareRequests[requestID] = tabID;
+  NSMutableDictionary *request = [payload mutableCopy];
+  request[@"profileID"] = profileID;
+  request[@"tabID"] = tabID;
+  request[@"windowID"] = windowID;
+  if (self.onWebShareRequest) {
+    self.onWebShareRequest(request);
+  } else {
+    [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
+  }
+}
+
+- (void)resolveWebShareRequestID:(NSString *)requestID outcome:(NSString *)outcome {
+  NSString *tabID = _shaarShareRequests[requestID];
+  if (!tabID) return;
+  [_shaarShareRequests removeObjectForKey:requestID];
+  if (!_shaarShareReply || !requestID.UTF8String) return;
+  _shaarShareReply(requestID.UTF8String, [outcome isEqualToString:@"shared"] ? 1 : 0);
 }
 
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {

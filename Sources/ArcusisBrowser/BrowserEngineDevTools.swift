@@ -173,6 +173,11 @@ extension BrowserEngine {
 
   func toggleChromiumDeveloperTools() {
     guard let target = siteControlTarget else { return }
+    if !ShaarDevToolsRoute.opensLegacyShell(),
+      let shell = shaarDevTools[target.tabID], shell.isOpen
+    {
+      shell.close()
+    }
     let identity = target.tabID.uuidString
     runtime.toggleDevTools(forTabID: identity) { [weak self] error in
       if let error { self?.reportNotice(error.localizedDescription) }

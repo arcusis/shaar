@@ -7,8 +7,21 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
-/// Hidden shipping proof that F12 and Option-Command-I open the Chromium dock.
+@testable import ArcusisBrowser
+
+/// Hidden verification proof that F12 and Option-Command-I open the Chromium dock.
 @MainActor enum ShaarDevToolsF12RouteSmoke {
+  static func run(arguments: [String]) -> Int32 {
+    guard let index = arguments.firstIndex(of: "--devtools-f12-route"),
+      arguments.indices.contains(index + 2),
+      let frameworks = Bundle.main.privateFrameworksURL
+    else { return 2 }
+    let framework = frameworks.appending(path: "Chromium Framework.framework")
+    let output = URL(fileURLWithPath: arguments[index + 1])
+    return run(
+      frameworkURL: framework, outputURL: output, pageURL: URL(string: arguments[index + 2]))
+  }
+
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
     guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else { return 2 }
     let root = outputURL.deletingLastPathComponent().appending(path: "profile")
@@ -50,7 +63,7 @@ import Foundation
     var rows: [[String: Any]] = []
     defer {
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
-      let passed = rows.count == 3 && rows.allSatisfy { $0["passed"] as? Bool == true } && hidden
+      let passed = rows.count == 4 && rows.allSatisfy { $0["passed"] as? Bool == true } && hidden
       write(
         ["passed": passed, "rows": rows, "allWindowsHidden": hidden],
         to: outputURL)
@@ -77,15 +90,18 @@ import Foundation
       probeKey.window = context.window
       if context.window.isVisible { context.window.orderOut(nil) }
       closeLegacyShell(context: context, tab: tab)
-      rows.append(await proveChromiumShortcut(
-        name: "f12", context: context, host: host, tab: tab, outputURL: outputURL,
-        fire: {
-          guard let event = f12Event(in: context.window) else { return false }
-          return host.performDeveloperToolsKey(event)
-        }))
-      rows.append(await proveChromiumShortcut(
-        name: "option-command-i", context: context, host: host, tab: tab, outputURL: outputURL,
-        fire: { routeOptionCommandI(host: host, window: context.window) }))
+      rows.append(
+        await proveChromiumShortcut(
+          name: "f12", context: context, host: host, tab: tab, outputURL: outputURL,
+          fire: {
+            guard let event = f12Event(in: context.window) else { return false }
+            return host.performDeveloperToolsKey(event)
+          }))
+      rows.append(
+        await proveChromiumShortcut(
+          name: "option-command-i", context: context, host: host, tab: tab, outputURL: outputURL,
+          fire: { routeOptionCommandI(host: host, window: context.window) }))
+      rows.append(await proveF12ClosesOpenShell(context: context, host: host, tab: tab))
       UserDefaults.standard.set(true, forKey: ShaarDevToolsRoute.legacyShellDefaultsKey)
       rows.append(await proveLegacyShell(context: context, host: host, tab: tab))
     } catch {
@@ -130,6 +146,38 @@ import Foundation
     ]
     if !fired { row["detail"] = fireDetail(name: name, context: context, host: host) }
     return row
+  }
+
+  private static func proveF12ClosesOpenShell(
+    context: NativeBrowserContext, host: NativeBrowserHost, tab: UUID
+  ) async -> [String: Any] {
+    await closeChromiumDock(context: context, host: host, tab: tab)
+    guard let target = context.engine.siteControlTarget, target.tabID == tab else {
+      return ["name": "f12-closes-legacy-shell", "passed": false, "detail": "No page target"]
+    }
+    let shown = context.engine.showDeveloperTools(for: target)
+    let shellBefore = context.engine.shaarDevTools[tab]?.isOpen == true
+    guard let event = f12Event(in: context.window) else {
+      return [
+        "name": "f12-closes-legacy-shell", "passed": false,
+        "detail": "Could not build an F12 event",
+      ]
+    }
+    let fired = host.performDeveloperToolsKey(event)
+    if context.window.isVisible { context.window.orderOut(nil) }
+    let settled = await wait {
+      context.engine.shaarDevTools[tab]?.isOpen != true
+        && chromiumDockIsOpen(context: context, tab: tab)
+    }
+    let shellClosed = context.engine.shaarDevTools[tab]?.isOpen != true
+    let dockOpen = chromiumDockIsOpen(context: context, tab: tab)
+    let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
+    return [
+      "name": "f12-closes-legacy-shell",
+      "passed": shown && shellBefore && fired && settled && hidden,
+      "fired": fired, "legacyShell": !shellClosed, "chromiumDock": dockOpen,
+      "windowsHidden": hidden, "notice": context.engine.notice ?? "",
+    ]
   }
 
   private static func proveLegacyShell(

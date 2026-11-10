@@ -102,7 +102,8 @@ import Testing
     let context = try fixture.context()
     let tab = try fixture.tabID()
     let current = try #require(context.engine.siteControlTarget)
-    let stale = SiteControlTarget(tabID: tab, profileID: current.profileID, url: URL(string: "https://stale.example/")!)
+    let stale = SiteControlTarget(
+      tabID: tab, profileID: current.profileID, url: URL(string: "https://stale.example/")!)
 
     #expect(!context.engine.showDeveloperTools(for: stale))
     #expect(context.engine.shaarDevTools[tab]?.isOpen != true)
@@ -110,7 +111,42 @@ import Testing
     #expect(context.engine.shaarDevTools[tab]?.isOpen == true)
     #expect(fixture.runtime.toggledTabs.isEmpty)
     context.engine.togglePublicDeveloperTools()
+    #expect(context.engine.shaarDevTools[tab]?.isOpen != true)
     #expect(fixture.runtime.toggledTabs == [tab.uuidString])
+  }
+
+  @Test func f12ClosesAnOpenLegacyShell() throws {
+    let legacy = LegacyShellDefault(enabled: false)
+    defer { legacy.restore() }
+    let fixture = try PublicRouteFixture()
+    defer { fixture.cleanUp() }
+    let context = try fixture.context()
+    let tab = try fixture.tabID()
+    let current = try #require(context.engine.siteControlTarget)
+
+    #expect(context.engine.showDeveloperTools(for: current))
+    #expect(context.engine.shaarDevTools[tab]?.isOpen == true)
+    #expect(fixture.host.performDeveloperToolsKey(try fixture.f12Event()))
+    #expect(context.engine.shaarDevTools[tab]?.isOpen != true)
+    #expect(fixture.runtime.toggledTabs == [tab.uuidString])
+  }
+
+  @Test func privateF12ClosesAnOpenLegacyShell() throws {
+    let legacy = LegacyShellDefault(enabled: false)
+    defer { legacy.restore() }
+    let fixture = try PublicRouteFixture()
+    defer { fixture.cleanUp() }
+    let owner = try fixture.openPrivateWindow()
+    let tab = try #require(owner.store.session.selectedPage?.tab.id)
+    let shell = LegacyShellDefault(enabled: true)
+
+    #expect(fixture.host.performDeveloperToolsKey(try fixture.f12Event(in: owner.window)))
+    #expect(owner.page.shaarDevTools[tab]?.isOpen == true)
+    #expect(fixture.runtime.privateToggles.isEmpty)
+    shell.restore()
+    #expect(fixture.host.performDeveloperToolsKey(try fixture.f12Event(in: owner.window)))
+    #expect(owner.page.shaarDevTools[tab]?.isOpen != true)
+    #expect(fixture.runtime.privateToggles == [tab.uuidString])
   }
 }
 
@@ -145,7 +181,8 @@ import Testing
 }
 
 @MainActor private final class PublicRouteFixture {
-  let root = FileManager.default.temporaryDirectory.appending(path: "devtools-route-\(UUID().uuidString)")
+  let root = FileManager.default.temporaryDirectory.appending(
+    path: "devtools-route-\(UUID().uuidString)")
   let runtime = PublicRouteRuntime()
   let host: NativeBrowserHost
   let key = PublicRouteKey()
@@ -203,8 +240,14 @@ import Testing
 
   func cleanUp() {
     host.detach()
-    for window in runtime.windows.values { window.orderOut(nil); window.close() }
-    for window in runtime.privateWindows.values { window.orderOut(nil); window.close() }
+    for window in runtime.windows.values {
+      window.orderOut(nil)
+      window.close()
+    }
+    for window in runtime.privateWindows.values {
+      window.orderOut(nil)
+      window.close()
+    }
     try? FileManager.default.removeItem(at: root)
   }
 
@@ -212,11 +255,12 @@ import Testing
     keyCode: UInt16, characters: String, modifiers: NSEvent.ModifierFlags, in window: NSWindow?
   ) throws -> NSEvent {
     let target = try #require(window ?? key.window)
-    return try #require(NSEvent.keyEvent(
-      with: .keyDown, location: .zero, modifierFlags: modifiers,
-      timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber,
-      context: nil, characters: characters, charactersIgnoringModifiers: characters,
-      isARepeat: false, keyCode: keyCode))
+    return try #require(
+      NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: modifiers,
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber,
+        context: nil, characters: characters, charactersIgnoringModifiers: characters,
+        isARepeat: false, keyCode: keyCode))
   }
 }
 

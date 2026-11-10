@@ -12,3 +12,4 @@ import './focus-contrast/focus-contrast-meta.js';
 import './stacking-3d/stacking-3d-meta.js';
 import './stacking/stacking-meta.js';
 import './copy-for-agent/copy-for-agent-meta.js';
+import './graphql-trpc/graphql-trpc-meta.js';

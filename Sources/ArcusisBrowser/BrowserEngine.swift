@@ -93,26 +93,35 @@ final class BrowserEngine {
   /// Site host last associated with each tab's icon. An empty query for that host
   /// leaves the icon in place. A different host drops the live icon and the saved file.
   @ObservationIgnored private var faviconHosts: [UUID: String] = [:]
-  private(set) var persistedFaviconUpdates = 0
+  /// Last image written for a tab. Loading ticks update the live icon without changing this,
+  /// so the bitmap compare still sees the saved icon when the page finishes loading.
+  @ObservationIgnored private var persistedFaviconImages: [UUID: NSImage] = [:]
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
     favicons[tabID] = image
   }
 
   /// Records the icon Chromium returned for this document host.
-  func noteDocumentFavicon(_ icon: NSImage?, for tabID: UUID, host: String?) {
+  /// The live icon updates immediately. A pinned tab or Favorite is saved only after loading
+  /// finishes, and only when that saved image changed.
+  func noteDocumentFavicon(
+    _ icon: NSImage?, for tabID: UUID, host: String?, loading: Bool = false
+  ) {
     let documentHost = host?.lowercased()
     if let icon {
-      let changed = faviconChanged(icon, for: tabID, host: documentHost)
       favicons[tabID] = icon
+      guard !loading else { return }
+      let persist =
+        store?.isPrivate != true && store?.remembersFavicon(forTab: tabID) == true
+      if persist, savedIconChanged(icon, for: tabID, host: documentHost) {
+        persistedFaviconImages[tabID] = icon
+        store?.rememberFavicon(icon, forTab: tabID, host: documentHost)
+      }
       faviconHosts[tabID] = documentHost
-      guard changed, store?.remembersFavicon(forTab: tabID) == true else { return }
-      persistedFaviconUpdates += 1
-      store?.rememberFavicon(icon, forTab: tabID, host: documentHost)
       return
     }
-    // A missing host is not a different site. The first loading tick must not wipe a saved icon.
-    guard let documentHost, !documentHost.isEmpty else { return }
+    // A loading tick, or a tick that names no site, is not a different site.
+    guard !loading, let documentHost, !documentHost.isEmpty else { return }
     let previous = faviconHosts[tabID] ?? store?.faviconHost(forTab: tabID)
     guard let previous else {
       faviconHosts[tabID] = documentHost
@@ -127,14 +136,19 @@ final class BrowserEngine {
     store?.forgetFavicon(forTab: tabID)
   }
 
-  private func faviconChanged(_ icon: NSImage, for tabID: UUID, host: String?) -> Bool {
-    guard let current = favicons[tabID], faviconHosts[tabID] == host else { return true }
-    return !FaviconCache.sameImage(current, icon)
+  /// Compares against the last image written for this site. Callers check the pin or Favorite
+  /// gate first, so an ordinary tab never pays for the bitmap compare.
+  private func savedIconChanged(_ icon: NSImage, for tabID: UUID, host: String?) -> Bool {
+    guard faviconHosts[tabID] == host, let saved = persistedFaviconImages[tabID] else {
+      return true
+    }
+    return !FaviconCache.sameImage(saved, icon)
   }
 
   private func clearFavicon(_ id: UUID) {
     favicons[id] = nil
     faviconHosts[id] = nil
+    persistedFaviconImages[id] = nil
   }
 
   func focusPage(_ tabID: UUID) {
@@ -520,7 +534,7 @@ final class BrowserEngine {
         icon = self.runtime.favicon(
           forTabID: identity, profileID: profile.uuidString, windowID: self.windowID)
       }
-      self.noteDocumentFavicon(icon, for: id, host: documentHost)
+      self.noteDocumentFavicon(icon, for: id, host: documentHost, loading: loading)
     }
     callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity) else { return }

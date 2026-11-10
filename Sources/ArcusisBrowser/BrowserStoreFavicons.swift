@@ -43,9 +43,10 @@ extension BrowserStore {
     }
   }
 
-  /// Saves a page icon reported for a tab or Favorite.
+  /// Saves a page icon for a pinned tab or Favorite.
+  /// Ordinary tabs and private windows show the live icon and do not write a file.
   func rememberFavicon(_ image: NSImage, forTab tabID: UUID, host: String? = nil) {
-    guard !isPrivate else { return }
+    guard !isPrivate, remembersFavicon(forTab: tabID) else { return }
     guard let itemID = faviconItemID(forTab: tabID),
       let profileID = session.profileID(forTabID: tabID)
     else { return }

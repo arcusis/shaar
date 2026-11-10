@@ -11,17 +11,21 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
+#include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
+#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
@@ -29,9 +33,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
-#include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+#include "crypto/sha2.h"
 #include "extensions/browser/extension_install_prompt_client.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/install_prompt_data.h"
@@ -39,6 +44,7 @@
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/unpacked_installer.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/manifest.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -60,6 +66,7 @@ struct PendingInstall {
   std::string profile_id;
   std::string window_id;
   std::string tab_id;
+  std::string manifest_sha256;
   GURL page_url;
   base::FilePath unpacked_path;
   bool withhold_on_accept = false;
@@ -69,13 +76,18 @@ struct PendingInstall {
 using PendingMap = std::map<std::string, PendingInstall>;
 
 PendingMap& Pending() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   static base::NoDestructor<PendingMap> pending;
   return *pending;
 }
 
-uint64_t& NextRequestID() {
-  static base::NoDestructor<uint64_t> next(0);
-  return *next;
+std::string NewRequestID() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  std::string id;
+  do {
+    id = base::HexEncode(base::RandBytesAsString(16));
+  } while (Pending().contains(id));
+  return id;
 }
 
 shaar_error_code Fail(shaar_error_code code,
@@ -215,23 +227,13 @@ void DropPending(std::string request_id) {
   Decline(std::move(pending.done));
 }
 
-base::ListValue StringList(const base::DictValue& manifest, const char* key) {
-  base::ListValue values;
-  const base::ListValue* list = manifest.FindList(key);
-  if (!list)
-    return values;
-  for (const base::Value& item : *list) {
-    if (values.size() >= kMaxListedPermissions)
-      break;
-    const std::string* text = item.GetIfString();
-    if (!text || text->empty() || text->size() > kMaxPermissionBytes)
-      continue;
-    values.Append(*text);
-  }
-  return values;
-}
+struct ReadManifestResult {
+  std::string contents;
+  base::DictValue value;
+};
 
-std::optional<base::DictValue> ReadManifest(const base::FilePath& manifest) {
+std::optional<ReadManifestResult> ReadManifest(
+    const base::FilePath& manifest) {
   std::string contents;
   if (!base::ReadFileToStringWithMaxSize(manifest, &contents,
                                          kMaxManifestBytes))
@@ -239,7 +241,7 @@ std::optional<base::DictValue> ReadManifest(const base::FilePath& manifest) {
   auto parsed = base::JSONReader::Read(contents, base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict())
     return std::nullopt;
-  return std::move(parsed->GetDict());
+  return ReadManifestResult{std::move(contents), std::move(parsed->GetDict())};
 }
 
 bool ManifestIsVersion3(const base::DictValue& manifest) {
@@ -249,6 +251,26 @@ bool ManifestIsVersion3(const base::DictValue& manifest) {
   return version.has_value() && *version == 3 && name &&
          TextFits(*name, 1024) && extension_version &&
          TextFits(*extension_version, 128);
+}
+
+struct ParsedUnpackedExtension {
+  scoped_refptr<extensions::Extension> extension;
+  std::string manifest_sha256;
+};
+
+std::optional<ParsedUnpackedExtension> ParseUnpackedExtension(
+    const base::FilePath& folder) {
+  const auto manifest = ReadManifest(folder.AppendASCII("manifest.json"));
+  if (!manifest || !ManifestIsVersion3(manifest->value))
+    return std::nullopt;
+  std::u16string error;
+  scoped_refptr<extensions::Extension> extension = extensions::Extension::Create(
+      folder, extensions::mojom::ManifestLocation::kUnpacked, manifest->value,
+      extensions::Extension::NO_FLAGS, &error);
+  if (!extension || extension->manifest_version() != 3)
+    return std::nullopt;
+  return ParsedUnpackedExtension{
+      std::move(extension), crypto::SHA256HashString(manifest->contents)};
 }
 
 content::WebContents* ContentsForRequest(ShaarEngineContext* context,
@@ -381,8 +403,7 @@ UnpackedFolderStatus InspectUnpackedFolder(const base::FilePath& path,
   if (!folder.AppendRelativePath(manifest, &relative) || relative.empty() ||
       relative.ReferencesParent())
     return UnpackedFolderStatus::kInvalid;
-  const std::optional<base::DictValue> parsed = ReadManifest(manifest);
-  if (!parsed || !ManifestIsVersion3(*parsed))
+  if (!ParseUnpackedExtension(folder))
     return UnpackedFolderStatus::kInvalid;
   if (resolved)
     *resolved = folder;
@@ -409,6 +430,33 @@ std::optional<std::string_view> InstallPromptEventType(int prompt_type) {
     default:
       return std::nullopt;
   }
+}
+
+std::optional<InstallConsentDetails> BuildInstallConsentDetails(
+    const extensions::Extension& extension,
+    const extensions::PermissionSet& permissions) {
+  extensions::InstallPromptData prompt(extensions::InstallPromptData::INSTALL_PROMPT);
+  prompt.set_extension(&extension);
+  prompt.AddPermissionSet(permissions);
+
+  InstallConsentDetails details;
+  for (size_t index = 0; index < prompt.GetPermissionCount(); ++index) {
+    if (details.permissions.size() >= kMaxListedPermissions)
+      return std::nullopt;
+    std::string permission = base::UTF16ToUTF8(prompt.GetPermission(index));
+    if (!TextFits(permission, kMaxPermissionBytes))
+      return std::nullopt;
+    details.permissions.push_back(std::move(permission));
+  }
+  for (const auto& pattern : permissions.effective_hosts()) {
+    if (details.host_permissions.size() >= kMaxListedPermissions)
+      return std::nullopt;
+    std::string host = pattern.GetAsString();
+    if (!TextFits(host, kMaxPermissionBytes))
+      return std::nullopt;
+    details.host_permissions.push_back(std::move(host));
+  }
+  return details;
 }
 
 bool DeveloperModePayloadValid(const base::DictValue& input) {
@@ -483,16 +531,23 @@ shaar_error_code BeginUnpackedLoad(ShaarEngineContext* context,
     ReplyRefused(reply, reply_context, request_id, SHAAR_IO_ERROR);
     return SHAAR_OK;
   }
-  const std::optional<base::DictValue> manifest =
-      ReadManifest(unpacked.AppendASCII("manifest.json"));
-  if (!manifest || !ManifestIsVersion3(*manifest)) {
+  std::optional<ParsedUnpackedExtension> parsed_extension =
+      ParseUnpackedExtension(unpacked);
+  if (!parsed_extension || !parsed_extension->extension->permissions_data()) {
     ReplyRefused(reply, reply_context, request_id, SHAAR_IO_ERROR);
     return SHAAR_OK;
   }
-  const std::string extension_id =
-      crx_file::id_util::GenerateIdForPath(unpacked);
+  const extensions::Extension& extension = *parsed_extension->extension;
+  const std::string extension_id = extension.id();
+  std::unique_ptr<const extensions::PermissionSet> prompt_permissions =
+      extensions::util::GetInstallPromptPermissionSetForExtension(&extension,
+                                                                  profile);
+  std::optional<InstallConsentDetails> consent =
+      prompt_permissions
+          ? BuildInstallConsentDetails(extension, *prompt_permissions)
+          : std::nullopt;
   if (!ExtensionIdIsAcceptable(extension_id) ||
-      Pending().size() >= kMaxPendingInstalls) {
+      Pending().size() >= kMaxPendingInstalls || !consent) {
     ReplyRefused(reply, reply_context, request_id, SHAAR_NOT_READY);
     return SHAAR_OK;
   }
@@ -508,20 +563,26 @@ shaar_error_code BeginUnpackedLoad(ShaarEngineContext* context,
     return SHAAR_OK;
   }
 
-  const std::string id = std::to_string(++NextRequestID());
+  const std::string id = NewRequestID();
   base::DictValue payload;
   payload.Set("schemaVersion", 1);
   payload.Set("kind", "installRequested");
   payload.Set("type", "install");
   payload.Set("requestId", id);
   payload.Set("id", extension_id);
-  payload.Set("name", *manifest->FindString("name"));
-  payload.Set("version", *manifest->FindString("version"));
+  payload.Set("name", extension.name());
+  payload.Set("version", extension.VersionString());
   payload.Set("sourceURL", contents->GetLastCommittedURL().spec());
-  AddPermissionList(&payload, "permissions",
-                    StringList(*manifest, "permissions"));
+  base::ListValue permission_list;
+  for (auto& permission : consent->permissions)
+    permission_list.Append(std::move(permission));
+  base::ListValue host_permission_list;
+  for (auto& host : consent->host_permissions)
+    host_permission_list.Append(std::move(host));
+  AddPermissionList(&payload, "permissions", std::move(permission_list));
   AddPermissionList(&payload, "hostPermissions",
-                    StringList(*manifest, "host_permissions"));
+                    std::move(host_permission_list));
+  payload.Set("permissionsComplete", true);
   std::string json;
   if (!base::JSONWriter::Write(payload, &json)) {
     ReplyRefused(reply, reply_context, request_id, SHAAR_CHROMIUM_ERROR);
@@ -538,6 +599,7 @@ shaar_error_code BeginUnpackedLoad(ShaarEngineContext* context,
   pending.tab_id = identity->tab_id;
   pending.page_url = contents->GetLastCommittedURL();
   pending.unpacked_path = unpacked;
+  pending.manifest_sha256 = parsed_extension->manifest_sha256;
   Pending().emplace(id, std::move(pending));
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, base::BindOnce(&DropPending, id), base::Minutes(2));
@@ -575,6 +637,10 @@ shaar_error_code ApplySiteAccess(ShaarEngineContext* context,
   auto identity = BindSelectedPage(context, engine, window, tab, &contents);
   if (!identity || !contents) {
     ReplyRefused(reply, reply_context, request_id, SHAAR_NOT_READY);
+    return SHAAR_OK;
+  }
+  if (contents->GetBrowserContext() != profile) {
+    ReplyRefused(reply, reply_context, request_id, SHAAR_WRONG_PROFILE);
     return SHAAR_OK;
   }
   const url::Origin expected = url::Origin::Create(GURL(*origin_text));
@@ -649,6 +715,15 @@ shaar_error_code ResolveInstallDecision(ShaarEngineContext* context,
           "{\"schemaVersion\":1,\"installed\":false}");
     return SHAAR_OK;
   }
+  const auto accepted_manifest =
+      ReadManifest(unpacked.AppendASCII("manifest.json"));
+  if (!accepted_manifest ||
+      crypto::SHA256HashString(accepted_manifest->contents) !=
+          pending.manifest_sha256) {
+    Reply(reply, reply_context, abi_request, SHAAR_OK,
+          "{\"schemaVersion\":1,\"installed\":false}");
+    return SHAAR_OK;
+  }
   StartUnpackedLoad(profile, unpacked);
   Reply(reply, reply_context, abi_request, SHAAR_OK,
         "{\"schemaVersion\":1,\"installed\":true}");
@@ -685,7 +760,7 @@ void ShaarShowInstallPrompt(
     return;
   }
 
-  const std::string id = std::to_string(++NextRequestID());
+  const std::string id = NewRequestID();
   base::DictValue payload;
   payload.Set("schemaVersion", 1);
   payload.Set("kind", "installRequested");

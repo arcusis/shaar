@@ -31,6 +31,20 @@ class ExtensionInstallPatchTests(unittest.TestCase):
         self.assertIn("weak_import", source)
         self.assertNotIn("document.title", source)
 
+    def test_patch_blocks_extensions_page_unpacked_install_bypass(self):
+        source = PATCH.read_text()
+        self.assertIn('HasSwitch("shaar-embedder")', source)
+        self.assertIn("DeveloperPrivateLoadUnpackedFunction", source)
+        self.assertIn("managed through Shaar Settings", source)
+
+    def test_layer_uses_chromium_permission_messages_and_manifest_binding(self):
+        source = (LAYER / INSTALL_FILES[1]).read_text()
+        self.assertIn("InstallPromptData", source)
+        self.assertIn("GetInstallPromptPermissionSetForExtension", source)
+        self.assertIn("SHA256HashString", source)
+        self.assertIn("pending.manifest_sha256", source)
+        self.assertIn("permissionsComplete", source)
+
     def test_patch_is_not_on_the_chromium_155_list(self):
         patches = json.loads(MANIFEST.read_text())["patches"]
         names = [entry["file"] for entry in patches]

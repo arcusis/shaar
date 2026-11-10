@@ -6,7 +6,9 @@
 #define CHROME_BROWSER_SHAAR_EXTENSIONS_SHAAR_EXTENSION_INSTALL_H_
 
 #include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/values.h"
@@ -14,6 +16,10 @@
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 class Profile;
+namespace extensions {
+class Extension;
+class PermissionSet;
+}  // namespace extensions
 
 namespace shaar::extensions_host {
 
@@ -32,6 +38,15 @@ UnpackedFolderStatus InspectUnpackedFolder(const base::FilePath& path,
 
 // Prompt types the app can show. Anything else is declined.
 std::optional<std::string_view> InstallPromptEventType(int prompt_type);
+
+struct InstallConsentDetails {
+  std::vector<std::string> permissions;
+  std::vector<std::string> host_permissions;
+};
+
+std::optional<InstallConsentDetails> BuildInstallConsentDetails(
+    const extensions::Extension& extension,
+    const extensions::PermissionSet& permissions);
 
 bool DeveloperModePayloadValid(const base::DictValue& input);
 bool UnpackedPayloadValid(const base::DictValue& input);

@@ -9,11 +9,55 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/json/json_reader.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "extensions/browser/install_prompt_data.h"
+#include "extensions/common/extension.h"
+#include "extensions/common/permissions/permissions_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace {
+
+TEST(ShaarExtensionsModuleTest,
+     UnpackedConsentUsesParsedContentScriptHostPermissions) {
+  base::ScopedTempDir extension_dir;
+  ASSERT_TRUE(extension_dir.CreateUniqueTempDir());
+  ASSERT_TRUE(base::WriteFile(extension_dir.GetPath().AppendASCII("content.js"),
+                              "void 0;"));
+  auto manifest = base::JSONReader::Read(
+      R"({"manifest_version":3,"name":"Host access test","version":"1.0","permissions":["storage"],"content_scripts":[{"matches":["https://example.com/*"],"js":["content.js"]}]})",
+      base::JSON_PARSE_RFC);
+  ASSERT_TRUE(manifest && manifest->is_dict());
+  std::u16string error;
+  auto extension = extensions::Extension::Create(
+      extension_dir.GetPath(), extensions::mojom::ManifestLocation::kUnpacked,
+      manifest->GetDict(), extensions::Extension::NO_FLAGS, &error);
+  ASSERT_TRUE(extension) << error;
+  ASSERT_TRUE(extension->permissions_data());
+
+  extensions::InstallPromptData prompt(
+      extensions::InstallPromptData::INSTALL_PROMPT);
+  prompt.set_extension(extension.get());
+  prompt.AddPermissionSet(extension->permissions_data()->active_permissions());
+  ASSERT_GT(prompt.GetPermissionCount(), 0u);
+  bool prompt_mentions_content_script_host = false;
+  for (size_t index = 0; index < prompt.GetPermissionCount(); ++index) {
+    if (prompt.GetPermission(index).find(u"example.com") !=
+        std::u16string::npos) {
+      prompt_mentions_content_script_host = true;
+    }
+  }
+  EXPECT_TRUE(prompt_mentions_content_script_host);
+
+  bool content_script_host_is_active = false;
+  for (const auto& host :
+       extension->permissions_data()->active_permissions().effective_hosts()) {
+    if (host.GetAsString() == "https://example.com/*")
+      content_script_host_is_active = true;
+  }
+  EXPECT_TRUE(content_script_host_is_active);
+}
 
 TEST(ShaarExtensionsModuleTest, ComponentExtensionsStayInternal) {
   using extensions::mojom::ManifestLocation;

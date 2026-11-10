@@ -32,3 +32,23 @@ diff --git a/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc
 +  }
    return base::BindRepeating(&ShowExtensionInstallDialogImpl);
  }
+diff --git a/chrome/browser/extensions/api/developer_private/developer_private_functions.cc b/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
+--- a/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
++++ b/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
+@@ -34,3 +34,4 @@
+ #include "base/barrier_closure.h"
++#include "base/command_line.h"
+ #include "base/debug/crash_logging.h"
+ #include "base/files/file_util.h"
+@@ -887,6 +888,11 @@ ExtensionFunction::ResponseAction DeveloperPrivateLoadUnpackedFunction::Run() {
+   EXTENSION_FUNCTION_VALIDATE(params);
+ 
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    return RespondNow(
++        Error("Unpacked installs are managed through Shaar Settings."));
++  }
++
+   content::WebContents* web_contents = GetSenderWebContents();
+   if (!web_contents) {
+     return RespondNow(Error(kCouldNotFindWebContentsError));
+   }

@@ -25,12 +25,35 @@ extension ProfileSettingsBackend {
   func thirdPartyCookiesManaged(_ id: UUID) -> Bool { false }
 }
 
+extension ARCChromiumRuntime {
+  /// Loads a profile after applying the stored HTTPS-only choice.
+  /// Settings and the browsing engine share this path.
+  func loadProfileID(
+    _ profileID: UUID, httpsOnly enabled: Bool, completion: @escaping (Error?) -> Void
+  ) {
+    if let shaar = self as? ARCShaarRuntime {
+      _ = shaar.setHttpsOnlyModeEnabled(enabled, forProfileID: profileID.uuidString)
+    }
+    loadProfileID(profileID.uuidString, completion: completion)
+  }
+}
+
 @MainActor
 struct EngineProfileSettings: ProfileSettingsBackend {
   let runtime: ARCChromiumRuntime
+  var httpsOnlyMode: (UUID) -> Bool = { _ in true }
 
   func loadProfile(_ id: UUID) async throws {
-    try await runtime.loadProfileID(id.uuidString)
+    try await withCheckedThrowingContinuation {
+      (continuation: CheckedContinuation<Void, Error>) in
+      runtime.loadProfileID(id, httpsOnly: httpsOnlyMode(id)) { error in
+        if let error {
+          continuation.resume(throwing: error)
+        } else {
+          continuation.resume()
+        }
+      }
+    }
     if let shaar = runtime as? ARCShaarRuntime {
       await withCheckedContinuation { continuation in
         shaar.refreshThirdPartyCookiePolicy(forProfileID: id.uuidString) {

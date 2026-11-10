@@ -3,8 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridge.h"
+#import "include/ChromiumShaarHttpsOnly.h"
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumLocalState.h"
+#import "ChromiumHttpsOnly.h"
 #import "ChromiumShaarExtensionsInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
 #import "ChromiumShaarFeatureTransport.h"
@@ -148,6 +150,8 @@ struct Symbols {
   BOOL _shaarTesting;
   BOOL _shaarMediaConsentAvailable;
   NSString *_shaarStartupNotice;
+  NSURL *_shaarUserDataDirectory;
+  NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
 }
 - (void)receiveEvent:(const shaar_event *)event;
 - (void)adoptOpenedTabFromEvent:(const shaar_event *)event
@@ -243,6 +247,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarFindTokens = [NSMutableDictionary dictionary];
   _shaarFindRequests = [NSMutableDictionary dictionary];
   _shaarMediaRequests = [NSMutableDictionary dictionary];
+  _shaarHttpsOnly = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -267,7 +272,9 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   NSAssert(NSThread.isMainThread, @"Shaar engine requires the main thread");
   if (![NSFileManager.defaultManager createDirectoryAtURL:directory
                               withIntermediateDirectories:YES attributes:nil error:nil]) return 1;
+  _shaarUserDataDirectory = directory;
   ARCDisableBackgroundMode(directory);
+  ARCDisableHttpsFirstDialog(directory);
   char *resolved = realpath(directory.fileSystemRepresentation, nullptr);
   if (!resolved) return 1;
   NSString *path = [NSString stringWithUTF8String:resolved];
@@ -504,6 +511,48 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     self.onRendererGone(tabID, _shaarTabProfiles[tabID] ?: @"", @"renderer_gone", 0);
 }
 
+- (NSValue *)loadedProfileValueForID:(NSString *)profileID {
+  NSValue *value = _shaarProfiles[profileID];
+  if (value) return value;
+  for (NSString *key in _shaarProfiles) {
+    if ([key caseInsensitiveCompare:profileID] == NSOrderedSame) return _shaarProfiles[key];
+  }
+  return nil;
+}
+
+- (BOOL)applyLiveHttpsOnly:(BOOL)enabled profileID:(NSString *)profileID {
+  NSValue *value = [self loadedProfileValueForID:profileID];
+  if (!_shaarLibrary || !value) return NO;
+  auto setter = reinterpret_cast<shaar_error_code (*)(shaar_profile *, int, shaar_error *)>(
+      dlsym(_shaarLibrary, "shaar_profile_set_https_only"));
+  shaar_profile *profile = static_cast<shaar_profile *>(value.pointerValue);
+  if (!setter || !profile) return NO;
+  shaar_error error = EmptyError();
+  return setter(profile, enabled ? 1 : 0, &error) == SHAAR_OK;
+}
+
+- (void)seedHttpsOnlyForProfileID:(NSString *)profileID {
+  NSString *canonical = ARCCanonicalProfileID(profileID);
+  if (!canonical || !_shaarUserDataDirectory) return;
+  NSNumber *applied = ARCSeedHttpsOnlyPreference(
+      _shaarUserDataDirectory, canonical, _shaarHttpsOnly[canonical]);
+  if (applied) _shaarHttpsOnly[canonical] = applied;
+}
+
+- (BOOL)setHttpsOnlyModeEnabled:(BOOL)enabled forProfileID:(NSString *)profileID {
+  NSString *canonical = ARCCanonicalProfileID(profileID);
+  if (!canonical) return NO;
+  NSNumber *previous = _shaarHttpsOnly[canonical];
+  BOOL changed = !previous || previous.boolValue != enabled;
+  _shaarHttpsOnly[canonical] = @(enabled);
+  if (_shaarUserDataDirectory && changed &&
+      !ARCWriteHttpsOnlyPreference(_shaarUserDataDirectory, canonical, enabled)) return NO;
+  if ([self loadedProfileValueForID:profileID]) {
+    return [self applyLiveHttpsOnly:enabled profileID:profileID];
+  }
+  return YES;
+}
+
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
   if ([self isPrivateIdentity:profileID]) {
     completion(ShaarError(@"Invalid profile identity or engine not ready."));
@@ -515,6 +564,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     else completion(nil);
     return;
   }
+  [self seedHttpsOnlyForProfileID:profileID];
   _shaarProfileWaiters[profileID] = [NSMutableArray arrayWithObject:[completion copy]];
   NSString *canonicalID = profileID.lowercaseString;
   NSString *directory = [@"Profile " stringByAppendingString:canonicalID];

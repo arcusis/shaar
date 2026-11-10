@@ -47,3 +47,64 @@ BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory) {
       ![json writeToURL:url options:NSDataWritingAtomic error:nil]) return NO;
   return [files setAttributes:@{NSFilePosixPermissions: @0600} ofItemAtPath:url.path error:nil];
 }
+
+// Chromium 157 shows a tab-modal dialog instead of the HTTPS-only interstitial when this
+// labs flag is enabled. Shaar has no dialog host, so force the disabled choice.
+static NSString *const ARCHttpsFirstDialogFlag = @"https-first-dialog-ui@2";
+static NSString *const ARCHttpsFirstDialogPrefix = @"https-first-dialog-ui@";
+
+static BOOL ARCHttpsFirstDialogIsDisabled(NSArray *experiments) {
+  BOOL disabled = NO;
+  for (id entry in experiments) {
+    if (![entry isKindOfClass:NSString.class]) continue;
+    if (![entry hasPrefix:ARCHttpsFirstDialogPrefix]) continue;
+    if (![entry isEqualToString:ARCHttpsFirstDialogFlag]) return NO;
+    disabled = YES;
+  }
+  return disabled;
+}
+
+BOOL ARCDisableHttpsFirstDialog(NSURL *userDataDirectory) {
+  NSURL *url = [userDataDirectory URLByAppendingPathComponent:@"Local State"];
+  BOOL readable = NO;
+  NSMutableDictionary *state = ARCReadLocalState(url, &readable);
+  if (!readable) return NO;
+  id browserValue = state[@"browser"];
+  NSMutableDictionary *browser = nil;
+  if (!browserValue) {
+    browser = [NSMutableDictionary dictionary];
+  } else if ([browserValue isKindOfClass:NSMutableDictionary.class]) {
+    browser = browserValue;
+  } else if ([browserValue isKindOfClass:NSDictionary.class]) {
+    browser = [browserValue mutableCopy];
+  } else {
+    return NO;
+  }
+  id experimentsValue = browser[@"enabled_labs_experiments"];
+  NSMutableArray *experiments = nil;
+  if (!experimentsValue) {
+    experiments = [NSMutableArray array];
+  } else if ([experimentsValue isKindOfClass:NSMutableArray.class]) {
+    experiments = experimentsValue;
+  } else if ([experimentsValue isKindOfClass:NSArray.class]) {
+    experiments = [experimentsValue mutableCopy];
+  } else {
+    return NO;
+  }
+  if (ARCHttpsFirstDialogIsDisabled(experiments)) return YES;
+  NSMutableArray *kept = [NSMutableArray array];
+  for (id entry in experiments) {
+    if ([entry isKindOfClass:NSString.class] && [entry hasPrefix:ARCHttpsFirstDialogPrefix]) continue;
+    [kept addObject:entry];
+  }
+  [kept addObject:ARCHttpsFirstDialogFlag];
+  browser[@"enabled_labs_experiments"] = kept;
+  state[@"browser"] = browser;
+  NSData *json = [NSJSONSerialization dataWithJSONObject:state options:0 error:nil];
+  NSFileManager *files = NSFileManager.defaultManager;
+  NSDictionary *owner = @{NSFilePosixPermissions: @0700};
+  if (!json || ![files createDirectoryAtURL:userDataDirectory withIntermediateDirectories:YES
+                                 attributes:owner error:nil] ||
+      ![json writeToURL:url options:NSDataWritingAtomic error:nil]) return NO;
+  return [files setAttributes:@{NSFilePosixPermissions: @0600} ofItemAtPath:url.path error:nil];
+}

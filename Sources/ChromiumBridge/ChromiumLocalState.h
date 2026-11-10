@@ -10,6 +10,9 @@ extern "C" {
 
 FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 
+/// Keeps the full-page HTTPS-only interstitial. Merges the labs flag; leaves an unreadable file in place.
+FOUNDATION_EXPORT BOOL ARCDisableHttpsFirstDialog(NSURL *userDataDirectory);
+
 #ifdef __cplusplus
 }
 #endif

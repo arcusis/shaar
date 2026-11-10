@@ -172,6 +172,39 @@ extension BrowserPreferencesTests {
     #expect(try Data(contentsOf: fileURL) == original)
   }
 
+  @Test func httpsOnlyModeDefaultsOnAndRemembersAnExplicitOff() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let fileURL = directory.appending(path: "preferences.json")
+    let profileID = UUID()
+    let legacy = """
+      {"version":1,"sidebarInitiallyVisible":true,"profileSearchEngines":["\(profileID.uuidString)","google"]}
+      """
+    try Data(legacy.utf8).write(to: fileURL)
+
+    let stored = BrowserPreferencesStore(fileURL: fileURL)
+    #expect(stored.httpsOnlyModeEnabled(for: profileID))
+    stored.setHttpsOnlyMode(true, for: profileID)
+    let untouched = try String(contentsOf: fileURL, encoding: .utf8)
+    #expect(!untouched.contains("profileHttpsOnlyMode"))
+
+    stored.setHttpsOnlyMode(false, for: profileID)
+    stored.setHttpsOnlyMode(false, for: profileID)
+    let disabled = BrowserPreferencesStore(fileURL: fileURL)
+    #expect(!disabled.httpsOnlyModeEnabled(for: profileID))
+    #expect(disabled.httpsOnlyModeEnabled(for: UUID()))
+
+    disabled.setHttpsOnlyMode(true, for: profileID)
+    let restored = BrowserPreferencesStore(fileURL: fileURL)
+    #expect(restored.httpsOnlyModeEnabled(for: profileID))
+
+    restored.setHttpsOnlyMode(false, for: profileID)
+    try restored.removeProfile(profileID)
+    let removed = BrowserPreferencesStore(fileURL: fileURL)
+    #expect(removed.httpsOnlyModeEnabled(for: profileID))
+  }
+
   @Test func repinningAnExtensionMovesItToTheEnd() {
     let store = BrowserPreferencesStore()
     let profile = UUID()

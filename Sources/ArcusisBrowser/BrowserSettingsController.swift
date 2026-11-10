@@ -41,7 +41,13 @@ final class BrowserSettingsState {
     self.preferences = preferences
     self.runtime = runtime
     self.sharedExtensions = sharedExtensions
-    self.profileBackend = profileBackend ?? runtime.map { EngineProfileSettings(runtime: $0) }
+    self.profileBackend =
+      profileBackend
+      ?? runtime.map { engine in
+        EngineProfileSettings(
+          runtime: engine,
+          httpsOnlyMode: { preferences.httpsOnlyModeEnabled(for: $0) })
+      }
     applyDownloadDirectoryToEngine = applyDownloadDirectory
     self.downloadDirectorySettingsEnabled =
       downloadDirectorySettingsEnabled && applyDownloadDirectory != nil
@@ -303,6 +309,12 @@ private struct BrowserSettingsRoot: View {
       profileBackend: state.profileBackend,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
+      },
+      httpsOnlyModeEnabled: { state.preferences.httpsOnlyModeEnabled(for: $0) },
+      onSetHttpsOnlyMode: { profileID, enabled in
+        state.preferences.setHttpsOnlyMode(enabled, for: profileID)
+        guard let runtime = state.runtime as? ARCShaarRuntime else { return false }
+        return runtime.setHttpsOnlyModeEnabled(enabled, forProfileID: profileID.uuidString)
       })
   }
 }

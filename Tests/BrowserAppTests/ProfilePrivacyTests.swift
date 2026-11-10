@@ -33,6 +33,15 @@ struct ProfilePrivacyTests {
     #expect(runtime.thirdPartyCookiesManaged(forProfileID: profileID) == nil)
   }
 
+  @Test func profileLoadAppliesTheStoredHttpsOnlyChoiceBeforeOpening() async throws {
+    let runtime = HttpsOnlyLoadSpy()
+    let id = UUID()
+    let backend = EngineProfileSettings(runtime: runtime) { _ in false }
+    try await backend.loadProfile(id)
+    #expect(runtime.appliedHttpsOnly == false)
+    #expect(runtime.loadedProfileID == id.uuidString)
+  }
+
   @Test func unavailableEngineFailsClosedForProfileAndCookieMutations() async {
     let backend = EngineProfileSettings(runtime: ARCChromiumRuntime())
     let id = UUID()
@@ -287,6 +296,21 @@ struct ProfilePrivacyTests {
     }
     #expect(backend.calls.isEmpty && workspace.workspace == before)
     #expect(preferences.searchEngine(for: source) == .bing)
+  }
+}
+
+private final class HttpsOnlyLoadSpy: ARCShaarRuntime {
+  var appliedHttpsOnly: Bool?
+  var loadedProfileID: String?
+
+  override func setHttpsOnlyModeEnabled(_ enabled: Bool, forProfileID profileID: String) -> Bool {
+    appliedHttpsOnly = enabled
+    return true
+  }
+
+  override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {
+    loadedProfileID = profileID
+    completion(nil)
   }
 }
 

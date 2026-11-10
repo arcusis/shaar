@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "../../ChromiumBridge/include/ChromiumBridge.h"
+#import "../../ChromiumBridge/ChromiumHttpsOnly.h"
 #import "../../ChromiumBridge/ChromiumLocalState.h"
 #import "../../ChromiumBridge/ChromiumShaarActivation.h"
 

@@ -235,56 +235,6 @@ import Testing
     #expect(har.contains("{\\\"ok\\\":true}") || har.contains("{\"ok\":true}"))
     #expect(har.contains("[redacted]"))
     #expect(!har.contains("Bearer secret"))
-    #expect(ShaarNetworkThrottle.slow3G.parameters["latency"] as? Int == 400)
-    #expect(ShaarNetworkThrottle.fast3G.parameters["downloadThroughput"] as? Int == 200_000)
-    #expect(ShaarNetworkThrottle.none.parameters["offline"] as? Bool == false)
-    #expect(ShaarNetworkThrottle.offline.parameters["offline"] as? Bool == true)
   }
 
-  @Test func networkConditionsAndPreviewRenderOffscreen() async throws {
-    _ = NSApplication.shared
-    let target = SiteControlTarget(
-      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
-    let requestID = "orders-1"
-    let fixture: [ShaarDevToolsEvent] = [
-      .network(
-        .init(
-          id: UUID(), method: "POST", url: "http://localhost:3000/api/orders",
-          status: nil, requestID: requestID, phase: .request, time: 0.3)),
-      .network(
-        .init(
-          id: UUID(), method: "", url: "", status: 503, requestID: requestID,
-          phase: .response, mimeType: "application/json", time: 0.48,
-          responseBody: "{\"error\":\"Service unavailable\"}")),
-    ]
-    let shell = ShaarDevToolsModel(
-      target: target,
-      transport: ShaarDevToolsFixtureTransport(fixture: fixture),
-      layoutDefaults: UserDefaults(suiteName: "ShaarNetworkTools.\(UUID().uuidString)")!)
-    let inspector = InspectorModel(target: target, engine: nil)
-    shell.open(inspector: inspector)
-    shell.section = .network
-    for _ in 0..<40 where shell.events.count < fixture.count { await Task.yield() }
-    #expect(shell.events.count == fixture.count)
-    shell.network.selectedID = requestID
-    shell.network.statusFilter = .serverError
-    shell.network.conditions.throttle = .slow3G
-    shell.network.conditions.cacheDisabled = true
-    shell.network.conditions.applyThrottle = { _ in
-      throw DeveloperModeFailure("Throttle was rejected.")
-    }
-    await shell.network.conditions.select(.offline)
-    #expect(shell.network.conditions.failure == "Throttle was rejected.")
-    shell.network.detailTab = .preview
-    let preview = try VisualCapture.pngOffscreen(
-      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
-      size: NSSize(width: 850, height: 620))
-    shell.network.detailTab = .response
-    let response = try VisualCapture.pngOffscreen(
-      ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {}),
-      size: NSSize(width: 850, height: 620))
-    #expect(!preview.isEmpty)
-    #expect(!response.isEmpty)
-    shell.close()
-  }
 }

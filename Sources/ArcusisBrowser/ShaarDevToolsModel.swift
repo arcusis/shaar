@@ -440,7 +440,8 @@ final class ShaarDevToolsModel {
   @ObservationIgnored var sensorGeneration = 0
   var sections: [ShaarDevToolsSection] {
     ShaarDevToolsSection.allCases.filter {
-      $0 != .console && $0 != .network && ($0 != .comparison || allowsWebKitComparison)
+      ![.console, .network, .application, .performance, .memory, .coverage, .sources].contains($0)
+        && ($0 != .comparison || allowsWebKitComparison)
     }
   }
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport

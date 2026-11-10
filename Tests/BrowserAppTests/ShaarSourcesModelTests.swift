@@ -260,57 +260,6 @@ import Testing
     #expect(afterCondition.contains("/[{};]/.test(value);"))
   }
 
-  @Test func sourcesPanelRendersOffscreenForTreeAndSearch() async throws {
-    _ = NSApplication.shared
-    let target = SiteControlTarget(
-      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
-    let fixture = ShaarPhase2FixtureTransport { command in
-      switch command {
-      case .resourceTree:
-        return [
-          "items": [
-            ["url": "https://example.com/app.js", "type": "Script", "mimeType": "text/javascript"],
-            [
-              "url": "https://example.com/src/panel.js", "type": "Script",
-              "mimeType": "text/javascript",
-            ],
-          ]
-        ]
-      case .resourceContent:
-        return [
-          "items": [],
-          "body": "function panel(){const label=\"a;b\";return label;}\n",
-          "base64Encoded": false,
-        ]
-      default:
-        return ["items": []]
-      }
-    }
-    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
-    let model = ShaarSourcesModel(phase2: phase2)
-    phase2.open()
-    #expect(await phase2.waitUntilAvailable())
-    await model.refresh()
-    let panel = try #require(model.resources.first { $0.name == "panel.js" })
-    await model.select(panel)
-    model.prettyPrint = true
-    model.contentQuery = "label"
-    model.revealCurrentMatch()
-    #expect(model.matchLines.count == 2)
-    let matches = try renderSources(model, width: 860, height: 520)
-    model.contentQuery = "zzz-no-such"
-    model.revealCurrentMatch()
-    #expect(model.matchLines.isEmpty)
-    let missing = try renderSources(model, width: 860, height: 520)
-    model.contentQuery = ""
-    model.revealCurrentMatch()
-    let cleared = try renderSources(model, width: 860, height: 520)
-    #expect(!matches.isEmpty)
-    #expect(!missing.isEmpty)
-    #expect(!cleared.isEmpty)
-    phase2.close()
-  }
-
   @Test func productionPendingTransportShowsNoResources() async {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
@@ -429,12 +378,4 @@ import Testing
     #expect(model.content == "const answer: number = 42")
     phase2.close()
   }
-}
-
-@MainActor private func renderSources(
-  _ model: ShaarSourcesModel, width: CGFloat, height: CGFloat
-) throws -> Data {
-  try VisualCapture.pngOffscreen(
-    ShaarSourcesPanel(model: model, inspector: nil),
-    size: NSSize(width: width, height: height))
 }

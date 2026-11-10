@@ -443,8 +443,8 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveExternalApp(id, windowID: self.windowID, accepted: accepted)
     }
-    store.onDeviceChooserDecision = { [weak self] request, index in
-      self?.settleDeviceChooser(request, optionIndex: index)
+    store.onDeviceChooserDecision = { [weak self] request, optionID in
+      self?.settleDeviceChooser(request, optionID: optionID)
     }
     callbacks.onDeviceChooserEvent = { [weak self] payload in
       self?.receiveDeviceChooser(payload)

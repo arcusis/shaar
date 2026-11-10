@@ -202,7 +202,7 @@ final class BrowserRuntimeEvents {
         guard let client = self.router.claim(.deviceChooser, id: id, payload: payload),
           let receive = client.onDeviceChooserEvent
         else {
-          self.runtime.resolveDeviceChooserRequestID(id, index: nil)
+          self.runtime.resolveDeviceChooserRequestID(id, optionID: nil)
           return
         }
         receive(payload)
@@ -220,7 +220,7 @@ final class BrowserRuntimeEvents {
         if let owner = self.router.client(for: .deviceChooser, id: id)?.windowID {
           _ = self.router.consume(.deviceChooser, id: id, windowID: owner)
         }
-        self.runtime.resolveDeviceChooserRequestID(id, index: nil)
+        self.runtime.resolveDeviceChooserRequestID(id, optionID: nil)
         return
       }
       receive(payload)
@@ -303,9 +303,9 @@ final class BrowserRuntimeEvents {
     runtime.resolveExternalAppRequestID(id, accepted: accepted)
   }
 
-  func resolveDeviceChooser(_ id: String, windowID: String, index: Int?) {
+  func resolveDeviceChooser(_ id: String, windowID: String, optionID: String?) {
     guard router.consume(.deviceChooser, id: id, windowID: windowID) else { return }
-    runtime.resolveDeviceChooserRequestID(id, index: index.map(NSNumber.init(value:)))
+    runtime.resolveDeviceChooserRequestID(id, optionID: optionID)
   }
 
   func applyBookmarkOperation(

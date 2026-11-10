@@ -36,10 +36,10 @@ enum DeviceChooserTransport: String, Equatable, Sendable {
 }
 
 struct DeviceChooserOption: Identifiable, Equatable, Sendable {
-  let index: Int
+  let optionID: String
   let title: String
   let detail: String
-  var id: Int { index }
+  var id: String { optionID }
 }
 
 struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
@@ -68,7 +68,7 @@ enum DeviceChooserIntake {
     "schemaVersion", "kind", "id", "transport", "pageURL", "origin", "options", "canGrant",
     "profileID", "tabID", "windowID",
   ]
-  private static let optionKeys: Set<String> = ["index", "name"]
+  private static let optionKeys: Set<String> = ["optionID", "name"]
   private static let identifierCharacters = CharacterSet(
     charactersIn: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-")
 
@@ -98,25 +98,19 @@ enum DeviceChooserIntake {
       let canGrant = payload["canGrant"] as? Bool
     else { return nil }
     var options: [DeviceChooserOption] = []
-    var seen: Set<Int> = []
+    var seen: Set<String> = []
     for raw in rawOptions {
       guard Set(raw.keys).isSubset(of: optionKeys),
-        let index = integer(raw["index"]), index >= 0, seen.insert(index).inserted,
+        let optionID = raw["optionID"] as? String, isChooserID(optionID),
+        seen.insert(optionID).inserted,
         let name = raw["name"] as? String, name.utf8.count <= 256
       else { return nil }
-      options.append(DeviceChooserOption(index: index, title: name, detail: ""))
+      options.append(DeviceChooserOption(optionID: optionID, title: name, detail: ""))
     }
     guard canGrant == !options.isEmpty else { return nil }
     return DeviceChooserRequest(
       id: id, tabID: tabID, profileID: profileID, pageURL: pageURL, transport: transport,
       options: options, bluetoothUnavailable: false, canGrant: canGrant)
-  }
-
-  private static func integer(_ value: Any?) -> Int? {
-    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
-      return nil
-    }
-    return number.intValue
   }
 }
 
@@ -124,9 +118,9 @@ struct DeviceChooserConsent: View {
   let store: BrowserStore
   let request: DeviceChooserRequest
   @Environment(\.dismiss) private var dismiss
-  @State private var selection: Int?
+  @State private var selection: String?
 
-  init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: Int? = nil) {
+  init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: String? = nil) {
     self.store = store
     self.request = request
     _selection = State(initialValue: initialSelection)
@@ -149,10 +143,10 @@ struct DeviceChooserConsent: View {
       Text(presented.transport.prompt)
       status(presented)
       HStack {
-        Button(PanelsL10n.string("Not now"), role: .cancel) { resolve(index: nil) }
+        Button(PanelsL10n.string("Not now"), role: .cancel) { resolve(optionID: nil) }
           .keyboardShortcut(.cancelAction)
         Spacer()
-        Button(PanelsL10n.string("Connect")) { resolve(index: selection) }
+        Button(PanelsL10n.string("Connect")) { resolve(optionID: selection) }
           .disabled(!canConnect(presented))
       }
     }
@@ -164,7 +158,7 @@ struct DeviceChooserConsent: View {
 
   private func canConnect(_ presented: DeviceChooserRequest) -> Bool {
     guard presented.canGrant, presented.matches(store.session), let selection else { return false }
-    return presented.options.contains { $0.index == selection }
+    return presented.options.contains { $0.optionID == selection }
   }
 
   @ViewBuilder private func status(_ presented: DeviceChooserRequest) -> some View {
@@ -180,7 +174,7 @@ struct DeviceChooserConsent: View {
     } else {
       ForEach(presented.options) { option in
         Button {
-          selection = option.index
+          selection = option.optionID
         } label: {
           optionLabel(option)
         }
@@ -198,12 +192,12 @@ struct DeviceChooserConsent: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(8)
-    .background(selection == option.index ? Color.accentColor.opacity(0.15) : Color.clear)
+    .background(selection == option.optionID ? Color.accentColor.opacity(0.15) : Color.clear)
     .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 
-  private func resolve(index: Int?) {
-    store.resolveDeviceChooser(request.id, optionIndex: index)
+  private func resolve(optionID: String?) {
+    store.resolveDeviceChooser(request.id, optionID: optionID)
     dismiss()
   }
 }

@@ -51,12 +51,12 @@ struct DeviceChooserTests {
         payload: extra) == nil)
   }
 
-  @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
+  @Test func sheetCancelRejectsWithoutADeviceOptionID() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
     let request = try #require(self.request(store, transport: "hid", id: "4"))
-    var decided: Int??
-    store.onDeviceChooserDecision = { _, index in decided = .some(index) }
+    var decided: String??
+    store.onDeviceChooserDecision = { _, optionID in decided = .some(optionID) }
     #expect(store.requestDeviceChooser(request))
     #expect(!store.requestDeviceChooser(request))
     let sheet = try #require(store.sheet)
@@ -64,16 +64,19 @@ struct DeviceChooserTests {
     #expect(sheet.isConsent)
     #expect(sheet.tabID == tab.id)
     #expect(sheet.matches(store.session))
-    store.resolveDeviceChooser(request.id, optionIndex: 0)
+    store.resolveDeviceChooser(request.id, optionID: "opaque-option-0")
     #expect(decided == .some(nil))
     #expect(store.deviceChooserRequests.isEmpty)
     _ = DeviceChooserConsent(store: store, request: request).body
     let populated = DeviceChooserRequest(
       id: "9", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
       transport: .usb,
-      options: [DeviceChooserOption(index: 0, title: "Adapter", detail: "USB")],
+      options: [DeviceChooserOption(optionID: "opaque-option-0", title: "Adapter", detail: "USB")],
       bluetoothUnavailable: false, canGrant: true)
-    _ = DeviceChooserConsent(store: store, request: populated, initialSelection: 0).body
+    _ =
+      DeviceChooserConsent(
+        store: store, request: populated, initialSelection: "opaque-option-0"
+      ).body
     let unavailable = DeviceChooserRequest(
       id: "8", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
       transport: .bluetooth, options: [], bluetoothUnavailable: true, canGrant: false)
@@ -87,7 +90,7 @@ struct DeviceChooserTests {
     let updated = try #require(
       self.request(
         store, kind: "deviceChooserUpdated", transport: "usb", id: "7",
-        options: [["index": 0, "name": "USB serial adapter"]], canGrant: true))
+        options: [["optionID": "opaque-option-0", "name": "USB serial adapter"]], canGrant: true))
     #expect(updated.canGrant)
     #expect(store.updateDeviceChooser(updated))
     guard case .deviceChooser(let shown) = store.sheet else {
@@ -95,10 +98,34 @@ struct DeviceChooserTests {
       return
     }
     #expect(shown.options.map(\.title) == ["USB serial adapter"])
+    #expect(shown.options.map(\.optionID) == ["opaque-option-0"])
     #expect(shown.canGrant)
     store.dismissDeviceChooserFromEngine(updated.id)
     #expect(store.deviceChooserRequests.isEmpty)
     #expect(store.sheet == nil)
+  }
+
+  @Test func chooserOptionsRequireUniqueOpaqueIdentifiers() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let valid = ["optionID": "opaque-option-0", "name": "Adapter"]
+    let parsedRequest = try #require(
+      self.request(store, transport: "usb", id: "opaque-session", options: [valid], canGrant: true))
+    #expect(parsedRequest.options.first?.optionID == "opaque-option-0")
+
+    var duplicate = event(
+      transport: "usb", id: "opaque-session", page: tab.url,
+      options: [valid, valid], canGrant: true)
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: duplicate) == nil)
+
+    duplicate["options"] = [["index": 0, "name": "Adapter"]]
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: duplicate) == nil)
   }
 
   private func store() throws -> BrowserStore {

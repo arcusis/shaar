@@ -257,8 +257,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (void)resolveWebShareRequestID:(NSString *)requestID outcome:(NSString *)outcome;
 - (void)resolvePrintRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
-/// `index` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
-- (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(nullable NSNumber *)index;
+/// `optionID` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
+- (void)resolveDeviceChooserRequestID:(NSString *)requestID optionID:(nullable NSString *)optionID;
 /// Canonical browser-managed download directory for a regular profile.
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
 - (int)nativeTabIDForID:(NSString *)tabID;

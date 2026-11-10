@@ -799,7 +799,8 @@ final class ShaarDevToolsModel {
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
     let tabChanged = self.target.tabID != target.tabID
-    if self.target.host != target.host { disconnectLogTap() }
+    let hostChanged = self.target.host != target.host
+    if hostChanged { disconnectLogTap() }
     self.target = target
     performance.updateTarget(target, committed: committed)
     // The panel lease is attached to the tab, and it stays up across a reload.
@@ -852,12 +853,19 @@ final class ShaarDevToolsModel {
       eventTask?.cancel()
       eventTask = nil
       cancelLocalTasks()
+    } else if hostChanged {
+      // Server-log streams follow the host. The tab's panel lease stays open.
+      cancelLocalTasks()
+      localEventsBySource.removeAll()
+      localAvailableSources.removeAll()
     }
     if isOpen {
       repro.history.start(for: target)
       repro.startFrames(for: target)
       if !keepLease {
         startStream()
+        startLocalStreams()
+      } else if hostChanged {
         startLocalStreams()
       }
       rules.resume()

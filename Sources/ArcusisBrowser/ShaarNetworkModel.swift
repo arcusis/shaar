@@ -161,9 +161,7 @@ final class ShaarNetworkModel {
 
   func loadResponseBody(id: String) async {
     guard responseBodies[id] == nil, !loadingBodyIDs.contains(id), let loadBody else { return }
-    guard let request = requests(from: lastEvents).first(where: { $0.id == id }),
-      request.resource != .socket, request.responseBody == nil
-    else { return }
+    guard !requestBlocksBodyLoad(id) else { return }
     loadingBodyIDs.insert(id)
     defer { loadingBodyIDs.remove(id) }
     do {
@@ -172,6 +170,14 @@ final class ShaarNetworkModel {
     } catch {
       return
     }
+  }
+
+  /// A row that is not in the log yet can still be fetched. Export applies the stored body later.
+  private func requestBlocksBodyLoad(_ id: String) -> Bool {
+    guard let request = requests(from: lastEvents).first(where: { $0.id == id }) else {
+      return false
+    }
+    return request.resource == .socket || request.responseBody != nil
   }
 
   nonisolated private static func buildRequests(

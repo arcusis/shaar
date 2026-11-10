@@ -366,7 +366,7 @@ def binary_symbol_is_harness(name: str) -> bool:
         return True
     separated = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1-\2", name)
     separated = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", separated).lower()
-    return bool(re.search(r"(?:^|-)(?:probe|parity|smoke|harness)(?:-|$)", separated))
+    return bool(re.search(r"(?:^|-)(?:probe|parity|smoke|harness|qa)(?:-|$)", separated))
 
 
 def binary_findings(path: Path, symbols: set[str], flags: set[str], ids: set[str]) -> list[str]:

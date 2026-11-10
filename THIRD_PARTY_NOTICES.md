@@ -22,7 +22,7 @@ Chromium framework remain available at `chrome://credits`.
 
 ## Built-in framework DevTools
 
-Shaar bundles the official Chrome Web Store CRX packages for local development pages. The exact CRX SHA-256 values, extension IDs, and reproducible staging process are in [scripts/fetch-framework-devtools.py](scripts/fetch-framework-devtools.py). The app keeps the original code and assets, pins the packages, removes their update URLs, narrows host and content-script matches to loopback, and adds a Shaar DevTools bootstrap.
+Shaar bundles the official Chrome Web Store CRX packages for local development pages. Those CRX bytes are not stored in git. [scripts/fetch-framework-devtools.py](scripts/fetch-framework-devtools.py) downloads each pinned archive from the `framework-devtools-pins` GitHub release, checks its SHA-256, and stages it. The app keeps the original code and assets, removes the upstream update URL, narrows host and content-script matches to loopback, and adds a Shaar DevTools bootstrap.
 
 - **React Developer Tools 8.0.0:** [React source](https://github.com/facebook/react/tree/1d34f91dfde6bba84d08b683aaba164c7194dacb/packages/react-devtools-extensions), MIT; [license text](ThirdParty/FrameworkDevTools/licenses/react-LICENSE).
 - **Vue.js DevTools 7.7.7:** [Vue DevTools source](https://github.com/vuejs/devtools/tree/v7.7.7), MIT; [license text](ThirdParty/FrameworkDevTools/licenses/vue-LICENSE). Vue DevTools v7 supports Vue 3.

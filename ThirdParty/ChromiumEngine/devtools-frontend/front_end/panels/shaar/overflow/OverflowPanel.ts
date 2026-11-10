@@ -11,10 +11,12 @@ import {html, render} from '../../../ui/lit/lit.js';
 import {CAUSE_LIMIT, type OverflowCause} from './OverflowFinder.js';
 import {
   causeDetail,
+  clearExpression,
   FAILED,
   highlightExpression,
   MOVED,
   OverflowSession,
+  resolveExpression,
 } from './OverflowPage.js';
 
 const UIStrings = {
@@ -126,6 +128,12 @@ export class OverflowPanel extends UI.Panel.Panel {
   override willHide(): void {
     super.willHide();
     this.#unsubscribe();
+    this.#clearMarks();
+  }
+
+  override onDetach(): void {
+    super.onDetach();
+    this.#clearMarks();
   }
 
   override performUpdate(): void {
@@ -369,6 +377,17 @@ export class OverflowPanel extends UI.Panel.Panel {
     Common.EventTarget.removeEventListeners([this.#descriptor]);
     this.#descriptor = null;
   }
+
+  #clearMarks(): void {
+    const target = pageTarget();
+    if (!target) {
+      return;
+    }
+    const caller = new TargetCaller(target);
+    void caller.evaluate(clearExpression()).catch(() => {
+      // The page can close before the outline is cleared.
+    });
+  }
 }
 
 function rowTemplate(
@@ -424,7 +443,7 @@ async function showCause(target: SDK.Target.Target, selector: string): Promise<v
 
 async function revealSelector(target: SDK.Target.Target, selector: string): Promise<void> {
   const response = await target.runtimeAgent().invoke_evaluate({
-    expression: `document.querySelector(${JSON.stringify(selector)})`,
+    expression: resolveExpression(selector),
     objectGroup: 'shaar-overflow',
   });
   if (response.getError() || response.exceptionDetails) {

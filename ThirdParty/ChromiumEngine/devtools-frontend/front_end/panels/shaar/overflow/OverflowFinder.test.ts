@@ -137,11 +137,17 @@ describe('OverflowFinder', () => {
   it('escapes a selector passed to the page', () => {
     const expression = Page.highlightExpression('a"b\\c\n');
     assert.include(expression, JSON.stringify('a"b\\c\n'));
+    assert.include(expression, 'outlineOffset');
     const collect = Page.collectExpression();
     assert.include(collect, 'return collectOverflowInPage();');
     assert.include(collect, 'location.href');
+    assert.include(collect, ':nth-of-type');
+    assert.notInclude(collect, 'depth < 5');
+    assert.notInclude(collect, 'export ');
     assert.isFunction(new Function(collect));
     assert.isFunction(new Function(expression));
+    assert.isFunction(new Function(Page.clearExpression()));
+    assert.isFunction(new Function(Page.resolveExpression('html > body')));
   });
 
   it('rejects a measurement that is not the page payload', () => {
@@ -208,6 +214,87 @@ describe('OverflowFinder', () => {
     assert.strictEqual(session.causes.length, 0);
   });
 });
+
+describe('overflow page selectors', () => {
+  const hosts: HTMLElement[] = [];
+
+  afterEach(() => {
+    Page.clearOverflowMarks(document);
+    Page.clearOverflowRefs(document);
+    while (hosts.length) {
+      hosts.pop()?.remove();
+    }
+  });
+
+  it('uses a root-anchored path that does not match a twin deeper than five levels', () => {
+    const host = document.createElement('div');
+    host.id = 'shaar-overflow-deep';
+    document.body.appendChild(host);
+    hosts.push(host);
+    const first = deepLeaf('a');
+    const second = deepLeaf('b');
+    host.append(first.root, second.root);
+    const selector = Page.selectorFor(second.leaf, document);
+    assert.match(selector, /^html\b/);
+    assert.include(selector, ':nth-of-type(');
+    assert.strictEqual(document.querySelectorAll(selector).length, 1);
+    assert.strictEqual(document.querySelector(selector), second.leaf);
+  });
+
+  it('does not use an id that matches more than one element', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    hosts.push(host);
+    const first = document.createElement('div');
+    first.id = 'shaar-overflow-dup';
+    const second = document.createElement('span');
+    second.id = 'shaar-overflow-dup';
+    host.append(first, second);
+    const selector = Page.selectorFor(second, document);
+    assert.notStrictEqual(selector, '#shaar-overflow-dup');
+    assert.strictEqual(document.querySelector(selector), second);
+  });
+
+  it('keeps a node reference when the element is not in the document', () => {
+    const el = document.createElement('div');
+    const selector = Page.selectorFor(el, document);
+    assert.match(selector, /^shaar-overflow-node:/);
+    assert.strictEqual(Page.elementForSelector(selector), el);
+  });
+
+  it('restores the outline and its offset when the mark is cleared', () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    hosts.push(el);
+    el.style.outline = '1px dashed rgb(0, 0, 0)';
+    el.style.outlineOffset = '4px';
+    const previousOutline = el.style.outline;
+    const previousOffset = el.style.outlineOffset;
+    const selector = Page.selectorFor(el, document);
+    assert.isTrue(Page.highlightOverflowInPage(selector));
+    assert.strictEqual(el.getAttribute('data-shaar-overflow-mark'), '1');
+    assert.strictEqual(el.style.outlineOffset, '2px');
+    assert.notStrictEqual(el.style.outline, previousOutline);
+    Page.clearOverflowMarks(document);
+    assert.strictEqual(el.style.outline, previousOutline);
+    assert.strictEqual(el.style.outlineOffset, previousOffset);
+    assert.isNull(el.getAttribute('data-shaar-overflow-mark'));
+    assert.isNull(el.getAttribute('data-shaar-overflow-outline-offset'));
+  });
+});
+
+function deepLeaf(label: string): {root: HTMLElement, leaf: HTMLElement} {
+  const leaf = document.createElement('span');
+  leaf.className = 'shaar-overflow-leaf';
+  leaf.textContent = label;
+  let node: HTMLElement = leaf;
+  for (let depth = 0; depth < 6; depth++) {
+    const wrap = document.createElement('div');
+    wrap.appendChild(node);
+    node = wrap;
+  }
+  return {root: node, leaf};
+}
 
 function box(id: string, fields: Partial<MeasuredNode>&{selector: string}): MeasuredNode {
   const left = fields.left ?? 0;

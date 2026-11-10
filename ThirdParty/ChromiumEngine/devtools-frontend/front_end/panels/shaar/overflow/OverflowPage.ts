@@ -141,11 +141,50 @@ export function readMeasurement(value: unknown): PageMeasurement|null {
 }
 
 export function collectExpression(): string {
-  return `(() => {\n${selectorsUsing100vw.toString()}\n${clipsOverflow.toString()}\n${elementUses100vw.toString()}\n${selectorFor.toString()}\n${clearOverflowMarks.toString()}\n${collectOverflowInPage.toString()}\nreturn collectOverflowInPage();\n})()`;
+  return pageScript(
+      [
+        clipsOverflow,
+        selectorsUsing100vw,
+        elementUses100vw,
+        nthOfType,
+        matchesOnly,
+        overflowNodeStore,
+        rememberNode,
+        selectorFor,
+        restoreOverflowMark,
+        clearOverflowMarks,
+        clearOverflowRefs,
+        collectOverflowInPage,
+      ],
+      'return collectOverflowInPage();');
 }
 
 export function highlightExpression(selector: string): string {
-  return `(${highlightOverflowInPage.toString()})(${JSON.stringify(String(selector))})`;
+  return pageScript(
+      [restoreOverflowMark, clearOverflowMarks, elementForSelector, highlightOverflowInPage],
+      `return highlightOverflowInPage(${JSON.stringify(String(selector))});`);
+}
+
+export function clearExpression(): string {
+  return pageScript(
+      [restoreOverflowMark, clearOverflowMarks],
+      'clearOverflowMarks(document);');
+}
+
+export function resolveExpression(selector: string): string {
+  return pageScript(
+      [elementForSelector],
+      `return elementForSelector(${JSON.stringify(String(selector))});`);
+}
+
+function pageScript(functions: Array<{toString(): string}>, call: string): string {
+  const body = functions.map(fn => fn.toString()).join('\n');
+  return `(() => {\n${body}\n${call}\n})()`;
+}
+
+interface OverflowNodeHost {
+  __shaarOverflowNodes?: Map<string, Element>;
+  __shaarOverflowSeq?: number;
 }
 
 function clipsOverflow(value: string): boolean {
@@ -227,61 +266,148 @@ function elementUses100vw(el: Element, selectors: string[]): boolean {
   return false;
 }
 
+function nthOfType(parent: Element, current: Element): number {
+  let count = 0;
+  for (let index = 0; index < parent.children.length; index++) {
+    const child = parent.children.item(index);
+    if (!child || child.tagName !== current.tagName) {
+      continue;
+    }
+    count += 1;
+    if (child === current) {
+      return count;
+    }
+  }
+  return 1;
+}
+
+function matchesOnly(doc: Document, selector: string, el: Element): boolean {
+  try {
+    const found = doc.querySelectorAll(selector);
+    return found.length === 1 && found.item(0) === el;
+  } catch {
+    return false;
+  }
+}
+
+function overflowNodeStore(): Map<string, Element> {
+  const host = globalThis as OverflowNodeHost;
+  if (!host.__shaarOverflowNodes) {
+    host.__shaarOverflowNodes = new Map();
+  }
+  return host.__shaarOverflowNodes;
+}
+
+function rememberNode(el: Element): string {
+  const store = overflowNodeStore();
+  const current = el.getAttribute('data-shaar-overflow-ref');
+  if (current && store.get(current) === el) {
+    return `shaar-overflow-node:${current}`;
+  }
+  const host = globalThis as OverflowNodeHost;
+  const next = (host.__shaarOverflowSeq ?? 0) + 1;
+  host.__shaarOverflowSeq = next;
+  const token = `o${next}`;
+  el.setAttribute('data-shaar-overflow-ref', token);
+  store.set(token, el);
+  return `shaar-overflow-node:${token}`;
+}
+
 function selectorFor(el: Element, doc: Document): string {
   if (el.id) {
-    const id = `#${CSS.escape(el.id)}`;
-    try {
-      if (doc.querySelectorAll(id).length === 1) {
-        return id;
-      }
-    } catch {
-      // Keep walking.
+    const idSelector = `#${CSS.escape(el.id)}`;
+    if (matchesOnly(doc, idSelector, el)) {
+      return idSelector;
     }
   }
   const parts: string[] = [];
   let current: Element|null = el;
-  let depth = 0;
-  while (current && current.nodeType === 1 && depth < 5) {
+  let reachedRoot = false;
+  while (current && current.nodeType === 1) {
     const parent: Element|null = current.parentElement;
     let segment = current.tagName.toLowerCase();
     if (parent) {
-      const same: Element[] = [];
-      for (let index = 0; index < parent.children.length; index++) {
-        const child = parent.children.item(index);
-        if (child && child.tagName === current.tagName) {
-          same.push(child);
-        }
-      }
-      if (same.length > 1) {
-        segment += `:nth-of-type(${same.indexOf(current) + 1})`;
-      }
+      segment += `:nth-of-type(${nthOfType(parent, current)})`;
     }
     parts.unshift(segment);
+    if (current === doc.documentElement) {
+      reachedRoot = true;
+      break;
+    }
+    if (!parent) {
+      break;
+    }
     current = parent;
-    depth += 1;
   }
   const selector = parts.join(' > ');
-  if (selector.length > 180) {
-    return selector.slice(0, 180);
+  if (reachedRoot && matchesOnly(doc, selector, el)) {
+    return selector;
   }
-  return selector;
+  return rememberNode(el);
+}
+
+function elementForSelector(selector: string): Element|null {
+  if (selector.startsWith('shaar-overflow-node:')) {
+    const token = selector.slice('shaar-overflow-node:'.length);
+    const host = globalThis as OverflowNodeHost;
+    const stored = host.__shaarOverflowNodes ? host.__shaarOverflowNodes.get(token) : null;
+    if (stored) {
+      return stored;
+    }
+    try {
+      return document.querySelector(`[data-shaar-overflow-ref="${CSS.escape(token)}"]`);
+    } catch {
+      return null;
+    }
+  }
+  try {
+    return document.querySelector(selector);
+  } catch {
+    return null;
+  }
+}
+
+function restoreOverflowMark(node: HTMLElement): void {
+  node.style.outline = node.getAttribute('data-shaar-overflow-outline') || '';
+  node.style.outlineOffset = node.getAttribute('data-shaar-overflow-outline-offset') || '';
+  node.removeAttribute('data-shaar-overflow-outline');
+  node.removeAttribute('data-shaar-overflow-outline-offset');
+  node.removeAttribute('data-shaar-overflow-mark');
 }
 
 function clearOverflowMarks(doc: Document): void {
   const marked = doc.querySelectorAll('[data-shaar-overflow-mark]');
-  for (const node of marked) {
+  for (let index = 0; index < marked.length; index++) {
+    const node = marked.item(index);
     if (!(node instanceof HTMLElement)) {
       continue;
     }
-    node.style.outline = node.getAttribute('data-shaar-overflow-outline') || '';
-    node.removeAttribute('data-shaar-overflow-outline');
-    node.removeAttribute('data-shaar-overflow-mark');
+    restoreOverflowMark(node);
+  }
+}
+
+function clearOverflowRefs(doc: Document): void {
+  const host = globalThis as OverflowNodeHost;
+  const store = host.__shaarOverflowNodes;
+  if (store) {
+    store.forEach(node => {
+      node.removeAttribute('data-shaar-overflow-ref');
+    });
+    store.clear();
+  }
+  const refs = doc.querySelectorAll('[data-shaar-overflow-ref]');
+  for (let index = 0; index < refs.length; index++) {
+    const node = refs.item(index);
+    if (node) {
+      node.removeAttribute('data-shaar-overflow-ref');
+    }
   }
 }
 
 function collectOverflowInPage(): {href: string, truncated: boolean, nodes: object[]} {
   const scanLimit = 8000;
   const doc = document;
+  clearOverflowRefs(doc);
   clearOverflowMarks(doc);
   const vwSelectors = selectorsUsing100vw(doc);
   const nodes: object[] = [];
@@ -353,28 +479,16 @@ function collectOverflowInPage(): {href: string, truncated: boolean, nodes: obje
 }
 
 function highlightOverflowInPage(selector: string): boolean {
-  const marked = document.querySelectorAll('[data-shaar-overflow-mark]');
-  for (const node of marked) {
-    if (!(node instanceof HTMLElement)) {
-      continue;
-    }
-    node.style.outline = node.getAttribute('data-shaar-overflow-outline') || '';
-    node.removeAttribute('data-shaar-overflow-outline');
-    node.removeAttribute('data-shaar-overflow-mark');
-  }
+  clearOverflowMarks(document);
   if (!selector) {
     return false;
   }
-  let el: Element|null = null;
-  try {
-    el = document.querySelector(selector);
-  } catch {
-    return false;
-  }
+  const el = elementForSelector(selector);
   if (!(el instanceof HTMLElement)) {
     return false;
   }
   el.setAttribute('data-shaar-overflow-outline', el.style.outline || '');
+  el.setAttribute('data-shaar-overflow-outline-offset', el.style.outlineOffset || '');
   el.setAttribute('data-shaar-overflow-mark', '1');
   el.style.outline = '2px solid rgb(229, 72, 77)';
   el.style.outlineOffset = '2px';
@@ -385,3 +499,11 @@ function highlightOverflowInPage(selector: string): boolean {
   }
   return true;
 }
+
+export {
+  clearOverflowMarks,
+  clearOverflowRefs,
+  elementForSelector,
+  highlightOverflowInPage,
+  selectorFor,
+};

@@ -17,6 +17,18 @@ enum ShaarVerificationMain {
     if CommandLine.arguments.contains("--devtools-f12-route") {
       exit(ShaarDevToolsF12RouteSmoke.run(arguments: CommandLine.arguments))
     }
+    if let index = CommandLine.arguments.firstIndex(of: "--platform-parity-probe"),
+      CommandLine.arguments.indices.contains(index + 3),
+      let frameworks = Bundle.main.privateFrameworksURL
+    {
+      let framework = frameworks.appending(path: "Chromium Framework.framework")
+      let output = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+      exit(
+        PlatformParityProbe.run(
+          frameworkURL: framework, outputURL: output,
+          httpBase: URL(string: CommandLine.arguments[index + 2]),
+          httpsBase: URL(string: CommandLine.arguments[index + 3])))
+    }
     if CommandLine.arguments.contains("--probe-shaar-preview") {
       exit(ShaarPreviewProbe.run(arguments: CommandLine.arguments))
     }

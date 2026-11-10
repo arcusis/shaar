@@ -79,6 +79,18 @@ enum ShaarVerificationMain {
       let page = URL(string: CommandLine.arguments[index + 2])
       exit(ShaarBrowsingEdgeProbe.run(frameworkURL: framework, outputURL: output, pageURL: page))
     }
+    if CommandLine.arguments.contains("--sleeping-tabs-probe") {
+      let arguments = CommandLine.arguments
+      guard let index = arguments.firstIndex(of: "--sleeping-tabs-probe"),
+        arguments.indices.contains(index + 1),
+        let frameworks = Bundle.main.privateFrameworksURL
+      else {
+        exit(2)
+      }
+      let framework = frameworks.appending(path: "Chromium Framework.framework")
+      let output = URL(fileURLWithPath: arguments[index + 1])
+      exit(SleepingTabsProbe.run(frameworkURL: framework, outputURL: output))
+    }
     exit(EngineProbe.run(arguments: CommandLine.arguments))
   }
 

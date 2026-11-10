@@ -7,6 +7,8 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
+@testable import ArcusisBrowser
+
 /// Hidden proof that idle discard asks the engine and leaves the tab in the window.
 /// An engine without the lifecycle operation reports incapable and closes nothing.
 @MainActor enum SleepingTabsProbe {

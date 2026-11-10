@@ -23,6 +23,7 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     ":*",
+    "..:*",
     "../*",
     "../../../entrypoints/*",
   ]
@@ -41,7 +42,7 @@ devtools_entrypoint("meta") {
 
   visibility = [
     ":*",
-    "../:meta",
+    "..:*",
     "../../../entrypoints/*",
   ]
 }

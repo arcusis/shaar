@@ -16,3 +16,9 @@ devtools_entrypoint("meta") {
     "../../entrypoints/*",
   ]
 }
+
+# One "<feature>:unittests" dep per feature, same order as shaar-meta.ts.
+group("unittests") {
+  testonly = true
+  deps = [ "build-info:unittests" ]
+}

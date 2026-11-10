@@ -47,6 +47,7 @@ class DevToolsFrontend157Tests(unittest.TestCase):
         source = REGISTRATION.read_text()
         self.assertIn("shaar-meta.js", source)
         self.assertIn("../../panels/shaar:meta", source)
+        self.assertIn("panels/shaar:unittests", source)
 
     def test_proof_panel_lists_the_pinned_build(self):
         panel = (FEATURE / "BuildInfoPanel.ts").read_text()
@@ -73,6 +74,7 @@ class DevToolsFrontend157Tests(unittest.TestCase):
         self.assertEqual(imports, ["import './build-info/build-info-meta.js';"])
         build = (PANEL / "BUILD.gn").read_text()
         self.assertIn('"build-info:meta"', build)
+        self.assertIn('"build-info:unittests"', build)
         self.assertEqual(registration.count("import './"), len(features))
 
     def test_patches_are_pinned_for_the_157_checkout(self):

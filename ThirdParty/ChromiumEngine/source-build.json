@@ -509,7 +509,7 @@
       },
       {
         "file": "ThirdParty/ChromiumEngine/patches/0062-shaar-devtools-frontend-registration.patch",
-        "sha256": "d18c45158051f61f2bebe6bb6da112d3dea09ad19de4519e0f142524e93d66fe"
+        "sha256": "1e23d3d027834224b3ead09f9e9c4d9b6d009d1ec92240bf0dadf1994db1c2c6"
       }
     ]
   },

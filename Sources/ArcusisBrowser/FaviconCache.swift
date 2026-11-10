@@ -119,7 +119,12 @@ final class FaviconCache {
     var entries: [UUID: [UUID: Entry]] = [:]
     for profileURL in contents(of: directory) {
       guard let profileID = UUID(uuidString: profileURL.lastPathComponent) else { continue }
-      let icons = contents(of: profileURL).filter { $0.pathExtension == "png" }
+      // A PNG saved before the host file existed has no site to compare. Leave it
+      // on disk and skip it here so a later nil tick cannot keep the stale icon.
+      // The next page load writes the icon again. Host-less files do not use a slot.
+      let icons = contents(of: profileURL).filter {
+        $0.pathExtension == "png" && loadHost(beside: $0) != nil
+      }
       for fileURL in icons.prefix(maximumIconsPerProfile) {
         guard let itemID = itemID(of: fileURL), let entry = loadEntry(at: fileURL) else {
           continue

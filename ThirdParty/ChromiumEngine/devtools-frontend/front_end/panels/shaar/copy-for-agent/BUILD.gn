@@ -1,0 +1,70 @@
+# Copyright 2026 The Shaar Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../../scripts/build/ninja/devtools_entrypoint.gni")
+import("../../../../scripts/build/ninja/devtools_module.gni")
+import("../../visibility.gni")
+
+devtools_ui_module("copy_for_agent") {
+  sources = [
+    "AgentPacket.ts",
+    "AgentPacketCollect.ts",
+    "CopyForAgentPanel.ts",
+  ]
+
+  ts_deps = [
+    "../../../core/i18n:bundle",
+    "../../../core/sdk:bundle",
+    "../../../generated",
+    "../../../ui/legacy:bundle",
+    "../../../ui/lit:bundle",
+  ]
+}
+
+devtools_entrypoint("bundle") {
+  entrypoint = "copy-for-agent.ts"
+
+  ts_deps = [ ":copy_for_agent" ]
+
+  visibility = [
+    ":*",
+    "..:*",
+    "../*",
+    "../../../entrypoints/*",
+  ]
+
+  visibility += devtools_panels_visibility
+}
+
+devtools_entrypoint("meta") {
+  entrypoint = "copy-for-agent-meta.ts"
+
+  ts_deps = [
+    ":bundle",
+    "../../../core/i18n:bundle",
+    "../../../ui/legacy:bundle",
+  ]
+
+  visibility = [
+    ":*",
+    "..:*",
+    "../../../entrypoints/*",
+  ]
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [ "AgentPacket.test.ts" ]
+
+  ts_deps = [
+    ":bundle",
+    "../../../core/i18n:bundle",
+    "../../../core/sdk:bundle",
+    "../../../generated",
+    "../../../testing",
+    "../../../ui/legacy:bundle",
+    "../../../ui/lit:bundle",
+  ]
+}

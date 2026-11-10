@@ -215,6 +215,13 @@ struct Symbols {
 - (void)cancelExtensionInstallRequestsForTabID:(NSString *)tabID;
 - (BOOL)shaarExtensionIDIsAcceptable:(NSString *)extensionID;
 - (BOOL)shaarInstallList:(id)value maxCount:(NSUInteger)maxCount maxItem:(NSUInteger)maxItem;
+- (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
+                           profileID:(NSString *)profileID
+                               tabID:(NSString *)tabID
+                  allowsProfileOnly:(BOOL)allowsProfileOnly
+                             payload:(NSDictionary *)payload
+                          completion:(void (^)(NSString *, shaar_error_code))completion
+                            syncCode:(shaar_error_code *)syncCode;
 - (void)adoptOpenedTabFromEvent:(const shaar_event *)event
                         payload:(NSDictionary *)payload
                       profileID:(NSString *)profileID;
@@ -1491,11 +1498,23 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
                              payload:(NSDictionary *)payload
                           completion:(void (^)(NSString *, shaar_error_code))completion {
   return [self shaarSubmitExtensionOperation:operation profileID:profileID tabID:tabID
-                                     payload:payload completion:completion syncCode:NULL];
+                         allowsProfileOnly:allowsProfileOnly payload:payload
+                                  completion:completion syncCode:NULL];
 }
 
 - (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
                            profileID:(NSString *)profileID tabID:(NSString *)tabID
+                             payload:(NSDictionary *)payload
+                          completion:(void (^)(NSString *, shaar_error_code))completion
+                            syncCode:(shaar_error_code *)syncCode {
+  return [self shaarSubmitExtensionOperation:operation profileID:profileID tabID:tabID
+                         allowsProfileOnly:NO payload:payload completion:completion
+                                  syncCode:syncCode];
+}
+
+- (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
+                           profileID:(NSString *)profileID tabID:(NSString *)tabID
+                  allowsProfileOnly:(BOOL)allowsProfileOnly
                              payload:(NSDictionary *)payload
                           completion:(void (^)(NSString *, shaar_error_code))completion
                             syncCode:(shaar_error_code *)syncCode {
@@ -1613,7 +1632,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   NSString *profileID = pending[@"profileID"];
   NSString *tabID = pending[@"tabID"];
   BOOL submitted = [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_INSTALL_DECISION
-      profileID:profileID tabID:tabID
+      profileID:profileID tabID:tabID allowsProfileOnly:NO
       payload:@{@"schemaVersion": @1, @"consentRequestId": requestID, @"accepted": @(accepted)}
       completion:^(NSString *json, shaar_error_code code) {
         if (code == SHAAR_OK && accepted) {
@@ -1636,7 +1655,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     if (![pending[@"tabID"] isEqualToString:tabID]) continue;
     [_shaarInstallRequests removeObjectForKey:requestID];
     [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_INSTALL_DECISION
-        profileID:pending[@"profileID"] tabID:tabID
+        profileID:pending[@"profileID"] tabID:tabID allowsProfileOnly:NO
         payload:@{@"schemaVersion": @1, @"consentRequestId": requestID, @"accepted": @NO}
         completion:^(NSString *json, shaar_error_code code) {}];
   }
@@ -1674,7 +1693,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (!usable) {
     if (_shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]]) {
       [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_INSTALL_DECISION
-          profileID:profileID tabID:tabID
+          profileID:profileID tabID:tabID allowsProfileOnly:NO
           payload:@{@"schemaVersion": @1, @"consentRequestId": requestID, @"accepted": @NO}
           completion:^(NSString *json, shaar_error_code code) {}];
     }

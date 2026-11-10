@@ -165,6 +165,10 @@ struct BrowserSettingsView: View {
   let onAddExtensions: (UUID) -> Void
   let clearHistory: ((UUID) async throws -> Void)?
   let profileBackend: (any ProfileSettingsBackend)?
+  let httpsOnlyModeEnabled: (UUID) -> Bool
+  let onSetHttpsOnlyMode: (UUID, Bool) -> Bool
+  @State private var httpsOnlyMode = true
+  @State private var httpsOnlyAppliesNextOpen = false
   @State private var deletingProfile: BrowserSettingsProfile?
   @State private var selectedSection: BrowserSettingsSection
   @State private var profileNameEdits: [UUID: String] = [:]
@@ -193,6 +197,8 @@ struct BrowserSettingsView: View {
     onAddExtensions: @escaping (UUID) -> Void = { _ in },
     profileBackend: (any ProfileSettingsBackend)? = nil,
     clearHistory: ((UUID) async throws -> Void)? = nil,
+    httpsOnlyModeEnabled: @escaping (UUID) -> Bool = { _ in true },
+    onSetHttpsOnlyMode: @escaping (UUID, Bool) -> Bool = { _, _ in true },
     initialSection: BrowserSettingsSection = .general
   ) {
     self.profiles = profiles
@@ -218,6 +224,8 @@ struct BrowserSettingsView: View {
     self.onAddExtensions = onAddExtensions
     self.clearHistory = clearHistory
     self.profileBackend = profileBackend
+    self.httpsOnlyModeEnabled = httpsOnlyModeEnabled
+    self.onSetHttpsOnlyMode = onSetHttpsOnlyMode
     _selectedSection = State(initialValue: initialSection)
   }
 
@@ -413,11 +421,24 @@ struct BrowserSettingsView: View {
           SettingsL10n.string(
             "Removes history for the selected profile. Cookies and cached files are not removed."))
       }
-      if let selectedProfileID, let profileBackend,
-        profiles.contains(where: { $0.id == selectedProfileID })
-      {
-        ProfilePrivacySections(profileID: selectedProfileID, backend: profileBackend)
-          .id(selectedProfileID)
+      if let selectedProfileID, profiles.contains(where: { $0.id == selectedProfileID }) {
+        Section {
+          Toggle(
+            SettingsL10n.string("Always use secure connections"), isOn: $httpsOnlyMode
+          )
+          .accessibilityIdentifier("settings.httpsOnlyMode")
+          .onChange(of: httpsOnlyMode) { _, enabled in
+            guard httpsOnlyModeEnabled(selectedProfileID) != enabled else { return }
+            let appliedNow = onSetHttpsOnlyMode(selectedProfileID, enabled)
+            httpsOnlyAppliesNextOpen = !appliedNow
+          }
+        } footer: {
+          Text(httpsOnlyFooter)
+        }
+        if let profileBackend {
+          ProfilePrivacySections(profileID: selectedProfileID, backend: profileBackend)
+            .id(selectedProfileID)
+        }
       }
       Section {
         LabeledContent(
@@ -448,6 +469,8 @@ struct BrowserSettingsView: View {
       }
       MacPermissionsSection()
     }.formStyle(.grouped)
+      .onAppear { refreshHttpsOnlyMode() }
+      .onChange(of: selectedProfileID) { _, _ in refreshHttpsOnlyMode() }
       .confirmationDialog(
         SettingsL10n.string("Clear all history for this profile?"), isPresented: $confirmHistory
       ) {
@@ -466,6 +489,25 @@ struct BrowserSettingsView: View {
           }
         }
       }
+  }
+
+  private var httpsOnlyFooter: String {
+    if httpsOnlyAppliesNextOpen {
+      return SettingsL10n.string(
+        "Public pages use HTTPS. A site that does not support HTTPS shows a warning instead of loading. This profile applies the change the next time it opens."
+      )
+    }
+    return SettingsL10n.string(
+      "Public pages use HTTPS. A site that does not support HTTPS shows a warning instead of loading."
+    )
+  }
+
+  private func refreshHttpsOnlyMode() {
+    httpsOnlyAppliesNextOpen = false
+    guard let selectedProfileID, profiles.contains(where: { $0.id == selectedProfileID })
+    else { return }
+    let enabled = httpsOnlyModeEnabled(selectedProfileID)
+    if httpsOnlyMode != enabled { httpsOnlyMode = enabled }
   }
 
   private var aboutContent: some View {

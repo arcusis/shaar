@@ -303,6 +303,12 @@ private struct BrowserSettingsRoot: View {
       profileBackend: state.profileBackend,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
+      },
+      httpsOnlyModeEnabled: { state.preferences.httpsOnlyModeEnabled(for: $0) },
+      onSetHttpsOnlyMode: { profileID, enabled in
+        state.preferences.setHttpsOnlyMode(enabled, for: profileID)
+        guard let runtime = state.runtime as? ARCShaarRuntime else { return false }
+        return runtime.setHttpsOnlyModeEnabled(enabled, forProfileID: profileID.uuidString)
       })
   }
 }

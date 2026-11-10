@@ -17,6 +17,7 @@ final class BrowserPreferencesStore {
   private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
   private var autoPictureInPictureOffSites: [UUID: [String]] = [:]
+  private var profileHttpsOnlyMode: [UUID: Bool] = [:]
   private var developerSimulations: [UUID: [String: DeveloperSimulation]] = [:]
   private var preservesExistingFile = false
 
@@ -119,6 +120,23 @@ final class BrowserPreferencesStore {
     save()
   }
 
+  /// Public HTTP upgrades to HTTPS unless this profile turned the warning off.
+  func httpsOnlyModeEnabled(for profileID: UUID) -> Bool {
+    profileHttpsOnlyMode[profileID] ?? true
+  }
+
+  func setHttpsOnlyMode(_ enabled: Bool, for profileID: UUID) {
+    let stored = profileHttpsOnlyMode[profileID]
+    if enabled {
+      guard stored != nil else { return }
+      profileHttpsOnlyMode[profileID] = nil
+    } else {
+      guard stored != false else { return }
+      profileHttpsOnlyMode[profileID] = false
+    }
+    save()
+  }
+
   func developerSimulation(on origin: String, for profileID: UUID) -> DeveloperSimulation {
     developerSimulations[profileID]?[origin] ?? DeveloperSimulation()
   }
@@ -152,6 +170,7 @@ final class BrowserPreferencesStore {
     connectedAccounts[profileID] = nil
     pinnedExtensions[profileID] = nil
     autoPictureInPictureOffSites[profileID] = nil
+    profileHttpsOnlyMode[profileID] = nil
     developerSimulations[profileID] = nil
     save()
     if storageNotice != nil { throw CocoaError(.fileWriteUnknown) }
@@ -184,6 +203,7 @@ final class BrowserPreferencesStore {
       connectedAccounts = document.connectedAccounts
       pinnedExtensions = document.pinnedExtensions
       autoPictureInPictureOffSites = document.autoPictureInPictureOffSites
+      profileHttpsOnlyMode = document.profileHttpsOnlyMode
       developerSimulations = document.developerSimulations
     } catch {
       preserveWithNotice(
@@ -215,6 +235,7 @@ final class BrowserPreferencesStore {
         profileDownloadBookmarks: profileDownloadBookmarks,
         pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts,
         autoPictureInPictureOffSites: autoPictureInPictureOffSites,
+        profileHttpsOnlyMode: profileHttpsOnlyMode,
         developerSimulations: developerSimulations)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
@@ -245,6 +266,7 @@ private struct PreferencesDocument: Codable {
   let connectedAccounts: [UUID: [ConnectedAccount]]
   let pinnedExtensions: [UUID: [String]]
   let autoPictureInPictureOffSites: [UUID: [String]]
+  let profileHttpsOnlyMode: [UUID: Bool]
   let developerSimulations: [UUID: [String: DeveloperSimulation]]
 
   private enum CodingKeys: String, CodingKey {
@@ -256,6 +278,7 @@ private struct PreferencesDocument: Codable {
     case connectedAccounts
     case pinnedExtensions
     case autoPictureInPictureOffSites
+    case profileHttpsOnlyMode
     case developerSimulations
   }
 
@@ -267,6 +290,7 @@ private struct PreferencesDocument: Codable {
     pinnedExtensions: [UUID: [String]] = [:],
     connectedAccounts: [UUID: [ConnectedAccount]] = [:],
     autoPictureInPictureOffSites: [UUID: [String]] = [:],
+    profileHttpsOnlyMode: [UUID: Bool] = [:],
     developerSimulations: [UUID: [String: DeveloperSimulation]] = [:]
   ) {
     self.version = version
@@ -277,6 +301,7 @@ private struct PreferencesDocument: Codable {
     self.connectedAccounts = connectedAccounts
     self.pinnedExtensions = pinnedExtensions
     self.autoPictureInPictureOffSites = autoPictureInPictureOffSites
+    self.profileHttpsOnlyMode = profileHttpsOnlyMode
     self.developerSimulations = developerSimulations
   }
 
@@ -296,6 +321,8 @@ private struct PreferencesDocument: Codable {
     autoPictureInPictureOffSites =
       try values.decodeIfPresent([UUID: [String]].self, forKey: .autoPictureInPictureOffSites)
       ?? [:]
+    profileHttpsOnlyMode =
+      try values.decodeIfPresent([UUID: Bool].self, forKey: .profileHttpsOnlyMode) ?? [:]
     profileDownloadDirectories =
       try values.decodeIfPresent([UUID: String].self, forKey: .profileDownloadDirectories) ?? [:]
     profileDownloadBookmarks =

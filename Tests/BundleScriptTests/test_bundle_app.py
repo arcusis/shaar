@@ -477,6 +477,8 @@ class BundleAppTests(unittest.TestCase):
             "--browsing-edge-probe",
             "--platform-parity-probe",
             "parity-action",
+            "--probe-https-only",
+            "HttpsOnlyProbe",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

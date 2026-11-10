@@ -33,6 +33,8 @@ assert_no_verification_code() {
     -e --browsing-edge-probe \
     -e --platform-parity-probe \
     -e parity-action \
+    -e --probe-https-only \
+    -e HttpsOnlyProbe \
     "$1"
   then
     echo "Verification code found in $1." >&2

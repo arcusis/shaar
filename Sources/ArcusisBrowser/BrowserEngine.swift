@@ -795,6 +795,11 @@ final class BrowserEngine {
         !failedProfiles.contains(profile)
       else { continue }
       loadingProfiles.insert(profile)
+      if let shaar = runtime as? ARCShaarRuntime {
+        shaar.setHttpsOnlyModeEnabled(
+          store.preferences.httpsOnlyModeEnabled(for: profile),
+          forProfileID: profile.uuidString)
+      }
       runtime.loadProfileID(profile.uuidString) { [weak self] error in
         Task { @MainActor [weak self] in
           await self?.finishLoadingProfile(profile, error: error)

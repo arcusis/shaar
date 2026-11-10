@@ -62,19 +62,19 @@ import Foundation
       context.engine.sleepingTabs.policy = {
         SleepingTabsPolicy(enabled: true, timeout: 2 * 60 * 60, neverSleepHosts: [])
       }
-      guard let original = context.store.session.selectedPage?.tab.id else {
-        throw Failure("No restored tab")
-      }
-      let originalLive = await wait { context.engine.liveTabs.contains(original) }
-      guard originalLive else {
+      let first = context.store.session.open(URL(string: "https://example.com")!)
+      guard let first else { throw Failure("Could not open the first tab") }
+      context.engine.reconcile()
+      let firstLive = await wait { context.engine.liveTabs.contains(first) }
+      guard firstLive else {
         throw Failure(
-          "The restored tab did not become live (live=\(context.engine.liveTabs.count))")
+          "The first tab did not become live (live=\(context.engine.liveTabs.count))")
       }
-      let opened = context.store.session.open(URL(string: "https://example.com")!)
+      let opened = context.store.session.open(URL(string: "https://example.org")!)
       guard let opened else { throw Failure("Could not open a second tab") }
       context.engine.reconcile()
       let ready = await wait {
-        context.engine.liveTabs.contains(opened) && context.engine.liveTabs.contains(original)
+        context.engine.liveTabs.contains(opened) && context.engine.liveTabs.contains(first)
       }
       guard ready else {
         throw Failure(

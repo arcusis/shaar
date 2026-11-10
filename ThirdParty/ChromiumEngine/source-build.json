@@ -506,7 +506,7 @@
       "sha256": "d5eb8044fbe3a3ad01c9e64696ccd3a3457fc3a76f4dda33111379150209c952"
     },
     {
-      "file": "ThirdParty/ChromiumEngine/patches/0061-shaar-icloud-passkey-window.patch",
+      "file": "ThirdParty/ChromiumEngine/patches/0063-shaar-icloud-passkey-window.patch",
       "sha256": "52a8ac2dfecd135078052a1ca678900f0fec81859f148e093f91e2b0c9f0fc16"
     }
   ],

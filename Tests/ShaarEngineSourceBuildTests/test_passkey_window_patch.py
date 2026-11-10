@@ -11,7 +11,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0061-shaar-icloud-passkey-window.patch"
+PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0063-shaar-icloud-passkey-window.patch"
 BRANDING = ROOT / "ThirdParty/ChromiumEngine/patches/0007-shaar-branding.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 

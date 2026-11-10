@@ -7,7 +7,7 @@ import * as UI from '../../../ui/legacy/legacy.js';
 import {html, render, type TemplateResult} from '../../../ui/lit/lit.js';
 
 import {collectFromInspectedPage, revealInElements, StackingCaptureError} from './StackingCapture.js';
-import stackingStyles from './stacking-3d.css.js';
+import stackingStyles from './stacking.css.js';
 import {
   fittedCamera,
   hitSlab,
@@ -120,7 +120,7 @@ const UIStrings = {
   root: 'Document root',
 } as const;
 
-const str_ = i18n.i18n.registerUIStrings('panels/shaar/stacking-3d/StackingPanel.ts', UIStrings);
+const str_ = i18n.i18n.registerUIStrings('panels/shaar/stacking/StackingPanel.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 const PITCH_MIN = 0.2;
@@ -146,7 +146,7 @@ export class StackingPanel extends UI.Panel.Panel {
   #drag: {x: number, y: number, yaw: number, pitch: number, moved: boolean}|null = null;
 
   constructor(collector?: Collector, select?: Selector) {
-    super('shaar-stacking-3d', /* useShadowDom */ true);
+    super('shaar-stacking', /* useShadowDom */ true);
     this.#collector = collector ?? collectFromInspectedPage;
     this.#select = select ?? revealInElements;
     this.registerRequiredCSS(stackingStyles);

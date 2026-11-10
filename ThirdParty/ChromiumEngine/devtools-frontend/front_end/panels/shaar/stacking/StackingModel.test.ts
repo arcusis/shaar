@@ -4,7 +4,7 @@
 
 import {assert} from 'chai';
 
-import * as Stacking from './stacking-3d.js';
+import * as Stacking from './stacking.js';
 
 const Model = Stacking.StackingModel;
 

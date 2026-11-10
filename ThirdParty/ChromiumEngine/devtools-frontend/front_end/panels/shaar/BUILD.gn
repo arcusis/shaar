@@ -15,6 +15,7 @@ devtools_entrypoint("meta") {
     "overflow:meta",
     "focus-contrast:meta",
     "stacking-3d:meta",
+    "stacking:meta",
   ]
 
   visibility = [
@@ -32,5 +33,6 @@ group("unittests") {
     "overflow:unittests",
     "focus-contrast:unittests",
     "stacking-3d:unittests",
+    "stacking:unittests",
   ]
 }

@@ -8,10 +8,10 @@ import("../../../../scripts/build/ninja/generate_css.gni")
 import("../../visibility.gni")
 
 generate_css("css_files") {
-  sources = [ "stacking-3d.css" ]
+  sources = [ "stacking.css" ]
 }
 
-devtools_ui_module("stacking_3d") {
+devtools_ui_module("stacking") {
   sources = [
     "StackingCapture.ts",
     "StackingModel.ts",
@@ -31,12 +31,12 @@ devtools_ui_module("stacking_3d") {
 }
 
 devtools_entrypoint("bundle") {
-  entrypoint = "stacking-3d.ts"
+  entrypoint = "stacking.ts"
 
   # The panel CSS is generated. The inlined bundle has to wait for that file.
   deps = [ ":css_files" ]
 
-  ts_deps = [ ":stacking_3d" ]
+  ts_deps = [ ":stacking" ]
 
   visibility = [
     ":*",
@@ -49,7 +49,7 @@ devtools_entrypoint("bundle") {
 }
 
 devtools_entrypoint("meta") {
-  entrypoint = "stacking-3d-meta.ts"
+  entrypoint = "stacking-meta.ts"
 
   deps = [ ":css_files" ]
 

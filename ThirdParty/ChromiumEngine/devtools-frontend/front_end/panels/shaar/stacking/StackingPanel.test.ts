@@ -6,7 +6,7 @@ import {assert} from 'chai';
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 
-import * as Stacking from './stacking-3d.js';
+import * as Stacking from './stacking.js';
 
 const Model = Stacking.StackingModel;
 const openPanels: Stacking.StackingPanel.StackingPanel[] = [];

@@ -159,7 +159,7 @@ public enum SleepingFormSignal {
   public static let script = """
     ({edited:(function(){
       function dirty(root){
-        return [...root.querySelectorAll('input,textarea,select,[contenteditable]')].some(e=>{
+        return [...root.querySelectorAll('input,textarea,select,[contenteditable]:not([contenteditable="false"])')].some(e=>{
           if(e.isContentEditable)return true;
           if(e instanceof HTMLInputElement){
             if(e.type==='checkbox'||e.type==='radio')return e.checked!==e.defaultChecked;
@@ -175,6 +175,7 @@ public enum SleepingFormSignal {
         if(dirty(root))return true;
         for(const el of root.querySelectorAll('*')){
           if(el.shadowRoot&&walk(el.shadowRoot))return true;
+          if(el.localName.includes('-')&&customElements.get(el.localName)&&!el.shadowRoot)return true;
         }
         for(const frame of root.querySelectorAll('iframe,frame')){
           let doc;

@@ -97,10 +97,10 @@ import Foundation
       let now = Date()
       context.engine.suspendInactiveTabs(now: now)
       context.engine.suspendInactiveTabs(now: now.addingTimeInterval(idleGap))
+      let sleeping = await wait { context.store.sleepingTabIDs.contains(background) }
       let after = context.store.session.spaces.flatMap(\.tabs).map(\.id)
       let stillListed = after.contains(background)
       let stillLive = context.engine.liveTabs.contains(background)
-      let sleeping = context.store.sleepingTabIDs.contains(background)
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
       let rendererFailures = context.store.rendererFailures.count
       let passed =

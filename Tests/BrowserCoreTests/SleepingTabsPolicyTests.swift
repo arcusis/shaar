@@ -100,6 +100,8 @@ import Testing
     #expect(SleepingFormSignal.script.contains("edited"))
     #expect(SleepingFormSignal.script.contains("iframe"))
     #expect(SleepingFormSignal.script.contains("shadowRoot"))
+    #expect(SleepingFormSignal.script.contains("customElements.get"))
+    #expect(SleepingFormSignal.script.contains("contenteditable=\"false\""))
     #expect(!SleepingFormSignal.script.contains("scrollX"))
     #expect(!SleepingFormSignal.script.contains("scrollTo"))
   }

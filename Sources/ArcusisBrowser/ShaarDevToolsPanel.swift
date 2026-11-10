@@ -2,7 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import AppKit
 import SwiftUI
 
 enum ShaarDevToolsAccessibility {
@@ -273,15 +272,6 @@ struct ShaarDevToolsPanel: View {
       ForEach(ShaarDevToolsDock.allCases, id: \.self) { dock in
         Button(ShellL10n.string(dock.rawValue)) { model.dock = dock }
       }
-      Divider()
-      if model.canTapLocalLogs {
-        if model.hasLogTap {
-          Button(ShellL10n.string("Disconnect server log")) { model.disconnectLogTap() }
-        } else {
-          Button(ShellL10n.string("Connect server log file…"), action: chooseLogFile)
-        }
-        Divider()
-      }
       Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
         .help(ShellL10n.string("Open Chromium DevTools with Option-Shift-Command-I"))
     } label: {
@@ -309,28 +299,10 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
-    case .console:
-      if model.consoleAvailable {
-        ShaarConsolePanel(
-          model: model.console, events: model.consoleEvents,
-          droppedCount: model.droppedConsoleCount, inspector: inspector,
-          openSource: openConsoleSource)
-      } else {
-        unavailablePanel
-      }
+    case .console, .network:
+      unavailablePanel
     case .issues:
-      ShaarDevToolsIssuesPanel(model: model)
-    case .network:
-      if model.streamAvailable {
-        ShaarNetworkPanel(
-          model: model.network, rules: model.rules, events: model.events,
-          droppedCount: model.droppedNetworkCount,
-          openChromium: openChromium
-        )
-        .task { bindNetworkConditions() }
-      } else {
-        unavailablePanel
-      }
+      ShaarDevToolsIssuesPanel(model: model, openChromium: openChromium)
     case .application:
       ShaarApplicationPanel(
         model: model.application, cookies: model.cookies, phase2: model.phase2,
@@ -426,10 +398,6 @@ struct ShaarDevToolsPanel: View {
         }
         .frame(maxWidth: 360)
       }
-      if model.section == .console && model.canTapLocalLogs {
-        Button(ShellL10n.string("Connect server log file…"), action: chooseLogFile)
-          .controlSize(.small)
-      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .multilineTextAlignment(.center)
@@ -447,7 +415,7 @@ struct ShaarDevToolsPanel: View {
     if model.section == .repro { return "Repro capture needs engine support" }
     if model.section == .viewports { return "Live Viewports need engine support" }
     if model.section == .comparison { return "WebKit comparison is unavailable for this tab" }
-    return "Live console and network are unavailable for this tab"
+    return "Use Chromium DevTools for Console and Network"
   }
 
   private var nativeFailure: String? {
@@ -459,64 +427,21 @@ struct ShaarDevToolsPanel: View {
     }
   }
 
-  private func bindNetworkConditions() {
-    let developer = inspector?.engine?.developerModel(for: model.target)
-    model.network.conditions.applyThrottle = { throttle in
-      guard let developer else { return }
-      try await ShaarNetworkConditions.applyThrottle(throttle) { method, params in
-        _ = try await developer.call(method, params: params)
-      }
-    }
-    model.network.conditions.applyCacheDisabled = { disabled in
-      guard let developer else { return }
-      try await ShaarNetworkConditions.applyCacheDisabled(disabled) { method, params in
-        _ = try await developer.call(method, params: params)
-      }
-    }
-  }
-
-  private func openConsoleSource(_ frame: ShaarConsoleFrame) {
-    guard let location = ShaarConsoleLocations.parse(frame.source) else { return }
-    model.section = .sources
-    Task {
-      let loaded = model.sources.resources.contains {
-        ShaarSourceTree.sameResource($0.url, location.url)
-      }
-      if !loaded { await model.sources.refresh() }
-      _ = await model.sources.reveal(url: location.url, line: location.line)
-    }
-  }
-
-  private func chooseLogFile() {
-    let panel = NSOpenPanel()
-    panel.canChooseFiles = true
-    panel.canChooseDirectories = false
-    panel.allowsMultipleSelection = false
-    panel.begin { response in
-      guard response == .OK, let file = panel.url else { return }
-      Task { @MainActor in _ = model.connectLogTap(file) }
-    }
-  }
-
-  @ViewBuilder private var commandLine: some View {
-    if model.streamAvailable && model.section == .console {
-      ShaarConsoleCommandLine(model: model.console, inspector: inspector)
-    } else {
-      HStack(spacing: 8) {
-        Text(">")
-          .font(.system(size: 12, weight: .medium, design: .monospaced))
-          .foregroundStyle(.primary)
-        Text(
-          ShellL10n.string(
-            footerMessage)
-        )
-        .font(.system(size: 11, design: .monospaced))
+  private var commandLine: some View {
+    HStack(spacing: 8) {
+      Text(">")
+        .font(.system(size: 12, weight: .medium, design: .monospaced))
         .foregroundStyle(.primary)
-        Spacer()
-      }
-      .padding(.horizontal, 12)
-      .frame(height: 34)
+      Text(
+        ShellL10n.string(
+          footerMessage)
+      )
+      .font(.system(size: 11, design: .monospaced))
+      .foregroundStyle(.primary)
+      Spacer()
     }
+    .padding(.horizontal, 12)
+    .frame(height: 34)
   }
 
   private var footerMessage: String {
@@ -568,9 +493,7 @@ struct ShaarDevToolsPanel: View {
     }
     if model.section == .rendering { return "Rendering changes are scoped to this tab" }
     if model.section == .comparison { return "WebKit comparison is scoped to this tab" }
-    guard model.streamAvailable else { return "Console commands are unavailable for this tab" }
-    if model.section == .network { return "Network requests are scoped to this tab" }
-    return "Open Console to evaluate JavaScript"
+    return "Open Chromium DevTools for Console and Network"
   }
 
   private func siteAction(_ action: SiteAction) -> (() async throws -> Void)? {
@@ -605,12 +528,6 @@ struct ShaarDevToolsPanel: View {
     switch model.section {
     case .elements where !model.dom.search.isEmpty:
       model.dom.search = ""
-      return
-    case .console where !model.console.search.isEmpty:
-      model.console.search = ""
-      return
-    case .network where !model.network.search.isEmpty:
-      model.network.search = ""
       return
     case .application where model.application.area == .cookies && !model.cookies.search.isEmpty:
       model.cookies.search = ""

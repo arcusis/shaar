@@ -13,9 +13,7 @@ import Foundation
     context: NativeBrowserContext, pageURL: URL, report: ShaarDevToolsSmokeReport
   ) async {
     await roundTwoElements(shell, inspector: inspector, context: context, report: report)
-    await roundTwoConsole(shell, inspector: inspector, context: context, report: report)
     await roundTwoSources(shell, context: context, pageURL: pageURL, report: report)
-    await roundTwoNetwork(shell, pageURL: pageURL, report: report)
     await roundTwoSocketAndWorker(
       shell, inspector: inspector, context: context, pageURL: pageURL, report: report)
     await roundTwoCookies(shell, inspector: inspector, context: context, report: report)
@@ -99,72 +97,6 @@ import Foundation
       "Edited searched element attribute through Elements: \(String(describing: value))",
       report: report)
     _ = try? await inspector.evaluate("document.getElementById('shaar-round2-search')?.remove()")
-  }
-
-  private static func roundTwoConsole(
-    _ shell: ShaarDevToolsModel, inspector: InspectorModel,
-    context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .console
-    _ = try? await inspector.evaluate(
-      "console.log('shaar-round2-object', {shaarRound2: 42, nested: {ok: true}})")
-    let received = await wait(attempts: 60) {
-      shell.console.rows(from: shell.consoleEvents).contains {
-        $0.event.origin == .browser && $0.event.message.contains("shaar-round2-object")
-      }
-    }
-    if let object = shell.console.rows(from: shell.consoleEvents).last(where: {
-      $0.event.origin == .browser && $0.event.message.contains("shaar-round2-object")
-    }) {
-      shell.console.selectedID = object.id
-      await settle(context)
-      _ = ShaarDevToolsSmokeAccess.capture(
-        context.hosting, to: report.directory.appending(path: "world-round2-console-before.png"))
-      let pressed = ShaarDevToolsSmokeAccess.press(
-        identifier: "shaar.devtools.consoleObjectProperties", in: context.hosting)
-      _ = await wait(attempts: 40) { shell.console.properties[object.id] != nil }
-      let properties = shell.console.properties[object.id] ?? object.event.previewProperties
-      record(
-        received && pressed && properties.contains { $0.name == "shaarRound2" },
-        "world2-console-object",
-        "UI press=\(pressed), expanded object has \(properties.count) properties",
-        report: report)
-      if let nested = properties.first(where: { $0.name == "nested" }) {
-        await settle(context)
-        let nestedPressed = ShaarDevToolsSmokeAccess.press(
-          identifier: "shaar.devtools.consoleNestedProperty", in: context.hosting)
-        if let objectID = nested.objectID {
-          _ = await wait(attempts: 40) { shell.console.childProperties[objectID] != nil }
-          let children = shell.console.childProperties[objectID] ?? []
-          record(
-            nestedPressed && children.contains { $0.name == "ok" && $0.value.contains("true") },
-            "world2-console-nested",
-            "UI press=\(nestedPressed), nested object has \(children.count) properties",
-            report: report)
-        } else {
-          report.fail("world2-console-nested", "Nested property has no object handle")
-        }
-      } else {
-        report.fail("world2-console-nested", "Nested property missing")
-      }
-      await settle(context)
-      _ = ShaarDevToolsSmokeAccess.capture(
-        context.hosting, to: report.directory.appending(path: "world-round2-console-after.png"))
-    } else {
-      report.fail("world2-console-object", "Console object did not arrive")
-    }
-    shell.console.command = "const shaarRound2 = 40;\nshaarRound2 + 2"
-    await shell.console.submit { expression in
-      let reply = try await inspector.call(
-        "Runtime.evaluate", params: ["expression": expression, "returnByValue": false])
-      return try ShaarConsoleModel.evaluation(from: reply)
-    }
-    let evaluated = shell.console.localEntries.contains {
-      $0.level == .info && $0.message == "42"
-    }
-    record(
-      evaluated, "world2-console-multiline", "Multiline console expression returned 42",
-      report: report)
   }
 
   private static func roundTwoSources(
@@ -299,7 +231,6 @@ import Foundation
       socketDetail,
       report: report)
     _ = try? await inspector.evaluate("globalThis.__shaarRound2WS?.close()")
-    shell.network.filter = .all
     shell.section = .application
     shell.application.selectArea(.workers)
     await shell.application.refresh()
@@ -310,46 +241,6 @@ import Foundation
       "world2-service-worker",
       "Page worker=\(String(describing: workerState)), Application workers=\(shell.application.workers.count)",
       report: report)
-  }
-
-  private static func roundTwoNetwork(
-    _ shell: ShaarDevToolsModel, pageURL: URL, report: ShaarDevToolsSmokeReport
-  ) async {
-    shell.section = .network
-    let rows = shell.network.requests(from: shell.events)
-    if pageURL.port == 3210 {
-      let distinct = Set(rows.filter { $0.url.contains("/api/item/") }.map(\.url)).count
-      record(
-        distinct >= 100, "world2-network-volume",
-        "\(distinct) distinct /api/item/ requests in \(rows.count) total rows", report: report)
-    }
-    shell.network.filter = .script
-    let scripts = shell.network.visibleRequests(from: shell.events)
-    record(
-      !scripts.isEmpty && scripts.allSatisfy { $0.resource == .script },
-      "world2-network-filter", "JS chip shows \(scripts.count) scripts", report: report)
-    shell.network.filter = .all
-    if let first = rows.first(where: { $0.url.contains("/api/item/") }) ?? rows.first {
-      shell.network.search = first.url
-      let searched = shell.network.visibleRequests(from: shell.events)
-      record(
-        !searched.isEmpty && searched.allSatisfy { $0.url.contains(first.url) },
-        "world2-network-search", "Search for \(first.url) shows \(searched.count) rows",
-        report: report)
-      shell.network.search = ""
-      let fetch = shell.network.fetchCommand(for: first)
-      record(
-        fetch.hasPrefix("fetch(") && fetch.contains("method:"),
-        "world2-network-fetch", "Copy as fetch text generated for \(first.name)", report: report)
-    }
-    let har = report.directory.appending(path: "world-round2-network.har")
-    do {
-      try ShaarNetworkHAR.write(shell.network.exportRequests(from: shell.events), to: har)
-      let size = (try? har.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-      record(size > 100, "world2-network-har", "HAR saved \(size) bytes", report: report)
-    } catch {
-      report.fail("world2-network-har", error.localizedDescription)
-    }
   }
 
   private static func roundTwoCookies(

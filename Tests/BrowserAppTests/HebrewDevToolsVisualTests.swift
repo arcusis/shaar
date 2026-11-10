@@ -48,9 +48,6 @@ import XCTest
     shell.open(inspector: inspector)
     for _ in 0..<30 where shell.events.count < fixture.count { await Task.yield() }
     XCTAssertTrue(shell.streamAvailable)
-    shell.network.selectedID = shell.network.requests(from: shell.events).first?.id
-    shell.network.detailTab = .response
-    shell.console.selectedID = shell.console.rows(from: shell.events).first?.id
 
     for scheme in [ColorScheme.light, .dark] {
       let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
@@ -60,18 +57,12 @@ import XCTest
           .frame(width: 1040, height: 620)
           .environment(\.colorScheme, scheme).shellLocalization(),
         named: "before-inspector-hebrew-\(suffix)", appearance: appearance, root: root)
-      shell.section = .console
+      shell.section = .issues
       try capture(
         ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {})
           .frame(width: 1040, height: 620)
           .environment(\.colorScheme, scheme).shellLocalization(),
-        named: "after-console-hebrew-\(suffix)", appearance: appearance, root: root)
-      shell.section = .network
-      try capture(
-        ShaarDevToolsPanel(model: shell, inspector: inspector, openChromium: {})
-          .frame(width: 1040, height: 620)
-          .environment(\.colorScheme, scheme).shellLocalization(),
-        named: "after-network-hebrew-\(suffix)", appearance: appearance, root: root)
+        named: "after-issues-hebrew-\(suffix)", appearance: appearance, root: root)
       for (section, name) in [
         (ShaarDevToolsSection.application, "application"),
         (.performance, "performance"), (.sources, "sources"), (.repro, "repro"),

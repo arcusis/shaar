@@ -24,9 +24,9 @@ import XCTest
     let inspector = InspectorModel(target: target, engine: nil)
     let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
     shell.open(inspector: inspector)
-    shell.section = .console
+    shell.section = .elements
     shell.dock = .bottom
-    shell.chooseOpening(.panel(.console))
+    shell.chooseOpening(.panel(.elements))
     shell.showSettings()
 
     for scheme in [ColorScheme.light, .dark] {

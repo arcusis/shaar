@@ -80,6 +80,7 @@ enum ShaarDevToolsIssues {
 
 struct ShaarDevToolsIssuesPanel: View {
   @Bindable var model: ShaarDevToolsModel
+  let openChromium: () -> Void
 
   var body: some View {
     let issues = model.issues
@@ -91,7 +92,7 @@ struct ShaarDevToolsIssuesPanel: View {
           LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(issues) { issue in
               Button {
-                model.openIssue(issue)
+                openChromium()
               } label: {
                 ShaarDevToolsIssueRow(issue: issue)
               }

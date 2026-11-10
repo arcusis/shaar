@@ -9,8 +9,6 @@ import ShaarEngineABI
 enum ShaarDevToolsCommandHit: Equatable {
   case section(ShaarDevToolsSection)
   case dock(ShaarDevToolsDock)
-  case console(UUID)
-  case network(String)
   case source(String)
   case element(Int)
   case settings
@@ -19,8 +17,6 @@ enum ShaarDevToolsCommandHit: Equatable {
     switch self {
     case .section(let section): "section:\(section.rawValue)"
     case .dock(let dock): "dock:\(dock.rawValue)"
-    case .console(let id): "console:\(id.uuidString)"
-    case .network(let id): "network:\(id)"
     case .source(let url): "source:\(url)"
     case .element(let id): "element:\(id)"
     case .settings: "settings"
@@ -30,8 +26,6 @@ enum ShaarDevToolsCommandHit: Equatable {
   var groupKey: String? {
     switch self {
     case .section, .dock: nil
-    case .console: "Console"
-    case .network: "Network"
     case .source: "Sources"
     case .element: "Elements"
     case .settings: nil
@@ -41,7 +35,7 @@ enum ShaarDevToolsCommandHit: Equatable {
   var localizesTitle: Bool {
     switch self {
     case .section, .dock, .settings: true
-    case .console, .network, .source, .element: false
+    case .source, .element: false
     }
   }
 }
@@ -75,16 +69,12 @@ enum ShaarDevToolsCommandIndex {
   static func matches(
     query: String,
     sections: [ShaarDevToolsSection],
-    console: [ShaarConsoleEvent],
-    network: [ShaarNetworkRequest],
     sources: [ShaarSourceResource],
     nodes: [ShaarDOMNode]
   ) -> [ShaarDevToolsCommandMatch] {
     let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
     var result = actions(needle: needle, sections: sections)
     guard !needle.isEmpty else { return result }
-    result += consoleHits(needle, events: console)
-    result += networkHits(needle, requests: network)
     result += sourceHits(needle, resources: sources)
     result += elementHits(needle, nodes: nodes)
     return result
@@ -104,35 +94,6 @@ enum ShaarDevToolsCommandIndex {
     }
     if matches(needle, "Settings") {
       result.append(ShaarDevToolsCommandMatch(hit: .settings, title: "Settings", detail: ""))
-    }
-    return result
-  }
-
-  private static func consoleHits(_ needle: String, events: [ShaarConsoleEvent])
-    -> [ShaarDevToolsCommandMatch]
-  {
-    var result: [ShaarDevToolsCommandMatch] = []
-    for event in events.suffix(scanLimit).reversed() {
-      guard result.count < contentLimit else { break }
-      guard matches(needle, event.message, event.source ?? "") else { continue }
-      result.append(
-        ShaarDevToolsCommandMatch(
-          hit: .console(event.id), title: event.message, detail: event.source ?? ""))
-    }
-    return result
-  }
-
-  private static func networkHits(_ needle: String, requests: [ShaarNetworkRequest])
-    -> [ShaarDevToolsCommandMatch]
-  {
-    var result: [ShaarDevToolsCommandMatch] = []
-    for request in requests.suffix(scanLimit).reversed() {
-      guard result.count < contentLimit else { break }
-      guard matches(needle, request.method, request.url, request.name, request.failure ?? "")
-      else { continue }
-      result.append(
-        ShaarDevToolsCommandMatch(
-          hit: .network(request.id), title: request.name, detail: networkDetail(request)))
     }
     return result
   }
@@ -165,12 +126,6 @@ enum ShaarDevToolsCommandIndex {
         ShaarDevToolsCommandMatch(hit: .element(node.id), title: title, detail: ""))
     }
     return result
-  }
-
-  private static func networkDetail(_ request: ShaarNetworkRequest) -> String {
-    if let failure = request.failure, !failure.isEmpty { return "\(request.method) \(failure)" }
-    if let status = request.status { return "\(request.method) \(status)" }
-    return request.method
   }
 
   private static func elementLabel(_ node: ShaarDOMNode) -> String {

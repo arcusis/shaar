@@ -10,7 +10,10 @@ import XCTest
 
 @MainActor final class ShaarDevToolsAccessibilityTests: XCTestCase {
   func testEverySectionExposesANameAndPanelNavigationHelp() {
-    for section in ShaarDevToolsSection.allCases {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let shell = ShaarDevToolsModel(target: target)
+    for section in shell.sections {
       XCTAssertFalse(ShaarDevToolsAccessibility.sectionLabel(section).isEmpty)
       XCTAssertTrue(
         ShaarDevToolsAccessibility.sectionHelp(section).contains("Left and Right Arrow"))

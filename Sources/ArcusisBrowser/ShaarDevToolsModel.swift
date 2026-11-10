@@ -191,7 +191,7 @@ protocol ShaarLocalConsoleTransport {
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarLocalConsoleMessage>
 }
 
-/// A pending transport reports unavailable when no native panel is connected.
+/// A pending transport reports unavailable when no event stream is connected.
 struct ShaarDevToolsPendingTransport: ShaarDevToolsEventTransport {
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
     AsyncStream { continuation in
@@ -439,7 +439,9 @@ final class ShaarDevToolsModel {
   @ObservationIgnored weak var sensorEngine: BrowserEngine?
   @ObservationIgnored var sensorGeneration = 0
   var sections: [ShaarDevToolsSection] {
-    ShaarDevToolsSection.allCases.filter { $0 != .comparison || allowsWebKitComparison }
+    ShaarDevToolsSection.allCases.filter {
+      $0 != .console && $0 != .network && ($0 != .comparison || allowsWebKitComparison)
+    }
   }
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
   @ObservationIgnored private var localTransports: [String: any ShaarLocalConsoleTransport]
@@ -641,13 +643,8 @@ final class ShaarDevToolsModel {
   }
 
   var commandMatches: [ShaarDevToolsCommandMatch] {
-    let entries = consoleEvents.compactMap { event -> ShaarConsoleEvent? in
-      guard case .console(let entry) = event else { return nil }
-      return entry
-    }
     return ShaarDevToolsCommandIndex.matches(
-      query: commandQuery, sections: sections, console: entries,
-      network: network.requests(from: events), sources: sources.resources,
+      query: commandQuery, sections: sections, sources: sources.resources,
       nodes: Array(dom.nodes.values))
   }
 
@@ -672,22 +669,6 @@ final class ShaarDevToolsModel {
     return ShaarDevToolsIssues.list(console: console, requests: network.requests(from: events))
   }
 
-  func openIssue(_ issue: ShaarDevToolsIssue) {
-    switch issue.kind {
-    case .console(let id, _):
-      section = .console
-      console.level = nil
-      console.origin = nil
-      console.search = ""
-      console.selectedID = id
-    case .network(let id, _, _):
-      section = .network
-      network.filter = .all
-      network.search = ""
-      network.selectedID = id
-    }
-  }
-
   func performSelectedCommand() {
     let matches = commandMatches
     guard matches.indices.contains(clampedCommandSelection) else { return }
@@ -701,17 +682,6 @@ final class ShaarDevToolsModel {
       self.section = section
     case .dock(let dock):
       self.dock = dock
-    case .console(let id):
-      section = .console
-      console.level = nil
-      console.origin = nil
-      console.search = ""
-      console.selectedID = id
-    case .network(let id):
-      section = .network
-      network.filter = .all
-      network.search = ""
-      network.selectedID = id
     case .source(let url):
       section = .sources
       sources.search = ""

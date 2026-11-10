@@ -9,11 +9,13 @@ import Testing
 @testable import ArcusisBrowser
 @testable import ShaarEngineABI
 
-@Suite struct ShaarDevToolsCommandIndexTests {
+@Suite @MainActor struct ShaarDevToolsCommandIndexTests {
   @Test func emptyQueryListsPanelsAndDockPositions() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let shell = ShaarDevToolsModel(target: target)
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "  ", sections: ShaarDevToolsSection.allCases, console: [], network: [],
-      sources: [], nodes: [])
+      query: "  ", sections: shell.sections, sources: [], nodes: [])
     let titles = matches.map(\.title)
     #expect(titles.first == "Elements")
     #expect(titles.contains("Issues"))
@@ -31,12 +33,6 @@ import Testing
   }
 
   @Test func queryFiltersCommandsAndFindsPageContent() {
-    let console = ShaarConsoleEvent(
-      id: UUID(), level: .error, message: "Dashboard failed", source: "app.ts")
-    let network = ShaarNetworkRequest(
-      id: "req-1", method: "GET", url: "http://localhost:3000/dashboard", status: 500,
-      mimeType: nil, encodedBytes: nil, startedAt: 0, respondedAt: nil, completedAt: nil,
-      failure: nil, requestHeaders: [], responseHeaders: [], payload: nil, responseBody: nil)
     let source = ShaarSourceResource(
       url: "http://localhost:3000/dashboard.js", type: "Script", mimeType: "text/javascript")
     let button = ShaarDOMNode(
@@ -47,10 +43,9 @@ import Testing
       ],
       childCount: 0, childrenIDs: [])
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "dash", sections: [.elements, .console, .network, .sources],
-      console: [console], network: [network], sources: [source], nodes: [button])
-    #expect(matches.map(\.hit) == [.console(console.id), .network("req-1"), .source(source.url)])
-    #expect(matches.map(\.detail) == ["app.ts", "GET 500", "Script"])
+      query: "dash", sections: [.elements, .sources], sources: [source], nodes: [button])
+    #expect(matches.map(\.hit) == [.source(source.url)])
+    #expect(matches.map(\.detail) == ["Script"])
   }
 
   @Test func elementQueryUsesTheTagAndIdentifier() {
@@ -65,52 +60,33 @@ import Testing
       id: 1, parentID: nil, relation: .child, nodeType: 9, name: "#document", value: "",
       attributes: [], childCount: 1, childrenIDs: [8])
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "save", sections: [], console: [], network: [], sources: [],
-      nodes: [document, text, button])
+      query: "save", sections: [], sources: [], nodes: [document, text, button])
     #expect(matches.map(\.title) == ["button#save", "Save changes"])
   }
 
-  @Test func contentHitsKeepTheNewestMatchesWithinTheScan() {
-    let events = (0..<8).map { index in
-      ShaarConsoleEvent(
-        id: UUID(), level: .log, message: "ready \(index)", source: nil)
-    }
-    let matches = ShaarDevToolsCommandIndex.matches(
-      query: "ready", sections: [], console: events, network: [], sources: [], nodes: [])
-    #expect(matches.count == ShaarDevToolsCommandIndex.contentLimit)
-    #expect(matches.first?.title == "ready 7")
-    #expect(matches.last?.title == "ready 2")
-  }
 }
 
 @Suite @MainActor struct ShaarDevToolsCommandMenuModelTests {
-  @Test func choosingAHitSwitchesThePanelAndSelectsTheRow() async throws {
-    let consoleID = UUID()
+  @Test func choosingAHitDoesNotRouteToARetiredPanel() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
     let defaults = UserDefaults(suiteName: "ShaarDevToolsCommandMenu.\(UUID().uuidString)")!
     let shell = ShaarDevToolsModel(
       target: target,
-      transport: CommandMenuFixtureTransport(consoleID: consoleID),
       layoutDefaults: defaults)
-    let inspector = InspectorModel(target: target, engine: nil)
-    shell.open(inspector: inspector)
-    for _ in 0..<20 where shell.events.isEmpty { await Task.yield() }
     shell.toggleCommandMenu()
     #expect(shell.commandMenuOpen)
-    shell.commandQuery = "dashboard"
-    let match = try #require(shell.commandMatches.first { $0.hit == .console(consoleID) })
-    shell.perform(match)
-    #expect(!shell.commandMenuOpen)
-    #expect(shell.section == .console)
-    #expect(shell.console.selectedID == consoleID)
+    shell.commandQuery = "console"
+    #expect(shell.commandMatches.isEmpty)
+    shell.closeCommandMenu()
+    #expect(shell.section != .console)
+    #expect(shell.section != .network)
 
     shell.toggleCommandMenu()
     shell.perform(
       ShaarDevToolsCommandMatch(hit: .dock(.bottom), title: "Dock to bottom", detail: ""))
     #expect(shell.dock == .bottom)
     #expect(!shell.commandMenuOpen)
-    shell.close()
   }
 
   @Test func arrowKeysStayInsideTheMatchList() {
@@ -141,25 +117,4 @@ import Testing
 
 private func isCommandMenu(_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) -> Bool {
   ShaarDevToolsShortcut.isCommandMenu(keyCode: keyCode, modifiers: modifiers)
-}
-
-private struct CommandMenuFixtureTransport: ShaarDevToolsEventTransport {
-  let consoleID: UUID
-
-  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
-    AsyncStream { continuation in
-      continuation.yield(.streamAvailable)
-      continuation.yield(
-        .event(
-          .console(
-            ShaarConsoleEvent(
-              id: consoleID, level: .error, message: "Dashboard failed", source: "app.ts"))))
-      continuation.yield(
-        .event(
-          .network(
-            ShaarNetworkEvent(
-              id: UUID(), method: "GET", url: "http://localhost:3000/dashboard", status: 500))))
-      continuation.finish()
-    }
-  }
 }

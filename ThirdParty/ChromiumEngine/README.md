@@ -11,6 +11,14 @@ ordered build patches, and their digests. The previous source runner depended on
 a dual-export framework and has been removed. A Shaar-only source build and native
 module checks remain future work; this migration does not build Chromium locally.
 
+Chromium 157 DevTools is a separate `devtoolsFrontend157` record. It is not part
+of the Chromium 155 `patches` list, and `0014-shaar-devtools-theme.patch` stays
+on this pin. The 157 checkout copies `devtools-frontend/` into
+`third_party/devtools-frontend/src/front_end/panels/shaar`, then applies
+`0061-shaar-devtools-theme-157.patch` and
+`0062-shaar-devtools-frontend-registration.patch`. See
+[devtools-frontend/README.md](devtools-frontend/README.md).
+
 The macOS embedding path releases Chromium Views ownership before attaching a
 selected page to Shaar. `patches/0008-native-cocoa-display.patch` restores Cocoa
 compositing after that release; its [license and notices](notices/README.md) ship

@@ -493,6 +493,24 @@
       "sha256": "d5eb8044fbe3a3ad01c9e64696ccd3a3457fc3a76f4dda33111379150209c952"
     }
   ],
+  "devtoolsFrontend157": {
+    "chromium": "157.0.8103.51",
+    "devtoolsFrontendRevision": "12ada949de6a27116dea47c600da5322f44c64f4",
+    "overlay": "ThirdParty/ChromiumEngine/devtools-frontend",
+    "copyTo": "third_party/devtools-frontend/src/front_end/panels/shaar",
+    "stageScript": "scripts/stage-shaar-devtools-frontend.py",
+    "replacesPatch": "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
+    "patches": [
+      {
+        "file": "ThirdParty/ChromiumEngine/patches/0061-shaar-devtools-theme-157.patch",
+        "sha256": "a34512296d4af976d27d38ae65d0594c2d1a22cb2394bd162f0ca2529ba177df"
+      },
+      {
+        "file": "ThirdParty/ChromiumEngine/patches/0062-shaar-devtools-frontend-registration.patch",
+        "sha256": "d18c45158051f61f2bebe6bb6da112d3dea09ad19de4519e0f142524e93d66fe"
+      }
+    ]
+  },
   "requiredExports": [
     "_shaar_abi_major",
     "_shaar_abi_minor",

@@ -1,0 +1,20 @@
+--- a/third_party/devtools-frontend/src/front_end/entrypoints/devtools_app/devtools_app.ts
++++ b/third_party/devtools-frontend/src/front_end/entrypoints/devtools_app/devtools_app.ts
+@@ -28,6 +28,7 @@
+ import '../../panels/layer_viewer/layer_viewer-meta.js';
+ import '../../panels/recorder/recorder-meta.js';
+ import '../../panels/whats_new/whats_new-meta.js';
++import '../../panels/shaar/shaar-meta.js';
+ 
+ import * as Root from '../../core/root/root.js';
+ import * as Main from '../main/main.js';
+--- a/third_party/devtools-frontend/src/front_end/entrypoints/devtools_app/BUILD.gn
++++ b/third_party/devtools-frontend/src/front_end/entrypoints/devtools_app/BUILD.gn
+@@ -31,6 +31,7 @@
+     "../../panels/recorder:meta",
+     "../../panels/security:meta",
+     "../../panels/sensors:meta",
++    "../../panels/shaar:meta",
+     "../../panels/timeline:meta",
+     "../../panels/web_audio:meta",
+     "../../panels/webauthn:meta",

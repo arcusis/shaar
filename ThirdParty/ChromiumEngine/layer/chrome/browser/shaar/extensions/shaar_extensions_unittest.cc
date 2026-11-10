@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/extensions/shaar_extensions.h"
+#include "chrome/browser/shaar/extensions/shaar_extension_install.h"
 
 #include <string>
 
@@ -16,12 +17,12 @@ namespace {
 
 TEST(ShaarExtensionsModuleTest, ComponentExtensionsStayInternal) {
   using extensions::mojom::ManifestLocation;
-  EXPECT_FALSE(shaar::extensions_host::ShouldListLocation(
-      ManifestLocation::kComponent));
+  EXPECT_FALSE(
+      shaar::extensions_host::ShouldListLocation(ManifestLocation::kComponent));
   EXPECT_FALSE(shaar::extensions_host::ShouldListLocation(
       ManifestLocation::kExternalComponent));
-  EXPECT_TRUE(shaar::extensions_host::ShouldListLocation(
-      ManifestLocation::kInternal));
+  EXPECT_TRUE(
+      shaar::extensions_host::ShouldListLocation(ManifestLocation::kInternal));
 }
 
 TEST(ShaarExtensionsModuleTest, WebStoreFitAllowsLoopbackOnlyInTesting) {
@@ -61,19 +62,24 @@ TEST(ShaarExtensionsModuleTest, FrameworkDevToolsPathCannotEscapeBundle) {
       root, root.Append("../foreign")));
   EXPECT_FALSE(shaar::extensions_host::ValidFrameworkDevToolsPath(
       root, root.Append("missing")));
-  ASSERT_TRUE(base::CreateSymbolicLink(root.Append("react"),
-                                       root.Append("linked")));
+  ASSERT_TRUE(
+      base::CreateSymbolicLink(root.Append("react"), root.Append("linked")));
   EXPECT_FALSE(shaar::extensions_host::ValidFrameworkDevToolsPath(
       root, root.Append("linked")));
 }
 
 TEST(ShaarExtensionsModuleTest, FrameworkDevToolsManifestRejectsRemoteHosts) {
-  const std::string local = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["http://127.0.0.1/*"]}],"web_accessible_resources":[{"matches":["https://localhost/*"]}]})";
-  const std::string remote = R"({"host_permissions":["https://example.com/*"],"content_scripts":[{"matches":["http://localhost/*"]}]})";
-  const std::string remote_script = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["<all_urls>"]}]})";
+  const std::string local =
+      R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["http://127.0.0.1/*"]}],"web_accessible_resources":[{"matches":["https://localhost/*"]}]})";
+  const std::string remote =
+      R"({"host_permissions":["https://example.com/*"],"content_scripts":[{"matches":["http://localhost/*"]}]})";
+  const std::string remote_script =
+      R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["<all_urls>"]}]})";
   EXPECT_TRUE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(local));
-  EXPECT_FALSE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(remote));
-  EXPECT_FALSE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(remote_script));
+  EXPECT_FALSE(
+      shaar::extensions_host::FrameworkDevToolsManifestIsLocal(remote));
+  EXPECT_FALSE(
+      shaar::extensions_host::FrameworkDevToolsManifestIsLocal(remote_script));
 }
 
 class EmptyProfileServices final : public shaar::ProfileServices {
@@ -281,15 +287,18 @@ TEST(ShaarExtensionsModuleTest, ProbeComponentRequiresOwnedMarkedDirectory) {
   const auto extension = root.Append("Extension");
   ASSERT_TRUE(base::CreateDirectory(data_root));
   ASSERT_TRUE(base::CreateDirectory(extension));
-  EXPECT_FALSE(shaar::extensions_host::ValidProbeExtensionPath(data_root, extension));
+  EXPECT_FALSE(
+      shaar::extensions_host::ValidProbeExtensionPath(data_root, extension));
   ASSERT_TRUE(base::WriteFile(root.Append(".arcusis-probe"),
                               "arcusis-engine-probe-v1\n"));
-  EXPECT_TRUE(shaar::extensions_host::ValidProbeExtensionPath(data_root, extension));
+  EXPECT_TRUE(
+      shaar::extensions_host::ValidProbeExtensionPath(data_root, extension));
   EXPECT_FALSE(shaar::extensions_host::ValidProbeExtensionPath(
       data_root, root.Append("Other")));
   const auto outside = temp.GetPath().Append("outside");
   ASSERT_TRUE(base::CreateDirectory(outside));
-  EXPECT_FALSE(shaar::extensions_host::ValidProbeExtensionPath(data_root, outside));
+  EXPECT_FALSE(
+      shaar::extensions_host::ValidProbeExtensionPath(data_root, outside));
 }
 
 TEST(ShaarExtensionsModuleTest, ProbeComponentRejectsMissingEngineAndProfile) {
@@ -297,10 +306,10 @@ TEST(ShaarExtensionsModuleTest, ProbeComponentRejectsMissingEngineAndProfile) {
   error.size = sizeof(error);
   shaar_bytes extension_id = {};
   constexpr char kPath[] = "/tmp/fixture/Extension";
-  EXPECT_EQ(shaar_test_load_component_extension(
-                nullptr, nullptr, {kPath, sizeof(kPath) - 1}, &extension_id,
-                &error),
-            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(
+      shaar_test_load_component_extension(
+          nullptr, nullptr, {kPath, sizeof(kPath) - 1}, &extension_id, &error),
+      SHAAR_INVALID_ARGUMENT);
   EXPECT_EQ(extension_id.data, nullptr);
 }
 
@@ -308,6 +317,186 @@ TEST(ShaarExtensionsModuleTest, SharedInstallDoesNotConfirmOlderVersion) {
   EXPECT_FALSE(SharedHomeVersionSatisfied("1.1", "1.2"));
   EXPECT_TRUE(SharedHomeVersionSatisfied("1.2", "1.2"));
   EXPECT_TRUE(SharedHomeVersionSatisfied("1.3", "1.2"));
+}
+
+struct ManageFixture {
+  EmptyProfileServices profiles;
+  shaar::ShaarEngineContext context{&profiles, nullptr};
+  shaar_scope scope = {};
+  shaar_error error = {};
+
+  ManageFixture() {
+    scope.size = sizeof(scope);
+    scope.profile = reinterpret_cast<shaar_profile*>(1);
+    error.size = sizeof(error);
+  }
+
+  shaar_error_code Send(shaar_operation operation, const std::string& json) {
+    return Submit(&context, scope, operation, json, &error);
+  }
+};
+
+std::string ManifestV3() {
+  return R"({"manifest_version":3,"name":"Probe","version":"1.0.0"})";
+}
+
+TEST(ShaarExtensionsModuleTest, DeveloperModeSchemaStopsBeforeProfileLookup) {
+  ManageFixture fixture;
+  EXPECT_EQ(fixture.Send(SHAAR_OP_EXTENSION_MANAGE,
+                         R"({"schemaVersion":1,"action":"setDeveloperMode"})"),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 0);
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_MANAGE,
+          R"({"schemaVersion":1,"action":"setDeveloperMode","enabled":true,"other":1})"),
+      SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 0);
+}
+
+TEST(ShaarExtensionsModuleTest, DeveloperModeReachesProfileWhenSchemaIsValid) {
+  ManageFixture fixture;
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_MANAGE,
+          R"({"schemaVersion":1,"action":"setDeveloperMode","enabled":true})"),
+      SHAAR_NOT_FOUND);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 1);
+}
+
+TEST(ShaarExtensionsModuleTest, UnpackedSchemaRejectsUnsafePaths) {
+  ManageFixture fixture;
+  EXPECT_EQ(fixture.Send(
+                SHAAR_OP_EXTENSION_MANAGE,
+                R"({"schemaVersion":1,"action":"loadUnpacked","path":"ext"})"),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_MANAGE,
+          R"({"schemaVersion":1,"action":"loadUnpacked","path":"/tmp/shaar/../etc"})"),
+      SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 0);
+}
+
+TEST(ShaarExtensionsModuleTest, UnpackedSchemaRejectsManifestVersion2) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  ASSERT_TRUE(base::WriteFile(
+      temp.GetPath().Append("manifest.json"),
+      R"({"manifest_version":2,"name":"Probe","version":"1.0.0"})"));
+  ManageFixture fixture;
+  const std::string json =
+      std::string(R"({"schemaVersion":1,"action":"loadUnpacked","path":")") +
+      temp.GetPath().AsUTF8Unsafe() + "\"}";
+  EXPECT_EQ(fixture.Send(SHAAR_OP_EXTENSION_MANAGE, json),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 0);
+}
+
+TEST(ShaarExtensionsModuleTest, UnpackedManifestV3ReachesProfileLookup) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  ASSERT_TRUE(
+      base::WriteFile(temp.GetPath().Append("manifest.json"), ManifestV3()));
+  ManageFixture fixture;
+  const std::string json =
+      std::string(R"({"schemaVersion":1,"action":"loadUnpacked","path":")") +
+      temp.GetPath().AsUTF8Unsafe() + "\"}";
+  EXPECT_EQ(fixture.Send(SHAAR_OP_EXTENSION_MANAGE, json), SHAAR_NOT_FOUND);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 1);
+}
+
+TEST(ShaarExtensionsModuleTest, UnpackedFolderRejectsSymlink) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  const base::FilePath real = temp.GetPath().Append("real");
+  ASSERT_TRUE(base::CreateDirectory(real));
+  ASSERT_TRUE(base::WriteFile(real.Append("manifest.json"), ManifestV3()));
+  const base::FilePath linked = temp.GetPath().Append("linked");
+  ASSERT_TRUE(base::CreateSymbolicLink(real, linked));
+  EXPECT_EQ(shaar::extensions_host::InspectUnpackedFolder(linked),
+            shaar::extensions_host::UnpackedFolderStatus::kInvalid);
+  EXPECT_EQ(shaar::extensions_host::InspectUnpackedFolder(real),
+            shaar::extensions_host::UnpackedFolderStatus::kOk);
+}
+
+TEST(ShaarExtensionsModuleTest, SiteAccessSchemaStopsBeforeProfileLookup) {
+  ManageFixture fixture;
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_MANAGE,
+          R"({"schemaVersion":1,"action":"setSiteAccess","extensionId":"../bad","access":"onClick","origin":"https://example.com"})"),
+      SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_MANAGE,
+          R"({"schemaVersion":1,"action":"setSiteAccess","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","access":"everywhere","origin":"https://example.com"})"),
+      SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_MANAGE,
+          R"({"schemaVersion":1,"action":"setSiteAccess","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","access":"onClick","origin":"https://example.com/path"})"),
+      SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 0);
+}
+
+TEST(ShaarExtensionsModuleTest, SiteAccessReachesProfileWhenSchemaIsValid) {
+  ManageFixture fixture;
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_MANAGE,
+          R"({"schemaVersion":1,"action":"setSiteAccess","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","access":"onSite","origin":"https://example.com"})"),
+      SHAAR_NOT_FOUND);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 1);
+}
+
+TEST(ShaarExtensionsModuleTest, UnknownManageActionStopsBeforeProfileLookup) {
+  ManageFixture fixture;
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_MANAGE,
+          R"({"schemaVersion":1,"action":"pin","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})"),
+      SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 0);
+}
+
+TEST(ShaarExtensionsModuleTest, InstallDecisionSchemaReachesProfileLookup) {
+  ManageFixture fixture;
+  EXPECT_EQ(fixture.Send(
+                SHAAR_OP_EXTENSION_INSTALL_DECISION,
+                R"({"schemaVersion":1,"consentRequestId":"","accepted":true})"),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 0);
+  EXPECT_EQ(
+      fixture.Send(
+          SHAAR_OP_EXTENSION_INSTALL_DECISION,
+          R"({"schemaVersion":1,"consentRequestId":"7","accepted":false})"),
+      SHAAR_NOT_FOUND);
+  EXPECT_EQ(fixture.profiles.resolve_calls, 1);
+}
+
+TEST(ShaarExtensionsModuleTest, InstallPromptTypesMatchTheApp) {
+  using shaar::extensions_host::InstallPromptEventType;
+  const auto install = InstallPromptEventType(0);
+  const auto external = InstallPromptEventType(5);
+  const auto remote = InstallPromptEventType(8);
+  const auto reenable = InstallPromptEventType(3);
+  const auto permissions = InstallPromptEventType(4);
+  const auto repair = InstallPromptEventType(9);
+  ASSERT_TRUE(install.has_value());
+  ASSERT_TRUE(external.has_value());
+  ASSERT_TRUE(remote.has_value());
+  ASSERT_TRUE(reenable.has_value());
+  ASSERT_TRUE(permissions.has_value());
+  ASSERT_TRUE(repair.has_value());
+  EXPECT_EQ(*install, "install");
+  EXPECT_EQ(*external, "install");
+  EXPECT_EQ(*remote, "install");
+  EXPECT_EQ(*reenable, "re-enable");
+  EXPECT_EQ(*permissions, "permissions");
+  EXPECT_EQ(*repair, "repair");
+  EXPECT_FALSE(InstallPromptEventType(13).has_value());
+  EXPECT_FALSE(InstallPromptEventType(15).has_value());
 }
 
 }  // namespace

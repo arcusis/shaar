@@ -80,6 +80,8 @@ source_set("engine") {
     "site_data/shaar_site_data_lifecycle_adapter.cc",
     # END site_data
     # BEGIN extensions
+    "extensions/shaar_extension_install.cc",
+    "extensions/shaar_extension_install.h",
     "extensions/shaar_extensions.cc",
     "extensions/shaar_extensions.h",
     "extensions/shaar_extension_views.mm",
@@ -203,6 +205,7 @@ source_set("engine") {
     "//url",
     # BEGIN extensions
     "//chrome/browser/extensions:extensions",
+    "//components/crx_file",
     "//extensions/common",
     # END extensions
   ]

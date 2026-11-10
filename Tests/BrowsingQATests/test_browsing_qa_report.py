@@ -2,7 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+from datetime import datetime, timezone
 import importlib.util
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -63,11 +65,40 @@ class BrowsingQAReportTests(unittest.TestCase):
         empty = {"passed": True, "rows": []}
         self.assertEqual(PROBE.scenario_result(empty, 0, False, []), "fail")
 
-    def test_deliberate_renderer_sigkill_is_not_a_second_defect(self):
-        report = {"rows": [{"name": "renderer-recover", "status": "pass"}]}
-        self.assertFalse(PROBE.crash_counts_against_suite("renderer", report, "EXC_CRASH SIGKILL"))
-        self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, "EXC_BAD_ACCESS"))
-        self.assertTrue(PROBE.crash_counts_against_suite("windows", report, "SIGKILL"))
+    def test_deliberate_renderer_kill_matches_pid_and_time(self):
+        finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
+        report = {"rows": [
+            {
+                "name": "renderer-kill",
+                "status": "pass",
+                "signaledPIDs": [42],
+                "signaledAt": "2026-11-10T12:00:05+00:00",
+            },
+            {"name": "renderer-recover", "status": "pass"},
+        ]}
+        match = '{"pid" : 42, "captureTime" : "2026-11-10 07:00:10.0000 -0500"}'
+        self.assertFalse(PROBE.crash_counts_against_suite("renderer", report, match, finished))
+        other_pid = '{"pid" : 99, "captureTime" : "2026-11-10 07:00:10.0000 -0500"}'
+        self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, other_pid, finished))
+        too_late = '{"pid" : 42, "captureTime" : "2026-11-10 07:02:00.0000 -0500"}'
+        self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, too_late, finished))
+        text_only = "EXC_CRASH SIGKILL"
+        self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, text_only, finished))
+        self.assertTrue(PROBE.crash_counts_against_suite("windows", report, match, finished))
+
+    def test_make_clip_timeout_returns_no_bytes(self):
+        def expired(*_args, **_kwargs):
+            raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=30)
+
+        original_which = PROBE.shutil.which
+        original_run = PROBE.subprocess.run
+        PROBE.shutil.which = lambda name: "/usr/bin/ffmpeg" if name == "ffmpeg" else None
+        PROBE.subprocess.run = expired
+        try:
+            self.assertEqual(PROBE.make_clip(Path("/tmp")), b"")
+        finally:
+            PROBE.shutil.which = original_which
+            PROBE.subprocess.run = original_run
 
     def test_suite_passes_when_every_scenario_is_pass_or_blocked(self):
         self.assertTrue(PROBE.suite_passed([

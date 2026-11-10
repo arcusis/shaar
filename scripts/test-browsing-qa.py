@@ -8,10 +8,12 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import subprocess
@@ -28,6 +30,7 @@ CRASH_DIRECTORIES = (
     Path.home() / "Library/Logs/DiagnosticReports/Retired",
 )
 CRASH_PREFIXES = ("Shaar", "ArcusisBrowser", "Chromium")
+LATE_CRASH_SECONDS = 8
 GIBIBYTE = 1024 ** 3
 OVERLOAD_CEILING = 8 * GIBIBYTE
 OVERLOAD_HEADROOM = 4 * GIBIBYTE
@@ -118,16 +121,70 @@ def scenario_result(report: dict, exit_code: int | None, timed_out: bool, crashe
     return "pass"
 
 
-def crash_counts_against_suite(scenario: str, report: dict, crash_text: str) -> bool:
+def crash_counts_against_suite(
+    scenario: str, report: dict, crash_text: str, finished: datetime | None = None,
+) -> bool:
     """A deliberate renderer SIGKILL is evidence for the recovery row, not a second defect."""
-    if scenario != "renderer":
+    if scenario != "renderer" or finished is None:
         return True
     recovered = any(
         row.get("name") == "renderer-recover" and row.get("status") == "pass"
         for row in report.get("rows") or []
     )
-    deliberate = "SIGKILL" in crash_text
-    return not (recovered and deliberate)
+    return not (recovered and deliberate_renderer_kill(report, crash_text, finished))
+
+
+def deliberate_renderer_kill(report: dict, crash_text: str, finished: datetime) -> bool:
+    signaled: set[int] = set()
+    signaled_at = None
+    for row in report.get("rows") or []:
+        for pid in row.get("signaledPIDs") or []:
+            if isinstance(pid, int):
+                signaled.add(pid)
+        parsed = parse_signaled_at(row.get("signaledAt"))
+        if parsed is not None:
+            signaled_at = parsed
+    if not signaled or signaled_at is None:
+        return False
+    identity = crash_identity(crash_text)
+    if identity is None:
+        return False
+    pid, when = identity
+    if pid not in signaled:
+        return False
+    return signaled_at - timedelta(seconds=2) <= when <= finished
+
+
+def parse_signaled_at(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def crash_identity(text: str) -> tuple[int, datetime] | None:
+    pid_match = re.search(r'"pid"\s*:\s*(\d+)', text)
+    time_match = re.search(r'"captureTime"\s*:\s*"([^"]+)"', text)
+    if pid_match is None or time_match is None:
+        return None
+    when = parse_crash_time(time_match.group(1))
+    if when is None:
+        return None
+    return int(pid_match.group(1)), when
+
+
+def parse_crash_time(value: str) -> datetime | None:
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f %z", "%Y-%m-%d %H:%M:%S %z"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def suite_passed(scenarios: list[dict]) -> bool:
@@ -212,6 +269,17 @@ def crash_paths() -> list[Path]:
 
 def crash_names() -> set[str]:
     return {path.name for path in crash_paths()}
+
+
+def collect_new_crashes(before: set[str]) -> list[tuple[str, str]]:
+    """Keep polling for the whole late-crash window. Reports often land seconds apart."""
+    deadline = time.monotonic() + LATE_CRASH_SECONDS
+    found = read_new_crashes(before)
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        time.sleep(min(1, max(0, remaining)))
+        found = read_new_crashes(before)
+    return found
 
 
 def read_new_crashes(before: set[str]) -> list[tuple[str, str]]:
@@ -331,16 +399,19 @@ def make_clip(directory: Path) -> bytes:
     target = directory / "clip.mp4"
     if not ffmpeg:
         return b""
-    subprocess.run(
-        [
-            ffmpeg, "-y", "-loglevel", "error",
-            "-f", "lavfi", "-i", "color=c=black:s=160x120:d=1",
-            "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
-            "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
-            str(target),
-        ],
-        check=False, capture_output=True, timeout=30,
-    )
+    try:
+        subprocess.run(
+            [
+                ffmpeg, "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", "color=c=black:s=160x120:d=1",
+                "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+                "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                str(target),
+            ],
+            check=False, capture_output=True, timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return b""
     if target.is_file() and target.stat().st_size > 0:
         return target.read_bytes()
     return b""
@@ -431,7 +502,7 @@ document.documentElement.dataset.webgl=gl?'1':'0';
 <button id="popup" onclick="window.open('{destination}','_blank')">Open</button>""")
         if path == "/unload":
             return page("unload", """
-<button id="popup" onclick="window.onbeforeunload=function(event){event.preventDefault();event.returnValue='';};document.documentElement.dataset.armed='1'">Arm</button>""")
+<button id="popup" onclick="window.onbeforeunload=function(event){event.preventDefault();event.returnValue='';document.documentElement.dataset.prompted='1';};document.documentElement.dataset.armed='1'">Arm</button>""")
         if path == "/favicon":
             return page("favicon", '<link rel="icon" href="/icon.png"><p>favicon</p>')
         if path == "/dest":
@@ -499,17 +570,12 @@ def launch_scenario(executable: Path, root: Path, page_url: str, scenario: str) 
                 break
             time.sleep(0.5)
     report = read_report(report_path)
-    crash_reports = read_new_crashes(before)
-    if not crash_reports:
-        for _ in range(8):
-            time.sleep(1)
-            crash_reports = read_new_crashes(before)
-            if crash_reports:
-                break
+    crash_reports = collect_new_crashes(before)
+    finished_at = datetime.now(timezone.utc)
     names = [name for name, _text in crash_reports]
     unexpected = [
         name for name, text in crash_reports
-        if crash_counts_against_suite(scenario, report, text)
+        if crash_counts_against_suite(scenario, report, text, finished_at)
     ]
     extra = ""
     if timed_out:

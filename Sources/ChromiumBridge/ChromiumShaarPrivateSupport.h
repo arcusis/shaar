@@ -10,6 +10,8 @@
 - (shaar_engine *)privateEngineHandle;
 - (uint64_t)nextPrivateDevToolsRequestID;
 - (shaar_profile *)privateProfileHandleForID:(NSString *)profileID;
+- (BOOL)privateIdentityOccupied:(NSString *)identity;
+- (BOOL)isPrivateIdentity:(NSString *)identity;
 - (BOOL)privateTabOwned:(NSString *)tabID windowID:(NSString *)windowID
              contextID:(NSString *)contextID;
 - (void)receivePrivateEvent:(const shaar_event *)event payload:(NSDictionary *)payload;

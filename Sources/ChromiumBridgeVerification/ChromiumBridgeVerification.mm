@@ -405,6 +405,15 @@ void ARCCompletePrivateQuitDialogCancellation(
   releaseHold();
 }
 
+@interface ARCPrivateProbeCloseCanceller : NSObject <NSWindowDelegate>
+@end
+
+@implementation ARCPrivateProbeCloseCanceller
+- (BOOL)windowShouldClose:(NSWindow *)sender {
+  return NO;
+}
+@end
+
 @implementation ARCChromiumRuntime (Verification)
 - (void)probeDevToolsRouteInTabID:(NSString *)tabID operation:(NSInteger)operation
                          payload:(NSDictionary *)payload
@@ -582,7 +591,25 @@ void ARCCompletePrivateQuitDialogCancellation(
     completion(value);
   }];
 }
-- (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID { return NO; }
+- (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !windowID.length) return NO;
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSMutableDictionary *state = ARCPrivateShaarState(runtime);
+  NSMutableDictionary *entry = state[@"windows"][windowID];
+  if (![entry isKindOfClass:NSMutableDictionary.class] || [entry[@"closing"] boolValue]) return NO;
+  NSString *contextID = entry[@"contextID"];
+  NSWindow *window = [runtime windowForPrivateWindowID:windowID contextID:contextID];
+  if (!window) return NO;
+  ARCPrivateProbeCloseCanceller *canceller = [ARCPrivateProbeCloseCanceller new];
+  id<NSWindowDelegate> previous = window.delegate;
+  window.delegate = canceller;
+  [window performClose:nil];
+  if (window.delegate == canceller) window.delegate = previous;
+  NSString *tabID = [entry[@"tabs"] anyObject];
+  NSDictionary *tab = state[@"tabs"][tabID];
+  return state[@"windows"][windowID] == entry && ![entry[@"closing"] boolValue] &&
+      [tab isKindOfClass:NSDictionary.class] && ![tab[@"closing"] boolValue];
+}
 - (NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID {
   if (![self isKindOfClass:ARCShaarRuntime.class]) return nil;
   ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
@@ -664,9 +691,16 @@ void ARCCompletePrivateQuitDialogCancellation(
     }
   }
   NSString *sourceID = context[@"sourceProfileID"];
-  BOOL profileAlive = [runtime privateProfileHandleForID:sourceID] != nullptr;
+  shaar_profile *sourceProfile = [runtime privateProfileHandleForID:sourceID];
+  BOOL profileAlive = sourceProfile != nullptr;
+  // One source profile owns the shared private session. Pending contexts have no tabs yet.
+  BOOL sessionLive = context[@"session"] != nil;
+  BOOL contextIsPrivate = sessionLive && (tabCount == 0 || allPrivate);
+  NSString *profileToken = sourceProfile
+      ? [NSString stringWithFormat:@"%p", sourceProfile] : @"";
   NSDictionary *audit = @{@"sourceIsRegular": @(profileAlive),
-      @"contextIsPrivate": @(allPrivate && tabCount > 0),
+      @"contextIsPrivate": @(contextIsPrivate),
+      @"profileToken": profileToken,
       @"contextDistinct": @(![contextID isEqual:sourceID]),
       @"profileAlive": @(profileAlive),
       @"sourceLeaseOwnsContext": @(context[@"session"] != nil),

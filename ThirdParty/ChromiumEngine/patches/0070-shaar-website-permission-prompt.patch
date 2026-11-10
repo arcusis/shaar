@@ -5,9 +5,9 @@
  #endif
  
 +namespace shaar::permissions {
-+std::unique_ptr<permissions::PermissionPrompt> CreateEmbedderPrompt(
++std::unique_ptr<::permissions::PermissionPrompt> CreateEmbedderPrompt(
 +    content::WebContents*,
-+    permissions::PermissionPrompt::Delegate*) __attribute__((weak_import));
++    ::permissions::PermissionPrompt::Delegate*) __attribute__((weak_import));
 +}
 +
  namespace {

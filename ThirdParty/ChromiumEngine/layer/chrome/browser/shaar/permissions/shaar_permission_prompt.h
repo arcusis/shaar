@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_SHAAR_PERMISSIONS_SHAAR_PERMISSION_PROMPT_H_
 #define CHROME_BROWSER_SHAAR_PERMISSIONS_SHAAR_PERMISSION_PROMPT_H_
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 #include "components/permissions/permission_prompt.h"
@@ -73,6 +76,28 @@ inline GrantPersistence PersistenceFor(bool allowed,
 inline bool GrantIsPersisted(GrantPersistence persistence) {
   return persistence == GrantPersistence::kProfile;
 }
+
+inline bool ShownPermissionsMatch(const std::vector<std::string>& shown,
+                                 const std::vector<std::string>& current) {
+  std::vector<std::string> sorted_shown = shown;
+  std::vector<std::string> sorted_current = current;
+  std::sort(sorted_shown.begin(), sorted_shown.end());
+  std::sort(sorted_current.begin(), sorted_current.end());
+  return sorted_shown == sorted_current;
+}
+
+inline bool ShownRequestCountMatches(std::size_t shown, std::size_t current) {
+  return shown == current;
+}
+
+GrantPersistence DecideGrant(
+    ::permissions::PermissionPrompt::Delegate* delegate,
+    bool allowed,
+    bool current,
+    bool private_profile,
+    bool one_time,
+    bool protocol_handler,
+    const ::PromptOptions& options);
 
 // Returns a prompt when every request maps to the shared website sheet.
 // An unmapped or empty request returns nullptr so Chromium keeps its own path.

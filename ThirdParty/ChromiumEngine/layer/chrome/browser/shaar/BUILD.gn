@@ -196,13 +196,6 @@ source_set("engine") {
   }
 }
 
-# BEGIN permissions
-test("shaar_permission_unittests") {
-  sources = [ "permissions/shaar_permission_prompt_unittest.cc" ]
-  deps = [ ":engine", "//testing/gtest" ]
-}
-# END permissions
-
 # BEGIN quit_probe
 # Compiled into shaar_layer_unittests by default. A release framework does not
 # depend on this target unless shaar_enable_quit_probe_hooks is set.
@@ -387,13 +380,17 @@ test("shaar_layer_unittests") {
     ":engine",
     "//base",
     "//base/test:test_support",
+    "//chrome/browser/content_settings:content_settings_factory_impl",
+    "//chrome/browser/custom_handlers",
     "//chrome/test/base:testing_browser_process_impl",
     "//chrome/test/base:testing_profile_impl",
     "//components/bookmarks/test",
+    "//components/content_settings/core/browser",
     "//components/download/public/common:test_support",
     "//components/history/core/browser",
     "//components/os_crypt/common:keychain_password_mac",
     "//components/os_crypt/async/browser:keychain_key_provider",
+    "//components/permissions:test_support",
     "//net:extras",
     "//services/network:test_support",
     "//content/test:test_support",

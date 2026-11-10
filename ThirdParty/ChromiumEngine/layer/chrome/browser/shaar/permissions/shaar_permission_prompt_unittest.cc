@@ -4,7 +4,16 @@
 
 #include "chrome/browser/shaar/permissions/shaar_permission_prompt.h"
 
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/test/base/testing_profile.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/custom_handlers/protocol_handler.h"
+#include "components/custom_handlers/protocol_handler_registry.h"
+#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+#include "components/permissions/test/mock_permission_prompt_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 namespace shaar::permissions {
 namespace {
@@ -109,6 +118,84 @@ TEST(ShaarPermissionPromptTest, PrivateProfileGrantIsNotPersisted) {
       GrantIsPersisted(PersistenceFor(true, true, false, false, false)));
   EXPECT_TRUE(
       GrantIsPersisted(PersistenceFor(true, true, false, false, true)));
+}
+
+TEST(ShaarPermissionPromptTest, AppendedPermissionWasNotShownAndCannotBeGranted) {
+  const std::vector<std::string> shown = {"camera"};
+  const std::vector<std::string> current = {"camera", "location"};
+  const std::vector<std::string> same_kinds_different_order = {
+      "location", "camera"};
+
+  EXPECT_FALSE(ShownPermissionsMatch(shown, current));
+  EXPECT_TRUE(ShownPermissionsMatch(current, same_kinds_different_order));
+  EXPECT_TRUE(ShownPermissionsMatch(shown, shown));
+  // A new request of an already listed kind still changes what Allow would
+  // resolve, even though the visible kind set is unchanged.
+  EXPECT_FALSE(ShownRequestCountMatches(1, 2));
+}
+
+TEST(ShaarPermissionPromptTest, OTRDecisionLeavesParentPermissionStoresAlone) {
+  TestingProfile profile;
+  Profile* otr = profile.GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  ASSERT_NE(otr, nullptr);
+
+  auto* parent_settings = HostContentSettingsMapFactory::GetForProfile(&profile);
+  auto* otr_settings = HostContentSettingsMapFactory::GetForProfile(otr);
+  ASSERT_NE(parent_settings, nullptr);
+  ASSERT_NE(otr_settings, nullptr);
+
+  const ContentSettingsType type = ContentSettingsType::GEOLOCATION;
+  const GURL origin("https://permission.example.test/");
+  parent_settings->SetContentSettingDefaultScope(
+      origin, origin, type, CONTENT_SETTING_ASK);
+  const ContentSetting parent_default_before =
+      parent_settings->GetDefaultContentSetting(type);
+  const ContentSetting parent_site_before =
+      parent_settings->GetContentSetting(origin, origin, type);
+  const ContentSetting otr_default_before =
+      otr_settings->GetDefaultContentSetting(type);
+  const ContentSetting otr_site_before =
+      otr_settings->GetContentSetting(origin, origin, type);
+
+  auto* parent_registry =
+      custom_handlers::ProtocolHandlerRegistryFactory::GetForBrowserContext(
+          &profile);
+  auto* otr_registry =
+      custom_handlers::ProtocolHandlerRegistryFactory::GetForBrowserContext(
+          otr);
+  ASSERT_NE(parent_registry, nullptr);
+  ASSERT_NE(otr_registry, nullptr);
+  ASSERT_NE(parent_registry, otr_registry);
+  parent_registry->OnAcceptRegisterProtocolHandler(
+      custom_handlers::ProtocolHandler::CreateProtocolHandler(
+          "web+shaartest", GURL("https://handler.example.test/?%s")));
+  const size_t parent_protocol_handlers_before =
+      parent_registry->GetHandlersFor("web+shaartest").size();
+
+  ::testing::StrictMock<permissions::MockPermissionPromptDelegate> delegate;
+  EXPECT_CALL(delegate, AcceptThisTime(::testing::_)).Times(1);
+  const GrantPersistence location_persistence = DecideGrant(
+      &delegate, true, true, otr->IsOffTheRecord(), false, false,
+      std::monostate{});
+  ASSERT_EQ(location_persistence, GrantPersistence::kThisVisit);
+
+  EXPECT_EQ(parent_settings->GetDefaultContentSetting(type),
+            parent_default_before);
+  EXPECT_EQ(parent_settings->GetContentSetting(origin, origin, type),
+            parent_site_before);
+  EXPECT_EQ(otr_settings->GetDefaultContentSetting(type), otr_default_before);
+  EXPECT_EQ(otr_settings->GetContentSetting(origin, origin, type),
+            otr_site_before);
+  EXPECT_EQ(parent_registry->GetHandlersFor("web+shaartest").size(),
+            parent_protocol_handlers_before);
+
+  EXPECT_CALL(delegate, Accept(::testing::_)).Times(1);
+  const GrantPersistence protocol_persistence = DecideGrant(
+      &delegate, true, true, otr->IsOffTheRecord(), false, true,
+      std::monostate{});
+  ASSERT_EQ(protocol_persistence, GrantPersistence::kPrivateProtocol);
+  EXPECT_EQ(parent_registry->GetHandlersFor("web+shaartest").size(),
+            parent_protocol_handlers_before);
 }
 
 }  // namespace

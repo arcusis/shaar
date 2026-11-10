@@ -46,6 +46,8 @@ struct PendingPermission {
   std::string tab_id;
   GURL page_url;
   GURL origin;
+  std::vector<std::string> shown_kinds;
+  std::size_t shown_request_count = 0;
   bool one_time = false;
   bool private_profile = false;
   bool protocol_handler = false;
@@ -110,7 +112,7 @@ std::optional<std::string_view> KindFor(
   return std::nullopt;
 }
 
-bool OneTimeGrant(const std::vector<std::string_view>& kinds) {
+bool OneTimeGrant(const std::vector<std::string>& kinds) {
   if (kinds.empty())
     return false;
   for (const std::string_view kind : kinds) {
@@ -119,6 +121,9 @@ bool OneTimeGrant(const std::vector<std::string_view>& kinds) {
   }
   return true;
 }
+
+std::vector<std::string> KindsFor(
+    ::permissions::PermissionPrompt::Delegate* delegate);
 
 ::PromptOptions OptionsFor(
     ::permissions::PermissionPrompt::Delegate* delegate) {
@@ -215,20 +220,19 @@ void Decide(PendingPermission pending, bool allowed) {
   auto delegate = pending.delegate;
   if (!delegate)
     return;
-  const ::PromptOptions options = OptionsFor(delegate.get());
-  switch (PersistenceFor(allowed, IsCurrent(pending), pending.private_profile,
-                         pending.one_time, pending.protocol_handler)) {
-    case GrantPersistence::kDeny:
-      delegate->Deny(options);
-      return;
-    case GrantPersistence::kThisVisit:
-      delegate->AcceptThisTime(options);
-      return;
-    case GrantPersistence::kPrivateProtocol:
-    case GrantPersistence::kProfile:
-      delegate->Accept(options);
-      return;
+  if (allowed) {
+    const auto& requests = delegate->Requests();
+    const bool request_count_matches =
+        ShownRequestCountMatches(pending.shown_request_count, requests.size());
+    const bool kinds_match =
+        ShownPermissionsMatch(pending.shown_kinds, KindsFor(delegate.get()));
+    if (!request_count_matches || !kinds_match)
+      allowed = false;
   }
+  const ::PromptOptions options = OptionsFor(delegate.get());
+  DecideGrant(delegate.get(), allowed, IsCurrent(pending),
+              pending.private_profile, pending.one_time,
+              pending.protocol_handler, options);
 }
 
 void DenyPending(std::string request_id) {
@@ -310,7 +314,7 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
  public:
   ShaarPermissionPrompt(content::WebContents* contents,
                         ::permissions::PermissionPrompt::Delegate* delegate,
-                        std::vector<std::string_view> kinds)
+                        std::vector<std::string> kinds)
       : one_time_(OneTimeGrant(kinds)) {
     InstallScope installing;
     if (!Bind(contents, delegate, std::move(kinds)) && delegate) {
@@ -361,7 +365,7 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
  private:
   bool Bind(content::WebContents* contents,
             ::permissions::PermissionPrompt::Delegate* delegate,
-            std::vector<std::string_view> kinds) {
+            std::vector<std::string> kinds) {
     shaar_engine* engine = lifecycle::ActiveEngine();
     const auto identity =
         windows_tabs::Registry().FindSelectedRegularTab(engine, contents);
@@ -386,7 +390,7 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
     if (id.size() > 128)
       return false;
     bool protocol_handler = false;
-    for (const std::string_view kind : kinds) {
+    for (const std::string& kind : kinds) {
       if (kind == "protocolHandler")
         protocol_handler = true;
     }
@@ -400,21 +404,33 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
     payload.Set("origin", reported_origin.spec());
     payload.Set("frameID", frame_snapshot.token);
     base::ListValue permissions;
-    for (const std::string_view kind : kinds)
-      permissions.Append(std::string(kind));
+    for (const std::string& kind : kinds)
+      permissions.Append(kind);
     payload.Set("permissions", std::move(permissions));
     std::string json;
     if (!base::JSONWriter::Write(payload, &json))
       return false;
 
     id_ = id;
-    Pending().emplace(
-        id, PendingPermission{
-                engine, contents, identity->window, identity->tab,
-                identity->profile_id, identity->window_id, identity->tab_id,
-                page_url, origin, one_time_, private_profile, protocol_handler,
-                frame_snapshot.token, frame_snapshot.navigation_id,
-                delegate->GetWeakPtr()});
+    PendingPermission pending;
+    pending.engine = engine;
+    pending.contents = contents;
+    pending.window = identity->window;
+    pending.tab = identity->tab;
+    pending.profile_id = identity->profile_id;
+    pending.window_id = identity->window_id;
+    pending.tab_id = identity->tab_id;
+    pending.page_url = page_url;
+    pending.origin = origin;
+    pending.shown_kinds = std::move(kinds);
+    pending.shown_request_count = delegate->Requests().size();
+    pending.one_time = one_time_;
+    pending.private_profile = private_profile;
+    pending.protocol_handler = protocol_handler;
+    pending.frame_token = frame_snapshot.token;
+    pending.navigation_id = frame_snapshot.navigation_id;
+    pending.delegate = delegate->GetWeakPtr();
+    Pending().emplace(id, std::move(pending));
     frame_watcher_ =
         std::make_unique<FrameWatcher>(contents, id, frame_snapshot);
     const shaar_error_code emitted = shaar::EmitEvent(
@@ -439,9 +455,9 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
   std::unique_ptr<FrameWatcher> frame_watcher_;
 };
 
-std::vector<std::string_view> KindsFor(
+std::vector<std::string> KindsFor(
     ::permissions::PermissionPrompt::Delegate* delegate) {
-  std::vector<std::string_view> kinds;
+  std::vector<std::string> kinds;
   if (!delegate)
     return kinds;
   for (const auto& request : delegate->Requests()) {
@@ -451,19 +467,48 @@ std::vector<std::string_view> KindsFor(
     if (!kind)
       return {};
     if (std::find(kinds.begin(), kinds.end(), *kind) == kinds.end())
-      kinds.push_back(*kind);
+      kinds.emplace_back(*kind);
   }
+  std::sort(kinds.begin(), kinds.end());
   return kinds;
 }
 
 }  // namespace
+
+GrantPersistence DecideGrant(
+    ::permissions::PermissionPrompt::Delegate* delegate,
+    bool allowed,
+    bool current,
+    bool private_profile,
+    bool one_time,
+    bool protocol_handler,
+    const ::PromptOptions& options) {
+  if (!delegate)
+    return GrantPersistence::kDeny;
+  const GrantPersistence persistence =
+      PersistenceFor(allowed, current, private_profile, one_time,
+                     protocol_handler);
+  switch (persistence) {
+    case GrantPersistence::kDeny:
+      delegate->Deny(options);
+      break;
+    case GrantPersistence::kThisVisit:
+      delegate->AcceptThisTime(options);
+      break;
+    case GrantPersistence::kPrivateProtocol:
+    case GrantPersistence::kProfile:
+      delegate->Accept(options);
+      break;
+  }
+  return persistence;
+}
 
 std::unique_ptr<::permissions::PermissionPrompt> CreateEmbedderPrompt(
     content::WebContents* contents,
     ::permissions::PermissionPrompt::Delegate* delegate) {
   if (!contents || !delegate)
     return nullptr;
-  const std::vector<std::string_view> kinds = KindsFor(delegate);
+  const std::vector<std::string> kinds = KindsFor(delegate);
   if (kinds.empty())
     return nullptr;
   return std::make_unique<ShaarPermissionPrompt>(contents, delegate, kinds);

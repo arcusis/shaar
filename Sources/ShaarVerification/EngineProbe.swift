@@ -43,6 +43,7 @@ final class EngineProbe {
   private static let measurementTabCounts: Set<Int> = [1, 10, 30, 50, 100]
   private let measurementTabCount: Int?
   private let measurementEager: Bool
+  private let measurementInspector: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -84,7 +85,8 @@ final class EngineProbe {
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
     localizationMode: Bool, basicBrowsingMode: Bool, reloadWindowMode: Bool, devModeOnly: Bool,
     mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool, devtoolsPanelsOnlyMode: Bool,
-    frameworkComponentsOnlyMode: Bool, measurementTabCount: Int?, measurementEager: Bool
+    frameworkComponentsOnlyMode: Bool, measurementTabCount: Int?, measurementEager: Bool,
+    measurementInspector: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -110,6 +112,7 @@ final class EngineProbe {
     self.frameworkComponentsOnlyMode = frameworkComponentsOnlyMode
     self.measurementTabCount = measurementTabCount
     self.measurementEager = measurementEager
+    self.measurementInspector = measurementInspector
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -246,8 +249,12 @@ final class EngineProbe {
         return Int(arguments[index + 1])
       }()
       let measurementEager = arguments.contains("--probe-measure-eager")
+      let measurementInspector = arguments.contains("--probe-measure-inspector")
       guard !measurementEager || measurementTabCount != nil else {
         throw ProbeFailure("Eager measurement requires --probe-measure-tabs.")
+      }
+      guard !measurementInspector || measurementTabCount != nil else {
+        throw ProbeFailure("Inspector measurement requires --probe-measure-tabs.")
       }
       guard
         measurementTabCount.map({ measurementTabCounts.contains($0) }) ?? !arguments.contains(
@@ -349,7 +356,8 @@ final class EngineProbe {
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
         devtoolsPanelsOnlyMode: devtoolsPanelsOnlyMode,
         frameworkComponentsOnlyMode: frameworkComponentsOnlyMode,
-        measurementTabCount: measurementTabCount, measurementEager: measurementEager)
+        measurementTabCount: measurementTabCount, measurementEager: measurementEager,
+        measurementInspector: measurementInspector)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -605,6 +613,7 @@ final class EngineProbe {
         guard browserEngine.liveTabs.count == loadedIDs.count,
           store.session.selectedSpace.tabs.count == measurementTabCount
         else { throw ProbeFailure("Measurement tab materialization count is incorrect.") }
+        if measurementInspector { try await openMeasurementInspector(browserEngine) }
         bootstrapStage = .ready
         fixtureStage = "measurement-ready"
         let ready =
@@ -613,12 +622,18 @@ final class EngineProbe {
             "mode": measurementEager ? "eager" : "lazy",
             "liveTabs": browserEngine.liveTabs.count,
             "placeholders": measurementTabCount - browserEngine.liveTabs.count,
+            "inspector": measurementInspector,
+            "inspectorLocked": measurementInspector,
             "readyAt": ProcessInfo.processInfo.systemUptime,
           ] as [String: Any]
         try JSONSerialization.data(withJSONObject: ready, options: [.sortedKeys])
           .write(to: output, options: .atomic)
         let hold = Double(argumentValue("--probe-measure-seconds") ?? "45") ?? 45
-        try await Task.sleep(for: .seconds(hold))
+        if measurementInspector {
+          try await recordInspectorPoll(browserEngine, seconds: hold)
+        } else {
+          try await Task.sleep(for: .seconds(hold))
+        }
         checks.append(
           "\(browserEngine.liveTabs.count) fixture pages loaded and \(measurementTabCount - browserEngine.liveTabs.count) placeholders in a hidden window"
         )
@@ -1101,6 +1116,88 @@ final class EngineProbe {
       finish(error: nil)
     } catch { finish(error: error) }
   }
+
+  /// Opens the shipping inspector and arms a read counter before the idle window.
+  private func openMeasurementInspector(_ engine: BrowserEngine) async throws {
+    guard let target = engine.siteControlTarget else {
+      throw ProbeFailure("Measurement inspector has no page.")
+    }
+    engine.toggleInspector(for: target)
+    guard let model = engine.inspectors[target.tabID], model.isOpen else {
+      throw ProbeFailure("Measurement inspector did not open.")
+    }
+    let deadline = ProcessInfo.processInfo.systemUptime + 10
+    while ProcessInfo.processInfo.systemUptime < deadline {
+      if let installed = try? await model.evaluate("!!globalThis.__shaarInspectorV2") as? Bool,
+        installed
+      {
+        _ = try await model.evaluate(Self.inspectorPollCounter)
+        let locked =
+          try await model.evaluate(
+            "globalThis.__shaarInspectorV2.select(document.querySelector('main') || document.body) === true"
+          ) as? Bool
+        guard locked == true else {
+          throw ProbeFailure("Measurement inspector did not lock an element.")
+        }
+        try await Task.sleep(for: .seconds(2))
+        _ = try await model.evaluate("globalThis.__shaarInspectorPollCalls = 0; true")
+        return
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw ProbeFailure("Measurement inspector script did not install.")
+  }
+
+  /// Writes how often the open inspector reads the page while the process is held.
+  private func recordInspectorPoll(_ engine: BrowserEngine, seconds: Double) async throws {
+    let sidecar = output.deletingLastPathComponent().appending(path: "inspector-poll.json")
+    let started = Date()
+    var samples: [[String: Int]] = []
+    while Date().timeIntervalSince(started) < seconds {
+      try await Task.sleep(for: .seconds(1))
+      let elapsed = Int(Date().timeIntervalSince(started).rounded())
+      let calls = try await inspectorPollCalls(engine)
+      samples.append(["elapsedSeconds": elapsed, "calls": calls])
+      let payload: [String: Any] = ["samples": samples]
+      if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) {
+        try? data.write(to: sidecar, options: .atomic)
+      }
+    }
+  }
+
+  private func inspectorPollCalls(_ engine: BrowserEngine) async throws -> Int {
+    guard let target = engine.siteControlTarget,
+      let model = engine.inspectors[target.tabID], model.isOpen
+    else { throw ProbeFailure("Inspector poll counter was missing.") }
+    let value = try? await model.evaluate("globalThis.__shaarInspectorPollCalls")
+    let calls: Int?
+    if let exact = value as? Int {
+      calls = exact
+    } else if let exact = value as? Double {
+      calls = Int(exact)
+    } else {
+      calls = nil
+    }
+    guard let calls, calls >= 0 else {
+      throw ProbeFailure("Inspector poll counter was missing.")
+    }
+    return calls
+  }
+
+  private static let inspectorPollCounter = """
+    (() => {
+      const inspector = globalThis.__shaarInspectorV2;
+      if (!inspector || inspector.__shaarPollWrapped) return true;
+      const read = inspector.read.bind(inspector);
+      globalThis.__shaarInspectorPollCalls = 0;
+      inspector.read = () => {
+        globalThis.__shaarInspectorPollCalls += 1;
+        return read();
+      };
+      inspector.__shaarPollWrapped = true;
+      return true;
+    })()
+    """
 
   private func waitUntilMeasurementPage(_ tabID: String) async throws {
     let deadline = ProcessInfo.processInfo.systemUptime + 60

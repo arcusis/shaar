@@ -30,6 +30,19 @@ enum ShaarVerificationMain {
     if CommandLine.arguments.contains("--marketing-screenshots") {
       exit(MarketingScreenshots.run(arguments: CommandLine.arguments))
     }
+    if CommandLine.arguments.contains("--inspector-idle-smoke") {
+      let arguments = CommandLine.arguments
+      guard let index = arguments.firstIndex(of: "--inspector-idle-smoke"),
+        arguments.indices.contains(index + 2),
+        let frameworks = Bundle.main.privateFrameworksURL
+      else {
+        exit(2)
+      }
+      let framework = frameworks.appending(path: "Chromium Framework.framework")
+      let output = URL(fileURLWithPath: arguments[index + 1])
+      let page = URL(string: arguments[index + 2])
+      exit(InspectorIdleSmoke.run(frameworkURL: framework, outputURL: output, pageURL: page))
+    }
     exit(EngineProbe.run(arguments: CommandLine.arguments))
   }
 

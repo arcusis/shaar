@@ -824,10 +824,26 @@ final class BrowserEngine {
         lastTabOrders[profile] = positions
       }
     }
-    // Ask for picture-in-picture, and let that request reach the page, before the
-    // leaving tab is hidden. YouTube pauses on hide, and a paused video is skipped.
+    // Ask for picture-in-picture before the leaving tab is hidden. YouTube pauses
+    // on hide, and a paused video is skipped. The enter reply, or a short fallback,
+    // activates the next tab. A switch that is not leaving a playing video does not wait.
+    pictureInPictureEnterGate.startSwitch()
     handOffPictureInPicture()
-    pictureInPictureEnterGate.waitUntilIdle()
+    let waitingToHidePlayingVideo = pictureInPictureEnterGate.deferActivationIfRequested {
+      [weak self] in
+      self?.activateReconciledSelection()
+    }
+    if waitingToHidePlayingVideo { return }
+    activateReconciledSelection()
+  }
+
+  /// Selects the current page. Picture-in-picture may defer this until the page
+  /// has been asked to enter, so a second switch cannot run inside the first one.
+  private func activateReconciledSelection() {
+    guard !isClosed, !runtime.isQuitting, let session = store?.session else { return }
+    let alreadyReconciling = reconciling
+    reconciling = true
+    defer { reconciling = alreadyReconciling }
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
     if let selected = session.selectedPage?.tab.id {
       runtime.activateTabID(selected.uuidString)

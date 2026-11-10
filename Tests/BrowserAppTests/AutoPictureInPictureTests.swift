@@ -142,31 +142,87 @@ final class AutoPictureInPictureTests: XCTestCase {
     XCTAssertTrue(store.automaticPictureInPictureAllowed(forTab: video))
   }
 
-  func testEnterGateWaitsUntilTheRequestIsAnswered() {
+  func testReplyThatArrivesBeforeActivationIsArmedDoesNotWait() {
     let gate = PictureInPictureEnterGate()
+    var activations = 0
+    gate.startSwitch()
     let started = gate.begin()
-    DispatchQueue.main.async { gate.end(generation: started) }
-    gate.waitUntilIdle(timeout: 1)
-    XCTAssertEqual(gate.pending, 0)
+    gate.end(generation: started)
+    let deferred = gate.deferActivationIfRequested(timeout: 1) { activations += 1 }
+    XCTAssertFalse(deferred)
+    XCTAssertEqual(activations, 0)
   }
 
-  func testEnterGateDoesNotWaitWhenNothingWasRequested() {
+  func testEnterReplyActivatesOnceAndCancelsTheFallback() {
     let gate = PictureInPictureEnterGate()
-    let start = Date()
-    gate.waitUntilIdle(timeout: 1)
-    XCTAssertLessThan(Date().timeIntervalSince(start), 0.1)
+    var activations = 0
+    gate.startSwitch()
+    let started = gate.begin()
+    XCTAssertTrue(gate.deferActivationIfRequested(timeout: 0.05) { activations += 1 })
+    gate.end(generation: started)
+    XCTAssertEqual(activations, 1)
+    gate.end(generation: started)
+    let quiet = expectation(description: "cancelled fallback stays quiet")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+      XCTAssertEqual(activations, 1)
+      quiet.fulfill()
+    }
+    wait(for: [quiet], timeout: 1)
   }
 
-  func testEnterGateDropsALostReplySoTheNextSwitchDoesNotStall() {
+  func testSwitchWithoutAPlayingVideoDoesNotWait() {
     let gate = PictureInPictureEnterGate()
-    _ = gate.begin()
-    let start = Date()
-    gate.waitUntilIdle(timeout: 0.12)
-    XCTAssertEqual(gate.pending, 0)
-    XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(start), 0.1)
-    let next = Date()
-    gate.waitUntilIdle(timeout: 1)
-    XCTAssertLessThan(Date().timeIntervalSince(next), 0.1)
+    var activations: [String] = []
+    gate.startSwitch()
+    let playing = gate.begin()
+    XCTAssertTrue(gate.deferActivationIfRequested(timeout: 1) { activations.append("playing") })
+
+    gate.startSwitch()
+    let started = Date()
+    let deferred = gate.deferActivationIfRequested(timeout: 1) { activations.append("plain") }
+    XCTAssertFalse(deferred)
+    XCTAssertLessThan(Date().timeIntervalSince(started), 0.1)
+    gate.end(generation: playing)
+    XCTAssertEqual(activations, [])
+  }
+
+  func testLostEnterReplyUsesTheFallbackOnce() {
+    let gate = PictureInPictureEnterGate()
+    var activations = 0
+    gate.startSwitch()
+    let started = gate.begin()
+    XCTAssertTrue(gate.deferActivationIfRequested(timeout: 0.05) { activations += 1 })
+    let fired = expectation(description: "fallback activated")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+      XCTAssertEqual(activations, 1)
+      gate.end(generation: started)
+      XCTAssertEqual(activations, 1)
+      fired.fulfill()
+    }
+    wait(for: [fired], timeout: 1)
+  }
+
+  func testTwoQuickSwitchesDropTheStaleActivation() {
+    let gate = PictureInPictureEnterGate()
+    var activations: [String] = []
+    gate.startSwitch()
+    let first = gate.begin()
+    XCTAssertTrue(gate.deferActivationIfRequested(timeout: 0.05) { activations.append("first") })
+
+    gate.startSwitch()
+    let second = gate.begin()
+    XCTAssertTrue(gate.deferActivationIfRequested(timeout: 1) { activations.append("second") })
+    gate.end(generation: first)
+    XCTAssertEqual(activations, [], "the first switch was replaced")
+    gate.end(generation: second)
+    XCTAssertEqual(activations, ["second"])
+
+    let quiet = expectation(description: "replaced fallback stays quiet")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+      XCTAssertEqual(activations, ["second"])
+      quiet.fulfill()
+    }
+    wait(for: [quiet], timeout: 1)
   }
 
   func testSiteSettingPersists() {

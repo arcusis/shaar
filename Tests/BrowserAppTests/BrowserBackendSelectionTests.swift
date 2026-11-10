@@ -108,6 +108,7 @@ final class BrowserBackendSelectionTests: XCTestCase {
       "nativeTabIDForID:",
       "resolveExternalAppRequestID:accepted:",
       "resolveDesktopCaptureRequestID:sourceID:",
+      "resolveWebShareRequestID:outcome:",
     ] {
       assertShaarOverrides(selector)
     }

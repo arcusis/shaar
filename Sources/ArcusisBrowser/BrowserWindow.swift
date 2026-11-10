@@ -152,6 +152,7 @@ struct BrowserWindow: View {
       case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
       case .websitePermission(let request): WebsitePermissionConsent(store: store, request: request)
       case .desktopCapture(let request): DesktopCapturePicker(request: request, store: store)
+      case .webShare(let request): WebShareSheet(request: request, store: store)
       case .externalApp(let request): ExternalAppConsent(store: store, request: request)
       case .deviceChooser(let request): DeviceChooserConsent(store: store, request: request)
       case .downloads(let profile):

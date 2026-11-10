@@ -28,6 +28,7 @@ enum BrowserSheet: Identifiable {
   case extensionInstall(ExtensionInstallRequest)
   case websitePermission(WebsitePermissionRequest)
   case desktopCapture(DesktopCaptureRequest)
+  case webShare(WebShareRequest)
   case externalApp(ExternalAppRequest)
   case deviceChooser(DeviceChooserRequest)
   case downloads(profileID: UUID)
@@ -42,6 +43,7 @@ enum BrowserSheet: Identifiable {
     case .extensionInstall(let request): "install-\(request.id)"
     case .websitePermission(let request): "permission-\(request.id)"
     case .desktopCapture(let request): request.sheetID
+    case .webShare(let request): request.sheetID
     case .externalApp(let request): "external-\(request.id)"
     case .deviceChooser(let request): request.sheetID
     case .downloads(let profile): "downloads-\(profile)"
@@ -55,7 +57,9 @@ enum BrowserSheet: Identifiable {
   var isConsent: Bool {
     switch self {
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
-    case .extensionInstall, .websitePermission, .desktopCapture, .externalApp, .deviceChooser: true
+    case .extensionInstall, .websitePermission, .desktopCapture, .webShare, .externalApp,
+      .deviceChooser:
+      true
     }
   }
 
@@ -64,6 +68,7 @@ enum BrowserSheet: Identifiable {
     case .extensionInstall(let request): request.tabID
     case .websitePermission(let request): request.tabID
     case .desktopCapture(let request): request.tabID
+    case .webShare(let request): request.tabID
     case .externalApp(let request): request.tabID
     case .deviceChooser(let request): request.tabID
     default: nil
@@ -76,6 +81,7 @@ enum BrowserSheet: Identifiable {
     case .extensionInstall(let request): request.matches(session)
     case .websitePermission(let request): request.matches(session)
     case .desktopCapture(let request): request.matches(session)
+    case .webShare(let request): request.matches(session)
     case .externalApp(let request): request.matches(session)
     case .deviceChooser(let request): request.matches(session)
     }

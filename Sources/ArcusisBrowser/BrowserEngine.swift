@@ -396,6 +396,10 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveDesktopCapture(id, windowID: self.windowID, sourceID: sourceID)
     }
+    store.onWebShareDecision = { [weak self] id, outcome in
+      guard let self else { return }
+      self.events.resolveWebShare(id, windowID: self.windowID, outcome: outcome)
+    }
     callbacks.onDesktopCaptureRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard let request = DesktopCaptureRequest(payload: payload),
@@ -407,6 +411,21 @@ final class BrowserEngine {
     }
     callbacks.onDesktopCaptureDismissed = { [weak store] id in
       store?.dismissDesktopCapture(id)
+    }
+    callbacks.onWebShareRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let request = WebShareRequest(payload: payload), let store = self.store else {
+        self.events.resolveWebShare(id, windowID: self.windowID, outcome: .cancelled)
+        return
+      }
+      store.rememberPermissionFrame(
+        request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
+      guard store.requestWebShare(request)
+      else {
+        store.forgetPermissionFrame(request.tabID, matching: request.frameID)
+        self.events.resolveWebShare(id, windowID: self.windowID, outcome: .cancelled)
+        return
+      }
     }
     callbacks.onWebsiteMediaRequest = { [weak self] payload in
       self?.requestWebsitePermission(payload)

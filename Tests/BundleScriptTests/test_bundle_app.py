@@ -473,7 +473,9 @@ class BundleAppTests(unittest.TestCase):
             "enum SleepingTabsProbe {}\n"
             "enum DeviceChooserProbe {}\n"
             "func evaluateDeviceChooserProbeInTabID() {}\n"
+            "enum WebShareProbe {}\n"
             "let flag = \"--browsing-qa\"\n"
+            "let shareFlag = \"--probe-web-share\"\n"
             "let elementID = \"parity-action\"\n"
             "if arguments.contains(\"--devtools-f12-route\") {}\n"
         )
@@ -500,6 +502,8 @@ class BundleAppTests(unittest.TestCase):
             "--probe-https-only",
             "HttpsOnlyProbe",
             "--probe-platform-prompts",
+            "--probe-web-share",
+            "WebShareProbe",
             "testing: true",
             "SleepingTabsProbe",
             "--sleeping-tabs-probe",

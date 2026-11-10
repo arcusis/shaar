@@ -151,6 +151,7 @@ final class BrowserStore {
   @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onWebsitePermissionDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onDesktopCaptureDecision: ((String, String?) -> Void)?
+  @ObservationIgnored var onWebShareDecision: ((String, WebShareOutcome) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onDeviceChooserDecision: ((DeviceChooserRequest, Int?) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
@@ -987,6 +988,35 @@ final class BrowserStore {
     enqueueConsent(.desktopCapture(request))
   }
 
+  @discardableResult
+  func requestWebShare(_ request: WebShareRequest) -> Bool {
+    guard let frameID = permissionFrames[request.tabID],
+      let origin = permissionFrameOrigins[request.tabID],
+      request.matches(session, frameID: frameID, origin: origin)
+    else { return false }
+    return enqueueConsent(.webShare(request))
+  }
+
+  func resolveWebShare(_ id: String, outcome: WebShareOutcome) {
+    let sheetID = "web-share-\(id)"
+    guard let request = consentRequests.first(where: { $0.id == sheetID }),
+      case .webShare(let share) = request
+    else { return }
+    let presented = sheet?.id == sheetID && presentedConsentID == sheetID
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID { presentedConsentID = nil }
+    if presented { sheet = nil }
+    let accepted =
+      presented
+      && outcome == .shared
+      && share.matches(
+        session, frameID: permissionFrames[share.tabID],
+        origin: permissionFrameOrigins[share.tabID])
+      && rendererFailures[share.tabID] == nil
+    onWebShareDecision?(id, accepted ? .shared : .cancelled)
+    presentNextConsent()
+  }
+
   func resolveDesktopCapture(_ id: String, sourceID: String?) {
     let sheetID = "desktop-capture-\(id)"
     guard let request = consentRequests.first(where: { $0.id == sheetID }),
@@ -1144,6 +1174,7 @@ final class BrowserStore {
     case .desktopCapture(let request):
       desktopCaptureSources[request.id] = nil
       onDesktopCaptureDecision?(request.id, nil)
+    case .webShare(let request): onWebShareDecision?(request.id, .cancelled)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .deviceChooser(let request): onDeviceChooserDecision?(request, nil)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break

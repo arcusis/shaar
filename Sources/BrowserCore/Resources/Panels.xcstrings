@@ -227,6 +227,16 @@
         }
       }
     },
+    "Share": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שתף"
+          }
+        }
+      }
+    },
     "Display %d": {
       "localizations": {
         "he": {

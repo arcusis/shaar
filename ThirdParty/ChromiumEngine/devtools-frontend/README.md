@@ -61,15 +61,15 @@ Chromium `src` checkout, after sync:
 ```
 python3 /path/to/shaar/scripts/stage-shaar-devtools-frontend.py \
   --destination third_party/devtools-frontend/src/front_end/panels/shaar
-git apply /path/to/shaar/ThirdParty/ChromiumEngine/patches/0061-shaar-devtools-theme-157.patch
-git apply /path/to/shaar/ThirdParty/ChromiumEngine/patches/0062-shaar-devtools-frontend-registration.patch
+git apply /path/to/shaar/ThirdParty/ChromiumEngine/patches/0064-shaar-devtools-theme-157.patch
+git apply /path/to/shaar/ThirdParty/ChromiumEngine/patches/0065-shaar-devtools-frontend-registration.patch
 ```
 
 On the standalone checkout, stage into `front_end/panels/shaar` and apply the
-registration patch with `-p4`. `0061` also touches Chromium browser files, so
+registration patch with `-p4`. `0064` also touches Chromium browser files, so
 it stays on the Chromium tree.
 
-`0061` is the 155 theme rewritten against this frontend. `0062` imports
+`0064` is the 155 theme rewritten against this frontend. `0065` imports
 `shaar-meta.js` once. The proof panel is `build-info`, titled Shaar, and lists
 the overlay id, the Chromium version, and the frontend revision.
 

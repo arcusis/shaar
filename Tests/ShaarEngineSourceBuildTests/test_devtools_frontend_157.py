@@ -15,9 +15,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 OVERLAY = ROOT / "ThirdParty/ChromiumEngine/devtools-frontend"
-THEME = ROOT / "ThirdParty/ChromiumEngine/patches/0061-shaar-devtools-theme-157.patch"
+THEME = ROOT / "ThirdParty/ChromiumEngine/patches/0064-shaar-devtools-theme-157.patch"
 REGISTRATION = (
-    ROOT / "ThirdParty/ChromiumEngine/patches/0062-shaar-devtools-frontend-registration.patch"
+    ROOT / "ThirdParty/ChromiumEngine/patches/0065-shaar-devtools-frontend-registration.patch"
 )
 PANEL = OVERLAY / "front_end/panels/shaar"
 FEATURE = PANEL / "build-info"
@@ -123,7 +123,12 @@ class DevToolsFrontend157Tests(unittest.TestCase):
             "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
             chromium_155_patches,
         )
+        self.assertEqual(THEME.name, "0064-shaar-devtools-theme-157.patch")
+        self.assertEqual(
+            REGISTRATION.name, "0065-shaar-devtools-frontend-registration.patch"
+        )
         self.assertNotIn(str(THEME.relative_to(ROOT)), chromium_155_patches)
+        self.assertNotIn(str(REGISTRATION.relative_to(ROOT)), chromium_155_patches)
 
     def test_stage_hardlinks_the_panel_into_panels_shaar(self):
         stage = load_stage()

@@ -17,8 +17,8 @@ on this pin. Each Shaar panel lives in
 `devtools-frontend/front_end/panels/shaar/<feature>/` and adds one import to
 `shaar-meta.ts`. The 157 checkout copies that directory into
 `third_party/devtools-frontend/src/front_end/panels/shaar`, then applies
-`0061-shaar-devtools-theme-157.patch` and
-`0062-shaar-devtools-frontend-registration.patch`. See
+`0064-shaar-devtools-theme-157.patch` and
+`0065-shaar-devtools-frontend-registration.patch`. See
 [devtools-frontend/README.md](devtools-frontend/README.md).
 
 The macOS embedding path releases Chromium Views ownership before attaching a

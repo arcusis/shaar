@@ -504,11 +504,11 @@
     "replacesPatch": "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
     "patches": [
       {
-        "file": "ThirdParty/ChromiumEngine/patches/0061-shaar-devtools-theme-157.patch",
+        "file": "ThirdParty/ChromiumEngine/patches/0064-shaar-devtools-theme-157.patch",
         "sha256": "a34512296d4af976d27d38ae65d0594c2d1a22cb2394bd162f0ca2529ba177df"
       },
       {
-        "file": "ThirdParty/ChromiumEngine/patches/0062-shaar-devtools-frontend-registration.patch",
+        "file": "ThirdParty/ChromiumEngine/patches/0065-shaar-devtools-frontend-registration.patch",
         "sha256": "1e23d3d027834224b3ead09f9e9c4d9b6d009d1ec92240bf0dadf1994db1c2c6"
       }
     ]

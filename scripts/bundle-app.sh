@@ -29,6 +29,8 @@ assert_no_verification_code() {
     -e --devtools-f12-route \
     -e WebsitePermissionPromptProbe \
     -e --probe-website-permission \
+    -e ShaarBrowsingEdgeProbe \
+    -e --browsing-edge-probe \
     "$1"
   then
     echo "Verification code found in $1." >&2

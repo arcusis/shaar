@@ -52,6 +52,15 @@ enum ShaarVerificationMain {
       let page = URL(string: arguments[index + 2])
       exit(InspectorIdleSmoke.run(frameworkURL: framework, outputURL: output, pageURL: page))
     }
+    if let index = CommandLine.arguments.firstIndex(of: "--browsing-edge-probe"),
+      CommandLine.arguments.indices.contains(index + 2),
+      let frameworks = Bundle.main.privateFrameworksURL
+    {
+      let framework = frameworks.appending(path: "Chromium Framework.framework")
+      let output = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+      let page = URL(string: CommandLine.arguments[index + 2])
+      exit(ShaarBrowsingEdgeProbe.run(frameworkURL: framework, outputURL: output, pageURL: page))
+    }
     exit(EngineProbe.run(arguments: CommandLine.arguments))
   }
 

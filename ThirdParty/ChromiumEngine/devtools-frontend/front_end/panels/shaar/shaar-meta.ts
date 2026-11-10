@@ -7,3 +7,4 @@
 // import to devtools_app.ts.
 import './build-info/build-info-meta.js';
 import './network-rules/network-rules-meta.js';
+import './overflow/overflow-meta.js';

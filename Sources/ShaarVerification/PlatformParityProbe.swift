@@ -399,9 +399,12 @@ private struct ParitySnapshot {
   private func settleConsent(
     allowMedia: Bool, in context: NativeBrowserContext, snapshot: inout ParitySnapshot
   ) {
+    let browserWindows = browserWindowClassNames
     for window in NSApp.windows where window.isVisible {
-      let name = "visible \(type(of: window))"
-      if !snapshot.surfaces.contains(name) { snapshot.surfaces.append(name) }
+      if !isBrowserOwnedWindow(window, browserWindows: browserWindows) {
+        let name = "visible \(type(of: window))"
+        if !snapshot.surfaces.contains(name) { snapshot.surfaces.append(name) }
+      }
       window.orderOut(nil)
     }
     for _ in 0..<5 {
@@ -586,7 +589,7 @@ private struct ParitySnapshot {
   ) -> [String: Any] {
     let decision = PlatformParityVerdicts.deviceChooser(
       outcome: text(snapshot.result["outcome"]), sheet: snapshot.sheet,
-      surfaces: snapshot.surfaces, hostWindow: hostWindowName)
+      surfaces: snapshot.surfaces, browserWindows: browserWindowClassNames)
     return row(
       item: item, passed: decision.passed, disposition: decision.disposition,
       delegate: delegate, evidence: "\(decision.evidence) \(describe(snapshot))",
@@ -596,7 +599,7 @@ private struct ParitySnapshot {
   private func screenRow(_ snapshot: ParitySnapshot) -> [String: Any] {
     let tracks = intValue(snapshot.result["tracks"])
     let chooser = snapshot.surfaces.contains {
-      PlatformParityVerdicts.isChooserSurface($0, hostWindow: hostWindowName)
+      PlatformParityVerdicts.isChooserSurface($0, browserWindows: browserWindowClassNames)
     }
     let passed = snapshot.sheet == "desktopCapture" || tracks > 0 || chooser
     return row(
@@ -619,7 +622,7 @@ private struct ParitySnapshot {
     let surfaced =
       !snapshot.sheet.isEmpty
       || snapshot.surfaces.contains {
-        PlatformParityVerdicts.isChooserSurface($0, hostWindow: hostWindowName)
+        PlatformParityVerdicts.isChooserSurface($0, browserWindows: browserWindowClassNames)
       }
     return row(
       item: item, passed: surfaced, delegate: delegate, evidence: describe(snapshot),
@@ -806,8 +809,40 @@ private struct ParitySnapshot {
       evidence: evidence, signals: [:])
   }
 
-  private var hostWindowName: String {
-    context.map { String(describing: type(of: $0.window)) } ?? ""
+  /// Every window class the browser owns, not only the first context window.
+  private var browserWindowClassNames: Set<String> {
+    var names = Set(host.contexts.values.map { String(describing: type(of: $0.window)) })
+    if let window = host.settingsController?.window {
+      names.insert(String(describing: type(of: window)))
+    }
+    for signIn in host.accountSignIns.values {
+      names.insert(String(describing: type(of: signIn.window)))
+    }
+    if let window = host.profileOnboarding?.window {
+      names.insert(String(describing: type(of: window)))
+    }
+    if let window = host.firstRunSetup?.window {
+      names.insert(String(describing: type(of: window)))
+    }
+    for owner in host.privateWindowOwners {
+      names.insert(String(describing: type(of: owner.window)))
+    }
+    return names
+  }
+
+  /// A browser window class, including a subclass of one, is not a chooser.
+  /// `NSOpenPanel` stays a chooser: its superclass is `NSPanel`, not a browser class.
+  private func isBrowserOwnedWindow(_ window: NSWindow, browserWindows: Set<String>) -> Bool {
+    var current: AnyClass? = type(of: window)
+    while let cls = current, cls != NSWindow.self, cls != NSPanel.self {
+      if PlatformParityVerdicts.isBrowserWindowClass(
+        String(describing: cls), browserWindows: browserWindows)
+      {
+        return true
+      }
+      current = class_getSuperclass(cls)
+    }
+    return type(of: window) == NSWindow.self
   }
 
   private func recordSurface(_ name: String, on snapshot: inout ParitySnapshot) {

@@ -245,6 +245,24 @@ struct PlatformParityVerdictTests {
     #expect(!decision.passed)
   }
 
+  @Test func browserWindowClassesAreNotAChooser() {
+    for name in PlatformParityVerdicts.browserWindowClasses {
+      let decision = PlatformParityVerdicts.deviceChooser(
+        outcome: "", sheet: "", surfaces: ["visible \(name)", "modal \(name)"])
+      #expect(!decision.passed)
+      #expect(decision.disposition == "gap")
+    }
+    let owned = PlatformParityVerdicts.deviceChooser(
+      outcome: "", sheet: "", surfaces: ["visible AnotherBrowserWindow"],
+      browserWindows: ["AnotherBrowserWindow"])
+    #expect(!owned.passed)
+    let chooser = PlatformParityVerdicts.deviceChooser(
+      outcome: "", sheet: "",
+      surfaces: ["visible NSOpenPanel", "modal NativeWidgetMacFramelessNSWindow"])
+    #expect(chooser.passed)
+    #expect(chooser.disposition == "pass")
+  }
+
   @Test func aResolvedChooserPassesWithoutASurface() {
     let decision = PlatformParityVerdicts.deviceChooser(
       outcome: "resolved", sheet: "", surfaces: ["activate", "makeKey BrowserWindow"])

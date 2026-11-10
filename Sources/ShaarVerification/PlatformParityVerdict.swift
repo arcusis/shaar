@@ -161,11 +161,22 @@ enum PlatformParityVerdicts {
     return body == "activate" || body == "makeKey" || body.hasPrefix("makeKey ")
   }
 
-  /// A chooser is a modal, a visible window, a sheet, or a panel. The probe's own
-  /// window and activation notes are not choosers.
-  static func isChooserSurface(_ name: String, hostWindow: String = "") -> Bool {
+  /// Chromium's browser window, Shaar's page host, the omnibox popup, and the
+  /// plain `NSWindow` instances the app creates for its own chrome.
+  static let browserWindowClasses: Set<String> = [
+    "BrowserNativeWidgetWindow",
+    "ShaarPageHostWindow",
+    "OmniboxPopupNSWindow",
+    "NSWindow",
+  ]
+
+  /// A chooser is a modal, a visible window, a sheet, or a panel. Activation
+  /// notes and every browser window class are not choosers.
+  static func isChooserSurface(
+    _ name: String, hostWindow: String = "", browserWindows: Set<String> = []
+  ) -> Bool {
     if isActivationEvent(name) { return false }
-    if !hostWindow.isEmpty, name == hostWindow || name == "visible \(hostWindow)" {
+    if isBrowserWindowClass(name, hostWindow: hostWindow, browserWindows: browserWindows) {
       return false
     }
     let folded = name.lowercased()
@@ -173,10 +184,30 @@ enum PlatformParityVerdicts {
       || folded.contains("panel")
   }
 
+  /// `hostWindow` is one owned class. `browserWindows` is every other class the
+  /// browser has open. A `visible` or `modal` prefix still names that class.
+  static func isBrowserWindowClass(
+    _ name: String, hostWindow: String = "", browserWindows: Set<String> = []
+  ) -> Bool {
+    let className = surfaceClassName(name)
+    if !hostWindow.isEmpty, className == hostWindow { return true }
+    return browserWindowClasses.contains(className) || browserWindows.contains(className)
+  }
+
+  private static func surfaceClassName(_ name: String) -> String {
+    for prefix in ["visible ", "modal "] where name.hasPrefix(prefix) {
+      return String(name.dropFirst(prefix.count))
+    }
+    return name
+  }
+
   static func deviceChooser(
-    outcome: String, sheet: String, surfaces: [String], hostWindow: String = ""
+    outcome: String, sheet: String, surfaces: [String], hostWindow: String = "",
+    browserWindows: Set<String> = []
   ) -> PlatformParityDecision {
-    let choosers = surfaces.filter { isChooserSurface($0, hostWindow: hostWindow) }
+    let choosers = surfaces.filter {
+      isChooserSurface($0, hostWindow: hostWindow, browserWindows: browserWindows)
+    }
     let appeared = !sheet.isEmpty || !choosers.isEmpty
     let passed = outcome == "resolved" || appeared
     let evidence: String

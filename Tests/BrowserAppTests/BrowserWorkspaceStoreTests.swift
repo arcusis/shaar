@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import ChromiumBridge
 import Foundation
 import Testing
 
@@ -50,6 +51,15 @@ struct BrowserWorkspaceStoreTests {
     #expect(source.session.selectedSpace.tabs.contains { $0.id == pinnedTab.id })
     #expect(destination.sidebarNotice != nil)
 
+    let ordinaryTab = try #require(source.session.selectedSpace.tabs.first(where: { !$0.isPinned }))
+    let pinnedSectionDrop = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID,
+      tabID: ordinaryTab.id)
+    #expect(
+      !destination.acceptSidebarDrop(
+        pinnedSectionDrop, into: destination.session.selectedSpaceID, pinned: true))
+    #expect(destination.sidebarNotice != nil)
+
     let privateStore = BrowserStore(privateSession: fixture())
     #expect(
       !BrowserWorkspaceStore.canTransferTab(sourceStore: source, destinationStore: privateStore))
@@ -58,7 +68,7 @@ struct BrowserWorkspaceStoreTests {
         sourceStore: privateStore, destinationStore: destination))
   }
 
-  @Test func failedTimeoutRollsBackFromCurrentWorkspaceState() async throws {
+  @Test func sourceWindowCanCloseImmediatelyAfterTransfer() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let file = file(directory)
@@ -69,79 +79,111 @@ struct BrowserWorkspaceStoreTests {
     let destination = try #require(manager.stores[destinationID])
     let sourceSpaceID = source.session.selectedSpaceID
     let tabID = try #require(source.session.selectedSpace.selectedTabID)
-    var releaseWaiter: CheckedContinuation<Bool, Never>?
-    manager.transferReleaseForTesting = { _, _ in
-      await withCheckedContinuation { releaseWaiter = $0 }
-    }
-    manager.transferDiscardForTesting = { false }
     let transfer = SidebarTransfer.tab(
       sessionID: source.dragSessionID, sourceSpaceID: sourceSpaceID, tabID: tabID)
 
     #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
-    await Task.yield()
-    #expect(releaseWaiter != nil)
-    #expect(source.updateSpace(sourceSpaceID, name: "Edited during transfer", tint: .ocean))
-    try manager.renameProfile(source.session.selectedSpace.profileID, name: "Edited profile")
-    try manager.flushSaves()
-    let pendingSave = try #require(try file.load())
-    #expect(
-      pendingSave.windows.first(where: { $0.id == sourceID })?.session.spaces
-        .first(where: { $0.id == sourceSpaceID })?.tabs.contains { $0.id == tabID } == true)
-    #expect(
-      pendingSave.windows.first(where: { $0.id == destinationID })?.session.spaces
-        .flatMap(\.tabs).contains { $0.id == tabID } == false)
-
-    releaseWaiter?.resume(returning: false)
-    try await Task.sleep(for: .milliseconds(10))
-
-    #expect(
-      source.session.spaces.first(where: { $0.id == sourceSpaceID })?.tabs.contains {
-        $0.id == tabID
-      } == true)
-    #expect(
-      source.session.spaces.first(where: { $0.id == sourceSpaceID })?.name
-        == "Edited during transfer")
-    #expect(destination.session.spaces.flatMap(\.tabs).contains { $0.id == tabID } == false)
-    #expect(destination.sidebarNotice != nil)
+    try manager.removeWindow(sourceID)
+    #expect(manager.workspace.window(sourceID) == nil)
+    #expect(destination.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
     try manager.flushSaves()
     #expect(try file.load() == manager.workspace)
-    #expect(manager.workspace.catalog.profiles.first?.name == "Edited profile")
   }
 
-  @Test func closingDestinationDuringTransferClearsTheHoldAndKeepsSaving() async throws {
-    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    let file = file(directory)
-    let manager = try BrowserWorkspaceStore(file: file, initialSession: fixture())
+  @Test func destinationWaitsForNativeOwnerBeforeBindingTransferredTab() async throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let sourceID = manager.workspace.windows[0].id
     let destinationID = try manager.newWindow(from: sourceID)
     let source = try #require(manager.stores[sourceID])
     let destination = try #require(manager.stores[destinationID])
-    let sourceSpaceID = source.session.selectedSpaceID
     let tabID = try #require(source.session.selectedSpace.selectedTabID)
-    var releaseWaiter: CheckedContinuation<Bool, Never>?
-    manager.transferReleaseForTesting = { _, _ in
-      await withCheckedContinuation { releaseWaiter = $0 }
+    let runtime = WindowTransferRuntime()
+    let events = BrowserRuntimeEvents(runtime: runtime)
+    let sourceEngine = try BrowserEngine(
+      events: events, windowID: sourceID.uuidString, store: source, presentsNativePanels: false)
+    let destinationEngine = try BrowserEngine(
+      events: events, windowID: destinationID.uuidString, store: destination,
+      presentsNativePanels: false)
+    defer {
+      sourceEngine.suspensionTask?.cancel()
+      destinationEngine.suspensionTask?.cancel()
     }
+    source.library.onLoad = nil
+    destination.library.onLoad = nil
+    sourceEngine.reconcile()
+    for _ in 0..<100 where runtime.windowID(forTabID: tabID.uuidString) == nil {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(runtime.windowID(forTabID: tabID.uuidString) == sourceID.uuidString)
     let transfer = SidebarTransfer.tab(
-      sessionID: source.dragSessionID, sourceSpaceID: sourceSpaceID, tabID: tabID)
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID, tabID: tabID)
 
     #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
-    await Task.yield()
-    #expect(releaseWaiter != nil)
-    try manager.removeWindow(destinationID)
-    releaseWaiter?.resume(returning: false)
-    await Task.yield()
-
-    #expect(manager.workspace.window(destinationID) == nil)
-    #expect(source.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
-    #expect(source.updateSpace(sourceSpaceID, name: "Still saving", tint: .ocean))
-    try manager.flushSaves()
-    let saved = try #require(try file.load())
-    #expect(saved == manager.workspace)
+    #expect(runtime.discarded.contains(tabID.uuidString))
     #expect(
-      saved.windows[0].session.spaces.first(where: { $0.id == sourceSpaceID })?.name
-        == "Still saving")
+      !runtime.opened.contains {
+        $0.tabID == tabID.uuidString && $0.windowID == destinationID.uuidString
+      })
+    try manager.removeWindow(sourceID)
+    runtime.release(tabID)
+    for _ in 0..<100
+    where !runtime.opened.contains(where: {
+      $0.tabID == tabID.uuidString && $0.windowID == destinationID.uuidString
+    }) {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(
+      runtime.opened.contains {
+        $0.tabID == tabID.uuidString && $0.windowID == destinationID.uuidString
+      })
+    #expect(destinationEngine.liveTabs.contains(tabID))
+    #expect(manager.workspace.window(sourceID) == nil)
+    #expect(
+      manager.workspace.window(destinationID)?.session.spaces.flatMap(\.tabs).contains {
+        $0.id == tabID
+      } == true)
+  }
+
+  @Test func destinationTimesOutAndReportsFailedTransferredTab() async throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let tabID = try #require(source.session.selectedSpace.selectedTabID)
+    let runtime = WindowTransferRuntime()
+    let events = BrowserRuntimeEvents(runtime: runtime)
+    let sourceEngine = try BrowserEngine(
+      events: events, windowID: sourceID.uuidString, store: source, presentsNativePanels: false)
+    let destinationEngine = try BrowserEngine(
+      events: events, windowID: destinationID.uuidString, store: destination,
+      presentsNativePanels: false)
+    defer {
+      sourceEngine.suspensionTask?.cancel()
+      destinationEngine.suspensionTask?.cancel()
+    }
+    source.library.onLoad = nil
+    destination.library.onLoad = nil
+    sourceEngine.reconcile()
+    for _ in 0..<100 where runtime.windowID(forTabID: tabID.uuidString) == nil {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID, tabID: tabID)
+
+    #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
+    for _ in 0..<300 where destinationEngine.notice == nil {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(destination.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
+    #expect(!destinationEngine.liveTabs.contains(tabID))
+    #expect(
+      !runtime.opened.contains {
+        $0.tabID == tabID.uuidString && $0.windowID == destinationID.uuidString
+      })
+    #expect(destinationEngine.notice != nil)
   }
 
   @Test func removalImpactIncludesEveryManagedWindowBeforeGlobalDeletion() throws {
@@ -356,4 +398,33 @@ struct BrowserWorkspaceStoreTests {
     #expect(throws: WorkspaceError.self) { try manager.focusWindow(secondID) }
     #expect(manager.workspace == before)
   }
+}
+
+@MainActor
+private final class WindowTransferRuntime: ARCChromiumRuntime, @unchecked Sendable {
+  nonisolated(unsafe) var owners: [String: String] = [:]
+  nonisolated(unsafe) var opened: [(tabID: String, windowID: String)] = []
+  nonisolated(unsafe) var discarded: [String] = []
+
+  override func isWindowOpenID(_ windowID: String) -> Bool { true }
+
+  override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {
+    completion(nil)
+  }
+
+  override func openTabID(_ tabID: String, profileID: String, windowID: String, url: String) throws
+  {
+    opened.append((tabID, windowID))
+    owners[tabID] = windowID
+  }
+
+  override func windowID(forTabID tabID: String) -> String? { owners[tabID] }
+
+  override func extensions(forProfileID profileID: String) -> [[String: Any]] { [] }
+
+  override func refreshDownloads(forProfileID profileID: String) {}
+
+  override func discardTabID(_ tabID: String) { discarded.append(tabID) }
+
+  func release(_ tab: UUID) { owners[tab.uuidString] = nil }
 }

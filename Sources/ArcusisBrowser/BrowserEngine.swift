@@ -68,6 +68,8 @@ final class BrowserEngine {
   @ObservationIgnored private var closesInFlight: Set<UUID> = []
   /// Reassigned tabs must wait for Chromium to release their old profile ownership.
   @ObservationIgnored private var tabsAwaitingProfileReassignment: Set<UUID> = []
+  /// Tabs moved from another window stay in the workspace while Chromium closes the old owner.
+  @ObservationIgnored private var tabsAwaitingWindowTransfer: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   /// Crashed documents whose native reload failed before the close event arrived.
   @ObservationIgnored private var tabsAwaitingReload: Set<UUID> = []
@@ -713,6 +715,52 @@ final class BrowserEngine {
     }
   }
 
+  private func waitForTransferredTabRelease(_ id: UUID) {
+    guard tabsAwaitingWindowTransfer.insert(id).inserted else { return }
+    Task { @MainActor [weak self] in
+      for _ in 0..<40 {
+        guard let self, !self.isClosed,
+          self.tabsAwaitingWindowTransfer.contains(id)
+        else { return }
+        if self.runtime.windowID(forTabID: id.uuidString) == nil {
+          self.tabsAwaitingWindowTransfer.remove(id)
+          self.openReleasedTransferredTab(id)
+          self.reconcile()
+          return
+        }
+        do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+      }
+      guard let self, self.tabsAwaitingWindowTransfer.remove(id) != nil else { return }
+      self.failedTabs.insert(id)
+      self.notice = ShellL10n.string("This tab could not be moved to this window.")
+    }
+  }
+
+  private func openReleasedTransferredTab(_ id: UUID) {
+    guard !isClosed, let store,
+      let page = store.session.page(forTabID: id),
+      case .tab(let tab) = page,
+      let profile = store.session.profileID(forTabID: id),
+      loadedProfiles.contains(profile), !liveTabs.contains(id)
+    else { return }
+    guard events.router.bindTab(id.uuidString, windowID: windowID) else {
+      failedTabs.insert(id)
+      notice = ShellL10n.string("A saved tab already belongs to another window.")
+      return
+    }
+    liveTabs.insert(id)
+    do {
+      try runtime.openTabID(
+        id.uuidString, profileID: profile.uuidString, windowID: windowID,
+        url: tab.url.absoluteString)
+    } catch {
+      events.router.forgetTab(id.uuidString, windowID: windowID)
+      liveTabs.remove(id)
+      failedTabs.insert(id)
+      notice = error.localizedDescription
+    }
+  }
+
   private func reloadPage(_ tab: UUID, profile: UUID, mode: PageReloadMode) -> Bool {
     guard !isClosed, !runtime.isQuitting, store?.session.profileID(forTabID: tab) == profile
     else { return false }
@@ -811,6 +859,12 @@ final class BrowserEngine {
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !failedTabs.contains(tab.id) {
         guard !tabsAwaitingProfileReassignment.contains(tab.id) else { continue }
+        if let ownerWindowID = runtime.windowID(forTabID: tab.id.uuidString),
+          ownerWindowID != windowID
+        {
+          waitForTransferredTabRelease(tab.id)
+          continue
+        }
         let decision = TabMaterializationPolicy.decision(
           isSelected: space.id == session.selectedSpaceID
             && (session.selectedPage?.tab.id == tab.id

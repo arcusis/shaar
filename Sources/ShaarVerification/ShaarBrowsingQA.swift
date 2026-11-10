@@ -321,12 +321,16 @@ import Foundation
           && destination.engine.runtime.windowID(forTabID: movedTab.uuidString)
             == destination.engine.windowID
       }
+      let destinationHasTab = destination.store.session.page(forTabID: movedTab) != nil
+      let destinationSelectedTab =
+        destination.store.session.selectedSpace.selectedTabID?.uuidString ?? "none"
+      let destinationEngineAttached = destination.store.engine === destination.engine
       rows.append(
         row(
           "windows-drag", accepted && !stayed && engineMoved ? "pass" : "fail",
           accepted && !stayed && engineMoved
             ? "The tab moved into the other window and its live engine owner followed."
-            : "Drop accepted=\(accepted), stayed in source=\(stayed), live engine owner transferred=\(engineMoved)."
+            : "Drop accepted=\(accepted), stayed in source=\(stayed), destination has tab=\(destinationHasTab), selected=\(destinationSelectedTab), engine attached=\(destinationEngineAttached), engine closed=\(destination.engine.isClosed), live=\(destination.engine.liveTabs.contains(movedTab)), owner=\(destination.engine.runtime.windowID(forTabID: movedTab.uuidString) ?? "none"), destination=\(destination.engine.windowID), notice=\(destination.engine.notice ?? "none")."
         ))
     } else {
       rows.append(

@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import ChromiumBridgeVerification
 import Foundation
 
 @testable import ArcusisBrowser
@@ -126,7 +127,12 @@ import Foundation
     name: String, context: NativeBrowserContext, host: NativeBrowserHost, tab: UUID,
     outputURL: URL, fire: () -> Bool
   ) async -> [String: Any] {
-    await closeChromiumDock(context: context, host: host, tab: tab)
+    if let detail = await closeChromiumDock(context: context, tab: tab) {
+      return [
+        "name": name, "passed": false, "detail": detail, "fired": false,
+        "notice": context.engine.notice ?? "",
+      ]
+    }
     closeLegacyShell(context: context, tab: tab)
     let shellBefore = context.engine.shaarDevTools[tab]?.isOpen == true
     let fired = fire()
@@ -144,14 +150,21 @@ import Foundation
       "windowsHidden": hidden, "snapshot": shot,
       "notice": context.engine.notice ?? "",
     ]
-    if !fired { row["detail"] = fireDetail(name: name, context: context, host: host) }
+    if !passed {
+      row["detail"] = fireDetail(name: name, context: context, host: host)
+      if let open = await engineDevToolsOpen(context.engine.runtime, tab: tab) {
+        row["engineOpen"] = open
+      }
+    }
     return row
   }
 
   private static func proveF12ClosesOpenShell(
     context: NativeBrowserContext, host: NativeBrowserHost, tab: UUID
   ) async -> [String: Any] {
-    await closeChromiumDock(context: context, host: host, tab: tab)
+    if let detail = await closeChromiumDock(context: context, tab: tab) {
+      return ["name": "f12-closes-legacy-shell", "passed": false, "detail": detail]
+    }
     guard let target = context.engine.siteControlTarget, target.tabID == tab else {
       return ["name": "f12-closes-legacy-shell", "passed": false, "detail": "No page target"]
     }
@@ -183,7 +196,9 @@ import Foundation
   private static func proveLegacyShell(
     context: NativeBrowserContext, host: NativeBrowserHost, tab: UUID
   ) async -> [String: Any] {
-    await closeChromiumDock(context: context, host: host, tab: tab)
+    if let detail = await closeChromiumDock(context: context, tab: tab) {
+      return ["name": "legacy-shell", "passed": false, "detail": detail]
+    }
     guard let event = f12Event(in: context.window) else {
       return ["name": "legacy-shell", "passed": false, "detail": "Could not build an F12 event"]
     }
@@ -213,17 +228,45 @@ import Foundation
     }
     let command = ShaarDevToolsRoute.f12Command()
     let recognized = event.map(ShaarDevToolsShortcut.isF12) ?? false
+    let menuMatches = NSApp.mainMenu === host.menu
     return "event=\(event != nil) f12=\(recognized) "
       + "canPerform=\(host.canPerform(command)) command=\(command.rawValue) "
-      + "visible=\(context.window.isVisible)"
+      + "visible=\(context.window.isVisible) mainMenuMatches=\(menuMatches)"
   }
 
-  private static func closeChromiumDock(
-    context: NativeBrowserContext, host: NativeBrowserHost, tab: UUID
-  ) async {
-    guard chromiumDockIsOpen(context: context, tab: tab) else { return }
-    host.perform(.chromiumDeveloperTools)
-    _ = await wait { !chromiumDockIsOpen(context: context, tab: tab) }
+  /// ClosePage() replies before the DevTools window is gone. The next toggle
+  /// still sees that window and closes it, so wait for the engine to report closed.
+  private static func closeChromiumDock(context: NativeBrowserContext, tab: UUID) async -> String? {
+    let runtime = context.engine.runtime
+    guard let open = await engineDevToolsOpen(runtime, tab: tab) else {
+      return "DevTools state unavailable"
+    }
+    if open || chromiumDockIsOpen(context: context, tab: tab) {
+      guard runtime.closeDevTools(forTabID: tab.uuidString) else {
+        return "DevTools close was rejected"
+      }
+    }
+    for _ in 0..<200 {
+      if !chromiumDockIsOpen(context: context, tab: tab),
+        await engineDevToolsOpen(runtime, tab: tab) == false
+      {
+        return nil
+      }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    let stillOpen = await engineDevToolsOpen(runtime, tab: tab)
+    if stillOpen == false, !chromiumDockIsOpen(context: context, tab: tab) {
+      return nil
+    }
+    return "DevTools stayed open after close"
+  }
+
+  private static func engineDevToolsOpen(_ runtime: ARCChromiumRuntime, tab: UUID) async -> Bool? {
+    await withCheckedContinuation { continuation in
+      runtime.probeDevToolsUIOpen(forTabID: tab.uuidString) { open in
+        continuation.resume(returning: open?.boolValue)
+      }
+    }
   }
 
   private static func chromiumDockIsOpen(context: NativeBrowserContext, tab: UUID) -> Bool {
@@ -231,10 +274,11 @@ import Foundation
   }
 
   private static func routeOptionCommandI(host: NativeBrowserHost, window: NSWindow) -> Bool {
-    guard let menu = NSApp.mainMenu, let event = optionCommandIEvent(in: window) else {
-      return false
-    }
-    return ShortcutPageRouting.route(event, menu: menu, responder: window.firstResponder)
+    guard let menu = host.menu, NSApp.mainMenu === menu, let event = optionCommandIEvent(in: window)
+    else { return false }
+    if host.performDeveloperToolsKey(event) { return true }
+    let responder = event.window?.firstResponder ?? window.firstResponder
+    return ShortcutPageRouting.route(event, menu: menu, responder: responder)
   }
 
   private static func f12Event(in window: NSWindow) -> NSEvent? {

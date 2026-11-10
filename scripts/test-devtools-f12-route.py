@@ -81,8 +81,11 @@ def main():
             environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
             environment["SHAAR_ENGINE_TESTING"] = "1"
             result = subprocess.run(
-                [str(executable), "--devtools-f12-route", str(report_path), page],
-                env=environment, capture_output=True, text=True, timeout=120, check=False,
+                [
+                    str(executable), "--devtools-f12-route", str(report_path), page,
+                    "--probe-data-dir", str(root),
+                ],
+                env=environment, capture_output=True, text=True, timeout=180, check=False,
             )
             report = json.loads(report_path.read_text()) if report_path.is_file() else {}
             shots = {}

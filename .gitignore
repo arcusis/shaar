@@ -8,3 +8,4 @@ node_modules/
 __pycache__/
 *.xcuserstate
 xcuserdata/
+Resources/Signing/Shaar.provisionprofile

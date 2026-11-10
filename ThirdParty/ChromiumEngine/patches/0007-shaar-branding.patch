@@ -15,7 +15,8 @@
 -MAC_BUNDLE_ID=org.chromium.Chromium
 +MAC_BUNDLE_ID=com.arcusis.shaar.engine
  MAC_CREATOR_CODE=Cr24
- MAC_TEAM_ID=
+-MAC_TEAM_ID=
++MAC_TEAM_ID=F9Z784RA6D
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
 @@ -480,8 +480,9 @@

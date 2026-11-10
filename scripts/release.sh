@@ -96,6 +96,14 @@ if [[ "$identities" != *"\"$sign_identity\""* ]]; then
   echo "error: signing identity not found in the keychain: $sign_identity" >&2
   exit 1
 fi
+# A Developer ID profile is optional. When one is present it must authorize iCloud
+# Keychain passkeys before the long build starts. A missing profile keeps the
+# current camera, microphone and location signature.
+provision_profile="${SHAAR_PROVISIONING_PROFILE:-Resources/Signing/Shaar.provisionprofile}"
+if [[ -f "$provision_profile" ]]; then
+  echo '==> Checking the Developer ID provisioning profile for iCloud Keychain passkeys'
+  "$python" scripts/passkey_signing.py check --profile "$provision_profile"
+fi
 # A placeholder key would ship an update that no installed Shaar can verify.
 if $notarize || ! $allow_unsigned; then
   feed check-key
@@ -171,7 +179,20 @@ sign --preserve-metadata=entitlements "$sparkle/Versions/B/XPCServices/Downloade
 sign "$sparkle/Versions/B/Autoupdate"
 sign "$sparkle/Versions/B/Updater.app"
 sign "$sparkle"
-sign --entitlements Resources/Signing/Shaar.entitlements "$app"
+app_entitlements=Resources/Signing/Shaar.entitlements
+if [[ -f "$provision_profile" ]]; then
+  app_entitlements="$out/entitlements/Shaar.plist"
+  "$python" scripts/passkey_signing.py merge \
+    --base Resources/Signing/Shaar.entitlements \
+    --passkeys Resources/Signing/Passkeys.entitlements \
+    --profile "$provision_profile" \
+    --output "$app_entitlements"
+  cp "$provision_profile" "$app/Contents/embedded.provisionprofile"
+  echo '==> Embedding the Developer ID profile for iCloud Keychain passkeys'
+else
+  echo '==> Signing without iCloud Keychain passkeys; no Developer ID provisioning profile was provided.'
+fi
+sign --entitlements "$app_entitlements" "$app"
 
 echo '==> Verifying code signature'
 codesign --verify --deep --strict --verbose=2 "$app"

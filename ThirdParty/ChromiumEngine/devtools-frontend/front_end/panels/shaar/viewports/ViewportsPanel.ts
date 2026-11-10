@@ -202,7 +202,7 @@ export class ViewportsPanel extends UI.Panel.Panel {
     super('shaar-viewports', /* useShadowDom */ true);
     this.controller = new ViewportController(host);
     this.#stopListening = this.controller.listen(() => this.requestUpdate());
-    this.registerRequiredCSS(viewportsStyles);
+    this.registerRequiredCSS(viewportsStyles as CSSInJS);
     this.requestUpdate();
   }
 

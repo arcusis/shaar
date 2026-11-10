@@ -17,6 +17,7 @@ devtools_entrypoint("meta") {
     "stacking-3d:meta",
     "stacking:meta",
     "copy-for-agent:meta",
+    "graphql-trpc:meta",
   ]
 
   visibility = [
@@ -36,5 +37,6 @@ group("unittests") {
     "stacking-3d:unittests",
     "stacking:unittests",
     "copy-for-agent:unittests",
+    "graphql-trpc:unittests",
   ]
 }

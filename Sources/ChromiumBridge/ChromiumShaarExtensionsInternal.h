@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
                            profileID:(NSString *)profileID
                                tabID:(NSString * _Nullable)tabID
+                  allowsProfileOnly:(BOOL)allowsProfileOnly
                              payload:(NSDictionary *)payload
                           completion:(void (^)(NSString * _Nullable json, shaar_error_code code))completion;
 - (BOOL)shaarOwnsSelectedTabID:(NSString *)tabID profileID:(NSString *)profileID;

@@ -60,13 +60,13 @@ import Foundation
 
     await check("f12-route") {
       guard shell.isOpen, chromiumDockClosed else {
-        throw Failure("The Shaar DevTools command opened the Chromium dock")
+        throw Failure("The direct shell API opened the Chromium dock")
       }
-      guard Self.f12OpensShaarDevTools() else {
-        throw Failure("F12 no longer maps to Shaar DevTools")
+      guard Self.publicF12OpensChromiumDock() else {
+        throw Failure("F12 no longer opens the Chromium dock")
       }
-      return "Shaar DevTools opened the Shaar shell and left the Chromium dock closed. "
-        + "F12 maps to that command."
+      return "The shell API still opens the SwiftUI shell. "
+        + "F12 and Option-Command-I open the Chromium dock unless shaar.devtools.legacyShell is set."
     }
     await check("shell-defaults") {
       try self.proveShellDefaults(shell)
@@ -932,15 +932,18 @@ import Foundation
     return "Live stack \(frame.function) \(frame.source)."
   }
 
-  private static func f12OpensShaarDevTools() -> Bool {
+  private static func publicF12OpensChromiumDock() -> Bool {
     let f12 = ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: [])
     let chord = ShaarDevToolsShortcut.isF12(
       keyCode: 111, modifiers: [.command, .option, .shift])
     let shaar = ShortcutCatalog.shortcut(for: .developerTools)
     let chromium = ShortcutCatalog.shortcut(for: .chromiumDeveloperTools)
+    let defaults = UserDefaults(suiteName: "shaar-f12-route.\(UUID().uuidString)")!
     guard f12, !chord, shaar?.key == "i", chromium?.key == "i" else { return false }
     return shaar?.modifiers == [.command, .option]
       && chromium?.modifiers == [.command, .option, .shift]
+      && !ShaarDevToolsRoute.opensLegacyShell(defaults)
+      && ShaarDevToolsRoute.f12Command(defaults) == .chromiumDeveloperTools
   }
 
   private func proveSecurity(shell: ShaarDevToolsModel) async throws -> String {

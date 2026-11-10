@@ -232,6 +232,15 @@ final class PrivatePageSession {
     return true
   }
 
+  /// F12 and Option-Command-I. The Chromium dock is the public path.
+  func togglePublicDeveloperTools() {
+    if ShaarDevToolsRoute.opensLegacyShell() {
+      toggleDeveloperTools()
+    } else {
+      toggleChromiumDeveloperTools()
+    }
+  }
+
   func toggleDeveloperTools() {
     guard let target = inspectorTarget else { return }
     if let shell = shaarDevTools[target.tabID], shell.isOpen {
@@ -276,6 +285,11 @@ final class PrivatePageSession {
 
   func toggleChromiumDeveloperTools() {
     guard let target = inspectorTarget else { return }
+    if !ShaarDevToolsRoute.opensLegacyShell(),
+      let shell = shaarDevTools[target.tabID], shell.isOpen
+    {
+      shell.close()
+    }
     runtime.toggleDevTools(
       forPrivateTabID: target.tabID.uuidString,
       windowID: windowID, contextID: contextID

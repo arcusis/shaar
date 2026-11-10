@@ -103,6 +103,8 @@ struct ShortcutCatalog {
     case .reload: ("r", .command)
     case .hardReload: ("r", [.command, .shift])
     case .developerTools: ("i", [.command, .option])
+    // The View menu has one Developer Tools item. This chord stays on the key
+    // monitor so Option-Shift-Command-I still opens the Chromium dock.
     case .chromiumDeveloperTools: ("i", [.command, .option, .shift])
     case .inspector: ("c", [.command, .option])
     case .inspectorSource: ("o", [.command, .option])
@@ -188,6 +190,16 @@ enum ShaarDevToolsShortcut {
 
   static func isF12(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
     keyCode == 111 && modifiers.intersection([.command, .option, .control, .shift]).isEmpty
+  }
+
+  static func isDirectChromiumShortcut(_ event: NSEvent) -> Bool {
+    isDirectChromiumShortcut(keyCode: event.keyCode, modifiers: event.modifierFlags)
+  }
+
+  /// Option-Shift-Command-I. ANSI I.
+  static func isDirectChromiumShortcut(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+    let flags = modifiers.intersection([.command, .option, .control, .shift])
+    return keyCode == 34 && flags == [.command, .option, .shift]
   }
 
   static func isCommandMenu(_ event: NSEvent) -> Bool {

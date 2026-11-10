@@ -467,6 +467,8 @@ class BundleAppTests(unittest.TestCase):
             "--probe-measure-inspector",
             "--probe-favicon-url",
             "--probe-favicon-restore",
+            "ShaarDevToolsF12RouteSmoke",
+            "--devtools-f12-route",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

@@ -234,7 +234,7 @@ final class PrivateBrowserHost {
     guard let owner = activeOwner, canPerform(command) else { return }
     let store = owner.store
     switch command {
-    case .developerTools: owner.page.toggleDeveloperTools()
+    case .developerTools: owner.page.togglePublicDeveloperTools()
     case .chromiumDeveloperTools: owner.page.toggleChromiumDeveloperTools()
     case .inspector: owner.page.toggleInspector()
     case .inspectorCopy:

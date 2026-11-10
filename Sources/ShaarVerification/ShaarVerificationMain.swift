@@ -11,6 +11,9 @@ enum ShaarVerificationMain {
     if CommandLine.arguments.contains("--browsing-qa") {
       exit(ShaarBrowsingQA.run(arguments: CommandLine.arguments))
     }
+    if CommandLine.arguments.contains("--devtools-f12-route") {
+      exit(ShaarDevToolsF12RouteSmoke.run(arguments: CommandLine.arguments))
+    }
     if CommandLine.arguments.contains("--probe-shaar-preview") {
       exit(ShaarPreviewProbe.run(arguments: CommandLine.arguments))
     }

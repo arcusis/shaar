@@ -7,6 +7,8 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
+@testable import ArcusisBrowser
+
 /// Hidden shipping check that WebAuthn is present and the platform authenticator stays unavailable.
 /// The page script reads `isUserVerifyingPlatformAuthenticatorAvailable` only.
 @MainActor enum ShaarPasskeyAvailabilitySmoke {
@@ -25,7 +27,9 @@ import Foundation
       runtime.onReady = { [weak host] in
         guard let host else { return }
         NSApp.setActivationPolicy(.prohibited)
-        Task { await exercise(host: host, runtime: runtime, pageURL: pageURL, outputURL: outputURL) }
+        Task {
+          await exercise(host: host, runtime: runtime, pageURL: pageURL, outputURL: outputURL)
+        }
       }
       return withExtendedLifetime(host) {
         let dataRoot = outputURL.deletingLastPathComponent().appending(path: "Chromium")
@@ -58,7 +62,8 @@ import Foundation
       context.store.perform(.open(pageURL))
       let ready = await wait {
         context.engine.siteControlTarget?.url == pageURL
-          && context.engine.siteControlTarget.flatMap { context.engine.pages[$0.tabID] }?.loading == false
+          && context.engine.siteControlTarget.flatMap { context.engine.pages[$0.tabID] }?.loading
+            == false
       }
       guard ready, let tab = context.engine.siteControlTarget?.tabID else {
         throw Failure("Passkey page did not load")
@@ -84,7 +89,9 @@ import Foundation
     return latest
   }
 
-  private static func readAvailability(_ runtime: ARCChromiumRuntime, tab: UUID) async -> [String: Any]? {
+  private static func readAvailability(_ runtime: ARCChromiumRuntime, tab: UUID) async -> [String:
+    Any]?
+  {
     let json: String? = await withCheckedContinuation { continuation in
       runtime.evaluate(inTabID: tab.uuidString, script: availabilityScript) {
         continuation.resume(returning: $0)
@@ -101,7 +108,8 @@ import Foundation
     let conditionalMediation = state["conditionalMediation"] as? Bool ?? false
     let credentialsGet = state["credentialsGet"] as? Bool ?? false
     let secureContext = state["secureContext"] as? Bool ?? false
-    let passed = quiet && passkey == "false" && publicKeyCredential && platformAuthenticator
+    let passed =
+      quiet && passkey == "false" && publicKeyCredential && platformAuthenticator
       && credentialsGet && secureContext
     return [
       "passed": passed, "passkey": passkey, "publicKeyCredential": publicKeyCredential,
@@ -128,32 +136,32 @@ import Foundation
   /// Starts the platform-authenticator query and returns the latest dataset value.
   /// `evaluate` does not await promises, so the caller polls until `passkey` leaves `pending`.
   private static let availabilityScript = """
-  (() => {
-    const root = document.documentElement;
-    if (!root.dataset.passkey) {
-      root.dataset.passkey = "pending";
-      const credential = window.PublicKeyCredential;
-      const available = credential && credential.isUserVerifyingPlatformAuthenticatorAvailable;
-      if (typeof available !== "function") {
-        root.dataset.passkey = "missing";
-      } else {
-        available.call(credential).then(
-          (value) => { root.dataset.passkey = value ? "true" : "false"; },
-          (error) => { root.dataset.passkey = "error:" + (error && error.name ? error.name : "failed"); }
-        );
+    (() => {
+      const root = document.documentElement;
+      if (!root.dataset.passkey) {
+        root.dataset.passkey = "pending";
+        const credential = window.PublicKeyCredential;
+        const available = credential && credential.isUserVerifyingPlatformAuthenticatorAvailable;
+        if (typeof available !== "function") {
+          root.dataset.passkey = "missing";
+        } else {
+          available.call(credential).then(
+            (value) => { root.dataset.passkey = value ? "true" : "false"; },
+            (error) => { root.dataset.passkey = "error:" + (error && error.name ? error.name : "failed"); }
+          );
+        }
       }
-    }
-    const credential = window.PublicKeyCredential;
-    return {
-      passkey: root.dataset.passkey || "",
-      publicKeyCredential: typeof credential === "function",
-      platformAuthenticator: typeof credential?.isUserVerifyingPlatformAuthenticatorAvailable === "function",
-      conditionalMediation: typeof credential?.isConditionalMediationAvailable === "function",
-      credentialsGet: typeof navigator.credentials?.get === "function",
-      secureContext: window.isSecureContext === true
-    };
-  })()
-  """
+      const credential = window.PublicKeyCredential;
+      return {
+        passkey: root.dataset.passkey || "",
+        publicKeyCredential: typeof credential === "function",
+        platformAuthenticator: typeof credential?.isUserVerifyingPlatformAuthenticatorAvailable === "function",
+        conditionalMediation: typeof credential?.isConditionalMediationAvailable === "function",
+        credentialsGet: typeof navigator.credentials?.get === "function",
+        secureContext: window.isSecureContext === true
+      };
+    })()
+    """
 
   private struct Failure: LocalizedError {
     let message: String

@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Exercise WebAuthn availability in a hidden ad-hoc shipping Shaar.app.
+"""Exercise WebAuthn availability in a hidden ad-hoc verification bundle.
 
 The page reads isUserVerifyingPlatformAuthenticatorAvailable. It does not call
 credentials.get or credentials.create. A signature that already has the browser
@@ -103,10 +103,10 @@ def contains_cstring(path: Path, needle: str) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar.app")
+    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/passkey-availability/receipt.json")
     options = parser.parse_args()
-    executable = options.app / "Contents/MacOS/ArcusisBrowser"
+    executable = options.app / "Contents/MacOS/ShaarVerification"
     framework = (
         options.app / "Contents/Frameworks/Chromium Framework.framework"
         / "Versions/Current/Chromium Framework"
@@ -152,7 +152,7 @@ def main():
         and report.get("allWindowsHidden") is True and not crashes
     )
     receipt = {
-        "shippingExecutable": str(executable), "exitCode": result.returncode,
+        "verificationExecutable": str(executable), "exitCode": result.returncode,
         "passkey": report.get("passkey"), "publicKeyCredential": report.get("publicKeyCredential"),
         "platformAuthenticator": report.get("platformAuthenticator"),
         "conditionalMediation": report.get("conditionalMediation"),

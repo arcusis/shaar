@@ -127,6 +127,10 @@ enum ShaarVerificationMain {
       return ShaarTabAdoptionSmoke.run(
         frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
     }
+    if let launch = harnessLaunch("--passkey-availability", arguments) {
+      return ShaarPasskeyAvailabilitySmoke.run(
+        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
+    }
     if let launch = harnessLaunch("--devtools-smoke", arguments) {
       let mode = launch.remainder ?? "fixture"
       let spaOnly = mode == "spa-only"

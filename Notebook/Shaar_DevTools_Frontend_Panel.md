@@ -10,7 +10,9 @@ Registration is one import in `front_end/panels/shaar/shaar-meta.ts`:
 
 `import './<feature>/<feature>-meta.js';`
 
-Add the matching `"<feature>:meta"` dep and the matching `"<feature>:unittests"` dep in `front_end/panels/shaar/BUILD.gn`, in the same order. That directory's `BUILD.gn` is the shared file beside the import. Do not add another import to `devtools_app.ts`. Patch `0065` already imports `shaar-meta.js`, depends on `../../panels/shaar:meta`, and lists `panels/shaar:unittests` once. Keep `"..:*"` on the feature meta visibility. The shared entrypoint typechecks through `meta_typescript_checked`, so `../:meta` alone is not visible.
+Add the matching `"<feature>:meta"` dep and the matching `"<feature>:unittests"` dep in `front_end/panels/shaar/BUILD.gn`, in the same order. That directory's `BUILD.gn` is the shared file beside the import. Do not add another import to `devtools_app.ts`, and do not add a per-feature Chromium patch. Patch `0065` already imports `shaar-meta.js`, depends on `../../panels/shaar:meta`, and lists `panels/shaar:unittests` once. The engine patches for this overlay are `0064-shaar-devtools-theme-157.patch` and `0065-shaar-devtools-frontend-registration.patch`. `0066-shaar-devtools-hydration-panel.patch` is not part of this layout. Keep `"..:*"` on the feature meta visibility. The shared entrypoint typechecks through `meta_typescript_checked`, so `../:meta` alone is not visible.
+
+`Tests/ShaarEngineSourceBuildTests/test_devtools_frontend_157.py` reads the feature list from those `shaar-meta.ts` imports in `test_each_feature_has_one_registration_line`. A feature pull request adds the directory, the one import, and the two `BUILD.gn` deps, in that order. Leave that test's expected list alone.
 
 `scripts/stage-shaar-devtools-frontend.py` hardlinks the `shaar` directory into `front_end/panels/shaar`. In a Chromium tree the destination is `third_party/devtools-frontend/src/front_end/panels/shaar`. `devtools_entrypoint` generates the GRD. `0014` stays on the Chromium 155 pin. Chromium 157 uses `0064-shaar-devtools-theme-157.patch` for the palette and the host-config hides. Panel CSS stays in the feature.
 

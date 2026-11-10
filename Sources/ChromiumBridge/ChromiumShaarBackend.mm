@@ -332,7 +332,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   config.event_context = (__bridge void *)self;
   shaar_error error = EmptyError();
   // The pinned engine adds --use-mock-keychain only inside SHAAR_ENGINE_TESTING.
-  // Developer ID signatures ignore the request and keep the login keychain.
+  // SHAAR_ENGINE_TESTING also enables fake media, disables renderer backgrounding and timer throttling, and maps trackertest.org to localhost.
   id mockKeychainSetting = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ShaarUseMockKeychain"];
   BOOL requested = ARCInfoBool(mockKeychainSetting) || ARCEnvironmentRequestsMockKeychain();
   BOOL adHoc = NO;

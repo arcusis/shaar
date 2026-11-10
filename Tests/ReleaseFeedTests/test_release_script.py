@@ -79,6 +79,12 @@ class ReleaseScriptOptionTests(unittest.TestCase):
         self.assertNotIn("unexpected", result.stderr)
         self.assertNotIn("Building", result.stdout)
 
+    def test_built_release_plist_guard_precedes_signing(self):
+        source = SCRIPT.read_text()
+        guard = 'grep -q \'<key>ShaarUseMockKeychain</key>\' "$app/Contents/Info.plist"'
+        self.assertIn(guard, source)
+        self.assertLess(source.index(guard), source.index('sign() {'))
+
     def test_missing_signing_identity_stops_before_build(self):
         result = self._run("--notes", str(self.notes))
 

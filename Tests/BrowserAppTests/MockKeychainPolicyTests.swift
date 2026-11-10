@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import ChromiumBridge
 import Foundation
 import Testing
-import ChromiumBridge
 
 @Suite struct MockKeychainPolicyTests {
   @Test func requestRequiresAnAdHocSignature() {
@@ -23,6 +23,36 @@ import ChromiumBridge
     let unsignedBundle = try #require(Bundle(url: unsigned.root))
     #expect(ARCBundleIsAdHocSigned(signedBundle))
     #expect(!ARCBundleIsAdHocSigned(unsignedBundle))
+  }
+
+  @Test func appleSignedBundleIsNotAdHoc() throws {
+    let source = URL(fileURLWithPath: "/System/Applications/Calculator.app")
+    guard FileManager.default.fileExists(atPath: source.path) else { return }
+    let copy = FileManager.default.temporaryDirectory
+      .appending(path: "shaar-apple-signed-\(UUID().uuidString).app", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: source, to: copy)
+    defer { try? FileManager.default.removeItem(at: copy) }
+    let bundle = try #require(Bundle(url: copy))
+    #expect(!ARCBundleIsAdHocSigned(bundle))
+  }
+
+  @Test func certificateSignedBundleIsNotAdHocWhenIdentityIsAvailable() throws {
+    let identities = try runOutput(
+      "/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"])
+    guard
+      let identity = identities.split(separator: "\n").compactMap({ line -> String? in
+        guard line.contains("\"") else { return nil }
+        let parts = line.split(separator: "\"")
+        return parts.count > 1 ? String(parts[1]) : nil
+      }).first
+    else { return }
+
+    let fixture = try FixtureApp.make(sign: false)
+    defer { fixture.remove() }
+    let status = try run("/usr/bin/codesign", ["--force", "--sign", identity, fixture.root.path])
+    guard status == 0 else { return }
+    let bundle = try #require(Bundle(url: fixture.root))
+    #expect(!ARCBundleIsAdHocSigned(bundle))
   }
 }
 
@@ -72,4 +102,15 @@ private func run(_ launchPath: String, _ arguments: [String]) throws -> Int32 {
   try process.run()
   process.waitUntilExit()
   return process.terminationStatus
+}
+
+private func runOutput(_ launchPath: String, _ arguments: [String]) throws -> String {
+  let process = Process()
+  let output = Pipe()
+  process.executableURL = URL(fileURLWithPath: launchPath)
+  process.arguments = arguments
+  process.standardOutput = output
+  try process.run()
+  process.waitUntilExit()
+  return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
 }

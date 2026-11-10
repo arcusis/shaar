@@ -16,6 +16,12 @@ std::string Repeat(char value, size_t count) {
 
 }  // namespace
 
+TEST(ShaarSavePromptTest, PrivateContextsDoNotReceiveOffers) {
+  EXPECT_FALSE(shaar::save_prompts::SavePromptAllowedForContext(false, false));
+  EXPECT_FALSE(shaar::save_prompts::SavePromptAllowedForContext(true, true));
+  EXPECT_TRUE(shaar::save_prompts::SavePromptAllowedForContext(true, false));
+}
+
 TEST(ShaarSavePromptTest, NeverAppliesOnlyToANewPassword) {
   EXPECT_EQ(shaar::save_prompts::DecisionCode("password", false, "save"),
             shaar::save_prompts::kDecisionSave);

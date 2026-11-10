@@ -24,6 +24,7 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -290,6 +291,11 @@ int DecisionCode(const char* prompt, bool update, const char* decision) {
   return kDecisionDismiss;
 }
 
+bool SavePromptAllowedForContext(bool has_browser_context,
+                                 bool off_the_record) {
+  return has_browser_context && !off_the_record;
+}
+
 std::string SanitizeDetail(std::string_view raw) {
   std::string cleaned;
   size_t index = 0;
@@ -333,6 +339,11 @@ bool OfferSavePrompt(content::WebContents* contents,
   };
   const bool password = prompt && std::strcmp(prompt, "password") == 0;
   if (!contents || !KnownPrompt(prompt) || (update && !password))
+    return decline();
+  content::BrowserContext* browser_context = contents->GetBrowserContext();
+  const bool off_the_record =
+      browser_context && browser_context->IsOffTheRecord();
+  if (!SavePromptAllowedForContext(browser_context != nullptr, off_the_record))
     return decline();
 
   shaar_engine* engine = lifecycle::ActiveEngine();

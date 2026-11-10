@@ -34,6 +34,10 @@ bool OfferSavePrompt(content::WebContents* contents,
 int DecisionCode(const char* prompt, bool update, const char* decision);
 std::string SanitizeDetail(std::string_view raw);
 
+// A private window, or a tab with no browser context, never gets a save offer.
+bool SavePromptAllowedForContext(bool has_browser_context,
+                                 bool off_the_record);
+
 }  // namespace shaar::save_prompts
 
 shaar_error_code HandleSavePromptOperation(

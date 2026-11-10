@@ -90,9 +90,21 @@ final class BrowserEngine {
   @ObservationIgnored private var suspendingTabs: Set<UUID> = []
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
   private(set) var favicons: [UUID: NSImage] = [:]
+  /// Site host last associated with each tab's icon. A later empty query for that host
+  /// leaves the icon in place; a different host replaces it.
+  @ObservationIgnored private var faviconHosts: [UUID: String] = [:]
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
     favicons[tabID] = image
+  }
+
+  private func clearFavicon(_ id: UUID) {
+    favicons[id] = nil
+    faviconHosts[id] = nil
+  }
+
+  private var acceptsEngineRequests: Bool {
+    !isClosed && !runtime.isQuitting && runtime.isWindowOpenID(windowID)
   }
 
   func focusPage(_ tabID: UUID) {
@@ -237,7 +249,7 @@ final class BrowserEngine {
         tabID: identity, profileID: owner, payload: payload, sequence: sequence)
     }
     store.library.onLoad = { [weak self] key, limit, completion in
-      guard let self, !self.isClosed else {
+      guard let self, self.acceptsEngineRequests else {
         completion(.failure(LibraryDataError.invalidBookmarks))
         return
       }
@@ -445,6 +457,8 @@ final class BrowserEngine {
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity)
       else { return }
+      let document = URL(string: address)
+      let documentHost = document?.host?.lowercased()
       let startedLoading = loading && self.pages[id]?.loading != true
       if startedLoading && self.store?.pageFind?.tabID == id {
         self.store?.dismissPageFind()
@@ -452,7 +466,7 @@ final class BrowserEngine {
       let finishedLoading = self.pages[id]?.loading == true && !loading
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       self.store?.nativePageLoading(id, loading: loading)
-      if let url = URL(string: address) {
+      if let url = document {
         self.inspectors[id]?.documentChanged(url: url)
         if let profile = self.store?.session.profileID(forTabID: id) {
           self.shaarDevTools[id]?.updateTarget(
@@ -476,9 +490,11 @@ final class BrowserEngine {
           forTabID: identity, profileID: profile.uuidString, windowID: self.windowID)
       {
         self.favicons[id] = icon
+        self.faviconHosts[id] = documentHost
         self.store?.rememberFavicon(icon, forTab: id)
-      } else {
-        self.favicons[id] = nil
+      } else if self.faviconHosts[id] != documentHost {
+        self.clearFavicon(id)
+        self.faviconHosts[id] = documentHost
       }
     }
     callbacks.onTabClosed = { [weak self] identity in
@@ -497,7 +513,7 @@ final class BrowserEngine {
       self.developmentProbedURLs[id] = nil
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
-      self.favicons[id] = nil
+      self.clearFavicon(id)
       self.store?.nativeTabClosed(id)
       if let store = self.store, store.session.page(forTabID: id)?.tab.isPinned == true,
         let profile = store.session.profileID(forTabID: id)
@@ -648,7 +664,7 @@ final class BrowserEngine {
       developerModels.removeValue(forKey: id)?.close()
       mediaAccess[id] = nil
       forgetMedia(id)
-      favicons[id] = nil
+      clearFavicon(id)
       runtime.discardTabID(id.uuidString)
     }
   }
@@ -733,7 +749,7 @@ final class BrowserEngine {
       developmentProbedURLs[removed] = nil
       mediaAccess[removed] = nil
       forgetMedia(removed)
-      favicons[removed] = nil
+      clearFavicon(removed)
     }
     for profile in Set(session.spaces.map(\.profileID)) {
       guard !loadedProfiles.contains(profile), !loadingProfiles.contains(profile),
@@ -894,7 +910,7 @@ final class BrowserEngine {
 
   private func finishLoadingProfile(_ profile: UUID, error: Error?) async {
     loadingProfiles.remove(profile)
-    guard !isClosed else { return }
+    guard acceptsEngineRequests else { return }
     if let error {
       failedProfiles.insert(profile)
       notice = error.localizedDescription

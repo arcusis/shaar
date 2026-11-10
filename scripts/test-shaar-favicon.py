@@ -44,6 +44,32 @@ class Fixture(BaseHTTPRequestHandler):
         pass
 
 
+def run_probe(app: Path, root: Path, data: Path, report: Path, page: str,
+              extra: list[str]) -> tuple[subprocess.CompletedProcess[str], dict]:
+    framework = app / "Contents/Frameworks/Chromium Framework.framework"
+    home = root / "home"
+    command = [str(app / "Contents/MacOS/ShaarVerification"),
+               "--probe-shaar-first-tab", "--probe-framework", str(framework),
+               "--probe-output", str(report), "--probe-data-dir", str(data),
+               "--probe-favicon-url", page, *extra]
+    environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
+                       SHAAR_ENGINE_TESTING="1", RUNNER_TEMP=str(root))
+    process = subprocess.run(command, env=environment, capture_output=True,
+                             text=True, timeout=60, check=False)
+    evidence = Path("build/favicon-1045-evidence")
+    evidence.mkdir(parents=True, exist_ok=True)
+    sidebar = root / "favicon-sidebar.png"
+    if sidebar.exists():
+        (evidence / f"{report.stem}.png").write_bytes(sidebar.read_bytes())
+    if report.exists():
+        (evidence / report.name).write_text(report.read_text())
+    if process.returncode or not report.exists():
+        raise AssertionError(
+            f"favicon probe exit={process.returncode}: {process.stderr[-2500:]} "
+            f"report={report.read_text() if report.exists() else 'missing'}")
+    return process, json.loads(report.read_text())
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path)
@@ -59,31 +85,40 @@ def main() -> None:
             marker = data / ".arcusis-probe"
             marker.write_text("arcusis-engine-probe-v1\n")
             marker.chmod(0o600)
-            home = root / "home"
-            home.mkdir()
-            report = root / "report.json"
-            framework = app / "Contents/Frameworks/Chromium Framework.framework"
-            command = [str(app / "Contents/MacOS/ShaarVerification"),
-                       "--probe-shaar-first-tab", "--probe-framework", str(framework),
-                       "--probe-output", str(report), "--probe-data-dir", str(data),
-                       "--probe-favicon-url", f"http://127.0.0.1:{server.server_port}/"]
-            environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
-                               SHAAR_ENGINE_TESTING="1", RUNNER_TEMP=str(root))
-            process = subprocess.run(command, env=environment, capture_output=True,
-                                     text=True, timeout=35, check=False)
-            if process.returncode or not report.exists():
-                raise AssertionError(
-                    f"favicon probe exit={process.returncode}: {process.stderr[-2500:]} "
-                    f"report={report.read_text() if report.exists() else 'missing'}")
-            result = json.loads(report.read_text())
-            assert (result["passed"] and result["faviconObserved"]
-                    and result["faviconCacheRestored"]
-                    and result["inactiveFaviconObserved"]
-                    and result["allWindowsHidden"]), result
-            print(json.dumps({"exitCode": process.returncode, "faviconObserved": True,
-                              "faviconCacheRestored": True,
-                              "inactiveFaviconObserved": True,
-                              "allWindowsHidden": True}, indent=2))
+            (root / "home").mkdir()
+            page = f"http://127.0.0.1:{server.server_port}/"
+            first_report = root / "report.json"
+            _, first = run_probe(app, root, data, first_report, page, [])
+            assert (first["passed"] and first["faviconObserved"]
+                    and first["faviconCacheRestored"]
+                    and first["inactiveFaviconObserved"]
+                    and first["favoriteFaviconCached"]
+                    and first["allWindowsHidden"]), first
+            restore_report = root / "restore.json"
+            _, restored = run_probe(
+                app, root, data, restore_report, page, ["--probe-favicon-restore"])
+            assert (restored["passed"] and restored["restoredPinIcon"]
+                    and restored["restoredFavoriteIcon"]
+                    and restored["restoredFavoriteDormant"]
+                    and restored["sidebarIconPixels"] >= 40
+                    and restored["allWindowsHidden"]), restored
+            evidence = Path("build/favicon-1045-evidence")
+            evidence.mkdir(parents=True, exist_ok=True)
+            sidebar = root / "favicon-sidebar.png"
+            if sidebar.exists():
+                (evidence / "favicon-sidebar-after-relaunch.png").write_bytes(sidebar.read_bytes())
+            print(json.dumps({
+                "exitCode": 0,
+                "faviconObserved": True,
+                "faviconCacheRestored": True,
+                "inactiveFaviconObserved": True,
+                "favoriteFaviconCached": True,
+                "restoredPinIcon": True,
+                "restoredFavoriteIcon": True,
+                "restoredFavoriteDormant": True,
+                "sidebarIconPixels": restored["sidebarIconPixels"],
+                "allWindowsHidden": True,
+            }, indent=2))
         server.shutdown()
 
 

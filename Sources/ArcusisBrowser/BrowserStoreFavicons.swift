@@ -7,21 +7,23 @@ import BrowserCore
 
 extension BrowserStore {
   /// The live page icon, or the last icon saved for a tab whose page has not loaded.
+  /// Private windows show the live icon and never the on-disk cache.
   func favicon(for tab: BrowserTab, profileID: UUID) -> NSImage? {
-    if isPrivate { return nil }
     if let live = engine?.favicons[tab.id] { return live }
+    if isPrivate { return nil }
     guard let itemID = faviconItemID(forTab: tab.id) else { return nil }
     return faviconCache?.icon(for: itemID, profileID: profileID)
   }
 
   /// The live page icon, or the last icon saved for the Favorite.
+  /// Private windows show the live icon and never the on-disk cache.
   func favicon(for favorite: BrowserFavorite) -> NSImage? {
-    if isPrivate { return nil }
     if let page = session.favoritePage(for: favorite.id),
       let live = engine?.favicons[page.tab.id]
     {
       return live
     }
+    if isPrivate { return nil }
     return faviconCache?.icon(for: favorite.id, profileID: favorite.profileID)
   }
 
@@ -50,8 +52,10 @@ extension BrowserStore {
     faviconCache?.store(image, for: itemID, profileID: profileID)
   }
 
-  func rememberLiveFavicon(forTab tabID: UUID) {
-    guard let image = engine?.favicons[tabID] else { return }
+  /// Writes an icon captured before a pin or Favorite change onto the tab's current cache key.
+  /// The workspace save drops the previous key, so the copy has to happen after that save.
+  func carryFavicon(_ image: NSImage?, toTab tabID: UUID) {
+    guard let image else { return }
     rememberFavicon(image, forTab: tabID)
   }
 

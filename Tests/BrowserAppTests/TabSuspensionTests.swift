@@ -102,6 +102,30 @@ struct TabSuspensionTests {
     #expect(engine.liveTabs.contains(inactive.id))
   }
 
+  @Test func aFailedCapabilityProbeCanSucceedOnALaterTick() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let inactive = BrowserTab(url: URL(string: "https://inactive.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = [active.id, inactive.id]
+    engine.sleepingTabs.capability = .unknown
+    runtime.lifecycleCapable = false
+
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    #expect(engine.sleepingTabs.capability == .unknown)
+    #expect(runtime.slept.isEmpty)
+
+    runtime.lifecycleCapable = true
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+    #expect(engine.sleepingTabs.capability == .capable)
+    #expect(runtime.slept.isEmpty)
+
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(10 * 60 + 2))
+    #expect(runtime.slept.map(\.0) == [inactive.id.uuidString])
+    #expect(store.sleepingTabIDs == [inactive.id])
+  }
+
   @Test func neverSleepHostsStayAwake() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let mail = BrowserTab(url: URL(string: "https://www.mail.example")!)
@@ -284,6 +308,32 @@ struct TabSuspensionTests {
     #expect(runtime.privateSlept.isEmpty)
     #expect(store.sleepingTabIDs.isEmpty)
     #expect(session.liveTabs.contains(first))
+    #expect(session.liveTabs.contains(background))
+  }
+
+  @Test func aPrivateProfileWithAnActiveDownloadKeepsTabsAwake() throws {
+    let first = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: first))
+    let runtime = SuspensionTestRuntime()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "private-context", windowID: "private-window",
+      firstTabID: first, store: store, profileIsDownloading: { _ in true })
+    defer { session.suspensionTask?.cancel() }
+    session.sleepingTabs.policy = {
+      SleepingTabsPolicy(enabled: true, timeout: 5 * 60, neverSleepHosts: [])
+    }
+    session.sleepingTabs.capability = .capable
+    session.memoryPressureSource?.cancel()
+    session.memoryPressureSource = nil
+    let opened = store.session.open(URL(string: "https://background.example")!)
+    let background = try #require(opened)
+    session.reconcile()
+
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    session.sleepForMemoryPressure(now: start)
+    #expect(runtime.privateSlept.isEmpty)
+    #expect(store.sleepingTabIDs.isEmpty)
     #expect(session.liveTabs.contains(background))
   }
 

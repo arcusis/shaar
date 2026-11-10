@@ -40,15 +40,18 @@ final class PrivatePageSession {
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var selectedTabID: UUID?
   @ObservationIgnored var onEmpty: (() -> Void)?
+  @ObservationIgnored let profileIsDownloading: (UUID) -> Bool
 
   init(
     runtime: ARCChromiumRuntime, contextID: String, windowID: String,
-    firstTabID: UUID, store: BrowserStore
+    firstTabID: UUID, store: BrowserStore,
+    profileIsDownloading: @escaping (UUID) -> Bool = { _ in false }
   ) {
     self.runtime = runtime
     self.contextID = contextID
     self.windowID = windowID
     self.store = store
+    self.profileIsDownloading = profileIsDownloading
     liveTabs = [firstTabID]
     selectedTabID = firstTabID
     store.privatePage = self

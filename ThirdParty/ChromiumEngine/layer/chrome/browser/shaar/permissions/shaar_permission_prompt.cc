@@ -25,6 +25,8 @@
 #include "components/permissions/permission_uma_constants.h"
 #include "components/permissions/request_type.h"
 #include "components/permissions/resolvers/permission_prompt_options.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -43,6 +45,10 @@ struct PendingPermission {
   GURL page_url;
   GURL origin;
   bool one_time = false;
+  bool private_profile = false;
+  bool protocol_handler = false;
+  std::string frame_token;
+  int64_t navigation_id = 0;
   base::WeakPtr<::permissions::PermissionPrompt::Delegate> delegate;
 };
 
@@ -127,6 +133,48 @@ bool OneTimeGrant(const std::vector<std::string_view>& kinds) {
       delegate->GetInitialGeolocationAccuracySelection()};
 }
 
+std::optional<content::GlobalRenderFrameHostId> SharedFrameID(
+    ::permissions::PermissionPrompt::Delegate* delegate) {
+  if (!delegate)
+    return std::nullopt;
+  std::optional<content::GlobalRenderFrameHostId> shared;
+  for (const auto& request : delegate->Requests()) {
+    if (!request)
+      return std::nullopt;
+    const content::GlobalRenderFrameHostId& id =
+        request->get_requesting_frame_id();
+    if (!shared)
+      shared = id;
+    else if (id != *shared)
+      return std::nullopt;
+  }
+  return shared;
+}
+
+FrameSnapshot SnapshotFor(content::WebContents* contents,
+                          content::RenderFrameHost* frame) {
+  FrameSnapshot live;
+  if (!contents || !frame)
+    return live;
+  live.token = frame->GetFrameToken().ToString();
+  live.active = frame->IsActive();
+  live.same_contents =
+      content::WebContents::FromRenderFrameHost(frame) == contents;
+  live.navigation_id = frame->GetNavigationId();
+  return live;
+}
+
+bool FrameMatches(const PendingPermission& pending) {
+  const std::optional<content::GlobalRenderFrameHostId> id =
+      SharedFrameID(pending.delegate.get());
+  content::RenderFrameHost* frame = nullptr;
+  if (id)
+    frame = content::RenderFrameHost::FromID(*id);
+  const FrameSnapshot stored{pending.frame_token, true, true,
+                             pending.navigation_id};
+  return FrameStillBound(stored, SnapshotFor(pending.contents, frame));
+}
+
 bool IsCurrent(const PendingPermission& pending) {
   if (!lifecycle::EngineIsReady(pending.engine) || !pending.contents ||
       !pending.delegate)
@@ -139,7 +187,8 @@ bool IsCurrent(const PendingPermission& pending) {
          identity->window_id == pending.window_id &&
          identity->tab_id == pending.tab_id &&
          pending.contents->GetLastCommittedURL() == pending.page_url &&
-         pending.delegate->GetRequestingOrigin() == pending.origin;
+         pending.delegate->GetRequestingOrigin() == pending.origin &&
+         FrameMatches(pending);
 }
 
 void EmitDismissFor(const PendingPermission& pending,
@@ -165,15 +214,19 @@ void Decide(PendingPermission pending, bool allowed) {
   if (!delegate)
     return;
   const ::PromptOptions options = OptionsFor(delegate.get());
-  if (!allowed || !IsCurrent(pending)) {
-    delegate->Deny(options);
-    return;
+  switch (PersistenceFor(allowed, IsCurrent(pending), pending.private_profile,
+                         pending.one_time, pending.protocol_handler)) {
+    case GrantPersistence::kDeny:
+      delegate->Deny(options);
+      return;
+    case GrantPersistence::kThisVisit:
+      delegate->AcceptThisTime(options);
+      return;
+    case GrantPersistence::kPrivateProtocol:
+    case GrantPersistence::kProfile:
+      delegate->Accept(options);
+      return;
   }
-  if (pending.one_time) {
-    delegate->AcceptThisTime(options);
-    return;
-  }
-  delegate->Accept(options);
 }
 
 void DenyPending(std::string request_id) {
@@ -262,16 +315,30 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
         windows_tabs::Registry().FindSelectedRegularTab(engine, contents);
     const GURL page_url = contents ? contents->GetLastCommittedURL() : GURL();
     const GURL origin = delegate ? delegate->GetRequestingOrigin() : GURL();
+    content::BrowserContext* context =
+        contents ? contents->GetBrowserContext() : nullptr;
+    const std::optional<content::GlobalRenderFrameHostId> frame_id =
+        SharedFrameID(delegate);
+    content::RenderFrameHost* frame =
+        frame_id ? content::RenderFrameHost::FromID(*frame_id) : nullptr;
+    const FrameSnapshot frame_snapshot = SnapshotFor(contents, frame);
     if (!lifecycle::EngineIsReady(engine) || !contents || !delegate ||
-        !identity || identity->profile_id.empty() ||
+        !context || !identity || identity->profile_id.empty() ||
         identity->window_id.empty() || identity->tab_id.empty() ||
         !page_url.SchemeIsHTTPOrHTTPS() || !origin.SchemeIsHTTPOrHTTPS() ||
+        !FrameStillBound(frame_snapshot, frame_snapshot) ||
         Pending().size() >= 32)
       return false;
 
     const std::string id = "permission-" + std::to_string(++NextRequestID());
     if (id.size() > 128)
       return false;
+    bool protocol_handler = false;
+    for (const std::string_view kind : kinds) {
+      if (kind == "protocolHandler")
+        protocol_handler = true;
+    }
+    const bool private_profile = context->IsOffTheRecord();
     const GURL reported_origin = url::Origin::Create(origin).GetURL();
     base::DictValue payload;
     payload.Set("schemaVersion", 1);
@@ -279,6 +346,7 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
     payload.Set("id", id);
     payload.Set("pageURL", page_url.spec());
     payload.Set("origin", reported_origin.spec());
+    payload.Set("frameID", frame_snapshot.token);
     base::ListValue permissions;
     for (const std::string_view kind : kinds)
       permissions.Append(std::string(kind));
@@ -289,10 +357,12 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
 
     id_ = id;
     Pending().emplace(
-        id, PendingPermission{engine, contents, identity->window, identity->tab,
-                              identity->profile_id, identity->window_id,
-                              identity->tab_id, page_url, origin, one_time_,
-                              delegate->GetWeakPtr()});
+        id, PendingPermission{
+                engine, contents, identity->window, identity->tab,
+                identity->profile_id, identity->window_id, identity->tab_id,
+                page_url, origin, one_time_, private_profile, protocol_handler,
+                frame_snapshot.token, frame_snapshot.navigation_id,
+                delegate->GetWeakPtr()});
     const shaar_error_code emitted = shaar::EmitEvent(
         engine, SHAAR_EVENT_PERMISSION,
         {identity->profile_id.data(), identity->profile_id.size()}, {},

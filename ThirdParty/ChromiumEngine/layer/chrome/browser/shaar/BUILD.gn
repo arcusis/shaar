@@ -196,6 +196,13 @@ source_set("engine") {
   }
 }
 
+# BEGIN permissions
+test("shaar_permission_unittests") {
+  sources = [ "permissions/shaar_permission_prompt_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END permissions
+
 # BEGIN quit_probe
 # Compiled into shaar_layer_unittests by default. A release framework does not
 # depend on this target unless shaar_enable_quit_probe_hooks is set.
@@ -325,6 +332,13 @@ test("shaar_media_unittests") {
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END media
+# BEGIN permissions
+test("shaar_permission_unittests") {
+  sources = [ "permissions/shaar_permission_prompt_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END permissions
+
 # BEGIN quit_probe
 test("shaar_quit_probe_unittests") {
   sources = [ "quit_probe/shaar_quit_probe_unittest.cc" ]
@@ -354,6 +368,7 @@ test("shaar_layer_unittests") {
     "media/shaar_media_unittest.cc",
     "save_prompts/shaar_save_prompts_unittest.cc",
     "navigation/shaar_navigation_unittest.cc",
+    "permissions/shaar_permission_prompt_unittest.cc",
     "private_sessions/shaar_private_sessions_unittest.cc",
     "profiles/shaar_profiles_unittest.cc",
     "quit_probe/shaar_quit_probe_unittest.cc",

@@ -5,14 +5,57 @@
 #ifndef CHROME_BROWSER_SHAAR_PERMISSIONS_SHAAR_PERMISSION_PROMPT_H_
 #define CHROME_BROWSER_SHAAR_PERMISSIONS_SHAAR_PERMISSION_PROMPT_H_
 
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 #include "components/permissions/permission_prompt.h"
 
 namespace shaar::permissions {
+
+// Token and navigation captured for the frame that asked. The live snapshot
+// must still be that frame, active, and inside the same tab.
+struct FrameSnapshot {
+  std::string token;
+  bool active = false;
+  bool same_contents = false;
+  int64_t navigation_id = 0;
+};
+
+inline bool FrameStillBound(const FrameSnapshot& stored,
+                            const FrameSnapshot& live) {
+  if (stored.token.empty())
+    return false;
+  return stored.token == live.token && live.active && live.same_contents &&
+         stored.navigation_id == live.navigation_id;
+}
+
+// Private profiles do not keep a grant in the parent profile. A private
+// protocol handler cannot use AcceptThisTime (that decision is forbidden),
+// so it is accepted onto the off-the-record registry, which does not persist.
+enum class GrantPersistence {
+  kDeny,
+  kThisVisit,
+  kProfile,
+  kPrivateProtocol,
+};
+
+inline GrantPersistence PersistenceFor(bool allowed,
+                                       bool current,
+                                       bool private_profile,
+                                       bool one_time,
+                                       bool protocol_handler) {
+  if (!allowed || !current)
+    return GrantPersistence::kDeny;
+  if (protocol_handler && private_profile)
+    return GrantPersistence::kPrivateProtocol;
+  if (one_time || private_profile)
+    return GrantPersistence::kThisVisit;
+  return GrantPersistence::kProfile;
+}
 
 // Returns a prompt when every request maps to the shared website sheet.
 // An unmapped or empty request returns nullptr so Chromium keeps its own path.

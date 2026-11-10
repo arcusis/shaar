@@ -1,0 +1,54 @@
+{
+  "fixture": {
+    "exitCode": 0,
+    "report": {
+      "allWindowsHidden": true,
+      "behindBelowModal": true,
+      "behindZ": -1,
+      "captured": true,
+      "cardContext": false,
+      "domReady": true,
+      "elementID": "modal",
+      "fadedContext": true,
+      "failure": "",
+      "modalContext": true,
+      "modalZ": 10,
+      "newCrashReports": [],
+      "normalBundle": "com.arcusis.browser",
+      "passed": true,
+      "screenshot": true,
+      "section": "Elements",
+      "selectedInElements": true,
+      "slabCount": 8,
+      "targetURL": "http://127.0.0.1:62650/stacking"
+    },
+    "stderrTail": ""
+  },
+  "site": {
+    "exitCode": 0,
+    "report": {
+      "allWindowsHidden": true,
+      "behindBelowModal": false,
+      "behindZ": 0,
+      "captured": true,
+      "cardContext": false,
+      "domReady": true,
+      "elementID": "",
+      "fadedContext": false,
+      "failure": "",
+      "modalContext": false,
+      "modalZ": 0,
+      "newCrashReports": [],
+      "normalBundle": "com.arcusis.browser",
+      "passed": true,
+      "screenshot": true,
+      "section": "Elements",
+      "selectedInElements": true,
+      "slabCount": 15,
+      "targetURL": "https://example.com/"
+    },
+    "stderrTail": "[77700:100370810:1110/075054.006071:ERROR:net/cert/ev_root_ca_metadata.cc:158] Failed to decode OID: 0\n"
+  },
+  "siteURL": "https://example.com",
+  "newCrashReports": []
+}

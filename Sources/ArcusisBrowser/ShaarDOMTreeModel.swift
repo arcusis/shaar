@@ -133,6 +133,8 @@ final class ShaarDOMTreeModel {
   @ObservationIgnored private let transport: any ShaarDOMTransport
   @ObservationIgnored private var streamTask: Task<Void, Never>?
   @ObservationIgnored private var generation = 0
+  /// A shallow load from open can finish after a deeper load. The higher serial wins.
+  @ObservationIgnored private var loadSerial = 0
   @ObservationIgnored private var isOpen = false
   @ObservationIgnored private var lastSequence: UInt64 = 0
   @ObservationIgnored private var searchID: String?
@@ -304,14 +306,20 @@ final class ShaarDOMTreeModel {
 
   func loadDocument(depth: Int = 2) async {
     guard available else { return }
+    loadSerial += 1
+    let serial = loadSerial
     let generation = generation
     let target = target
     loading = true
-    defer { if self.generation == generation { loading = false } }
+    defer {
+      if self.generation == generation, self.loadSerial == serial { loading = false }
+    }
     let bounded = min(max(depth, 1), 12)
     do {
       let reply = try await transport.execute(.document(depth: bounded), for: target)
-      guard self.generation == generation, self.target == target else { return }
+      guard self.loadSerial == serial, self.generation == generation, self.target == target else {
+        return
+      }
       guard let snapshot = ShaarDOMSnapshot.decode(reply) else {
         throw ShaarDOMFailure("DOM tree could not be read")
       }
@@ -323,7 +331,9 @@ final class ShaarDOMTreeModel {
       for node in snapshot.nodes where node.parentID == snapshot.rootID { expanded.insert(node.id) }
       failure = nil
     } catch {
-      if self.generation == generation { failure = error.localizedDescription }
+      if self.loadSerial == serial, self.generation == generation {
+        failure = error.localizedDescription
+      }
     }
   }
 
@@ -411,6 +421,36 @@ final class ShaarDOMTreeModel {
         ShaarDOMFailure("DOM search found a match but could not reveal it")
         .localizedDescription
     }
+  }
+
+  /// `DOM.getDocument` drops frontend node ids. `backendID` is Blink's id and still names the node.
+  func revealNode(frontendID: Int, backendID: Int?) async -> Int? {
+    if let resolved = await resolvedNode(frontendID: frontendID, backendID: backendID) {
+      return resolved
+    }
+    await loadDocument(depth: 12)
+    if let resolved = await resolvedNode(frontendID: frontendID, backendID: backendID) {
+      return resolved
+    }
+    guard let backendID, let bound = await self.frontendID(forBackend: backendID) else {
+      return nil
+    }
+    if nodes[bound] == nil { await linkUnloadedMatch(bound) }
+    guard nodes[bound] != nil else { return nil }
+    select(bound)
+    return bound
+  }
+
+  private func resolvedNode(frontendID: Int, backendID: Int?) async -> Int? {
+    if nodes[frontendID] != nil {
+      select(frontendID)
+      return frontendID
+    }
+    guard let backendID, let bound = await self.frontendID(forBackend: backendID),
+      nodes[bound] != nil
+    else { return nil }
+    select(bound)
+    return bound
   }
 
   /// A search id can name a node the depth-limited document never loaded. Ask for that node and

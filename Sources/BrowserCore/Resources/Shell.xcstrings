@@ -3867,7 +3867,22 @@
       }
     },
     "Getter threw an exception": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Getter threw an exception"}},"he":{"stringUnit":{"state":"translated","value":"קריאת ה-getter זרקה חריגה"}}}},
-    "Invoke getter": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Invoke getter"}},"he":{"stringUnit":{"state":"translated","value":"הפעלת ה-getter"}}}}
+    "Invoke getter": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Invoke getter"}},"he":{"stringUnit":{"state":"translated","value":"הפעלת ה-getter"}}}},
+    "3D view": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"3D view"}},"he":{"stringUnit":{"state":"translated","value":"תצוגת תלת־ממד"}}}},
+    "3D": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"3D"}},"he":{"stringUnit":{"state":"translated","value":"תלת־ממד"}}}},
+    "Capture snapshot": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Capture snapshot"}},"he":{"stringUnit":{"state":"translated","value":"צלם תצלום מצב"}}}},
+    "Z-index": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Z-index"}},"he":{"stringUnit":{"state":"translated","value":"Z-index"}}}},
+    "Stacking contexts": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Stacking contexts"}},"he":{"stringUnit":{"state":"translated","value":"הקשרי ערימה"}}}},
+    "Capture a snapshot to see DOM depth and stacking contexts.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Capture a snapshot to see DOM depth and stacking contexts."}},"he":{"stringUnit":{"state":"translated","value":"צלמו תצלום מצב כדי לראות את עומק ה־DOM ואת הקשרי הערימה."}}}},
+    "Drag to rotate. Click a slab to select it in Elements.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Drag to rotate. Click a slab to select it in Elements."}},"he":{"stringUnit":{"state":"translated","value":"גררו כדי לסובב. לחצו על לוח כדי לבחור אותו באלמנטים."}}}},
+    "3D view is scoped to this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"3D view is scoped to this tab"}},"he":{"stringUnit":{"state":"translated","value":"תצוגת התלת־ממד חלה על הלשונית הזו"}}}},
+    "Show in Elements": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show in Elements"}},"he":{"stringUnit":{"state":"translated","value":"הצג באלמנטים"}}}},
+    "The element is not in the Elements tree yet.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The element is not in the Elements tree yet."}},"he":{"stringUnit":{"state":"translated","value":"האלמנט עדיין לא בעץ האלמנטים."}}}},
+    "This snapshot stops at the first 180 elements.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"This snapshot stops at the first 180 elements."}},"he":{"stringUnit":{"state":"translated","value":"התצלום נעצר ב־180 האלמנטים הראשונים."}}}},
+    "Snapshot needs a page": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Snapshot needs a page"}},"he":{"stringUnit":{"state":"translated","value":"תצלום המצב צריך דף"}}}},
+    "DOM snapshot was empty": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"DOM snapshot was empty"}},"he":{"stringUnit":{"state":"translated","value":"תצלום ה־DOM היה ריק"}}}},
+    "No visible elements in this snapshot.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No visible elements in this snapshot."}},"he":{"stringUnit":{"state":"translated","value":"אין אלמנטים גלויים בתצלום הזה."}}}},
+    "%d elements, %d stacking contexts": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%d elements, %d stacking contexts"}},"he":{"stringUnit":{"state":"translated","value":"%d אלמנטים, %d הקשרי ערימה"}}}}
   },
   "version": "1.0"
 }

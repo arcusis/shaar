@@ -1875,6 +1875,7 @@ import Vision
   ) -> String? {
     switch section {
     case .elements: shell.dom.failure
+    case .stacking: shell.stacking.failure
     case .memory: shell.memory.failure
     case .rendering: shell.rendering.failure
     case .performance: shell.performance.failure
@@ -1904,6 +1905,7 @@ import Vision
   private static func panelRoot(_ section: ShaarDevToolsSection) -> String? {
     switch section {
     case .elements: "shaar.devtools.domTree"
+    case .stacking: "shaar.devtools.stacking"
     case .components: "shaar.devtools.componentTree"
     case .console: "shaar.devtools.consolePanel"
     case .issues: "shaar.devtools.issues"
@@ -1971,6 +1973,7 @@ import Vision
   private static func toolbarLabel(_ section: ShaarDevToolsSection) -> String {
     switch section {
     case .elements: "Elements"
+    case .stacking: "3D"
     case .components: "Comps"
     case .console: "Console"
     case .issues: "Issues"
@@ -1999,6 +2002,7 @@ import Vision
   private static func panelMarkers(_ section: ShaarDevToolsSection) -> [String] {
     switch section {
     case .elements: ["DOM tree", "Event listeners"]
+    case .stacking: ["Capture snapshot", "stacking contexts"]
     case .components: ["Component tree", "ReactCounter"]
     case .console: ["No console messages yet", "Evaluate JavaScript", "Search console"]
     case .issues: ["No issues"]

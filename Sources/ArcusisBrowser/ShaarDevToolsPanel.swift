@@ -31,6 +31,7 @@ extension ShaarDevToolsSection {
   fileprivate var symbol: String {
     switch self {
     case .elements: "square.dashed.inset.filled"
+    case .stacking: "cube"
     case .components: "square.stack.3d.up"
     case .console: "terminal"
     case .issues: "exclamationmark.triangle"
@@ -55,6 +56,7 @@ extension ShaarDevToolsSection {
   fileprivate var shortLabel: String {
     switch self {
     case .elements: "Elements"
+    case .stacking: "3D"
     case .components: "Comps"
     case .console: "Console"
     case .issues: "Issues"
@@ -303,6 +305,9 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .stacking:
+      ShaarStackingPanel(
+        model: model.stacking, showInElements: { model.section = .elements })
     case .components:
       if let inspector, inspector.isOpen {
         ShaarFrameworkComponentsPanel(model: model.framework, openChromium: openChromium)
@@ -524,6 +529,7 @@ struct ShaarDevToolsPanel: View {
       return model.dom.available
         ? "DOM tree is scoped to this tab" : "DOM tree needs engine support"
     }
+    if model.section == .stacking { return "3D view is scoped to this tab" }
     if model.section == .components {
       return model.framework.allowed
         ? "Components are scoped to this tab"

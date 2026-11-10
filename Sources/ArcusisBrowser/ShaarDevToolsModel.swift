@@ -8,6 +8,7 @@ import Observation
 
 enum ShaarDevToolsSection: String, CaseIterable {
   case elements = "Elements"
+  case stacking = "3D view"
   case components = "Components"
   case console = "Console"
   case issues = "Issues"
@@ -343,7 +344,7 @@ final class ShaarDevToolsModel {
       rememberSectionIfNeeded()
       guard isOpen, section != oldValue else { return }
       if section == .viewports { viewports.open() } else { viewports.close() }
-      if section == .elements { dom.open() } else { dom.close() }
+      if section == .elements || section == .stacking { dom.open() } else { dom.close() }
       if section == .components { framework.activate() } else { framework.suspend() }
       if section == .comparison {
         comparison.open(inspector: comparisonInspector)
@@ -402,6 +403,7 @@ final class ShaarDevToolsModel {
   let coverage = ShaarDevToolsCoverageModel()
   let sources: ShaarSourcesModel
   let cssOverview: ShaarDevToolsCSSOverviewModel
+  let stacking: ShaarStackingModel
   let repro: ShaarReproModel
   let recorder = ShaarDevToolsRecorderModel()
   let viewports: ShaarViewportsModel
@@ -511,6 +513,7 @@ final class ShaarDevToolsModel {
       phase2: phase2, inspectorContent: sourceInspectorContent,
       loadSourceData: sourceLoader)
     cssOverview = ShaarDevToolsCSSOverviewModel(sources: sources)
+    stacking = ShaarStackingModel()
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
     rendering = ShaarRenderingModel(target: target, transport: renderingTransport)
@@ -548,6 +551,7 @@ final class ShaarDevToolsModel {
     frameworkClose = nil
     comparisonInspector = inspector
     attachCSSPageSheets(inspector)
+    attachStacking(inspector)
     pageAudit.inspector = inspector
     attachSensorSender(inspector)
     coverage.attach(inspector, target: target)
@@ -566,7 +570,7 @@ final class ShaarDevToolsModel {
     phase2.open()
     if section == .viewports { viewports.open() }
     rules.resume()
-    if section == .elements { dom.open() }
+    if section == .elements || section == .stacking { dom.open() }
     if section == .components { framework.activate() }
     if section == .comparison && allowsWebKitComparison { comparison.open(inspector: inspector) }
   }
@@ -601,6 +605,7 @@ final class ShaarDevToolsModel {
     coverage.detach()
     sources.reset()
     cssOverview.reset()
+    stacking.reset()
     recorder.detach()
     pageAudit.reset()
     pageAudit.inspector = nil
@@ -780,6 +785,30 @@ final class ShaarDevToolsModel {
     }
   }
 
+  private func attachStacking(_ inspector: InspectorModel) {
+    stacking.attach(
+      capture: { [weak inspector] in
+        guard let inspector else { throw ShaarStackingFailure("Snapshot needs a page") }
+        return try await ShaarStackingCapture.collect { method, params in
+          try await inspector.call(method, params: params)
+        }
+      },
+      select: { [weak self] id in
+        guard let self else { return false }
+        return await self.selectStackingNode(id)
+      })
+  }
+
+  func selectStackingNode(_ id: Int) async -> Bool {
+    if section == .stacking { dom.open() }
+    let backend = stacking.elements.first { $0.nodeID == id }?.backendNodeID
+    guard let resolved = await dom.revealNode(frontendID: id, backendID: backend) else {
+      return false
+    }
+    await dom.highlight(resolved)
+    return dom.selectedID == resolved
+  }
+
   private func attachCSSPageSheets(_ inspector: InspectorModel) {
     cssOverview.attach { [weak inspector] in
       guard let inspector else { return [] }
@@ -832,6 +861,7 @@ final class ShaarDevToolsModel {
     cookies.reset()
     sources.reset()
     cssOverview.reset()
+    stacking.clearPage()
     if committed || tabChanged {
       Task { [weak self] in
         await self?.cssOverview.reload(force: true)

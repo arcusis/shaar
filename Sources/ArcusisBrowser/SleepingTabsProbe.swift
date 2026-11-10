@@ -62,7 +62,7 @@ import Foundation
       context.engine.sleepingTabs.policy = {
         SleepingTabsPolicy(enabled: true, timeout: 2 * 60 * 60, neverSleepHosts: [])
       }
-      let opened = context.store.session.open(URL(string: "about:blank")!)
+      let opened = context.store.session.open(URL(string: "https://example.com")!)
       guard let opened else { throw Failure("Could not open a second tab") }
       context.engine.reconcile()
       let ready = await wait {

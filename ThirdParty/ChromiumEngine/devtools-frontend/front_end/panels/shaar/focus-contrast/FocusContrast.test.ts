@@ -25,7 +25,7 @@ describe('FocusContrast', () => {
     const normal = Contrast.decideContrast(style('rgb(119, 119, 119)', '16px', '400'), white);
     const large = Contrast.decideContrast(style('rgb(119, 119, 119)', '24px', '400'), white);
     const bold = Contrast.decideContrast(style('rgb(119, 119, 119)', '18.66px', 'bold'), white);
-    const almost = Contrast.decideContrast(style('rgb(119, 119, 119)', '18.5px', '700'), white);
+    const almost = Contrast.decideContrast(style('rgb(119, 119, 119)', '18.65px', '700'), white);
     const ink = Contrast.decideContrast(style('rgb(17, 17, 17)', '16px', '400'), white);
     const boundary = Contrast.decideContrast(style('rgb(118, 118, 118)', '16px', '400'), white);
     assert.isNotNull(normal);
@@ -38,7 +38,7 @@ describe('FocusContrast', () => {
     assert.isTrue(large?.largeText);
     assert.isFalse(bold?.fails);
     assert.isTrue(bold?.largeText);
-    assert.isFalse(Contrast.isLargeText(18.5, 700));
+    assert.isFalse(Contrast.isLargeText(18.65, 700));
     assert.isTrue(Contrast.isLargeText(Contrast.LARGE_BOLD_PX, 700));
     assert.isTrue(almost?.fails);
     assert.isFalse(almost?.largeText);

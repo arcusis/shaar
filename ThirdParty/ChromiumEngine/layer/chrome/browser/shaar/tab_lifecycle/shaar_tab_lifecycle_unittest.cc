@@ -34,6 +34,11 @@ TEST(TabLifecycleTest, FreezeBlocksVisibleAudibleCaptureAndFormEntry) {
   EXPECT_EQ(nullptr, TabSleepBlock(TabSleepSignals()));
 }
 
+TEST(TabLifecycleTest, WakeTemporarilyHidesOnlyVisiblePages) {
+  EXPECT_TRUE(NeedsTemporaryHideForWake(true));
+  EXPECT_FALSE(NeedsTemporaryHideForWake(false));
+}
+
 TEST(TabLifecycleTest, DiscardAllowsOnlyProactiveAndUrgent) {
   const TabSleepSignals clear;
   EXPECT_EQ(nullptr, TabDiscardBlock(TabDiscardReason::kProactive, clear));

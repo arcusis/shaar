@@ -133,9 +133,17 @@ void RetargetDiscardedTab(shaar_tab* tab, content::WebContents* new_contents) {
     tab->favicon_observation.Reset();
     return;
   }
+  auto& registry = shaar::windows_tabs::Registry();
+  registry.UnbindTab(tab->engine, tab->window, tab);
   tab->Observe(new_contents);
-  shaar::windows_tabs::Registry().BindTab(
-      tab->engine, tab->window, tab, tab->tab_id, tab->browser, new_contents);
+  registry.BindTab(tab->engine, tab->window, tab, tab->tab_id, tab->browser,
+                   new_contents);
+  if (registry.FindWebContents(tab->engine, tab->window, tab) != new_contents) {
+    registry.UnbindTab(tab->engine, tab->window, tab);
+    tab->Observe(nullptr);
+    tab->favicon_observation.Reset();
+    return;
+  }
   tab->favicon_observation.Reset();
 }
 

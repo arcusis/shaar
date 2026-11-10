@@ -1,8 +1,6 @@
-diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
-index 97789b2..f648d15 100644
 --- a/chrome/browser/shaar/BUILD.gn
 +++ b/chrome/browser/shaar/BUILD.gn
-@@ -106,6 +106,10 @@ source_set("engine") {
+@@ -106,6 +106,10 @@
      "storage_keychain/shaar_storage_keychain.h",
      "storage_keychain/shaar_storage_keychain_lifecycle_adapter.cc",
      # END storage_keychain
@@ -13,7 +11,7 @@ index 97789b2..f648d15 100644
    ]
    cflags_objcc = [ "-fobjc-arc" ]
    frameworks = [ "AppKit.framework" ]
-@@ -113,6 +117,10 @@ source_set("engine") {
+@@ -113,6 +117,10 @@
      "//base",
      "//chrome/browser:chrome_browser_main",
      "//chrome/browser:browser",
@@ -24,7 +22,7 @@ index 97789b2..f648d15 100644
      "//chrome/browser:main_extra_parts",
      "//chrome/browser:chrome_content_browser_client",
      # BEGIN devtools
-@@ -287,6 +295,7 @@ test("shaar_layer_unittests") {
+@@ -287,6 +295,7 @@
      "site_data/shaar_site_data_unittest.cc",
      "storage_keychain/shaar_storage_keychain_unittest.cc",
      "storage_keychain/shaar_keychain_deadline_unittest.mm",
@@ -32,11 +30,9 @@ index 97789b2..f648d15 100644
      "testing/shaar_test_link_stubs.cc",
      "testing/shaar_test_main.cc",
      "windows_tabs/shaar_windows_tabs_handlers_unittest.cc",
-diff --git a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
-index c571ecd..d54f7e2 100644
 --- a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
 +++ b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
-@@ -39,6 +39,9 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_media_register);
+@@ -39,6 +39,9 @@
  // BEGIN storage_keychain
  SHAAR_DECLARE_OPTIONAL_MODULE(shaar_storage_keychain_register);
  // END storage_keychain
@@ -46,7 +42,7 @@ index c571ecd..d54f7e2 100644
  #undef SHAAR_DECLARE_OPTIONAL_MODULE
  
  namespace {
-@@ -207,6 +210,10 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
+@@ -207,6 +210,10 @@
    if (shaar_storage_keychain_register)
      shaar_storage_keychain_register(registry);
    // END storage_keychain
@@ -57,11 +53,9 @@ index c571ecd..d54f7e2 100644
  }
  
  ShaarModuleRegistry& ModuleRegistry() {
-diff --git a/chrome/browser/shaar/media/shaar_media.cc b/chrome/browser/shaar/media/shaar_media.cc
-index 9d246e2..9a7aeb3 100644
 --- a/chrome/browser/shaar/media/shaar_media.cc
 +++ b/chrome/browser/shaar/media/shaar_media.cc
-@@ -618,6 +618,18 @@ class MediaTracker final : public content::WebContentsObserver {
+@@ -618,6 +618,18 @@
      EmitChangedState();
    }
  
@@ -80,14 +74,14 @@ index 9d246e2..9a7aeb3 100644
    void WebContentsDestroyed() override {
      timer_.Stop();
      element_states.erase(contents_);
-diff --git a/chrome/browser/shaar/navigation/shaar_navigation.cc b/chrome/browser/shaar/navigation/shaar_navigation.cc
-index 1f762b6..2a71ca5 100644
 --- a/chrome/browser/shaar/navigation/shaar_navigation.cc
 +++ b/chrome/browser/shaar/navigation/shaar_navigation.cc
-@@ -388,6 +388,16 @@ void NavigationObserver::PrimaryMainFrameRenderProcessGone(
+@@ -386,6 +386,16 @@
+   if (destroyed_) return;
+   ++generation_;
    Emit("failed", active_navigation_id_, false, nullptr, "renderer_gone");
- }
- 
++}
++
 +void NavigationObserver::AboutToBeDiscarded(content::WebContents* new_contents) {
 +  if (!new_contents || new_contents == web_contents())
 +    return;
@@ -96,16 +90,12 @@ index 1f762b6..2a71ca5 100644
 +  active_navigation_failed_or_stopped_ = false;
 +  Observe(new_contents);
 +  EmitInitialState();
-+}
-+
+ }
+ 
  void NavigationObserver::WebContentsDestroyed() {
-   destroyed_ = true;
-   Observe(nullptr);
-diff --git a/chrome/browser/shaar/navigation/shaar_navigation.h b/chrome/browser/shaar/navigation/shaar_navigation.h
-index 5c0a5ec..fb63c55 100644
 --- a/chrome/browser/shaar/navigation/shaar_navigation.h
 +++ b/chrome/browser/shaar/navigation/shaar_navigation.h
-@@ -100,6 +100,7 @@ class NavigationObserver final : public content::WebContentsObserver {
+@@ -100,6 +100,7 @@
    void TitleWasSet(content::NavigationEntry* entry) override;
    void PrimaryMainFrameRenderProcessGone(
        base::TerminationStatus status) override;
@@ -113,11 +103,9 @@ index 5c0a5ec..fb63c55 100644
    void WebContentsDestroyed() override;
  
   private:
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
-index 0631adc..f01ff64 100644
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -13,7 +13,7 @@ extern "C" {
+@@ -13,7 +13,7 @@
  #endif
  
  #define SHAAR_ENGINE_ABI_MAJOR 1u
@@ -126,26 +114,23 @@ index 0631adc..f01ff64 100644
  #define SHAAR_EXPORT __attribute__((visibility("default")))
  
  typedef struct shaar_engine shaar_engine;
-@@ -131,6 +131,13 @@ typedef enum {
+@@ -130,6 +130,13 @@
+   SHAAR_OP_TAB_MOVE = 205,
    SHAAR_OP_TAB_ACTIVATION_RESOLVE = 206,
    SHAAR_OP_WINDOW_SET_BOUNDS = 207,
- 
++
 +  /* Sleeping tabs (#1467), ABI minor 11. An engine without this module
 +   * returns SHAAR_UNSUPPORTED_CAPABILITY. */
 +  SHAAR_OP_TAB_DISCARD = 208,
 +  SHAAR_OP_TAB_FREEZE = 209,
 +  SHAAR_OP_TAB_WAKE = 210,
 +  SHAAR_OP_TAB_LIFECYCLE_GET = 211,
-+
+ 
    SHAAR_OP_TAB_NAVIGATE = 300,
    SHAAR_OP_TAB_GO = 301,
-   SHAAR_OP_TAB_RELOAD = 302,
-diff --git a/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc
-new file mode 100644
-index 0000000..4de3b31
 --- /dev/null
 +++ b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc
-@@ -0,0 +1,562 @@
+@@ -0,0 +1,565 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -200,6 +185,10 @@ index 0000000..4de3b31
 +      return "discard reason is not available to the app";
 +  }
 +  return TabSleepBlock(signals);
++}
++
++bool NeedsTemporaryHideForWake(bool page_visible) {
++  return page_visible;
 +}
 +
 +}  // namespace shaar::tab_lifecycle
@@ -543,7 +532,8 @@ index 0000000..4de3b31
 +    return;
 +  // SetPageFrozen DCHECKs while the page is visible. Hide for that call,
 +  // then show the page again so a selected tab stays visible.
-+  const bool visible = PageIsVisible(contents);
++  const bool visible =
++      shaar::tab_lifecycle::NeedsTemporaryHideForWake(PageIsVisible(contents));
 +  if (visible)
 +    contents->WasHidden();
 +  contents->SetPageFrozen(false);
@@ -661,7 +651,8 @@ index 0000000..4de3b31
 +      return Fail(error, SHAAR_INVALID_ARGUMENT, "discard reason is invalid");
 +    discard_reason = *reason;
 +    status = DiscardTab(contents, discard_reason, unit, &message);
-+    // contents may now refer to a WebContents Chromium destroyed.
++    // DiscardTab may replace contents and invalidate both pointers. Do not use
++    // either pointer after it returns.
 +    contents = nullptr;
 +  } else if (operation == SHAAR_OP_TAB_FREEZE) {
 +    status = FreezeTab(contents, unit, &message);
@@ -679,19 +670,16 @@ index 0000000..4de3b31
 +  if (status != SHAAR_OK)
 +    return Fail(error, status, message);
 +
-+  // The lifecycle unit follows replacement contents. A null contents pointer
-+  // after a successful discard is still success; do not read the old one.
-+  content::WebContents* current = is_discard ? unit->GetWebContents() : contents;
 +  std::string payload;
-+  if (!current) {
-+    if (!is_discard)
-+      return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
++  if (is_discard) {
 +    Snapshot snapshot;
 +    snapshot.state = "discarded";
 +    snapshot.discard_reason = ReasonName(discard_reason);
 +    payload = PayloadJSON(snapshot);
 +  } else {
-+    payload = PayloadJSON(ReadSnapshot(current, nullptr));
++    if (!contents)
++      return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
++    payload = PayloadJSON(ReadSnapshot(contents, nullptr));
 +  }
 +  if (payload.empty())
 +    return Fail(error, SHAAR_IO_ERROR, "tab lifecycle state could not be written");
@@ -708,12 +696,9 @@ index 0000000..4de3b31
 +  registry->Register(SHAAR_OP_TAB_DISCARD, SHAAR_OP_TAB_LIFECYCLE_GET,
 +                     &HandleTabLifecycleOperation);
 +}
-diff --git a/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h
-new file mode 100644
-index 0000000..10ad7e9
 --- /dev/null
 +++ b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,65 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -757,6 +742,9 @@ index 0000000..10ad7e9
 +// the app cannot request them. nullptr when discard may proceed.
 +const char* TabDiscardBlock(TabDiscardReason reason, TabSleepSignals signals);
 +
++// SetPageFrozen requires the page to be hidden. Preserve visibility around wake.
++bool NeedsTemporaryHideForWake(bool page_visible);
++
 +// Posted after Chromium finishes a discard, including one Chrome started
 +// itself. The WebContents pointer is only used while this call is on the
 +// stack; the event is delivered on a later UI-thread task.
@@ -776,12 +764,9 @@ index 0000000..10ad7e9
 +extern "C" void shaar_tab_lifecycle_register(ShaarModuleRegistry* registry);
 +
 +#endif  // CHROME_BROWSER_SHAAR_TAB_LIFECYCLE_SHAAR_TAB_LIFECYCLE_H_
-diff --git a/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle_unittest.cc b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle_unittest.cc
-new file mode 100644
-index 0000000..e497a93
 --- /dev/null
 +++ b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle_unittest.cc
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,63 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -818,6 +803,11 @@ index 0000000..e497a93
 +  EXPECT_EQ(nullptr, TabSleepBlock(TabSleepSignals()));
 +}
 +
++TEST(TabLifecycleTest, WakeTemporarilyHidesOnlyVisiblePages) {
++  EXPECT_TRUE(NeedsTemporaryHideForWake(true));
++  EXPECT_FALSE(NeedsTemporaryHideForWake(false));
++}
++
 +TEST(TabLifecycleTest, DiscardAllowsOnlyProactiveAndUrgent) {
 +  const TabSleepSignals clear;
 +  EXPECT_EQ(nullptr, TabDiscardBlock(TabDiscardReason::kProactive, clear));
@@ -840,8 +830,6 @@ index 0000000..e497a93
 +
 +}  // namespace
 +}  // namespace shaar::tab_lifecycle
-diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
-index 5b20e56..dd5a89b 100644
 --- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
 +++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
 @@ -31,6 +31,7 @@
@@ -852,7 +840,7 @@ index 5b20e56..dd5a89b 100644
  #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/ui/browser.h"
-@@ -55,11 +56,24 @@ struct shaar_window {
+@@ -55,11 +56,24 @@
  };
  
  void CleanupTab(uint64_t serial);
@@ -877,10 +865,11 @@ index 5b20e56..dd5a89b 100644
    void WebContentsDestroyed() override {
      favicon_observation.Reset();
      // Drop the WebContents pointer before a queued view update can request it.
-@@ -97,6 +111,34 @@ struct shaar_tab : content::WebContentsObserver,
+@@ -96,6 +110,42 @@
+       favicon_observation{this};
    std::string favicon_png;
  };
- 
++
 +void RebindFavicon(shaar_tab* tab) {
 +  if (!tab || tab->favicon_observation.IsObserving())
 +    return;
@@ -903,12 +892,19 @@ index 5b20e56..dd5a89b 100644
 +    tab->favicon_observation.Reset();
 +    return;
 +  }
++  auto& registry = shaar::windows_tabs::Registry();
++  registry.UnbindTab(tab->engine, tab->window, tab);
 +  tab->Observe(new_contents);
-+  shaar::windows_tabs::Registry().BindTab(
-+      tab->engine, tab->window, tab, tab->tab_id, tab->browser, new_contents);
++  registry.BindTab(tab->engine, tab->window, tab, tab->tab_id, tab->browser,
++                   new_contents);
++  if (registry.FindWebContents(tab->engine, tab->window, tab) != new_contents) {
++    registry.UnbindTab(tab->engine, tab->window, tab);
++    tab->Observe(nullptr);
++    tab->favicon_observation.Reset();
++    return;
++  }
 +  tab->favicon_observation.Reset();
 +}
-+
+ 
  namespace {
  
- std::unordered_map<shaar_window*, std::unique_ptr<shaar_window>> windows;

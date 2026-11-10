@@ -44,6 +44,8 @@ class TabLifecyclePatchTests(unittest.TestCase):
         self.assertIn("+#define SHAAR_ENGINE_ABI_MINOR 11u", source)
         self.assertIn("TabSleepBlock", source)
         self.assertIn("TabDiscardBlock", source)
+        self.assertIn("NeedsTemporaryHideForWake", source)
+        self.assertNotIn("unit->GetWebContents()", source)
         self.assertIn("discard reason is not available to the app", source)
         self.assertIn("contents->WasHidden()", source)
         self.assertIn("contents->SetPageFrozen(false)", source)

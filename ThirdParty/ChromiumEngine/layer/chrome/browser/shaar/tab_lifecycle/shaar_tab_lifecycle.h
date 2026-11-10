@@ -41,6 +41,9 @@ const char* TabSleepBlock(TabSleepSignals signals);
 // the app cannot request them. nullptr when discard may proceed.
 const char* TabDiscardBlock(TabDiscardReason reason, TabSleepSignals signals);
 
+// SetPageFrozen requires the page to be hidden. Preserve visibility around wake.
+bool NeedsTemporaryHideForWake(bool page_visible);
+
 // Posted after Chromium finishes a discard, including one Chrome started
 // itself. The WebContents pointer is only used while this call is on the
 // stack; the event is delivered on a later UI-thread task.

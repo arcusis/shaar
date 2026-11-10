@@ -54,6 +54,10 @@ const char* TabDiscardBlock(TabDiscardReason reason, TabSleepSignals signals) {
   return TabSleepBlock(signals);
 }
 
+bool NeedsTemporaryHideForWake(bool page_visible) {
+  return page_visible;
+}
+
 }  // namespace shaar::tab_lifecycle
 
 namespace {
@@ -395,7 +399,8 @@ void Unfreeze(content::WebContents* contents) {
     return;
   // SetPageFrozen DCHECKs while the page is visible. Hide for that call,
   // then show the page again so a selected tab stays visible.
-  const bool visible = PageIsVisible(contents);
+  const bool visible =
+      shaar::tab_lifecycle::NeedsTemporaryHideForWake(PageIsVisible(contents));
   if (visible)
     contents->WasHidden();
   contents->SetPageFrozen(false);
@@ -513,7 +518,8 @@ shaar_error_code HandleTabLifecycleOperation(
       return Fail(error, SHAAR_INVALID_ARGUMENT, "discard reason is invalid");
     discard_reason = *reason;
     status = DiscardTab(contents, discard_reason, unit, &message);
-    // contents may now refer to a WebContents Chromium destroyed.
+    // DiscardTab may replace contents and invalidate both pointers. Do not use
+    // either pointer after it returns.
     contents = nullptr;
   } else if (operation == SHAAR_OP_TAB_FREEZE) {
     status = FreezeTab(contents, unit, &message);
@@ -531,19 +537,16 @@ shaar_error_code HandleTabLifecycleOperation(
   if (status != SHAAR_OK)
     return Fail(error, status, message);
 
-  // The lifecycle unit follows replacement contents. A null contents pointer
-  // after a successful discard is still success; do not read the old one.
-  content::WebContents* current = is_discard ? unit->GetWebContents() : contents;
   std::string payload;
-  if (!current) {
-    if (!is_discard)
-      return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
+  if (is_discard) {
     Snapshot snapshot;
     snapshot.state = "discarded";
     snapshot.discard_reason = ReasonName(discard_reason);
     payload = PayloadJSON(snapshot);
   } else {
-    payload = PayloadJSON(ReadSnapshot(current, nullptr));
+    if (!contents)
+      return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
+    payload = PayloadJSON(ReadSnapshot(contents, nullptr));
   }
   if (payload.empty())
     return Fail(error, SHAAR_IO_ERROR, "tab lifecycle state could not be written");

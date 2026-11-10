@@ -32,8 +32,9 @@ import XCTest
   }
 
   func testTooltipsNameTheDevToolsOpeningShortcuts() {
-    XCTAssertTrue(ShaarDevToolsAccessibility.openHelp.contains("F12"))
-    XCTAssertTrue(ShaarDevToolsAccessibility.openHelp.contains("Option-Command-I"))
+    XCTAssertEqual(
+      ShaarDevToolsAccessibility.openHelp, "F12 and Option-Command-I open Developer Tools.")
+    XCTAssertFalse(ShaarDevToolsAccessibility.openHelp.contains("Shaar DevTools"))
     XCTAssertTrue(ShaarDevToolsAccessibility.closeHelp.contains("Escape"))
   }
 

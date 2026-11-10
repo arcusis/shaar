@@ -1295,8 +1295,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.sidebar, "Toggle sidebar", to: view)
     add(.reload, "Reload", to: view)
     add(.hardReload, "Hard Reload", to: view)
-    add(.developerTools, "Shaar DevTools", to: view)
-    add(.chromiumDeveloperTools, "Open Chromium DevTools", to: view)
+    add(.developerTools, "Developer Tools", to: view)
     add(.inspector, "Inspect Element", to: view)
     add(.inspectorSource, "Open source", to: view)
     add(.inspectorAgentCopy, "Copy for agent", to: view)
@@ -1336,12 +1335,18 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     return main
   }
 
-  /// F12. Option-Command-I stays on the Shaar DevTools menu item, which calls
-  /// the same public dock.
+  /// F12 follows the public route. Option-Shift-Command-I opens the Chromium
+  /// dock directly. Option-Command-I is the one Developer Tools menu item.
   @discardableResult
   func performDeveloperToolsKey(_ event: NSEvent) -> Bool {
-    guard ShaarDevToolsShortcut.isF12(event) else { return false }
-    let command = ShaarDevToolsRoute.f12Command()
+    let command: BrowserMenuCommand
+    if ShaarDevToolsShortcut.isF12(event) {
+      command = ShaarDevToolsRoute.f12Command()
+    } else if ShaarDevToolsShortcut.isDirectChromiumShortcut(event) {
+      command = .chromiumDeveloperTools
+    } else {
+      return false
+    }
     guard canPerform(command) else { return false }
     perform(command)
     return true

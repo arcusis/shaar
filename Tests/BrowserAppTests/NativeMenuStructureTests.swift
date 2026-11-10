@@ -48,8 +48,12 @@ import Testing
     guard let command = item.representedObject as? String else { return nil }
     return (command, item)
   }
-  #expect(Set(commandItems.map(\.0)) == Set(BrowserMenuCommand.allCases.map(\.rawValue)))
-  #expect(commandItems.count == BrowserMenuCommand.allCases.count)
+  let menuCommands = Set(
+    BrowserMenuCommand.allCases.map(\.rawValue).filter {
+      $0 != BrowserMenuCommand.chromiumDeveloperTools.rawValue
+    })
+  #expect(Set(commandItems.map(\.0)) == menuCommands)
+  #expect(commandItems.count == menuCommands.count)
 
   func item(_ command: BrowserMenuCommand) -> NSMenuItem? {
     commandItems.first { $0.0 == command.rawValue }?.1
@@ -63,12 +67,12 @@ import Testing
   #expect(item(.hardReload)?.keyEquivalent == "r")
   #expect(item(.hardReload)?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item(.developerTools)?.menu?.title == "View")
-  #expect(item(.developerTools)?.title == "Shaar DevTools")
+  #expect(item(.developerTools)?.title == "Developer Tools")
   #expect(item(.developerTools)?.keyEquivalent == "i")
   #expect(item(.developerTools)?.keyEquivalentModifierMask == [.command, .option])
-  #expect(item(.chromiumDeveloperTools)?.title == "Open Chromium DevTools")
-  #expect(item(.chromiumDeveloperTools)?.keyEquivalent == "i")
-  #expect(item(.chromiumDeveloperTools)?.keyEquivalentModifierMask == [.command, .option, .shift])
+  #expect(item(.chromiumDeveloperTools) == nil)
+  #expect(!commandItems.contains { $0.1.title == "Shaar DevTools" })
+  #expect(!commandItems.contains { $0.1.title == "Open Chromium DevTools" })
   #expect(item(.newSpace)?.menu?.title == "Spaces")
   #expect(item(.closeTab)?.menu?.title == "Tabs")
   #expect(item(.bookmarks)?.menu?.title == "Bookmarks")

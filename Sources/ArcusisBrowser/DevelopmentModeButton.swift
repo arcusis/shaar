@@ -16,11 +16,8 @@ struct DevelopmentModeButton: View {
       let page = engine.selectedDevelopmentPage
     {
       Menu {
-        Button(ShellL10n.string("Shaar DevTools")) {
+        Button(ShellL10n.string("Developer Tools")) {
           engine.togglePublicDeveloperTools()
-        }
-        Button(ShellL10n.string("Open Chromium DevTools")) {
-          _ = engine.openChromiumDeveloperTools(for: target.tabID)
         }
         Button(ShellL10n.string("Open Inspector")) {
           engine.toggleInspector(for: target)

@@ -19,6 +19,11 @@ import Testing
   #expect(ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: []))
   #expect(ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: [.function]))
   #expect(!ShaarDevToolsShortcut.isF12(keyCode: 111, modifiers: [.command]))
+  #expect(
+    ShaarDevToolsShortcut.isDirectChromiumShortcut(
+      keyCode: 34, modifiers: [.command, .option, .shift]))
+  #expect(
+    !ShaarDevToolsShortcut.isDirectChromiumShortcut(keyCode: 34, modifiers: [.command, .option]))
   #expect(!ShaarDevToolsShortcut.isF12(keyCode: 110, modifiers: []))
   #expect(
     NSImage(

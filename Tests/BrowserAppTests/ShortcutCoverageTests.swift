@@ -16,7 +16,9 @@ import Testing
     else { return nil }
     return (command, item)
   }
-  #expect(Set(commands.map(\.0)) == Set(BrowserMenuCommand.allCases))
+  let menuCommands = Set(BrowserMenuCommand.allCases).subtracting([.chromiumDeveloperTools])
+  #expect(Set(commands.map(\.0)) == menuCommands)
+  #expect(commands.count == menuCommands.count)
   #expect(commands.first { $0.0 == .sharePage }?.1.keyEquivalent == "")
   let actionableItems = items.filter {
     !$0.isSeparatorItem && $0.action != nil && $0.submenu == nil

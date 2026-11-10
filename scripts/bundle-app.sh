@@ -23,6 +23,8 @@ assert_no_verification_code() {
     -e InspectorIdleSmoke \
     -e --inspector-idle-smoke \
     -e --probe-measure-inspector \
+    -e --probe-favicon-url \
+    -e --probe-favicon-restore \
     "$1"
   then
     echo "Verification code found in $1." >&2

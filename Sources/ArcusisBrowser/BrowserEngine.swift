@@ -90,9 +90,51 @@ final class BrowserEngine {
   @ObservationIgnored private var suspendingTabs: Set<UUID> = []
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
   private(set) var favicons: [UUID: NSImage] = [:]
+  /// Site host last associated with each tab's icon. An empty query for that host
+  /// leaves the icon in place. A different host drops the live icon and the saved file.
+  @ObservationIgnored private var faviconHosts: [UUID: String] = [:]
+  private(set) var persistedFaviconUpdates = 0
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
     favicons[tabID] = image
+  }
+
+  /// Records the icon Chromium returned for this document host.
+  func noteDocumentFavicon(_ icon: NSImage?, for tabID: UUID, host: String?) {
+    let documentHost = host?.lowercased()
+    if let icon {
+      let changed = faviconChanged(icon, for: tabID, host: documentHost)
+      favicons[tabID] = icon
+      faviconHosts[tabID] = documentHost
+      guard changed, store?.remembersFavicon(forTab: tabID) == true else { return }
+      persistedFaviconUpdates += 1
+      store?.rememberFavicon(icon, forTab: tabID, host: documentHost)
+      return
+    }
+    // A missing host is not a different site. The first loading tick must not wipe a saved icon.
+    guard let documentHost, !documentHost.isEmpty else { return }
+    let previous = faviconHosts[tabID] ?? store?.faviconHost(forTab: tabID)
+    guard let previous else {
+      faviconHosts[tabID] = documentHost
+      return
+    }
+    guard previous != documentHost else {
+      faviconHosts[tabID] = documentHost
+      return
+    }
+    clearFavicon(tabID)
+    faviconHosts[tabID] = documentHost
+    store?.forgetFavicon(forTab: tabID)
+  }
+
+  private func faviconChanged(_ icon: NSImage, for tabID: UUID, host: String?) -> Bool {
+    guard let current = favicons[tabID], faviconHosts[tabID] == host else { return true }
+    return !FaviconCache.sameImage(current, icon)
+  }
+
+  private func clearFavicon(_ id: UUID) {
+    favicons[id] = nil
+    faviconHosts[id] = nil
   }
 
   func focusPage(_ tabID: UUID) {
@@ -445,6 +487,8 @@ final class BrowserEngine {
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity)
       else { return }
+      let document = URL(string: address)
+      let documentHost = document?.host?.lowercased()
       let startedLoading = loading && self.pages[id]?.loading != true
       if startedLoading && self.store?.pageFind?.tabID == id {
         self.store?.dismissPageFind()
@@ -452,7 +496,7 @@ final class BrowserEngine {
       let finishedLoading = self.pages[id]?.loading == true && !loading
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       self.store?.nativePageLoading(id, loading: loading)
-      if let url = URL(string: address) {
+      if let url = document {
         self.inspectors[id]?.documentChanged(url: url)
         if let profile = self.store?.session.profileID(forTabID: id) {
           self.shaarDevTools[id]?.updateTarget(
@@ -471,15 +515,12 @@ final class BrowserEngine {
         }
         self.withholdAutomaticPictureInPictureIfOff(id, url: url)
       }
-      if let profile = self.store?.session.profileID(forTabID: id),
-        let icon = self.runtime.favicon(
+      var icon: NSImage?
+      if let profile = self.store?.session.profileID(forTabID: id) {
+        icon = self.runtime.favicon(
           forTabID: identity, profileID: profile.uuidString, windowID: self.windowID)
-      {
-        self.favicons[id] = icon
-        self.store?.rememberFavicon(icon, forTab: id)
-      } else {
-        self.favicons[id] = nil
       }
+      self.noteDocumentFavicon(icon, for: id, host: documentHost)
     }
     callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity) else { return }
@@ -497,7 +538,7 @@ final class BrowserEngine {
       self.developmentProbedURLs[id] = nil
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
-      self.favicons[id] = nil
+      self.clearFavicon(id)
       self.store?.nativeTabClosed(id)
       if let store = self.store, store.session.page(forTabID: id)?.tab.isPinned == true,
         let profile = store.session.profileID(forTabID: id)
@@ -648,7 +689,7 @@ final class BrowserEngine {
       developerModels.removeValue(forKey: id)?.close()
       mediaAccess[id] = nil
       forgetMedia(id)
-      favicons[id] = nil
+      clearFavicon(id)
       runtime.discardTabID(id.uuidString)
     }
   }
@@ -733,7 +774,7 @@ final class BrowserEngine {
       developmentProbedURLs[removed] = nil
       mediaAccess[removed] = nil
       forgetMedia(removed)
-      favicons[removed] = nil
+      clearFavicon(removed)
     }
     for profile in Set(session.spaces.map(\.profileID)) {
       guard !loadedProfiles.contains(profile), !loadingProfiles.contains(profile),

@@ -167,6 +167,26 @@ struct PrivateParityTests {
     #expect(!FileManager.default.fileExists(atPath: root.path))
   }
 
+  @Test func privateWindowShowsTheLiveIconWithoutWritingTheCache() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let store = try makeStore()
+    store.faviconCache = FaviconCache(directory: root)
+    store.perform(.open(URL(string: "https://example.com/private")!))
+    let tab = try #require(store.session.selectedPage?.tab)
+    let profileID = try #require(store.session.profileID(forTabID: tab.id))
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    engine.seedFavicon(FaviconFixture.icon(.blue), for: tab.id)
+    let shown = try #require(store.favicon(for: tab, profileID: profileID))
+    #expect(FaviconFixture.matches(shown, .blue))
+    #expect(store.addCurrentPageAsFavorite())
+    let favorite = try #require(store.session.favorites.first)
+    let favoriteIcon = try #require(store.favicon(for: favorite))
+    #expect(FaviconFixture.matches(favoriteIcon, .blue))
+    #expect(!FileManager.default.fileExists(atPath: root.path))
+  }
+
   @Test func everyPrivateModelTabKeepsTheSourceProfile() throws {
     let source = UUID()
     let store = try makeStore(source: source)

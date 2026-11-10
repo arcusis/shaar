@@ -19,7 +19,7 @@ struct FaviconCacheTests {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
     let cache = FaviconCache(directory: directory)
-    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID)
+    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID, host: "example.test")
     #expect(cache.icon(for: itemID, profileID: profileID) != nil)
 
     let restarted = FaviconCache(directory: directory)
@@ -31,8 +31,8 @@ struct FaviconCacheTests {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
     let cache = FaviconCache(directory: directory)
-    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID)
-    cache.store(FaviconFixture.icon(.blue), for: itemID, profileID: profileID)
+    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID, host: "example.test")
+    cache.store(FaviconFixture.icon(.blue), for: itemID, profileID: profileID, host: "example.test")
     #expect(
       FaviconFixture.matches(try #require(cache.icon(for: itemID, profileID: profileID)), .blue))
 
@@ -46,8 +46,8 @@ struct FaviconCacheTests {
     defer { try? FileManager.default.removeItem(at: directory) }
     let cache = FaviconCache(directory: directory)
     let keptID = UUID()
-    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID)
-    cache.store(FaviconFixture.icon(.blue), for: keptID, profileID: profileID)
+    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID, host: "example.test")
+    cache.store(FaviconFixture.icon(.blue), for: keptID, profileID: profileID, host: "example.test")
     cache.remove(itemID, profileID: profileID)
     #expect(cache.icon(for: itemID, profileID: profileID) == nil)
 
@@ -61,8 +61,9 @@ struct FaviconCacheTests {
     defer { try? FileManager.default.removeItem(at: directory) }
     let otherProfileID = UUID()
     let cache = FaviconCache(directory: directory)
-    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID)
-    cache.store(FaviconFixture.icon(.blue), for: itemID, profileID: otherProfileID)
+    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID, host: "example.test")
+    cache.store(
+      FaviconFixture.icon(.blue), for: itemID, profileID: otherProfileID, host: "example.test")
     #expect(cache.icon(for: UUID(), profileID: profileID) == nil)
     #expect(cache.icon(for: itemID, profileID: UUID()) == nil)
 
@@ -82,9 +83,11 @@ struct FaviconCacheTests {
     let deletedProfileID = UUID()
     let removedID = UUID()
     let cache = FaviconCache(directory: directory)
-    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID)
-    cache.store(FaviconFixture.icon(.blue), for: removedID, profileID: profileID)
-    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: deletedProfileID)
+    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID, host: "example.test")
+    cache.store(
+      FaviconFixture.icon(.blue), for: removedID, profileID: profileID, host: "example.test")
+    cache.store(
+      FaviconFixture.icon(.red), for: itemID, profileID: deletedProfileID, host: "example.test")
     cache.retain([profileID: [itemID]])
 
     let restarted = FaviconCache(directory: directory)
@@ -127,9 +130,9 @@ struct FaviconCacheTests {
     let pageID = try #require(store.session.favoritePage(for: favoriteID)?.tab.id)
     let pinID = try #require(window.pins.first { $0.tabID == pinnedID }?.pinID)
 
-    store.rememberFavicon(FaviconFixture.icon(.red), forTab: pageID)
-    store.rememberFavicon(FaviconFixture.icon(.blue), forTab: pinnedID)
-    store.rememberFavicon(FaviconFixture.icon(.red), forTab: ordinaryID)
+    store.rememberFavicon(FaviconFixture.icon(.red), forTab: pageID, host: "favorite.example")
+    store.rememberFavicon(FaviconFixture.icon(.blue), forTab: pinnedID, host: "pinned.example")
+    store.rememberFavicon(FaviconFixture.icon(.red), forTab: ordinaryID, host: "ordinary.example")
     #expect(cache.icon(for: favoriteID, profileID: profileID) != nil)
     #expect(cache.icon(for: pinID, profileID: profileID) != nil)
     #expect(cache.icon(for: ordinaryID, profileID: profileID) != nil)
@@ -211,6 +214,226 @@ struct FaviconCacheTests {
     let favorite = try #require(store.session.selectedFavorite)
     let icon = try #require(cache.icon(for: favorite.id, profileID: profileID))
     #expect(FaviconFixture.matches(icon, .red))
+  }
+
+  @Test func pinningCopiesACachedIconWhenTheLiveIconIsGone() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var session = BrowserSession.fresh()
+    _ = session.open(URL(string: "https://pinned.example")!)
+    let tabID = try #require(session.selectedPage?.tab.id)
+    let profileID = session.selectedSpace.profileID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let store = try #require(manager.stores[manager.workspace.windows[0].id])
+    store.rememberFavicon(FaviconFixture.icon(.blue), forTab: tabID)
+
+    store.togglePin(tabID)
+    let pinID = try #require(manager.workspace.windows[0].pins.first?.pinID)
+    #expect(pinID != tabID)
+    let icon = try #require(cache.icon(for: pinID, profileID: profileID))
+    #expect(FaviconFixture.matches(icon, .blue))
+    let pinned = try #require(store.session.page(forTabID: tabID)?.tab)
+    #expect(
+      store.favicon(for: pinned, profileID: profileID).map { FaviconFixture.matches($0, .blue) }
+        == true)
+  }
+
+  @Test func unpinningDoesNotPersistTheIconOnTheOrdinaryTab() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var session = BrowserSession.fresh()
+    _ = session.open(URL(string: "https://pinned.example")!)
+    let tabID = try #require(session.selectedPage?.tab.id)
+    let profileID = session.selectedSpace.profileID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let store = try #require(manager.stores[manager.workspace.windows[0].id])
+    store.togglePin(tabID)
+    let pinID = try #require(manager.workspace.windows[0].pins.first?.pinID)
+    store.rememberFavicon(FaviconFixture.icon(.blue), forTab: tabID)
+    cache.remove(tabID, profileID: profileID)
+
+    store.togglePin(tabID)
+    #expect(cache.icon(for: tabID, profileID: profileID) == nil)
+    #expect(pinID != tabID)
+    #expect(!Self.iconFileExists(directory, profileID: profileID, itemID: tabID))
+  }
+
+  @Test func movingAnOrdinaryTabDoesNotWriteAFavicon() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var session = BrowserSession.fresh()
+    let opened = session.open(URL(string: "https://ordinary.example")!)
+    let tabID = try #require(opened)
+    let profileID = session.selectedSpace.profileID
+    let source = session.selectedSpaceID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let store = try #require(manager.stores[manager.workspace.windows[0].id])
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    engine.noteDocumentFavicon(FaviconFixture.icon(.blue), for: tabID, host: "ordinary.example")
+    #expect(engine.favicons[tabID] != nil)
+    #expect(cache.icon(for: tabID, profileID: profileID) == nil)
+
+    #expect(store.createSpace(name: "Shared", sharingProfile: profileID, tint: .ocean))
+    #expect(store.moveTab(tabID, from: source, to: store.session.selectedSpaceID))
+    #expect(cache.icon(for: tabID, profileID: profileID) == nil)
+    #expect(!Self.iconFileExists(directory, profileID: profileID, itemID: tabID))
+  }
+
+  @Test func droppingACachedTabOnFavoritesKeepsTheIcon() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var session = BrowserSession.fresh()
+    _ = session.open(URL(string: "https://favorite.example")!)
+    let tabID = try #require(session.selectedPage?.tab.id)
+    let profileID = session.selectedSpace.profileID
+    let space = session.selectedSpaceID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let store = try #require(manager.stores[manager.workspace.windows[0].id])
+    store.rememberFavicon(FaviconFixture.icon(.red), forTab: tabID)
+
+    #expect(
+      store.acceptFavoritesDrop(
+        .tab(sessionID: store.dragSessionID, sourceSpaceID: space, tabID: tabID)))
+    let favorite = try #require(store.session.favorites.first)
+    let icon = try #require(cache.icon(for: favorite.id, profileID: profileID))
+    #expect(FaviconFixture.matches(icon, .red))
+    #expect(
+      store.favicon(for: favorite).map { FaviconFixture.matches($0, .red) } == true)
+  }
+
+  @Test func hostChangeRemovesTheSavedPinFavoriteAndOrdinaryIcon() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let (session, favoriteID, pinnedID, ordinaryID) = sidebarSession()
+    let profileID = session.selectedSpace.profileID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let store = try #require(manager.stores[manager.workspace.windows[0].id])
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    let favoriteTab = try #require(store.session.favoritePage(for: favoriteID)?.tab.id)
+    let pinID = try #require(
+      manager.workspace.windows[0].pins.first { $0.tabID == pinnedID }?.pinID)
+    let icon = FaviconFixture.icon(.blue)
+
+    engine.noteDocumentFavicon(icon, for: pinnedID, host: "pinned.example")
+    engine.noteDocumentFavicon(icon, for: pinnedID, host: "pinned.example")
+    #expect(engine.persistedFaviconUpdates == 1)
+    engine.noteDocumentFavicon(nil, for: pinnedID, host: "pinned.example")
+    #expect(cache.icon(for: pinID, profileID: profileID) != nil)
+    #expect(engine.favicons[pinnedID] != nil)
+    engine.noteDocumentFavicon(nil, for: pinnedID, host: "other.example")
+    #expect(cache.icon(for: pinID, profileID: profileID) == nil)
+    #expect(engine.favicons[pinnedID] == nil)
+
+    engine.noteDocumentFavicon(icon, for: favoriteTab, host: "favorite.example")
+    #expect(cache.icon(for: favoriteID, profileID: profileID) != nil)
+    engine.noteDocumentFavicon(nil, for: favoriteTab, host: "other.example")
+    #expect(cache.icon(for: favoriteID, profileID: profileID) == nil)
+    #expect(engine.favicons[favoriteTab] == nil)
+
+    store.rememberFavicon(icon, forTab: ordinaryID)
+    #expect(cache.icon(for: ordinaryID, profileID: profileID) != nil)
+    let writes = engine.persistedFaviconUpdates
+    engine.noteDocumentFavicon(icon, for: ordinaryID, host: "ordinary.example")
+    #expect(engine.persistedFaviconUpdates == writes)
+    engine.noteDocumentFavicon(nil, for: ordinaryID, host: "other.example")
+    #expect(cache.icon(for: ordinaryID, profileID: profileID) == nil)
+    #expect(engine.favicons[ordinaryID] == nil)
+  }
+
+  @Test func freshEngineClearsAStalePinAndFavoriteWhenTheHostDiffers() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let (session, favoriteID, pinnedID, _) = sidebarSession()
+    let profileID = session.selectedSpace.profileID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let store = try #require(manager.stores[manager.workspace.windows[0].id])
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    let favoriteTab = try #require(store.session.favoritePage(for: favoriteID)?.tab.id)
+    let pinID = try #require(
+      manager.workspace.windows[0].pins.first { $0.tabID == pinnedID }?.pinID)
+    let icon = FaviconFixture.icon(.blue)
+
+    engine.noteDocumentFavicon(icon, for: pinnedID, host: "a.example")
+    engine.noteDocumentFavicon(icon, for: favoriteTab, host: "a.example")
+    #expect(cache.host(for: pinID, profileID: profileID) == "a.example")
+    #expect(cache.host(for: favoriteID, profileID: profileID) == "a.example")
+
+    let reloaded = FaviconCache(directory: directory)
+    let restarted = try BrowserWorkspaceStore(
+      initialSession: store.session, faviconCache: reloaded)
+    let freshStore = try #require(restarted.stores[restarted.workspace.windows[0].id])
+    let freshFavoriteTab = try #require(freshStore.session.favoritePage(for: favoriteID)?.tab.id)
+    let fresh = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: freshStore)
+    #expect(reloaded.host(for: pinID, profileID: profileID) == "a.example")
+    #expect(reloaded.host(for: favoriteID, profileID: profileID) == "a.example")
+    #expect(fresh.favicons[pinnedID] == nil)
+    #expect(fresh.favicons[freshFavoriteTab] == nil)
+
+    fresh.noteDocumentFavicon(nil, for: pinnedID, host: "b.example")
+    fresh.noteDocumentFavicon(nil, for: freshFavoriteTab, host: "b.example")
+    #expect(reloaded.icon(for: pinID, profileID: profileID) == nil)
+    #expect(reloaded.icon(for: favoriteID, profileID: profileID) == nil)
+    #expect(reloaded.host(for: pinID, profileID: profileID) == nil)
+    #expect(reloaded.host(for: favoriteID, profileID: profileID) == nil)
+    #expect(!Self.iconFileExists(directory, profileID: profileID, itemID: pinID))
+    #expect(!Self.iconFileExists(directory, profileID: profileID, itemID: favoriteID))
+  }
+
+  @Test func legacyIconWithoutAHostFileStaysClearedOnAFreshEngine() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let (session, favoriteID, pinnedID, _) = sidebarSession()
+    let profileID = session.selectedSpace.profileID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let store = try #require(manager.stores[manager.workspace.windows[0].id])
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    let favoriteTab = try #require(store.session.favoritePage(for: favoriteID)?.tab.id)
+    let pinID = try #require(
+      manager.workspace.windows[0].pins.first { $0.tabID == pinnedID }?.pinID)
+    let icon = FaviconFixture.icon(.blue)
+
+    engine.noteDocumentFavicon(icon, for: pinnedID, host: "a.example")
+    engine.noteDocumentFavicon(icon, for: favoriteTab, host: "a.example")
+    for itemID in [pinID, favoriteID] {
+      try FileManager.default.removeItem(
+        at: directory.appending(path: "\(profileID.uuidString)/\(itemID.uuidString).host"))
+    }
+
+    let reloaded = FaviconCache(directory: directory)
+    let restarted = try BrowserWorkspaceStore(
+      initialSession: store.session, faviconCache: reloaded)
+    let freshStore = try #require(restarted.stores[restarted.workspace.windows[0].id])
+    let freshFavoriteTab = try #require(freshStore.session.favoritePage(for: favoriteID)?.tab.id)
+    let fresh = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: freshStore)
+    #expect(reloaded.icon(for: pinID, profileID: profileID) == nil)
+    #expect(reloaded.icon(for: favoriteID, profileID: profileID) == nil)
+    #expect(fresh.favicons[pinnedID] == nil)
+    #expect(fresh.favicons[freshFavoriteTab] == nil)
+
+    fresh.noteDocumentFavicon(nil, for: pinnedID, host: "b.example")
+    fresh.noteDocumentFavicon(nil, for: freshFavoriteTab, host: "b.example")
+    #expect(reloaded.icon(for: pinID, profileID: profileID) == nil)
+    #expect(reloaded.icon(for: favoriteID, profileID: profileID) == nil)
+    #expect(Self.iconFileExists(directory, profileID: profileID, itemID: pinID))
+    #expect(Self.iconFileExists(directory, profileID: profileID, itemID: favoriteID))
+  }
+
+  private static func iconFileExists(_ directory: URL, profileID: UUID, itemID: UUID) -> Bool {
+    FileManager.default.fileExists(
+      atPath: directory.appending(path: "\(profileID.uuidString)/\(itemID.uuidString).png").path)
   }
 
   private func sidebarSession() -> (

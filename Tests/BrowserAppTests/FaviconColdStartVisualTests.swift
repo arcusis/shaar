@@ -53,10 +53,12 @@ final class FaviconColdStartVisualTests: XCTestCase {
     let store = try XCTUnwrap(manager.stores[manager.workspace.windows[0].id])
     for (favorite, color) in zip(store.profileFavorites, iconColors) {
       let page = try XCTUnwrap(store.session.favoritePage(for: favorite.id))
-      store.rememberFavicon(FaviconFixture.icon(color), forTab: page.tab.id)
+      store.rememberFavicon(
+        FaviconFixture.icon(color), forTab: page.tab.id, host: page.tab.url.host)
     }
     let pinned = try XCTUnwrap(store.session.selectedSpace.tabs.first { $0.isPinned })
-    store.rememberFavicon(FaviconFixture.icon(pinnedColor), forTab: pinned.id)
+    store.rememberFavicon(
+      FaviconFixture.icon(pinnedColor), forTab: pinned.id, host: pinned.url.host)
   }
 
   private func captureColdStart(file: WorkspaceFile, favicons: URL, to url: URL) async throws

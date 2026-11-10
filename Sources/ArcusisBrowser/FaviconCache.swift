@@ -19,6 +19,7 @@ final class FaviconCache {
   private struct Entry {
     let image: NSImage
     let data: Data
+    let host: String?
   }
 
   @ObservationIgnored private let directory: URL
@@ -33,15 +34,29 @@ final class FaviconCache {
     entries[profileID]?[itemID]?.image
   }
 
-  func store(_ image: NSImage, for itemID: UUID, profileID: UUID) {
+  func host(for itemID: UUID, profileID: UUID) -> String? {
+    entries[profileID]?[itemID]?.host
+  }
+
+  func store(_ image: NSImage, for itemID: UUID, profileID: UUID, host: String? = nil) {
+    let site = Self.siteHost(host)
+    if let existing = entries[profileID]?[itemID], Self.sameImage(existing.image, image) {
+      recordHost(site, replacing: existing.host, for: itemID, profileID: profileID)
+      return
+    }
     guard let data = Self.pngData(for: image) else { return }
     let profileEntries = entries[profileID, default: [:]]
-    guard profileEntries[itemID]?.data != data else { return }
+    let keptHost = site ?? profileEntries[itemID]?.host
+    guard profileEntries[itemID]?.data != data else {
+      recordHost(site, replacing: profileEntries[itemID]?.host, for: itemID, profileID: profileID)
+      return
+    }
     guard profileEntries[itemID] != nil || profileEntries.count < Self.maximumIconsPerProfile,
-      let entry = Self.entry(decoding: data)
+      let entry = Self.entry(decoding: data, host: keptHost)
     else { return }
     entries[profileID, default: [:]][itemID] = entry
     write(data, for: itemID, profileID: profileID)
+    if let keptHost { writeHost(keptHost, for: itemID, profileID: profileID) }
   }
 
   func remove(_ itemID: UUID, profileID: UUID) {
@@ -51,6 +66,7 @@ final class FaviconCache {
       try? FileManager.default.removeItem(at: profileDirectory(profileID))
     } else {
       try? FileManager.default.removeItem(at: fileURL(for: itemID, profileID: profileID))
+      try? FileManager.default.removeItem(at: hostURL(for: itemID, profileID: profileID))
     }
   }
 
@@ -79,11 +95,37 @@ final class FaviconCache {
     profileDirectory(profileID).appending(path: "\(itemID.uuidString).png")
   }
 
+  private func hostURL(for itemID: UUID, profileID: UUID) -> URL {
+    profileDirectory(profileID).appending(path: "\(itemID.uuidString).host")
+  }
+
+  private func recordHost(
+    _ site: String?, replacing previous: String?, for itemID: UUID, profileID: UUID
+  ) {
+    guard let site, site != previous else { return }
+    entries[profileID]?[itemID] = entries[profileID]?[itemID].map {
+      Entry(image: $0.image, data: $0.data, host: site)
+    }
+    writeHost(site, for: itemID, profileID: profileID)
+  }
+
+  private func writeHost(_ site: String, for itemID: UUID, profileID: UUID) {
+    try? FileManager.default.createDirectory(
+      at: profileDirectory(profileID), withIntermediateDirectories: true)
+    try? Data(site.utf8).write(to: hostURL(for: itemID, profileID: profileID), options: .atomic)
+  }
+
   private static func load(from directory: URL) -> [UUID: [UUID: Entry]] {
     var entries: [UUID: [UUID: Entry]] = [:]
     for profileURL in contents(of: directory) {
       guard let profileID = UUID(uuidString: profileURL.lastPathComponent) else { continue }
-      for fileURL in contents(of: profileURL).prefix(maximumIconsPerProfile) {
+      // A PNG saved before the host file existed has no site to compare. Leave it
+      // on disk and skip it here so a later nil tick cannot keep the stale icon.
+      // The next page load writes the icon again. Host-less files do not use a slot.
+      let icons = contents(of: profileURL).filter {
+        $0.pathExtension == "png" && loadHost(beside: $0) != nil
+      }
+      for fileURL in icons.prefix(maximumIconsPerProfile) {
         guard let itemID = itemID(of: fileURL), let entry = loadEntry(at: fileURL) else {
           continue
         }
@@ -109,13 +151,34 @@ final class FaviconCache {
       size <= maximumIconBytes,
       let data = try? Data(contentsOf: fileURL)
     else { return nil }
-    return entry(decoding: data)
+    return entry(decoding: data, host: loadHost(beside: fileURL))
   }
 
-  private static func entry(decoding data: Data) -> Entry? {
+  private static func loadHost(beside fileURL: URL) -> String? {
+    let hostURL = fileURL.deletingPathExtension().appendingPathExtension("host")
+    guard let text = try? String(contentsOf: hostURL, encoding: .utf8) else { return nil }
+    return siteHost(text)
+  }
+
+  private static func siteHost(_ host: String?) -> String? {
+    guard let host = host?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+      !host.isEmpty, host.count <= 253, !host.contains("/")
+    else { return nil }
+    return host
+  }
+
+  private static func entry(decoding data: Data, host: String?) -> Entry? {
     guard let image = NSImage(data: data) else { return nil }
     image.size = NSSize(width: pointSide, height: pointSide)
-    return Entry(image: image, data: data)
+    return Entry(image: image, data: data, host: host)
+  }
+
+  /// True when both images already have the same bitmap, so the cache can skip a redraw.
+  static func sameImage(_ lhs: NSImage, _ rhs: NSImage) -> Bool {
+    guard let left = lhs.tiffRepresentation, let right = rhs.tiffRepresentation else {
+      return false
+    }
+    return left == right
   }
 
   /// Redraws into a fixed-size sRGB bitmap so stored files stay small and independent of the

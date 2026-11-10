@@ -668,6 +668,7 @@ final class BrowserStore {
   func addCurrentPageAsFavorite() -> Bool {
     guard canFavoriteCurrentPage, case .tab(let tab) = session.selectedPage else { return false }
     let tabID = tab.id
+    let icon = favicon(forPage: tabID)
     guard profileFavorites.count < BrowserSession.maximumFavoritesPerProfile else {
       sidebarNotice = ShellL10n.string("Favorites are full (12). Remove one to add another.")
       return false
@@ -676,7 +677,7 @@ final class BrowserStore {
       return false
     }
     save()
-    rememberLiveFavicon(forTab: tabID)
+    carryFavicon(icon, toTab: tabID)
     return true
   }
 
@@ -695,12 +696,15 @@ final class BrowserStore {
 
   @discardableResult
   func removeFavorite(_ id: UUID) -> Bool {
+    let pageID = session.favoritePages.first { $0.favoriteID == id }?.tab.id
+    let icon = pageID.flatMap { favicon(forPage: $0) }
     guard sheet == nil, !commandIsOpen,
       session.favorites.contains(where: {
         $0.id == id && $0.profileID == session.selectedSpace.profileID
       }), session.removeFavorite(id, disposition: .preserveAsTab)
     else { return false }
     save()
+    if let pageID { carryFavicon(icon, toTab: pageID) }
     return true
   }
 
@@ -714,6 +718,7 @@ final class BrowserStore {
       session.favorites.contains(where: { $0.id == id && $0.profileID == space.profileID }),
       let pageID = session.favoritePages.first(where: { $0.favoriteID == id })?.tab.id
     else { return false }
+    let icon = favicon(forPage: pageID)
     var draft = session
     let selectedSpaceID = draft.selectedSpaceID
     guard draft.selectFavorite(id, in: spaceID),
@@ -728,6 +733,7 @@ final class BrowserStore {
     draft.selectSpace(selectedSpaceID)
     session = draft
     save()
+    carryFavicon(icon, toTab: pageID)
     return true
   }
 
@@ -1030,11 +1036,10 @@ final class BrowserStore {
   }
 
   func togglePin(_ id: UUID) {
+    let icon = favicon(forPage: id)
     session.togglePin(id)
     save()
-    if session.page(forTabID: id)?.tab.isPinned == true {
-      rememberLiveFavicon(forTab: id)
-    }
+    carryFavicon(icon, toTab: id)
   }
 
   func setKeepAlive(_ enabled: Bool, for id: UUID) {
@@ -1063,6 +1068,7 @@ final class BrowserStore {
       sidebarNotice = ShellL10n.string("Tabs can move only between spaces sharing a profile.")
       return false
     }
+    let icon = favicon(forPage: id)
     guard
       session.moveTab(
         id, from: source, to: destination, before: target, pinned: pinned, folderID: folderID)
@@ -1071,6 +1077,7 @@ final class BrowserStore {
     }
     sidebarNotice = nil
     save()
+    carryFavicon(icon, toTab: id)
     return true
   }
 
@@ -1195,12 +1202,17 @@ final class BrowserStore {
     sidebarNotice = nil
     switch item {
     case .tab(let token, let source, let tab):
+      let icon = favicon(forPage: tab)
       guard token == dragSessionID, source == session.selectedSpaceID,
         let page = session.selectedSpace.tabs.first(where: { $0.id == tab }),
         NavigationInput.isWebURL(page.url),
         let favorite = session.promoteTabToFavorite(tab, in: source)
       else { return false }
       if let target { _ = session.moveFavorite(favorite, in: profile, before: target) }
+      tabDrag = nil
+      save()
+      carryFavicon(icon, toTab: tab)
+      return true
     case .favorite(let payload):
       guard acceptsFavoriteDrag(payload, in: session.selectedSpaceID) else { return false }
       return moveFavorite(payload.favoriteID, before: target)

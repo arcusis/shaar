@@ -93,3 +93,142 @@ final class AutoPictureInPicture {
     return allowed(page)
   }
 }
+
+/// Holds tab activation until picture-in-picture enter replies, without pumping the run loop.
+/// The reply or a 300 millisecond fallback runs activation once. A newer switch drops that work.
+/// The engine may answer off the main thread; the lock covers the reply.
+final class PictureInPictureEnterGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var nextSwitch = 0
+  private var openSwitch: Int?
+  private var pendingBySwitch: [Int: Int] = [:]
+  private var armed: ArmedSwitch?
+
+  /// Enters requested after this belong to the switch being reconciled.
+  /// An activation still waiting from the previous switch is dropped.
+  func startSwitch() {
+    lock.lock()
+    openSwitch = nil
+    pendingBySwitch.removeAll()
+    disarmLocked()
+    lock.unlock()
+  }
+
+  /// One picture-in-picture enter posted for the current switch.
+  func begin() -> Int {
+    lock.lock()
+    defer { lock.unlock() }
+    let switchID: Int
+    if let openSwitch {
+      switchID = openSwitch
+    } else {
+      switchID = nextSwitch
+      nextSwitch += 1
+      openSwitch = switchID
+    }
+    pendingBySwitch[switchID, default: 0] += 1
+    return switchID
+  }
+
+  func end(generation started: Int) {
+    let ready = lock.withLock { () -> Bool in
+      guard let count = pendingBySwitch[started], count > 0 else { return false }
+      let remaining = count - 1
+      if remaining == 0 {
+        pendingBySwitch[started] = nil
+        return armed?.switchID == started
+      }
+      pendingBySwitch[started] = remaining
+      return false
+    }
+    if ready { fireIfCurrent(started) }
+  }
+
+  /// Runs `perform` from the enter reply or the timeout, whichever comes first.
+  /// Returns false when this switch requested nothing, so the caller activates immediately.
+  @MainActor
+  func deferActivationIfRequested(
+    timeout: TimeInterval = 0.3,
+    perform: @escaping @MainActor () -> Void
+  ) -> Bool {
+    let action = MainActorOnce(perform)
+    return arm(timeout: timeout) { action.run() }
+  }
+
+  private func arm(timeout: TimeInterval, perform: @escaping @Sendable () -> Void) -> Bool {
+    lock.lock()
+    let requested = openSwitch
+    openSwitch = nil
+    guard let switchID = requested, (pendingBySwitch[switchID] ?? 0) > 0 else {
+      disarmLocked()
+      lock.unlock()
+      return false
+    }
+    disarmLocked()
+    let item = DispatchWorkItem { [weak self] in
+      self?.fireIfCurrent(switchID)
+    }
+    armed = ArmedSwitch(switchID: switchID, timeout: item, perform: perform)
+    lock.unlock()
+    DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: item)
+    return true
+  }
+
+  private func fireIfCurrent(_ switchID: Int) {
+    if Thread.isMainThread {
+      runIfCurrent(switchID)
+      return
+    }
+    DispatchQueue.main.async { [self] in
+      self.runIfCurrent(switchID)
+    }
+  }
+
+  private func runIfCurrent(_ switchID: Int) {
+    let perform = lock.withLock { takePerformLocked(switchID) }
+    perform?()
+  }
+
+  /// Caller holds `lock`.
+  private func takePerformLocked(_ switchID: Int) -> (@Sendable () -> Void)? {
+    guard let armed, armed.switchID == switchID else { return nil }
+    disarmLocked()
+    return armed.perform
+  }
+
+  /// Caller holds `lock`. Drops the waiting activation without running it.
+  private func disarmLocked() {
+    guard let armed else { return }
+    armed.timeout.cancel()
+    pendingBySwitch[armed.switchID] = nil
+    self.armed = nil
+  }
+}
+
+private struct ArmedSwitch {
+  let switchID: Int
+  let timeout: DispatchWorkItem
+  let perform: @Sendable () -> Void
+}
+
+/// Runs a main-actor activation once. The enter reply may arrive off the main thread.
+private final class MainActorOnce: @unchecked Sendable {
+  private let lock = NSLock()
+  private var perform: (@MainActor () -> Void)?
+
+  @MainActor
+  init(_ perform: @escaping @MainActor () -> Void) {
+    self.perform = perform
+  }
+
+  func run() {
+    let perform: (@MainActor () -> Void)? = lock.withLock {
+      let perform = self.perform
+      self.perform = nil
+      return perform
+    }
+    guard let perform else { return }
+    dispatchPrecondition(condition: .onQueue(.main))
+    MainActor.assumeIsolated(perform)
+  }
+}

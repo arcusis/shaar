@@ -148,9 +148,14 @@ extension MediaSessionAction {
 }
 
 extension AutoPictureInPicture.Engine {
-  static func chromium(_ runtime: ARCChromiumRuntime) -> Self {
+  static func chromium(_ runtime: ARCChromiumRuntime, gate: PictureInPictureEnterGate) -> Self {
     Self(
-      enter: { runtime.enterPictureInPicture(inTabID: $0.uuidString) { _ in } },
+      enter: { page in
+        let started = gate.begin()
+        runtime.enterPictureInPicture(inTabID: page.uuidString) { _ in
+          gate.end(generation: started)
+        }
+      },
       exit: { runtime.exitPictureInPicture(inTabID: $0.uuidString) },
       handlesAutomatically: { runtime.engineHandlesAutoPictureInPicture(forTabID: $0.uuidString) })
   }

@@ -48,6 +48,7 @@ final class BrowserEngine {
   let windowID: String
   private let callbacks: BrowserRuntimeClient
   let autoPictureInPicture: AutoPictureInPicture
+  let pictureInPictureEnterGate = PictureInPictureEnterGate()
   let pictureInPictureControls = PictureInPictureControls()
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
@@ -128,7 +129,8 @@ final class BrowserEngine {
     self.events = events
     self.downloadDirectoryApplier = downloadDirectoryApplier
     self.windowID = windowID ?? runtime.primaryWindowID
-    autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
+    autoPictureInPicture = AutoPictureInPicture(
+      engine: .chromium(runtime, gate: pictureInPictureEnterGate))
     callbacks = BrowserRuntimeClient(windowID: self.windowID) { [weak store] in
       Set(store?.session.profiles.map { $0.id.uuidString } ?? [])
     }
@@ -823,8 +825,26 @@ final class BrowserEngine {
         lastTabOrders[profile] = positions
       }
     }
-    // Before the switch, so the leaving page still counts as visible to Chromium.
+    // Ask for picture-in-picture before the leaving tab is hidden. YouTube pauses
+    // on hide, and a paused video is skipped. The enter reply, or a short fallback,
+    // activates the next tab. A switch that is not leaving a playing video does not wait.
+    pictureInPictureEnterGate.startSwitch()
     handOffPictureInPicture()
+    let waitingToHidePlayingVideo = pictureInPictureEnterGate.deferActivationIfRequested {
+      [weak self] in
+      self?.activateReconciledSelection()
+    }
+    if waitingToHidePlayingVideo { return }
+    activateReconciledSelection()
+  }
+
+  /// Selects the current page. Picture-in-picture may defer this until the page
+  /// has been asked to enter, so a second switch cannot run inside the first one.
+  private func activateReconciledSelection() {
+    guard !isClosed, !runtime.isQuitting, let session = store?.session else { return }
+    let alreadyReconciling = reconciling
+    reconciling = true
+    defer { reconciling = alreadyReconciling }
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
     if let selected = session.selectedPage?.tab.id {
       runtime.activateTabID(selected.uuidString)

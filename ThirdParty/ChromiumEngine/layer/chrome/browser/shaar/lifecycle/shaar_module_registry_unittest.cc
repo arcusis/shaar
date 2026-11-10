@@ -25,7 +25,8 @@ TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
                       "--no-startup-window"),
             verification.end());
   for (const auto& arguments : {production, verification}) {
-    for (const char* option : {"--shaar-embedder", "--no-first-run"}) {
+    for (const char* option : {"--shaar-embedder", "--no-first-run",
+                               "--disable-features=HttpsFirstDialogUi"}) {
       EXPECT_NE(std::find(arguments.begin(), arguments.end(), option),
                 arguments.end());
     }

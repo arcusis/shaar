@@ -1,0 +1,126 @@
+diff --git a/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc b/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc
+index 1536cf9..4c42e48 100644
+--- a/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc
++++ b/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc
+@@ -239,6 +239,9 @@ std::vector<std::string> ChromeMainArguments(
+       executable_path, "--user-data-dir=" + data_root, "--no-first-run",
+       "--no-default-browser-check", "--no-startup-window",
+       "--disable-background-mode", "--shaar-embedder"};
++  // Chromium 157 shows an HTTPS-only warning as a Views dialog. Shaar has no
++  // dialog host, so keep Chromium's interstitial.
++  arguments.push_back("--disable-features=HttpsFirstDialogUi");
+   if (testing) {
+     arguments.push_back("--use-mock-keychain");
+     arguments.push_back("--use-fake-device-for-media-stream");
+diff --git a/chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc b/chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc
+index aa38442..f5101e9 100644
+--- a/chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc
++++ b/chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc
+@@ -25,7 +25,8 @@ TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
+                       "--no-startup-window"),
+             verification.end());
+   for (const auto& arguments : {production, verification}) {
+-    for (const char* option : {"--shaar-embedder", "--no-first-run"}) {
++    for (const char* option : {"--shaar-embedder", "--no-first-run",
++                               "--disable-features=HttpsFirstDialogUi"}) {
+       EXPECT_NE(std::find(arguments.begin(), arguments.end(), option),
+                 arguments.end());
+     }
+diff --git a/chrome/browser/shaar/profiles/shaar_profiles.cc b/chrome/browser/shaar/profiles/shaar_profiles.cc
+index 60f3370..cea1b11 100644
+--- a/chrome/browser/shaar/profiles/shaar_profiles.cc
++++ b/chrome/browser/shaar/profiles/shaar_profiles.cc
+@@ -33,6 +33,7 @@
+ #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
+ #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
++#include "chrome/common/pref_names.h"
+ #include "components/content_settings/core/browser/cookie_settings.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/content_settings/core/common/pref_names.h"
+@@ -167,6 +168,19 @@ void Reply(shaar_reply_fn callback,
+   callback(context, &result);
+ }
+ 
++void ApplyDefaultHttpsOnlyMode(Profile* profile) {
++  if (!profile)
++    return;
++  PrefService* prefs = profile->GetPrefs();
++  if (!prefs)
++    return;
++  if (prefs->IsManagedPreference(prefs::kHttpsOnlyModeEnabled))
++    return;
++  if (prefs->HasPrefPath(prefs::kHttpsOnlyModeEnabled))
++    return;
++  prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, true);
++}
++
+ void OnProfileReady(shaar_profile* handle,
+                     shaar_reply_fn callback,
+                     void* context,
+@@ -201,6 +215,8 @@ void OnProfileReady(shaar_profile* handle,
+   shaar::EmitEvent(handle->engine, SHAAR_EVENT_PROFILE,
+                    {handle->id.data(), handle->id.size()}, {}, {},
+                    {}, {payload.data(), payload.size()});
++  // Keep this below patch 0033's hunk. The reply is what the app waits on.
++  ApplyDefaultHttpsOnlyMode(profile);
+   Reply(callback, context, request_id, SHAAR_OK, handle->id);
+   for (const auto& waiter : handle->waiters)
+     Reply(waiter.callback, waiter.context, waiter.request_id, SHAAR_OK, handle->id);
+@@ -601,6 +617,29 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_set_state(
+   return Fail(SHAAR_OK, "", error);
+ }
+ 
++extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_set_https_only(
++    shaar_profile* profile, int enabled, shaar_error* error) {
++  if (!profile || !pthread_main_np())
++    return Fail(SHAAR_INVALID_ARGUMENT, "invalid https-only request", error);
++  if (enabled != 0 && enabled != 1)
++    return Fail(SHAAR_INVALID_ARGUMENT, "https-only must be 0 or 1", error);
++  if (!IsRegisteredProfile(profile))
++    return Fail(SHAAR_NOT_FOUND, "profile handle is stale", error);
++  if (!profile->ready || !profile->native)
++    return Fail(SHAAR_NOT_READY, "profile is not ready", error);
++  if (profile->deleting)
++    return Fail(SHAAR_CONFLICT, "profile deletion is pending", error);
++  PrefService* prefs = profile->native->GetPrefs();
++  if (!prefs)
++    return Fail(SHAAR_NOT_READY, "profile preferences are unavailable", error);
++  if (prefs->IsManagedPreference(prefs::kHttpsOnlyModeEnabled))
++    return Fail(SHAAR_POLICY_BLOCKED, "https-only mode is managed", error);
++  const bool next = enabled == 1;
++  if (prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled) != next)
++    prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, next);
++  return Fail(SHAAR_OK, "", error);
++}
++
+ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
+     shaar_profile* profile, shaar_error* error) {
+   if (!profile || !pthread_main_np())
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index 2b1ae85..611be8a 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -470,6 +470,10 @@ SHAAR_EXPORT shaar_error_code shaar_profile_get_state(
+ SHAAR_EXPORT shaar_error_code shaar_profile_set_state(
+     shaar_profile *, shaar_bytes state_key, shaar_bytes value_json,
+     shaar_error *error);
++/* enabled is 0 or 1. Missing from older engines; the app treats that as
++ * "applies the next time this profile opens." */
++SHAAR_EXPORT shaar_error_code shaar_profile_set_https_only(
++    shaar_profile *, int enabled, shaar_error *error);
+ SHAAR_EXPORT shaar_error_code shaar_profile_get_path(
+     shaar_profile *, shaar_bytes *path, shaar_error *error);
+ /* END Shaar profiles module ABI exports. */
+diff --git a/chrome/browser/shaar/shaar_engine.exports b/chrome/browser/shaar/shaar_engine.exports
+index cec0332..697c37a 100644
+--- a/chrome/browser/shaar/shaar_engine.exports
++++ b/chrome/browser/shaar/shaar_engine.exports
+@@ -14,6 +14,7 @@ _shaar_profile_close
+ _shaar_profile_delete
+ _shaar_profile_get_state
+ _shaar_profile_set_state
++_shaar_profile_set_https_only
+ _shaar_profile_get_path
+ _shaar_private_session_open
+ _shaar_private_session_close

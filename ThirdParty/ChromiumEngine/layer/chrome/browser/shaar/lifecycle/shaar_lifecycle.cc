@@ -238,6 +238,9 @@ std::vector<std::string> ChromeMainArguments(
       executable_path, "--user-data-dir=" + data_root, "--no-first-run",
       "--no-default-browser-check", "--no-startup-window",
       "--disable-background-mode", "--shaar-embedder"};
+  // Chromium 157 shows an HTTPS-only warning as a Views dialog. Shaar has no
+  // dialog host, so keep Chromium's interstitial.
+  arguments.push_back("--disable-features=HttpsFirstDialogUi");
   if (testing) {
     arguments.push_back("--use-mock-keychain");
     arguments.push_back("--use-fake-device-for-media-stream");

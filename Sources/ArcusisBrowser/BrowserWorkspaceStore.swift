@@ -9,13 +9,25 @@ import Observation
 /// One in-process writer coordinates all normal window models. Native window lifecycle is separate.
 @MainActor @Observable
 final class BrowserWorkspaceStore {
+  private struct PendingTabTransfer {
+    let id: UUID
+    let tabID: UUID
+    let sourceWindowID: UUID
+    let sourceSpaceID: UUID
+    let destinationWindowID: UUID
+    let destinationSpaceID: UUID
+    let originalDestinationSession: BrowserSession
+  }
+
   private(set) var workspace: BrowserWorkspace
   private(set) var storageNotice: String?
   @ObservationIgnored private(set) var stores: [UUID: BrowserStore] = [:]
   @ObservationIgnored private let file: WorkspaceFile?
   @ObservationIgnored private var maySave = true
   @ObservationIgnored private var suppressBroadcast = false
-  @ObservationIgnored private var pendingTabTransfers: [UUID: BrowserSession] = [:]
+  @ObservationIgnored private var pendingTabTransfers: [UUID: PendingTabTransfer] = [:]
+  @ObservationIgnored var transferReleaseForTesting: ((UUID, BrowserStore) async -> Bool)?
+  @ObservationIgnored var transferDiscardForTesting: (() -> Bool)?
   @ObservationIgnored private let snapshotScheduler = SnapshotSaveScheduler()
   @ObservationIgnored private let faviconCache: FaviconCache?
 
@@ -52,6 +64,10 @@ final class BrowserWorkspaceStore {
   }
 
   func removeWindow(_ id: UUID) throws {
+    let transfers = pendingTabTransfers.values.filter {
+      $0.sourceWindowID == id || $0.destinationWindowID == id
+    }
+    for transfer in transfers { rollbackTabTransfer(transfer, showNotice: false) }
     try workspace.removeWindow(id)
     stores[id] = nil
     saveAndBroadcast()
@@ -209,6 +225,18 @@ final class BrowserWorkspaceStore {
         $0.id == destinationSpaceID
       })
     else { return false }
+    guard pendingTabTransfers[destinationWindowID] == nil else { return false }
+    guard Self.canTransferTab(sourceStore: sourceStore, destinationStore: destinationStore) else {
+      destinationStore.setSidebarNotice(
+        ShellL10n.string("Tabs cannot move to or from a private window."))
+      return false
+    }
+    guard let sourceTab = sourceSpace.tabs.first(where: { $0.id == tabID }) else { return false }
+    guard !sourceTab.isPinned else {
+      destinationStore.setSidebarNotice(
+        ShellL10n.string("Pinned tabs cannot move between windows."))
+      return false
+    }
     guard sourceSpace.profileID == targetSpace.profileID else {
       destinationStore.setSidebarNotice(
         ShellL10n.string(
@@ -237,36 +265,68 @@ final class BrowserWorkspaceStore {
     }
 
     workspace = updated
-    pendingTabTransfers[destinationWindowID] = destinationOriginalSession
+    let transfer = PendingTabTransfer(
+      id: UUID(), tabID: tabID, sourceWindowID: sourceWindow.id,
+      sourceSpaceID: sourceSpaceID, destinationWindowID: destinationWindowID,
+      destinationSpaceID: destinationSpaceID,
+      originalDestinationSession: destinationOriginalSession)
+    pendingTabTransfers[destinationWindowID] = transfer
     suppressBroadcast = true
     sourceStore.applyManagedSession(sourceSession, notice: storageNotice)
     suppressBroadcast = false
     scheduleSnapshot(deferred: false)
-    if let sourceEngine = sourceStore.engine {
-      Task { @MainActor [weak self, weak sourceEngine, weak destinationStore] in
-        guard let sourceEngine else { return }
-        let released = await Self.waitForSourceRelease(tabID, engine: sourceEngine)
-        guard let self, let destinationStore else { return }
-        if !released {
-          sourceEngine.discardReassignedTabs([tabID])
-          guard sourceEngine.runtime.windowID(forTabID: tabID.uuidString) == nil else {
-            self.rollbackTabTransfer(
-              sourceWindowID: sourceWindow.id, sourceSession: sourceOriginalSession,
-              destinationWindowID: destinationWindowID,
-              destinationSession: destinationOriginalSession)
-            destinationStore.setSidebarNotice(
-              ShellL10n.string("The tab could not be moved. It remains in its original window."))
-            return
-          }
-        }
-        destinationStore.setSidebarNotice(nil)
-        self.finishTabTransfer(to: destinationWindowID, in: destinationStore)
+    if sourceStore.engine != nil || transferReleaseForTesting != nil {
+      Task { @MainActor [self, sourceStore] in
+        await completeTabTransfer(transfer, sourceStore: sourceStore)
       }
     } else {
       destinationStore.setSidebarNotice(nil)
-      finishTabTransfer(to: destinationWindowID, in: destinationStore)
+      finishTabTransfer(transfer)
     }
     return true
+  }
+
+  static func canTransferTab(sourceStore: BrowserStore, destinationStore: BrowserStore)
+    -> Bool
+  {
+    !sourceStore.isPrivate && !destinationStore.isPrivate
+  }
+
+  private func completeTabTransfer(_ transfer: PendingTabTransfer, sourceStore: BrowserStore)
+    async
+  {
+    let sourceEngine = sourceStore.engine
+    let released: Bool
+    if let transferReleaseForTesting {
+      released = await transferReleaseForTesting(transfer.tabID, sourceStore)
+    } else if let sourceEngine {
+      released = await Self.waitForSourceRelease(transfer.tabID, engine: sourceEngine)
+    } else {
+      released = true
+    }
+    guard pendingTabTransfers[transfer.destinationWindowID]?.id == transfer.id else { return }
+
+    if !released {
+      let discarded: Bool
+      if let transferDiscardForTesting {
+        discarded = transferDiscardForTesting()
+      } else if let sourceEngine {
+        sourceEngine.discardReassignedTabs([transfer.tabID])
+        discarded = sourceEngine.runtime.windowID(forTabID: transfer.tabID.uuidString) == nil
+      } else {
+        discarded = false
+      }
+      guard discarded else {
+        rollbackTabTransfer(transfer, showNotice: true)
+        return
+      }
+    }
+    guard let destinationStore = stores[transfer.destinationWindowID] else {
+      rollbackTabTransfer(transfer, showNotice: false)
+      return
+    }
+    destinationStore.setSidebarNotice(nil)
+    finishTabTransfer(transfer)
   }
 
   private static func waitForSourceRelease(_ tabID: UUID, engine: BrowserEngine) async -> Bool {
@@ -277,33 +337,58 @@ final class BrowserWorkspaceStore {
     return engine.runtime.windowID(forTabID: tabID.uuidString) == nil
   }
 
-  private func finishTabTransfer(to windowID: UUID, in store: BrowserStore) {
-    guard let current = workspace.window(windowID) else {
-      pendingTabTransfers[windowID] = nil
-      return
+  private func finishTabTransfer(_ transfer: PendingTabTransfer) {
+    guard pendingTabTransfers[transfer.destinationWindowID]?.id == transfer.id else { return }
+    pendingTabTransfers[transfer.destinationWindowID] = nil
+    if let current = workspace.window(transfer.destinationWindowID) {
+      stores[transfer.destinationWindowID]?.applyManagedSession(
+        current.session, notice: storageNotice)
     }
-    pendingTabTransfers[windowID] = nil
-    store.applyManagedSession(current.session, notice: storageNotice)
     scheduleSnapshot(deferred: false)
   }
 
-  private func rollbackTabTransfer(
-    sourceWindowID: UUID, sourceSession: BrowserSession, destinationWindowID: UUID,
-    destinationSession: BrowserSession
-  ) {
+  private func rollbackTabTransfer(_ transfer: PendingTabTransfer, showNotice: Bool) {
     var restored = workspace
+    guard var sourceSession = restored.window(transfer.sourceWindowID)?.session,
+      var destinationSession = restored.window(transfer.destinationWindowID)?.session,
+      destinationSession.transferTab(
+        transfer.tabID, from: transfer.destinationSpaceID, to: &sourceSession,
+        in: transfer.sourceSpaceID)
+    else {
+      clearPendingTabTransfer(transfer)
+      if showNotice {
+        stores[transfer.destinationWindowID]?.setSidebarNotice(
+          ShellL10n.string("The tab could not be moved. It remains in its original window."))
+      }
+      return
+    }
     do {
-      try restored.updateWindow(sourceWindowID, session: sourceSession)
-      try restored.updateWindow(destinationWindowID, session: destinationSession)
+      try restored.updateWindow(transfer.destinationWindowID, session: destinationSession)
+      try restored.updateWindow(transfer.sourceWindowID, session: sourceSession)
       try restored.validate()
     } catch {
-      pendingTabTransfers[destinationWindowID] = nil
+      clearPendingTabTransfer(transfer)
+      if showNotice {
+        stores[transfer.destinationWindowID]?.setSidebarNotice(
+          ShellL10n.string("The tab could not be moved. It remains in its original window."))
+      }
       return
     }
     workspace = restored
-    stores[sourceWindowID]?.applyManagedSession(sourceSession, notice: storageNotice)
-    pendingTabTransfers[destinationWindowID] = nil
-    stores[destinationWindowID]?.applyManagedSession(destinationSession, notice: storageNotice)
+    stores[transfer.sourceWindowID]?.applyManagedSession(sourceSession, notice: storageNotice)
+    clearPendingTabTransfer(transfer)
+    stores[transfer.destinationWindowID]?.applyManagedSession(
+      destinationSession, notice: storageNotice)
+    if showNotice {
+      stores[transfer.destinationWindowID]?.setSidebarNotice(
+        ShellL10n.string("The tab could not be moved. It remains in its original window."))
+    }
+    scheduleSnapshot(deferred: false)
+  }
+
+  private func clearPendingTabTransfer(_ transfer: PendingTabTransfer) {
+    guard pendingTabTransfers[transfer.destinationWindowID]?.id == transfer.id else { return }
+    pendingTabTransfers[transfer.destinationWindowID] = nil
     scheduleSnapshot(deferred: false)
   }
 
@@ -315,8 +400,9 @@ final class BrowserWorkspaceStore {
         session: session,
         notice: ShellL10n.string("This window is closed; its changes will not be saved."))
     }
-    if let originalSession = pendingTabTransfers[id] {
-      return ManagedSessionSaveResult(session: originalSession, notice: storageNotice)
+    if let transfer = pendingTabTransfers[id] {
+      return ManagedSessionSaveResult(
+        session: transfer.originalDestinationSession, notice: storageNotice)
     }
     do {
       try workspace.updateWindow(id, session: session)
@@ -342,7 +428,7 @@ final class BrowserWorkspaceStore {
     guard maySave else { return false }
     faviconCache?.retain(workspace.faviconItemIDs)
     do {
-      let snapshot = workspace
+      let snapshot = snapshotForSaving()
       try snapshotScheduler.writeNow { try file?.save(snapshot) }
       storageNotice = nil
       return true
@@ -355,13 +441,34 @@ final class BrowserWorkspaceStore {
   /// Every change is flushed to disk off the main thread; deferred changes also coalesce.
   private func scheduleSnapshot(deferred: Bool) {
     guard maySave else { return }
-    guard pendingTabTransfers.isEmpty else { return }
     faviconCache?.retain(workspace.faviconItemIDs)
     guard let file else { return }
-    let snapshot = workspace
+    let snapshot = snapshotForSaving()
     snapshotScheduler.schedule(
       deferred: deferred, { try file.save(snapshot) },
       completion: { [weak self] failure in self?.showSaveResult(failure: failure) })
+  }
+
+  private func snapshotForSaving() -> BrowserWorkspace {
+    var snapshot = workspace
+    for transfer in pendingTabTransfers.values {
+      var restored = snapshot
+      guard var sourceSession = restored.window(transfer.sourceWindowID)?.session,
+        var destinationSession = restored.window(transfer.destinationWindowID)?.session,
+        destinationSession.transferTab(
+          transfer.tabID, from: transfer.destinationSpaceID, to: &sourceSession,
+          in: transfer.sourceSpaceID)
+      else { continue }
+      do {
+        try restored.updateWindow(transfer.destinationWindowID, session: destinationSession)
+        try restored.updateWindow(transfer.sourceWindowID, session: sourceSession)
+        try restored.validate()
+        snapshot = restored
+      } catch {
+        continue
+      }
+    }
+    return snapshot
   }
 
   private func showSaveResult(failure: String?) {

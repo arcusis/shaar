@@ -35,6 +35,115 @@ struct BrowserWorkspaceStoreTests {
     try manager.workspace.validate()
   }
 
+  @Test func pinnedAndPrivateWindowTransfersAreRefusedWithNotices() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let pinnedTab = try #require(source.session.selectedSpace.tabs.first(where: { $0.isPinned }))
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID,
+      tabID: pinnedTab.id)
+
+    #expect(!destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
+    #expect(source.session.selectedSpace.tabs.contains { $0.id == pinnedTab.id })
+    #expect(destination.sidebarNotice != nil)
+
+    let privateStore = BrowserStore(privateSession: fixture())
+    #expect(
+      !BrowserWorkspaceStore.canTransferTab(sourceStore: source, destinationStore: privateStore))
+    #expect(
+      !BrowserWorkspaceStore.canTransferTab(
+        sourceStore: privateStore, destinationStore: destination))
+  }
+
+  @Test func failedTimeoutRollsBackFromCurrentWorkspaceState() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = file(directory)
+    let manager = try BrowserWorkspaceStore(file: file, initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let sourceSpaceID = source.session.selectedSpaceID
+    let tabID = try #require(source.session.selectedSpace.selectedTabID)
+    var releaseWaiter: CheckedContinuation<Bool, Never>?
+    manager.transferReleaseForTesting = { _, _ in
+      await withCheckedContinuation { releaseWaiter = $0 }
+    }
+    manager.transferDiscardForTesting = { false }
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: sourceSpaceID, tabID: tabID)
+
+    #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
+    await Task.yield()
+    #expect(releaseWaiter != nil)
+    #expect(source.updateSpace(sourceSpaceID, name: "Edited during transfer", tint: .ocean))
+    try manager.renameProfile(source.session.selectedSpace.profileID, name: "Edited profile")
+    try manager.flushSaves()
+    let pendingSave = try #require(try file.load())
+    #expect(
+      pendingSave.windows.first(where: { $0.id == sourceID })?.session.spaces
+        .first(where: { $0.id == sourceSpaceID })?.tabs.contains { $0.id == tabID } == true)
+    #expect(
+      pendingSave.windows.first(where: { $0.id == destinationID })?.session.spaces
+        .flatMap(\.tabs).contains { $0.id == tabID } == false)
+
+    releaseWaiter?.resume(returning: false)
+    try await Task.sleep(for: .milliseconds(10))
+
+    #expect(
+      source.session.spaces.first(where: { $0.id == sourceSpaceID })?.tabs.contains {
+        $0.id == tabID
+      } == true)
+    #expect(
+      source.session.spaces.first(where: { $0.id == sourceSpaceID })?.name
+        == "Edited during transfer")
+    #expect(destination.session.spaces.flatMap(\.tabs).contains { $0.id == tabID } == false)
+    #expect(destination.sidebarNotice != nil)
+    try manager.flushSaves()
+    #expect(try file.load() == manager.workspace)
+    #expect(manager.workspace.catalog.profiles.first?.name == "Edited profile")
+  }
+
+  @Test func closingDestinationDuringTransferClearsTheHoldAndKeepsSaving() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = file(directory)
+    let manager = try BrowserWorkspaceStore(file: file, initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let sourceSpaceID = source.session.selectedSpaceID
+    let tabID = try #require(source.session.selectedSpace.selectedTabID)
+    var releaseWaiter: CheckedContinuation<Bool, Never>?
+    manager.transferReleaseForTesting = { _, _ in
+      await withCheckedContinuation { releaseWaiter = $0 }
+    }
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: sourceSpaceID, tabID: tabID)
+
+    #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
+    await Task.yield()
+    #expect(releaseWaiter != nil)
+    try manager.removeWindow(destinationID)
+    releaseWaiter?.resume(returning: false)
+    await Task.yield()
+
+    #expect(manager.workspace.window(destinationID) == nil)
+    #expect(source.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
+    #expect(source.updateSpace(sourceSpaceID, name: "Still saving", tint: .ocean))
+    try manager.flushSaves()
+    let saved = try #require(try file.load())
+    #expect(saved == manager.workspace)
+    #expect(
+      saved.windows[0].session.spaces.first(where: { $0.id == sourceSpaceID })?.name
+        == "Still saving")
+  }
+
   @Test func removalImpactIncludesEveryManagedWindowBeforeGlobalDeletion() throws {
     let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let first = manager.workspace.windows[0].id

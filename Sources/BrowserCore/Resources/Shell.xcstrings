@@ -3185,6 +3185,18 @@
         }
       }
     },
+    "Pinned tabs cannot move between windows.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pinned tabs cannot move between windows." } },
+        "he": { "stringUnit": { "state": "translated", "value": "אי אפשר להעביר לשוניות מוצמדות בין חלונות." } }
+      }
+    },
+    "Tabs cannot move to or from a private window.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Tabs cannot move to or from a private window." } },
+        "he": { "stringUnit": { "state": "translated", "value": "אי אפשר להעביר לשוניות אל חלון פרטי או ממנו." } }
+      }
+    },
     "The tab could not be moved. It remains in its original window.": {
       "localizations": {
         "en": {

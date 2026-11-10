@@ -193,6 +193,94 @@ describe('HydrationDiff', () => {
     assert.strictEqual(report.mismatches[0].path, 'body > li#inserted');
     assert.strictEqual(report.mismatches[0].backendNodeId, 7);
   });
+
+  it('keeps one inserted duplicate key in a long sibling list as a single extra', () => {
+    const count = 5000;
+    const serverChildren = [];
+    const pageChildren = [];
+    for (let index = 0; index < count; index++) {
+      serverChildren.push(Diff.elementNode('div'));
+      pageChildren.push(Diff.elementNode('div'));
+    }
+    pageChildren.splice(2500, 0, Diff.elementNode('div', [{name: 'id', value: 'extra'}], [], 7));
+    const report = Diff.diffHydrationTrees(Diff.bodyNode(serverChildren), Diff.bodyNode(pageChildren));
+    assert.deepEqual(report.mismatches.map(mismatch => mismatch.kind), ['extra']);
+    assert.strictEqual(report.mismatches[0].path, 'body > div#extra');
+    assert.strictEqual(report.mismatches[0].backendNodeId, 7);
+  });
+
+  it('matches a shared key inside a large changed sibling list without a matrix', () => {
+    const count = 5000;
+    const serverChildren = [];
+    const pageChildren = [];
+    for (let index = 0; index < count; index++) {
+      serverChildren.push(Diff.elementNode('li', [{name: 'id', value: 's' + index}]));
+      pageChildren.push(Diff.elementNode('li', [{name: 'id', value: 'p' + index}]));
+    }
+    serverChildren[1] = Diff.elementNode('li', [{name: 'id', value: 'keep'}]);
+    pageChildren[1] = Diff.elementNode('li', [{name: 'id', value: 'keep'}], [], 11);
+    const report = Diff.diffHydrationTrees(Diff.bodyNode(serverChildren), Diff.bodyNode(pageChildren));
+    assert.isTrue(report.truncated);
+    assert.lengthOf(report.mismatches, Diff.MISMATCH_LIMIT);
+    assert.isFalse(report.mismatches.some(mismatch => mismatch.path === 'body > li#keep'));
+  });
+
+  it('pairs duplicate keys around one insertion when the ends also differ', () => {
+    const count = 5000;
+    const serverChildren = [Diff.elementNode('span', [{name: 'id', value: 'server-a'}])];
+    const pageChildren = [Diff.elementNode('span', [{name: 'id', value: 'page-a'}])];
+    for (let index = 0; index < count; index++) {
+      serverChildren.push(Diff.elementNode('div'));
+      pageChildren.push(Diff.elementNode('div'));
+    }
+    pageChildren.splice(2501, 0, Diff.elementNode('div', [{name: 'id', value: 'extra'}], [], 7));
+    serverChildren.push(Diff.elementNode('span', [{name: 'id', value: 'server-b'}]));
+    pageChildren.push(Diff.elementNode('span', [{name: 'id', value: 'page-b'}]));
+    const report = Diff.diffHydrationTrees(Diff.bodyNode(serverChildren), Diff.bodyNode(pageChildren));
+    assert.isFalse(report.truncated);
+    assert.deepEqual(
+        report.mismatches.map(mismatch => mismatch.kind), ['missing', 'extra', 'extra', 'missing', 'extra']);
+    assert.strictEqual(report.mismatches[2].path, 'body > div#extra');
+    assert.isFalse(report.mismatches.some(mismatch => mismatch.path === 'body > div'));
+  });
+
+  it('aligns a short reorder with the matrix', () => {
+    const server = Diff.bodyNode([
+      Diff.elementNode('c'),
+      Diff.elementNode('a'),
+      Diff.elementNode('b'),
+    ]);
+    const page = Diff.bodyNode([
+      Diff.elementNode('a'),
+      Diff.elementNode('b'),
+      Diff.elementNode('c'),
+    ]);
+    const report = Diff.diffHydrationTrees(server, page);
+    assert.deepEqual(report.mismatches.map(mismatch => mismatch.kind), ['missing', 'extra']);
+    assert.strictEqual(report.mismatches[0].path, 'body > c');
+    assert.strictEqual(report.mismatches[1].path, 'body > c');
+  });
+
+  it('treats whitespace-only text inside a mount as empty', () => {
+    const whitespace = Diff.textNode(' \n\t ');
+    assert.strictEqual(whitespace.value, '');
+    const server = Diff.bodyNode([
+      Diff.elementNode('div', [{name: 'id', value: 'root'}], [
+        Diff.elementNode('div', [], [whitespace]),
+      ]),
+    ]);
+    const page = Diff.bodyNode([
+      Diff.elementNode('div', [{name: 'id', value: 'root'}], [
+        Diff.elementNode('p', [], [Diff.textNode('Hydrated')], 12),
+      ]),
+    ]);
+    const report = Diff.diffHydrationTrees(server, page);
+    assert.strictEqual(report.notice, 'client-shell-mount');
+    const blank = Diff.bodyNode([
+      Diff.elementNode('div', [{name: 'id', value: 'root'}], [Diff.textNode('\n')]),
+    ]);
+    assert.isNull(Diff.diffHydrationTrees(server, blank).notice);
+  });
 });
 
 describe('HydrationSettle', () => {
@@ -226,36 +314,32 @@ describe('HydrationSettle', () => {
   });
 
   it('drops the load listener and the timer when load never arrives', async () => {
-    let listeners = 0;
-    const loaded = await Settle.attachLoadWait(
-        () => {
-          listeners++;
-        },
-        () => {
-          listeners--;
-        },
-        15);
-    assert.isFalse(loaded);
-    assert.strictEqual(listeners, 0);
+    const clear = sinon.spy(globalThis, 'clearTimeout');
+    const listen = sinon.spy();
+    const unlisten = sinon.spy();
+    try {
+      const loaded = await Settle.attachLoadWait(listen, unlisten, 15);
+      assert.isFalse(loaded);
+      assert.isTrue(listen.calledOnce);
+      assert.isTrue(unlisten.calledOnce);
+      assert.strictEqual(unlisten.firstCall.args[0], listen.firstCall.args[0]);
+      assert.isTrue(clear.called);
+    } finally {
+      clear.restore();
+    }
   });
 
   it('drops the load listener and the timer when the load arrives', async () => {
     const clear = sinon.spy(globalThis, 'clearTimeout');
-    let fire = (): void => {};
-    let listeners = 0;
+    const listen = sinon.spy();
+    const unlisten = sinon.spy();
     try {
-      const pending = Settle.attachLoadWait(
-          listener => {
-            listeners++;
-            fire = listener;
-          },
-          () => {
-            listeners--;
-          },
-          1000);
-      fire();
+      const pending = Settle.attachLoadWait(listen, unlisten, 1000);
+      const onLoad = listen.firstCall.args[0] as () => void;
+      onLoad();
       assert.isTrue(await pending);
-      assert.strictEqual(listeners, 0);
+      assert.isTrue(unlisten.calledOnce);
+      assert.strictEqual(unlisten.firstCall.args[0], onLoad);
       assert.isTrue(clear.called);
     } finally {
       clear.restore();
@@ -263,32 +347,66 @@ describe('HydrationSettle', () => {
   });
 
   it('waits until a tracked fetch finishes and then stays quiet', async () => {
+    const clear = sinon.spy(globalThis, 'clearTimeout');
     const tracker = new Settle.RequestSettleTracker();
-    const started = Date.now();
-    const pending = Settle.waitForQuiet(() => tracker.inflight(), listener => tracker.subscribe(listener), 30, 500);
-    tracker.start({id: 'fetch-1', settles: true});
-    setTimeout(() => {
-      tracker.finish({id: 'fetch-1', settles: true});
-    }, 40);
-    await pending;
-    assert.isAtLeast(Date.now() - started, 60);
-    assert.strictEqual(tracker.inflight(), 0);
+    const watched = watchSubscribe(tracker);
+    try {
+      const started = Date.now();
+      const pending = Settle.waitForQuiet(() => tracker.inflight(), watched.subscribe, 30, 500);
+      tracker.start({id: 'fetch-1', settles: true});
+      setTimeout(() => {
+        tracker.finish({id: 'fetch-1', settles: true});
+      }, 40);
+      await pending;
+      assert.isAtLeast(Date.now() - started, 60);
+      assert.isTrue(watched.subscribe.calledOnce);
+      assert.isTrue(watched.remove()?.calledOnce);
+      assert.isTrue(clear.called);
+      const callsAtQuiet = watched.listenerCalls();
+      tracker.start({id: 'fetch-2', settles: true});
+      assert.strictEqual(watched.listenerCalls(), callsAtQuiet);
+    } finally {
+      clear.restore();
+    }
   });
 
   it('does not let a socket hold the quiet window open', async () => {
+    const clear = sinon.spy(globalThis, 'clearTimeout');
     const tracker = new Settle.RequestSettleTracker();
+    const watched = watchSubscribe(tracker);
     tracker.start({id: 'socket', settles: false});
     assert.strictEqual(tracker.inflight(), 0);
-    await Settle.waitForQuiet(() => tracker.inflight(), listener => tracker.subscribe(listener), 20, 200);
-    assert.strictEqual(tracker.inflight(), 0);
+    try {
+      await Settle.waitForQuiet(() => tracker.inflight(), watched.subscribe, 20, 200);
+      assert.isTrue(watched.subscribe.calledOnce);
+      assert.isTrue(watched.remove()?.calledOnce);
+      assert.isTrue(clear.called);
+      const callsAtQuiet = watched.listenerCalls();
+      tracker.start({id: 'later', settles: true});
+      assert.strictEqual(watched.listenerCalls(), callsAtQuiet);
+    } finally {
+      clear.restore();
+    }
   });
 
   it('stops waiting at the cap and unsubscribes', async () => {
+    const clear = sinon.spy(globalThis, 'clearTimeout');
     const tracker = new Settle.RequestSettleTracker();
     tracker.start({id: 'fetch-1', settles: true});
-    await Settle.waitForQuiet(() => tracker.inflight(), listener => tracker.subscribe(listener), 500, 30);
-    tracker.finish({id: 'fetch-1', settles: true});
-    assert.strictEqual(tracker.inflight(), 0);
+    const watched = watchSubscribe(tracker);
+    try {
+      await Settle.waitForQuiet(() => tracker.inflight(), watched.subscribe, 500, 30);
+      assert.isTrue(watched.subscribe.calledOnce);
+      assert.isTrue(watched.remove()?.calledOnce);
+      assert.isTrue(clear.called);
+      const callsAtCap = watched.listenerCalls();
+      tracker.finish({id: 'fetch-1', settles: true});
+      tracker.start({id: 'fetch-2', settles: true});
+      assert.strictEqual(watched.listenerCalls(), callsAtCap);
+      assert.strictEqual(tracker.inflight(), 1);
+    } finally {
+      clear.restore();
+    }
   });
 
   it('extends the quiet window while the DOM is still changing', async () => {
@@ -318,6 +436,25 @@ describe('HydrationSettle', () => {
     }
   });
 });
+
+function watchSubscribe(tracker: {subscribe: (listener: () => void) => () => void}) {
+  let calls = 0;
+  let remove: {calledOnce: boolean}|null = null;
+  const subscribe = sinon.spy((listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      calls++;
+      listener();
+    };
+    const inner = sinon.spy(tracker.subscribe(wrapped));
+    remove = inner;
+    return inner;
+  });
+  return {
+    subscribe,
+    listenerCalls: () => calls,
+    remove: () => remove,
+  };
+}
 
 function sampleSnapshot(): Hydration.HydrationDiff.SnapshotPayload {
   return {

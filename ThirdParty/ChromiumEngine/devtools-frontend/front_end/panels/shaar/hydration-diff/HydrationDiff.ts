@@ -38,6 +38,9 @@ const RENDERED_TAGS = new Set([
   'textarea',
   'video',
 ]);
+// A rows-by-columns matrix past this many cells is not allocated. The middle
+// then matches keys in order instead.
+const ALIGN_CELL_CAP = 4096;
 
 export type HydrationNotice = 'not-html'|'client-shell-empty'|'client-shell-mount';
 
@@ -229,8 +232,8 @@ function isEmptyMount(node: HydrationNode): boolean {
 }
 
 function isEmptyElement(node: HydrationNode): boolean {
-  if (node.kind !== 'element') {
-    return false;
+  if (node.kind === 'text') {
+    return node.value.length === 0;
   }
   if (RENDERED_TAGS.has(node.name)) {
     return false;
@@ -375,6 +378,9 @@ function alignByKey(left: HydrationNode[], right: HydrationNode[], key: (node: H
 
 function alignMiddle(
     left: HydrationNode[], right: HydrationNode[], leftKeys: string[], rightKeys: string[]): AlignPair[] {
+  if (leftKeys.length * rightKeys.length > ALIGN_CELL_CAP) {
+    return alignInKeyOrder(left, right, leftKeys, rightKeys);
+  }
   const scores = alignmentScores(leftKeys, rightKeys);
   const pairs: AlignPair[] = [];
   let i = 0;
@@ -408,6 +414,9 @@ function alignMiddle(
 function alignmentScores(leftKeys: string[], rightKeys: string[]): number[][] {
   const rows = leftKeys.length;
   const columns = rightKeys.length;
+  if (rows * columns > ALIGN_CELL_CAP) {
+    throw new Error('alignment matrix exceeds the cell cap');
+  }
   const scores: number[][] = [];
   for (let i = 0; i <= rows; i++) {
     scores.push(new Array<number>(columns + 1).fill(0));
@@ -422,6 +431,65 @@ function alignmentScores(leftKeys: string[], rightKeys: string[]): number[][] {
     }
   }
   return scores;
+}
+
+function alignInKeyOrder(
+    left: HydrationNode[], right: HydrationNode[], leftKeys: string[], rightKeys: string[]): AlignPair[] {
+  const buckets = new Map<string, number[]>();
+  for (let index = 0; index < rightKeys.length; index++) {
+    const key = rightKeys[index];
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = [];
+      buckets.set(key, bucket);
+    }
+    bucket.push(index);
+  }
+  const cursor = new Map<string, number>();
+  const matchedRight = new Array<number>(left.length).fill(-1);
+  let lastRight = -1;
+  for (let index = 0; index < left.length; index++) {
+    const key = leftKeys[index];
+    const bucket = buckets.get(key);
+    if (!bucket) {
+      continue;
+    }
+    let position = cursor.get(key) ?? 0;
+    while (position < bucket.length && bucket[position] <= lastRight) {
+      position++;
+    }
+    if (position >= bucket.length) {
+      cursor.set(key, position);
+      continue;
+    }
+    matchedRight[index] = bucket[position];
+    lastRight = bucket[position];
+    cursor.set(key, position + 1);
+  }
+  return pairsFromMatches(left, right, matchedRight);
+}
+
+function pairsFromMatches(left: HydrationNode[], right: HydrationNode[], matchedRight: number[]): AlignPair[] {
+  const pairs: AlignPair[] = [];
+  let rightIndex = 0;
+  for (let leftIndex = 0; leftIndex < left.length; leftIndex++) {
+    const match = matchedRight[leftIndex];
+    if (match < 0) {
+      pairs.push({left: left[leftIndex], right: null});
+      continue;
+    }
+    while (rightIndex < match) {
+      pairs.push({left: null, right: right[rightIndex]});
+      rightIndex++;
+    }
+    pairs.push({left: left[leftIndex], right: right[match]});
+    rightIndex = match + 1;
+  }
+  while (rightIndex < right.length) {
+    pairs.push({left: null, right: right[rightIndex]});
+    rightIndex++;
+  }
+  return pairs;
 }
 
 function nodeKey(node: HydrationNode): string {

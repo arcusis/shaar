@@ -8,6 +8,8 @@ import ChromiumBridge
 import Darwin
 import Foundation
 
+@testable import ArcusisBrowser
+
 /// Records dialogs and panels on the main run loop, then dismisses them.
 /// Hidden runs must not leave a password prompt, file panel, or alert on screen.
 private final class DialogGuard: NSObject, @unchecked Sendable {
@@ -171,6 +173,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let dialogs = DialogGuard()
     defer {
       dialogs.stop()
+      silenceRenderers()
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
       report.finish(hidden: hidden, dialogs: dialogs.snapshot())
       host.events.quit()
@@ -1092,6 +1095,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
         Darwin.kill(pid, SIGKILL)
         continuation.resume()
       }
+    }
+  }
+
+  private static func silenceRenderers() {
+    for pid in rendererProcessIDs().prefix(4) {
+      Darwin.kill(pid, SIGKILL)
     }
   }
 

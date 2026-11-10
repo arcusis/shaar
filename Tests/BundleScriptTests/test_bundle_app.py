@@ -83,7 +83,9 @@ class BundleAppTests(unittest.TestCase):
         self.binary_dir = self.root / "swift-bin"
         self.binary_dir.mkdir()
         (self.binary_dir / "ArcusisBrowser").write_text("stub binary")
-        (self.binary_dir / "ShaarVerification").write_text("stub ShaarVerification EngineProbe --engine-probe")
+        (self.binary_dir / "ShaarVerification").write_text(
+            "stub ShaarVerification EngineProbe --engine-probe ShaarBrowsingEdgeProbe --browsing-edge-probe"
+        )
         resource_bundle = self.binary_dir / "ArcusisBrowser_BrowserCore.bundle" / "Contents"
         (resource_bundle / "Resources").mkdir(parents=True)
         shutil.copyfile(PSL, resource_bundle / "Resources" / "public_suffix_list.dat")
@@ -471,6 +473,8 @@ class BundleAppTests(unittest.TestCase):
             "--devtools-f12-route",
             "WebsitePermissionPromptProbe",
             "--probe-website-permission",
+            "ShaarBrowsingEdgeProbe",
+            "--browsing-edge-probe",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Part B hidden browsing probe for the shipping Shaar.app.
+"""Part B hidden browsing probe for Shaar Verification.app.
 
 Covers heavy pages, dialogs, popups, downloads, sad-tab and hang recovery,
 unreachable hosts, HTTP errors, find in page, zoom, and print. Part A owns
@@ -317,7 +317,12 @@ def owned_crash(name, app_pid, launcher_pid):
 def browser_crash(name, app_pid, launcher_pid):
     if "Helper" in name:
         return False
-    if not (name.startswith("ArcusisBrowser") or name.startswith("Shaar-") or name.startswith("Shaar ")):
+    if not (
+        name.startswith("ArcusisBrowser")
+        or name.startswith("ShaarVerification")
+        or name.startswith("Shaar-")
+        or name.startswith("Shaar ")
+    ):
         return False
     return owned_crash(name, app_pid, launcher_pid)
 
@@ -352,18 +357,58 @@ def stop(process):
         process.kill()
 
 
+def read_report(path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def collect_output(process, report_path, timeout=660, quit_grace=15):
+    captured = {}
+
+    def read():
+        _stdout, stderr = process.communicate()
+        captured["stderr"] = stderr
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    deadline = time.monotonic() + timeout
+    complete_at = None
+    quit_hung = False
+    timed_out = False
+    while process.poll() is None and time.monotonic() < deadline:
+        if read_report(report_path).get("complete") is True:
+            if complete_at is None:
+                complete_at = time.monotonic()
+            elif time.monotonic() - complete_at >= quit_grace:
+                quit_hung = True
+                break
+        else:
+            complete_at = None
+        time.sleep(0.5)
+    if process.poll() is None:
+        if not quit_hung:
+            timed_out = True
+        stop(process)
+    reader.join(timeout=20)
+    return_code = process.returncode if process.returncode is not None else 1
+    return return_code, captured.get("stderr") or "", timed_out, quit_hung
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar.app")
+    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/browsing-edge/receipt.json")
     options = parser.parse_args()
-    executable = options.app / "Contents/MacOS/ArcusisBrowser"
+    executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
-        parser.error(f"Missing shipping app: {executable}")
+        parser.error(f"Missing verification app: {executable}")
     before = crash_names()
     report = {}
     return_code = 1
     timed_out = False
+    quit_hung = False
     stderr = ""
     root = None
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
@@ -388,16 +433,8 @@ def main():
                 env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 start_new_session=True,
             )
-            try:
-                _stdout, stderr = process.communicate(timeout=660)
-                return_code = process.returncode
-            except subprocess.TimeoutExpired:
-                stop(process)
-                _stdout, stderr = process.communicate()
-                return_code = process.returncode if process.returncode is not None else 1
-                timed_out = True
-            if report_path.is_file():
-                report = json.loads(report_path.read_text())
+            return_code, stderr, timed_out, quit_hung = collect_output(process, report_path)
+            report = read_report(report_path)
         except Exception as error:
             stderr = (stderr or "") + f"\nharness error: {error}"
         finally:
@@ -415,23 +452,23 @@ def main():
             if name not in browser and "Helper" in name and owned_crash(name, app_pid, os.getpid())
         ]
         rows = list(report.get("rows") or [])
-        app_finished = (
-            return_code == 0 and not timed_out and not browser
-            and report.get("complete") is True
-        )
+        finished_report = report.get("complete") is True and not browser
+        clean_exit = return_code == 0 and not timed_out
+        app_finished = finished_report and (clean_exit or quit_hung)
         rows.append({
             "name": "Browser process stayed up",
             "passed": app_finished,
             "proven": True,
             "detail": (
-                f"exit {return_code}, timedOut {timed_out}, "
+                f"exit {return_code}, timedOut {timed_out}, quitHung {quit_hung}, "
                 f"browser reports {len(browser)}, helper reports {len(helper)}"
             ),
         })
         receipt = {
-            "shippingExecutable": str(executable),
+            "verificationExecutable": str(executable),
             "exitCode": return_code,
             "timedOut": timed_out,
+            "quitHung": quit_hung,
             "allWindowsHidden": report.get("allWindowsHidden"),
             "complete": report.get("complete"),
             "rows": rows,

@@ -1571,29 +1571,6 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
 
 @end
 
-@implementation ARCShaarRuntime (Verification)
-- (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
-  if (!ProbeCaptureAllowed()) return nil;
-  QuitProbeSymbols symbols = {};
-  if (QuitProbeSymbolsAvailable(&symbols)) {
-    NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
-    BOOL current = owner && PrivateQuitHoldOwnerCurrent(self, tabID, owner);
-    if (!ARCProbeNativeHoldAuditVisible(current, [owner[@"nativeHold"] boolValue]))
-      return nil;
-    return ProbeNativeHoldAudit(self, tabID, symbols);
-  }
-  NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
-  if (!owner || !PrivateQuitHoldOwnerCurrent(self, tabID, owner)) return nil;
-  NSString *windowID = [self windowIDForTabID:tabID];
-  if (![owner[@"windowID"] isEqualToString:self.primaryWindowID] ||
-      ![windowID isEqualToString:self.primaryWindowID]) return nil;
-  id selected = ProbeTable(self, "_shaarSelectedTabs")[self.primaryWindowID];
-  return @{@"holdCommandPending": owner[@"holdCommandPending"] ?: @NO,
-           @"holdConfirmedPending": owner[@"holdConfirmedPending"] ?: @NO,
-           @"selectedNormalTab": @([selected isEqual:tabID])};
-}
-
-@end
 
 @implementation ARCShaarRuntime (TrustedProbeClick)
 
@@ -1676,16 +1653,108 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
 @end
 
 @implementation ARCShaarRuntime (Verification)
-- (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID { return nil; }
-- (void)preparePrivateQuitCancellationProbeTabID:(NSString *)tabID
-                                      completion:(void (^)(BOOL))completion { completion(NO); }
-- (void)cancelPrivateQuitDialogForProbeTabID:(NSString *)tabID
-                                  completion:(void (^)(BOOL))completion { completion(NO); }
-- (NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID
-                                 error:(NSError **)error {
-  if (error) *error = ProbeUnsupported();
-  return nil;
+- (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
+  if (!ProbeCaptureAllowed()) return nil;
+  QuitProbeSymbols symbols = {};
+  if (QuitProbeSymbolsAvailable(&symbols)) {
+    NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
+    BOOL current = owner && PrivateQuitHoldOwnerCurrent(self, tabID, owner);
+    if (!ARCProbeNativeHoldAuditVisible(current, [owner[@"nativeHold"] boolValue]))
+      return nil;
+    return ProbeNativeHoldAudit(self, tabID, symbols);
+  }
+  NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
+  if (!owner || !PrivateQuitHoldOwnerCurrent(self, tabID, owner)) return nil;
+  NSString *windowID = [self windowIDForTabID:tabID];
+  if (![owner[@"windowID"] isEqualToString:self.primaryWindowID] ||
+      ![windowID isEqualToString:self.primaryWindowID]) return nil;
+  id selected = ProbeTable(self, "_shaarSelectedTabs")[self.primaryWindowID];
+  return @{@"holdCommandPending": owner[@"holdCommandPending"] ?: @NO,
+           @"holdConfirmedPending": owner[@"holdConfirmedPending"] ?: @NO,
+           @"selectedNormalTab": @([selected isEqual:tabID])};
 }
+
+- (void)preparePrivateQuitCancellationProbeTabID:(NSString *)tabID
+                                      completion:(void (^)(BOOL))completion {
+  if (!completion) return;
+  if (!PrivateQuitProbeTabIsEligible(self, tabID)) {
+    completion(NO);
+    return;
+  }
+  NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [self windowIDForTabID:tabID];
+  __weak ARCShaarRuntime *weakSelf = self;
+  [self shaarDevToolsCall:@"Runtime.evaluate"
+      params:@{@"expression": @"location.href", @"returnByValue": @YES}
+      capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+      profileID:profileID windowID:windowID
+      completion:^(NSDictionary *result, NSError *error) {
+        ARCShaarRuntime *runtime = weakSelf;
+        NSString *href = ProbeEvaluateString(result);
+        if (!runtime || error || !PrivateQuitProbeTabIsEligible(runtime, tabID) ||
+            !ARCProbeLoopbackDocumentURL(href)) {
+          completion(NO);
+          return;
+        }
+        QuitProbeSymbols symbols = {};
+        if (QuitProbeSymbolsAvailable(&symbols)) {
+          ProbePrepareNativeHold(runtime, tabID, symbols, completion);
+          return;
+        }
+        [runtime shaarDevToolsSubmit:SHAAR_OP_DEVTOOLS_CALL tabID:tabID profileID:profileID
+            windowID:windowID payload:ProbeDevToolsPayload(kProbePageDisableCommand, @{})
+            completion:^(NSDictionary *, NSError *probeError) {
+              ARCShaarRuntime *ready = weakSelf;
+              if (!ready || !PrivateQuitProbeTabIsEligible(ready, tabID) ||
+                  ARCProbeDevToolsCommandIsUnknown(probeError.localizedDescription)) {
+                completion(NO);
+                return;
+              }
+              [ready beginPrivateQuitCDPHoldForTabID:tabID completion:completion];
+            }];
+      }];
+}
+
+- (void)cancelPrivateQuitDialogForProbeTabID:(NSString *)tabID
+                                  completion:(void (^)(BOOL))completion {
+  if (!completion) return;
+  NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
+  NSString *rejection = PrivateQuitCancelRejection(self, tabID, owner);
+  if (rejection) {
+    RecordPrivateQuitDialogResult(self, [@"rejected-" stringByAppendingString:rejection]);
+    completion(NO);
+    return;
+  }
+  QuitProbeSymbols symbols = {};
+  if ([owner[@"nativeHold"] boolValue] && QuitProbeSymbolsAvailable(&symbols)) {
+    ProbeCancelNativeHold(self, tabID, owner, symbols, completion);
+    return;
+  }
+  NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [self windowIDForTabID:tabID];
+  __weak ARCShaarRuntime *weakSelf = self;
+  [self shaarDevToolsSubmit:SHAAR_OP_DEVTOOLS_CALL tabID:tabID profileID:profileID
+      windowID:windowID
+      payload:ProbeDevToolsPayload(kProbePageHandleJavaScriptDialogCommand, @{@"accept": @NO})
+      completion:^(NSDictionary *, NSError *error) {
+        ARCShaarRuntime *runtime = weakSelf;
+        if (!runtime) {
+          completion(NO);
+          return;
+        }
+        BOOL ownerCurrent = PrivateQuitHoldOwnerCurrent(runtime, tabID, owner);
+        RecordPrivateQuitDialogResult(runtime, ARCProbePrivateQuitDialogResult(
+            ownerCurrent, error.localizedDescription));
+        ARCCompletePrivateQuitDialogCancellation(ownerCurrent, error.localizedDescription, ^{
+          [runtime endPrivateQuitCDPHoldForTabID:tabID owner:owner completion:^(BOOL ended) {
+            completion(ended);
+          }];
+        }, ^{
+          completion(NO);
+        });
+      }];
+}
+
 - (void)evaluateProbePopupID:(NSString *)popupID script:(NSString *)script
                  completion:(void (^)(NSString *))completion {
   if (!completion) return;
@@ -1738,7 +1807,19 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
 }
 
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
-                    completion:(void (^)(BOOL))completion { completion(NO); }
+                    completion:(void (^)(BOOL))completion {
+  if (!completion) return;
+  if (!ProbeCaptureAllowed()) {
+    completion(NO);
+    return;
+  }
+  QuitProbeSymbols symbols = {};
+  if (!QuitProbeSymbolsAvailable(&symbols)) {
+    [self submitTrustedProbeClickInTabID:tabID elementID:elementID completion:completion];
+    return;
+  }
+  ProbeActivateElement(self, tabID, elementID, symbols, completion);
+}
 - (NSDictionary *)privateNavigationProbeAuditForTabID:(NSString *)tabID {
   if (!ProbeCaptureAllowed()) return nil;
   NSDictionary *tab = ARCPrivateShaarState(self)[@"tabs"][tabID];

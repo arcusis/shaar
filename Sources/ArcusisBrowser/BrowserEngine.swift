@@ -321,6 +321,7 @@ final class BrowserEngine {
         self.store?.session.profiles.contains(where: { $0.id == profile }) == true
       else { return }
       self.downloads.restore(rows, profileID: profile)
+      self.clearRecoveredDownloadListNotice()
     }
     store.onFindRequest = { [weak self] request, forward in
       self?.runtime.find(
@@ -922,7 +923,15 @@ final class BrowserEngine {
     }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
 
+  /// Matches the exhausted download-list notice from ChromiumEngineServices.
+  static let downloadListUnavailableNotice = "Downloads could not be restored."
+
   func reportNotice(_ message: String) { notice = message }
+
+  private func clearRecoveredDownloadListNotice() {
+    guard notice == Self.downloadListUnavailableNotice else { return }
+    notice = nil
+  }
 
   func revealDownload(_ id: String, profileID: UUID, open: Bool) {
     guard let selected = store?.session.selectedSpace.profileID, selected == profileID else {

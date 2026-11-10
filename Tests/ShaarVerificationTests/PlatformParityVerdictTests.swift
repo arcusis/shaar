@@ -66,9 +66,26 @@ struct PlatformParityVerdictTests {
   @Test func httpsInterstitialPassesWhenLoopbackIsProven() {
     let decision = PlatformParityVerdicts.httpsFirst(
       href: "chrome-error://chromewebdata/", committedURL: "",
-      pageText: "This site does not support HTTPS", outcome: "", security: "",
-      loopbackPeer: "127.0.0.1")
+      pageText: "You are seeing this warning because this site does not support HTTPS.",
+      outcome: "", security: "", loopbackPeer: "127.0.0.1")
     #expect(decision.passed)
+  }
+
+  @Test func theSecureConnectionHeadingPassesHttpsFirst() {
+    let decision = PlatformParityVerdicts.httpsFirst(
+      href: "chrome-error://chromewebdata/", committedURL: "",
+      pageText: "This site doesn\u{2019}t support a secure connection",
+      outcome: "", security: "", loopbackPeer: "127.0.0.1")
+    #expect(decision.passed)
+  }
+
+  @Test func anHttpsSubstringIsNotTheHttpsOnlyInterstitial() {
+    let decision = PlatformParityVerdicts.httpsFirst(
+      href: "chrome-error://chromewebdata/", committedURL: "",
+      pageText: "See https://example.com for help", outcome: "", security: "",
+      loopbackPeer: "127.0.0.1")
+    #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
   }
 
   @Test func plainHttpOnTheMappedHostFailsHttpsFirst() {
@@ -145,6 +162,14 @@ struct PlatformParityVerdictTests {
     let decision = PlatformParityVerdicts.printSurface(
       outcome: "afterprint", beforePrint: true, surfaces: [])
     #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
+  }
+
+  @Test func printWithNoEventStaysAProbe() {
+    let decision = PlatformParityVerdicts.printSurface(
+      outcome: "", beforePrint: false, surfaces: ["BrowserWindow"])
+    #expect(!decision.passed)
+    #expect(decision.disposition == "probe")
   }
 
   @Test func printSurfacePasses() {
@@ -160,9 +185,10 @@ struct PlatformParityVerdictTests {
     #expect(decision.disposition == "gap")
   }
 
-  @Test func emptyExtensionListWithoutAnInstallFails() {
+  @Test func emptyExtensionListWithoutAnInstallStaysAProbe() {
     let decision = PlatformParityVerdicts.extensions(listed: [], installedMV3: false)
     #expect(!decision.passed)
+    #expect(decision.disposition == "probe")
   }
 
   @Test func installedMV3ExtensionPassesWhenItIsListed() {
@@ -174,6 +200,7 @@ struct PlatformParityVerdictTests {
   @Test func installFlagWithAnEmptyListFails() {
     let decision = PlatformParityVerdicts.extensions(listed: [], installedMV3: true)
     #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
   }
 
   @Test func missingSafeBrowsingPrefIsAProbe() {

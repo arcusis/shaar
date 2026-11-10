@@ -35,6 +35,8 @@ class PlatformParityReportTests(unittest.TestCase):
         self.assertFalse(PROBE.run_completed(hidden, []))
         unfinished = {"completed": False, "allWindowsHidden": True, "rows": rows}
         self.assertFalse(PROBE.run_completed(unfinished, []))
+        self.assertFalse(PROBE.run_completed(report, [], 124))
+        self.assertFalse(PROBE.run_completed(report, [], 1))
 
     def test_group_parser_keeps_exact_pids(self):
         text = "  10 10\n  11 10\n  12 55\n  1 10\n  bad line\n"
@@ -85,3 +87,39 @@ class PlatformParityReportTests(unittest.TestCase):
         text = 'Process: Chromium Helper\n"pid" : 4242\n'
         self.assertTrue(PROBE.crash_matches_pids(text, [90066, 4242]))
         self.assertFalse(PROBE.crash_matches_pids(text, [90066]))
+        self.assertTrue(PROBE.crash_matches_pids('"pid": 12\n', [12]))
+        self.assertFalse(PROBE.crash_matches_pids('"pid": 123\n', [12]))
+        self.assertFalse(PROBE.crash_matches_pids('"pid" : 1234\n', [123]))
+
+    def test_stop_resnapshots_helpers_after_the_leader_exits(self):
+        class Proc:
+            pid = 10
+
+            def poll(self):
+                return 0
+
+        owned = []
+        killed = []
+        alive = PROBE.pid_alive
+        kill = PROBE.os.kill
+        group = PROBE.process_group
+        listed = PROBE.pids_in_group
+        try:
+            PROBE.pids_in_group = lambda pgid: [11, 12] if pgid == 10 else []
+            PROBE.pid_alive = lambda pid: pid in {11, 12}
+            PROBE.process_group = lambda pid: 10 if pid == 11 else 99
+
+            def record(pid, sig):
+                killed.append(pid)
+                return None
+
+            PROBE.os.kill = record
+            victims = PROBE.stop_process_group(Proc(), owned)
+        finally:
+            PROBE.pid_alive = alive
+            PROBE.os.kill = kill
+            PROBE.process_group = group
+            PROBE.pids_in_group = listed
+        self.assertEqual(owned, [11, 12])
+        self.assertEqual(victims, [11])
+        self.assertEqual(killed, [11, 11])

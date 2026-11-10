@@ -53,9 +53,9 @@ enum PlatformParityVerdicts {
     let address = href.isEmpty ? committedURL : href
     let loadedPlain = outcome == "loaded" && address.hasPrefix("http:")
     let upgraded = address.hasPrefix("https:") && !address.contains("chrome-error")
-    let namesHTTPS = pageText.localizedCaseInsensitiveContains("https")
     let onErrorPage = address.contains("chrome-error") || isCertificateError(security)
-    let interstitial = namesHTTPS && onErrorPage && !address.hasPrefix("http:")
+    let interstitial =
+      isHTTPSOnlyInterstitial(pageText) && onErrorPage && !address.hasPrefix("http:")
     let passed = !loadedPlain && (upgraded || interstitial)
     let evidence: String
     if passed {
@@ -84,29 +84,59 @@ enum PlatformParityVerdicts {
       passed: prompted, disposition: prompted ? "pass" : "gap", evidence: evidence)
   }
 
+  /// Chrome 155's HTTPS-Only interstitial. A page that merely mentions https is not this warning.
+  private static let httpsOnlyInterstitialSentences = [
+    "You are seeing this warning because this site does not support HTTPS.",
+    "This site doesn\u{2019}t support a secure connection",
+  ]
+
+  static func isHTTPSOnlyInterstitial(_ pageText: String) -> Bool {
+    httpsOnlyInterstitialSentences.contains { pageText.localizedCaseInsensitiveContains($0) }
+  }
+
   /// beforeprint and afterprint are page events. A pass needs a print surface.
+  /// Nothing observed is a probe; an event without a surface is a gap.
   static func printSurface(
     outcome: String, beforePrint: Bool, surfaces: [String]
   ) -> PlatformParityDecision {
     let surfaced = surfaces.contains { $0.localizedCaseInsensitiveContains("print") }
-    let evidence =
-      surfaced
-      ? "A print surface appeared."
-      : "beforeprint or afterprint without a print surface is not print UI. outcome \(outcome); beforeprint \(beforePrint)"
+    if surfaced {
+      return PlatformParityDecision(
+        passed: true, disposition: "pass", evidence: "A print surface appeared.")
+    }
+    let observed = beforePrint || !outcome.isEmpty
+    if !observed {
+      return PlatformParityDecision(
+        passed: false, disposition: "probe",
+        evidence: "Print was not measured. No beforeprint event and no print surface.")
+    }
     return PlatformParityDecision(
-      passed: surfaced, disposition: surfaced ? "pass" : "gap", evidence: evidence)
+      passed: false, disposition: "gap",
+      evidence:
+        "beforeprint or afterprint without a print surface is not print UI. outcome \(outcome); beforeprint \(beforePrint)"
+    )
   }
 
   /// The product list can contain an extension this run never installed.
+  /// An empty list with no install attempt was not measured.
   static func extensions(listed: [String], installedMV3: Bool) -> PlatformParityDecision {
     let names = listed.isEmpty ? "product list empty" : listed.joined(separator: "; ")
-    let passed = installedMV3 && !listed.isEmpty
+    if installedMV3 && !listed.isEmpty {
+      return PlatformParityDecision(
+        passed: true, disposition: "pass",
+        evidence: "This run installed an MV3 extension and it is in the product list. \(names)")
+    }
+    if !installedMV3 && listed.isEmpty {
+      return PlatformParityDecision(
+        passed: false, disposition: "probe",
+        evidence: "No MV3 install was attempted. \(names)")
+    }
     let evidence =
-      passed
-      ? "This run installed an MV3 extension and it is in the product list. \(names)"
+      installedMV3
+      ? "This run's MV3 install is not in the product list."
       : "No MV3 extension was installed by this run. \(names)"
     return PlatformParityDecision(
-      passed: passed, disposition: passed ? "pass" : "gap", evidence: evidence)
+      passed: false, disposition: "gap", evidence: evidence)
   }
 
   /// An absent Safe Browsing pref is not evidence that the feature is on.

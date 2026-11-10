@@ -1055,7 +1055,9 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   return -1;  // Native Chromium window IDs are not part of the Shaar ABI.
 }
 
-- (int)nativeTabIDForID:(NSString *)tabID { return -1; }
+- (int)nativeTabIDForID:(NSString *)tabID {
+  return -1;  // Chromium's integer tab ids are not part of the Shaar ABI.
+}
 
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted {
   // No Shaar external-app request ABI exists yet.

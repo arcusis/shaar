@@ -597,17 +597,36 @@ final class ShaarFirstTabProbe {
       passed = false
       FileHandle.standardError.write(Data("Shaar first-tab report failed: \(error)\n".utf8))
     }
-    // Profile load refreshes bookmarks on this window. Close after that submit.
+    if !passed {
+      runtime.quit()
+      return
+    }
+    if checksFavicon || restoresFavicon {
+      // Profile load refreshes bookmarks on this window. Close after that submit.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        guard let self else { return }
+        self.closeProbeWindows()
+        self.quitProbe()
+      }
+      return
+    }
+    closeProbeWindows()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-      guard let self else { return }
-      for context in self.host.contexts.values {
-        _ = self.runtime.closeWindowID(context.nativeID)
-      }
-      if self.passed && self.systemQuit {
-        NSApp.terminate(nil)
-      } else {
-        self.runtime.quit()
-      }
+      self?.quitProbe()
+    }
+  }
+
+  private func closeProbeWindows() {
+    for context in host.contexts.values {
+      _ = runtime.closeWindowID(context.nativeID)
+    }
+  }
+
+  private func quitProbe() {
+    if systemQuit {
+      NSApp.terminate(nil)
+    } else {
+      runtime.quit()
     }
   }
 

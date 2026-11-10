@@ -108,14 +108,20 @@ final class BrowserEngine {
       faviconHosts[tabID] = documentHost
       guard changed, store?.remembersFavicon(forTab: tabID) == true else { return }
       persistedFaviconUpdates += 1
-      store?.rememberFavicon(icon, forTab: tabID)
+      store?.rememberFavicon(icon, forTab: tabID, host: documentHost)
       return
     }
-    guard let previous = faviconHosts[tabID] else {
+    // A missing host is not a different site. The first loading tick must not wipe a saved icon.
+    guard let documentHost, !documentHost.isEmpty else { return }
+    let previous = faviconHosts[tabID] ?? store?.faviconHost(forTab: tabID)
+    guard let previous else {
       faviconHosts[tabID] = documentHost
       return
     }
-    guard previous != documentHost else { return }
+    guard previous != documentHost else {
+      faviconHosts[tabID] = documentHost
+      return
+    }
     clearFavicon(tabID)
     faviconHosts[tabID] = documentHost
     store?.forgetFavicon(forTab: tabID)

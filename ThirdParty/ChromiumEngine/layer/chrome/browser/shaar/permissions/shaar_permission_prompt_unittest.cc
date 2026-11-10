@@ -157,6 +157,14 @@ TEST(ShaarPermissionPromptTest, OTRDecisionLeavesParentPermissionStoresAlone) {
   const ContentSetting otr_site_before =
       otr_settings->GetContentSetting(origin, origin, type);
 
+  auto* registry_factory =
+      custom_handlers::ProtocolHandlerRegistryFactory::GetInstance();
+  registry_factory->SetTestingFactoryAndUse(
+      &profile,
+      custom_handlers::ProtocolHandlerRegistryFactory::GetDefaultFactory());
+  registry_factory->SetTestingFactoryAndUse(
+      otr,
+      custom_handlers::ProtocolHandlerRegistryFactory::GetDefaultFactory());
   auto* parent_registry =
       custom_handlers::ProtocolHandlerRegistryFactory::GetForBrowserContext(
           &profile);
@@ -166,7 +174,7 @@ TEST(ShaarPermissionPromptTest, OTRDecisionLeavesParentPermissionStoresAlone) {
   ASSERT_NE(parent_registry, nullptr);
   ASSERT_NE(otr_registry, nullptr);
   ASSERT_NE(parent_registry, otr_registry);
-  parent_registry->OnAcceptRegisterProtocolHandler(
+  parent_registry->OnDenyRegisterProtocolHandler(
       custom_handlers::ProtocolHandler::CreateProtocolHandler(
           "web+shaartest", GURL("https://handler.example.test/?%s")));
   const size_t parent_protocol_handlers_before =

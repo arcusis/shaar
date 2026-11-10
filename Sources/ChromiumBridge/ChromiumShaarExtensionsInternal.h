@@ -15,6 +15,14 @@ NS_ASSUME_NONNULL_BEGIN
                   allowsProfileOnly:(BOOL)allowsProfileOnly
                              payload:(NSDictionary *)payload
                           completion:(void (^)(NSString * _Nullable json, shaar_error_code code))completion;
+/// Same submit. On a synchronous refusal, writes the engine code and returns NO
+/// without calling the completion. A NULL code keeps the older refusal path.
+- (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
+                           profileID:(NSString *)profileID
+                               tabID:(NSString * _Nullable)tabID
+                             payload:(NSDictionary *)payload
+                          completion:(void (^)(NSString * _Nullable json, shaar_error_code code))completion
+                            syncCode:(shaar_error_code * _Nullable)syncCode;
 - (BOOL)shaarOwnsSelectedTabID:(NSString *)tabID profileID:(NSString *)profileID;
 - (nullable NSString *)shaarProfileIDForTabID:(NSString *)tabID;
 - (nullable NSString *)shaarWindowIDForTabID:(NSString *)tabID;
@@ -23,6 +31,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSView *)shaarExtensionPopupViewForID:(NSString *)popupID
                                          windowID:(NSString *)windowID;
 - (void)shaarExtensionEvent:(const shaar_event *)event payload:(NSDictionary *)payload;
+- (void)shaarForgetExtensionListForProfileID:(NSString *)profileID;
 @end
 
 NS_ASSUME_NONNULL_END

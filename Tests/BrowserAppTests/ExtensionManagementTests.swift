@@ -113,6 +113,223 @@ struct ExtensionManagementTests {
     #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
   }
 
+  @Test func unpackedFolderRequiresAManifestV3Directory() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    #expect(ExtensionUnpackedFolder.directory(root) == nil)
+    try Data(#"{"manifest_version":2,"name":"Old"}"#.utf8).write(
+      to: root.appending(path: "manifest.json"))
+    #expect(ExtensionUnpackedFolder.directory(root) == nil)
+    try Data(#"{"manifest_version":3,"name":"Probe"}"#.utf8).write(
+      to: root.appending(path: "manifest.json"))
+    #expect(ExtensionUnpackedFolder.directory(root) == root.standardizedFileURL.path)
+    #expect(ExtensionUnpackedFolder.directory(URL(string: "https://example.com")!) == nil)
+  }
+
+  @Test func manageReplyMapsEngineRefusalsAndPromptedInstalls() throws {
+    #expect(ExtensionManageReply(json: nil, code: 1) == .failed)
+    #expect(
+      ExtensionManageReply(json: nil, code: 1, action: "setDeveloperMode") == .unsupported)
+    #expect(ExtensionManageReply(json: nil, code: 1, action: "loadUnpacked") == .unsupported)
+    #expect(ExtensionManageReply(json: nil, code: 1, action: "uninstall") == .failed)
+    #expect(ExtensionManageReply(json: nil, code: 15) == .unsupported)
+    #expect(
+      ExtensionManageReply(json: #"{"schemaVersion":1,"prompted":true}"#, code: 0) == .prompted)
+    #expect(ExtensionManageReply(json: #"{"schemaVersion":1,"updated":true}"#, code: 0) == .updated)
+    #expect(ExtensionManageReply(json: "true", code: 0) == .failed)
+    #expect(
+      ExtensionPageOrigin.string(from: URL(string: "https://example.com/path")!)
+        == "https://example.com")
+    #expect(ExtensionPageOrigin.accepts("https://example.com"))
+    #expect(!ExtensionPageOrigin.accepts("https://example.com/"))
+    #expect(
+      ExtensionPageOrigin.string(from: URL(string: "https://example.com:443/path")!)
+        == "https://example.com")
+    #expect(
+      ExtensionPageOrigin.string(from: URL(string: "http://example.com:80/a")!)
+        == "http://example.com")
+    #expect(
+      ExtensionPageOrigin.string(from: URL(string: "https://example.com:8443/a")!)
+        == "https://example.com:8443")
+    #expect(ExtensionPageOrigin.string(from: URL(string: "https://[::1]/path")!) == "https://[::1]")
+    #expect(
+      ExtensionPageOrigin.string(from: URL(string: "http://[::1]:8080/")!) == "http://[::1]:8080")
+    #expect(ExtensionPageOrigin.accepts("https://[::1]"))
+    #expect(!ExtensionPageOrigin.accepts("https://::1"))
+    #expect(!ExtensionPageOrigin.accepts("https://example.com:443"))
+    #expect(
+      ExtensionPageOrigin.string(from: URL(string: "https://user:pass@example.com/a?q=1#h")!)
+        == "https://example.com")
+    let listed = try JSONDecoder().decode(
+      [ManagedExtension].self,
+      from: Data(
+        #"[{"id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","name":"Probe","version":"1","description":"","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[],"siteAccess":"onSite"}]"#
+          .utf8))
+    #expect(listed.first?.siteAccess == "onSite")
+  }
+
+  @Test @MainActor func developerModePersistsAndUnpackedLoadReportsTheEngineRefusal() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let profile = UUID()
+    let store = BrowserPreferencesStore(fileURL: file)
+    store.setExtensionDeveloperMode(true, for: profile)
+    #expect(BrowserPreferencesStore(fileURL: file).extensionDeveloperMode(for: profile))
+    store.setExtensionDeveloperMode(false, for: profile)
+    #expect(!BrowserPreferencesStore(fileURL: file).extensionDeveloperMode(for: profile))
+
+    let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try Data(#"{"manifest_version":3,"name":"Probe"}"#.utf8).write(
+      to: folder.appending(path: "manifest.json"))
+    let disabled = ExtensionManagerModel(profileID: profile, extensions: [])
+    disabled.loadUnpacked(at: folder, tabID: nil)
+    #expect(disabled.status == "Turn on Developer mode to load an unpacked extension.")
+    let model = ExtensionManagerModel(profileID: profile, extensions: [], developerMode: true)
+    model.loadUnpacked(at: folder, tabID: nil)
+    #expect(model.status == ExtensionInstallNotice.needsNewerEngine)
+    let invalidFolderModel = ExtensionManagerModel(
+      profileID: profile, extensions: [], developerMode: true)
+    let empty = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+    invalidFolderModel.loadUnpacked(at: empty, tabID: nil)
+    #expect(invalidFolderModel.status == "Choose a folder that contains a Manifest V3 extension.")
+  }
+
+  @Test func bridgeReportsInvalidArgumentAndAMissingEngineSeparately() {
+    let runtime = ARCShaarRuntime()
+    let missingEngine = CodeSink()
+    runtime.submitExtensionManage(
+      forProfileID: UUID().uuidString, tabID: nil,
+      payload: ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": true]
+    ) { _, code in
+      missingEngine.code = code
+    }
+    #expect(missingEngine.code == 3)
+    #expect(ExtensionManageReply(json: nil, code: missingEngine.code ?? 0) == .failed)
+
+    let invalid = CodeSink()
+    runtime.submitExtensionManage(
+      forProfileID: "not-a-profile", tabID: nil, payload: ["schemaVersion": 1]
+    ) { _, code in
+      invalid.code = code
+    }
+    #expect(invalid.code == 1)
+    #expect(ExtensionManageReply(json: nil, code: invalid.code ?? 0) == .failed)
+  }
+
+  @Test @MainActor func manageRepliesReportDeveloperModeAndInstallRefusals() async throws {
+    let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try Data(#"{"manifest_version":3,"name":"Probe"}"#.utf8).write(
+      to: folder.appending(path: "manifest.json"))
+    func preferences() -> BrowserPreferencesStore {
+      BrowserPreferencesStore(
+        fileURL: FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json"))
+    }
+    let togglePreferences = preferences()
+    let toggleRuntime = ScriptedManageRuntime(replies: [(nil, 1)])
+    let toggle = ExtensionManagerModel.shared(
+      runtime: toggleRuntime, preferences: togglePreferences, profileID: UUID())
+    toggle.setDeveloperMode(true)
+    await Task.yield()
+    #expect(!toggle.developerMode)
+    #expect(!togglePreferences.extensionDeveloperMode(for: toggle.profileID))
+    #expect(toggle.status == ExtensionInstallNotice.needsNewerEngine)
+    #expect(toggleRuntime.actions == ["setDeveloperMode"])
+
+    let loadPreferences = preferences()
+    let loadProfile = UUID()
+    loadPreferences.setExtensionDeveloperMode(true, for: loadProfile)
+    let loadRuntime = ScriptedManageRuntime(
+      replies: [
+        (#"{"schemaVersion":1,"updated":true}"#, 0),
+        (#"{"schemaVersion":1,"updated":true}"#, 0), (nil, 1),
+      ])
+    let load = ExtensionManagerModel.shared(
+      runtime: loadRuntime, preferences: loadPreferences, profileID: loadProfile)
+    load.loadUnpacked(at: folder, tabID: nil)
+    await Task.yield()
+    #expect(load.developerMode)
+    #expect(loadPreferences.extensionDeveloperMode(for: loadProfile))
+    #expect(load.status == ExtensionInstallNotice.needsNewerEngine)
+    #expect(loadRuntime.actions == ["setDeveloperMode", "setDeveloperMode", "loadUnpacked"])
+
+    let failedPreferences = preferences()
+    let failedProfile = UUID()
+    failedPreferences.setExtensionDeveloperMode(true, for: failedProfile)
+    let failedRuntime = ScriptedManageRuntime(
+      replies: [
+        (#"{"schemaVersion":1,"updated":true}"#, 0),
+        (#"{"schemaVersion":1,"updated":true}"#, 0), (nil, 2),
+      ])
+    let failed = ExtensionManagerModel.shared(
+      runtime: failedRuntime, preferences: failedPreferences, profileID: failedProfile)
+    failed.loadUnpacked(at: folder, tabID: nil)
+    await Task.yield()
+    #expect(failed.status == ExtensionInstallNotice.installFailed)
+    #expect(failedRuntime.actions == ["setDeveloperMode", "setDeveloperMode", "loadUnpacked"])
+
+    let privateAccess = ScriptedManageRuntime(replies: [(nil, 15)])
+    let extensions = ExtensionManagerModel.shared(
+      runtime: privateAccess, preferences: preferences(), profileID: UUID())
+    extensions.setIncognitoEnabled(validID, enabled: true)
+    #expect(extensions.status == ExtensionInstallNotice.privateAccessRefused)
+    #expect(privateAccess.actions == ["setIncognitoEnabled"])
+    let listed = try JSONDecoder().decode(
+      ManagedExtension.self,
+      from: Data(
+        #"{"id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","name":"Probe","version":"1","description":"","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[]}"#
+          .utf8))
+    #expect(listed.incognitoEnabled != true)
+  }
+
+  @Test @MainActor func siteAccessOriginFollowsTheKeyWindowThenTheFocusedWindow() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let workspace = try BrowserWorkspaceStore(
+      file: WorkspaceFile(
+        url: root.appending(path: "workspace.json"),
+        legacySessionURL: root.appending(path: "session.json")))
+    let firstID = try #require(workspace.workspace.windows.first?.id)
+    let secondID = try workspace.newWindow(from: firstID)
+    let first = try #require(workspace.stores[firstID])
+    let second = try #require(workspace.stores[secondID])
+    first.perform(.open(URL(string: "https://example.com/path")!))
+    second.perform(.open(URL(string: "https://other.example:443/page")!))
+    let profile = first.session.selectedSpace.profileID
+    let runtime = WindowMapRuntime()
+    let firstWindow = orderedOutWindow()
+    let secondWindow = orderedOutWindow()
+    runtime.windows[firstID.uuidString] = firstWindow
+    runtime.windows[secondID.uuidString] = secondWindow
+    let state = BrowserSettingsState(
+      workspace: workspace,
+      preferences: BrowserPreferencesStore(fileURL: root.appending(path: "preferences.json")),
+      runtime: runtime)
+
+    #expect(state.browserStoreForSiteAccess(profileID: profile, keyWindow: secondWindow) === second)
+    #expect(
+      ExtensionPageOrigin.string(from: try #require(second.session.selectedPage?.tab.url))
+        == "https://other.example")
+    let focused = try #require(workspace.workspace.focusedWindowID)
+    #expect(
+      state.browserStoreForSiteAccess(profileID: profile, keyWindow: nil)
+        === workspace.stores[focused])
+    #expect(state.browserStoreForSiteAccess(profileID: UUID(), keyWindow: nil) == nil)
+    #expect(state.browserStoreForSiteAccess(profileID: UUID(), keyWindow: firstWindow) == nil)
+  }
+
+  @MainActor private func orderedOutWindow() -> NSWindow {
+    let window = NSWindow(
+      contentRect: NSRect(x: -20000, y: -20000, width: 20, height: 20),
+      styleMask: [.borderless], backing: .buffered, defer: true)
+    window.orderOut(nil)
+    return window
+  }
+
   @Test @MainActor func pinnedExtensionsPersistPerProfile() throws {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
@@ -136,6 +353,34 @@ struct ExtensionManagementTests {
         bytesPerRow: 0, bitsPerPixel: 0))
     return try #require(bitmap.representation(using: .png, properties: [:]))
   }
+}
+
+private final class CodeSink: @unchecked Sendable {
+  var code: Int?
+}
+
+private final class ScriptedManageRuntime: ARCShaarRuntime {
+  var replies: [(String?, Int)]
+  var actions: [String] = []
+
+  init(replies: [(String?, Int)]) {
+    self.replies = replies
+    super.init()
+  }
+
+  override func submitExtensionManage(
+    forProfileID profileID: String, tabID: String?, payload: [String: Any],
+    completion: @escaping (String?, Int) -> Void
+  ) {
+    actions.append(payload["action"] as? String ?? "")
+    let reply = replies.isEmpty ? (nil, 1) : replies.removeFirst()
+    completion(reply.0, reply.1)
+  }
+}
+
+private final class WindowMapRuntime: ARCChromiumRuntime {
+  var windows: [String: NSWindow] = [:]
+  override func window(forID windowID: String) -> NSWindow? { windows[windowID] }
 }
 
 extension ExtensionManagementTests {

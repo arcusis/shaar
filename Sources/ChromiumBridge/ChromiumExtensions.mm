@@ -214,6 +214,32 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
   if (!accepted) completion(nil);
 }
 
+- (void)submitExtensionManageForProfileID:(NSString *)profileID
+                                    tabID:(NSString *)tabID
+                                  payload:(NSDictionary<NSString *, id> *)payload
+                               completion:(void (^)(NSString *, NSInteger))completion {
+  NSString *validated = ARCValidatedProfileID(profileID);
+  if (!validated || ![payload isKindOfClass:NSDictionary.class]) {
+    completion(nil, SHAAR_INVALID_ARGUMENT);
+    return;
+  }
+  NSString *tab = nil;
+  if ([tabID isKindOfClass:NSString.class] && tabID.length) tab = tabID;
+  shaar_error_code syncCode = SHAAR_OK;
+  BOOL accepted = [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_MANAGE
+      profileID:validated tabID:tab payload:payload
+      completion:^(NSString *json, shaar_error_code code) {
+        if (code == SHAAR_OK) [ShaarExtensionState(self).lists removeObjectForKey:validated];
+        completion(json, (NSInteger)code);
+      } syncCode:&syncCode];
+  if (!accepted) completion(nil, syncCode == SHAAR_OK ? SHAAR_CHROMIUM_ERROR : syncCode);
+}
+
+- (void)shaarForgetExtensionListForProfileID:(NSString *)profileID {
+  NSString *validated = ARCValidatedProfileID(profileID);
+  if (validated) [ShaarExtensionState(self).lists removeObjectForKey:validated];
+}
+
 - (NSURL *)extensionsDirectoryForProfileID:(NSString *)profileID {
   NSString *validated = ARCValidatedProfileID(profileID);
   NSURL *directory = validated ? [self shaarProfileDirectoryForID:validated] : nil;

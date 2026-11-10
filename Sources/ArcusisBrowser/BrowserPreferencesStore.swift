@@ -16,6 +16,7 @@ final class BrowserPreferencesStore {
   private var profileDownloadBookmarks: [UUID: Data] = [:]
   private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
+  private var extensionDeveloperMode: [UUID: Bool] = [:]
   private var autoPictureInPictureOffSites: [UUID: [String]] = [:]
   private var profileHttpsOnlyMode: [UUID: Bool] = [:]
   private var developerSimulations: [UUID: [String: DeveloperSimulation]] = [:]
@@ -76,6 +77,16 @@ final class BrowserPreferencesStore {
     var ids = pinnedExtensionIDs(for: profileID).filter { $0 != id }
     if pinned { ids.append(id) }
     pinnedExtensions[profileID] = ids.isEmpty ? nil : ids
+    save()
+  }
+
+  /// Local Developer mode for unpacked extensions. The engine pref is separate and may refuse.
+  func extensionDeveloperMode(for profileID: UUID) -> Bool {
+    extensionDeveloperMode[profileID] == true
+  }
+
+  func setExtensionDeveloperMode(_ enabled: Bool, for profileID: UUID) {
+    extensionDeveloperMode[profileID] = enabled ? true : nil
     save()
   }
 
@@ -177,6 +188,7 @@ final class BrowserPreferencesStore {
     profileDownloadBookmarks[profileID] = nil
     connectedAccounts[profileID] = nil
     pinnedExtensions[profileID] = nil
+    extensionDeveloperMode[profileID] = nil
     autoPictureInPictureOffSites[profileID] = nil
     profileHttpsOnlyMode[profileID] = nil
     developerSimulations[profileID] = nil
@@ -210,6 +222,7 @@ final class BrowserPreferencesStore {
       profileDownloadBookmarks = document.profileDownloadBookmarks
       connectedAccounts = document.connectedAccounts
       pinnedExtensions = document.pinnedExtensions
+      extensionDeveloperMode = document.extensionDeveloperMode
       autoPictureInPictureOffSites = document.autoPictureInPictureOffSites
       profileHttpsOnlyMode = document.profileHttpsOnlyMode
       developerSimulations = document.developerSimulations
@@ -241,7 +254,8 @@ final class BrowserPreferencesStore {
         profileSearchEngines: profileSearchEngines,
         profileDownloadDirectories: profileDownloadDirectories,
         profileDownloadBookmarks: profileDownloadBookmarks,
-        pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts,
+        pinnedExtensions: pinnedExtensions, extensionDeveloperMode: extensionDeveloperMode,
+        connectedAccounts: connectedAccounts,
         autoPictureInPictureOffSites: autoPictureInPictureOffSites,
         profileHttpsOnlyMode: profileHttpsOnlyMode,
         developerSimulations: developerSimulations)
@@ -273,6 +287,7 @@ private struct PreferencesDocument: Codable {
   let profileDownloadBookmarks: [UUID: Data]
   let connectedAccounts: [UUID: [ConnectedAccount]]
   let pinnedExtensions: [UUID: [String]]
+  let extensionDeveloperMode: [UUID: Bool]
   let autoPictureInPictureOffSites: [UUID: [String]]
   let profileHttpsOnlyMode: [UUID: Bool]
   let developerSimulations: [UUID: [String: DeveloperSimulation]]
@@ -285,6 +300,7 @@ private struct PreferencesDocument: Codable {
     case profileDownloadBookmarks
     case connectedAccounts
     case pinnedExtensions
+    case extensionDeveloperMode
     case autoPictureInPictureOffSites
     case profileHttpsOnlyMode
     case developerSimulations
@@ -296,6 +312,7 @@ private struct PreferencesDocument: Codable {
     profileDownloadDirectories: [UUID: String] = [:],
     profileDownloadBookmarks: [UUID: Data] = [:],
     pinnedExtensions: [UUID: [String]] = [:],
+    extensionDeveloperMode: [UUID: Bool] = [:],
     connectedAccounts: [UUID: [ConnectedAccount]] = [:],
     autoPictureInPictureOffSites: [UUID: [String]] = [:],
     profileHttpsOnlyMode: [UUID: Bool] = [:],
@@ -308,6 +325,7 @@ private struct PreferencesDocument: Codable {
     self.profileDownloadBookmarks = profileDownloadBookmarks
     self.connectedAccounts = connectedAccounts
     self.pinnedExtensions = pinnedExtensions
+    self.extensionDeveloperMode = extensionDeveloperMode
     self.autoPictureInPictureOffSites = autoPictureInPictureOffSites
     self.profileHttpsOnlyMode = profileHttpsOnlyMode
     self.developerSimulations = developerSimulations
@@ -323,6 +341,8 @@ private struct PreferencesDocument: Codable {
       try values.decodeIfPresent([UUID: [ConnectedAccount]].self, forKey: .connectedAccounts) ?? [:]
     pinnedExtensions =
       try values.decodeIfPresent([UUID: [String]].self, forKey: .pinnedExtensions) ?? [:]
+    extensionDeveloperMode =
+      try values.decodeIfPresent([UUID: Bool].self, forKey: .extensionDeveloperMode) ?? [:]
     developerSimulations =
       try values.decodeIfPresent(
         [UUID: [String: DeveloperSimulation]].self, forKey: .developerSimulations) ?? [:]

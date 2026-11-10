@@ -287,6 +287,11 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
                          extensionID:(nullable NSString *)extensionID
                              enabled:(BOOL)enabled
                           completion:(void (^)(NSString * _Nullable json))completion;
+/// Submits a manage payload. The completion code is a `shaar_error_code`.
+- (void)submitExtensionManageForProfileID:(NSString *)profileID
+                                    tabID:(nullable NSString *)tabID
+                                  payload:(NSDictionary<NSString *, id> *)payload
+                               completion:(void (^)(NSString * _Nullable json, NSInteger code))completion;
 /// The profile's installed-extensions folder, for reading extension manifests and icons.
 - (nullable NSURL *)extensionsDirectoryForProfileID:(NSString *)profileID;
 - (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;

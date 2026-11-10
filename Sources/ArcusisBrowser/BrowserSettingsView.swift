@@ -163,6 +163,9 @@ struct BrowserSettingsView: View {
   let extensionManager: (UUID) -> ExtensionManagerModel?
   let sharedExtensions: SharedExtensionSettingsModel?
   let onAddExtensions: (UUID) -> Void
+  let onLoadUnpacked: (UUID) -> Void
+  let pageOrigin: (UUID) -> String?
+  let selectedTabID: (UUID) -> UUID?
   let clearHistory: ((UUID) async throws -> Void)?
   let profileBackend: (any ProfileSettingsBackend)?
   let httpsOnlyModeEnabled: (UUID) -> Bool
@@ -195,6 +198,9 @@ struct BrowserSettingsView: View {
     extensionManager: @escaping (UUID) -> ExtensionManagerModel? = { _ in nil },
     sharedExtensions: SharedExtensionSettingsModel? = nil,
     onAddExtensions: @escaping (UUID) -> Void = { _ in },
+    onLoadUnpacked: @escaping (UUID) -> Void = { _ in },
+    pageOrigin: @escaping (UUID) -> String? = { _ in nil },
+    selectedTabID: @escaping (UUID) -> UUID? = { _ in nil },
     profileBackend: (any ProfileSettingsBackend)? = nil,
     clearHistory: ((UUID) async throws -> Void)? = nil,
     httpsOnlyModeEnabled: @escaping (UUID) -> Bool,
@@ -222,6 +228,9 @@ struct BrowserSettingsView: View {
     self.extensionManager = extensionManager
     self.sharedExtensions = sharedExtensions
     self.onAddExtensions = onAddExtensions
+    self.onLoadUnpacked = onLoadUnpacked
+    self.pageOrigin = pageOrigin
+    self.selectedTabID = selectedTabID
     self.clearHistory = clearHistory
     self.profileBackend = profileBackend
     self.httpsOnlyModeEnabled = httpsOnlyModeEnabled
@@ -291,6 +300,8 @@ struct BrowserSettingsView: View {
           }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("settings.section.\(section.rawValue)")
+        .accessibilityLabel(section.title)
         .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
       }
       Spacer()
@@ -720,7 +731,10 @@ struct BrowserSettingsView: View {
         ProfileExtensionsSection(
           model: extensionManager(profile.id),
           sharedModel: sharedExtensions,
-          onAddExtensions: { onAddExtensions(profile.id) })
+          pageOrigin: { pageOrigin(profile.id) },
+          selectedTabID: { selectedTabID(profile.id) },
+          onAddExtensions: { onAddExtensions(profile.id) },
+          onLoadUnpacked: { onLoadUnpacked(profile.id) })
       }
       Section {
         Button(SettingsL10n.string("Delete Profile…"), role: .destructive) {

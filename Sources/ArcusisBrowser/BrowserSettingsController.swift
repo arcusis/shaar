@@ -95,6 +95,59 @@ final class BrowserSettingsState {
     store.perform(.open(BrowserExtension.storeCatalogURL))
   }
 
+  func selectedTabID(for profileID: UUID) -> UUID? {
+    browserStoreForSiteAccess(profileID: profileID, keyWindow: NSApp.keyWindow)?.session
+      .selectedPage?.tab.id
+  }
+
+  func pageOrigin(for profileID: UUID) -> String? {
+    guard
+      let url = browserStoreForSiteAccess(profileID: profileID, keyWindow: NSApp.keyWindow)?
+        .session.selectedPage?.tab.url
+    else { return nil }
+    return ExtensionPageOrigin.string(from: url)
+  }
+
+  /// The browser window the user is looking at. Settings is often key, so the focused
+  /// browser window is the next choice. Another window is not a guess.
+  func browserStoreForSiteAccess(profileID: UUID, keyWindow: NSWindow?) -> BrowserStore? {
+    if let keyWindow, let store = store(for: keyWindow),
+      store.session.selectedSpace.profileID == profileID
+    {
+      return store
+    }
+    if let focusedID = workspace.workspace.focusedWindowID,
+      let focused = workspace.stores[focusedID],
+      focused.session.selectedSpace.profileID == profileID
+    {
+      return focused
+    }
+    return nil
+  }
+
+  private func store(for window: NSWindow) -> BrowserStore? {
+    guard let runtime else { return nil }
+    for (id, store) in workspace.stores {
+      if runtime.window(forID: id.uuidString) === window { return store }
+    }
+    return nil
+  }
+
+  func chooseUnpackedExtension(for profileID: UUID) {
+    guard extensionManager(for: profileID) != nil else { return }
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = false
+    panel.prompt = SettingsL10n.string("Choose")
+    panel.message = SettingsL10n.string("Choose an unpacked extension folder.")
+    if panel.runModal() == .OK, let url = panel.url {
+      extensionManager(for: profileID)?.loadUnpacked(
+        at: url, tabID: selectedTabID(for: profileID))
+    }
+  }
+
   var searchEngines: [BrowserSettingsChoice] {
     BrowserSearchEngine.allCases.map {
       BrowserSettingsChoice(id: $0.rawValue, title: $0.displayName)
@@ -306,6 +359,9 @@ private struct BrowserSettingsRoot: View {
       extensionManager: state.extensionManager(for:),
       sharedExtensions: state.sharedExtensions,
       onAddExtensions: { state.openExtensions(for: $0) },
+      onLoadUnpacked: { state.chooseUnpackedExtension(for: $0) },
+      pageOrigin: { state.pageOrigin(for: $0) },
+      selectedTabID: { state.selectedTabID(for: $0) },
       profileBackend: state.profileBackend,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }

@@ -31,6 +31,8 @@ final class ExtensionManagerModel {
   private(set) var extensions: [ManagedExtension] = []
   private(set) var icons: [String: NSImage] = [:]
   private(set) var pinnedIDs: [String] = []
+  private(set) var developerMode = false
+  private(set) var status: String?
   private var requestID = UUID()
 
   static func shared(
@@ -44,7 +46,14 @@ final class ExtensionManagerModel {
       runtime: runtime, preferences: preferences, profileID: profileID)
     models[key] = WeakExtensionManager(model)
     model.refresh()
+    if model.developerMode { model.verifyStoredDeveloperMode() }
     return model
+  }
+
+  static func refreshInstalled() {
+    for entry in models.values {
+      entry.value?.refresh()
+    }
   }
 
   private init(
@@ -53,14 +62,19 @@ final class ExtensionManagerModel {
     self.runtime = runtime
     self.preferences = preferences
     self.profileID = profileID
+    developerMode = preferences.extensionDeveloperMode(for: profileID)
   }
 
-  init(profileID: UUID, extensions: [ManagedExtension], pinnedIDs: [String] = []) {
+  init(
+    profileID: UUID, extensions: [ManagedExtension], pinnedIDs: [String] = [],
+    developerMode: Bool = false
+  ) {
     self.runtime = nil
     self.preferences = nil
     self.profileID = profileID
     self.extensions = extensions
     self.pinnedIDs = pinnedIDs
+    self.developerMode = developerMode
   }
 
   static func sortedExtensions(
@@ -121,6 +135,153 @@ final class ExtensionManagerModel {
     mutate(.uninstall(id: id))
   }
 
+  func setDeveloperMode(_ enabled: Bool) {
+    let previousValue = developerMode
+    developerMode = enabled
+    status = nil
+    preferences?.setExtensionDeveloperMode(enabled, for: profileID)
+    submitDeveloperMode(enabled) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .updated:
+        self.status = nil
+      case .unsupported:
+        self.restoreDeveloperMode(previousValue)
+        self.status = ExtensionInstallNotice.needsNewerEngine
+      case .prompted, .failed:
+        self.restoreDeveloperMode(previousValue)
+        self.status = ExtensionInstallNotice.developerModeFailed
+      }
+    }
+  }
+
+  private func verifyStoredDeveloperMode() {
+    submitDeveloperMode(true) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .updated:
+        self.status = nil
+      case .unsupported:
+        self.restoreDeveloperMode(false)
+        self.status = ExtensionInstallNotice.needsNewerEngine
+      case .prompted, .failed:
+        self.restoreDeveloperMode(false)
+        self.status = ExtensionInstallNotice.developerModeFailed
+      }
+    }
+  }
+
+  func loadUnpacked(at url: URL, tabID: UUID?) {
+    guard developerMode else {
+      status = SettingsL10n.string("Turn on Developer mode to load an unpacked extension.")
+      return
+    }
+    guard let path = ExtensionUnpackedFolder.directory(url) else {
+      status = SettingsL10n.string("Choose a folder that contains a Manifest V3 extension.")
+      return
+    }
+    status = nil
+    var payload: [String: Any] = [
+      "schemaVersion": 1, "action": "loadUnpacked", "path": path,
+    ]
+    if let tabID { payload["tabId"] = tabID.uuidString }
+    submitManage(
+      ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": true], tabID: nil
+    ) { [weak self] modeReply in
+      guard let self else { return }
+      switch modeReply {
+      case .updated:
+        self.submitUnpackedLoad(payload, tabID: tabID)
+      case .unsupported:
+        self.restoreDeveloperMode(false)
+        self.status = ExtensionInstallNotice.needsNewerEngine
+      case .prompted, .failed:
+        self.restoreDeveloperMode(false)
+        self.status = ExtensionInstallNotice.installFailed
+      }
+    }
+  }
+
+  private func submitUnpackedLoad(_ payload: [String: Any], tabID: UUID?) {
+    submitManage(payload, tabID: tabID) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .prompted:
+        self.status = nil
+      case .updated:
+        self.status = nil
+        self.refresh()
+      case .unsupported:
+        self.status = ExtensionInstallNotice.needsNewerEngine
+      case .failed:
+        self.status = ExtensionInstallNotice.installFailed
+      }
+    }
+  }
+
+  private func restoreDeveloperMode(_ enabled: Bool) {
+    developerMode = enabled
+    preferences?.setExtensionDeveloperMode(enabled, for: profileID)
+  }
+
+  func setIncognitoEnabled(_ id: String, enabled: Bool) {
+    guard BrowserExtension.isValidID(id) else {
+      status = ExtensionInstallNotice.privateAccessRefused
+      return
+    }
+    status = nil
+    submitManage(
+      [
+        "schemaVersion": 1, "action": "setIncognitoEnabled", "extensionId": id,
+        "enabled": enabled,
+      ], tabID: nil
+    ) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .updated:
+        self.status = nil
+        self.refresh()
+      case .prompted, .unsupported, .failed:
+        self.status = ExtensionInstallNotice.privateAccessRefused
+      }
+    }
+  }
+
+  func setSiteAccess(
+    _ access: ExtensionSiteAccess, extensionID: String, origin: String, tabID: UUID?
+  ) {
+    guard BrowserExtension.isValidID(extensionID), ExtensionPageOrigin.accepts(origin) else {
+      status = ExtensionInstallNotice.siteAccessRefused
+      return
+    }
+    status = nil
+    submitManage(
+      [
+        "schemaVersion": 1, "action": "setSiteAccess", "extensionId": extensionID,
+        "access": access.rawValue, "origin": origin,
+      ], tabID: tabID
+    ) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .updated:
+        self.status = nil
+        self.refresh()
+      case .prompted, .unsupported:
+        self.status = ExtensionInstallNotice.siteAccessRefused
+      case .failed:
+        self.status = ExtensionInstallNotice.siteAccessRefused
+      }
+    }
+  }
+
+  fileprivate func submitDeveloperMode(
+    _ enabled: Bool, completion: @escaping @MainActor (ExtensionManageReply) -> Void
+  ) {
+    submitManage(
+      ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": enabled], tabID: nil,
+      completion: completion)
+  }
+
   private func mutate(_ operation: ExtensionManagementOperation) {
     guard let runtime, ExtensionManagementOperation.isValidProfileID(profileID.uuidString) else {
       return
@@ -128,6 +289,18 @@ final class ExtensionManagerModel {
     runtime.manageExtensions(operation, profileID: profileID) { [weak self] _ in
       Task { @MainActor [weak self] in self?.refresh() }
     }
+  }
+
+  private func submitManage(
+    _ payload: [String: Any], tabID: UUID?,
+    completion: @escaping @MainActor (ExtensionManageReply) -> Void
+  ) {
+    guard let runtime else {
+      completion(.unsupported)
+      return
+    }
+    runtime.submitExtensionManage(
+      profileID: profileID, tabID: tabID, payload: payload, completion: completion)
   }
 
   private func loadIcons() {

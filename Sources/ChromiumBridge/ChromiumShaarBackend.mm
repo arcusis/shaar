@@ -185,6 +185,7 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarDeviceChooserRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarShareRequests;
   ShaarShareReplyFunction _shaarShareReply;
+  NSMutableDictionary<NSString *, NSDictionary *> *_shaarInstallRequests;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
@@ -207,6 +208,20 @@ struct Symbols {
                        payload:(NSDictionary *)payload
                          tabID:(NSString *)tabID
                      profileID:(NSString *)profileID;
+- (void)receiveExtensionInstallEvent:(const shaar_event *)event
+                             payload:(NSDictionary *)payload
+                           profileID:(NSString *)profileID
+                               tabID:(NSString *)tabID;
+- (void)cancelExtensionInstallRequestsForTabID:(NSString *)tabID;
+- (BOOL)shaarExtensionIDIsAcceptable:(NSString *)extensionID;
+- (BOOL)shaarInstallList:(id)value maxCount:(NSUInteger)maxCount maxItem:(NSUInteger)maxItem;
+- (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
+                           profileID:(NSString *)profileID
+                               tabID:(NSString *)tabID
+                  allowsProfileOnly:(BOOL)allowsProfileOnly
+                             payload:(NSDictionary *)payload
+                          completion:(void (^)(NSString *, shaar_error_code))completion
+                            syncCode:(shaar_error_code *)syncCode;
 - (void)adoptOpenedTabFromEvent:(const shaar_event *)event
                         payload:(NSDictionary *)payload
                       profileID:(NSString *)profileID;
@@ -331,6 +346,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarMediaRequests = [NSMutableDictionary dictionary];
   _shaarHttpsOnly = [NSMutableDictionary dictionary];
   _shaarCaptureRequests = [NSMutableDictionary dictionary];
+  _shaarInstallRequests = [NSMutableDictionary dictionary];
   _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
   _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
   _shaarShareRequests = [NSMutableDictionary dictionary];
@@ -416,6 +432,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarFindRequests removeAllObjects];
   [_shaarMediaRequests removeAllObjects];
   [_shaarDeviceChooserRequests removeAllObjects];
+  [_shaarShareRequests removeAllObjects];
+  [_shaarInstallRequests removeAllObjects];
   _symbols.release(_shaarEngine);
   _shaarEngine = nullptr;
   return result == SHAAR_OK ? 0 : 1;
@@ -547,6 +565,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self receiveWebShareRequest:event payload:payload tabID:tabID profileID:profileID];
     return;
   }
+  if (event->kind == SHAAR_EVENT_EXTENSION &&
+      [kind isEqualToString:@"installRequested"] && !event->session_id.size) {
+    [self receiveExtensionInstallEvent:event payload:payload profileID:profileID tabID:tabID];
+    return;
+  }
   if (event->kind == SHAAR_EVENT_DEVTOOLS && [kind isEqualToString:@"panelEvent"] &&
       !event->session_id.size && [payload[@"schemaVersion"] isEqual:@1] &&
       _shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
@@ -618,6 +641,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       [self resolveDeviceChooserRequestID:requestID index:nil];
     for (NSString *requestID in [_shaarShareRequests allKeysForObject:tabID])
       [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
+    [self cancelExtensionInstallRequestsForTabID:tabID];
     NSString *windowID = _shaarTabWindows[tabID];
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
@@ -1474,15 +1498,42 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
                   allowsProfileOnly:(BOOL)allowsProfileOnly
                              payload:(NSDictionary *)payload
                           completion:(void (^)(NSString *, shaar_error_code))completion {
+  return [self shaarSubmitExtensionOperation:operation profileID:profileID tabID:tabID
+                         allowsProfileOnly:allowsProfileOnly payload:payload
+                                  completion:completion syncCode:NULL];
+}
+
+- (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
+                           profileID:(NSString *)profileID tabID:(NSString *)tabID
+                             payload:(NSDictionary *)payload
+                          completion:(void (^)(NSString *, shaar_error_code))completion
+                            syncCode:(shaar_error_code *)syncCode {
+  return [self shaarSubmitExtensionOperation:operation profileID:profileID tabID:tabID
+                         allowsProfileOnly:NO payload:payload completion:completion
+                                  syncCode:syncCode];
+}
+
+- (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
+                           profileID:(NSString *)profileID tabID:(NSString *)tabID
+                  allowsProfileOnly:(BOOL)allowsProfileOnly
+                             payload:(NSDictionary *)payload
+                          completion:(void (^)(NSString *, shaar_error_code))completion
+                            syncCode:(shaar_error_code *)syncCode {
   shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
   NSString *windowID = tabID ? _shaarTabWindows[tabID] : _shaarPrimaryWindowID;
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   shaar_tab *tab = tabID ? (shaar_tab *)_shaarTabs[tabID].pointerValue : nullptr;
   const BOOL profileOnly = allowsProfileOnly && !tabID;
   if (!_shaarEngine || !profile || (!profileOnly && !window) || (tabID && (!tab ||
-      ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) return NO;
+      ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) {
+    if (syncCode) *syncCode = SHAAR_NOT_READY;
+    return NO;
+  }
   NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
-  if (!json) return NO;
+  if (!json) {
+    if (syncCode) *syncCode = SHAAR_INVALID_ARGUMENT;
+    return NO;
+  }
   shaar_scope scope = {};
   scope.size = sizeof(scope);
   scope.profile = profile;
@@ -1497,6 +1548,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
         reply(json, result ? result->error.code : SHAAR_CHROMIUM_ERROR);
       }, context, &error);
   if (status != SHAAR_OK) {
+    if (syncCode) *syncCode = error.code == SHAAR_OK ? SHAAR_CHROMIUM_ERROR : error.code;
     CFBridgingRelease(context);
     return NO;
   }
@@ -1569,7 +1621,111 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted {
-  if (self.onNotice) self.onNotice(@"Extension installation is unsupported by this Shaar engine.");
+  NSDictionary *pending = _shaarInstallRequests[requestID];
+  if (![pending isKindOfClass:NSDictionary.class]) {
+    if (self.onNotice) {
+      self.onNotice(ARCBridgeLocalizedString(
+          @"Extension installation is unsupported by this Shaar engine."));
+    }
+    return;
+  }
+  [_shaarInstallRequests removeObjectForKey:requestID];
+  NSString *profileID = pending[@"profileID"];
+  NSString *tabID = pending[@"tabID"];
+  BOOL submitted = [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_INSTALL_DECISION
+      profileID:profileID tabID:tabID allowsProfileOnly:NO
+      payload:@{@"schemaVersion": @1, @"consentRequestId": requestID, @"accepted": @(accepted)}
+      completion:^(NSString *json, shaar_error_code code) {
+        if (code == SHAAR_OK && accepted) {
+          [self shaarForgetExtensionListForProfileID:profileID];
+          return;
+        }
+        if (code != SHAAR_OK && self.onNotice) {
+          self.onNotice(ARCBridgeLocalizedString(
+              @"This Shaar engine cannot install extensions yet."));
+        }
+      }];
+  if (!submitted && self.onNotice) {
+    self.onNotice(ARCBridgeLocalizedString(@"This Shaar engine cannot install extensions yet."));
+  }
+}
+
+- (void)cancelExtensionInstallRequestsForTabID:(NSString *)tabID {
+  for (NSString *requestID in [_shaarInstallRequests allKeys]) {
+    NSDictionary *pending = _shaarInstallRequests[requestID];
+    if (![pending[@"tabID"] isEqualToString:tabID]) continue;
+    [_shaarInstallRequests removeObjectForKey:requestID];
+    [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_INSTALL_DECISION
+        profileID:pending[@"profileID"] tabID:tabID allowsProfileOnly:NO
+        payload:@{@"schemaVersion": @1, @"consentRequestId": requestID, @"accepted": @NO}
+        completion:^(NSString *json, shaar_error_code code) {}];
+  }
+}
+
+- (void)receiveExtensionInstallEvent:(const shaar_event *)event
+                             payload:(NSDictionary *)payload
+                           profileID:(NSString *)profileID
+                               tabID:(NSString *)tabID {
+  NSString *windowID = String(event->window_id);
+  NSString *requestID = payload[@"requestId"];
+  if (![requestID isKindOfClass:NSString.class] || !requestID.length || requestID.length > 128
+      || _shaarInstallRequests[requestID]) return;
+  NSString *extensionID = payload[@"id"];
+  NSString *name = payload[@"name"];
+  NSString *version = payload[@"version"];
+  NSString *sourceURL = payload[@"sourceURL"];
+  NSString *type = payload[@"type"];
+  NSURL *page = [sourceURL isKindOfClass:NSString.class] ? [NSURL URLWithString:sourceURL] : nil;
+  NSString *scheme = page.scheme.lowercaseString;
+  BOOL usable = [payload[@"schemaVersion"] isEqual:@1]
+      && [@[@"install", @"permissions", @"re-enable", @"repair"] containsObject:type]
+      && [self shaarExtensionIDIsAcceptable:extensionID]
+      && [name isKindOfClass:NSString.class]
+      && name.length && [name lengthOfBytesUsingEncoding:NSUTF8StringEncoding] <= 1024
+      && [version isKindOfClass:NSString.class]
+      && version.length && [version lengthOfBytesUsingEncoding:NSUTF8StringEncoding] <= 128
+      && page.host.length
+      && ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"])
+      && [self shaarInstallList:payload[@"permissions"] maxCount:128 maxItem:8192]
+      && [self shaarInstallList:payload[@"hostPermissions"] maxCount:128 maxItem:8192]
+      && _shaarTabs[tabID]
+      && [profileID isEqualToString:_shaarTabProfiles[tabID]]
+      && [windowID isEqualToString:_shaarTabWindows[tabID]];
+  if (!usable) {
+    if (_shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]]) {
+      [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_INSTALL_DECISION
+          profileID:profileID tabID:tabID allowsProfileOnly:NO
+          payload:@{@"schemaVersion": @1, @"consentRequestId": requestID, @"accepted": @NO}
+          completion:^(NSString *json, shaar_error_code code) {}];
+    }
+    return;
+  }
+  _shaarInstallRequests[requestID] = @{@"profileID": profileID, @"tabID": tabID};
+  NSMutableDictionary *request = [payload mutableCopy];
+  request[@"profileID"] = profileID;
+  request[@"tabID"] = tabID;
+  request[@"windowID"] = windowID;
+  if (self.onInstallRequest) self.onInstallRequest(request);
+  else [self resolveInstallRequestID:requestID accepted:NO];
+}
+
+- (BOOL)shaarExtensionIDIsAcceptable:(NSString *)extensionID {
+  if (![extensionID isKindOfClass:NSString.class] || extensionID.length != 32) return NO;
+  for (NSUInteger index = 0; index < extensionID.length; index++) {
+    unichar character = [extensionID characterAtIndex:index];
+    if (character < 'a' || character > 'p') return NO;
+  }
+  return YES;
+}
+
+- (BOOL)shaarInstallList:(id)value maxCount:(NSUInteger)maxCount maxItem:(NSUInteger)maxItem {
+  if (!value) return YES;
+  if (![value isKindOfClass:NSArray.class] || [(NSArray *)value count] > maxCount) return NO;
+  for (id item in (NSArray *)value) {
+    if (![item isKindOfClass:NSString.class] || ![(NSString *)item length]) return NO;
+    if ([(NSString *)item lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > maxItem) return NO;
+  }
+  return YES;
 }
 
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted {

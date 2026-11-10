@@ -485,6 +485,7 @@ final class BrowserEngine {
             do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
             guard let self else { return }
             self.refreshExtensions()
+            ExtensionManagerModel.refreshInstalled()
           }
         }
       }

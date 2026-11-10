@@ -1,0 +1,62 @@
+# Copyright 2026 The Shaar Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../../scripts/build/ninja/devtools_entrypoint.gni")
+import("../../../../scripts/build/ninja/devtools_module.gni")
+import("../../visibility.gni")
+
+devtools_ui_module("build_info") {
+  sources = [ "BuildInfoPanel.ts" ]
+
+  ts_deps = [
+    "../../../core/i18n:bundle",
+    "../../../ui/legacy:bundle",
+    "../../../ui/lit:bundle",
+  ]
+}
+
+devtools_entrypoint("bundle") {
+  entrypoint = "build-info.ts"
+
+  ts_deps = [ ":build_info" ]
+
+  visibility = [
+    ":*",
+    "..:*",
+    "../*",
+    "../../../entrypoints/*",
+  ]
+
+  visibility += devtools_panels_visibility
+}
+
+devtools_entrypoint("meta") {
+  entrypoint = "build-info-meta.ts"
+
+  ts_deps = [
+    ":bundle",
+    "../../../core/i18n:bundle",
+    "../../../ui/legacy:bundle",
+  ]
+
+  visibility = [
+    ":*",
+    "..:*",
+    "../../../entrypoints/*",
+  ]
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [ "BuildInfoPanel.test.ts" ]
+
+  ts_deps = [
+    ":bundle",
+    "../../../core/i18n:bundle",
+    "../../../testing",
+    "../../../ui/legacy:bundle",
+    "../../../ui/lit:bundle",
+  ]
+}

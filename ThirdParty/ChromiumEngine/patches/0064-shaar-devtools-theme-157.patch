@@ -1,0 +1,454 @@
+--- a/chrome/browser/devtools/devtools_ui_bindings.cc
++++ b/chrome/browser/devtools/devtools_ui_bindings.cc
+@@ -2339,6 +2339,16 @@
+           "enabled", base::FeatureList::IsEnabled(
+                          ::features::kDevToolsAiNaturalLanguageInterface)));
+ 
++  const bool is_shaar_embedder =
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder");
++  response_dict.Set("isShaarEmbedder", is_shaar_embedder);
++  if (is_shaar_embedder) {
++    response_dict.FindDict("aidaAvailability")->Set("enabled", false);
++    response_dict.Set("devToolsGlobalAiButton",
++                      base::DictValue().Set("enabled", false));
++    response_dict.FindDict("devToolsConsoleInsightsTeasers")
++        ->Set("enabled", false);
++  }
+   return response_dict;
+ }
+ 
+--- a/third_party/devtools-frontend/src/front_end/core/root/Runtime.ts
++++ b/third_party/devtools-frontend/src/front_end/core/root/Runtime.ts
+@@ -548,6 +548,7 @@
+    * or guest mode, rather than a "normal" profile.
+    */
+   isOffTheRecord: boolean,
++  isShaarEmbedder?: boolean,
+   devToolsEnableOriginBoundCookies: HostConfigEnableOriginBoundCookies,
+   devToolsAnimationStylesInStylesTab: HostConfigAnimationStylesInStylesTab,
+   devToolsJpegXlImageFormat: HostConfigJpegXlImageFormat,
+--- a/third_party/devtools-frontend/src/front_end/entrypoints/main/MainImpl.ts
++++ b/third_party/devtools-frontend/src/front_end/entrypoints/main/MainImpl.ts
+@@ -190,6 +190,9 @@
+ 
+     console.timeStamp('Main._gotPreferences');
+     this.#initializeGlobalsForLayoutTests();
++    if (config.isShaarEmbedder) {
++      this.#configureShaarFrontend();
++    }
+     Object.assign(Root.Runtime.hostConfig, config);
+ 
+     const creationOptions: Foundation.Universe.CreationOptions = {
+@@ -205,6 +208,9 @@
+       initAutomaticFilesystem: true,
+     };
+     this.#universe = new Foundation.Universe.Universe(creationOptions);
++    if (config.isShaarEmbedder && !('apca' in prefs)) {
++      this.#universe.settings.resolve(SDK.SDKSettings.apcaSettingDescriptor).set(true);
++    }
+     Root.DevToolsContext.setGlobalInstance(this.#universe.context as Root.DevToolsContext.WritableDevToolsContext);
+     // Needed to allow CD4A to access the server bridge class.
+     (globalThis as unknown as {universe: Foundation.Universe.Universe}).universe = this.#universe;
+@@ -244,6 +250,24 @@
+     }
+ 
+     void this.#createAppUI();
++  }
++
++  #configureShaarFrontend(): void {
++    document.documentElement.classList.add('shaar-theme');
++
++    UI.ViewManager.maybeRemoveViewExtension('release-note');
++    UI.ActionRegistration.maybeRemoveActionExtension('help.release-notes');
++    UI.ActionRegistration.maybeRemoveActionExtension('help.report-issue');
++    Common.Settings.maybeRemoveSettingExtension('help.show-release-note');
++    UI.ContextMenu.maybeRemoveItem({
++      location: UI.ContextMenu.ItemLocation.MAIN_MENU_HELP_DEFAULT,
++      actionId: 'help.release-notes',
++    });
++    UI.ContextMenu.maybeRemoveItem({
++      location: UI.ContextMenu.ItemLocation.MAIN_MENU_HELP_DEFAULT,
++      actionId: 'help.report-issue',
++    });
++    Common.Runnable.maybeRemoveLateInitializationRunnable('whats-new');
+   }
+ 
+   #initializeGlobalsForLayoutTests(): void {
+@@ -866,14 +890,16 @@
+ 
+     contextMenu.defaultSection().appendAction('freestyler.main-menu', undefined, /* optional */ true);
+ 
+-    contextMenu.defaultSection().appendItem(i18nString(UIStrings.getChromeDevToolsForAgents), () => {
+-      UIHelpers.openInNewTab('https://github.com/ChromeDevTools/chrome-devtools-mcp');
+-    }, {
+-      additionalElement: UI.UIUtils.maybeCreateNewBadge('get-devtools-mcp'),
+-      jslogContext: 'get-devtools-mcp',
+-    });
+-
+-    contextMenu.defaultSection().appendSeparator();
++    if (!Root.Runtime.hostConfig.isShaarEmbedder) {
++      contextMenu.defaultSection().appendItem(i18nString(UIStrings.getChromeDevToolsForAgents), () => {
++        UIHelpers.openInNewTab('https://github.com/ChromeDevTools/chrome-devtools-mcp');
++      }, {
++        additionalElement: UI.UIUtils.maybeCreateNewBadge('get-devtools-mcp'),
++        jslogContext: 'get-devtools-mcp',
++      });
++
++      contextMenu.defaultSection().appendSeparator();
++    }
+ 
+     if (dockController.dockSide() === UI.DockController.DockState.UNDOCKED) {
+       const mainTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/theme_support/ThemeSupport.ts
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/theme_support/ThemeSupport.ts
+@@ -105,6 +105,9 @@
+    * `window.document` in which this ThemeSupport instance was created.
+    */
+   addDocumentToTheme(document: Document): void {
++    if (Root.Runtime.hostConfig.isShaarEmbedder) {
++      document.documentElement.classList.add('shaar-theme');
++    }
+     this.#documentsToTheme.add(document);
+     this.#fetchColorsAndApplyHostTheme(document);
+   }
+--- a/third_party/devtools-frontend/src/front_end/panels/settings/SettingsScreen.ts
++++ b/third_party/devtools-frontend/src/front_end/panels/settings/SettingsScreen.ts
+@@ -460,7 +460,7 @@
+                           }}>
+                         </devtools-button>
+                       ` : Lit.nothing}
+-                      ${experiment.feedbackLink ? html`
++                      ${experiment.feedbackLink && !Root.Runtime.hostConfig.isShaarEmbedder ? html`
+                         <devtools-link
+                           class="feedback-link"
+                           href=${experiment.feedbackLink}
+--- a/third_party/devtools-frontend/src/front_end/design_system_tokens.css
++++ b/third_party/devtools-frontend/src/front_end/design_system_tokens.css
+@@ -1060,3 +1060,67 @@
+   --ref-palette-indigo99: rgb(255 251 255 / 100%);
+   --ref-palette-indigo100: rgb(255 255 255 / 100%);
+ }
++
++/* Shaar DevTools palette. */
++:root.shaar-theme {
++  --shaar-accent: #026748;
++  --shaar-accent-tint: #dff3e8;
++  --shaar-section: #eef6f0;
++  --default-font-family: system-ui, sans-serif;
++  --sys-color-surface: #ffffff;
++  --sys-color-base: #edf4ef;
++  --sys-color-base-container: #f6faf7;
++  --sys-color-base-container-elevated: #ffffff;
++  --sys-color-cdt-base: #ffffff;
++  --sys-color-cdt-base-container: #ffffff;
++  --sys-color-on-surface: #18291f;
++  --sys-color-on-surface-subtle: #53665a;
++  --sys-color-on-surface-primary: var(--shaar-accent);
++  --sys-color-on-base: #18291f;
++  --sys-color-primary: var(--shaar-accent);
++  --sys-color-on-primary: #ffffff;
++  --sys-color-tonal-container: var(--shaar-accent-tint);
++  --sys-color-on-tonal-container: #064934;
++  --sys-color-neutral-container: #eaf1ec;
++  --sys-color-outline: #779b85;
++  --sys-color-divider: #d7e5dc;
++  --sys-color-divider-prominent: #9db9a8;
++  --sys-color-surface1: #f8fbf9;
++  --sys-color-surface2: #f4f9f5;
++  --sys-color-surface3: #eff7f1;
++  --sys-color-surface4: #eaf4ed;
++  --sys-color-surface5: #e4f1e8;
++  --sys-color-state-focus-ring: var(--shaar-accent);
++  --sys-color-state-focus-select: #d9f0e4;
++}
++
++:root.shaar-theme.theme-with-dark-background {
++  --shaar-accent: #83f0b4;
++  --shaar-accent-tint: #204832;
++  --shaar-section: #1c3525;
++  --sys-color-surface: #121a15;
++  --sys-color-base: #17221b;
++  --sys-color-base-container: #1b2920;
++  --sys-color-base-container-elevated: #243328;
++  --sys-color-cdt-base: #151e18;
++  --sys-color-cdt-base-container: #151e18;
++  --sys-color-on-surface: #edf7ef;
++  --sys-color-on-surface-subtle: #a9c3b0;
++  --sys-color-on-surface-primary: var(--shaar-accent);
++  --sys-color-on-base: #edf7ef;
++  --sys-color-primary: var(--shaar-accent);
++  --sys-color-on-primary: #052719;
++  --sys-color-tonal-container: var(--shaar-accent-tint);
++  --sys-color-on-tonal-container: #d1f6df;
++  --sys-color-neutral-container: #263a2d;
++  --sys-color-outline: #85aa92;
++  --sys-color-divider: #35483a;
++  --sys-color-divider-prominent: #648672;
++  --sys-color-surface1: #18251c;
++  --sys-color-surface2: #1b2b20;
++  --sys-color-surface3: #1f3124;
++  --sys-color-surface4: #233729;
++  --sys-color-surface5: #28402e;
++  --sys-color-state-focus-ring: var(--shaar-accent);
++  --sys-color-state-focus-select: #2a6241;
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/autofill/AutofillView.ts
++++ b/third_party/devtools-frontend/src/front_end/panels/autofill/AutofillView.ts
+@@ -10,6 +10,7 @@
+ import * as Host from '../../core/host/host.js';
+ import * as i18n from '../../core/i18n/i18n.js';
+ import type * as Platform from '../../core/platform/platform.js';
++import * as Root from '../../core/root/root.js';
+ import * as SDK from '../../core/sdk/sdk.js';
+ import * as Protocol from '../../generated/protocol.js';
+ import * as AutofillManager from '../../models/autofill_manager/autofill_manager.js';
+@@ -104,6 +105,15 @@
+ 
+ const str_ = i18n.i18n.registerUIStrings('panels/autofill/AutofillView.ts', UIStrings);
+ export const i18nString: i18n.LocalizeString = i18n.i18n.getLocalizedString.bind(undefined, str_);
++
++function renderAutofillFeedback(): Lit.LitTemplate {
++  if (Root.Runtime.hostConfig.isShaarEmbedder) {
++    return Lit.nothing;
++  }
++  return html`<devtools-link href=${AUTOFILL_FEEDBACK_URL} class="feedback link" jslogcontext="feedback">
++    ${i18nString(UIStrings.sendFeedback)}
++  </devtools-link>`;
++}
+ 
+ interface ViewInput {
+   autoOpenViewSetting: Common.Settings.Setting<boolean>;
+@@ -236,7 +246,7 @@
+                 title=${i18nString(UIStrings.autoShowTooltip)}>
+               ${i18nString(UIStrings.autoShow)}
+             </devtools-checkbox>
+-            <devtools-link href=${AUTOFILL_FEEDBACK_URL} class="feedback link" jslogcontext="feedback">${i18nString(UIStrings.sendFeedback)}</devtools-link>
++            ${renderAutofillFeedback()}
+           </div>
+           <div class="placeholder-container" jslog=${VisualLogging.pane('autofill-empty')}>
+             <div class="empty-state">
+@@ -275,7 +285,7 @@
+                 ${i18nString(UIStrings.autoShow)}
+               </devtools-checkbox>
+             </div>
+-            <devtools-link href=${AUTOFILL_FEEDBACK_URL} class="feedback link" jslogcontext="feedback">${i18nString(UIStrings.sendFeedback)}</devtools-link>
++            ${renderAutofillFeedback()}
+           </div>
+           <div role="region" aria-label=${i18nString(UIStrings.addressPreview)}>
+             ${renderAddress()}
+--- a/third_party/devtools-frontend/src/front_end/panels/recorder/RecorderPanel.ts
++++ b/third_party/devtools-frontend/src/front_end/panels/recorder/RecorderPanel.ts
+@@ -18,7 +18,7 @@
+ import * as Dialogs from '../../ui/components/dialogs/dialogs.js';
+ import type * as Menus from '../../ui/components/menus/menus.js';
+ import * as UI from '../../ui/legacy/legacy.js';
+-import {Directives, html, type LitTemplate, render} from '../../ui/lit/lit.js';
++import {Directives, html, type LitTemplate, nothing, render} from '../../ui/lit/lit.js';
+ import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
+ 
+ import * as Converters from './converters/converters.js';
+@@ -262,6 +262,16 @@
+ }
+ 
+ export type View = (input: ViewInput, output: ViewOutput, target: DocumentFragment) => void;
++
++function renderRecorderFeedback(): LitTemplate {
++  if (Root.Runtime.hostConfig.isShaarEmbedder) {
++    return nothing;
++  }
++  return html`<div class="feedback">
++    <devtools-link class="devtools-link" title=${i18nString(UIStrings.sendFeedback)} href=${FEEDBACK_URL}
++        jslogcontext="feedback">${i18nString(UIStrings.sendFeedback)}</devtools-link>
++  </div>`;
++}
+ 
+ export const DEFAULT_VIEW: View = (input, output, target): void => {
+   function renderCurrentPage(): LitTemplate {
+@@ -558,11 +568,7 @@
+                 } as Buttons.Button.ButtonData
+               }
+             ></devtools-button>
+-            <div class="feedback">
+-              <devtools-link class="devtools-link" title=${i18nString(UIStrings.sendFeedback)} href=${
+-                FEEDBACK_URL
+-              } jslogcontext="feedback">${i18nString(UIStrings.sendFeedback)}</devtools-link>
+-            </div>
++            ${renderRecorderFeedback()}
+             <div class="separator"></div>
+             <devtools-shortcut-dialog
+               .data=${
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/tabbedPane.css
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/tabbedPane.css
+@@ -440,3 +440,26 @@
+ 
+   --icon-default: var(--sys-color-primary);
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header,
++  .shaar-theme .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header {
++    background: var(--sys-color-base-container);
++    border-bottom-color: var(--sys-color-divider-prominent);
++  }
++
++  :host-context(.shaar-theme) .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header-contents,
++  .shaar-theme .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header-contents {
++    background: transparent;
++  }
++
++  :host-context(.shaar-theme) .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header-tab.selected,
++  .shaar-theme .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header-tab.selected {
++    color: var(--sys-color-on-tonal-container);
++    background: var(--sys-color-tonal-container);
++    border-radius: 6px 6px 0 0;
++    box-shadow: inset 0 3px 0 var(--sys-color-primary),
++      0 0 0 1px var(--sys-color-divider);
++    font-weight: 600;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/toolbar.css
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/toolbar.css
+@@ -42,3 +42,11 @@
+ devtools-toolbar-input {
+   display: flex;
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) {
++    --toolbar-height: 28px;
++
++    padding-inline: 6px;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/filter.css
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/filter.css
+@@ -178,3 +178,34 @@
+     color: HighlightText;
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .filter-bar,
++  .shaar-theme .filter-bar {
++    background: var(--sys-color-base-container);
++    border-bottom-color: var(--sys-color-divider-prominent);
++  }
++
++  :host-context(.shaar-theme) .filter-bitset-filter span,
++  .shaar-theme .filter-bitset-filter span {
++    background: var(--sys-color-base-container-elevated);
++    border: 1px solid var(--sys-color-divider-prominent);
++    border-radius: 5px;
++    outline: none;
++    padding-inline: 8px;
++  }
++
++  :host-context(.shaar-theme) .filter-bitset-filter span.selected,
++  .shaar-theme .filter-bitset-filter span.selected {
++    background: var(--sys-color-tonal-container);
++    border-color: var(--sys-color-primary);
++    box-shadow: inset 0 -2px 0 var(--sys-color-primary);
++    color: var(--sys-color-on-tonal-container);
++  }
++
++  :host-context(.shaar-theme) .filter-bitset-filter span:focus-visible,
++  .shaar-theme .filter-bitset-filter span:focus-visible {
++    outline: 2px solid var(--sys-color-state-focus-ring);
++    outline-offset: 2px;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/network/networkLogView.css
++++ b/third_party/devtools-frontend/src/front_end/panels/network/networkLogView.css
+@@ -473,3 +473,15 @@
+     color: HighlightText;
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .network-log-grid.data-grid tbody tr.revealed.selected,
++  .shaar-theme .network-log-grid.data-grid tbody tr.revealed.selected {
++    box-shadow: inset 3px 0 0 var(--sys-color-primary);
++  }
++
++  :host-context(.shaar-theme) .network-log-grid.data-grid tbody tr.revealed.selected:not(.network-error-row, .network-warning-row, .network-throttled-row),
++  .shaar-theme .network-log-grid.data-grid tbody tr.revealed.selected:not(.network-error-row, .network-warning-row, .network-throttled-row) {
++    background: var(--sys-color-tonal-container);
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/elements/domTreeWidget.css
++++ b/third_party/devtools-frontend/src/front_end/panels/elements/domTreeWidget.css
+@@ -462,3 +462,11 @@
+ .tree-outline-disclosure li.in-clipboard .highlight {
+   outline: 1px dotted var(--sys-color-divider);
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .elements-disclosure li.selected .selection,
++  .shaar-theme .elements-disclosure li.selected .selection {
++    background: var(--sys-color-tonal-container);
++    box-shadow: inset 3px 0 0 var(--sys-color-primary);
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/console/consoleView.css
++++ b/third_party/devtools-frontend/src/front_end/panels/console/consoleView.css
+@@ -685,3 +685,20 @@
+     --override-error-text-color: HighlightText;
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .console-message-wrapper:focus,
++  :host-context(.shaar-theme) .console-message-wrapper.console-selected,
++  .shaar-theme .console-message-wrapper:focus,
++  .shaar-theme .console-message-wrapper.console-selected {
++    box-shadow: inset 3px 0 0 var(--sys-color-primary);
++  }
++
++  :host-context(.shaar-theme) .console-message-wrapper:not(.console-error-level, .console-warning-level):focus,
++  :host-context(.shaar-theme) .console-message-wrapper:not(.console-error-level, .console-warning-level).console-selected,
++  .shaar-theme .console-message-wrapper:not(.console-error-level, .console-warning-level):focus,
++  .shaar-theme .console-message-wrapper:not(.console-error-level, .console-warning-level).console-selected {
++    background: var(--sys-color-tonal-container);
++    background-image: none;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/reportView.css
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/reportView.css
+@@ -132,3 +132,18 @@
+     color: ButtonText;
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .report-section-header,
++  .shaar-theme .report-section-header {
++    background: var(--shaar-section);
++    border-inline-start: 3px solid var(--sys-color-primary);
++    border-radius: 3px;
++    padding: 6px 8px;
++  }
++
++  :host-context(.shaar-theme) .report-section-title,
++  .shaar-theme .report-section-title {
++    font-weight: 600;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/elements/stylesSidebarPane.css
++++ b/third_party/devtools-frontend/src/front_end/panels/elements/stylesSidebarPane.css
+@@ -383,3 +383,16 @@
+     }
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .styles-section-title,
++  .shaar-theme .styles-section-title {
++    color: var(--sys-color-on-surface);
++    font-weight: 600;
++  }
++
++  :host-context(.shaar-theme) .styles-section.matched-styles:focus-within,
++  .shaar-theme .styles-section.matched-styles:focus-within {
++    box-shadow: inset 3px 0 0 var(--sys-color-primary);
++  }
++}

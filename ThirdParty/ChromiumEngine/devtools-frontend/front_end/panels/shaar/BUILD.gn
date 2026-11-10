@@ -1,0 +1,24 @@
+# Copyright 2026 The Shaar Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../scripts/build/ninja/devtools_entrypoint.gni")
+import("../visibility.gni")
+
+# One "<feature>:meta" dep per import in shaar-meta.ts, same order.
+devtools_entrypoint("meta") {
+  entrypoint = "shaar-meta.ts"
+
+  ts_deps = [ "build-info:meta" ]
+
+  visibility = [
+    ":*",
+    "../../entrypoints/*",
+  ]
+}
+
+# One "<feature>:unittests" dep per feature, same order as shaar-meta.ts.
+group("unittests") {
+  testonly = true
+  deps = [ "build-info:unittests" ]
+}

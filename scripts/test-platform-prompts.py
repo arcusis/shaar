@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Prove getDisplayMedia presents the Shaar picker in a hidden verification bundle."""
+"""Prove a page title cannot open the screen-sharing picker, and a bound request can."""
 
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,17 +20,7 @@ CRASHES = Path.home() / "Library/Logs/DiagnosticReports"
 PAGE = """<!doctype html>
 <meta charset="utf-8">
 <title>Display capture</title>
-<button id="parity-action">Share screen</button>
-<script>
-document.getElementById("parity-action").addEventListener("click", async () => {
-  try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({video: true});
-    window.__shaarCaptureOutcome = "tracks:" + stream.getTracks().length;
-  } catch (error) {
-    window.__shaarCaptureOutcome = (error && error.name) || "error";
-  }
-});
-</script>
+<p>Screen sharing picker fixture</p>
 """
 
 

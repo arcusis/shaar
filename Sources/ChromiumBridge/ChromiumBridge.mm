@@ -4,7 +4,6 @@
 
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumProbeRoot.h"
-#import "ChromiumDesktopCapture.h"
 #import <dlfcn.h>
 #import <objc/message.h>
 #include <string>

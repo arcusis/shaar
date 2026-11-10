@@ -12,7 +12,7 @@
 #import "ChromiumShaarFeatureTransport.h"
 #import "ChromiumMediaSession.h"
 #import "ChromiumShaarActivation.h"
-#import "ChromiumDesktopCapture.h"
+
 
 #import <Security/Security.h>
 
@@ -147,16 +147,21 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarFindRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarMediaRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarCaptureRequests;
-  NSMutableSet<NSString *> *_shaarPromptTabs;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
   BOOL _shaarMediaConsentAvailable;
+  BOOL _shaarDesktopCaptureAvailable;
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
 }
 - (void)receiveEvent:(const shaar_event *)event;
+- (void)receiveDesktopCaptureRequest:(const shaar_event *)event
+                             payload:(NSDictionary *)payload
+                               tabID:(NSString *)tabID
+                           profileID:(NSString *)profileID;
+- (void)receiveDesktopCaptureDismissal:(NSDictionary *)payload tabID:(NSString *)tabID;
 - (void)adoptOpenedTabFromEvent:(const shaar_event *)event
                         payload:(NSDictionary *)payload
                       profileID:(NSString *)profileID;
@@ -252,7 +257,6 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarMediaRequests = [NSMutableDictionary dictionary];
   _shaarHttpsOnly = [NSMutableDictionary dictionary];
   _shaarCaptureRequests = [NSMutableDictionary dictionary];
-  _shaarPromptTabs = [NSMutableSet set];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -268,6 +272,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     return nil;
   }
   _shaarMediaConsentAvailable = _symbols.abi_minor() >= 8;
+  // Desktop capture requests arrive with patch 0071. Minor 14 is that bump.
+  _shaarDesktopCaptureAvailable = _symbols.abi_minor() >= 14;
   _symbols.tab_find = reinterpret_cast<decltype(_symbols.tab_find)>(
       dlsym(_shaarLibrary, "shaar_tab_find"));
   return self;
@@ -412,6 +418,16 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     }
     return;
   }
+  if (event->kind == SHAAR_EVENT_PERMISSION &&
+      [kind isEqualToString:@"desktopCaptureDismissed"]) {
+    [self receiveDesktopCaptureDismissal:payload tabID:tabID];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_PERMISSION &&
+      [kind isEqualToString:@"desktopCaptureRequested"]) {
+    [self receiveDesktopCaptureRequest:event payload:payload tabID:tabID profileID:profileID];
+    return;
+  }
   if (event->kind == SHAAR_EVENT_DEVTOOLS && [kind isEqualToString:@"panelEvent"] &&
       !event->session_id.size && [payload[@"schemaVersion"] isEqual:@1] &&
       _shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
@@ -478,8 +494,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     for (NSString *requestID in [_shaarMediaRequests allKeysForObject:tabID])
       [self resolveWebsiteMediaRequestID:requestID accepted:NO];
     for (NSString *requestID in [_shaarCaptureRequests allKeysForObject:tabID])
-      [_shaarCaptureRequests removeObjectForKey:requestID];
-    [_shaarPromptTabs removeObject:tabID];
+      [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
     NSString *windowID = _shaarTabWindows[tabID];
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
@@ -511,8 +526,6 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   }
   if ([payload[@"phase"] isEqualToString:@"committed"] && self.onDocumentCommitted)
     self.onDocumentCommitted(tabID, _shaarTabProfiles[tabID] ?: @"");
-  if ([payload[@"phase"] isEqualToString:@"committed"])
-    [self installPagePromptsForTabID:tabID];
   if ([payload[@"phase"] isEqualToString:@"committed"] && self.onLibraryChanged)
     self.onLibraryChanged(_shaarTabProfiles[tabID] ?: @"", @"history");
   NSDictionary *failure = [payload[@"failure"] isKindOfClass:NSDictionary.class]
@@ -1326,75 +1339,62 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
                       @"accepted": @(accepted)}];
 }
 
-- (void)installPagePromptsForTabID:(NSString *)tabID {
-  // Desktop media is ABI minor 14 (0071). Minor 12 is the save-prompt hook.
-  if (_symbols.abi_minor && _symbols.abi_minor() >= 14) return;
-  NSString *profileID = _shaarTabProfiles[tabID];
-  NSString *windowID = _shaarTabWindows[tabID];
-  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) return;
-  NSString *script = ARCPagePromptScript();
-  if (![_shaarPromptTabs containsObject:tabID]) {
-    [_shaarPromptTabs addObject:tabID];
-    __weak ARCShaarRuntime *weakSelf = self;
-    [self shaarDevToolsCall:@"Page.enable" params:@{}
-                capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
-                 profileID:profileID windowID:windowID
-                completion:^(NSDictionary *result, NSError *error) {
-      ARCShaarRuntime *owner = weakSelf;
-      if (!owner) return;
-      if (error) {
-        [owner->_shaarPromptTabs removeObject:tabID];
-        return;
-      }
-      [owner shaarDevToolsCall:@"Page.addScriptToEvaluateOnNewDocument"
-                       params:@{@"source": script, @"runImmediately": @YES}
-                   capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
-                    profileID:profileID windowID:windowID
-                   completion:^(NSDictionary *added, NSError *addError) {
-        ARCShaarRuntime *addedOwner = weakSelf;
-        if (addedOwner && addError) [addedOwner->_shaarPromptTabs removeObject:tabID];
-      }];
-    }];
-  }
-  [self evaluateInTabID:tabID script:script completion:^(NSString *result) {}];
+- (BOOL)desktopCaptureField:(id)value maxLength:(NSUInteger)maxLength {
+  if (![value isKindOfClass:NSString.class]) return NO;
+  NSUInteger length = [(NSString *)value length];
+  return length > 0 && length <= maxLength;
 }
 
-- (void)rememberDesktopCaptureRequestID:(NSString *)requestID tabID:(NSString *)tabID {
-  if (![[NSUUID alloc] initWithUUIDString:requestID] || !_shaarTabs[tabID]) return;
+- (void)receiveDesktopCaptureDismissal:(NSDictionary *)payload tabID:(NSString *)tabID {
+  if (!_shaarDesktopCaptureAvailable) return;
+  NSString *requestID = payload[@"id"];
+  if (![payload[@"schemaVersion"] isEqual:@1] ||
+      ![requestID isKindOfClass:NSString.class] ||
+      ![_shaarCaptureRequests[requestID] isEqualToString:tabID]) return;
+  [_shaarCaptureRequests removeObjectForKey:requestID];
+  if (self.onDesktopCaptureDismissed) self.onDesktopCaptureDismissed(requestID);
+}
+
+- (void)receiveDesktopCaptureRequest:(const shaar_event *)event
+                             payload:(NSDictionary *)payload
+                               tabID:(NSString *)tabID
+                           profileID:(NSString *)profileID {
+  if (!_shaarDesktopCaptureAvailable || event->session_id.size) return;
+  NSString *windowID = String(event->window_id);
+  NSString *requestID = payload[@"id"];
+  if (![payload[@"schemaVersion"] isEqual:@1] ||
+      ![requestID isKindOfClass:NSString.class] ||
+      ![[NSUUID alloc] initWithUUIDString:requestID] ||
+      _shaarCaptureRequests[requestID] ||
+      !_shaarTabs[tabID] ||
+      ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+      ![windowID isEqualToString:_shaarTabWindows[tabID]] ||
+      ![self desktopCaptureField:payload[@"origin"] maxLength:2048] ||
+      ![self desktopCaptureField:payload[@"pageURL"] maxLength:4096] ||
+      ![self desktopCaptureField:payload[@"frameID"] maxLength:256]) return;
+  if (payload[@"sourceTypes"] && ![payload[@"sourceTypes"] isKindOfClass:NSArray.class]) return;
   _shaarCaptureRequests[requestID] = tabID;
-}
-
-- (void)finishPagePromptInTabID:(NSString *)tabID requestID:(NSString *)requestID
-                       sourceID:(NSString *)sourceID {
-  if (!_shaarTabs[tabID] || ![[NSUUID alloc] initWithUUIDString:requestID]) return;
-  if ([_shaarCaptureRequests[requestID] isEqualToString:tabID]) {
-    [_shaarCaptureRequests removeObjectForKey:requestID];
-    [self submitCaptureReplyForTabID:tabID requestID:requestID sourceID:sourceID];
+  NSMutableDictionary *request = [payload mutableCopy];
+  request[@"profileID"] = profileID;
+  request[@"tabID"] = tabID;
+  request[@"windowID"] = windowID;
+  if (self.onDesktopCaptureRequest) {
+    self.onDesktopCaptureRequest(request);
+  } else {
+    [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
   }
-  NSArray *arguments = @[requestID, sourceID ?: NSNull.null];
-  NSData *json = [NSJSONSerialization dataWithJSONObject:arguments options:0 error:nil];
-  if (!json) return;
-  NSString *encoded = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
-  NSString *script = [NSString stringWithFormat:
-      @"(()=>{const a=%@;const f=window.__shaarPromptFinish;"
-      @"if(typeof f!=='function')return false;return !!f(a[0],a[1]);})()", encoded];
-  [self evaluateInTabID:tabID script:script completion:^(NSString *result) {}];
 }
 
-- (void)submitCaptureReplyForTabID:(NSString *)tabID requestID:(NSString *)requestID
-                         sourceID:(NSString *)sourceID {
+- (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {
+  if (!_shaarDesktopCaptureAvailable) return;
+  NSString *tabID = _shaarCaptureRequests[requestID];
+  if (!tabID) return;
+  [_shaarCaptureRequests removeObjectForKey:requestID];
   NSString *token = sourceID ?: @"";
   NSString *decision = token.length ? @"approve" : @"cancel";
   [self submitTabID:tabID operation:SHAAR_OP_MEDIA_CAPTURE_REPLY
             payload:@{@"schemaVersion": @1, @"promptID": requestID,
                       @"decision": decision, @"sourceToken": token}];
-}
-
-- (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {
-  NSString *tabID = _shaarCaptureRequests[requestID];
-  if (!tabID) return;
-  [_shaarCaptureRequests removeObjectForKey:requestID];
-  [self submitCaptureReplyForTabID:tabID requestID:requestID sourceID:sourceID];
 }
 
 - (void)dealloc {

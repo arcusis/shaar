@@ -198,41 +198,63 @@ struct DesktopCaptureConsentTests {
     #expect(rendererDecisions == [nil])
   }
 
-  @Test func pagePromptTitleKeepsThePreviousTabTitle() {
-    let id = UUID().uuidString
-    let title = "\u{2060}shaar-prompt\u{2060}display\u{2060}\(id)"
-    let signal = PagePromptSignal.parse(title)
-    #expect(signal == PagePromptSignal(kind: .display, id: id))
-    #expect(PagePromptSignal.visibleTitle(reported: "Meet", previous: "Keep") == "Meet")
-    #expect(PagePromptSignal.visibleTitle(reported: title, previous: "Keep") == "Keep")
-    #expect(PagePromptSignal.parse("Hello") == nil)
-    #expect(PagePromptSignal.parse("\u{2060}shaar-prompt\u{2060}nope\u{2060}\(id)") == nil)
-  }
-
-  @Test func displayPromptBuildsTheCaptureRequestFromThePage() throws {
+  @Test func aPageTitleCannotOpenTheCaptureSheet() throws {
     let store = store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    let id = UUID().uuidString
-    let signal = try #require(
-      PagePromptSignal.parse("\u{2060}shaar-prompt\u{2060}display\u{2060}\(id)"))
-    let request = try #require(
-      PagePromptCapture.request(
-        signal: signal, tabID: tab.id, profileID: store.session.selectedSpace.profileID,
-        pageURL: tab.url))
-    #expect(request.matches(store.session))
-    #expect(request.frameID == "main")
+    let marker = "\u{2060}shaar-prompt\u{2060}display\u{2060}\(UUID().uuidString)"
+    store.nativeTabChanged(tab.id, url: tab.url, title: marker)
+    #expect(store.sheet == nil)
+    #expect(store.session.selectedSpace.selectedTab?.title == marker)
+  }
 
-    let page = try #require(URL(string: "http://127.0.0.1:9/screen?q=1#x"))
-    let origin = try #require(PagePromptCapture.origin(of: page))
-    #expect(origin.host() == "127.0.0.1")
-    #expect(origin.port == 9)
-    #expect(origin.query == nil)
-    #expect(origin.fragment == nil)
-    let share = PagePromptSignal(kind: .share, id: id)
-    #expect(
-      PagePromptCapture.request(
-        signal: share, tabID: tab.id, profileID: store.session.selectedSpace.profileID,
-        pageURL: tab.url) == nil)
+  @Test func rejectsAnUnsolicitedCaptureRequest() throws {
+    let store = store()
+    let capture = try request(store)
+    var payload: [String: Any] = [
+      "id": UUID().uuidString,
+      "profileID": capture.profileID.uuidString,
+      "tabID": UUID().uuidString,
+      "pageURL": capture.pageURL.absoluteString,
+      "origin": capture.requestingOrigin.absoluteString,
+      "frameID": "other-frame",
+    ]
+    let foreign = try #require(DesktopCaptureRequest(payload: payload))
+    #expect(!store.requestDesktopCapture(foreign))
+    #expect(store.sheet == nil)
+
+    payload["tabID"] = capture.tabID.uuidString
+    payload["sourceTypes"] = ["printer"]
+    #expect(DesktopCaptureRequest(payload: payload) == nil)
+    payload["sourceTypes"] = ["tab"]
+    let tabsOnly = try #require(DesktopCaptureRequest(payload: payload))
+    #expect(tabsOnly.allowedKinds == [.tab])
+    #expect(store.requestDesktopCapture(tabsOnly))
+    var decision: String?
+    store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID }
+    store.resolveDesktopCapture(tabsOnly.id, sourceID: "tab:\(capture.tabID.uuidString):0")
+    #expect(decision == "tab:\(capture.tabID.uuidString):0")
+    #expect(store.sheet == nil)
+  }
+
+  @Test func privateWindowListsOnlyItsOwnTab() throws {
+    let regular = store()
+    let regularTab = try #require(regular.session.selectedSpace.selectedTab)
+    let privateTab = UUID()
+    let privateSession = try BrowserSession.privateWindow(
+      sourceProfileID: regular.session.selectedSpace.profileID, firstTabID: privateTab)
+    let listed = DesktopCaptureCatalog.tabSources(
+      session: privateSession, profileID: privateSession.selectedSpace.profileID,
+      requestingTabID: privateTab)
+    #expect(listed.map(\.id) == ["tab:\(privateTab.uuidString):0"])
+    #expect(listed.allSatisfy { !$0.id.contains(regularTab.id.uuidString) })
+
+    let other = try #require(
+      regular.session.spaces.first { $0.profileID != regular.session.selectedSpace.profileID })
+    let own = DesktopCaptureCatalog.tabSources(
+      session: regular.session, profileID: regular.session.selectedSpace.profileID,
+      requestingTabID: regularTab.id)
+    let otherIDs = Set(other.tabs.map { "tab:\($0.id.uuidString):0" })
+    #expect(own.allSatisfy { !otherIDs.contains($0.id) })
   }
 
   @Test func tabSourcesStayAvailableWithoutScreenRecording() throws {

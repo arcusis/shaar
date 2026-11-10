@@ -9,7 +9,8 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
-/// Hidden proof that getDisplayMedia presents the Shaar screen-sharing picker.
+/// Hidden proof that a page title cannot open the screen-sharing picker, and that a
+/// request bound to the live tab can.
 @MainActor
 final class PlatformPromptProbe {
   private let runtime: ARCShaarRuntime
@@ -21,9 +22,10 @@ final class PlatformPromptProbe {
   private let dataRoot: URL
   private let pageURL: URL
   private var checks: [String: Bool] = [
-    "scriptInstalled": false,
-    "trustedClick": false,
+    "pageReady": false,
+    "spoofRejected": false,
     "sheetPresented": false,
+    "approved": false,
     "cancelled": false,
     "screenshots": false,
     "windowsHidden": false,
@@ -31,7 +33,7 @@ final class PlatformPromptProbe {
   private var outcome = ""
   private var finished = false
   private var passed = false
-  private var clicked = false
+  private var decisions: [String: String] = [:]
 
   private init(arguments: [String]) throws {
     func value(after flag: String) throws -> String {
@@ -89,110 +91,122 @@ final class PlatformPromptProbe {
       guard let self else { return }
       do {
         try self.host.restore()
-        Task { await self.pollInstalled(deadline: Date().addingTimeInterval(25)) }
+        Task { await self.pollPage(deadline: Date().addingTimeInterval(25)) }
       } catch {
         self.finish(error: "Browser host restore failed: \(error)")
       }
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 45) { [weak self] in
-      self?.finish(error: "Timed out waiting for the screen sharing picker.")
+      self?.finish(error: "Timed out waiting for the screen-sharing picker.")
     }
     let result = runtime.run(withDataDirectory: dataRoot.appending(path: "Chromium"), testing: true)
     host.detach()
     return passed && result == 0 ? 0 : 1
   }
 
-  private func pollInstalled(deadline: Date) async {
+  private func pollPage(deadline: Date) async {
     guard !finished else { return }
     if Date() > deadline {
-      finish(error: "Page prompt script was not installed.")
+      finish(error: "The capture page did not load.")
       return
     }
     guard matches(store.session.selectedSpace.selectedTab?.url, pageURL) else {
       await pause()
-      await pollInstalled(deadline: deadline)
+      await pollPage(deadline: deadline)
       return
     }
-    let state = await readPage()
-    guard !finished else { return }
-    if state.installed {
-      checks["scriptInstalled"] = true
-      click()
-    } else {
-      await pause()
-      await pollInstalled(deadline: deadline)
-    }
+    checks["pageReady"] = true
+    await spoofTitle()
   }
 
-  private func click() {
-    guard !clicked else { return }
-    clicked = true
-    runtime.submitTrustedProbeClick(inTabID: tabID.uuidString, elementID: "parity-action") {
-      [weak self] ok in
-      guard let self, !self.finished else { return }
-      guard ok else {
-        self.finish(error: "Trusted click did not land.")
-        return
-      }
-      self.checks["trustedClick"] = true
-      Task { await self.pollSheet(deadline: Date().addingTimeInterval(8)) }
-    }
-  }
-
-  private func pollSheet(deadline: Date) async {
+  private func spoofTitle() async {
+    let marker = "\u{2060}shaar-prompt\u{2060}display\u{2060}\(UUID().uuidString)"
+    let literal = Self.javaScriptString(marker)
+    let script = "(() => { document.title = \(literal); return document.title === \(literal); })()"
+    let applied = await evaluate(script)
+    try? await Task.sleep(for: .milliseconds(800))
     guard !finished else { return }
-    if case .desktopCapture(let request) = store.sheet {
-      checks["sheetPresented"] = true
-      await writeScreenshots(request)
-      store.resolveDesktopCapture(request.id, sourceID: nil)
-      await pollOutcome(deadline: Date().addingTimeInterval(6))
+    if applied != "true" {
+      finish(error: "The title spoof did not land.")
       return
     }
-    if Date() > deadline {
-      finish(error: "Desktop capture sheet was not presented. Outcome: \(outcome).")
+    if store.sheet != nil {
+      finish(error: "A page title opened a sheet.")
       return
     }
-    let state = await readPage()
-    if !state.outcome.isEmpty { outcome = state.outcome }
-    await pause()
-    await pollSheet(deadline: deadline)
+    checks["spoofRejected"] = true
+    presentBoundRequest()
   }
 
-  private func pollOutcome(deadline: Date) async {
+  private func presentBoundRequest() {
+    guard let request = boundRequest(), store.requestDesktopCapture(request) else {
+      finish(error: "The bound capture request was rejected.")
+      return
+    }
+    guard case .desktopCapture(let presented) = store.sheet, presented.id == request.id else {
+      finish(error: "Desktop capture sheet was not presented.")
+      return
+    }
+    checks["sheetPresented"] = true
+    store.onDesktopCaptureDecision = { [weak self] id, sourceID in
+      self?.decisions[id] = sourceID ?? "cancel"
+    }
+    Task { await self.finishPresented(request) }
+  }
+
+  private func finishPresented(_ request: DesktopCaptureRequest) async {
+    await writeScreenshots(request)
     guard !finished else { return }
-    let state = await readPage()
-    guard !finished else { return }
-    if !state.outcome.isEmpty { outcome = state.outcome }
-    if state.outcome == "NotAllowedError" {
-      checks["cancelled"] = true
+    store.resolveDesktopCapture(request.id, sourceID: "screen:1:0")
+    checks["approved"] = decisions[request.id] == "screen:1:0"
+    guard let cancel = boundRequest(), store.requestDesktopCapture(cancel) else {
+      finish(error: "The cancel request was rejected.")
+      return
+    }
+    store.resolveDesktopCapture(cancel.id, sourceID: nil)
+    checks["cancelled"] = decisions[cancel.id] == "cancel" && store.sheet == nil
+    outcome = "\(decisions[request.id] ?? "missing")/\(decisions[cancel.id] ?? "missing")"
+    if checks["approved"] == true && checks["cancelled"] == true {
       finish(error: nil)
-      return
+    } else {
+      finish(error: "Capture decision was \(outcome).")
     }
-    if Date() > deadline {
-      finish(error: "Screen sharing did not reject after cancel. Outcome: \(outcome).")
-      return
-    }
-    await pause()
-    await pollOutcome(deadline: deadline)
   }
 
-  private func readPage() async -> (installed: Bool, outcome: String) {
-    let script =
-      "({installed: window.__shaarPrompts === true, outcome: window.__shaarCaptureOutcome || ''})"
-    let tab = tabID.uuidString
-    return await withCheckedContinuation { continuation in
-      runtime.evaluate(inTabID: tab, script: script) { raw in
-        continuation.resume(returning: Self.pageState(raw))
+  private func boundRequest(id: String = UUID().uuidString) -> DesktopCaptureRequest? {
+    guard let tab = store.session.page(forTabID: tabID)?.tab,
+      let profile = store.session.profileID(forTabID: tabID),
+      var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false)
+    else { return nil }
+    components.path = ""
+    components.query = nil
+    components.fragment = nil
+    components.user = nil
+    components.password = nil
+    guard let origin = components.url else { return nil }
+    return DesktopCaptureRequest(payload: [
+      "id": id,
+      "profileID": profile.uuidString,
+      "tabID": tab.id.uuidString,
+      "pageURL": tab.url.absoluteString,
+      "origin": origin.absoluteString,
+      "frameID": "probe-frame",
+      "sourceTypes": ["screen", "window", "tab"],
+    ])
+  }
+
+  private func evaluate(_ script: String) async -> String? {
+    await withCheckedContinuation { continuation in
+      runtime.evaluate(inTabID: tabID.uuidString, script: script) { raw in
+        continuation.resume(returning: raw)
       }
     }
   }
 
-  nonisolated private static func pageState(_ raw: String?) -> (installed: Bool, outcome: String) {
-    guard let raw, let data = raw.data(using: .utf8),
-      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { return (false, "") }
-    let installed = (object["installed"] as? NSNumber)?.boolValue ?? false
-    return (installed, object["outcome"] as? String ?? "")
+  nonisolated private static func javaScriptString(_ value: String) -> String {
+    let data = try? JSONSerialization.data(withJSONObject: [value])
+    let encoded = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[\"\"]"
+    return String(encoded.dropFirst().dropLast())
   }
 
   private func pause() async {

@@ -100,6 +100,7 @@ class NavigationObserver final : public content::WebContentsObserver {
   void TitleWasSet(content::NavigationEntry* entry) override;
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
+  void AboutToBeDiscarded(content::WebContents* new_contents) override;
   void WebContentsDestroyed() override;
 
  private:

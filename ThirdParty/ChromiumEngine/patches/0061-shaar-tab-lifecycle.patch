@@ -1,0 +1,692 @@
+diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
+index 97789b2..c7ebf14 100644
+--- a/chrome/browser/shaar/BUILD.gn
++++ b/chrome/browser/shaar/BUILD.gn
+@@ -106,6 +106,10 @@ source_set("engine") {
+     "storage_keychain/shaar_storage_keychain.h",
+     "storage_keychain/shaar_storage_keychain_lifecycle_adapter.cc",
+     # END storage_keychain
++    # BEGIN tab_lifecycle
++    "tab_lifecycle/shaar_tab_lifecycle.cc",
++    "tab_lifecycle/shaar_tab_lifecycle.h",
++    # END tab_lifecycle
+   ]
+   cflags_objcc = [ "-fobjc-arc" ]
+   frameworks = [ "AppKit.framework" ]
+@@ -113,6 +117,10 @@ source_set("engine") {
+     "//base",
+     "//chrome/browser:chrome_browser_main",
+     "//chrome/browser:browser",
++    # BEGIN tab_lifecycle
++    "//chrome/browser/resource_coordinator",
++    "//components/performance_manager",
++    # END tab_lifecycle
+     "//chrome/browser:main_extra_parts",
+     "//chrome/browser:chrome_content_browser_client",
+     # BEGIN devtools
+diff --git a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
+index c571ecd..d54f7e2 100644
+--- a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
++++ b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
+@@ -39,6 +39,9 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_media_register);
+ // BEGIN storage_keychain
+ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_storage_keychain_register);
+ // END storage_keychain
++// BEGIN tab_lifecycle
++SHAAR_DECLARE_OPTIONAL_MODULE(shaar_tab_lifecycle_register);
++// END tab_lifecycle
+ #undef SHAAR_DECLARE_OPTIONAL_MODULE
+ 
+ namespace {
+@@ -207,6 +210,10 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
+   if (shaar_storage_keychain_register)
+     shaar_storage_keychain_register(registry);
+   // END storage_keychain
++  // BEGIN tab_lifecycle
++  if (shaar_tab_lifecycle_register)
++    shaar_tab_lifecycle_register(registry);
++  // END tab_lifecycle
+ }
+ 
+ ShaarModuleRegistry& ModuleRegistry() {
+diff --git a/chrome/browser/shaar/media/shaar_media.cc b/chrome/browser/shaar/media/shaar_media.cc
+index 9d246e2..9a7aeb3 100644
+--- a/chrome/browser/shaar/media/shaar_media.cc
++++ b/chrome/browser/shaar/media/shaar_media.cc
+@@ -618,6 +618,18 @@ class MediaTracker final : public content::WebContentsObserver {
+     EmitChangedState();
+   }
+ 
++  void AboutToBeDiscarded(content::WebContents* new_contents) override {
++    if (!new_contents || new_contents == contents_)
++      return;
++    const auto state = element_states.find(contents_);
++    if (state != element_states.end()) {
++      element_states.emplace(new_contents, std::move(state->second));
++      element_states.erase(state);
++    }
++    contents_ = new_contents;
++    Observe(new_contents);
++  }
++
+   void WebContentsDestroyed() override {
+     timer_.Stop();
+     element_states.erase(contents_);
+diff --git a/chrome/browser/shaar/navigation/shaar_navigation.cc b/chrome/browser/shaar/navigation/shaar_navigation.cc
+index 1f762b6..664290e 100644
+--- a/chrome/browser/shaar/navigation/shaar_navigation.cc
++++ b/chrome/browser/shaar/navigation/shaar_navigation.cc
+@@ -388,6 +388,12 @@ void NavigationObserver::PrimaryMainFrameRenderProcessGone(
+   Emit("failed", active_navigation_id_, false, nullptr, "renderer_gone");
+ }
+ 
++void NavigationObserver::AboutToBeDiscarded(content::WebContents* new_contents) {
++  if (!new_contents || new_contents == web_contents())
++    return;
++  Observe(new_contents);
++}
++
+ void NavigationObserver::WebContentsDestroyed() {
+   destroyed_ = true;
+   Observe(nullptr);
+diff --git a/chrome/browser/shaar/navigation/shaar_navigation.h b/chrome/browser/shaar/navigation/shaar_navigation.h
+index 5c0a5ec..fb63c55 100644
+--- a/chrome/browser/shaar/navigation/shaar_navigation.h
++++ b/chrome/browser/shaar/navigation/shaar_navigation.h
+@@ -100,6 +100,7 @@ class NavigationObserver final : public content::WebContentsObserver {
+   void TitleWasSet(content::NavigationEntry* entry) override;
+   void PrimaryMainFrameRenderProcessGone(
+       base::TerminationStatus status) override;
++  void AboutToBeDiscarded(content::WebContents* new_contents) override;
+   void WebContentsDestroyed() override;
+ 
+  private:
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index 0631adc..5bc04d3 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -131,6 +131,14 @@ typedef enum {
+   SHAAR_OP_TAB_ACTIVATION_RESOLVE = 206,
+   SHAAR_OP_WINDOW_SET_BOUNDS = 207,
+ 
++  /* Sleeping tabs (#1467). An engine without this module returns
++   * SHAAR_UNSUPPORTED_CAPABILITY. The base minor stays 8 so an existing
++   * patch can still append it; do not treat these IDs as a minor bump. */
++  SHAAR_OP_TAB_DISCARD = 208,
++  SHAAR_OP_TAB_FREEZE = 209,
++  SHAAR_OP_TAB_WAKE = 210,
++  SHAAR_OP_TAB_LIFECYCLE_GET = 211,
++
+   SHAAR_OP_TAB_NAVIGATE = 300,
+   SHAAR_OP_TAB_GO = 301,
+   SHAAR_OP_TAB_RELOAD = 302,
+diff --git a/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc
+new file mode 100644
+index 0000000..4f256d0
+--- /dev/null
++++ b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.cc
+@@ -0,0 +1,456 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this
++// file, You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#include "chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h"
++
++#include <cstring>
++#include <optional>
++#include <string>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
++#include "chrome/browser/shaar/engine/shaar_engine_context.h"
++#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
++#include "components/performance_manager/public/decorators/page_live_state_decorator.h"
++#include "components/performance_manager/public/performance_manager.h"
++#include "content/public/browser/visibility.h"
++#include "content/public/browser/web_contents.h"
++
++namespace {
++
++constexpr size_t kMaximumArgumentsBytes = 4096;
++
++struct Identity {
++  std::string profile_id;
++  std::string session_id;
++  std::string window_id;
++  std::string tab_id;
++};
++
++struct Snapshot {
++  const char* state = "active";
++  const char* discard_reason = "";
++  bool audible = false;
++  bool capturing = false;
++  bool auto_discardable = true;
++};
++
++struct ReplyContext {
++  shaar_request_id request_id;
++  shaar_reply_fn callback;
++  void* context;
++};
++
++shaar_bytes Bytes(const std::string& value) {
++  return {value.data(), value.size()};
++}
++
++shaar_error_code Fail(shaar_error* error,
++                      shaar_error_code code,
++                      const char* message) {
++  if (error) {
++    const uint32_t size = error->size;
++    if (size >= offsetof(shaar_error, code) + sizeof(error->code))
++      error->code = code;
++    if (size >=
++        offsetof(shaar_error, platform_code) + sizeof(error->platform_code))
++      error->platform_code = 0;
++    if (size >= offsetof(shaar_error, message) + sizeof(error->message))
++      error->message = {message, std::strlen(message)};
++  }
++  return code;
++}
++
++using LifecycleUnit = resource_coordinator::TabLifecycleUnitSource::TabLifecycleUnit;
++
++LifecycleUnit* UnitFor(content::WebContents* contents) {
++  auto* external =
++      resource_coordinator::TabLifecycleUnitExternal::FromWebContents(contents);
++  if (!external)
++    return nullptr;
++  return static_cast<LifecycleUnit*>(external);
++}
++
++bool PageNodeReady(content::WebContents* contents) {
++  if (!performance_manager::PerformanceManager::IsAvailable())
++    return false;
++  return performance_manager::PerformanceManager::GetPrimaryPageNodeForWebContents(
++             contents)
++      .get();
++}
++
++bool IsCapturing(content::WebContents* contents) {
++  if (contents->IsBeingCaptured())
++    return true;
++  if (!PageNodeReady(contents))
++    return false;
++  if (performance_manager::PageLiveStateDecorator::IsCapturingVideo(contents))
++    return true;
++  if (performance_manager::PageLiveStateDecorator::IsCapturingAudio(contents))
++    return true;
++  if (performance_manager::PageLiveStateDecorator::IsCapturingWindow(contents))
++    return true;
++  if (performance_manager::PageLiveStateDecorator::IsCapturingDisplay(contents))
++    return true;
++  if (performance_manager::PageLiveStateDecorator::IsBeingMirrored(contents))
++    return true;
++  return false;
++}
++
++const char* ReasonName(mojom::LifecycleUnitDiscardReason reason) {
++  switch (reason) {
++    case mojom::LifecycleUnitDiscardReason::EXTERNAL:
++      return "external";
++    case mojom::LifecycleUnitDiscardReason::URGENT:
++      return "urgent";
++    case mojom::LifecycleUnitDiscardReason::PROACTIVE:
++      return "proactive";
++    case mojom::LifecycleUnitDiscardReason::SUGGESTED:
++      return "suggested";
++    case mojom::LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY:
++      return "frozenWithGrowingMemory";
++  }
++  return "";
++}
++
++const char* StateName(mojom::LifecycleUnitState state, bool discarded) {
++  if (discarded || state == mojom::LifecycleUnitState::DISCARDED)
++    return "discarded";
++  if (state == mojom::LifecycleUnitState::FROZEN)
++    return "frozen";
++  return "active";
++}
++
++Snapshot ReadSnapshot(content::WebContents* contents, const char* forced_state) {
++  Snapshot snapshot;
++  snapshot.audible = contents->IsCurrentlyAudible();
++  snapshot.capturing = IsCapturing(contents);
++  LifecycleUnit* unit = UnitFor(contents);
++  if (!unit) {
++    snapshot.state = forced_state ? forced_state : "active";
++    snapshot.auto_discardable = true;
++    return snapshot;
++  }
++  snapshot.auto_discardable = unit->IsAutoDiscardable();
++  const bool discarded = contents->WasDiscarded() ||
++                         unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED;
++  snapshot.state = forced_state ? forced_state
++                                : StateName(unit->GetTabState(), discarded);
++  if (snapshot.state && std::strcmp(snapshot.state, "discarded") == 0)
++    snapshot.discard_reason = ReasonName(unit->GetDiscardReason());
++  return snapshot;
++}
++
++std::string PayloadJSON(const Snapshot& snapshot) {
++  base::DictValue payload;
++  payload.Set("schemaVersion", 1);
++  payload.Set("kind", "lifecycle");
++  payload.Set("state", snapshot.state);
++  payload.Set("discardReason", snapshot.discard_reason);
++  payload.Set("audible", snapshot.audible);
++  payload.Set("capturing", snapshot.capturing);
++  payload.Set("autoDiscardable", snapshot.auto_discardable);
++  std::string json;
++  base::JSONWriter::Write(base::Value(std::move(payload)), &json);
++  return json;
++}
++
++void DeliverReply(ReplyContext request,
++                  shaar_error_code code,
++                  std::string payload,
++                  std::string message) {
++  shaar_result result = {};
++  result.size = sizeof(result);
++  result.request_id = request.request_id;
++  result.error.size = sizeof(result.error);
++  result.error.code = code;
++  result.error.platform_code = 0;
++  result.error.message = {message.data(), message.size()};
++  result.payload_json = {payload.data(), payload.size()};
++  request.callback(request.context, &result);
++}
++
++void ReplyLater(ReplyContext request,
++                shaar_error_code code,
++                std::string payload,
++                std::string message) {
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&DeliverReply, request, code, std::move(payload),
++                                std::move(message)));
++}
++
++void EmitLater(shaar_engine* engine, Identity identity, std::string payload) {
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](shaar_engine* engine, Identity identity, std::string payload) {
++            if (!shaar::EngineIsLive(engine) || payload.empty())
++              return;
++            shaar::EmitEvent(engine, SHAAR_EVENT_TAB, Bytes(identity.profile_id),
++                             Bytes(identity.session_id), Bytes(identity.window_id),
++                             Bytes(identity.tab_id), Bytes(payload));
++          },
++          engine, std::move(identity), std::move(payload)));
++}
++
++bool AllowedKeys(const base::DictValue& dict, bool allow_reason) {
++  for (const auto item : dict) {
++    if (item.first == "schemaVersion")
++      continue;
++    if (allow_reason && item.first == "reason")
++      continue;
++    return false;
++  }
++  return true;
++}
++
++std::optional<base::DictValue> ParseArguments(shaar_bytes bytes) {
++  if (!bytes.data || bytes.size == 0 || bytes.size > kMaximumArgumentsBytes)
++    return std::nullopt;
++  auto parsed = base::JSONReader::Read(
++      std::string_view(bytes.data, bytes.size), base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_dict())
++    return std::nullopt;
++  return std::move(parsed->GetDict());
++}
++
++std::optional<mojom::LifecycleUnitDiscardReason> ParseReason(
++    const base::DictValue& args) {
++  const base::Value* value = args.Find("reason");
++  if (!value)
++    return mojom::LifecycleUnitDiscardReason::PROACTIVE;
++  if (!value->is_string())
++    return std::nullopt;
++  const std::string& reason = value->GetString();
++  if (reason == "external")
++    return mojom::LifecycleUnitDiscardReason::EXTERNAL;
++  if (reason == "urgent")
++    return mojom::LifecycleUnitDiscardReason::URGENT;
++  if (reason == "proactive")
++    return mojom::LifecycleUnitDiscardReason::PROACTIVE;
++  if (reason == "suggested")
++    return mojom::LifecycleUnitDiscardReason::SUGGESTED;
++  if (reason == "frozenWithGrowingMemory")
++    return mojom::LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY;
++  return std::nullopt;
++}
++
++shaar_error_code ResolveIdentity(shaar::ShaarEngineContext* context,
++                                 shaar_engine* engine,
++                                 shaar_scope scope,
++                                 shaar_window* window,
++                                 shaar_tab* tab,
++                                 content::WebContents** contents,
++                                 Identity* identity,
++                                 const char** message) {
++  if (!context || !context->browser_tabs || !engine || !window || !tab ||
++      !contents || !identity) {
++    *message = "tab lifecycle is missing its target";
++    return SHAAR_INVALID_ARGUMENT;
++  }
++  *contents = context->browser_tabs->FindWebContents(engine, window, tab);
++  if (!*contents) {
++    *message = "tab is not registered";
++    return SHAAR_NOT_FOUND;
++  }
++  identity->window_id =
++      std::string(context->browser_tabs->WindowID(engine, window));
++  identity->tab_id = std::string(context->browser_tabs->TabID(engine, window, tab));
++  if (identity->window_id.empty() || identity->tab_id.empty()) {
++    *message = "tab identity is unavailable";
++    return SHAAR_NOT_FOUND;
++  }
++  if (scope.profile) {
++    if (!context->profile_services) {
++      *message = "profile services are unavailable";
++      return SHAAR_NOT_READY;
++    }
++    Profile* profile =
++        context->profile_services->ResolveProfile(engine, scope.profile);
++    Profile* tab_profile =
++        Profile::FromBrowserContext((*contents)->GetBrowserContext());
++    if (!profile || profile->IsOffTheRecord() || profile != tab_profile) {
++      *message = "tab is not in this profile";
++      return SHAAR_WRONG_PROFILE;
++    }
++    identity->profile_id =
++        std::string(context->profile_services->ProfileID(engine, scope.profile));
++    return SHAAR_OK;
++  }
++  if (!context->private_sessions) {
++    *message = "private sessions are unavailable";
++    return SHAAR_NOT_READY;
++  }
++  Profile* parent = nullptr;
++  Profile* otr = nullptr;
++  std::string_view profile_id;
++  std::string_view session_id;
++  const bool resolved = context->private_sessions->Resolve(
++      engine, scope.private_session, &parent, &otr, &profile_id, &session_id);
++  if (!resolved || !otr || (*contents)->GetBrowserContext() != otr) {
++    *message = "tab is not in this private session";
++    return SHAAR_WRONG_SESSION;
++  }
++  identity->profile_id = std::string(profile_id);
++  identity->session_id = std::string(session_id);
++  return SHAAR_OK;
++}
++
++bool PageIsVisible(content::WebContents* contents) {
++  return contents->GetVisibility() == content::Visibility::VISIBLE;
++}
++
++void UnfreezeIfHidden(content::WebContents* contents) {
++  if (PageIsVisible(contents) || contents->WasDiscarded())
++    return;
++  contents->SetPageFrozen(false);
++}
++
++shaar_error_code DiscardTab(content::WebContents* contents,
++                            mojom::LifecycleUnitDiscardReason reason,
++                            LifecycleUnit* unit,
++                            const char** message) {
++  if (PageIsVisible(contents)) {
++    *message = "visible tab stays awake";
++    return SHAAR_POLICY_BLOCKED;
++  }
++  if (contents->WasDiscarded() ||
++      unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED) {
++    return SHAAR_OK;
++  }
++  if (!unit->DiscardTab(reason, 0)) {
++    *message = "Chromium refused to discard this tab";
++    return SHAAR_POLICY_BLOCKED;
++  }
++  return SHAAR_OK;
++}
++
++shaar_error_code FreezeTab(content::WebContents* contents,
++                           LifecycleUnit* unit,
++                           const char** message) {
++  if (PageIsVisible(contents)) {
++    *message = "visible tab cannot be frozen";
++    return SHAAR_POLICY_BLOCKED;
++  }
++  if (contents->WasDiscarded() ||
++      unit->GetTabState() == mojom::LifecycleUnitState::DISCARDED) {
++    return SHAAR_OK;
++  }
++  contents->SetPageFrozen(true);
++  return SHAAR_OK;
++}
++
++}  // namespace
++
++namespace shaar::tab_lifecycle {
++
++void NoteDiscarded(shaar_engine* engine,
++                   std::string_view profile_id,
++                   std::string_view session_id,
++                   std::string_view window_id,
++                   std::string_view tab_id,
++                   content::WebContents* contents) {
++  if (!engine || !contents || profile_id.empty() || tab_id.empty())
++    return;
++  Identity identity;
++  identity.profile_id = std::string(profile_id);
++  identity.session_id = std::string(session_id);
++  identity.window_id = std::string(window_id);
++  identity.tab_id = std::string(tab_id);
++  const std::string payload = PayloadJSON(ReadSnapshot(contents, "discarded"));
++  EmitLater(engine, std::move(identity), payload);
++}
++
++}  // namespace shaar::tab_lifecycle
++
++shaar_error_code HandleTabLifecycleOperation(
++    shaar::ShaarEngineContext* context,
++    shaar_engine* engine,
++    shaar_scope scope,
++    shaar_window* window,
++    shaar_tab* tab,
++    shaar_operation operation,
++    shaar_bytes args_json,
++    shaar_request_id request_id,
++    shaar_reply_fn reply,
++    void* reply_context,
++    shaar_error* error) {
++  if (!reply || !request_id)
++    return Fail(error, SHAAR_INVALID_ARGUMENT, "tab lifecycle reply is missing");
++  const char* message = "tab lifecycle failed";
++  content::WebContents* contents = nullptr;
++  Identity identity;
++  const shaar_error_code scope_status = ResolveIdentity(
++      context, engine, scope, window, tab, &contents, &identity, &message);
++  if (scope_status != SHAAR_OK)
++    return Fail(error, scope_status, message);
++
++  LifecycleUnit* unit = UnitFor(contents);
++  if (!unit)
++    return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
++                "tab lifecycle is not running");
++
++  auto args = ParseArguments(args_json);
++  if (!args)
++    return Fail(error, SHAAR_INVALID_ARGUMENT, "tab lifecycle arguments are invalid");
++  const bool is_discard = operation == SHAAR_OP_TAB_DISCARD;
++  if (!AllowedKeys(*args, is_discard))
++    return Fail(error, SHAAR_INVALID_ARGUMENT, "tab lifecycle arguments are invalid");
++
++  shaar_error_code status = SHAAR_OK;
++  if (is_discard) {
++    const auto reason = ParseReason(*args);
++    if (!reason)
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "discard reason is invalid");
++    status = DiscardTab(contents, *reason, unit, &message);
++  } else if (operation == SHAAR_OP_TAB_FREEZE) {
++    status = FreezeTab(contents, unit, &message);
++  } else if (operation == SHAAR_OP_TAB_WAKE) {
++    UnfreezeIfHidden(contents);
++    unit->MaybeLoad();
++  } else if (operation != SHAAR_OP_TAB_LIFECYCLE_GET) {
++    return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
++                "tab lifecycle operation is unknown");
++  }
++  if (status != SHAAR_OK)
++    return Fail(error, status, message);
++
++  // Replace-path discard destroys the WebContents pointer captured above.
++  // The lifecycle unit follows the contents Chromium kept.
++  content::WebContents* current = unit->GetWebContents();
++  if (!current)
++    return Fail(error, SHAAR_NOT_FOUND, "tab is not registered");
++
++  const char* forced_state = nullptr;
++  if (is_discard)
++    forced_state = "discarded";
++  else if (operation == SHAAR_OP_TAB_FREEZE)
++    forced_state = current->WasDiscarded() ? "discarded" : "frozen";
++  else if (operation == SHAAR_OP_TAB_WAKE)
++    forced_state = "active";
++
++  // Discard notifies WasDiscarded, which posts the lifecycle event. Freeze
++  // and wake post it here. Reading state only replies.
++  const std::string payload = PayloadJSON(ReadSnapshot(current, forced_state));
++  if (payload.empty())
++    return Fail(error, SHAAR_IO_ERROR, "tab lifecycle state could not be written");
++  if (operation == SHAAR_OP_TAB_FREEZE || operation == SHAAR_OP_TAB_WAKE)
++    EmitLater(engine, identity, payload);
++  ReplyLater(ReplyContext{request_id, reply, reply_context}, SHAAR_OK, payload,
++             std::string());
++  return SHAAR_OK;
++}
++
++extern "C" void shaar_tab_lifecycle_register(ShaarModuleRegistry* registry) {
++  if (!registry)
++    return;
++  registry->Register(SHAAR_OP_TAB_DISCARD, SHAAR_OP_TAB_LIFECYCLE_GET,
++                     &HandleTabLifecycleOperation);
++}
+diff --git a/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h
+new file mode 100644
+index 0000000..b66f3f6
+--- /dev/null
++++ b/chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h
+@@ -0,0 +1,36 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this
++// file, You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#ifndef CHROME_BROWSER_SHAAR_TAB_LIFECYCLE_SHAAR_TAB_LIFECYCLE_H_
++#define CHROME_BROWSER_SHAAR_TAB_LIFECYCLE_SHAAR_TAB_LIFECYCLE_H_
++
++#include <string_view>
++
++#include "chrome/browser/shaar/engine/shaar_module_registry.h"
++
++namespace content {
++class WebContents;
++}
++
++namespace shaar::tab_lifecycle {
++
++// Posted after Chromium finishes a discard, including one Chrome started
++// itself. The WebContents pointer is only used while this call is on the
++// stack; the event is delivered on a later UI-thread task.
++void NoteDiscarded(shaar_engine* engine,
++                   std::string_view profile_id,
++                   std::string_view session_id,
++                   std::string_view window_id,
++                   std::string_view tab_id,
++                   content::WebContents* contents);
++
++}  // namespace shaar::tab_lifecycle
++
++shaar_error_code HandleTabLifecycleOperation(
++    shaar::ShaarEngineContext*, shaar_engine*, shaar_scope, shaar_window*,
++    shaar_tab*, shaar_operation, shaar_bytes, shaar_request_id, shaar_reply_fn,
++    void*, shaar_error*);
++extern "C" void shaar_tab_lifecycle_register(ShaarModuleRegistry* registry);
++
++#endif  // CHROME_BROWSER_SHAAR_TAB_LIFECYCLE_SHAAR_TAB_LIFECYCLE_H_
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
+index 5b20e56..1330f91 100644
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
+@@ -31,6 +31,7 @@
+ #include "chrome/browser/shaar/media/shaar_media.h"
+ #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
+ #include "chrome/browser/shaar/navigation/shaar_navigation.h"
++#include "chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h"
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser.h"
+@@ -55,11 +56,24 @@ struct shaar_window {
+ };
+ 
+ void CleanupTab(uint64_t serial);
++struct shaar_tab;
++void RebindFavicon(shaar_tab* tab);
++void RetargetDiscardedTab(shaar_tab* tab, content::WebContents* new_contents);
+ 
+ struct shaar_tab : content::WebContentsObserver,
+                    favicon::FaviconDriverObserver {
+   shaar_tab(content::WebContents* contents, uint64_t serial)
+       : content::WebContentsObserver(contents), serial(serial) {}
++  void AboutToBeDiscarded(content::WebContents* new_contents) override {
++    RetargetDiscardedTab(this, new_contents);
++  }
++  void WasDiscarded() override {
++    // Replace-path discard attaches tab helpers, including the favicon
++    // driver, only after AboutToBeDiscarded returns.
++    RebindFavicon(this);
++    shaar::tab_lifecycle::NoteDiscarded(engine, profile_id, session_id,
++                                        window_id, tab_id, web_contents());
++  }
+   void WebContentsDestroyed() override {
+     favicon_observation.Reset();
+     // Drop the WebContents pointer before a queued view update can request it.
+@@ -97,6 +111,28 @@ struct shaar_tab : content::WebContentsObserver,
+   std::string favicon_png;
+ };
+ 
++void RebindFavicon(shaar_tab* tab) {
++  if (!tab || tab->favicon_observation.IsObserving())
++    return;
++  content::WebContents* contents = tab->web_contents();
++  if (!contents)
++    return;
++  if (auto* driver = favicon::ContentFaviconDriver::FromWebContents(contents))
++    tab->favicon_observation.Observe(driver);
++}
++
++void RetargetDiscardedTab(shaar_tab* tab, content::WebContents* new_contents) {
++  // The preserve path discards in place and passes the same WebContents.
++  if (!tab || !new_contents || new_contents == tab->web_contents())
++    return;
++  tab->Observe(new_contents);
++  if (tab->engine && tab->window && tab->browser && !tab->tab_id.empty()) {
++    shaar::windows_tabs::Registry().BindTab(
++        tab->engine, tab->window, tab, tab->tab_id, tab->browser, new_contents);
++  }
++  tab->favicon_observation.Reset();
++}
++
+ namespace {
+ 
+ std::unordered_map<shaar_window*, std::unique_ptr<shaar_window>> windows;

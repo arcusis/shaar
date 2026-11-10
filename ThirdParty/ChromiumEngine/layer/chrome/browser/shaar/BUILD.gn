@@ -113,6 +113,10 @@ source_set("engine") {
     "storage_keychain/shaar_storage_keychain.h",
     "storage_keychain/shaar_storage_keychain_lifecycle_adapter.cc",
     # END storage_keychain
+    # BEGIN tab_lifecycle
+    "tab_lifecycle/shaar_tab_lifecycle.cc",
+    "tab_lifecycle/shaar_tab_lifecycle.h",
+    # END tab_lifecycle
   ]
   cflags_objcc = [ "-fobjc-arc" ]
   frameworks = [ "AppKit.framework" ]
@@ -120,6 +124,10 @@ source_set("engine") {
     "//base",
     "//chrome/browser:chrome_browser_main",
     "//chrome/browser:browser",
+    # BEGIN tab_lifecycle
+    "//chrome/browser/resource_coordinator",
+    "//components/performance_manager",
+    # END tab_lifecycle
     "//chrome/browser:main_extra_parts",
     "//chrome/browser:chrome_content_browser_client",
     # BEGIN devtools

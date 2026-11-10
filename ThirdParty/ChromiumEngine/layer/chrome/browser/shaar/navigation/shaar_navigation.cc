@@ -388,6 +388,12 @@ void NavigationObserver::PrimaryMainFrameRenderProcessGone(
   Emit("failed", active_navigation_id_, false, nullptr, "renderer_gone");
 }
 
+void NavigationObserver::AboutToBeDiscarded(content::WebContents* new_contents) {
+  if (!new_contents || new_contents == web_contents())
+    return;
+  Observe(new_contents);
+}
+
 void NavigationObserver::WebContentsDestroyed() {
   destroyed_ = true;
   Observe(nullptr);

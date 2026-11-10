@@ -618,6 +618,18 @@ class MediaTracker final : public content::WebContentsObserver {
     EmitChangedState();
   }
 
+  void AboutToBeDiscarded(content::WebContents* new_contents) override {
+    if (!new_contents || new_contents == contents_)
+      return;
+    const auto state = element_states.find(contents_);
+    if (state != element_states.end()) {
+      element_states.emplace(new_contents, std::move(state->second));
+      element_states.erase(state);
+    }
+    contents_ = new_contents;
+    Observe(new_contents);
+  }
+
   void WebContentsDestroyed() override {
     timer_.Stop();
     element_states.erase(contents_);

@@ -131,6 +131,14 @@ typedef enum {
   SHAAR_OP_TAB_ACTIVATION_RESOLVE = 206,
   SHAAR_OP_WINDOW_SET_BOUNDS = 207,
 
+  /* Sleeping tabs (#1467). An engine without this module returns
+   * SHAAR_UNSUPPORTED_CAPABILITY. The base minor stays 8 so an existing
+   * patch can still append it; do not treat these IDs as a minor bump. */
+  SHAAR_OP_TAB_DISCARD = 208,
+  SHAAR_OP_TAB_FREEZE = 209,
+  SHAAR_OP_TAB_WAKE = 210,
+  SHAAR_OP_TAB_LIFECYCLE_GET = 211,
+
   SHAAR_OP_TAB_NAVIGATE = 300,
   SHAAR_OP_TAB_GO = 301,
   SHAAR_OP_TAB_RELOAD = 302,

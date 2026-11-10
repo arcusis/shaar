@@ -38,6 +38,22 @@ enum BrowserSettingsAccessibility {
   }
 }
 
+/// Puts a Settings identifier on an AppKit view. A hidden window still builds this subview,
+/// which is how the extension probe finds the control without an accessibility client.
+struct SettingsControlMarker: NSViewRepresentable {
+  let identifier: String
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView(frame: .zero)
+    view.setAccessibilityIdentifier(identifier)
+    return view
+  }
+
+  func updateNSView(_ view: NSView, context: Context) {
+    view.setAccessibilityIdentifier(identifier)
+  }
+}
+
 /// Installs the section callback when Settings is built, including a hidden window.
 private struct SettingsSectionBridge: NSViewRepresentable {
   let navigator: BrowserSettingsSectionNavigator
@@ -322,6 +338,9 @@ struct BrowserSettingsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("settings.section.\(section.rawValue)")
+        .background {
+          SettingsControlMarker(identifier: "settings.section.\(section.rawValue)")
+        }
         .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
       }
       Spacer()

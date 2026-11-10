@@ -230,9 +230,11 @@ private struct ExtensionDeveloperControls: View {
         isOn: Binding(get: { model.developerMode }, set: { model.setDeveloperMode($0) })
       )
       .accessibilityIdentifier("settings.extensions.developerMode")
+      .background { SettingsControlMarker(identifier: "settings.extensions.developerMode") }
       if model.developerMode {
         Button(SettingsL10n.string("Load unpacked…"), action: onLoadUnpacked)
           .accessibilityIdentifier("settings.extensions.loadUnpacked")
+          .background { SettingsControlMarker(identifier: "settings.extensions.loadUnpacked") }
         Text(
           SettingsL10n.string(
             "Load an unpacked Manifest V3 extension from a folder on this Mac.")
@@ -256,6 +258,7 @@ private struct ExtensionInstallStatus: View {
         .font(.caption)
         .foregroundStyle(.red)
         .accessibilityIdentifier("settings.extensions.status")
+        .background { SettingsControlMarker(identifier: "settings.extensions.status") }
     }
   }
 }

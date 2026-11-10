@@ -233,6 +233,21 @@ enum ExtensionIconLoader {
   }
 }
 
+enum ExtensionManageDelivery {
+  static func deliver(
+    _ reply: ExtensionManageReply,
+    to completion: @escaping @MainActor (ExtensionManageReply) -> Void
+  ) {
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { completion(reply) }
+      return
+    }
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated { completion(reply) }
+    }
+  }
+}
+
 extension ARCChromiumRuntime {
   /// Submits one extension-manage payload. A synchronous engine refusal is `unsupported`.
   func submitExtensionManage(
@@ -243,7 +258,7 @@ extension ARCChromiumRuntime {
       forProfileID: profileID.uuidString, tabID: tabID?.uuidString, payload: payload
     ) { json, code in
       let reply = ExtensionManageReply(json: json, code: code)
-      Task { @MainActor in completion(reply) }
+      ExtensionManageDelivery.deliver(reply, to: completion)
     }
   }
 

@@ -121,8 +121,13 @@ final class ExtensionInstallProbe {
     let beforeIDs = ControlSearch.identifiers(in: content)
     checks["profilesSectionControl"] = beforeIDs.contains("settings.section.profiles")
     settings.selectSettingsSection(.profiles)
+    guard settings.selectProfile(profileID) else {
+      finish(error: "The profile row could not be selected.", checks: checks)
+      return
+    }
     pump(0.4)
     content.layoutSubtreeIfNeeded()
+    ControlSearch.reveal("settings.extensions.developerMode", in: content)
     writePNG(content, name: "settings-extensions-before.png")
     let developerIDs = ControlSearch.identifiers(in: content)
     checks["developerModeControl"] = developerIDs.contains("settings.extensions.developerMode")
@@ -140,6 +145,7 @@ final class ExtensionInstallProbe {
     acceptInstallPromptIfNeeded()
     pump(0.5)
     content.layoutSubtreeIfNeeded()
+    ControlSearch.reveal("settings.extensions.status", in: content)
     writePNG(content, name: "settings-extensions-after.png")
     let installed = probeExtension(in: settings)
     if status == ExtensionInstallNotice.engineRefused && installed == nil {
@@ -309,6 +315,26 @@ final class ExtensionInstallProbe {
 
 @MainActor
 private enum ControlSearch {
+  static func reveal(_ identifier: String, in root: NSView) {
+    guard let marker = view(identifier: identifier, in: root),
+      let scroll = marker.enclosingScrollView
+    else { return }
+    let rect = marker.convert(marker.bounds, to: scroll.documentView)
+    scroll.documentView?.scrollToVisible(rect.insetBy(dx: 0, dy: -80))
+    root.layoutSubtreeIfNeeded()
+  }
+
+  private static func view(identifier: String, in root: NSView) -> NSView? {
+    var pending: [NSView] = [root]
+    var seen: Set<ObjectIdentifier> = []
+    while let view = pending.popLast() {
+      if !seen.insert(ObjectIdentifier(view)).inserted { continue }
+      if view.accessibilityIdentifier() == identifier { return view }
+      pending.append(contentsOf: view.subviews)
+    }
+    return nil
+  }
+
   static func identifiers(in root: NSView) -> Set<String> {
     var found: Set<String> = []
     var pending: [NSObject] = [root]

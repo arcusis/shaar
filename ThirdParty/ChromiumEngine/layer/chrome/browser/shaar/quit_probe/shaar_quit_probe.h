@@ -58,6 +58,9 @@ struct CancelGate {
   bool dialog_handled = false;
 };
 
+// Private tabs are refused on purpose. The testing-only click and the dialog
+// hold run only on the selected regular tab, including while a private window
+// is open beside it.
 inline ProbeRefusal TargetRefusal(const TargetGate& gate, bool require_hidden) {
   if (!gate.testing)
     return ProbeRefusal::kNotTesting;

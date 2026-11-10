@@ -7,7 +7,9 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -35,6 +37,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
@@ -59,13 +62,30 @@ struct ReplyContext {
   void* context;
 };
 
+class HoldLifetime final : public content::WebContentsObserver {
+ public:
+  HoldLifetime(shaar_engine* engine, shaar_tab* tab, content::WebContents* contents)
+      : content::WebContentsObserver(contents), engine_(engine), tab_(tab) {}
+
+  void WebContentsDestroyed() override;
+
+ private:
+  shaar_engine* engine_;
+  shaar_tab* tab_;
+};
+
 struct HoldState {
   shaar_engine* engine = nullptr;
   shaar_window* window = nullptr;
   shaar_tab* tab = nullptr;
   bool command_pending = false;
   bool confirmed_pending = false;
+  std::unique_ptr<HoldLifetime> lifetime;
 };
+
+void DeleteHoldLifetime(std::unique_ptr<HoldLifetime> observer) {
+  observer.reset();
+}
 
 struct ResolvedTab {
   content::WebContents* contents = nullptr;
@@ -231,11 +251,14 @@ HoldState* FindHold(shaar_engine* engine, shaar_tab* tab) {
   return nullptr;
 }
 
-void ArmHold(shaar_engine* engine, shaar_window* window, shaar_tab* tab) {
+void ArmHold(shaar_engine* engine, shaar_window* window, shaar_tab* tab,
+             content::WebContents* contents) {
   if (HoldState* existing = FindHold(engine, tab)) {
     existing->window = window;
     existing->command_pending = true;
     existing->confirmed_pending = true;
+    if (!existing->lifetime && contents)
+      existing->lifetime = std::make_unique<HoldLifetime>(engine, tab, contents);
     return;
   }
   HoldState created;
@@ -244,7 +267,9 @@ void ArmHold(shaar_engine* engine, shaar_window* window, shaar_tab* tab) {
   created.tab = tab;
   created.command_pending = true;
   created.confirmed_pending = true;
-  Holds().push_back(created);
+  if (contents)
+    created.lifetime = std::make_unique<HoldLifetime>(engine, tab, contents);
+  Holds().push_back(std::move(created));
 }
 
 void ClearHold(shaar_engine* engine, shaar_tab* tab) {
@@ -254,6 +279,24 @@ void ClearHold(shaar_engine* engine, shaar_tab* tab) {
       holds.erase(it);
       return;
     }
+  }
+}
+
+void HoldLifetime::WebContentsDestroyed() {
+  // Detach before the hold drops this observer. Deleting it on this stack
+  // use-after-frees the WebContents observer list.
+  Observe(nullptr);
+  shaar_engine* engine = engine_;
+  shaar_tab* tab = tab_;
+  std::vector<HoldState>& holds = Holds();
+  for (auto it = holds.begin(); it != holds.end(); ++it) {
+    if (it->engine != engine || it->tab != tab)
+      continue;
+    std::unique_ptr<HoldLifetime> self = std::move(it->lifetime);
+    holds.erase(it);
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&DeleteHoldLifetime, std::move(self)));
+    return;
   }
 }
 
@@ -438,9 +481,18 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_test_quit_dialog_prepare(
   const shaar::quit_probe::ProbeRefusal refusal = shaar::quit_probe::PrepareRefusal(gate);
   if (refusal != shaar::quit_probe::ProbeRefusal::kNone)
     return Refuse(refusal, error);
-  ArmHold(engine, window, tab);
+  ArmHold(engine, window, tab, resolved.contents);
   Reply({request_id, reply, reply_context}, SHAAR_OK,
         R"({"schemaVersion":1,"prepared":true})");
+  return Fail(SHAAR_OK, "", error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_test_quit_dialog_release(
+    shaar_engine* engine, shaar_scope, shaar_window*, shaar_tab* tab,
+    shaar_error* error) {
+  if (!EngineAcceptsProbe(engine, error))
+    return Reported(error);
+  ClearHold(engine, tab);
   return Fail(SHAAR_OK, "", error);
 }
 
@@ -453,7 +505,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_test_quit_dialog_cancel(
   const ResolvedTab resolved = ResolveTab(engine, scope, window, tab);
   HoldState* hold = FindHold(engine, tab);
   shaar::quit_probe::CancelGate gate;
-  gate.target = MakeTarget(true, resolved);
+  gate.target = MakeTarget(HostIsHidden(resolved.contents), resolved);
   gate.trying_to_quit = browser_shutdown::IsTryingToQuit();
   gate.hold_present = hold != nullptr;
   gate.same_owner = hold && hold->window == window && hold->tab == tab;

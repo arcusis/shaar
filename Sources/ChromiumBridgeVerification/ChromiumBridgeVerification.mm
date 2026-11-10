@@ -1288,12 +1288,15 @@ using ShaarQuitPrepare = shaar_error_code (*)(
     shaar_reply_fn, void *, shaar_error *);
 using ShaarQuitAudit = shaar_error_code (*)(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *, shaar_bytes *, shaar_error *);
+using ShaarQuitRelease = shaar_error_code (*)(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *, shaar_error *);
 
 struct QuitProbeSymbols {
   ShaarQuitActivate activate;
   ShaarQuitPrepare prepare;
   ShaarQuitPrepare cancel;
   ShaarQuitAudit audit;
+  ShaarQuitRelease release;
 };
 
 static BOOL QuitProbeSymbolsAvailable(QuitProbeSymbols *symbols) {
@@ -1305,7 +1308,10 @@ static BOOL QuitProbeSymbolsAvailable(QuitProbeSymbols *symbols) {
       dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_cancel"));
   symbols->audit = reinterpret_cast<ShaarQuitAudit>(
       dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_audit"));
-  return symbols->activate && symbols->prepare && symbols->cancel && symbols->audit;
+  symbols->release = reinterpret_cast<ShaarQuitRelease>(
+      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_release"));
+  return symbols->activate && symbols->prepare && symbols->cancel && symbols->audit &&
+      symbols->release;
 }
 
 static uint64_t ProbeNextRequestID(ARCShaarRuntime *runtime) {
@@ -1448,16 +1454,24 @@ static void ProbePrepareNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
         return symbols.prepare(engine, scope, window, tab, requestID, reply, context, error);
       }, ^(NSDictionary *reply, NSError *error) {
         ARCShaarRuntime *ready = weakRuntime;
-        if (!ready || error || ![reply[@"prepared"] boolValue] ||
-            !PrivateQuitProbeTabIsEligible(ready, tabID)) {
+        BOOL prepared = [reply[@"prepared"] boolValue];
+        BOOL replyFailed = error != nil;
+        BOOL stillEligible = ready && PrivateQuitProbeTabIsEligible(ready, tabID);
+        NSMutableDictionary *existing = ready ? PrivateQuitHoldOwners(ready)[tabID] : nil;
+        BOOL foreign = existing && ![existing[@"nativeHold"] boolValue];
+        if (ARCProbeNativePrepareShouldReleaseHold(ready != nil, replyFailed, prepared,
+                                                  stillEligible, foreign)) {
+          shaar_error releaseError = ARCPrivateShaarEmptyError();
+          if (symbols.release(engine, scope, window, tab, &releaseError) != SHAAR_OK)
+            NSLog(@"Quit probe release failed.");
           completion(NO);
           return;
         }
-        NSMutableDictionary *owner = PrivateQuitHoldOwners(ready)[tabID];
-        if (owner && ![owner[@"nativeHold"] boolValue]) {
+        if (!ready || replyFailed || !prepared || !stillEligible || foreign) {
           completion(NO);
           return;
         }
+        NSMutableDictionary *owner = existing;
         if (!owner) {
           owner = [NSMutableDictionary dictionary];
           PrivateQuitHoldOwners(ready)[tabID] = owner;
@@ -1553,6 +1567,30 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
         }
       }];
   if (!accepted) completion(nil, ARCBridgeError(@"This extension action is unavailable in the selected profile."));
+}
+
+@end
+
+@implementation ARCShaarRuntime (Verification)
+- (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
+  if (!ProbeCaptureAllowed()) return nil;
+  QuitProbeSymbols symbols = {};
+  if (QuitProbeSymbolsAvailable(&symbols)) {
+    NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
+    BOOL current = owner && PrivateQuitHoldOwnerCurrent(self, tabID, owner);
+    if (!ARCProbeNativeHoldAuditVisible(current, [owner[@"nativeHold"] boolValue]))
+      return nil;
+    return ProbeNativeHoldAudit(self, tabID, symbols);
+  }
+  NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
+  if (!owner || !PrivateQuitHoldOwnerCurrent(self, tabID, owner)) return nil;
+  NSString *windowID = [self windowIDForTabID:tabID];
+  if (![owner[@"windowID"] isEqualToString:self.primaryWindowID] ||
+      ![windowID isEqualToString:self.primaryWindowID]) return nil;
+  id selected = ProbeTable(self, "_shaarSelectedTabs")[self.primaryWindowID];
+  return @{@"holdCommandPending": owner[@"holdCommandPending"] ?: @NO,
+           @"holdConfirmedPending": owner[@"holdConfirmedPending"] ?: @NO,
+           @"selectedNormalTab": @([selected isEqual:tabID])};
 }
 
 @end

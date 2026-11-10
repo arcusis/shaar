@@ -21,6 +21,7 @@ using shaar::quit_probe::PrepareRefusal;
 using shaar::quit_probe::ProbeRefusal;
 using shaar::quit_probe::RefusalMessage;
 using shaar::quit_probe::TargetGate;
+using shaar::quit_probe::TargetRefusal;
 
 TargetGate OwnedHiddenTab() {
   TargetGate gate;
@@ -90,6 +91,29 @@ TEST(ShaarQuitProbeTest, LoopbackIsHttpLocalhostOnly) {
   EXPECT_TRUE(LoopbackHttpHost("http", "[::1]"));
   EXPECT_FALSE(LoopbackHttpHost("https", "127.0.0.1"));
   EXPECT_FALSE(LoopbackHttpHost("http", "example.com"));
+}
+
+TEST(ShaarQuitProbeTest, TargetRefusalRejectsEveryPrivateTab) {
+  TargetGate gate = OwnedHiddenTab();
+  gate.private_tab = true;
+  EXPECT_EQ(TargetRefusal(gate, true), ProbeRefusal::kPrivateTab);
+  EXPECT_EQ(TargetRefusal(gate, false), ProbeRefusal::kPrivateTab);
+  gate.hidden_host = false;
+  EXPECT_EQ(TargetRefusal(gate, false), ProbeRefusal::kPrivateTab);
+  EXPECT_EQ(RefusalMessage(ProbeRefusal::kPrivateTab),
+            std::string("private tab is not the quit probe"));
+}
+
+TEST(ShaarQuitProbeTest, CancelAllowsAVisibleHostWhenTheDialogIsDismissed) {
+  CancelGate gate;
+  gate.target = OwnedHiddenTab();
+  gate.target.hidden_host = false;
+  gate.trying_to_quit = true;
+  gate.hold_present = true;
+  gate.same_owner = true;
+  gate.dialog_handled = true;
+  EXPECT_EQ(CancelRefusal(gate), ProbeRefusal::kNone);
+  EXPECT_FALSE(CancelKeepsHold(ProbeRefusal::kNone));
 }
 
 TEST(ShaarQuitProbeTest, CancelClearsHoldOnlyAfterTheDialogIsDismissed) {

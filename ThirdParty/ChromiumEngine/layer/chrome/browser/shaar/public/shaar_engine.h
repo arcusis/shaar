@@ -505,8 +505,10 @@ SHAAR_EXPORT shaar_error_code shaar_site_security_info(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
     shaar_bytes *out_json, shaar_error *error);
 
-/* Verification-only private-quit hooks. Engines that predate them omit the
- * symbols; callers resolve them with dlsym and keep the older probe path.
+/* Verification-only private-quit hooks. Release builds leave
+ * shaar_enable_quit_probe_hooks off, so these symbols are not linked.
+ * Callers dlsym the whole set and keep the older probe path when any symbol
+ * is missing. Release drops a prepare hold and succeeds when none is armed.
  * Immediate failure has no later callback. A result payload is empty on error.
  * Audit JSON is borrowed until the next call on this thread. */
 SHAAR_EXPORT shaar_error_code shaar_test_renderer_activate(
@@ -521,6 +523,8 @@ SHAAR_EXPORT shaar_error_code shaar_test_quit_dialog_cancel(
 SHAAR_EXPORT shaar_error_code shaar_test_quit_dialog_audit(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
     shaar_bytes *out_json, shaar_error *);
+SHAAR_EXPORT shaar_error_code shaar_test_quit_dialog_release(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *, shaar_error *);
 
 /* args_json includes schemaVersion. Immediate failure has no later callback;
  * accepted requests complete once. A result payload is empty on error. */

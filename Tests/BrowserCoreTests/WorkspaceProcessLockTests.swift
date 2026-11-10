@@ -27,6 +27,7 @@ private func temporaryWorkspaceLockDirectory() -> URL {
   #expect(throws: WorkspaceLockError.self) { _ = try WorkspaceProcessLock(directory: root) }
   #expect(try Data(contentsOf: path) == original)
   #expect(owner != nil)
+  owner?.release()
   owner = nil
   successor = try WorkspaceProcessLock(directory: root)
   withExtendedLifetime(successor) {
@@ -98,6 +99,22 @@ private func temporaryWorkspaceLockDirectory() -> URL {
   #expect(throws: WorkspaceLockError.invalidFile) {
     _ = try WorkspaceProcessLock(directory: root)
   }
+}
+
+@Test func workspaceLockReleaseLetsTheSameFileBeLockedAgain() throws {
+  let root = temporaryWorkspaceLockDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  for _ in 0..<50 {
+    let lock = try WorkspaceProcessLock(directory: root)
+    lock.release()
+  }
+  let held = try WorkspaceProcessLock(directory: root)
+  defer { held.release() }
+  var rejected = false
+  do { _ = try WorkspaceProcessLock(directory: root) } catch WorkspaceLockError.inUse {
+    rejected = true
+  }
+  #expect(rejected)
 }
 
 @Test func workspaceLockErrorsDescribeTheConflict() {

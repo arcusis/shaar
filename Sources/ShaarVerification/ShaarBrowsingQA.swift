@@ -8,8 +8,22 @@ import ChromiumBridge
 import Darwin
 import Foundation
 
-/// Hidden shipping-app exercise for everyday browsing. The Python driver owns memory samples.
+@testable import ArcusisBrowser
+
+/// Hidden verification exercise for everyday browsing. The Python driver owns memory samples.
 @MainActor enum ShaarBrowsingQA {
+  static func run(arguments: [String]) -> Int32 {
+    guard let index = arguments.firstIndex(of: "--browsing-qa"),
+      arguments.indices.contains(index + 3),
+      let frameworks = Bundle.main.privateFrameworksURL
+    else { return 2 }
+    let framework = frameworks.appending(path: "Chromium Framework.framework")
+    let output = URL(fileURLWithPath: arguments[index + 1])
+    let page = URL(string: arguments[index + 2])
+    return run(
+      frameworkURL: framework, outputURL: output, pageURL: page, scenario: arguments[index + 3])
+  }
+
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?, scenario: String) -> Int32 {
     guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else {
       write(["passed": false, "error": "Loopback http base URL is required."], to: outputURL)
@@ -91,7 +105,7 @@ import Foundation
     case "overload-100": return await overload(100, context: context, base: base)
     case "overload-200": return await overload(200, context: context, base: base)
     case "churn": return await churn(context: context, runtime: runtime, base: base)
-    case "windows": return await windows(host: host, context: context, base: base)
+    case "windows": return await windows(host: host, context: context, base: base, root: root)
     case "splits": return await splits(context: context, base: base)
     case "heavy": return await heavy(context: context, runtime: runtime, base: base)
     case "dialogs": return await dialogs(context: context, runtime: runtime, base: base)
@@ -242,17 +256,14 @@ import Foundation
       return rows
     }
     let inFlight = await until(attempts: 40, condition: { pageIsLoading(context) })
-    let reloaded = inFlight && context.store.reloadCurrentPage()
-    let settledReload = await until(
-      attempts: 150,
-      condition: {
-        settled(context, path: "/slow") || settled(context, path: "/nav/1")
-      })
+    let stillLoading = pageIsLoading(context)
+    let reloaded = inFlight && stillLoading && context.store.reloadCurrentPage()
+    let settledSlow = await until(attempts: 200, condition: { settled(context, path: "/slow") })
     let landed = context.store.session.selectedPage?.tab.url.path ?? "nothing"
     rows.append(
       row(
-        "churn-reload-during-load", reloaded && settledReload ? "pass" : "fail",
-        "Reload during load finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
+        "churn-reload-during-load", reloaded && settledSlow ? "pass" : "fail",
+        "Reload during load inFlight=\(stillLoading), reload=\(reloaded), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
         ["elapsedMs": milliseconds(since: slowStarted)]))
     let failures = context.store.rendererFailures.count
     rows.append(
@@ -264,7 +275,7 @@ import Foundation
   }
 
   private static func windows(
-    host: NativeBrowserHost, context: NativeBrowserContext, base: URL
+    host: NativeBrowserHost, context: NativeBrowserContext, base: URL, root: URL
   ) async -> [[String: Any]] {
     var rows: [[String: Any]] = []
     let originSpace = context.store.session.selectedSpaceID
@@ -298,9 +309,7 @@ import Foundation
         "Created \(windowCount) normal windows."))
     guard keepHidden(&rows, "windows-create") else { return rows }
 
-    if let movedTab,
-      let destination = host.contexts.values.first(where: { $0.id != context.id })
-    {
+    if let movedTab, let destination = host.contexts.values.first(where: { $0.id != context.id }) {
       let payload = SidebarTransfer.tab(
         sessionID: context.store.dragSessionID, sourceSpaceID: originSpace, tabID: movedTab)
       let accepted = destination.store.acceptSidebarDrop(
@@ -313,6 +322,9 @@ import Foundation
             ? "The tab moved into the other window."
             : "Dropping a tab on another window was rejected. The tab stayed in the source window."
         ))
+    } else {
+      rows.append(
+        row("windows-drag", "fail", "There was no tab or destination window to drop."))
     }
 
     context.store.perform(.open(url(base, path: "/nav/2")))
@@ -357,11 +369,26 @@ import Foundation
         owner.store.session.selectedPage?.tab.url.path == "/light"
           && owner.page.pages[owner.store.session.selectedPage?.tab.id ?? UUID()]?.loading == false
       })
+    let workspaceFile = root.appending(path: "profile/workspace.json")
+    var flushed = false
+    var absent = false
+    if privateLoaded {
+      do {
+        try host.workspace.flushSaves()
+        flushed = true
+      } catch {
+        flushed = false
+      }
+      if flushed, let saved = try? String(contentsOf: workspaceFile, encoding: .utf8) {
+        absent = !saved.contains("n=private")
+      }
+    }
+    let privateHidden = !owner.window.isVisible
     rows.append(
       row(
         "windows-private",
-        privateLoaded && !owner.window.isVisible ? "pass" : "fail",
-        "Private HTTP prompt=\(prompted), loaded=\(privateLoaded), visible=\(owner.window.isVisible)."
+        privateLoaded && privateHidden && flushed && absent ? "pass" : "fail",
+        "Private HTTP prompt=\(prompted), loaded=\(privateLoaded), visible=\(owner.window.isVisible), flushed=\(flushed), absentFromWorkspace=\(absent)."
       ))
 
     let personal = context.store.session.selectedSpaceID
@@ -378,6 +405,15 @@ import Foundation
     context.store.perform(.space(personal))
     guard context.engine.navigateCurrentPage(to: url(base, path: "/slow")) else {
       rows.append(row("windows-profile", "fail", "The slow navigation did not start."))
+      return rows
+    }
+    let inFlight = await until(attempts: 40, condition: { pageIsLoading(context) })
+    let stillLoading = pageIsLoading(context)
+    guard inFlight && stillLoading else {
+      rows.append(
+        row(
+          "windows-profile", "fail",
+          "The profile switch did not happen during the load."))
       return rows
     }
     let switched = context.store.setSpaceProfile(personal, to: otherProfile)
@@ -480,20 +516,28 @@ import Foundation
       rows.append(row("heavy-scroll", "fail", "The scroll page did not load."))
       return rows
     }
-    let script =
-      "(()=>{const feed=document.getElementById('feed');if(!feed)return 0;const before=feed.children.length;const top=feed.scrollTop;feed.scrollTop=feed.scrollHeight;const moved=feed.scrollTop>top?1:0;return before*1000000+feed.children.length*10+moved;})()"
-    let encoded = wholeNumber(await evaluate(runtime, tab: scrollID, script: script))
-    let before = (encoded ?? 0) / 1_000_000
-    let after = ((encoded ?? 0) / 10) % 100_000
-    let moved = (encoded ?? 0) % 10 == 1
-    let grew = before == 100 && after > before
+    let primed = wholeNumber(
+      await evaluate(
+        runtime, tab: scrollID,
+        script:
+          "(()=>{const feed=document.getElementById('feed');if(!feed)return 0;const before=feed.children.length;feed.scrollTop=feed.scrollHeight;return before;})()"
+      ))
+    let before = primed ?? 0
+    var after = before
+    let grew = await untilReady(attempts: 40) {
+      after =
+        wholeNumber(
+          await evaluate(
+            runtime, tab: scrollID,
+            script:
+              "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
+          )) ?? 0
+      return before == 100 && after > before
+    }
     rows.append(
       row(
-        "heavy-scroll", grew ? "pass" : "blocked",
-        grew
-          ? "Scroll grew from \(before) to \(after) nodes."
-          : "The hidden page did not grow the feed (before \(before), after \(after), scrolled \(moved))."
-      ))
+        "heavy-scroll", grew ? "pass" : "fail",
+        "Scroll grew from \(before) to \(after) nodes."))
 
     context.store.perform(.open(url(base, path: "/webgl")))
     guard await until(attempts: 100, condition: { settled(context, path: "/webgl") }),
@@ -514,16 +558,29 @@ import Foundation
       rows.append(row("heavy-video", "fail", "The video page did not load."))
       return rows
     }
-    let clicked = await click(runtime, tab: videoID, element: "popup")
-    let playback = await evaluate(
-      runtime, tab: videoID,
-      script:
-        "(()=>{const v=document.getElementById('clip');return {paused:v.paused,width:v.videoWidth,error:v.error?v.error.code:0};})()"
-    )
-    rows.append(
-      row(
-        "heavy-video", clicked && playbackStarted(playback) ? "pass" : "fail",
-        "Play click=\(clicked), state \(playback ?? "nothing")."))
+    let clipReady = await evaluate(
+      runtime, tab: videoID, script: "document.documentElement.dataset.clip==='0'?0:1")
+    if clipReady == "0" {
+      rows.append(
+        row(
+          "heavy-video", "blocked",
+          "ffmpeg did not produce a clip, so playback was not measured."))
+    } else {
+      let clicked = await click(runtime, tab: videoID, element: "popup")
+      var playback: String?
+      _ = await untilReady(attempts: 50) {
+        playback = await evaluate(
+          runtime, tab: videoID,
+          script:
+            "(()=>{const v=document.getElementById('clip');if(!v)return {paused:true,width:0,error:1};return {paused:v.paused,width:v.videoWidth,error:v.error?v.error.code:0};})()"
+        )
+        return playbackSettled(playback)
+      }
+      rows.append(
+        row(
+          "heavy-video", clicked && playbackStarted(playback) ? "pass" : "fail",
+          "Play click=\(clicked), state \(playback ?? "nothing")."))
+    }
     rows.append(
       row(
         "picture-in-picture", "blocked",
@@ -566,7 +623,7 @@ import Foundation
       guard keepHidden(&rows, name) else { return rows }
     }
 
-    for (path, marker) in [("/missing", "404"), ("/error", "500")] {
+    for (path, expected) in [("/missing", 404), ("/error", 500)] {
       guard context.engine.navigateCurrentPage(to: url(base, path: path)),
         await until(attempts: 80, condition: { settled(context, path: path) }),
         let id = context.store.session.selectedPage?.tab.id
@@ -574,12 +631,11 @@ import Foundation
         rows.append(row("dialogs\(path)", "fail", "\(path) did not finish."))
         continue
       }
-      let text = await evaluate(
-        runtime, tab: id, script: "document.body?document.body.innerText.slice(0,120):''")
+      let status = await navigationStatus(runtime, tab: id)
       rows.append(
         row(
-          "dialogs\(path)", text?.contains(marker) == true ? "pass" : "fail",
-          "Body: \(text ?? "empty")."))
+          "dialogs\(path)", status == expected ? "pass" : "fail",
+          "HTTP status \(status.map(String.init) ?? "missing"), expected \(expected)."))
     }
 
     let offlineStarted = Date()
@@ -608,29 +664,24 @@ import Foundation
     let armedState = await evaluate(
       runtime, tab: unloadID, script: "document.documentElement.dataset.armed==='1'?1:0")
     context.store.closeTab(unloadID)
-    let prompted = await until(
-      attempts: 30,
-      condition: {
-        context.store.session.page(forTabID: unloadID) == nil || !windowsHidden()
-          || NSApp.modalWindow != nil
-      })
-    let dialogVisible = !windowsHidden() || NSApp.modalWindow != nil
-    let stayed = context.store.session.page(forTabID: unloadID) != nil
-    _ = await evaluate(runtime, tab: unloadID, script: "window.onbeforeunload=null")
-    orderOutVisibleWindows()
-    if stayed { context.store.closeTab(unloadID) }
+    let decision = await beforeUnloadDecision(context, tab: unloadID)
+    if context.store.session.page(forTabID: unloadID) != nil {
+      _ = await evaluate(runtime, tab: unloadID, script: "window.onbeforeunload=null")
+      orderOutVisibleWindows()
+      context.store.closeTab(unloadID)
+    }
     let dismissed = await until(
       attempts: 40,
       condition: {
         context.store.session.page(forTabID: unloadID) == nil && windowsHidden()
       })
-    let status =
-      armed && armedState == "1" && prompted && dialogVisible && stayed && dismissed
-      ? "pass" : "fail"
+    let status = beforeUnloadStatus(
+      armed: armed, armedState: armedState, cancelledWhileHidden: decision.cancelledWhileHidden,
+      sawVisibleDialog: decision.sawVisibleDialog, dismissed: dismissed)
     rows.append(
       row(
         "dialogs-beforeunload", status,
-        "Armed=\(armedState ?? "nil"), stayed=\(stayed), dialog=\(dialogVisible), dismissed=\(dismissed)."
+        "Armed=\(armedState ?? "nil"), cancelledWhileHidden=\(decision.cancelledWhileHidden), sawVisibleDialog=\(decision.sawVisibleDialog), dismissed=\(dismissed)."
       ))
     return rows
   }
@@ -825,9 +876,8 @@ import Foundation
   ) -> Bool {
     let prefix = directory.standardizedFileURL.resolvingSymlinksInPath().path
     return context.engine.downloads.items(in: profile).contains { item in
-      guard item.state == .finished, let path = item.fileURL?.standardizedFileURL.path else {
-        return false
-      }
+      guard item.state == .finished, let file = item.fileURL else { return false }
+      let path = file.standardizedFileURL.resolvingSymlinksInPath().path
       return path == prefix || path.hasPrefix(prefix + "/")
     }
   }
@@ -987,6 +1037,55 @@ import Foundation
       try? await Task.sleep(for: .milliseconds(100))
     }
     return condition()
+  }
+
+  private static func untilReady(attempts: Int, condition: () async -> Bool) async -> Bool {
+    for _ in 0..<attempts {
+      if await condition() { return true }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    return await condition()
+  }
+
+  private static func navigationStatus(_ runtime: ARCShaarRuntime, tab: UUID) async -> Int? {
+    wholeNumber(
+      await evaluate(
+        runtime, tab: tab,
+        script:
+          "(()=>{const e=performance.getEntriesByType('navigation')[0];return e?e.responseStatus:0})()"
+      ))
+  }
+
+  private static func beforeUnloadDecision(
+    _ context: NativeBrowserContext, tab: UUID
+  ) async -> (cancelledWhileHidden: Bool, sawVisibleDialog: Bool) {
+    for _ in 0..<40 {
+      if !windowsHidden() {
+        return (false, true)
+      }
+      if context.store.session.page(forTabID: tab) == nil {
+        return (false, false)
+      }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    let visible = !windowsHidden()
+    let stayed = context.store.session.page(forTabID: tab) != nil && !visible
+    return (stayed, visible)
+  }
+
+  private static func beforeUnloadStatus(
+    armed: Bool, armedState: String?, cancelledWhileHidden: Bool, sawVisibleDialog: Bool,
+    dismissed: Bool
+  ) -> String {
+    if sawVisibleDialog { return "blocked" }
+    if armed && armedState == "1" && cancelledWhileHidden && dismissed { return "pass" }
+    return "fail"
+  }
+
+  private static func playbackSettled(_ value: String?) -> Bool {
+    guard let value else { return false }
+    if value.contains("\"error\":") && !value.contains("\"error\":0") { return true }
+    return value.contains("\"paused\":false") && !value.contains("\"width\":0")
   }
 
   private static func row(

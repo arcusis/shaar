@@ -60,6 +60,8 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertEqual(PROBE.scenario_result(blocked, 0, False, []), "blocked")
         passed = {"passed": True, "rows": [{"status": "pass"}, {"status": "blocked"}]}
         self.assertEqual(PROBE.scenario_result(passed, 0, False, []), "pass")
+        empty = {"passed": True, "rows": []}
+        self.assertEqual(PROBE.scenario_result(empty, 0, False, []), "fail")
 
     def test_deliberate_renderer_sigkill_is_not_a_second_defect(self):
         report = {"rows": [{"name": "renderer-recover", "status": "pass"}]}
@@ -68,8 +70,15 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertTrue(PROBE.crash_counts_against_suite("windows", report, "SIGKILL"))
 
     def test_suite_passes_when_every_scenario_is_pass_or_blocked(self):
-        self.assertTrue(PROBE.suite_passed([{"result": "pass"}, {"result": "blocked"}]))
+        self.assertTrue(PROBE.suite_passed([
+            {"scenario": "dialogs", "result": "pass"},
+            {"scenario": "heavy", "result": "blocked"},
+        ]))
         self.assertFalse(PROBE.suite_passed([{"result": "pass"}, {"result": "hang"}]))
+        self.assertFalse(PROBE.suite_passed([
+            {"scenario": "overload-50", "result": "pass"},
+            {"scenario": "overload-100", "result": "blocked"},
+        ]))
 
     def test_markdown_table_names_the_scenario_and_escapes_notes(self):
         table = PROBE.markdown_table([{

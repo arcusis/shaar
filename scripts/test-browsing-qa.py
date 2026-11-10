@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Exercise everyday browsing in a hidden shipping Shaar.app."""
+"""Exercise everyday browsing in a hidden Shaar Verification.app."""
 
 from __future__ import annotations
 
@@ -111,9 +111,9 @@ def scenario_result(report: dict, exit_code: int | None, timed_out: bool, crashe
     rows = report.get("rows") or []
     if any(row.get("status") == "fail" for row in rows):
         return "fail"
-    if report.get("passed") is not True or exit_code not in (0, None):
+    if not rows or report.get("passed") is not True or exit_code not in (0, None):
         return "fail"
-    if rows and all(row.get("status") == "blocked" for row in rows):
+    if all(row.get("status") == "blocked" for row in rows):
         return "blocked"
     return "pass"
 
@@ -131,7 +131,15 @@ def crash_counts_against_suite(scenario: str, report: dict, crash_text: str) -> 
 
 
 def suite_passed(scenarios: list[dict]) -> bool:
-    return all(item["result"] in {"pass", "blocked"} for item in scenarios)
+    for item in scenarios:
+        result = item.get("result")
+        if result == "pass":
+            continue
+        scenario = str(item.get("scenario", ""))
+        if result == "blocked" and not scenario.startswith("overload-"):
+            continue
+        return False
+    return True
 
 
 def format_mib(value: int | None) -> str:
@@ -167,9 +175,11 @@ def markdown_table(scenarios: list[dict]) -> str:
 
 def available_bytes() -> int | None:
     try:
-        page = int(subprocess.check_output(["sysctl", "-n", "hw.pagesize"], text=True).strip())
-        text = subprocess.check_output(["vm_stat"], text=True)
-    except (OSError, subprocess.CalledProcessError, ValueError):
+        page = int(
+            subprocess.check_output(
+                ["sysctl", "-n", "hw.pagesize"], text=True, timeout=5).strip())
+        text = subprocess.check_output(["vm_stat"], text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError, ValueError):
         return None
     pages: dict[str, int] = {}
     for line in text.splitlines():
@@ -219,8 +229,9 @@ def read_new_crashes(before: set[str]) -> list[tuple[str, str]]:
 
 def process_tree_rss_bytes(root_pid: int) -> int:
     try:
-        output = subprocess.check_output(["ps", "-axo", "pid=,ppid=,rss="], text=True)
-    except (OSError, subprocess.CalledProcessError):
+        output = subprocess.check_output(
+            ["ps", "-axo", "pid=,ppid=,rss="], text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
         return 0
     rows: dict[int, tuple[int, int]] = {}
     for line in output.splitlines():
@@ -408,7 +419,10 @@ const gl=document.getElementById('c').getContext('webgl')||document.getElementBy
 document.documentElement.dataset.webgl=gl?'1':'0';
 </script>""")
         if path == "/video":
+            if not self.clip:
+                return page("video", "<script>document.documentElement.dataset.clip='0'</script>")
             return page("video", """
+<script>document.documentElement.dataset.clip='1'</script>
 <video id="clip" src="/clip.mp4" playsinline></video>
 <button id="popup" onclick="document.getElementById('clip').play()">Play</button>""")
         if path == "/popup":
@@ -486,7 +500,7 @@ def launch_scenario(executable: Path, root: Path, page_url: str, scenario: str) 
             time.sleep(0.5)
     report = read_report(report_path)
     crash_reports = read_new_crashes(before)
-    if process.returncode not in (0, None) and not crash_reports:
+    if not crash_reports:
         for _ in range(8):
             time.sleep(1)
             crash_reports = read_new_crashes(before)
@@ -499,7 +513,7 @@ def launch_scenario(executable: Path, root: Path, page_url: str, scenario: str) 
     ]
     extra = ""
     if timed_out:
-        extra = "The shipping app was still running when the scenario budget ended."
+        extra = "The verification app was still running when the scenario budget ended."
     elif names and not unexpected:
         extra = "Crash report is the deliberate renderer SIGKILL."
     if not report.get("rows") and stderr_path.is_file():
@@ -584,7 +598,7 @@ def run_suite(
 
 def write_receipt(path: Path, markdown_path: Path, executable: Path, results: list[dict]) -> None:
     receipt = {
-        "shippingExecutable": str(executable),
+        "verificationExecutable": str(executable),
         "clipBytes": len(Fixture.clip),
         "scenarios": results,
         "passed": suite_passed(results),
@@ -596,7 +610,7 @@ def write_receipt(path: Path, markdown_path: Path, executable: Path, results: li
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar.app")
+    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/browsing-qa/receipt.json")
     parser.add_argument("--markdown", type=Path, default=ROOT / "build/browsing-qa/table.md")
     parser.add_argument("--scenarios", default="")
@@ -605,9 +619,9 @@ def main() -> None:
         scenarios = parse_scenarios(options.scenarios)
     except UnknownScenario as error:
         parser.error(str(error))
-    executable = options.app / "Contents/MacOS/ArcusisBrowser"
+    executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
-        parser.error(f"Missing shipping app: {executable}")
+        parser.error(f"Missing verification app: {executable}")
     with tempfile.TemporaryDirectory(prefix="shaar-browsing-qa-") as temporary:
         Fixture.icon = favicon_png()
         Fixture.clip = make_clip(Path(temporary))

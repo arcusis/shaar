@@ -72,7 +72,7 @@ shaar_error_code HandleLifecycleOperation(
     browser = found == state->browsers_by_profile.end() ? nullptr
                                                         : found->second;
   }
-  if (!browser)
+  if (!browser || (!tab && registry.ReleaseIfClosing(browser)))
     return SHAAR_NOT_FOUND;
   std::unordered_map<std::string, content::WebContents*> tabs;
   registry.GetTabsForBrowser(engine, window, browser, &tabs);

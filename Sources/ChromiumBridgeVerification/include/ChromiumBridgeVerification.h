@@ -92,6 +92,10 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeDevToolsDockAudit(
 - (void)probeDevToolsRouteInTabID:(NSString *)tabID operation:(NSInteger)operation
                          payload:(NSDictionary *)payload
                       completion:(void (^)(BOOL))completion;
+/// Engine DevTools window state. Nil unless this process owns a disposable probe root.
+- (void)probeDevToolsUIOpenForTabID:(NSString *)tabID
+                         completion:(void (NS_SWIFT_UI_ACTOR ^)(NSNumber * _Nullable open))completion
+    NS_SWIFT_UI_ACTOR;
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (void)inspectorProbePointerInTabID:(NSString *)tabID selector:(NSString *)selector

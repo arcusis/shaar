@@ -443,6 +443,29 @@ void ARCCompletePrivateQuitDialogCancellation(
                           completion(!error && [reply[key] boolValue]);
                         }]) completion(NO);
 }
+- (void)probeDevToolsUIOpenForTabID:(NSString *)tabID
+                         completion:(void (^)(NSNumber *))completion {
+  if (!completion) return;
+  void (^finish)(NSNumber *) = ^(NSNumber *open) {
+    if (NSThread.isMainThread) completion(open);
+    else dispatch_async(dispatch_get_main_queue(), ^{ completion(open); });
+  };
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed()) {
+    finish(nil);
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSString *profileID = [runtime shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [runtime windowIDForTabID:tabID];
+  [runtime shaarDevToolsSubmit:SHAAR_OP_DEVTOOLS_UI_STATE tabID:tabID
+                     profileID:profileID windowID:windowID
+                       payload:@{@"schemaVersion": @1}
+                    completion:^(NSDictionary *reply, NSError *error) {
+                      NSNumber *open = [reply[@"open"] isKindOfClass:NSNumber.class]
+                        ? reply[@"open"] : nil;
+                      finish(error ? nil : open);
+                    }];
+}
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (^)(NSError *))completion {
   completion(ProbeUnsupported());
 }

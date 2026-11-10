@@ -22,9 +22,13 @@ enum class UnpackedFolderStatus {
   kInvalid,
 };
 
-// Absolute Manifest V3 directory. Parent references, links, and other
-// manifests are rejected before any profile or installer is touched.
+// Absolute Manifest V3 directory. Parent references are rejected before the
+// path is resolved. A directory link is followed to its real folder. The
+// resolved manifest must stay inside that folder. `resolved` receives the
+// real directory when inspection succeeds.
 UnpackedFolderStatus InspectUnpackedFolder(const base::FilePath& path);
+UnpackedFolderStatus InspectUnpackedFolder(const base::FilePath& path,
+                                           base::FilePath* resolved);
 
 // Prompt types the app can show. Anything else is declined.
 std::optional<std::string_view> InstallPromptEventType(int prompt_type);

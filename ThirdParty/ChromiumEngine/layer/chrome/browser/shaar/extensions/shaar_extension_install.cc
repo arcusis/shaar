@@ -364,19 +364,34 @@ void StartUnpackedLoad(Profile* profile, const base::FilePath& path) {
 
 }  // namespace
 
-UnpackedFolderStatus InspectUnpackedFolder(const base::FilePath& path) {
+UnpackedFolderStatus InspectUnpackedFolder(const base::FilePath& path,
+                                           base::FilePath* resolved) {
+  // Reject parent references on the caller's path before resolving links.
   if (!path.IsAbsolute() || path.ReferencesParent() || path.empty())
     return UnpackedFolderStatus::kInvalid;
-  if (base::IsLink(path) || !base::DirectoryExists(path))
+  const base::FilePath folder = base::MakeAbsoluteFilePath(path);
+  if (folder.empty() || base::IsLink(folder) || !base::DirectoryExists(folder))
     return UnpackedFolderStatus::kInvalid;
-  const base::FilePath manifest = path.AppendASCII("manifest.json");
-  if (base::IsLink(manifest) || !base::PathExists(manifest) ||
-      base::DirectoryExists(manifest))
+  const base::FilePath manifest =
+      base::MakeAbsoluteFilePath(folder.AppendASCII("manifest.json"));
+  if (manifest.empty() || base::IsLink(manifest) ||
+      !base::PathExists(manifest) || base::DirectoryExists(manifest))
+    return UnpackedFolderStatus::kInvalid;
+  base::FilePath relative;
+  if (!folder.AppendRelativePath(manifest, &relative) || relative.empty() ||
+      relative.ReferencesParent())
     return UnpackedFolderStatus::kInvalid;
   const std::optional<base::DictValue> parsed = ReadManifest(manifest);
   if (!parsed || !ManifestIsVersion3(*parsed))
     return UnpackedFolderStatus::kInvalid;
+  if (resolved)
+    *resolved = folder;
   return UnpackedFolderStatus::kOk;
+}
+
+UnpackedFolderStatus InspectUnpackedFolder(const base::FilePath& path) {
+  base::FilePath resolved;
+  return InspectUnpackedFolder(path, &resolved);
 }
 
 std::optional<std::string_view> InstallPromptEventType(int prompt_type) {
@@ -463,17 +478,19 @@ shaar_error_code BeginUnpackedLoad(ShaarEngineContext* context,
     return Fail(SHAAR_INVALID_ARGUMENT, "invalid unpacked extension request",
                 error);
   const base::FilePath path = base::FilePath::FromUTF8Unsafe(*path_text);
-  if (InspectUnpackedFolder(path) != UnpackedFolderStatus::kOk) {
+  base::FilePath unpacked;
+  if (InspectUnpackedFolder(path, &unpacked) != UnpackedFolderStatus::kOk) {
     ReplyRefused(reply, reply_context, request_id, SHAAR_IO_ERROR);
     return SHAAR_OK;
   }
   const std::optional<base::DictValue> manifest =
-      ReadManifest(path.AppendASCII("manifest.json"));
+      ReadManifest(unpacked.AppendASCII("manifest.json"));
   if (!manifest || !ManifestIsVersion3(*manifest)) {
     ReplyRefused(reply, reply_context, request_id, SHAAR_IO_ERROR);
     return SHAAR_OK;
   }
-  const std::string extension_id = crx_file::id_util::GenerateIdForPath(path);
+  const std::string extension_id =
+      crx_file::id_util::GenerateIdForPath(unpacked);
   if (!ExtensionIdIsAcceptable(extension_id) ||
       Pending().size() >= kMaxPendingInstalls) {
     ReplyRefused(reply, reply_context, request_id, SHAAR_NOT_READY);
@@ -520,7 +537,7 @@ shaar_error_code BeginUnpackedLoad(ShaarEngineContext* context,
   pending.window_id = identity->window_id;
   pending.tab_id = identity->tab_id;
   pending.page_url = contents->GetLastCommittedURL();
-  pending.unpacked_path = path;
+  pending.unpacked_path = unpacked;
   Pending().emplace(id, std::move(pending));
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, base::BindOnce(&DropPending, id), base::Minutes(2));
@@ -624,14 +641,15 @@ shaar_error_code ResolveInstallDecision(ShaarEngineContext* context,
           "{\"schemaVersion\":1,\"installed\":true}");
     return SHAAR_OK;
   }
+  base::FilePath unpacked;
   if (!DeveloperModeEnabled(profile) ||
-      InspectUnpackedFolder(pending.unpacked_path) !=
+      InspectUnpackedFolder(pending.unpacked_path, &unpacked) !=
           UnpackedFolderStatus::kOk) {
     Reply(reply, reply_context, abi_request, SHAAR_OK,
           "{\"schemaVersion\":1,\"installed\":false}");
     return SHAAR_OK;
   }
-  StartUnpackedLoad(profile, pending.unpacked_path);
+  StartUnpackedLoad(profile, unpacked);
   Reply(reply, reply_context, abi_request, SHAAR_OK,
         "{\"schemaVersion\":1,\"installed\":true}");
   return SHAAR_OK;

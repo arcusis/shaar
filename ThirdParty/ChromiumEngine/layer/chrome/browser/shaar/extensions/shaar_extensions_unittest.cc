@@ -414,10 +414,24 @@ TEST(ShaarExtensionsModuleTest, UnpackedFolderRejectsSymlink) {
   ASSERT_TRUE(base::WriteFile(real.Append("manifest.json"), ManifestV3()));
   const base::FilePath linked = temp.GetPath().Append("linked");
   ASSERT_TRUE(base::CreateSymbolicLink(real, linked));
-  EXPECT_EQ(shaar::extensions_host::InspectUnpackedFolder(linked),
-            shaar::extensions_host::UnpackedFolderStatus::kInvalid);
-  EXPECT_EQ(shaar::extensions_host::InspectUnpackedFolder(real),
+  const base::FilePath absolute_real = base::MakeAbsoluteFilePath(real);
+  ASSERT_FALSE(absolute_real.empty());
+  base::FilePath resolved;
+  EXPECT_EQ(shaar::extensions_host::InspectUnpackedFolder(linked, &resolved),
             shaar::extensions_host::UnpackedFolderStatus::kOk);
+  EXPECT_EQ(resolved, absolute_real);
+  EXPECT_EQ(shaar::extensions_host::InspectUnpackedFolder(real, &resolved),
+            shaar::extensions_host::UnpackedFolderStatus::kOk);
+  EXPECT_EQ(resolved, absolute_real);
+
+  const base::FilePath outside = temp.GetPath().Append("outside.json");
+  ASSERT_TRUE(base::WriteFile(outside, ManifestV3()));
+  const base::FilePath escaped = temp.GetPath().Append("escaped");
+  ASSERT_TRUE(base::CreateDirectory(escaped));
+  ASSERT_TRUE(
+      base::CreateSymbolicLink(outside, escaped.Append("manifest.json")));
+  EXPECT_EQ(shaar::extensions_host::InspectUnpackedFolder(escaped),
+            shaar::extensions_host::UnpackedFolderStatus::kInvalid);
 }
 
 TEST(ShaarExtensionsModuleTest, SiteAccessSchemaStopsBeforeProfileLookup) {

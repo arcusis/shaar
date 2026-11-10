@@ -1376,13 +1376,14 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
                            profileID:(NSString *)profileID tabID:(NSString *)tabID
+                  allowsProfileOnly:(BOOL)allowsProfileOnly
                              payload:(NSDictionary *)payload
                           completion:(void (^)(NSString *, shaar_error_code))completion {
   shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
   NSString *windowID = tabID ? _shaarTabWindows[tabID] : _shaarPrimaryWindowID;
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   shaar_tab *tab = tabID ? (shaar_tab *)_shaarTabs[tabID].pointerValue : nullptr;
-  const BOOL profileOnly = operation == SHAAR_OP_EXTENSION_LIST || !tabID;
+  const BOOL profileOnly = allowsProfileOnly && !tabID;
   if (!_shaarEngine || !profile || (!profileOnly && !window) || (tabID && (!tab ||
       ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) return NO;
   NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];

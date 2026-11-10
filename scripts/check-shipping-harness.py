@@ -210,12 +210,24 @@ def strip_comments(text: str) -> str:
     while index < len(text):
         char = text[index]
         if quote:
+            if quote != '"""' and char == "\n":
+                quote = None
+                index += 1
+                continue
+            if quote == '"""' and text.startswith('"""', index):
+                quote = None
+                index += 3
+                continue
             if char == "\\":
                 index += 2
                 continue
-            if char == quote:
+            if quote != '"""' and char == quote:
                 quote = None
             index += 1
+            continue
+        if text.startswith('"""', index):
+            quote = '"""'
+            index += 3
             continue
         if char in ('"', "'"):
             quote = char
@@ -349,7 +361,8 @@ def symbol_present(data: bytes, name: bytes) -> bool:
 def binary_symbol_is_harness(name: str) -> bool:
     if name.startswith(("ShaarVerification", "ChromiumBridgeVerification")):
         return True
-    separated = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", name).lower()
+    separated = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1-\2", name)
+    separated = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", separated).lower()
     return bool(re.search(r"(?:^|-)(?:probe|parity|smoke|harness)(?:-|$)", separated))
 
 

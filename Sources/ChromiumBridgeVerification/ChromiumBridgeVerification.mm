@@ -1224,7 +1224,7 @@ extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
     return;
   }
   BOOL accepted = [self shaarSubmitExtensionOperation:SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS
-      profileID:validated tabID:nil payload:@{@"schemaVersion": @1}
+      profileID:validated tabID:nil allowsProfileOnly:YES payload:@{@"schemaVersion": @1}
       completion:^(NSString *json, shaar_error_code code) {
         NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
         NSDictionary *reply = data ? [NSJSONSerialization JSONObjectWithData:data

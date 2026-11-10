@@ -120,7 +120,7 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
   if (![state.actionLoading containsObject:key]) {
     [state.actionLoading addObject:key];
     BOOL accepted = [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_ACTION_STATE
-        profileID:profileID tabID:tabID
+        profileID:profileID tabID:tabID allowsProfileOnly:NO
         payload:@{@"schemaVersion": @1, @"extensionId": extensionID}
         completion:^(NSString *json, shaar_error_code code) {
           [state.actionLoading removeObject:key];
@@ -148,7 +148,7 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
     return NO;
   }
   BOOL accepted = [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_ACTION
-      profileID:profileID tabID:tabID
+      profileID:profileID tabID:tabID allowsProfileOnly:NO
       payload:@{@"schemaVersion": @1, @"extensionId": extensionID}
       completion:^(NSString *json, shaar_error_code code) {
         if (code != SHAAR_OK) {
@@ -199,7 +199,8 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
     payload[@"extensionId"] = extensionID;
   } else if (operation != ARCExtensionManagementOperationList) { completion(nil); return; }
   BOOL accepted = [self shaarSubmitExtensionOperation:nativeOperation profileID:validated
-      tabID:nil payload:payload completion:^(NSString *json, shaar_error_code code) {
+      tabID:nil allowsProfileOnly:YES payload:payload
+      completion:^(NSString *json, shaar_error_code code) {
         if (code != SHAAR_OK) { completion(nil); return; }
         if (operation == ARCExtensionManagementOperationList) {
           NSArray *rows = ARCVisibleShaarExtensionRows(json);
@@ -227,7 +228,7 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
   if (!popupID.length || !windowID ||
       ![self shaarOwnsSelectedTabID:tabID profileID:profileID]) {
     if (popupID.length) [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_POPUP_CLOSE
-        profileID:profileID tabID:tabID
+        profileID:profileID tabID:tabID allowsProfileOnly:NO
         payload:@{@"schemaVersion": @1, @"popupId": popupID}
         completion:^(NSString *json, shaar_error_code code) {}];
     return;
@@ -235,7 +236,7 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
   NSView *view = [self shaarExtensionPopupViewForID:popupID windowID:windowID];
   if (!view) {
     [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_POPUP_CLOSE
-        profileID:profileID tabID:tabID
+        profileID:profileID tabID:tabID allowsProfileOnly:NO
         payload:@{@"schemaVersion": @1, @"popupId": popupID}
         completion:^(NSString *json, shaar_error_code code) {}];
     return;
@@ -296,7 +297,8 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
   NSString *profileID = info[@"profileID"];
   NSString *tabID = info[@"tabID"];
   if (profileID && tabID) [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_POPUP_CLOSE
-      profileID:profileID tabID:tabID payload:@{@"schemaVersion": @1, @"popupId": popupID}
+      profileID:profileID tabID:tabID allowsProfileOnly:NO
+      payload:@{@"schemaVersion": @1, @"popupId": popupID}
       completion:^(NSString *json, shaar_error_code code) {}];
   if (self.onExtensionPopupClosed) self.onExtensionPopupClosed(popupID);
 }

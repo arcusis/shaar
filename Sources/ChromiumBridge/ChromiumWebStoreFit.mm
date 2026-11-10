@@ -121,7 +121,7 @@ double ARCWebStoreFitZoom(double viewportWidth, double requiredWidth) {
   double zoom = ARCWebStoreFitZoom(width, 1280);
   NSUInteger generation = state.generation;
   [runtime shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_WEB_STORE_ZOOM
-      profileID:state.shaarProfileID tabID:tabID
+      profileID:state.shaarProfileID tabID:tabID allowsProfileOnly:NO
       payload:@{@"schemaVersion": @1, @"zoomFactor": @(zoom),
                 @"appliedZoom": @(state.appliedZoom)}
       completion:^(NSString *json, shaar_error_code code) {

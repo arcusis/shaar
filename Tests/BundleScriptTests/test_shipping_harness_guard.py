@@ -271,6 +271,25 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         self.binary.write_bytes(b"prefix FrameworkDevTools suffix")
         self.assertEqual(GUARD.findings(self.root, self.binary), [])
 
+    def test_acronym_prefixed_probe_symbol_fails_in_binary(self):
+        self.plant(
+            "Sources/ShaarVerification/Probe.swift",
+            "enum ARCProbePlantedHarness {}\n",
+        )
+        self.binary.write_bytes(b"prefix _ARCProbePlantedHarness suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("ARCProbePlantedHarness" in item for item in found), found)
+
+    def test_unmatched_quote_at_newline_does_not_hide_following_comment(self):
+        source = self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "NSString *broken = 'stray\n"
+            "// SHAAR_ENGINE_TESTING appears only in this comment\n",
+        )
+        self.assertEqual(
+            GUARD.engine_testing_findings(source, source.read_text()), []
+        )
+
     def test_engine_testing_string_in_the_binary_is_allowed(self):
         self.binary.write_bytes(b"prefix SHAAR_ENGINE_TESTING suffix")
         self.assertEqual(GUARD.findings(self.root, self.binary), [])

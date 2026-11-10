@@ -46,6 +46,7 @@ final class BrowserStore {
   private var permissionFrames: [UUID: String] = [:]
   /// Tabs Chromium has discarded or frozen. Not saved with the session.
   private(set) var sleepingTabIDs: Set<UUID> = []
+  private var permissionFrameOrigins: [UUID: URL] = [:]
   var privatePage: PrivatePageSession?
   var splitTabRecency: [UUID] = []
   var pendingSplitPlacement: SplitPlacement?
@@ -104,6 +105,7 @@ final class BrowserStore {
     }
   }
   private var consentRequests: [BrowserSheet] = []
+  private var desktopCaptureSources: [String: Set<String>] = [:]
   var installationRequests: [ExtensionInstallRequest] {
     consentRequests.compactMap {
       if case .extensionInstall(let request) = $0 { return request }
@@ -882,6 +884,7 @@ final class BrowserStore {
   func nativeTabChanged(_ id: UUID, url: URL, title: String) {
     if session.page(forTabID: id)?.tab.url != url {
       permissionFrames[id] = nil
+      permissionFrameOrigins[id] = nil
     }
     if session.favoritePages.contains(where: { $0.tab.id == id }),
       let profileID = session.profileID(forTabID: id)
@@ -986,18 +989,37 @@ final class BrowserStore {
     consentRequests.removeAll { $0.id == sheetID }
     if presentedConsentID == sheetID { presentedConsentID = nil }
     if presented { sheet = nil }
+    var validSource: String?
+    if let sourceID,
+      DesktopCaptureSource.isValidToken(sourceID),
+      desktopCaptureSources[id]?.contains(sourceID) == true,
+      let sourceKind = DesktopCaptureSource.kind(forToken: sourceID), capture.allows(sourceKind)
+    {
+      validSource = sourceID
+    }
     let valid =
       presented
-      && capture.matches(session)
+      && capture.matches(
+        session, frameID: permissionFrames[capture.tabID],
+        origin: permissionFrameOrigins[capture.tabID])
       && rendererFailures[capture.tabID] == nil
-    onDesktopCaptureDecision?(id, valid ? sourceID : nil)
+    onDesktopCaptureDecision?(id, valid ? validSource : nil)
+    desktopCaptureSources[id] = nil
     presentNextConsent()
+  }
+
+  func setDesktopCaptureSources(_ sourceIDs: [String], for id: String) {
+    guard consentRequests.contains(where: { $0.id == "desktop-capture-\(id)" }),
+      sourceIDs.allSatisfy(DesktopCaptureSource.isValidToken)
+    else { return }
+    desktopCaptureSources[id] = Set(sourceIDs)
   }
 
   func dismissDesktopCapture(_ id: String) {
     let sheetID = "desktop-capture-\(id)"
     guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
     consentRequests.removeAll { $0.id == sheetID }
+    desktopCaptureSources[id] = nil
     if presentedConsentID == sheetID {
       presentedConsentID = nil
       if sheet?.id == sheetID { sheet = nil }
@@ -1005,13 +1027,15 @@ final class BrowserStore {
     presentNextConsent()
   }
 
-  func rememberPermissionFrame(_ tabID: UUID, frameID: String) {
+  func rememberPermissionFrame(_ tabID: UUID, frameID: String, origin: URL? = nil) {
     permissionFrames[tabID] = frameID
+    permissionFrameOrigins[tabID] = origin
   }
 
   func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {
     guard permissionFrames[tabID] == frameID else { return }
     permissionFrames[tabID] = nil
+    permissionFrameOrigins[tabID] = nil
   }
 
   func websitePermissionIsCurrent(_ request: WebsitePermissionRequest) -> Bool {
@@ -1061,7 +1085,9 @@ final class BrowserStore {
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
     case .websitePermission(let request): onWebsitePermissionDecision?(request.id, allow)
-    case .desktopCapture(let request): onDesktopCaptureDecision?(request.id, nil)
+    case .desktopCapture(let request):
+      desktopCaptureSources[request.id] = nil
+      onDesktopCaptureDecision?(request.id, nil)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }

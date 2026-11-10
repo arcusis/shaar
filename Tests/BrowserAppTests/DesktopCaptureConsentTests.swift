@@ -27,7 +27,7 @@ struct DesktopCaptureConsentTests {
         "tabID": tab.id.uuidString,
         "pageURL": tab.url.absoluteString,
         "origin": "https://meet.google.com",
-        "frameID": "main-frame",
+        "frameID": "0123456789abcdef0123456789abcdef",
       ]))
   }
 
@@ -37,9 +37,16 @@ struct DesktopCaptureConsentTests {
 
     #expect(capture.pageURL == URL(string: "https://meet.google.com/example"))
     #expect(capture.requestingOrigin == URL(string: "https://meet.google.com"))
-    #expect(capture.frameID == "main-frame")
+    #expect(capture.frameID == "0123456789abcdef0123456789abcdef")
     #expect(capture.sheetID == "desktop-capture-\(capture.id)")
     #expect(capture.matches(store.session))
+    #expect(
+      !capture.matches(
+        store.session, frameID: "fedcba9876543210fedcba9876543210",
+        origin: capture.requestingOrigin))
+    #expect(
+      !capture.matches(
+        store.session, frameID: capture.frameID, origin: URL(string: "https://other.example")))
 
     let sheet = BrowserSheet.desktopCapture(capture)
     #expect(sheet.id == capture.sheetID)
@@ -118,6 +125,7 @@ struct DesktopCaptureConsentTests {
       ("origin", "http://meet.google.com" as Any),
       ("origin", "https://meet.google.com/path" as Any),
       ("frameID", 4 as Any),
+      ("frameID", "wrong-frame" as Any),
     ] {
       var malformed = valid
       malformed[key] = value
@@ -146,6 +154,8 @@ struct DesktopCaptureConsentTests {
 
     #expect(store.requestDesktopCapture(first))
     #expect(store.requestDesktopCapture(second))
+    store.setDesktopCaptureSources(["screen:1:0"], for: first.id)
+    store.setDesktopCaptureSources(["window:2:0"], for: second.id)
     #expect(store.sheet?.id == first.sheetID)
     store.resolveDesktopCapture(first.id, sourceID: "screen:1:0")
     #expect(decisions == ["\(first.id):screen:1:0"])
@@ -158,6 +168,8 @@ struct DesktopCaptureConsentTests {
     let fourth = try request(store, id: UUID().uuidString)
     #expect(store.requestDesktopCapture(third))
     #expect(store.requestDesktopCapture(fourth))
+    store.setDesktopCaptureSources(["screen:3:0"], for: third.id)
+    store.setDesktopCaptureSources(["window:4:0"], for: fourth.id)
     store.resolveDesktopCapture(fourth.id, sourceID: "window:4:0")
     #expect(
       decisions == [
@@ -183,6 +195,7 @@ struct DesktopCaptureConsentTests {
     }
 
     #expect(browser.requestDesktopCapture(stale))
+    browser.setDesktopCaptureSources(["screen:1:0"], for: stale.id)
     browser.perform(.open(URL(string: "https://meet.google.com/another")!))
     browser.resolveDesktopCapture(stale.id, sourceID: "screen:1:0")
     #expect(decisions == ["\(stale.id):cancel"])
@@ -192,6 +205,7 @@ struct DesktopCaptureConsentTests {
     var rendererDecisions: [String?] = []
     failedStore.onDesktopCaptureDecision = { _, sourceID in rendererDecisions.append(sourceID) }
     #expect(failedStore.requestDesktopCapture(rendererFailure))
+    failedStore.setDesktopCaptureSources(["window:1:0"], for: rendererFailure.id)
     failedStore.nativeRendererGone(
       rendererFailure.tabID, profileID: rendererFailure.profileID, status: "crashed", exitCode: 1)
     failedStore.resolveDesktopCapture(rendererFailure.id, sourceID: "window:1:0")
@@ -216,7 +230,7 @@ struct DesktopCaptureConsentTests {
       "tabID": UUID().uuidString,
       "pageURL": capture.pageURL.absoluteString,
       "origin": capture.requestingOrigin.absoluteString,
-      "frameID": "other-frame",
+      "frameID": "fedcba9876543210fedcba9876543210",
     ]
     let foreign = try #require(DesktopCaptureRequest(payload: payload))
     #expect(!store.requestDesktopCapture(foreign))
@@ -229,11 +243,42 @@ struct DesktopCaptureConsentTests {
     let tabsOnly = try #require(DesktopCaptureRequest(payload: payload))
     #expect(tabsOnly.allowedKinds == [.tab])
     #expect(store.requestDesktopCapture(tabsOnly))
+    store.setDesktopCaptureSources(["tab:\(capture.tabID.uuidString):0"], for: tabsOnly.id)
     var decision: String?
     store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID }
     store.resolveDesktopCapture(tabsOnly.id, sourceID: "tab:\(capture.tabID.uuidString):0")
     #expect(decision == "tab:\(capture.tabID.uuidString):0")
     #expect(store.sheet == nil)
+  }
+
+  @Test func rejectsMalformedOrUnlistedCaptureTokens() throws {
+    let store = store()
+    let capture = try request(store)
+    #expect(store.requestDesktopCapture(capture))
+    store.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    var decision: String?
+    store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID ?? "cancel" }
+
+    store.resolveDesktopCapture(capture.id, sourceID: "screen:999:0")
+    #expect(decision == "cancel")
+    #expect(!DesktopCaptureSource.isValidToken("screen:-1:0"))
+    #expect(!DesktopCaptureSource.isValidToken("window:01:0"))
+    #expect(!DesktopCaptureSource.isValidToken("tab:not-a-uuid:0"))
+  }
+
+  @Test func deniesCaptureWhenRememberedFrameOrOriginChanged() throws {
+    let store = store()
+    let capture = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.rememberPermissionFrame(
+      tab.id, frameID: "fedcba9876543210fedcba9876543210",
+      origin: URL(string: "https://other.example")!)
+    #expect(store.requestDesktopCapture(capture))
+    store.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    var decision: String?
+    store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID }
+    store.resolveDesktopCapture(capture.id, sourceID: "screen:1:0")
+    #expect(decision == nil)
   }
 
   @Test func privateWindowListsOnlyItsOwnTab() throws {

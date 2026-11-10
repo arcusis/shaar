@@ -105,3 +105,21 @@ import Testing
   #expect(foreign["mediaCount"] as? Int == 0)
   #expect(foreign["pipCount"] as? Int == 0)
 }
+
+@Test func desktopCaptureRequestsReachTheObjectiveCReceivePathForOwnedTabs() throws {
+  let id = UUID().uuidString
+  let payload: [String: Any] = [
+    "schemaVersion": 1,
+    "promptID": id,
+    "origin": "https://meet.google.com",
+    "pageURL": "https://meet.google.com/example",
+    "frameID": "0123456789abcdef0123456789abcdef",
+    "sourceTypes": ["screen", "window", "tab"],
+  ]
+  let owned = ARCProbeDesktopCaptureEventDispatch(payload, true)
+  let foreign = ARCProbeDesktopCaptureEventDispatch(payload, false)
+  #expect(owned["id"] as? String == id)
+  #expect(owned["kind"] as? String == "desktopCaptureRequested")
+  #expect(owned["tabID"] as? String != nil)
+  #expect(foreign.isEmpty)
+}

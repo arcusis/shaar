@@ -13,6 +13,24 @@ struct DesktopCaptureSource: Identifiable, Equatable {
   let kind: Kind
   var isRequestingTab = false
 
+  static func kind(forToken token: String) -> Kind? {
+    let parts = token.split(separator: ":", omittingEmptySubsequences: false)
+    guard parts.count == 3, parts[2] == "0" else { return nil }
+    switch parts[0] {
+    case "tab":
+      guard let id = UUID(uuidString: String(parts[1])),
+        id.uuidString.caseInsensitiveCompare(String(parts[1])) == .orderedSame
+      else { return nil }
+      return .tab
+    case "window", "screen":
+      guard let value = UInt32(parts[1]), String(value) == String(parts[1]) else { return nil }
+      return parts[0] == "window" ? .window : .display
+    default: return nil
+    }
+  }
+
+  static func isValidToken(_ token: String) -> Bool { kind(forToken: token) != nil }
+
   var systemImageName: String {
     switch kind {
     case .display: "display"
@@ -81,6 +99,7 @@ struct DesktopCapturePicker: View {
     let listing = DesktopCaptureCatalog.listing(
       tabs: tabs, screens: screens, screenAccessFailed: screenAccessFailed)
     sources = listing.sources
+    store.setDesktopCaptureSources(listing.sources.map(\.id), for: request.id)
     error = listing.error.map(PanelsL10n.string)
     note = listing.note.map(PanelsL10n.string)
     loading = false

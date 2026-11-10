@@ -1497,7 +1497,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (void)receiveDesktopCaptureDismissal:(NSDictionary *)payload tabID:(NSString *)tabID {
   if (!_shaarDesktopCaptureAvailable) return;
-  NSString *requestID = payload[@"id"];
+  NSString *requestID = [payload[@"id"] isKindOfClass:NSString.class]
+      ? payload[@"id"] : payload[@"promptID"];
   if (![payload[@"schemaVersion"] isEqual:@1] ||
       ![requestID isKindOfClass:NSString.class] ||
       ![_shaarCaptureRequests[requestID] isEqualToString:tabID]) return;
@@ -1511,20 +1512,28 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
                            profileID:(NSString *)profileID {
   if (!_shaarDesktopCaptureAvailable || event->session_id.size) return;
   NSString *windowID = String(event->window_id);
-  NSString *requestID = payload[@"id"];
+  NSString *requestID = [payload[@"id"] isKindOfClass:NSString.class]
+      ? payload[@"id"] : payload[@"promptID"];
+  BOOL ownsTab = _shaarTabs[tabID] &&
+      [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
+      [windowID isEqualToString:_shaarTabWindows[tabID]];
+  BOOL validPromptID = [requestID isKindOfClass:NSString.class] &&
+      requestID.length <= 64 && [[NSUUID alloc] initWithUUIDString:requestID];
+  if (!ownsTab || !validPromptID) return;
+  if (_shaarCaptureRequests[requestID]) return;
   if (![payload[@"schemaVersion"] isEqual:@1] ||
-      ![requestID isKindOfClass:NSString.class] ||
-      ![[NSUUID alloc] initWithUUIDString:requestID] ||
-      _shaarCaptureRequests[requestID] ||
-      !_shaarTabs[tabID] ||
-      ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
-      ![windowID isEqualToString:_shaarTabWindows[tabID]] ||
       ![self desktopCaptureField:payload[@"origin"] maxLength:2048] ||
       ![self desktopCaptureField:payload[@"pageURL"] maxLength:4096] ||
-      ![self desktopCaptureField:payload[@"frameID"] maxLength:256]) return;
-  if (payload[@"sourceTypes"] && ![payload[@"sourceTypes"] isKindOfClass:NSArray.class]) return;
+      ![self desktopCaptureField:payload[@"frameID"] maxLength:256] ||
+      (payload[@"sourceTypes"] &&
+       ![payload[@"sourceTypes"] isKindOfClass:NSArray.class])) {
+    _shaarCaptureRequests[requestID] = tabID;
+    [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
+    return;
+  }
   _shaarCaptureRequests[requestID] = tabID;
   NSMutableDictionary *request = [payload mutableCopy];
+  request[@"id"] = requestID;
   request[@"profileID"] = profileID;
   request[@"tabID"] = tabID;
   request[@"windowID"] = windowID;

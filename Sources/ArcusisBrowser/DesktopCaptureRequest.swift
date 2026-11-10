@@ -22,6 +22,7 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
       let pageURL = (payload["pageURL"] as? String).flatMap(URL.init(string:)),
       let requestingOrigin = (payload["origin"] as? String).flatMap(URL.init(string:)),
       let frameID = payload["frameID"] as? String,
+      Self.isFrameToken(frameID),
       NavigationInput.isWebURL(pageURL),
       requestingOrigin.host() != nil,
       requestingOrigin.path.isEmpty || requestingOrigin.path == "/",
@@ -51,6 +52,14 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
     allowedKinds.contains(kind)
   }
 
+  private static func isFrameToken(_ value: String) -> Bool {
+    guard value.utf8.count == 32 else { return false }
+    return value.unicodeScalars.allSatisfy {
+      (48...57).contains(Int($0.value)) || (65...70).contains(Int($0.value))
+        || (97...102).contains(Int($0.value))
+    }
+  }
+
   /// Missing source types mean the engine asked for a screen, a window, and a tab.
   private static func allowedKinds(from value: Any?) -> Set<DesktopCaptureSource.Kind>? {
     guard let value else { return [.display, .window, .tab] }
@@ -69,10 +78,14 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
 
   var sheetID: String { "desktop-capture-\(id)" }
 
-  func matches(_ session: BrowserSession) -> Bool {
+  func matches(
+    _ session: BrowserSession, frameID: String? = nil, origin: URL? = nil
+  ) -> Bool {
     session.selectedSpace.profileID == profileID
       && session.selectedPage?.tab.id == tabID
       && session.selectedPage?.tab.url == pageURL
       && session.profileID(forTabID: tabID) == profileID
+      && (frameID == nil || self.frameID == frameID)
+      && (origin == nil || requestingOrigin == origin)
   }
 }

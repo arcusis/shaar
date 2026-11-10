@@ -565,6 +565,25 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
   if (!context ||
       [context[@"sourceProfileID"] caseInsensitiveCompare:profileID] != NSOrderedSame)
     return;
+  if (event->kind == SHAAR_EVENT_PERMISSION &&
+      [payload[@"kind"] isEqual:@"desktopCaptureRequested"]) {
+    NSString *promptID = [payload[@"id"] isKindOfClass:NSString.class]
+        ? payload[@"id"] : payload[@"promptID"];
+    NSDictionary *window = state[@"windows"][windowID];
+    NSDictionary *tab = state[@"tabs"][tabID];
+    if ([promptID isKindOfClass:NSString.class] && promptID.length <= 64 &&
+        [[NSUUID alloc] initWithUUIDString:promptID] &&
+        [window[@"contextID"] isEqual:contextID] &&
+        [tab[@"contextID"] isEqual:contextID] &&
+        [tab[@"windowID"] isEqual:windowID]) {
+      ARCPrivateShaarSubmit(
+          self, PrivateScope(context), PrivateWindow(window), PrivateTab(tab),
+          SHAAR_OP_MEDIA_CAPTURE_REPLY,
+          @{@"schemaVersion": @1, @"promptID": promptID,
+            @"decision": @"cancel", @"sourceToken": @""}, nil);
+    }
+    return;
+  }
   if (event->kind == SHAAR_EVENT_TAB && [payload[@"kind"] isEqual:@"lifecycle"]) {
     if ([self privateTabOwned:tabID windowID:windowID contextID:contextID] &&
         self.onPrivateTabLifecycle) {

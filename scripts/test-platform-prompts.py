@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import threading
+import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,6 +98,7 @@ def main():
                     if source.is_file():
                         (shot_dir / name).write_bytes(source.read_bytes())
         server.shutdown()
+    time.sleep(30)
     crashes = sorted(crash_names() - before)
     receipt = {
         "verificationExecutable": str(executable),

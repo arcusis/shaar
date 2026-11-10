@@ -840,7 +840,7 @@
  #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/ui/browser.h"
-@@ -55,11 +56,24 @@
+@@ -55,11 +56,27 @@
  };
  
  void CleanupTab(uint64_t serial);
@@ -852,6 +852,9 @@
                     favicon::FaviconDriverObserver {
    shaar_tab(content::WebContents* contents, uint64_t serial)
        : content::WebContentsObserver(contents), serial(serial) {}
++  void RetargetWebContents(content::WebContents* contents) {
++    Observe(contents);
++  }
 +  void AboutToBeDiscarded(content::WebContents* new_contents) override {
 +    RetargetDiscardedTab(this, new_contents);
 +  }
@@ -865,7 +868,7 @@
    void WebContentsDestroyed() override {
      favicon_observation.Reset();
      // Drop the WebContents pointer before a queued view update can request it.
-@@ -96,6 +110,42 @@
+@@ -96,6 +113,42 @@
        favicon_observation{this};
    std::string favicon_png;
  };
@@ -888,18 +891,18 @@
 +      tab->engine && tab->window && tab->browser && !tab->tab_id.empty();
 +  if (!can_bind) {
 +    shaar::windows_tabs::Registry().UnbindTab(tab->engine, tab->window, tab);
-+    tab->Observe(nullptr);
++    tab->RetargetWebContents(nullptr);
 +    tab->favicon_observation.Reset();
 +    return;
 +  }
 +  auto& registry = shaar::windows_tabs::Registry();
 +  registry.UnbindTab(tab->engine, tab->window, tab);
-+  tab->Observe(new_contents);
++  tab->RetargetWebContents(new_contents);
 +  registry.BindTab(tab->engine, tab->window, tab, tab->tab_id, tab->browser,
 +                   new_contents);
 +  if (registry.FindWebContents(tab->engine, tab->window, tab) != new_contents) {
 +    registry.UnbindTab(tab->engine, tab->window, tab);
-+    tab->Observe(nullptr);
++    tab->RetargetWebContents(nullptr);
 +    tab->favicon_observation.Reset();
 +    return;
 +  }

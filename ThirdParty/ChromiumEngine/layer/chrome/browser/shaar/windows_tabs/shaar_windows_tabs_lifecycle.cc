@@ -64,6 +64,9 @@ struct shaar_tab : content::WebContentsObserver,
                    favicon::FaviconDriverObserver {
   shaar_tab(content::WebContents* contents, uint64_t serial)
       : content::WebContentsObserver(contents), serial(serial) {}
+  void RetargetWebContents(content::WebContents* contents) {
+    Observe(contents);
+  }
   void AboutToBeDiscarded(content::WebContents* new_contents) override {
     RetargetDiscardedTab(this, new_contents);
   }
@@ -129,18 +132,18 @@ void RetargetDiscardedTab(shaar_tab* tab, content::WebContents* new_contents) {
       tab->engine && tab->window && tab->browser && !tab->tab_id.empty();
   if (!can_bind) {
     shaar::windows_tabs::Registry().UnbindTab(tab->engine, tab->window, tab);
-    tab->Observe(nullptr);
+    tab->RetargetWebContents(nullptr);
     tab->favicon_observation.Reset();
     return;
   }
   auto& registry = shaar::windows_tabs::Registry();
   registry.UnbindTab(tab->engine, tab->window, tab);
-  tab->Observe(new_contents);
+  tab->RetargetWebContents(new_contents);
   registry.BindTab(tab->engine, tab->window, tab, tab->tab_id, tab->browser,
                    new_contents);
   if (registry.FindWebContents(tab->engine, tab->window, tab) != new_contents) {
     registry.UnbindTab(tab->engine, tab->window, tab);
-    tab->Observe(nullptr);
+    tab->RetargetWebContents(nullptr);
     tab->favicon_observation.Reset();
     return;
   }

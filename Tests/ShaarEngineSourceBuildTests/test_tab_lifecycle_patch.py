@@ -50,7 +50,8 @@ class TabLifecyclePatchTests(unittest.TestCase):
         self.assertIn("contents->WasHidden()", source)
         self.assertIn("contents->SetPageFrozen(false)", source)
         self.assertIn("UnbindTab", source)
-        self.assertIn("Observe(nullptr)", source)
+        self.assertIn("RetargetWebContents(nullptr)", source)
+        self.assertNotIn("tab->Observe(", source)
         self.assertIn("EmitInitialState", source)
         self.assertNotIn("RegisterModule", source)
 

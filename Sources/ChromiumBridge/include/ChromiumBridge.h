@@ -127,7 +127,11 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onWebsiteMediaRequest)(NSDictionary<NSString *, id> *request);
 /// websiteMediaDismissed and websitePermissionDismissed share this callback.
 @property(copy, nullable) void (^onWebsiteMediaDismissed)(NSString *requestID);
+/// Chromium offered to save a password, card, or address. The payload has no secret.
+@property(copy, nullable) void (^onSavePromptRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onSavePromptDismissed)(NSString *requestID);
 /// The engine asked the app to choose a capture source for a live tab.
+/// A page called getDisplayMedia; the request is bound to its live tab and frame.
 @property(copy, nullable) void (^onDesktopCaptureRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onDesktopCaptureDismissed)(NSString *requestID);
 /// The engine asked the app to present a share sheet for a live tab.
@@ -259,6 +263,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
             completion:(void (^)(NSString * _Nullable))completion;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+/// `decision` is save, dismiss, or never. Ignored until a save-prompt event arrives.
+- (void)resolveSavePromptRequestID:(NSString *)requestID decision:(NSString *)decision;
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(nullable NSString *)sourceID;
 /// `outcome` is "shared" or "cancelled". The reply symbol is optional until patch 0072.
 - (void)resolveWebShareRequestID:(NSString *)requestID outcome:(NSString *)outcome;

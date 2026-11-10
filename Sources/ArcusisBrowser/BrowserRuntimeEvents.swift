@@ -260,8 +260,21 @@ final class BrowserRuntimeEvents {
       }
       receive(payload)
     }
+    runtime.onSavePromptRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let client = self.router.claim(.savePrompt, id: id, payload: payload),
+        let receive = client.onSavePromptRequest
+      else {
+        self.runtime.resolveSavePromptRequestID(id, decision: "dismiss")
+        return
+      }
+      receive(payload)
+    }
     runtime.onHTTPAuthDismissed = { [weak self] id in
       self?.router.client(for: .httpAuth, id: id, removing: true)?.onHTTPAuthDismissed?(id)
+    }
+    runtime.onSavePromptDismissed = { [weak self] id in
+      self?.router.client(for: .savePrompt, id: id, removing: true)?.onSavePromptDismissed?(id)
     }
     runtime.onDownloadChanged = { [weak self] profile, record in
       for client in self?.router.clients(forProfile: profile) ?? [] {
@@ -364,6 +377,11 @@ final class BrowserRuntimeEvents {
   func rejectHTTPAuth(_ id: String, tabID: String, windowID: String) {
     guard router.consume(.httpAuth, id: id, windowID: windowID) else { return }
     runtime.resolveHTTPAuthRequestID(id, tabID: tabID, username: nil, password: nil)
+  }
+
+  func resolveSavePrompt(_ id: String, windowID: String, decision: String) {
+    guard router.consume(.savePrompt, id: id, windowID: windowID) else { return }
+    runtime.resolveSavePromptRequestID(id, decision: decision)
   }
 
   func applyBookmarkOperation(

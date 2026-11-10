@@ -161,6 +161,9 @@ final class BrowserStore {
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onDeviceChooserDecision: ((DeviceChooserRequest, Int?) -> Void)?
   @ObservationIgnored var onHTTPAuthDecision: ((HTTPAuthRequest, String?, String?) -> Void)?
+  /// The Chromium save offer currently shown for this window. Only one is offered at a time.
+  private(set) var savePrompt: SavePromptRequest?
+  @ObservationIgnored var onSavePromptDecision: ((String, SavePromptRequest.Decision) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
@@ -1415,6 +1418,28 @@ final class BrowserStore {
     else { return nil }
     guard chooser.options.contains(where: { $0.index == optionIndex }) else { return nil }
     return optionIndex
+  }
+
+  @discardableResult
+  func requestSavePrompt(_ request: SavePromptRequest) -> Bool {
+    if savePrompt?.id == request.id { return true }
+    guard savePrompt == nil, request.matches(session) else { return false }
+    dismissCommand()
+    dismissPageFind()
+    savePrompt = request
+    return true
+  }
+
+  func resolveSavePrompt(_ id: String, decision: SavePromptRequest.Decision) {
+    guard let request = savePrompt, request.id == id else { return }
+    savePrompt = nil
+    onSavePromptDecision?(id, request.decision(decision, matchesSession: request.matches(session)))
+  }
+
+  /// Clears a prompt Chromium already finished. Does not send another decision.
+  func dismissSavePrompt(_ id: String) {
+    guard savePrompt?.id == id else { return }
+    savePrompt = nil
   }
 
   private func enqueueConsent(_ request: BrowserSheet) -> Bool {

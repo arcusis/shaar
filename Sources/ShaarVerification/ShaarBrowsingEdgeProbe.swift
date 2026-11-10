@@ -10,8 +10,27 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+let browsingEdgeDialogNoteCap = 40
+let browsingEdgeDialogSampleIntervalMs = 50
+
+func browsingEdgeDialogSampleGap() -> String {
+  "Sweeps are \(browsingEdgeDialogSampleIntervalMs) ms apart, so a shorter flash can be missed."
+}
+
+func browsingEdgeRecordNote(
+  notes: inout [[String: String]], seen: inout Set<String>, dropped: inout Bool,
+  note: [String: String], key: String
+) {
+  guard seen.insert(key).inserted else { return }
+  guard notes.count < browsingEdgeDialogNoteCap else {
+    dropped = true
+    return
+  }
+  notes.append(note)
+}
+
 func browsingEdgeHiddenWindowsFailure(
-  stillVisible: [String], notes: [[String: String]]
+  stillVisible: [String], notes: [[String: String]], notesDropped: Bool = false
 ) -> String? {
   let flashed = notes.compactMap { note -> String? in
     guard note["kind"] == "visible" else { return nil }
@@ -27,8 +46,23 @@ func browsingEdgeHiddenWindowsFailure(
   if !stillVisible.isEmpty {
     parts.append("Still visible: \(stillVisible.joined(separator: ", "))")
   }
+  if notesDropped {
+    parts.append("Dialog note cap was hit, so a later window was not recorded")
+  }
   if parts.isEmpty { return nil }
   return parts.joined(separator: ". ")
+}
+
+func browsingEdgeHiddenWindowsVerdict(
+  stillVisible: [String], notes: [[String: String]], notesDropped: Bool
+) -> (passed: Bool, detail: String) {
+  let gap = browsingEdgeDialogSampleGap()
+  if let failure = browsingEdgeHiddenWindowsFailure(
+    stillVisible: stillVisible, notes: notes, notesDropped: notesDropped)
+  {
+    return (false, "\(failure). \(gap)")
+  }
+  return (true, "No window was left visible. \(gap)")
 }
 
 /// Records panels the probe asked for and cancels file choosers.
@@ -38,6 +72,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   private var running = false
   private var notes: [[String: String]] = []
   private var seen: Set<String> = []
+  private var dropped = false
 
   func start() {
     lock.lock()
@@ -52,7 +87,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
         self.perform(
           #selector(sweepOnMain), on: Thread.main, with: nil, waitUntilDone: false,
           modes: [RunLoop.Mode.common.rawValue])
-        Thread.sleep(forTimeInterval: 0.05)
+        Thread.sleep(forTimeInterval: Double(browsingEdgeDialogSampleIntervalMs) / 1000)
       }
     }
   }
@@ -69,6 +104,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     return notes
   }
 
+  func notesWereDropped() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return dropped
+  }
+
   private var keepRunning: Bool {
     lock.lock()
     defer { lock.unlock() }
@@ -77,6 +118,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
 
   @MainActor
   @objc private func sweepOnMain() {
+    guard keepRunning else { return }
     if let modal = NSApp.modalWindow {
       if let panel = modal as? NSSavePanel {
         recordChooser(panel)
@@ -111,16 +153,15 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   private func record(_ window: NSWindow, kind: String) {
     let text = labels(in: window).joined(separator: " ")
     let key = "\(kind)|\(window.className)|\(window.title)|\(text)"
-    lock.lock()
-    defer { lock.unlock() }
-    guard seen.insert(key).inserted else { return }
-    guard notes.count < 40 else { return }
-    notes.append([
+    let note = [
       "kind": kind,
       "class": window.className,
       "title": window.title,
       "text": String(text.prefix(240)),
-    ])
+    ]
+    lock.lock()
+    defer { lock.unlock() }
+    browsingEdgeRecordNote(notes: &notes, seen: &seen, dropped: &dropped, note: note, key: key)
   }
 
   @MainActor
@@ -197,7 +238,9 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       dialogs.stop()
       silenceRenderers()
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
-      report.finish(hidden: hidden, dialogs: dialogs.snapshot())
+      report.finish(
+        hidden: hidden, dialogs: dialogs.snapshot(),
+        dialogsTruncated: dialogs.notesWereDropped())
       host.events.quit()
     }
     do {
@@ -228,11 +271,9 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     cancelActiveDownloads(context)
     let stray = visibleWindowLabels()
     let notes = dialogs.snapshot()
-    if let detail = browsingEdgeHiddenWindowsFailure(stillVisible: stray, notes: notes) {
-      report.add(makeRow("Hidden windows", false, detail))
-    } else {
-      report.add(makeRow("Hidden windows", true, "No window was left visible"))
-    }
+    let verdict = browsingEdgeHiddenWindowsVerdict(
+      stillVisible: stray, notes: notes, notesDropped: dialogs.notesWereDropped())
+    report.add(makeRow("Hidden windows", verdict.passed, verdict.detail))
   }
 
   private static func checkPageZoom(
@@ -1307,15 +1348,20 @@ private final class EdgeProbeReport {
     for row in extra { add(row) }
   }
 
-  func finish(hidden: Bool, dialogs: [[String: String]]) {
-    publish(complete: true, hidden: hidden, dialogs: dialogs)
+  func finish(hidden: Bool, dialogs: [[String: String]], dialogsTruncated: Bool) {
+    publish(complete: true, hidden: hidden, dialogs: dialogs, dialogsTruncated: dialogsTruncated)
   }
 
-  private func publish(complete: Bool, hidden: Bool, dialogs: [[String: String]]) {
-    let passed = complete && hidden && !rows.isEmpty && rows.allSatisfy(rowAccepted)
+  private func publish(
+    complete: Bool, hidden: Bool, dialogs: [[String: String]], dialogsTruncated: Bool = false
+  ) {
+    let passed =
+      complete && hidden && !dialogsTruncated && !rows.isEmpty && rows.allSatisfy(rowAccepted)
     edgeProbeWrite(
       [
         "passed": passed, "complete": complete, "allWindowsHidden": hidden,
+        "dialogsTruncated": dialogsTruncated,
+        "dialogSampleIntervalMs": browsingEdgeDialogSampleIntervalMs,
         "rows": rows, "dialogs": dialogs,
       ],
       to: output)

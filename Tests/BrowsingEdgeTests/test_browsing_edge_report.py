@@ -83,3 +83,20 @@ class BrowsingEdgeReportTests(unittest.TestCase):
                 "| Find in page | FAIL |  |",
             ]),
         )
+
+    def test_note_cap_fails_a_hidden_windows_row_that_claims_a_pass(self):
+        rows = [{"name": "Hidden windows", "passed": True, "proven": True}]
+        harness = {"passed": True, "proven": True}
+        self.assertFalse(PROBE.note_cap_fails_its_row(rows, True))
+        self.assertFalse(PROBE.evaluate_gate(rows, [], harness, True))
+        self.assertTrue(PROBE.evaluate_gate(rows, [], harness, False))
+
+    def test_note_cap_with_no_hidden_windows_row_fails_the_gate(self):
+        rows = [{"name": "Find in page", "passed": True, "proven": True}]
+        self.assertFalse(PROBE.note_cap_fails_its_row(rows, True))
+        self.assertFalse(PROBE.evaluate_gate(
+            rows, [], {"passed": True, "proven": True}, True))
+
+    def test_note_cap_passes_when_the_row_failed(self):
+        rows = [{"name": "Hidden windows", "passed": False, "proven": True}]
+        self.assertTrue(PROBE.note_cap_fails_its_row(rows, True))

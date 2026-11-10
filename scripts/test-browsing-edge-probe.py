@@ -347,10 +347,18 @@ def visible_notes_fail_their_row(rows, dialogs):
     return bool(hidden) and all(row.get("passed") is False for row in hidden)
 
 
-def evaluate_gate(product_rows, dialogs, harness_row):
+def note_cap_fails_its_row(rows, dialogs_truncated):
+    if not dialogs_truncated:
+        return True
+    hidden = [row for row in rows if row.get("name") == "Hidden windows"]
+    return bool(hidden) and all(row.get("passed") is False for row in hidden)
+
+
+def evaluate_gate(product_rows, dialogs, harness_row, dialogs_truncated=False):
     return (
         report_passed(product_rows)
         and visible_notes_fail_their_row(product_rows, dialogs)
+        and note_cap_fails_its_row(product_rows, dialogs_truncated)
         and row_accepted(harness_row)
     )
 
@@ -489,13 +497,17 @@ def main():
             ),
         }
         rows = product_rows + [harness_row]
-        gate = evaluate_gate(product_rows, report.get("dialogs") or [], harness_row)
+        gate = evaluate_gate(
+            product_rows, report.get("dialogs") or [], harness_row,
+            report.get("dialogsTruncated") is True)
         receipt = {
             "verificationExecutable": str(executable),
             "exitCode": return_code,
             "timedOut": timed_out,
             "quitHung": quit_hung,
             "allWindowsHidden": report.get("allWindowsHidden"),
+            "dialogsTruncated": report.get("dialogsTruncated") is True,
+            "dialogSampleIntervalMs": report.get("dialogSampleIntervalMs"),
             "complete": report.get("complete"),
             "rows": rows,
             "dialogs": report.get("dialogs") or [],

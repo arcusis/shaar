@@ -152,3 +152,30 @@ import Testing
   #expect(oldABI["replyID"] as? String == "")
   #expect(oldABI["replyOutcome"] as? Int == -1)
 }
+
+@Test func printRequestsRequireABI16AndOwnedLiveTabOnTheObjectiveCReceivePath() throws {
+  let id = UUID().uuidString
+  let payload: [String: Any] = [
+    "schemaVersion": 1,
+    "id": id,
+    "origin": "https://example.com",
+    "pageURL": "https://example.com/article",
+    "frameID": "0123456789abcdef0123456789abcdef",
+    "title": "Print page",
+  ]
+  let supported = ARCProbePrintEventDispatch(payload, 16, true)
+  let received = try #require(supported["received"] as? [String: Any])
+  #expect(received["id"] as? String == id)
+  #expect(received["kind"] as? String == "printRequested")
+  #expect(supported["replyOutcome"] as? Int == -1)
+
+  let foreign = ARCProbePrintEventDispatch(payload, 16, false)
+  #expect((foreign["received"] as? [String: Any])?.isEmpty == true)
+  #expect(foreign["replyID"] as? String == id)
+  #expect(foreign["replyOutcome"] as? Int == 0)
+
+  let oldABI = ARCProbePrintEventDispatch(payload, 15, true)
+  #expect((oldABI["received"] as? [String: Any])?.isEmpty == true)
+  #expect(oldABI["replyID"] as? String == "")
+  #expect(oldABI["replyOutcome"] as? Int == -1)
+}

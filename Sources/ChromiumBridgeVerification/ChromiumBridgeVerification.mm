@@ -35,6 +35,12 @@ shaar_error_code ProbeShareReply(const char *requestID, int shared) {
   return SHAAR_OK;
 }
 
+shaar_error_code ProbePrintReply(const char *requestID, int accepted) {
+  gProbeShareReplyID = requestID ? requestID : "";
+  gProbeShareReplyOutcome = accepted;
+  return SHAAR_OK;
+}
+
 BOOL ProbeCaptureAllowed(void) {
   const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
   if (!testing || std::strcmp(testing, "1") != 0) return NO;
@@ -222,6 +228,54 @@ NSDictionary *ARCProbeWebShareEventDispatch(NSDictionary *payload, uint32_t abiM
   gProbeShareReplyOutcome = -1;
   NSMutableDictionary *eventPayload = [payload mutableCopy];
   eventPayload[@"kind"] = @"webShareRequested";
+  NSData *data = [NSJSONSerialization dataWithJSONObject:eventPayload options:0 error:nil];
+  NSString *eventWindow = validOwner ? windowID : NSUUID.UUID.UUIDString;
+  shaar_event event = {};
+  event.size = sizeof(event);
+  event.kind = SHAAR_EVENT_PERMISSION;
+  event.profile_id = {profileID.UTF8String, profileID.length};
+  event.window_id = {eventWindow.UTF8String, eventWindow.length};
+  event.tab_id = {tabID.UTF8String, tabID.length};
+  event.payload_json = {(const char *)data.bytes, data.length};
+  [runtime receiveEvent:&event];
+  return @{
+    @"received": received ?: @{},
+    @"replyID": [NSString stringWithUTF8String:gProbeShareReplyID.c_str()] ?: @"",
+    @"replyOutcome": @(gProbeShareReplyOutcome),
+  };
+}
+
+NSDictionary *ARCProbePrintEventDispatch(NSDictionary *payload, uint32_t abiMinor,
+                                          BOOL validOwner) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  __block NSDictionary *received = nil;
+  runtime.onPrintRequest = ^(NSDictionary *request) { received = request; };
+  NSString *tabID = NSUUID.UUID.UUIDString;
+  NSString *profileID = NSUUID.UUID.UUIDString;
+  NSString *windowID = NSUUID.UUID.UUIDString;
+  auto setIvar = ^(const char *name, const void *value, size_t size) {
+    Ivar ivar = class_getInstanceVariable(runtime.class, name);
+    if (!ivar) return;
+    void *address = (__bridge void *)runtime;
+    std::memcpy(static_cast<uint8_t *>(address) + ivar_getOffset(ivar), value, size);
+  };
+  BOOL available = abiMinor >= 16;
+  setIvar("_shaarPrintAvailable", &available, sizeof(available));
+  using ReplyFunction = shaar_error_code (*)(const char *, int);
+  ReplyFunction reply = ProbePrintReply;
+  setIvar("_shaarPrintReply", &reply, sizeof(reply));
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabs"),
+                 [@{tabID: [NSValue valueWithPointer:(void *)1]} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabProfiles"),
+                 [@{tabID: profileID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
+                 [@{tabID: windowID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarPrintRequests"),
+                 [NSMutableDictionary dictionary]);
+  gProbeShareReplyID.clear();
+  gProbeShareReplyOutcome = -1;
+  NSMutableDictionary *eventPayload = [payload mutableCopy];
+  eventPayload[@"kind"] = @"printRequested";
   NSData *data = [NSJSONSerialization dataWithJSONObject:eventPayload options:0 error:nil];
   NSString *eventWindow = validOwner ? windowID : NSUUID.UUID.UUIDString;
   shaar_event event = {};

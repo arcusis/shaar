@@ -71,7 +71,29 @@ final class PrivatePageSession {
       self.runtime.stopFinding(
         inPrivateTabID: tabID.uuidString, windowID: self.windowID, contextID: self.contextID)
     }
+    store.onPrintDecision = { [weak runtime] id, accepted in
+      runtime?.resolvePrintRequestID(id, accepted: accepted)
+    }
     startSleepingTabWatch()
+  }
+
+  func receivePrintRequest(_ payload: [String: Any], tabID: String) {
+    guard let store, let id = payload["id"] as? String,
+      let request = PrintRequest(payload: payload), request.tabID.uuidString == tabID,
+      liveTabs.contains(request.tabID)
+    else {
+      if let id = payload["id"] as? String {
+        runtime.resolvePrintRequestID(id, accepted: false)
+      }
+      return
+    }
+    store.rememberPermissionFrame(
+      request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
+    guard store.requestPrint(request) else {
+      store.forgetPermissionFrame(request.tabID, matching: request.frameID)
+      runtime.resolvePrintRequestID(id, accepted: false)
+      return
+    }
   }
 
   var selectedState: PageState? {

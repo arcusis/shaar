@@ -163,6 +163,19 @@ final class BrowserRuntimeEvents {
       }
       receive(payload)
     }
+    runtime.onPrintRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let client = self.router.claim(.print, id: id, payload: payload) else {
+        self.runtime.resolvePrintRequestID(id, accepted: false)
+        return
+      }
+      guard let receive = client.onPrintRequest else {
+        _ = self.router.consume(.print, id: id, windowID: client.windowID)
+        self.runtime.resolvePrintRequestID(id, accepted: false)
+        return
+      }
+      receive(payload)
+    }
     runtime.onExternalAppRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard !self.router.owns(.externalApp, id: id) else { return }
@@ -276,6 +289,11 @@ final class BrowserRuntimeEvents {
   func resolveWebShare(_ id: String, windowID: String, outcome: WebShareOutcome) {
     guard router.consume(.webShare, id: id, windowID: windowID) else { return }
     runtime.resolveWebShareRequestID(id, outcome: outcome.rawValue)
+  }
+
+  func resolvePrint(_ id: String, windowID: String, accepted: Bool) {
+    guard router.consume(.print, id: id, windowID: windowID) else { return }
+    runtime.resolvePrintRequestID(id, accepted: accepted)
   }
 
   func resolveExternalApp(_ id: String, windowID: String, accepted: Bool) {

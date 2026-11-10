@@ -29,6 +29,7 @@ enum BrowserSheet: Identifiable {
   case websitePermission(WebsitePermissionRequest)
   case desktopCapture(DesktopCaptureRequest)
   case webShare(WebShareRequest)
+  case print(PrintRequest)
   case externalApp(ExternalAppRequest)
   case deviceChooser(DeviceChooserRequest)
   case downloads(profileID: UUID)
@@ -44,6 +45,7 @@ enum BrowserSheet: Identifiable {
     case .websitePermission(let request): "permission-\(request.id)"
     case .desktopCapture(let request): request.sheetID
     case .webShare(let request): request.sheetID
+    case .print(let request): request.sheetID
     case .externalApp(let request): "external-\(request.id)"
     case .deviceChooser(let request): request.sheetID
     case .downloads(let profile): "downloads-\(profile)"
@@ -57,7 +59,7 @@ enum BrowserSheet: Identifiable {
   var isConsent: Bool {
     switch self {
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
-    case .extensionInstall, .websitePermission, .desktopCapture, .webShare, .externalApp,
+    case .extensionInstall, .websitePermission, .desktopCapture, .webShare, .print, .externalApp,
       .deviceChooser:
       true
     }
@@ -69,6 +71,7 @@ enum BrowserSheet: Identifiable {
     case .websitePermission(let request): request.tabID
     case .desktopCapture(let request): request.tabID
     case .webShare(let request): request.tabID
+    case .print(let request): request.tabID
     case .externalApp(let request): request.tabID
     case .deviceChooser(let request): request.tabID
     default: nil
@@ -82,6 +85,7 @@ enum BrowserSheet: Identifiable {
     case .websitePermission(let request): request.matches(session)
     case .desktopCapture(let request): request.matches(session)
     case .webShare(let request): request.matches(session)
+    case .print(let request): request.matches(session)
     case .externalApp(let request): request.matches(session)
     case .deviceChooser(let request): request.matches(session)
     }

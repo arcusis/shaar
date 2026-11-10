@@ -402,6 +402,10 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveWebShare(id, windowID: self.windowID, outcome: outcome)
     }
+    store.onPrintDecision = { [weak self] id, accepted in
+      guard let self else { return }
+      self.events.resolvePrint(id, windowID: self.windowID, accepted: accepted)
+    }
     callbacks.onDesktopCaptureRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard let request = DesktopCaptureRequest(payload: payload),
@@ -426,6 +430,20 @@ final class BrowserEngine {
       else {
         store.forgetPermissionFrame(request.tabID, matching: request.frameID)
         self.events.resolveWebShare(id, windowID: self.windowID, outcome: .cancelled)
+        return
+      }
+    }
+    callbacks.onPrintRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let request = PrintRequest(payload: payload), let store = self.store else {
+        self.events.resolvePrint(id, windowID: self.windowID, accepted: false)
+        return
+      }
+      store.rememberPermissionFrame(
+        request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
+      guard store.requestPrint(request) else {
+        store.forgetPermissionFrame(request.tabID, matching: request.frameID)
+        self.events.resolvePrint(id, windowID: self.windowID, accepted: false)
         return
       }
     }

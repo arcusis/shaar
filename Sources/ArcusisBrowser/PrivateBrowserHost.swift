@@ -107,6 +107,19 @@ final class PrivateBrowserHost {
         microphone: access["microphone"]?.boolValue ?? false,
         screen: access["screen"]?.boolValue ?? false)
     }
+    runtime.onPrivatePrintRequest = { [weak self] context, window, tab, request in
+      guard let owner = self?.owner(context: context, window: window),
+        let tabID = UUID(uuidString: tab),
+        let profileID = UUID(uuidString: request["profileID"] as? String ?? ""),
+        owner.page.ownsLiveTab(tabID, profileID: profileID)
+      else {
+        if let id = request["id"] as? String {
+          self?.runtime.resolvePrintRequestID(id, accepted: false)
+        }
+        return
+      }
+      owner.page.receivePrintRequest(request, tabID: tab)
+    }
     runtime.onPrivateWindowClosed = { [weak self] context, window in
       self?.windowClosed(context: context, window: window)
     }
@@ -134,6 +147,7 @@ final class PrivateBrowserHost {
     runtime.onPrivateTabClosed = nil
     runtime.onPrivateTabLifecycle = nil
     runtime.onPrivateMediaAccess = nil
+    runtime.onPrivatePrintRequest = nil
     runtime.onPrivateWindowClosed = nil
     for owner in owners.values { retire(owner) }
     owners.removeAll()

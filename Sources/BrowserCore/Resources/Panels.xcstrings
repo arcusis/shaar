@@ -227,6 +227,26 @@
         }
       }
     },
+    "Print this page?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "להדפיס דף זה?"
+          }
+        }
+      }
+    },
+    "Continue to Print": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המשך להדפסה"
+          }
+        }
+      }
+    },
     "Share": {
       "localizations": {
         "he": {

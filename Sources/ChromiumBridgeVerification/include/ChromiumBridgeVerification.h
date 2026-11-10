@@ -83,6 +83,8 @@ FOUNDATION_EXPORT NSDictionary *ARCProbeDesktopCaptureEventDispatch(
     NSDictionary *payload, BOOL validOwner);
 FOUNDATION_EXPORT NSDictionary *ARCProbeWebShareEventDispatch(
     NSDictionary *payload, uint32_t abiMinor, BOOL validOwner);
+FOUNDATION_EXPORT NSDictionary *ARCProbePrintEventDispatch(
+    NSDictionary *payload, uint32_t abiMinor, BOOL validOwner);
 /// Injects a DevTools open-URL event and records its validated app callback.
 FOUNDATION_EXPORT NSDictionary *ARCProbeShaarDevToolsURLDispatch(
   NSDictionary *payload, BOOL validOwner);

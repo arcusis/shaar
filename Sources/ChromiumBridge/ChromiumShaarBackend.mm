@@ -30,6 +30,8 @@ extern "C" shaar_error_code shaar_tab_find(
 
 // Patch 0072. shaar.28 does not export this; a null pointer skips the reply.
 typedef shaar_error_code (*ShaarShareReplyFunction)(const char *request_id, int shared);
+// Patch 0073. Older engine builds do not export this; a null pointer skips the reply.
+typedef shaar_error_code (*ShaarPrintReplyFunction)(const char *request_id, int accepted);
 
 namespace {
 
@@ -41,6 +43,12 @@ NSError *ShaarError(NSString *message) {
 NSError *ShaarStatusError(NSString *message, shaar_error_code status) {
   return [NSError errorWithDomain:@"org.arcusis.shaar.engine" code:status
                          userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
+BOOL ShaarPrintField(id value, NSUInteger maxUTF8Length, BOOL required) {
+  if (![value isKindOfClass:NSString.class]) return !required && value == nil;
+  NSData *data = [(NSString *)value dataUsingEncoding:NSUTF8StringEncoding];
+  return data && data.length <= maxUTF8Length && (!required || data.length > 0);
 }
 
 shaar_bytes Bytes(NSString *value) {
@@ -186,6 +194,8 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarShareRequests;
   ShaarShareReplyFunction _shaarShareReply;
   NSMutableDictionary<NSString *, NSDictionary *> *_shaarInstallRequests;
+  NSMutableDictionary<NSString *, NSString *> *_shaarPrintRequests;
+  ShaarPrintReplyFunction _shaarPrintReply;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
@@ -193,6 +203,7 @@ struct Symbols {
   BOOL _shaarDesktopCaptureAvailable;
   BOOL _shaarDeviceChooserAvailable;
   BOOL _shaarWebShareAvailable;
+  BOOL _shaarPrintAvailable;
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
@@ -219,9 +230,13 @@ struct Symbols {
                            profileID:(NSString *)profileID
                                tabID:(NSString *)tabID
                   allowsProfileOnly:(BOOL)allowsProfileOnly
-                             payload:(NSDictionary *)payload
+                            payload:(NSDictionary *)payload
                           completion:(void (^)(NSString *, shaar_error_code))completion
                             syncCode:(shaar_error_code *)syncCode;
+- (void)receivePrintRequest:(const shaar_event *)event
+                    payload:(NSDictionary *)payload
+                      tabID:(NSString *)tabID
+                  profileID:(NSString *)profileID;
 - (void)adoptOpenedTabFromEvent:(const shaar_event *)event
                         payload:(NSDictionary *)payload
                       profileID:(NSString *)profileID;
@@ -350,6 +365,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
   _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
   _shaarShareRequests = [NSMutableDictionary dictionary];
+  _shaarPrintRequests = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -373,6 +389,9 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       dlsym(_shaarLibrary, "shaar_tab_find"));
   _shaarShareReply = reinterpret_cast<ShaarShareReplyFunction>(
       dlsym(_shaarLibrary, "shaar_share_reply"));
+  _shaarPrintReply = reinterpret_cast<ShaarPrintReplyFunction>(
+      dlsym(_shaarLibrary, "shaar_print_reply"));
+  _shaarPrintAvailable = _symbols.abi_minor() >= 16 && _shaarPrintReply != nullptr;
   return self;
 }
 
@@ -570,6 +589,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self receiveExtensionInstallEvent:event payload:payload profileID:profileID tabID:tabID];
     return;
   }
+  if (event->kind == SHAAR_EVENT_PERMISSION &&
+      [kind isEqualToString:@"printRequested"] && _shaarPrintAvailable) {
+    [self receivePrintRequest:event payload:payload tabID:tabID profileID:profileID];
+    return;
+  }
   if (event->kind == SHAAR_EVENT_DEVTOOLS && [kind isEqualToString:@"panelEvent"] &&
       !event->session_id.size && [payload[@"schemaVersion"] isEqual:@1] &&
       _shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
@@ -642,6 +666,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     for (NSString *requestID in [_shaarShareRequests allKeysForObject:tabID])
       [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
     [self cancelExtensionInstallRequestsForTabID:tabID];
+    for (NSString *requestID in [_shaarPrintRequests allKeysForObject:tabID])
+      [self resolvePrintRequestID:requestID accepted:NO];
     NSString *windowID = _shaarTabWindows[tabID];
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
@@ -1853,6 +1879,46 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarShareRequests removeObjectForKey:requestID];
   if (!_shaarShareReply || !requestID.UTF8String) return;
   _shaarShareReply(requestID.UTF8String, [outcome isEqualToString:@"shared"] ? 1 : 0);
+}
+
+- (void)receivePrintRequest:(const shaar_event *)event
+                    payload:(NSDictionary *)payload
+                      tabID:(NSString *)tabID
+                  profileID:(NSString *)profileID {
+  if (!_shaarPrintAvailable) return;
+  NSString *requestID = payload[@"id"];
+  if (![requestID isKindOfClass:NSString.class] || requestID.length > 64 ||
+      ![[NSUUID alloc] initWithUUIDString:requestID] || _shaarPrintRequests[requestID]) return;
+  _shaarPrintRequests[requestID] = tabID ?: @"";
+  NSString *windowID = String(event->window_id);
+  if (event->session_id.size || ![payload[@"schemaVersion"] isEqual:@1] ||
+      !_shaarTabs[tabID] ||
+      ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+      ![windowID isEqualToString:_shaarTabWindows[tabID]] ||
+      !ShaarPrintField(payload[@"pageURL"], 4096, YES) ||
+      !ShaarPrintField(payload[@"origin"], 2048, YES) ||
+      !ShaarPrintField(payload[@"frameID"], 256, YES) ||
+      !ShaarPrintField(payload[@"title"], 2048, NO)) {
+    [self resolvePrintRequestID:requestID accepted:NO];
+    return;
+  }
+  NSMutableDictionary *request = [payload mutableCopy];
+  request[@"profileID"] = profileID;
+  request[@"tabID"] = tabID;
+  request[@"windowID"] = windowID;
+  if (self.onPrintRequest) {
+    self.onPrintRequest(request);
+  } else {
+    [self resolvePrintRequestID:requestID accepted:NO];
+  }
+}
+
+- (void)resolvePrintRequestID:(NSString *)requestID accepted:(BOOL)accepted {
+  if (!_shaarPrintAvailable) return;
+  if (!_shaarPrintRequests[requestID]) return;
+  [_shaarPrintRequests removeObjectForKey:requestID];
+  if (!_shaarPrintReply || !requestID.UTF8String) return;
+  _shaarPrintReply(requestID.UTF8String, accepted ? 1 : 0);
 }
 
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {

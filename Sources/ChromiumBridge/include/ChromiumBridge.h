@@ -132,6 +132,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onDesktopCaptureDismissed)(NSString *requestID);
 /// The engine asked the app to present a share sheet for a live tab.
 @property(copy, nullable) void (^onWebShareRequest)(NSDictionary<NSString *, id> *request);
+/// The engine asked the app to confirm printing for a live tab.
+@property(copy, nullable) void (^onPrintRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExternalAppDismissed)(NSString *requestID);
 /// deviceChooserRequested, deviceChooserUpdated, and deviceChooserDismissed.
@@ -251,6 +253,7 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(nullable NSString *)sourceID;
 /// `outcome` is "shared" or "cancelled". The reply symbol is optional until patch 0072.
 - (void)resolveWebShareRequestID:(NSString *)requestID outcome:(NSString *)outcome;
+- (void)resolvePrintRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 /// `index` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
 - (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(nullable NSNumber *)index;

@@ -145,7 +145,8 @@ final class ReopenProbe {
     let alpha = store.session.selectedSpace.selectedTabID!
     let alphaDocument = try await document(alpha)
     try expect(
-      alpha != ids.alphaClosed && runtime.nativeTabID(forID: alpha.uuidString) >= 0,
+      alpha != ids.alphaClosed && runtime.view(forTabID: alpha.uuidString) != nil
+        && runtime.view(forTabID: ids.alphaClosed.uuidString) == nil,
       "reopened alpha page receives a fresh model and native tab identity")
     if let previousInstance {
       try expect(

@@ -7,10 +7,15 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
-/// Opens Inspector on one loopback page in the hidden shipping app and counts
+@testable import ArcusisBrowser
+
+/// Opens Inspector on one loopback page in the hidden verification app and counts
 /// how often it reads the page once the selection has stopped changing.
 @MainActor enum InspectorIdleSmoke {
+  private static var verdictPassed = false
+
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
+    verdictPassed = false
     guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else { return 2 }
     let root = outputURL.deletingLastPathComponent().appending(path: "profile")
     do {
@@ -30,7 +35,7 @@ import Foundation
       return withExtendedLifetime(host) {
         let code = runtime.run(withDataDirectory: root.appending(path: "Chromium"), testing: true)
         host.detach()
-        return code
+        return verdictPassed && code == 0 ? 0 : 1
       }
     } catch {
       write(["passed": false, "error": error.localizedDescription], to: outputURL)
@@ -66,9 +71,10 @@ import Foundation
       let calls = try await pollCalls(model)
       let hidden = host.contexts.values.allSatisfy { !$0.window.isVisible }
       let backedOff = (2...12).contains(calls)
+      verdictPassed = backedOff && hidden && model.isOpen
       write(
         [
-          "passed": backedOff && hidden && model.isOpen,
+          "passed": verdictPassed,
           "calls": calls,
           "locked": true,
           "allWindowsHidden": hidden,

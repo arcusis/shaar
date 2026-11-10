@@ -13,7 +13,18 @@ source scripts/engine-signing.sh
 adhoc_sign() { codesign --force --timestamp=none --sign - "$1"; }
 # Probes live only in the ShaarVerification harness; a shipped executable must not contain them.
 assert_no_verification_code() {
-  if LC_ALL=C grep -a -F -q -e ShaarVerification -e EngineProbe -e --engine-probe -e --probe-data-dir -e ShaarBrowsingQA -e --browsing-qa "$1"; then
+  if LC_ALL=C grep -a -F -q \
+    -e ShaarVerification \
+    -e EngineProbe \
+    -e --engine-probe \
+    -e --probe-data-dir \
+    -e ShaarBrowsingQA \
+    -e --browsing-qa \
+    -e InspectorIdleSmoke \
+    -e --inspector-idle-smoke \
+    -e --probe-measure-inspector \
+    "$1"
+  then
     echo "Verification code found in $1." >&2
     exit 1
   fi

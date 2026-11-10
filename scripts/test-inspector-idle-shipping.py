@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Open Inspector in a hidden shipping Shaar.app and count idle page reads."""
+"""Open Inspector in the hidden verification app and count idle page reads."""
 
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -50,12 +50,12 @@ def crash_names():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar.app")
+    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/inspector-idle/receipt.json")
     options = parser.parse_args()
-    executable = options.app / "Contents/MacOS/ArcusisBrowser"
+    executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
-        parser.error(f"Missing shipping app: {executable}")
+        parser.error(f"Missing verification app: {executable}")
     before = crash_names()
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -81,7 +81,7 @@ def main():
         server.shutdown()
     crashes = sorted(crash_names() - before)
     receipt = {
-        "shippingExecutable": str(executable),
+        "verificationExecutable": str(executable),
         "exitCode": result.returncode,
         "calls": report.get("calls"),
         "locked": report.get("locked"),

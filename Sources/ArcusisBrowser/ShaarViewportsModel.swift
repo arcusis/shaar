@@ -58,6 +58,46 @@ enum ShaarViewportOrientation: String, Equatable, Sendable {
   case landscape
 }
 
+enum ShaarViewportColorScheme: String, Equatable, Sendable, CaseIterable {
+  case noPreference
+  case light
+  case dark
+
+  var title: String {
+    switch self {
+    case .noPreference: "Device"
+    case .light: "Light"
+    case .dark: "Dark"
+    }
+  }
+
+  var next: Self {
+    switch self {
+    case .noPreference: .light
+    case .light: .dark
+    case .dark: .noPreference
+    }
+  }
+}
+
+struct ShaarViewportCapabilities: Equatable, Sendable {
+  var colorScheme = false
+  var hover = false
+  var typing = false
+
+  static let supported = Self(colorScheme: true, hover: true, typing: true)
+}
+
+enum ShaarViewportTyping {
+  static let maximumBytes = 64
+
+  static func isValid(_ text: String) -> Bool {
+    let bytes = Array(text.utf8)
+    guard (1...maximumBytes).contains(bytes.count) else { return false }
+    return bytes.allSatisfy { byte in byte >= 0x20 && byte != 0x7F }
+  }
+}
+
 enum ShaarViewportGeometry {
   static func project(_ value: Int, from source: Int, to destination: Int) -> Int {
     guard source > 0 else { return 0 }
@@ -135,6 +175,7 @@ struct ShaarViewportFrame: Equatable, Sendable, Identifiable {
   let pngData: Data
   var safeArea: ShaarViewportInsets = .zero
   var orientation: ShaarViewportOrientation = .portrait
+  var colorScheme: ShaarViewportColorScheme = .noPreference
 
   var contentWidth: Int {
     orientation == .portrait ? preset.width : preset.height
@@ -151,7 +192,7 @@ struct ShaarViewportFrame: Equatable, Sendable, Identifiable {
       orientation == .portrait ? .landscape : .portrait
     return Self(
       id: id, preset: preset, url: url, pngData: keepingImage ? pngData : Data(),
-      safeArea: nextInsets, orientation: nextOrientation)
+      safeArea: nextInsets, orientation: nextOrientation, colorScheme: colorScheme)
   }
 }
 
@@ -161,12 +202,17 @@ enum ShaarViewportAction: Equatable, Sendable {
   case setSafeArea(UUID, ShaarViewportInsets)
   case rotate(UUID)
   case click(UUID, x: Int, y: Int)
+  case hover(UUID, x: Int, y: Int)
+  case type(UUID, text: String)
+  case setColorScheme(UUID, ShaarViewportColorScheme)
+  case mirrorColorScheme(ShaarViewportColorScheme)
   case scroll(UUID, deltaX: Int, deltaY: Int)
   case navigate(URL)
 }
 
 enum ShaarViewportsMessage: Sendable {
   case available
+  case capabilities(ShaarViewportCapabilities)
   case unavailable
   case frames([ShaarViewportFrame])
 }
@@ -208,6 +254,7 @@ struct ShaarViewportsPendingTransport: ShaarViewportsTransport {
 final class ShaarViewportsModel {
   private(set) var target: SiteControlTarget
   private(set) var available = false
+  private(set) var capabilities = ShaarViewportCapabilities()
   private(set) var frames: [ShaarViewportFrame] = []
   private(set) var isOpen = false
   var zoomToFit = true
@@ -232,6 +279,7 @@ final class ShaarViewportsModel {
     task = nil
     isOpen = false
     available = false
+    capabilities = ShaarViewportCapabilities()
     frames.removeAll()
   }
 
@@ -242,8 +290,13 @@ final class ShaarViewportsModel {
     task?.cancel()
     task = nil
     available = false
+    capabilities = ShaarViewportCapabilities()
     frames.removeAll()
     if isOpen { startStream() }
+  }
+
+  func contactSheetPNG() -> Data? {
+    ShaarViewportContactSheet.png(frames: frames)
   }
 
   func perform(_ action: ShaarViewportAction) async throws {
@@ -267,9 +320,17 @@ final class ShaarViewportsModel {
       return insets.isValid && frames.contains { $0.id == id }
     case .rotate(let id):
       return frames.contains { $0.id == id }
-    case .click(let id, let x, let y):
+    case .click(let id, let x, let y), .hover(let id, let x, let y):
       guard let frame = frames.first(where: { $0.id == id }) else { return false }
+      if case .hover = action, !capabilities.hover { return false }
       return (0..<frame.contentWidth).contains(x) && (0..<frame.contentHeight).contains(y)
+    case .type(let id, let text):
+      return capabilities.typing && ShaarViewportTyping.isValid(text)
+        && frames.contains { $0.id == id }
+    case .setColorScheme(let id, _):
+      return capabilities.colorScheme && frames.contains { $0.id == id }
+    case .mirrorColorScheme:
+      return capabilities.colorScheme && !frames.isEmpty
     case .scroll(let id, let deltaX, let deltaY):
       return frames.contains { $0.id == id }
         && (-2_000...2_000).contains(deltaX) && (-2_000...2_000).contains(deltaY)
@@ -295,8 +356,10 @@ final class ShaarViewportsModel {
   private func receive(_ message: ShaarViewportsMessage) {
     switch message {
     case .available: available = true
+    case .capabilities(let next): capabilities = next
     case .unavailable:
       available = false
+      capabilities = ShaarViewportCapabilities()
       frames.removeAll()
     case .frames(let next):
       guard available, (1...4).contains(next.count) else { return }

@@ -47,6 +47,7 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
 @MainActor private final class ShaarViewportSessionState {
   let target: SiteControlTarget
   var leaseID: Int?
+  var mirroredScheme: ShaarViewportColorScheme?
   var frames: [(nativeID: Int, frame: ShaarViewportFrame)] = []
   var continuation: AsyncStream<ShaarViewportsMessage>.Continuation?
   var task: Task<Void, Never>?
@@ -109,9 +110,7 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
         throw ShaarViewportsError.staleTarget
       }
       let old = session.frames[currentIndex].frame
-      session.frames[currentIndex].frame = ShaarViewportFrame(
-        id: old.id, preset: old.preset, url: old.url, pngData: old.pngData, safeArea: insets,
-        orientation: old.orientation)
+      session.frames[currentIndex].frame = copy(old, safeArea: insets)
     case .rotate(let id):
       let nativeID = try viewportID(id, in: session)
       _ = try await actionRequest(
@@ -125,6 +124,35 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
       _ = try await actionRequest(
         session, leaseID: leaseID,
         fields: ["kind": "click", "viewportID": nativeID, "x": x, "y": y])
+    case .hover(let id, let x, let y):
+      let nativeID = try viewportID(id, in: session)
+      _ = try await actionRequest(
+        session, leaseID: leaseID,
+        fields: ["kind": "hover", "viewportID": nativeID, "x": x, "y": y])
+    case .type(let id, let text):
+      guard ShaarViewportTyping.isValid(text) else { throw ShaarViewportsError.invalidAction }
+      let nativeID = try viewportID(id, in: session)
+      _ = try await actionRequest(
+        session, leaseID: leaseID,
+        fields: ["kind": "type", "viewportID": nativeID, "text": text])
+    case .setColorScheme(let id, let scheme):
+      let nativeID = try viewportID(id, in: session)
+      _ = try await actionRequest(
+        session, leaseID: leaseID,
+        fields: ["kind": "colorScheme", "viewportID": nativeID, "scheme": scheme.rawValue])
+      guard current(session),
+        let index = session.frames.firstIndex(where: { $0.nativeID == nativeID })
+      else { throw ShaarViewportsError.staleTarget }
+      session.mirroredScheme = nil
+      session.frames[index].frame = copy(session.frames[index].frame, colorScheme: scheme)
+    case .mirrorColorScheme(let scheme):
+      _ = try await actionRequest(
+        session, leaseID: leaseID, fields: ["kind": "colorScheme", "scheme": scheme.rawValue])
+      guard current(session) else { throw ShaarViewportsError.staleTarget }
+      session.mirroredScheme = scheme
+      session.frames = session.frames.map { nativeID, frame in
+        (nativeID, copy(frame, colorScheme: scheme))
+      }
     case .scroll(let id, let deltaX, let deltaY):
       let nativeID = try viewportID(id, in: session)
       _ = try await actionRequest(
@@ -137,12 +165,7 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
         session, leaseID: leaseID, fields: ["kind": "navigate", "url": url.absoluteString])
       guard current(session) else { throw ShaarViewportsError.staleTarget }
       session.frames = session.frames.map { nativeID, frame in
-        (
-          nativeID,
-          ShaarViewportFrame(
-            id: frame.id, preset: frame.preset, url: url, pngData: Data(),
-            safeArea: frame.safeArea, orientation: frame.orientation)
-        )
+        (nativeID, copy(frame, url: url, pngData: Data()))
       }
     }
     guard current(session) else { throw ShaarViewportsError.staleTarget }
@@ -166,6 +189,7 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
       try await add(.iphone15Pro, to: session, leaseID: leaseID)
       try await add(.desktop, to: session, leaseID: leaseID)
       guard current(session) else { return }
+      session.continuation?.yield(.capabilities(capabilities(in: reply)))
       session.continuation?.yield(.available)
       emitFrames(session)
       while current(session) {
@@ -193,14 +217,35 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
       let nativeID = reply["viewportID"] as? Int, nativeID > 0,
       !session.frames.contains(where: { $0.nativeID == nativeID })
     else { throw ShaarViewportsError.staleTarget }
-    session.frames.append(
-      (
-        nativeID,
-        ShaarViewportFrame(
-          id: UUID(), preset: preset,
-          url: session.frames.first?.frame.url ?? session.target.url, pngData: Data(),
-          safeArea: preset.defaultInsets)
-      ))
+    var frame = ShaarViewportFrame(
+      id: UUID(), preset: preset,
+      url: session.frames.first?.frame.url ?? session.target.url, pngData: Data(),
+      safeArea: preset.defaultInsets)
+    if let scheme = session.mirroredScheme, scheme != .noPreference {
+      _ = try await actionRequest(
+        session, leaseID: leaseID,
+        fields: ["kind": "colorScheme", "viewportID": nativeID, "scheme": scheme.rawValue])
+      guard current(session) else { throw ShaarViewportsError.staleTarget }
+      frame = copy(frame, colorScheme: scheme)
+    }
+    session.frames.append((nativeID, frame))
+  }
+
+  private func capabilities(in reply: [String: Any]) -> ShaarViewportCapabilities {
+    ShaarViewportCapabilities(
+      colorScheme: reply["colorScheme"] as? Int == 1,
+      hover: reply["hover"] as? Int == 1,
+      typing: reply["typing"] as? Int == 1)
+  }
+
+  private func copy(
+    _ frame: ShaarViewportFrame, url: URL? = nil, pngData: Data? = nil,
+    safeArea: ShaarViewportInsets? = nil, colorScheme: ShaarViewportColorScheme? = nil
+  ) -> ShaarViewportFrame {
+    ShaarViewportFrame(
+      id: frame.id, preset: frame.preset, url: url ?? frame.url, pngData: pngData ?? frame.pngData,
+      safeArea: safeArea ?? frame.safeArea, orientation: frame.orientation,
+      colorScheme: colorScheme ?? frame.colorScheme)
   }
 
   private func refreshFrames(_ session: ShaarViewportSessionState, leaseID: Int) async {
@@ -230,9 +275,7 @@ private struct ShaarViewportReplyBox: @unchecked Sendable {
       let data = Data(base64Encoded: encoded), data.count <= 8 * 1024 * 1024,
       data.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
     else { return nil }
-    return ShaarViewportFrame(
-      id: old.id, preset: old.preset, url: url, pngData: data, safeArea: old.safeArea,
-      orientation: old.orientation)
+    return copy(old, url: url, pngData: data)
   }
 
   private func actionRequest(

@@ -491,6 +491,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0060-shaar-devtools-websocket-events.patch",
       "sha256": "d5eb8044fbe3a3ad01c9e64696ccd3a3457fc3a76f4dda33111379150209c952"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0062-shaar-devtools-viewport-sync.patch",
+      "sha256": "0e0b3dd02f6d48d8cc2466bca53ecae4f4985728e7bdf233d9d96df8e0d813dc"
     }
   ],
   "requiredExports": [

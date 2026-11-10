@@ -170,6 +170,62 @@ import Testing
     #expect(desktop.width > phone.width)
   }
 
+  @Test func mirroredSchemeHoverTypingAndContactSheet() async throws {
+    let png = Data(
+      base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pJkAAAAASUVORK5CYII="
+    )!
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/a")!)
+    let phone = ShaarViewportFrame(
+      id: UUID(), preset: .iphone15Pro, url: target.url, pngData: png)
+    let desktop = ShaarViewportFrame(
+      id: UUID(), preset: .desktop, url: target.url, pngData: png)
+    let transport = ShaarViewportsFixtureTransport(frames: [phone, desktop])
+    let model = ShaarViewportsModel(target: target, transport: transport)
+    model.open()
+    for _ in 0..<30 where model.frames.count != 2 || model.capabilities != .supported {
+      await Task.yield()
+    }
+    #expect(model.capabilities == .supported)
+
+    try await model.perform(.mirrorColorScheme(.dark))
+    for _ in 0..<30 where !model.frames.allSatisfy({ $0.colorScheme == .dark }) {
+      await Task.yield()
+    }
+    #expect(model.frames.allSatisfy { $0.colorScheme == .dark })
+    try await model.perform(.setColorScheme(phone.id, .light))
+    for _ in 0..<30
+    where model.frames.first(where: { $0.id == phone.id })?.colorScheme != .light {
+      await Task.yield()
+    }
+    #expect(model.frames.first { $0.id == phone.id }?.colorScheme == .light)
+    #expect(model.frames.first { $0.id == desktop.id }?.colorScheme == .dark)
+    try await model.perform(.add(.pixel8))
+    for _ in 0..<30 where model.frames.count != 3 { await Task.yield() }
+    #expect(model.frames.first { $0.preset == .pixel8 }?.colorScheme == .noPreference)
+
+    try await model.perform(.hover(phone.id, x: 10, y: 20))
+    #expect(transport.hovers.map(\.viewportID) == [phone.id, desktop.id, model.frames[2].id])
+    try await model.perform(.type(desktop.id, text: "Hi"))
+    #expect(transport.typed == ["Hi"])
+    await #expect(throws: ShaarViewportsError.self) {
+      try await model.perform(.type(phone.id, text: ""))
+    }
+    #expect(!ShaarViewportTyping.isValid(String(repeating: "a", count: 65)))
+    #expect(ShaarViewportTyping.isValid("a b"))
+
+    let sheet = try #require(model.contactSheetPNG())
+    #expect(sheet.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
+    let sizes = [CGSize(width: 393, height: 852), CGSize(width: 1280, height: 800)]
+    let canvas = ShaarViewportContactSheet.canvasSize(imageSizes: sizes)
+    #expect(ShaarViewportContactSheet.displayScale(imageSizes: sizes) < 1)
+    #expect(canvas.width <= ShaarViewportContactSheet.maximumWidth)
+    #expect(canvas.height <= 780)
+    model.close()
+    #expect(model.capabilities == ShaarViewportCapabilities())
+  }
+
   @Test func cardWidthKeepsTheDeviceHeaderReadable() {
     let narrow = ShaarViewportPreviewLayout.cardWidth(previewWidth: 80)
     #expect(narrow == ShaarViewportPreviewLayout.minimumCardWidth)

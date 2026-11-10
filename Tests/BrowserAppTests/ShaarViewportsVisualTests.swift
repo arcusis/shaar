@@ -15,8 +15,10 @@ import XCTest
     }
     _ = NSApplication.shared
     let previous = NSApp.keyWindow
+    let evidence =
+      ProcessInfo.processInfo.environment["SHAAR_VIEWPORTS_EVIDENCE"] ?? "Evidence/issue-1159"
     let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-      .appending(path: "Evidence/issue-1159")
+      .appending(path: evidence)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
@@ -56,29 +58,49 @@ import XCTest
       let suffix = scheme == .dark ? "dark" : "light"
       let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
       let pending = ShaarDevToolsModel(target: target)
-      pending.section = .viewports
       pending.open(inspector: inspector)
+      pending.section = .viewports
       try capture(
         panel: pending, inspector: inspector, named: "after-viewports-unavailable-\(suffix)",
         scheme: scheme, appearance: appearance, root: root)
       pending.close()
 
       let live = ShaarDevToolsModel(target: target, viewportsTransport: fitted)
-      live.section = .viewports
       live.viewports.zoomToFit = true
       live.open(inspector: inspector)
-      for _ in 0..<30 where live.viewports.frames.count != 4 { await Task.yield() }
+      live.section = .viewports
+      for _ in 0..<80 where live.viewports.frames.count != 4 { await Task.yield() }
       XCTAssertEqual(live.viewports.frames.count, 4)
       try capture(
         panel: live, inspector: inspector, named: "after-viewports-fit-\(suffix)",
         scheme: scheme, appearance: appearance, root: root)
       live.close()
 
+      let pinned = ShaarDevToolsModel(
+        target: target,
+        viewportsTransport: ShaarViewportsFixtureTransport(
+          frames: [
+            deviceFrame(.iphone15Pro, url: target.url, png: phoneImage),
+            deviceFrame(.ipad, url: target.url, png: ipadImage),
+            deviceFrame(.pixel8, url: target.url, png: pixelImage),
+            deviceFrame(.desktop, url: target.url, png: desktopImage),
+          ], capabilities: ShaarViewportCapabilities()))
+      pinned.viewports.zoomToFit = true
+      pinned.open(inspector: inspector)
+      pinned.section = .viewports
+      for _ in 0..<80 where pinned.viewports.frames.count != 4 { await Task.yield() }
+      XCTAssertEqual(pinned.viewports.frames.count, 4)
+      XCTAssertFalse(pinned.viewports.capabilities.colorScheme)
+      try capture(
+        panel: pinned, inspector: inspector, named: "after-viewports-pinned-\(suffix)",
+        scheme: scheme, appearance: appearance, root: root)
+      pinned.close()
+
       let wide = ShaarDevToolsModel(target: target, viewportsTransport: rotated)
-      wide.section = .viewports
       wide.viewports.zoomToFit = true
       wide.open(inspector: inspector)
-      for _ in 0..<30 where wide.viewports.frames.count != 4 { await Task.yield() }
+      wide.section = .viewports
+      for _ in 0..<80 where wide.viewports.frames.count != 4 { await Task.yield() }
       XCTAssertEqual(wide.viewports.frames.first?.orientation, .landscape)
       try capture(
         panel: wide, inspector: inspector, named: "after-viewports-rotated-\(suffix)",

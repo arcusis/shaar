@@ -23,6 +23,7 @@ import Testing
       await Task.yield()
     }
     #expect(model.available)
+    #expect(model.capabilities == ShaarViewportCapabilities())
     #expect(model.frames.map(\.preset) == [.iphone15Pro, .desktop])
     #expect(model.frames.allSatisfy { !$0.pngData.isEmpty })
 
@@ -76,10 +77,48 @@ import Testing
     }
     model.close()
   }
+
+  @Test func syncReplyMirrorsColorSchemeHoverAndTyping() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/start")!)
+    let requester = ViewportRequestFixture()
+    requester.advertiseSync = true
+    let model = ShaarViewportsModel(
+      target: target, transport: ShaarViewportsNativeTransport(requester: requester))
+    model.open()
+    for _ in 0..<100 where model.frames.count != 2 || model.capabilities != .supported {
+      await Task.yield()
+    }
+    let phone = try #require(model.frames.first(where: { $0.preset == .iphone15Pro }))
+    try await model.perform(.mirrorColorScheme(.dark))
+    #expect(requester.actions.last?["kind"] as? String == "colorScheme")
+    #expect(requester.actions.last?["scheme"] as? String == "dark")
+    #expect(requester.actions.last?["viewportID"] == nil)
+    for _ in 0..<100 where !model.frames.allSatisfy({ $0.colorScheme == .dark }) {
+      await Task.yield()
+    }
+    #expect(model.frames.allSatisfy { $0.colorScheme == .dark })
+    try await model.perform(.setColorScheme(phone.id, .light))
+    #expect(requester.actions.last?["viewportID"] as? Int == 1)
+    #expect(requester.actions.last?["scheme"] as? String == "light")
+    for _ in 0..<100
+    where model.frames.first(where: { $0.id == phone.id })?.colorScheme != .light {
+      await Task.yield()
+    }
+    #expect(model.frames.first { $0.id == phone.id }?.colorScheme == .light)
+    try await model.perform(.hover(phone.id, x: 4, y: 8))
+    #expect(requester.actions.last?["kind"] as? String == "hover")
+    #expect(requester.actions.last?["x"] as? Int == 4)
+    try await model.perform(.type(phone.id, text: "ok"))
+    #expect(requester.actions.last?["kind"] as? String == "type")
+    #expect(requester.actions.last?["text"] as? String == "ok")
+    model.close()
+  }
 }
 
 @MainActor private final class ViewportRequestFixture: ShaarViewportRequesting {
   var rejectOpen = false
+  var advertiseSync = false
   private(set) var openCount = 0
   private(set) var closedCount = 0
   private(set) var targets: [SiteControlTarget] = []
@@ -100,7 +139,13 @@ import Testing
       openCount += 1
       if rejectOpen { throw ShaarViewportsError.unavailable }
       pageURL = target.url
-      return ["schemaVersion": 1, "leaseID": 7]
+      var reply: [String: Any] = ["schemaVersion": 1, "leaseID": 7]
+      if advertiseSync {
+        reply["colorScheme"] = 1
+        reply["hover"] = 1
+        reply["typing"] = 1
+      }
+      return reply
     case .viewportAdd:
       defer { nextViewportID += 1 }
       return ["schemaVersion": 1, "viewportID": nextViewportID]

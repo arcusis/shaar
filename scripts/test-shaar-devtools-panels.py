@@ -59,6 +59,9 @@ def main() -> None:
             }
             options.receipt.parent.mkdir(parents=True, exist_ok=True)
             options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
+            sheet = root / "viewport-contact-sheet.png"
+            if sheet.is_file():
+                shutil.copyfile(sheet, options.receipt.parent / "viewport-contact-sheet.png")
             print(json.dumps({
                 "exitCode": process.returncode,
                 "panels": panel["results"] if panel else None,

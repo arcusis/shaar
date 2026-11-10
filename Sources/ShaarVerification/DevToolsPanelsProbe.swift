@@ -646,7 +646,44 @@ import Foundation
     guard paths == ["/inspector-viewports"], shell.viewports.frames.count == 2 else {
       throw Failure("Viewport navigation diverged: \(paths)")
     }
-    return "Safe area, navigation, click, and scroll changed both offscreen viewport frames"
+    guard let sheet = shell.viewports.contactSheetPNG(),
+      sheet.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    else { throw Failure("Viewport contact sheet was not a PNG") }
+    try sheet.write(to: root.appending(path: "viewport-contact-sheet.png"), options: .atomic)
+    let sync = try await proveMirroredViewportInput(shell, source: source)
+    return "Safe area, navigation, click, and scroll changed both offscreen viewport frames. "
+      + "Screenshot all wrote one PNG. \(sync)"
+  }
+
+  private func proveMirroredViewportInput(
+    _ shell: ShaarDevToolsModel, source: ShaarViewportFrame
+  ) async throws -> String {
+    guard shell.viewports.capabilities.colorScheme, shell.viewports.capabilities.hover,
+      shell.viewports.capabilities.typing
+    else {
+      return "Color scheme, hover, and typing wait for the next engine pin"
+    }
+    let beforeScheme = viewportPNG(shell)
+    try await shell.viewports.perform(.mirrorColorScheme(.dark))
+    try await wait("dark color scheme on every viewport", attempts: 160) {
+      self.viewportsChanged(shell, from: beforeScheme)
+        && shell.viewports.frames.allSatisfy { $0.colorScheme == .dark }
+    }
+    guard let phone = shell.viewports.frames.first(where: { $0.id == source.id }) else {
+      throw Failure("Mobile viewport missing after color scheme")
+    }
+    let beforeLight = viewportPNG(shell)
+    try await shell.viewports.perform(.setColorScheme(phone.id, .light))
+    try await wait("one viewport stayed light", attempts: 160) {
+      guard let light = shell.viewports.frames.first(where: { $0.id == phone.id }),
+        let dark = shell.viewports.frames.first(where: { $0.id != phone.id })
+      else { return false }
+      return light.colorScheme == .light && dark.colorScheme == .dark
+        && light.pngData != dark.pngData && light.pngData != beforeLight[phone.id]
+    }
+    try await shell.viewports.perform(.hover(phone.id, x: 200, y: 12))
+    try await shell.viewports.perform(.type(phone.id, text: "shaar"))
+    return "Dark and light rendered together. Hover and typing were mirrored"
   }
 
   private func proveViewportPresets(_ shell: ShaarDevToolsModel) async throws -> String {

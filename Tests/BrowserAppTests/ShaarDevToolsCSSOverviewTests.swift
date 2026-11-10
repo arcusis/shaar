@@ -127,7 +127,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let sources = ShaarSourcesModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     let batch = try await sources.loadStylesheets()
     phase2.close()
 

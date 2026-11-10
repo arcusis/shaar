@@ -31,6 +31,11 @@ describe('AgentPacket', () => {
   });
 
   it('redacts secrets and keeps an email address', () => {
+    const jwt = [
+      'eyJhbGciOiJIUzI1NiJ9',
+      'eyJzdWIiOiIxMjM0NTY3ODkwIn0',
+      'SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+    ].join('.');
     const text = [
       'cookie: session=abc',
       'Authorization: Bearer abcdefghijklmnop',
@@ -39,7 +44,7 @@ describe('AgentPacket', () => {
       'Proxy-Authorization: Basic abcdefgh',
       'https://ada@example.com/path?token=abcdef&access_token=zzzzzzzz',
       'https://ada:secret@example.com/stay',
-      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+      jwt,
     ].join('\n');
     const redacted = redact(text);
     assert.include(redacted, 'cookie: [redacted]');

@@ -181,6 +181,8 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeDevToolsDockAudit(
                     completion:(void (^)(BOOL clicked))completion;
 /// The owned private tab's pre-navigation stage in a marked hidden probe.
 - (nullable NSDictionary<NSString *, id> *)privateNavigationProbeAuditForTabID:(NSString *)tabID;
+/// Whether the current engine implements a supported renderer crash hook for owned probe tabs.
+- (BOOL)supportsRendererCrashProbe;
 /// Intentionally terminates only an authored loopback page in a disposable probe profile.
 - (BOOL)crashProbeTabID:(NSString *)tabID;
 /// Chromium's keep-alive registry and quit state, for diagnosing a process that outlives Quit.

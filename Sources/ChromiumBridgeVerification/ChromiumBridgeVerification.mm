@@ -1041,6 +1041,7 @@ void ARCCompletePrivateQuitDialogCancellation(
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
                     completion:(void (^)(BOOL))completion { completion(NO); }
 - (NSDictionary *)privateNavigationProbeAuditForTabID:(NSString *)tabID { return nil; }
+- (BOOL)supportsRendererCrashProbe { return NO; }
 - (BOOL)crashProbeTabID:(NSString *)tabID { return NO; }
 - (NSString *)probeKeepAliveState { return nil; }
 - (BOOL)probeQuitStoppedEventLoop { return NO; }

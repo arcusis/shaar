@@ -12,7 +12,7 @@ struct SwitchProbeMetrics: Codable {
   static let warmupDiscardReason =
     "The first selection of each same-profile tab can include one-time native WebContents activation and first-display setup. Two warm-up switches are measured and reported separately, then excluded from the steady-state Space p95."
   static let measurementScope =
-    "Each phase records two same-profile Space warm-up switches separately, then 20 measured same-profile Space switches and 20 cross-profile switches. Latency is Host-plus-IPC time from native store selection through native selection acknowledgment; measured p95 must be at most 100 ms. Displayed-WebContents audits and authored JavaScript snapshots separately verify presentation, account, document, and session continuity and are excluded from latency. Excludes physical paint, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
+    "Each phase records two same-profile Space warm-up switches separately, then 20 measured same-profile Space switches and 20 cross-profile switches. Latency is Host-plus-IPC time from native store selection through native selection acknowledgment; measured p95 must be at most 100 ms. Each sample separately records synchronous store update, native selection acknowledgment, and time to the selected page's next requestAnimationFrame after its displayed-WebContents audit. Authored JavaScript snapshots separately verify account, document, and session continuity and are excluded from latency. Excludes physical display scanout, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
 
   enum SwitchKind: String, Codable {
     case space
@@ -23,6 +23,9 @@ struct SwitchProbeMetrics: Codable {
     let kind: SwitchKind
     let iteration: Int
     let latencyMilliseconds: Double
+    let storeUpdateMilliseconds: Double
+    let engineSelectionMilliseconds: Double
+    let firstPaintMilliseconds: Double
     let residentMemoryBytes: UInt64?
   }
 
@@ -70,7 +73,7 @@ struct SwitchProbeMetrics: Codable {
     }
   }
 
-  let schema = 3
+  let schema = 4
   let phase: String
   let measurementScope = Self.measurementScope
   let expectedSampleCount = Self.expectedSwitchCount
@@ -176,6 +179,10 @@ struct SwitchProbeMetrics: Codable {
       && samples.enumerated().allSatisfy({ index, sample in
         sample.iteration == index + 1 && sample.latencyMilliseconds.isFinite
           && sample.latencyMilliseconds >= 0 && sample.kind == kind
+          && [
+            sample.storeUpdateMilliseconds, sample.engineSelectionMilliseconds,
+            sample.firstPaintMilliseconds,
+          ].allSatisfy { $0.isFinite && $0 >= 0 }
       })
   }
 
@@ -221,7 +228,9 @@ struct SwitchProbeMetricsRecorder {
   private(set) var profileSwitchSamples: [SwitchProbeMetrics.Sample] = []
 
   mutating func recordSpaceWarmup(
-    iteration: Int, latencySeconds: Double, residentMemoryBytes: UInt64?
+    iteration: Int, latencySeconds: Double, storeUpdateSeconds: Double = 0,
+    engineSelectionSeconds: Double = 0, firstPaintSeconds: Double = 0,
+    residentMemoryBytes: UInt64?
   ) throws {
     let latencyMilliseconds = latencySeconds * 1_000
     guard iteration == spaceWarmupSamples.count + 1,
@@ -231,23 +240,34 @@ struct SwitchProbeMetricsRecorder {
     spaceWarmupSamples.append(
       SwitchProbeMetrics.Sample(
         kind: .space, iteration: iteration, latencyMilliseconds: latencyMilliseconds,
+        storeUpdateMilliseconds: storeUpdateSeconds * 1_000,
+        engineSelectionMilliseconds: engineSelectionSeconds * 1_000,
+        firstPaintMilliseconds: firstPaintSeconds * 1_000,
         residentMemoryBytes: residentMemoryBytes))
   }
 
   mutating func record(
     kind: SwitchProbeMetrics.SwitchKind, iteration: Int, latencySeconds: Double,
+    storeUpdateSeconds: Double = 0, engineSelectionSeconds: Double = 0,
+    firstPaintSeconds: Double = 0,
     residentMemoryBytes: UInt64?
   ) throws {
     let latencyMilliseconds = latencySeconds * 1_000
     let count = kind == .space ? spaceSwitchSamples.count : profileSwitchSamples.count
+    let validBreakdown = [storeUpdateSeconds, engineSelectionSeconds, firstPaintSeconds]
+      .allSatisfy { $0.isFinite && $0 >= 0 }
     guard iteration == count + 1,
       iteration <= SwitchProbeMetrics.expectedSwitchCount,
-      latencySeconds.isFinite, latencySeconds >= 0, latencyMilliseconds.isFinite
+      latencySeconds.isFinite, latencySeconds >= 0, latencyMilliseconds.isFinite,
+      validBreakdown
     else { throw SwitchProbeMetricsError.invalidSample }
     let sample = SwitchProbeMetrics.Sample(
       kind: kind,
       iteration: iteration,
       latencyMilliseconds: latencyMilliseconds,
+      storeUpdateMilliseconds: storeUpdateSeconds * 1_000,
+      engineSelectionMilliseconds: engineSelectionSeconds * 1_000,
+      firstPaintMilliseconds: firstPaintSeconds * 1_000,
       residentMemoryBytes: residentMemoryBytes)
     if kind == .space {
       spaceSwitchSamples.append(sample)

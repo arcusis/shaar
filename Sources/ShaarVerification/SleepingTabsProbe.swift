@@ -9,8 +9,8 @@ import Foundation
 
 @testable import ArcusisBrowser
 
-/// Hidden proof that idle discard asks the engine and leaves the tab in the window.
-/// An engine without the lifecycle operation reports incapable and closes nothing.
+/// Hidden proof that an idle background tab is discarded and stays in the window.
+/// An engine that cannot discard fails the verdict.
 @MainActor enum SleepingTabsProbe {
   private static let idleGap: TimeInterval = 3 * 60 * 60
 
@@ -102,11 +102,10 @@ import Foundation
       let stillLive = context.engine.liveTabs.contains(background)
       let sleeping = context.store.sleepingTabIDs.contains(background)
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
-      let incapableLeftItAwake = capable || !sleeping
+      let rendererFailures = context.store.rendererFailures.count
       let passed =
-        stillListed && stillLive && hidden
-        && before.contains(background) && incapableLeftItAwake
-        && context.store.rendererFailures.isEmpty
+        capable && sleeping && stillListed && stillLive && hidden
+        && before.contains(background) && rendererFailures == 0
       payload = [
         "passed": passed,
         "capable": capable,
@@ -115,11 +114,31 @@ import Foundation
         "sleeping": sleeping,
         "tabCount": after.count,
         "allWindowsHidden": hidden,
-        "rendererFailures": context.store.rendererFailures.count,
+        "rendererFailures": rendererFailures,
       ]
+      if let error = probeFailure(
+        capable: capable, sleeping: sleeping, stillListed: stillListed, stillLive: stillLive,
+        hidden: hidden, wasOpen: before.contains(background), rendererFailures: rendererFailures)
+      {
+        payload["error"] = error
+      }
     } catch {
       payload = ["passed": false, "error": error.localizedDescription]
     }
+  }
+
+  private static func probeFailure(
+    capable: Bool, sleeping: Bool, stillListed: Bool, stillLive: Bool, hidden: Bool,
+    wasOpen: Bool, rendererFailures: Int
+  ) -> String? {
+    if !capable { return "The engine cannot discard this tab" }
+    if !sleeping { return "The background tab stayed awake" }
+    if !stillListed { return "The background tab left the window" }
+    if !stillLive { return "The background tab is no longer live" }
+    if !hidden { return "A window became visible" }
+    if !wasOpen { return "The background tab was not open before sleep" }
+    if rendererFailures != 0 { return "The renderer failed" }
+    return nil
   }
 
   private static func wait(_ condition: () -> Bool) async -> Bool {

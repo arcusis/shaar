@@ -41,10 +41,23 @@ extension PrivatePageSession {
 
   func wakeIfSleeping(_ id: UUID) {
     guard store?.sleepingTabIDs.contains(id) == true else { return }
+    wakeNow(id)
+  }
+
+  func acceptSleep(_ id: UUID) {
+    guard let store, store.session.page(forTabID: id) != nil else { return }
+    if store.session.selectedPage?.tab.id == id || store.visiblePageIDs.contains(id) {
+      wakeNow(id)
+      return
+    }
+    store.noteTabSleeping(id)
+  }
+
+  private func wakeNow(_ id: UUID) {
     runtime.wakePrivateTabID(
       id.uuidString, windowID: windowID, contextID: contextID
     ) { [weak self] accepted in
-      if accepted { self?.store?.noteTabAwake(id) }
+      self?.store?.resolveWake(id, accepted: accepted)
     }
   }
 
@@ -89,26 +102,20 @@ extension PrivatePageSession {
         guard let self, let store = self.store else { return [] }
         return self.sleepingCandidates(in: store)
       },
-      onSlept: { [weak store] id in store?.noteTabSleeping(id) })
+      onSlept: { [weak self] id in self?.acceptSleep(id) })
   }
 
   private func sleepingCandidates(in store: BrowserStore) -> [SleepingTabScheduler.Candidate] {
     let visible = store.visiblePageIDs
     let selected = store.session.selectedPage?.tab.id
-    var seen: Set<UUID> = []
-    var candidates: [SleepingTabScheduler.Candidate] = []
     let tabs = store.session.spaces.flatMap(\.tabs) + store.session.favoritePages.map(\.tab)
-    for tab in tabs where seen.insert(tab.id).inserted {
-      candidates.append(
-        SleepingTabScheduler.Candidate(
-          id: tab.id, host: tab.url.host() ?? "", isPinned: tab.isPinned,
-          keepAlive: tab.keepAlive, isVisible: visible.contains(tab.id),
-          isPrivateActive: tab.id == selected,
-          isPlaying: store.media.sessions[tab.id]?.isPlaying == true,
-          isCapturing: false, hasInspector: inspectors[tab.id] != nil,
-          hasDeveloperTools: shaarDevTools[tab.id] != nil, profileIsDownloading: false,
-          isLive: liveTabs.contains(tab.id)))
-    }
-    return candidates
+    return SleepingTabScheduler.candidates(
+      tabs: tabs, liveTabs: liveTabs, visible: visible,
+      isPrivateActive: { $0 == selected },
+      isPlaying: { store.media.sessions[$0]?.isPlaying == true },
+      isCapturing: { self.mediaAccess[$0]?.isCapturing == true },
+      hasInspector: { self.inspectors[$0] != nil },
+      hasDeveloperTools: { self.shaarDevTools[$0] != nil },
+      profileIsDownloading: { _ in false })
   }
 }

@@ -36,6 +36,8 @@ struct TabSuspensionTests {
     #expect(store.sleepingTabIDs == [inactive.id])
     #expect(runtime.evaluatedScripts.count == 1)
     #expect(runtime.evaluatedScripts[0].contains("edited"))
+    #expect(runtime.evaluatedScripts[0].contains("iframe"))
+    #expect(runtime.evaluatedScripts[0].contains("shadowRoot"))
     #expect(!runtime.evaluatedScripts[0].contains("scrollX"))
     #expect(!runtime.evaluatedScripts[0].contains("scrollTo"))
   }
@@ -135,6 +137,24 @@ struct TabSuspensionTests {
     #expect(engine.liveTabs.isSuperset(of: store.sleepingTabIDs))
   }
 
+  @Test func memoryPressureSkipsTabsThatAreAlreadySleeping() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let background = (0..<6).map { index in
+      BrowserTab(url: URL(string: "https://tab-\(index).example")!)
+    }
+    let (store, engine, runtime) = try makeEngine(tabs: [active] + background)
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = Set(([active] + background).map(\.id))
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    store.noteTabSleeping(background[0].id)
+    store.noteTabSleeping(background[1].id)
+    engine.sleepForMemoryPressure(now: start.addingTimeInterval(1))
+    #expect(runtime.slept.map(\.0) == background[2...5].map(\.id.uuidString))
+    #expect(runtime.slept.allSatisfy { $0.1 == "urgent" })
+    #expect(store.sleepingTabIDs == Set(background.map(\.id)))
+  }
+
   @Test func selectingASleepingTabWakesIt() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let inactive = BrowserTab(url: URL(string: "https://inactive.example")!)
@@ -148,6 +168,46 @@ struct TabSuspensionTests {
     store.perform(.tab(space: store.session.selectedSpaceID, tab: inactive.id))
     engine.reconcile()
     #expect(runtime.woke == [inactive.id.uuidString])
+    #expect(store.sleepingTabIDs.isEmpty)
+  }
+
+  @Test func aFailedWakeClearsTheSelectedSleepingTab() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let inactive = BrowserTab(url: URL(string: "https://inactive.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = [active.id, inactive.id]
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+    #expect(store.sleepingTabIDs == [inactive.id])
+    runtime.wakeAccepted = false
+    engine.wakeIfSleeping(inactive.id)
+    #expect(runtime.woke == [inactive.id.uuidString])
+    #expect(store.sleepingTabIDs == [inactive.id])
+    store.perform(.tab(space: store.session.selectedSpaceID, tab: inactive.id))
+    engine.reconcile()
+    #expect(store.sleepingTabIDs.isEmpty)
+  }
+
+  @Test func aClosedTabCannotBeMarkedSleeping() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let inactive = BrowserTab(url: URL(string: "https://inactive.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = [active.id, inactive.id]
+    runtime.holdSleepCompletion = true
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+    #expect(runtime.slept.map(\.0) == [inactive.id.uuidString])
+    #expect(store.sleepingTabIDs.isEmpty)
+    store.session.closeTab(inactive.id)
+    runtime.deliverHeldSleep()
+    #expect(store.sleepingTabIDs.isEmpty)
+    store.noteTabSleeping(inactive.id)
+    engine.sleepingTabs.apply(
+      state: "discarded", audible: false, capturing: false, id: inactive.id, store: store)
     #expect(store.sleepingTabIDs.isEmpty)
   }
 
@@ -199,6 +259,34 @@ struct TabSuspensionTests {
     #expect(store.sleepingTabIDs.isEmpty)
   }
 
+  @Test func aPrivateTabThatIsCapturingStaysAwake() throws {
+    let first = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: first))
+    let runtime = SuspensionTestRuntime()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "private-context", windowID: "private-window",
+      firstTabID: first, store: store)
+    defer { session.suspensionTask?.cancel() }
+    session.sleepingTabs.policy = {
+      SleepingTabsPolicy(enabled: true, timeout: 5 * 60, neverSleepHosts: [])
+    }
+    session.sleepingTabs.capability = .capable
+    session.memoryPressureSource?.cancel()
+    session.memoryPressureSource = nil
+    let opened = store.session.open(URL(string: "https://background.example")!)
+    let background = try #require(opened)
+    session.reconcile()
+    session.noteMediaAccess(first, camera: true, microphone: false, screen: false)
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    session.suspendInactiveTabs(now: start)
+    session.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+    #expect(runtime.privateSlept.isEmpty)
+    #expect(store.sleepingTabIDs.isEmpty)
+    #expect(session.liveTabs.contains(first))
+    #expect(session.liveTabs.contains(background))
+  }
+
   private func makeEngine(tabs: [BrowserTab]) throws -> (
     BrowserStore, BrowserEngine, SuspensionTestRuntime
   ) {
@@ -231,6 +319,9 @@ private final class SuspensionTestRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var privateWoke: [String] = []
   nonisolated(unsafe) var evaluationResult = "{\"edited\":false}"
   nonisolated(unsafe) var lifecycleCapable = true
+  nonisolated(unsafe) var wakeAccepted = true
+  nonisolated(unsafe) var holdSleepCompletion = false
+  nonisolated(unsafe) var heldSleep: (@MainActor @Sendable (Bool) -> Void)?
 
   override func evaluate(
     inTabID tabID: String, script: String,
@@ -264,14 +355,25 @@ private final class SuspensionTestRuntime: ARCChromiumRuntime {
     _ tabID: String, reason: String, completion: @escaping @MainActor @Sendable (Bool) -> Void
   ) {
     slept.append((tabID, reason))
+    if holdSleepCompletion {
+      heldSleep = completion
+      return
+    }
     finish(true, completion)
+  }
+
+  func deliverHeldSleep(_ accepted: Bool = true) {
+    let completion = heldSleep
+    heldSleep = nil
+    guard let completion else { return }
+    finish(accepted, completion)
   }
 
   override func wakeTabID(
     _ tabID: String, completion: @escaping @MainActor @Sendable (Bool) -> Void
   ) {
     woke.append(tabID)
-    finish(true, completion)
+    finish(wakeAccepted, completion)
   }
 
   override func probePrivateTabLifecycle(

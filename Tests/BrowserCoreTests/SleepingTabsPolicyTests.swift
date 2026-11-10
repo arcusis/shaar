@@ -12,6 +12,22 @@ import Testing
     #expect(SleepingTabsPolicy.hostKey(" WWW.Example.COM ") == "example.com")
     #expect(SleepingTabsPolicy.hostKey("example.com") == "example.com")
     #expect(SleepingTabsPolicy.hostKey("notwww.example.com") == "notwww.example.com")
+    #expect(SleepingTabsPolicy.hostKey("https://www.Mail.Example.com/inbox") == "mail.example.com")
+    #expect(SleepingTabsPolicy.hostKey("mail.example.com/inbox") == "mail.example.com")
+    #expect(SleepingTabsPolicy.hostKey("example.com:443") == "example.com")
+  }
+
+  @Test func neverSleepListCoversTheSiteAndItsSubdomains() {
+    let policy = SleepingTabsPolicy(neverSleepHosts: ["example.com", "https://bank.test/home"])
+    #expect(policy.neverSleeps("example.com"))
+    #expect(policy.neverSleeps("mail.example.com"))
+    #expect(policy.neverSleeps("www.example.com"))
+    #expect(policy.neverSleeps("www.bank.test"))
+    #expect(!policy.neverSleeps("notexample.com"))
+    #expect(!policy.neverSleeps("example.com.evil"))
+    #expect(
+      SleepingTabPreferences.hosts(from: "https://www.Mail.Example.com/inbox")
+        == ["mail.example.com"])
   }
 
   @Test func exemptionsCoverVisibleSoundCaptureFormsPinsAndThePrivateSelection() {
@@ -42,7 +58,7 @@ import Testing
     #expect(policy.memoryPressureTabs(tabs).isEmpty)
   }
 
-  @Test func memoryPressureKeepsTheFourOldestEligibleTabs() {
+  @Test func memoryPressureListsEligibleTabsOldestFirst() {
     let policy = SleepingTabsPolicy()
     let start = Date(timeIntervalSince1970: 1_700_000_000)
     var tabs: [SleepingTabFacts] = []
@@ -51,9 +67,9 @@ import Testing
     }
     tabs.append(facts(isPinned: true, lastActive: start.addingTimeInterval(-100)))
     let chosen = policy.memoryPressureTabs(tabs)
-    #expect(chosen == Array(tabs.prefix(4).map(\.id)))
+    #expect(chosen == Array(tabs.prefix(6).map(\.id)))
     let tied = (0..<6).map { _ in facts(lastActive: start) }
-    #expect(policy.memoryPressureTabs(tied) == Array(tied.prefix(4).map(\.id)))
+    #expect(policy.memoryPressureTabs(tied) == tied.map(\.id))
   }
 
   @Test func preferencesDefaultToTwoHoursAndParseNeverSleepHosts() {
@@ -81,6 +97,9 @@ import Testing
     #expect(SleepingFormSignal.edited("{\"edited\":true}") == true)
     #expect(SleepingFormSignal.edited("{\"x\":1}") == nil)
     #expect(SleepingFormSignal.edited(nil) == nil)
+    #expect(SleepingFormSignal.script.contains("edited"))
+    #expect(SleepingFormSignal.script.contains("iframe"))
+    #expect(SleepingFormSignal.script.contains("shadowRoot"))
     #expect(!SleepingFormSignal.script.contains("scrollX"))
     #expect(!SleepingFormSignal.script.contains("scrollTo"))
   }

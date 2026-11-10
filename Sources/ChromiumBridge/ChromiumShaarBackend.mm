@@ -200,6 +200,14 @@ static BOOL ShaarLifecycleAccepted(NSDictionary *reply, NSError *error,
   return [states containsObject:state];
 }
 
+/// A failed submit, including INVALID_ARGUMENT and UNSUPPORTED_CAPABILITY, is not a lifecycle.
+static BOOL ShaarLifecycleProbeCapable(NSDictionary *reply, NSError *error) {
+  if (error || [reply[@"error"] isKindOfClass:NSString.class] ||
+      [reply[@"error"] isKindOfClass:NSNumber.class]) return NO;
+  NSString *state = [reply[@"state"] isKindOfClass:NSString.class] ? reply[@"state"] : @"";
+  return [@[@"active", @"frozen", @"discarded"] containsObject:state];
+}
+
 static void ShaarEventCallback(void *context, const shaar_event *event) {
   ARCPerformShaarEventCallback(^{
     [(__bridge ARCShaarRuntime *)context receiveEvent:event];
@@ -968,9 +976,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     ShaarFinishOnMain(completion, NO);
     return;
   }
-  BOOL capable = [self submitTabID:tabID operation:kShaarOpTabLifecycleGet
-                           payload:@{@"schemaVersion": @1}];
-  ShaarFinishOnMain(completion, capable);
+  [self submitTabID:tabID operation:kShaarOpTabLifecycleGet
+            payload:@{@"schemaVersion": @1}
+         completion:^(NSDictionary *reply, NSError *error) {
+    ShaarFinishOnMain(completion, ShaarLifecycleProbeCapable(reply, error));
+  }];
 }
 
 - (void)sleepTabID:(NSString *)tabID reason:(NSString *)reason

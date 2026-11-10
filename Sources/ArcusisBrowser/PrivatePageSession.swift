@@ -34,6 +34,7 @@ final class PrivatePageSession {
   @ObservationIgnored private(set) weak var store: BrowserStore?
   @ObservationIgnored private(set) var liveTabs: Set<UUID>
   @ObservationIgnored let sleepingTabs = SleepingTabScheduler()
+  @ObservationIgnored var mediaAccess: [UUID: MediaAccessState] = [:]
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
   @ObservationIgnored var memoryPressureSource: DispatchSourceMemoryPressure?
   @ObservationIgnored private var reconciling = false
@@ -184,9 +185,14 @@ final class PrivatePageSession {
     _ = store.nativeTabActivated(id, profileID: store.session.selectedSpace.profileID)
   }
 
+  func noteMediaAccess(_ id: UUID, camera: Bool, microphone: Bool, screen: Bool) {
+    mediaAccess[id] = MediaAccessState(camera: camera, microphone: microphone, screen: screen)
+  }
+
   func tabClosed(_ id: UUID) {
     sleepingTabs.forget(id)
     store?.noteTabAwake(id)
+    mediaAccess[id] = nil
     guard liveTabs.remove(id) != nil else { return }
     shaarDevTools.removeValue(forKey: id)?.close()
     if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }

@@ -59,12 +59,37 @@ public struct SleepingTabsPolicy: Equatable, Sendable {
     self.neverSleepHosts = neverSleepHosts
   }
 
+  /// A hostname, a pasted address, or a path. Leading www and a port are dropped.
   public static func hostKey(_ value: String) -> String {
     var host = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if host.hasPrefix("http://") || host.hasPrefix("https://") || host.hasPrefix("//") {
+      let absolute = host.hasPrefix("//") ? "https:" + host : host
+      if let name = URL(string: absolute)?.host() {
+        host = name
+      }
+    } else if let slash = host.firstIndex(of: "/") {
+      host = String(host[..<slash])
+    }
+    if let at = host.lastIndex(of: "@") {
+      host = String(host[host.index(after: at)...])
+    }
+    if !host.hasPrefix("["), let colon = host.firstIndex(of: ":") {
+      host = String(host[..<colon])
+    }
     if host.hasPrefix("www.") {
       host.removeFirst(4)
     }
     return host
+  }
+
+  /// The site itself and any subdomain. `example.com` covers `mail.example.com`.
+  public func neverSleeps(_ host: String) -> Bool {
+    let key = Self.hostKey(host)
+    guard !key.isEmpty else { return false }
+    return neverSleepHosts.contains { rule in
+      let entry = Self.hostKey(rule)
+      return !entry.isEmpty && (key == entry || key.hasSuffix("." + entry))
+    }
   }
 
   public func isExempt(_ facts: SleepingTabFacts) -> Bool {
@@ -74,7 +99,7 @@ public struct SleepingTabsPolicy: Equatable, Sendable {
     }
     if facts.isPlaying || facts.isCapturing || facts.formEdited { return true }
     if facts.hasInspector || facts.hasDeveloperTools || facts.profileIsDownloading { return true }
-    return neverSleepHosts.contains(Self.hostKey(facts.host))
+    return neverSleeps(facts.host)
   }
 
   public func isIdle(_ facts: SleepingTabFacts, now: Date) -> Bool {
@@ -87,6 +112,7 @@ public struct SleepingTabsPolicy: Equatable, Sendable {
   }
 
   /// Oldest eligible tabs first. Equal ages keep the order the window listed them.
+  /// The caller drops tabs that are already sleeping, then keeps `memoryPressureLimit`.
   public func memoryPressureTabs(_ tabs: [SleepingTabFacts]) -> [UUID] {
     let eligible = tabs.enumerated().filter { !isExempt($0.element) }
     let oldest = eligible.sorted { left, right in
@@ -95,7 +121,7 @@ public struct SleepingTabsPolicy: Equatable, Sendable {
       }
       return left.offset < right.offset
     }
-    return oldest.prefix(Self.memoryPressureLimit).map(\.element.id)
+    return oldest.map(\.element.id)
   }
 }
 
@@ -127,19 +153,38 @@ public enum SleepingTabPreferences {
   }
 }
 
-/// The page's edited-form signal. A missing or unreadable result stays awake.
+/// The page's edited-form signal. A missing result stays awake, and so does a
+/// page whose iframe cannot be read. Open shadow roots are checked with the page.
 public enum SleepingFormSignal {
   public static let script = """
-    ({edited:[...document.querySelectorAll('input,textarea,select,[contenteditable]')].some(e=>{
-      if(e.isContentEditable)return true;
-      if(e instanceof HTMLInputElement){
-        if(e.type==='checkbox'||e.type==='radio')return e.checked!==e.defaultChecked;
-        return e.value!==e.defaultValue;
+    ({edited:(function(){
+      function dirty(root){
+        return [...root.querySelectorAll('input,textarea,select,[contenteditable]')].some(e=>{
+          if(e.isContentEditable)return true;
+          if(e instanceof HTMLInputElement){
+            if(e.type==='checkbox'||e.type==='radio')return e.checked!==e.defaultChecked;
+            return e.value!==e.defaultValue;
+          }
+          if(e instanceof HTMLTextAreaElement)return e.value!==e.defaultValue;
+          if(e instanceof HTMLSelectElement)return [...e.options].some(o=>o.selected!==o.defaultSelected);
+          return true;
+        });
       }
-      if(e instanceof HTMLTextAreaElement)return e.value!==e.defaultValue;
-      if(e instanceof HTMLSelectElement)return [...e.options].some(o=>o.selected!==o.defaultSelected);
-      return true;
-    })})
+      function walk(root){
+        if(!root)return true;
+        if(dirty(root))return true;
+        for(const el of root.querySelectorAll('*')){
+          if(el.shadowRoot&&walk(el.shadowRoot))return true;
+        }
+        for(const frame of root.querySelectorAll('iframe,frame')){
+          let doc;
+          try{doc=frame.contentDocument;}catch(e){return true;}
+          if(walk(doc))return true;
+        }
+        return false;
+      }
+      return walk(document);
+    })()})
     """
 
   public static func edited(_ result: String?) -> Bool? {

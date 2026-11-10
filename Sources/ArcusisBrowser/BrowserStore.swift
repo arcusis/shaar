@@ -631,11 +631,21 @@ final class BrowserStore {
   }
 
   func noteTabSleeping(_ id: UUID) {
+    guard session.page(forTabID: id) != nil else { return }
     sleepingTabIDs.insert(id)
   }
 
   func noteTabAwake(_ id: UUID) {
     sleepingTabIDs.remove(id)
+  }
+
+  /// A successful wake, a wake of the tab on screen, or a wake of a closed tab
+  /// drops the sleeping mark. A failed wake of a background tab keeps it.
+  func resolveWake(_ id: UUID, accepted: Bool) {
+    let onScreen = session.selectedPage?.tab.id == id || visiblePageIDs.contains(id)
+    if accepted || onScreen || session.page(forTabID: id) == nil {
+      noteTabAwake(id)
+    }
   }
 
   func nativeTabClosed(_ id: UUID) {

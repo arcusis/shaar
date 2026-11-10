@@ -318,10 +318,14 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
     PrivateLifecycleFinish(completion, NO);
     return;
   }
-  BOOL capable = [self privateTabOperation:kShaarOpPrivateTabLifecycleGet tabID:tabID
-                                 windowID:windowID contextID:contextID
-                                  payload:@{@"schemaVersion": @1}];
-  PrivateLifecycleFinish(completion, capable);
+  [self submitPrivateLifecycle:kShaarOpPrivateTabLifecycleGet tabID:tabID
+                    windowID:windowID contextID:contextID
+                     payload:@{@"schemaVersion": @1}
+                  completion:^(BOOL accepted, NSString *state) {
+    BOOL capable = accepted && ([state isEqualToString:@"active"] ||
+        [state isEqualToString:@"frozen"] || [state isEqualToString:@"discarded"]);
+    PrivateLifecycleFinish(completion, capable);
+  }];
 }
 
 - (void)submitPrivateLifecycle:(shaar_operation)operation tabID:(NSString *)tabID
@@ -579,6 +583,23 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
   if (event->kind == SHAAR_EVENT_WINDOW && [payload[@"kind"] isEqual:@"closed"]) {
     if ([state[@"windows"][windowID][@"contextID"] isEqual:contextID])
       [self finishPrivateWindowID:windowID];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_MEDIA) {
+    if ([self privateTabOwned:tabID windowID:windowID contextID:contextID] &&
+        [payload[@"schemaVersion"] isEqual:@1] &&
+        [payload[@"kind"] isEqualToString:@"capture_changed"] &&
+        self.onPrivateMediaAccess) {
+      NSNumber *camera = payload[@"camera"];
+      NSNumber *microphone = payload[@"microphone"];
+      NSNumber *screen = payload[@"screen"];
+      if ([camera isKindOfClass:NSNumber.class] &&
+          [microphone isKindOfClass:NSNumber.class] &&
+          [screen isKindOfClass:NSNumber.class]) {
+        self.onPrivateMediaAccess(contextID, windowID, tabID, @{
+          @"camera": camera, @"microphone": microphone, @"screen": screen});
+      }
+    }
     return;
   }
   if (event->kind != SHAAR_EVENT_NAVIGATION ||

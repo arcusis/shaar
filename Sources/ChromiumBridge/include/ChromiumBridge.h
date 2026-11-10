@@ -175,6 +175,9 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
     NSString *tabID);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateTabLifecycle)(NSString *contextID,
     NSString *windowID, NSString *tabID, NSString *state, BOOL audible, BOOL capturing);
+/// Camera, microphone, or screen capture on an off-the-record tab.
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateMediaAccess)(NSString *contextID,
+    NSString *windowID, NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateWindowClosed)(NSString *contextID, NSString *windowID);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onRendererGone)(NSString *tabID, NSString *profileID, NSString *status, int exitCode);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDocumentCommitted)(NSString *tabID, NSString *profileID);

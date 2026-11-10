@@ -55,12 +55,23 @@ final class SleepingTabScheduler {
     state: String, audible isAudible: Bool, capturing isCapturing: Bool, id: UUID,
     store: BrowserStore
   ) {
+    guard store.session.page(forTabID: id) != nil else {
+      forget(id)
+      store.noteTabAwake(id)
+      return
+    }
     noteSignal(id, audible: isAudible, capturing: isCapturing)
     if state == "active" || isAudible || isCapturing {
       store.noteTabAwake(id)
       return
     }
     if state == "discarded" || state == "frozen" {
+      let onScreen =
+        store.session.selectedPage?.tab.id == id || store.visiblePageIDs.contains(id)
+      if onScreen {
+        store.noteTabAwake(id)
+        return
+      }
       store.noteTabSleeping(id)
     }
   }
@@ -126,11 +137,13 @@ final class SleepingTabScheduler {
         guard self.stillWants(id, now: now, urgent: urgent, fresh: fresh) else { return }
         self.pending.insert(id)
         sleep(id, reason) { [weak self] accepted in
-          self?.pending.remove(id)
-          if accepted {
-            self?.inactiveSince[id] = nil
-            onSlept(id)
-          }
+          guard let self else { return }
+          self.pending.remove(id)
+          // The tab can close while the discard is in flight. Marking it then
+          // would put a dead id back into the sleeping set.
+          guard accepted, fresh().contains(where: { $0.id == id }) else { return }
+          self.inactiveSince[id] = nil
+          onSlept(id)
         }
       }
     }
@@ -154,7 +167,31 @@ final class SleepingTabScheduler {
   ) -> [UUID] {
     let facts = stamped(candidates, now: now, rules: rules)
     let pool = urgent ? rules.memoryPressureTabs(facts) : rules.idleTabs(facts, now: now)
-    return pool.filter { !sleeping.contains($0) && !pending.contains($0) }
+    let available = pool.filter { !sleeping.contains($0) && !pending.contains($0) }
+    if urgent { return Array(available.prefix(SleepingTabsPolicy.memoryPressureLimit)) }
+    return available
+  }
+
+  static func candidates(
+    tabs: [BrowserTab], liveTabs: Set<UUID>, visible: Set<UUID>,
+    isPrivateActive: (UUID) -> Bool, isPlaying: (UUID) -> Bool, isCapturing: (UUID) -> Bool,
+    hasInspector: (UUID) -> Bool, hasDeveloperTools: (UUID) -> Bool,
+    profileIsDownloading: (UUID) -> Bool
+  ) -> [Candidate] {
+    var seen: Set<UUID> = []
+    var candidates: [Candidate] = []
+    for tab in tabs where seen.insert(tab.id).inserted {
+      candidates.append(
+        Candidate(
+          id: tab.id, host: tab.url.host() ?? "", isPinned: tab.isPinned,
+          keepAlive: tab.keepAlive, isVisible: visible.contains(tab.id),
+          isPrivateActive: isPrivateActive(tab.id), isPlaying: isPlaying(tab.id),
+          isCapturing: isCapturing(tab.id), hasInspector: hasInspector(tab.id),
+          hasDeveloperTools: hasDeveloperTools(tab.id),
+          profileIsDownloading: profileIsDownloading(tab.id),
+          isLive: liveTabs.contains(tab.id)))
+    }
+    return candidates
   }
 
   private func stamped(

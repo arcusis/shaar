@@ -568,7 +568,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
-    case .developerTools: context.engine.toggleDeveloperTools()
+    case .developerTools: context.engine.togglePublicDeveloperTools()
     case .chromiumDeveloperTools: context.engine.toggleChromiumDeveloperTools()
     case .inspector: context.engine.toggleInspector()
     case .inspectorCopy:
@@ -1336,6 +1336,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     return main
   }
 
+  /// F12. Option-Command-I stays on the Shaar DevTools menu item, which calls
+  /// the same public dock.
+  @discardableResult
+  func performDeveloperToolsKey(_ event: NSEvent) -> Bool {
+    guard ShaarDevToolsShortcut.isF12(event) else { return false }
+    let command = ShaarDevToolsRoute.f12Command()
+    guard canPerform(command) else { return false }
+    perform(command)
+    return true
+  }
+
   @objc private func menuAction(_ sender: NSMenuItem) {
     guard let raw = sender.representedObject as? String,
       let command = BrowserMenuCommand(rawValue: raw)
@@ -1408,8 +1419,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     NSApp.mainMenu = main
     shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       guard let self, let menu = self.menu, NSApp.mainMenu === menu else { return event }
-      if ShaarDevToolsShortcut.isF12(event), self.canPerform(.developerTools) {
-        self.perform(.developerTools)
+      if self.performDeveloperToolsKey(event) {
         return nil
       }
       if ShaarDevToolsShortcut.isCommandMenu(event), self.presentDevToolsCommandMenu() {

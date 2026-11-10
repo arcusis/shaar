@@ -17,7 +17,7 @@ struct DevelopmentModeButton: View {
     {
       Menu {
         Button(ShellL10n.string("Shaar DevTools")) {
-          _ = engine.showDeveloperTools(for: target)
+          engine.togglePublicDeveloperTools()
         }
         Button(ShellL10n.string("Open Chromium DevTools")) {
           _ = engine.openChromiumDeveloperTools(for: target.tabID)

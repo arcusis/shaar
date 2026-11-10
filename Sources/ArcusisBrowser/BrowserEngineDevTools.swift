@@ -150,6 +150,15 @@ extension BrowserEngine {
     }
   }
 
+  /// F12 and Option-Command-I. The Chromium dock is the public path.
+  func togglePublicDeveloperTools() {
+    if ShaarDevToolsRoute.opensLegacyShell() {
+      toggleDeveloperTools()
+    } else {
+      toggleChromiumDeveloperTools()
+    }
+  }
+
   @discardableResult
   func openChromiumDeveloperTools(for tabID: UUID) -> Bool {
     guard !isClosed, liveTabs.contains(tabID),

@@ -78,6 +78,12 @@ BOOL ShaarWebsitePermissionEvent(NSString *kind, BOOL *dismissed) {
   return NO;
 }
 
+NSInteger HistoryQueryVisitsPerURL(NSInteger limit) {
+  const NSInteger maximumVisitsPerURL = 50;
+  const NSInteger pageHeadroom = 5000;
+  return MIN(maximumVisitsPerURL, MAX(2, pageHeadroom / limit + 1));
+}
+
 // Patch 0069 on #290. The shipping header stays at minor 8. This decision is
 // submitted only when the loaded engine reports minor 13 or newer.
 static const uint32_t kShaarDeviceChooserABIMinor = 13;
@@ -1385,10 +1391,12 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     completion(nil, ShaarError(@"Invalid Shaar history limit."));
     return;
   }
-  // Keep the engine query bounded to the number of rows this caller needs.
+  // The engine rejects queries that fill its maxUrls * maxVisitsPerUrl bound.
+  // Preserve the caller's URL limit and leave bounded room for repeated visits.
+  NSInteger visitsPerURL = HistoryQueryVisitsPerURL(limit);
   [self submitProfileID:profileID operation:SHAAR_OP_HISTORY_QUERY
                 payload:@{@"schemaVersion": @1, @"maxUrls": @(limit),
-                          @"maxVisitsPerUrl": @1}
+                          @"maxVisitsPerUrl": @(visitsPerURL)}
              completion:^(NSDictionary *result, NSError *error) {
     NSArray *entries = result[@"entries"];
     if (error || ![entries isKindOfClass:NSArray.class]) {
@@ -1406,8 +1414,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
         completion(nil, ShaarError(@"Invalid Shaar history entry."));
         return;
       }
+      NSArray *visits = entry[@"visits"];
+      NSArray *latestVisit = visits.count ? @[visits.firstObject] : @[];
       [rows addObject:@{@"u": entry[@"url"], @"t": entry[@"title"],
-                        @"n": entry[@"visitCount"], @"v": entry[@"visits"]}];
+                        @"n": entry[@"visitCount"], @"v": latestVisit}];
     }
     completion(rows, nil);
   }];

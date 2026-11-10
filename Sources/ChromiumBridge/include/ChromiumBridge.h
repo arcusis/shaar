@@ -185,6 +185,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 /// Camera, microphone, or screen capture on an off-the-record tab.
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateMediaAccess)(NSString *contextID,
     NSString *windowID, NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivatePrintRequest)(NSString *contextID,
+    NSString *windowID, NSString *tabID, NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateWindowClosed)(NSString *contextID, NSString *windowID);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onRendererGone)(NSString *tabID, NSString *profileID, NSString *status, int exitCode);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDocumentCommitted)(NSString *tabID, NSString *profileID);

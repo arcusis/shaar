@@ -1000,12 +1000,15 @@ final class BrowserStore {
 
   @discardableResult
   func requestPrint(_ request: PrintRequest) -> Bool {
-    guard !isPrivate,
-      let frameID = permissionFrames[request.tabID],
-      let origin = permissionFrameOrigins[request.tabID],
-      request.matches(session, frameID: frameID, origin: origin)
-    else { return false }
+    guard printRequestIsCurrent(request) else { return false }
     return enqueueConsent(.print(request))
+  }
+
+  private func printRequestIsCurrent(_ request: PrintRequest) -> Bool {
+    guard let frameID = permissionFrames[request.tabID],
+      let origin = permissionFrameOrigins[request.tabID]
+    else { return false }
+    return request.matches(session, frameID: frameID, origin: origin)
   }
 
   func resolvePrint(_ id: String, accepted: Bool) {
@@ -1019,9 +1022,7 @@ final class BrowserStore {
     if presented { sheet = nil }
     let allow =
       presented && accepted
-      && printRequest.matches(
-        session, frameID: permissionFrames[printRequest.tabID],
-        origin: permissionFrameOrigins[printRequest.tabID])
+      && printRequestIsCurrent(printRequest)
       && rendererFailures[printRequest.tabID] == nil
     onPrintDecision?(id, allow)
     presentNextConsent()

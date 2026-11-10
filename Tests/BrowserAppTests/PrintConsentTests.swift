@@ -115,16 +115,29 @@ struct PrintConsentTests {
     store.resolvePrint(stale.id, accepted: true)
     #expect(decisions.map(\.1) == [true, false])
     #expect(store.sheet == nil)
+
+    let cleared = try request(store)
+    store.rememberPermissionFrame(
+      cleared.tabID, frameID: cleared.frameID, origin: cleared.requestingOrigin)
+    #expect(store.requestPrint(cleared))
+    store.forgetPermissionFrame(cleared.tabID, matching: cleared.frameID)
+    store.resolvePrint(cleared.id, accepted: true)
+    #expect(decisions.map(\.1) == [true, false, false])
+    #expect(store.sheet == nil)
   }
 
-  @Test func privateAndUnboundPrintRequestsAreDenied() throws {
+  @Test func privatePrintRequestsAreBoundAndUnboundRequestsAreDenied() throws {
     let privateStore = BrowserStore(privateSession: .fresh())
     privateStore.perform(.open(URL(string: "https://example.com/article")!))
     let privateRequest = try request(privateStore)
     privateStore.rememberPermissionFrame(
       privateRequest.tabID, frameID: privateRequest.frameID,
       origin: privateRequest.requestingOrigin)
-    #expect(!privateStore.requestPrint(privateRequest))
+    var privateDecision: Bool?
+    privateStore.onPrintDecision = { _, accepted in privateDecision = accepted }
+    #expect(privateStore.requestPrint(privateRequest))
+    privateStore.resolvePrint(privateRequest.id, accepted: true)
+    #expect(privateDecision == true)
 
     let store = openedStore()
     let unbound = try request(store)

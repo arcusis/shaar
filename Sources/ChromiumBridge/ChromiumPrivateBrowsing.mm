@@ -566,6 +566,15 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
       [context[@"sourceProfileID"] caseInsensitiveCompare:profileID] != NSOrderedSame)
     return;
   if (event->kind == SHAAR_EVENT_PERMISSION &&
+      [payload[@"kind"] isEqual:@"printRequested"]) {
+    if ([self privateTabOwned:tabID windowID:windowID contextID:contextID]) {
+      [self receivePrivatePrintRequest:payload contextID:contextID
+                             profileID:context[@"sourceProfileID"]
+                              windowID:windowID tabID:tabID];
+    }
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_PERMISSION &&
       [payload[@"kind"] isEqual:@"desktopCaptureRequested"]) {
     NSString *promptID = [payload[@"id"] isKindOfClass:NSString.class]
         ? payload[@"id"] : payload[@"promptID"];

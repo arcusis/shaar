@@ -18,6 +18,14 @@ void ARCSetPictureInPictureWindowObserver(ARCPictureInPictureWindowObserver obse
 - (BOOL)tabLifecycleSupported;
 @end
 
+@interface ARCShaarRuntime (PrivatePrint)
+- (void)receivePrivatePrintRequest:(NSDictionary *)payload
+                         contextID:(NSString *)contextID
+                         profileID:(NSString *)profileID
+                          windowID:(NSString *)windowID
+                            tabID:(NSString *)tabID;
+@end
+
 @interface ARCShaarRuntime (DevToolsTransport)
 - (BOOL)shaarPrivateDevToolsSubmit:(NSUInteger)operation tabID:(NSString *)tabID
                         windowID:(NSString *)windowID contextID:(NSString *)contextID

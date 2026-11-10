@@ -237,6 +237,11 @@ struct Symbols {
                     payload:(NSDictionary *)payload
                       tabID:(NSString *)tabID
                   profileID:(NSString *)profileID;
+- (void)receivePrivatePrintRequest:(NSDictionary *)payload
+                         contextID:(NSString *)contextID
+                         profileID:(NSString *)profileID
+                          windowID:(NSString *)windowID
+                            tabID:(NSString *)tabID;
 - (void)adoptOpenedTabFromEvent:(const shaar_event *)event
                         payload:(NSDictionary *)payload
                       profileID:(NSString *)profileID;
@@ -1908,6 +1913,36 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   request[@"windowID"] = windowID;
   if (self.onPrintRequest) {
     self.onPrintRequest(request);
+  } else {
+    [self resolvePrintRequestID:requestID accepted:NO];
+  }
+}
+
+- (void)receivePrivatePrintRequest:(NSDictionary *)payload
+                         contextID:(NSString *)contextID
+                         profileID:(NSString *)profileID
+                          windowID:(NSString *)windowID
+                            tabID:(NSString *)tabID {
+  if (!_shaarPrintAvailable) return;
+  NSString *requestID = payload[@"id"];
+  if (![requestID isKindOfClass:NSString.class] || requestID.length > 64 ||
+      ![[NSUUID alloc] initWithUUIDString:requestID] || _shaarPrintRequests[requestID]) return;
+  _shaarPrintRequests[requestID] = tabID ?: @"";
+  if (![payload[@"schemaVersion"] isEqual:@1] || !profileID.length ||
+      !ShaarPrintField(payload[@"pageURL"], 4096, YES) ||
+      !ShaarPrintField(payload[@"origin"], 2048, YES) ||
+      !ShaarPrintField(payload[@"frameID"], 256, YES) ||
+      !ShaarPrintField(payload[@"title"], 2048, NO)) {
+    [self resolvePrintRequestID:requestID accepted:NO];
+    return;
+  }
+  NSMutableDictionary *request = [payload mutableCopy];
+  request[@"profileID"] = profileID;
+  request[@"tabID"] = tabID;
+  request[@"windowID"] = windowID;
+  request[@"contextID"] = contextID;
+  if (self.onPrivatePrintRequest) {
+    self.onPrivatePrintRequest(contextID, windowID, tabID, request);
   } else {
     [self resolvePrintRequestID:requestID accepted:NO];
   }

@@ -495,7 +495,10 @@ final class BrowserEngine {
     }
     callbacks.onTabChanged = { [weak self] identity, address, title, loading, back, forward in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
-        let id = UUID(uuidString: identity)
+        let id = UUID(uuidString: identity),
+        let ownerProfile = self.runtime.profileID(forTabID: identity),
+        let profile = self.store?.session.profileID(forTabID: id),
+        ownerProfile == profile.uuidString
       else { return }
       let document = URL(string: address)
       let documentHost = document?.host?.lowercased()
@@ -508,12 +511,10 @@ final class BrowserEngine {
       self.store?.nativePageLoading(id, loading: loading)
       if let url = document {
         self.inspectors[id]?.documentChanged(url: url)
-        if let profile = self.store?.session.profileID(forTabID: id) {
-          self.shaarDevTools[id]?.updateTarget(
-            SiteControlTarget(tabID: id, profileID: profile, url: url))
-          if !loading { self.shaarDevTools[id]?.refreshFrameworkComponents() }
-          if finishedLoading { self.shaarDevTools[id]?.pageDidFinishLoading() }
-        }
+        self.shaarDevTools[id]?.updateTarget(
+          SiteControlTarget(tabID: id, profileID: profile, url: url))
+        if !loading { self.shaarDevTools[id]?.refreshFrameworkComponents() }
+        if finishedLoading { self.shaarDevTools[id]?.pageDidFinishLoading() }
         self.developerDocumentChanged(id, url: url)
         self.updateDevelopmentPage(tabID: id, url: url, loading: loading)
         if let profile = self.store?.session.profileID(forTabID: id),
@@ -541,6 +542,7 @@ final class BrowserEngine {
     callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity) else { return }
       if self.tabsAwaitingProfileReassignment.remove(id) != nil {
+        self.pages[id] = nil
         DispatchQueue.main.async { [weak self] in self?.reconcile() }
         return
       }
@@ -642,6 +644,29 @@ final class BrowserEngine {
       forgetMedia(id)
       clearFavicon(id)
       runtime.discardTabID(id.uuidString)
+      waitForProfileReassignmentClose(id)
+    }
+  }
+
+  private func waitForProfileReassignmentClose(_ id: UUID) {
+    Task { @MainActor [weak self] in
+      for _ in 0..<40 {
+        guard let self, !self.isClosed,
+          self.tabsAwaitingProfileReassignment.contains(id)
+        else { return }
+        if self.runtime.windowID(forTabID: id.uuidString) == nil {
+          self.tabsAwaitingProfileReassignment.remove(id)
+          self.events.router.forgetTab(id.uuidString, windowID: self.windowID)
+          self.reconcile()
+          return
+        }
+        do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+      }
+      guard let self, self.tabsAwaitingProfileReassignment.remove(id) != nil else { return }
+      self.events.router.forgetTab(id.uuidString, windowID: self.windowID)
+      self.failedTabs.insert(id)
+      self.notice = ShellL10n.string(
+        "This tab could not be reopened after its profile changed.")
     }
   }
 

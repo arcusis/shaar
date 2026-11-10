@@ -827,6 +827,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (NSString *)windowIDForTabID:(NSString *)tabID { return _shaarTabWindows[tabID]; }
+- (NSString *)profileIDForTabID:(NSString *)tabID { return _shaarTabProfiles[tabID]; }
 
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID
                url:(NSString *)url error:(NSError **)error {

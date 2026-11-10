@@ -16,7 +16,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     developerTools, chromiumDeveloperTools
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
-  case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
+  case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy, agentPacket
 }
 
 /// AppKit otherwise falls back from unbound Command-N to the private-window menu item.
@@ -378,6 +378,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
     case .inspector:
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
+    case .agentPacket:
+      guard let url = context.engine.siteControlTarget?.url else { return false }
+      return NavigationInput.isWebURL(url) && (afterLauncher || !store.commandIsOpen)
     case .inspectorCopy:
       guard let target = context.engine.siteControlTarget else { return false }
       return context.engine.inspectors[target.tabID]?.aiCopy.canCopy == true
@@ -570,6 +573,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
     case .developerTools: context.engine.toggleDeveloperTools()
     case .chromiumDeveloperTools: context.engine.toggleChromiumDeveloperTools()
+    case .agentPacket: store.presentAgentPacket()
     case .inspector: context.engine.toggleInspector()
     case .inspectorCopy:
       if let target = context.engine.siteControlTarget,
@@ -1297,6 +1301,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.hardReload, "Hard Reload", to: view)
     add(.developerTools, "Shaar DevTools", to: view)
     add(.chromiumDeveloperTools, "Open Chromium DevTools", to: view)
+    add(.agentPacket, "Agent packet…", to: view)
     add(.inspector, "Inspect Element", to: view)
     add(.inspectorSource, "Open source", to: view)
     add(.inspectorAgentCopy, "Copy for agent", to: view)

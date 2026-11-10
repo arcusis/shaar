@@ -75,6 +75,7 @@ final class BrowserStore {
   private(set) var pageFind: PageFindState?
   private(set) var rendererFailures: [UUID: RendererFailure] = [:]
   @ObservationIgnored private var requestedTabCloses: Set<UUID> = []
+  var agentCopy: AgentCopySession?
   var sheet: BrowserSheet? {
     didSet {
       if sheet != nil { closeLibraryDrawer() }

@@ -179,8 +179,13 @@ struct BrowserWindow: View {
         store.engine?.extensionPanel = nil
       }
     }
+    .onChange(of: store.session.selectedPage?.tab.id) { _, _ in
+      store.dismissAgentPacket()
+    }
     .onExitCommand {
-      if store.libraryDrawerSection != nil {
+      if store.agentCopy != nil {
+        store.dismissAgentPacket()
+      } else if store.libraryDrawerSection != nil {
         dismissLibraryDrawerAndFocusPage()
       }
     }
@@ -260,6 +265,21 @@ struct BrowserWindow: View {
               .foregroundStyle(.tertiary)
           }
           .padding(32)
+        }
+      }
+      .overlay(alignment: .top) {
+        if let session = store.agentCopy {
+          AgentCopyPanel(
+            state: session.panelState,
+            onScope: { session.setScope($0) },
+            onCopy: { session.copy() },
+            onHand: { session.handToAgent() },
+            onRefresh: { session.rebuild() },
+            onClose: { store.dismissAgentPacket() }
+          )
+          .padding(.top, 12)
+          .frame(width: 420)
+          .padding(.horizontal, 12)
         }
       }
       .focusable()

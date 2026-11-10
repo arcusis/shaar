@@ -453,7 +453,10 @@ class BundleAppTests(unittest.TestCase):
                 self.assertNotIn("ShaarVerification", self._log())
 
     def test_shipping_bundle_rejects_executable_with_verification_code(self):
-        for marker in ("ShaarVerification", "EngineProbe", "--engine-probe", "--probe-data-dir"):
+        for marker in (
+            "ShaarVerification", "EngineProbe", "--engine-probe", "--probe-data-dir",
+            "ShaarBrowsingQA", "--browsing-qa", "AgentCopyProbe", "--agent-copy-probe",
+        ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)
                 (self.binary_dir / "ArcusisBrowser").write_text(f"stub binary {marker}")

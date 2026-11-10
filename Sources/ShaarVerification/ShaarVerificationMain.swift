@@ -30,6 +30,15 @@ enum ShaarVerificationMain {
     if CommandLine.arguments.contains("--marketing-screenshots") {
       exit(MarketingScreenshots.run(arguments: CommandLine.arguments))
     }
+    if let index = CommandLine.arguments.firstIndex(of: "--agent-copy-probe"),
+      CommandLine.arguments.indices.contains(index + 2),
+      let frameworks = Bundle.main.privateFrameworksURL
+    {
+      let framework = frameworks.appending(path: "Chromium Framework.framework")
+      let output = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+      let page = URL(string: CommandLine.arguments[index + 2])
+      exit(AgentCopyProbe.run(frameworkURL: framework, outputURL: output, pageURL: page))
+    }
     exit(EngineProbe.run(arguments: CommandLine.arguments))
   }
 

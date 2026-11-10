@@ -84,7 +84,7 @@ struct ShortcutCatalog {
   /// These menu actions intentionally have no shortcut; web pages keep those keys.
   static let unassignedTitles: Set<String> = [
     "About \(ProductIdentity.name)", "Check for Updates…", "Show All", "Bring All to Front",
-    "Share Page…",
+    "Share Page…", "Agent packet…",
   ]
 
   static func shortcut(for command: BrowserMenuCommand) -> (
@@ -128,7 +128,7 @@ struct ShortcutCatalog {
     case .downloads: ("j", [.command, .shift])
     case .extensions: ("e", [.command, .shift])
     case .zoomWindow: ("m", [.command, .control])
-    case .bringAllToFront, .checkForUpdates, .sharePage: nil
+    case .bringAllToFront, .checkForUpdates, .sharePage, .agentPacket: nil
     case .help: ("?", .command)
     case .minimizeWindow: ("m", .command)
     case .settings: (",", .command)

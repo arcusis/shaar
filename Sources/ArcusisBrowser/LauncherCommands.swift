@@ -78,6 +78,7 @@ enum LauncherCommands {
     case .extensions: "puzzlepiece.extension"
     case .settings: "gearshape"
     case .checkForUpdates: "arrow.triangle.2.circlepath"
+    case .agentPacket: "doc.on.doc"
     default: "command"
     }
   }

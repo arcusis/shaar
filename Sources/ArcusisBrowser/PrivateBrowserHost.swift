@@ -202,6 +202,9 @@ final class PrivateBrowserHost {
     case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
     case .developerTools, .chromiumDeveloperTools, .inspector:
       !store.commandIsOpen && store.privatePage?.inspectorTarget != nil
+    case .agentPacket:
+      !store.commandIsOpen
+        && store.privatePage?.inspectorTarget.map { NavigationInput.isWebURL($0.url) } == true
     case .inspectorCopy, .inspectorSource, .inspectorAgentCopy:
       store.session.selectedPage.flatMap { store.privatePage?.inspectors[$0.tab.id] }?
         .aiCopy.canCopy == true
@@ -236,6 +239,7 @@ final class PrivateBrowserHost {
     switch command {
     case .developerTools: owner.page.toggleDeveloperTools()
     case .chromiumDeveloperTools: owner.page.toggleChromiumDeveloperTools()
+    case .agentPacket: store.presentAgentPacket()
     case .inspector: owner.page.toggleInspector()
     case .inspectorCopy:
       if let target = owner.page.inspectorTarget,

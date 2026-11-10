@@ -132,6 +132,9 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onDesktopCaptureDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExternalAppDismissed)(NSString *requestID);
+/// deviceChooserRequested, deviceChooserUpdated, and deviceChooserDismissed.
+/// The payload is the engine permission event plus profileID, tabID, and windowID.
+@property(copy, nullable) void (^onDeviceChooserEvent)(NSDictionary<NSString *, id> *event);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (^onAgentBridgeStatus)(NSString *tabID, NSString *profileID,
                                                       NSDictionary<NSString *, id> *status);
@@ -244,6 +247,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(nullable NSString *)sourceID;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+/// `index` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
+- (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(nullable NSNumber *)index;
 /// Canonical browser-managed download directory for a regular profile.
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
 - (int)nativeTabIDForID:(NSString *)tabID;

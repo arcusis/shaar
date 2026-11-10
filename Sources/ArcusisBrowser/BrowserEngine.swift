@@ -418,6 +418,12 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveExternalApp(id, windowID: self.windowID, accepted: accepted)
     }
+    store.onDeviceChooserDecision = { [weak self] request, index in
+      self?.settleDeviceChooser(request, optionIndex: index)
+    }
+    callbacks.onDeviceChooserEvent = { [weak self] payload in
+      self?.receiveDeviceChooser(payload)
+    }
     callbacks.onExternalAppRequest = { [weak self] payload in self?.requestExternalApp(payload) }
     callbacks.onExternalAppDismissed = { [weak self] id in
       self?.store?.resolveExternalApp(id, accepted: false)
@@ -517,8 +523,7 @@ final class BrowserEngine {
         if let profile = self.store?.session.profileID(forTabID: id),
           self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true
         {
-          self.store?.nativeFavoritePageChanged(
-            id, profileID: profile, url: url, title: title)
+          self.store?.nativeFavoritePageChanged(id, profileID: profile, url: url, title: title)
         } else {
           self.store?.nativeTabChanged(id, url: url, title: title)
         }

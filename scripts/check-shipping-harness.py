@@ -195,6 +195,9 @@ def line_findings(
             symbol = symbol_re.search(line)
             if symbol:
                 found.append(f"{path}:{number}: {symbol.group(0)}")
+        # The removed title channel is not a type or a launch flag.
+        if "shaar-chooser:" in line:
+            found.append(f"{path}:{number}: shaar-chooser:")
         if id_re:
             fixture = id_re.search(line)
             if fixture:
@@ -388,6 +391,9 @@ def binary_findings(path: Path, symbols: set[str], flags: set[str], ids: set[str
         found.append(f"{path}: testing: true")
     for match in re.finditer(br"SHAAR_OP_PROBE_[A-Z0-9_]+", data):
         found.append(f"{path}: {match.group(0).decode('ascii')}")
+    # The removed title channel is not a type or a launch flag.
+    if b"shaar-chooser:" in data:
+        found.append(f"{path}: shaar-chooser:")
     return found
 
 

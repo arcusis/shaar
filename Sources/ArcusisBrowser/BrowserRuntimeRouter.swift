@@ -21,6 +21,7 @@ final class BrowserRuntimeClient {
   var onDesktopCaptureDismissed: ((String) -> Void)?
   var onExternalAppRequest: (([String: Any]) -> Void)?
   var onExternalAppDismissed: ((String) -> Void)?
+  var onDeviceChooserEvent: (([String: Any]) -> Void)?
   var onMediaAccess: ((String, [String: NSNumber]) -> Void)?
   var onAgentBridgeStatus: ((String, String, [String: Any]) -> Void)?
   var onDevToolsPanelEvent: ((String, String, Data, UInt64) -> Void)?
@@ -58,7 +59,9 @@ enum BrowserRoutingError: Error, LocalizedError {
 /// Retains ownership until close delivery, after Chromium has removed its tab mapping.
 @MainActor
 final class BrowserRuntimeRouter {
-  enum Context: CaseIterable { case popup, installation, media, desktopCapture, externalApp }
+  enum Context: CaseIterable {
+    case popup, installation, media, desktopCapture, externalApp, deviceChooser
+  }
 
   private struct Subscription {
     weak var client: BrowserRuntimeClient?

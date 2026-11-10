@@ -968,6 +968,96 @@
         }
       }
     },
+    "Choose a device": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בחירת מכשיר"
+          }
+        }
+      }
+    },
+    "This site wants to use a USB device.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אתר זה רוצה להשתמש במכשיר USB."
+          }
+        }
+      }
+    },
+    "This site wants to use a serial port.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אתר זה רוצה להשתמש ביציאה טורית."
+          }
+        }
+      }
+    },
+    "This site wants to use a Bluetooth device.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אתר זה רוצה להשתמש במכשיר Bluetooth."
+          }
+        }
+      }
+    },
+    "This site wants to use an HID device.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אתר זה רוצה להשתמש במכשיר HID."
+          }
+        }
+      }
+    },
+    "No devices found.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא נמצאו מכשירים."
+          }
+        }
+      }
+    },
+    "Bluetooth access isn't available.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גישת Bluetooth אינה זמינה."
+          }
+        }
+      }
+    },
+    "Shaar cannot use Bluetooth until macOS allows it for this app.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shaar לא יכול להשתמש ב-Bluetooth עד ש-macOS יאפשר זאת ליישום זה."
+          }
+        }
+      }
+    },
+    "Connect": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיבור"
+          }
+        }
+      }
+    },
     "Not now": {
       "localizations": {
         "he": {

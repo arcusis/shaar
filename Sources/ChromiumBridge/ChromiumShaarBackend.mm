@@ -74,6 +74,37 @@ BOOL ShaarWebsitePermissionEvent(NSString *kind, BOOL *dismissed) {
   return NO;
 }
 
+// Patch 0069 on #290. The shipping header stays at minor 8. This decision is
+// submitted only when the loaded engine reports minor 13 or newer.
+static const uint32_t kShaarDeviceChooserABIMinor = 13;
+static const shaar_operation kShaarDeviceChooserDecision = (shaar_operation)1600;
+
+static BOOL ShaarDeviceChooserKind(NSString *kind, BOOL *dismissed, BOOL *updated) {
+  if ([kind isEqualToString:@"deviceChooserDismissed"]) {
+    *dismissed = YES;
+    *updated = NO;
+    return YES;
+  }
+  if ([kind isEqualToString:@"deviceChooserUpdated"]) {
+    *dismissed = NO;
+    *updated = YES;
+    return YES;
+  }
+  if ([kind isEqualToString:@"deviceChooserRequested"]) {
+    *dismissed = NO;
+    *updated = NO;
+    return YES;
+  }
+  return NO;
+}
+
+static BOOL ShaarDeviceChooserID(NSString *value) {
+  if (![value isKindOfClass:NSString.class] || value.length < 1 || value.length > 64) return NO;
+  NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:
+      @"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-"];
+  return [value rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound;
+}
+
 struct Symbols {
   decltype(&shaar_abi_minor) abi_minor = nullptr;
   decltype(&shaar_engine_create) create = nullptr;
@@ -147,11 +178,13 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarFindRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarMediaRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarCaptureRequests;
+  NSMutableDictionary<NSString *, NSString *> *_shaarDeviceChooserRequests;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
   BOOL _shaarMediaConsentAvailable;
   BOOL _shaarDesktopCaptureAvailable;
+  BOOL _shaarDeviceChooserAvailable;
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
@@ -288,6 +321,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarHttpsOnly = [NSMutableDictionary dictionary];
   _shaarCaptureRequests = [NSMutableDictionary dictionary];
   _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
+  _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -305,6 +339,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarMediaConsentAvailable = _symbols.abi_minor() >= 8;
   // Desktop capture requests arrive with patch 0071. Minor 14 is that bump.
   _shaarDesktopCaptureAvailable = _symbols.abi_minor() >= 14;
+  _shaarDeviceChooserAvailable = _symbols.abi_minor() >= kShaarDeviceChooserABIMinor;
   _symbols.tab_find = reinterpret_cast<decltype(_symbols.tab_find)>(
       dlsym(_shaarLibrary, "shaar_tab_find"));
   return self;
@@ -365,6 +400,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarFindTokens removeAllObjects];
   [_shaarFindRequests removeAllObjects];
   [_shaarMediaRequests removeAllObjects];
+  [_shaarDeviceChooserRequests removeAllObjects];
   _symbols.release(_shaarEngine);
   _shaarEngine = nullptr;
   return result == SHAAR_OK ? 0 : 1;
@@ -459,6 +495,39 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self receiveDesktopCaptureRequest:event payload:payload tabID:tabID profileID:profileID];
     return;
   }
+  BOOL chooserDismissed = NO;
+  BOOL chooserUpdated = NO;
+  if (_shaarDeviceChooserAvailable && event->kind == SHAAR_EVENT_PERMISSION &&
+      ShaarDeviceChooserKind(kind, &chooserDismissed, &chooserUpdated)) {
+    NSString *requestID = payload[@"id"];
+    NSString *windowID = String(event->window_id);
+    if (![payload[@"schemaVersion"] isEqual:@1] || !ShaarDeviceChooserID(requestID)) return;
+    if (chooserDismissed || chooserUpdated) {
+      if (![_shaarDeviceChooserRequests[requestID] isEqualToString:tabID]) return;
+      if (chooserDismissed) [_shaarDeviceChooserRequests removeObjectForKey:requestID];
+      NSMutableDictionary *chooserEvent = [payload mutableCopy];
+      chooserEvent[@"profileID"] = profileID;
+      chooserEvent[@"tabID"] = tabID;
+      chooserEvent[@"windowID"] = windowID;
+      if (self.onDeviceChooserEvent) self.onDeviceChooserEvent(chooserEvent);
+      return;
+    }
+    if (event->session_id.size || _shaarDeviceChooserRequests[requestID] ||
+        !_shaarTabs[tabID] ||
+        ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+    _shaarDeviceChooserRequests[requestID] = tabID;
+    NSMutableDictionary *chooserEvent = [payload mutableCopy];
+    chooserEvent[@"profileID"] = profileID;
+    chooserEvent[@"tabID"] = tabID;
+    chooserEvent[@"windowID"] = windowID;
+    if (self.onDeviceChooserEvent) {
+      self.onDeviceChooserEvent(chooserEvent);
+    } else {
+      [self resolveDeviceChooserRequestID:requestID index:nil];
+    }
+    return;
+  }
   if (event->kind == SHAAR_EVENT_DEVTOOLS && [kind isEqualToString:@"panelEvent"] &&
       !event->session_id.size && [payload[@"schemaVersion"] isEqual:@1] &&
       _shaarTabs[tabID] && [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
@@ -526,6 +595,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       [self resolveWebsiteMediaRequestID:requestID accepted:NO];
     for (NSString *requestID in [_shaarCaptureRequests allKeysForObject:tabID])
       [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
+    for (NSString *requestID in [_shaarDeviceChooserRequests allKeysForObject:tabID])
+      [self resolveDeviceChooserRequestID:requestID index:nil];
     NSString *windowID = _shaarTabWindows[tabID];
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
@@ -1545,6 +1616,21 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   } else {
     [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
   }
+}
+
+- (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(NSNumber *)index {
+  if (!_shaarDeviceChooserAvailable) return;
+  NSString *tabID = _shaarDeviceChooserRequests[requestID];
+  if (!tabID) return;
+  [_shaarDeviceChooserRequests removeObjectForKey:requestID];
+  BOOL select = index != nil && index.integerValue >= 0;
+  NSMutableDictionary *payload = [@{
+    @"schemaVersion": @1,
+    @"id": requestID,
+    @"action": select ? @"select" : @"cancel",
+  } mutableCopy];
+  if (select) payload[@"index"] = @(index.integerValue);
+  [self submitTabID:tabID operation:kShaarDeviceChooserDecision payload:payload];
 }
 
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {

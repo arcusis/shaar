@@ -471,6 +471,8 @@ class BundleAppTests(unittest.TestCase):
             "enum ShaarBrowsingEdgeProbe {}\n"
             "enum HttpsOnlyProbe {}\n"
             "enum SleepingTabsProbe {}\n"
+            "enum DeviceChooserProbe {}\n"
+            "func evaluateDeviceChooserProbeInTabID() {}\n"
             "let flag = \"--browsing-qa\"\n"
             "let elementID = \"parity-action\"\n"
             "if arguments.contains(\"--devtools-f12-route\") {}\n"
@@ -501,6 +503,10 @@ class BundleAppTests(unittest.TestCase):
             "testing: true",
             "SleepingTabsProbe",
             "--sleeping-tabs-probe",
+            "--probe-device-choosers",
+            "DeviceChooserProbe",
+            "evaluateDeviceChooserProbe",
+            "shaar-chooser:",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

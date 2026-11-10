@@ -36,6 +36,7 @@ struct SidebarTabRow: View {
   let isPinned: Bool
   let isSelected: Bool
   let closeIsVisible: Bool
+  var isSleeping: Bool = false
   let onSelect: () -> Void
   let onClose: () -> Void
   let onHoverChanged: (Bool) -> Void
@@ -69,6 +70,13 @@ struct SidebarTabRow: View {
           .minimumScaleFactor(SidebarTabTitle.minimumScale)
           .truncationMode(.tail)
           .padding(.trailing, showsClose ? SidebarTabTitle.closeReserve : 0)
+        if isSleeping {
+          Image(systemName: "moon.zzz")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("sidebar-tab-sleeping-\(tabID.uuidString)")
+            .accessibilityLabel(ShellL10n.string("Sleeping"))
+        }
         Spacer(minLength: 0)
       }
       .contentShape(Rectangle())

@@ -798,6 +798,7 @@ struct BrowserSidebar: View {
         isPinned: tab.isPinned,
         isSelected: store.session.selectedPage?.tab.id == tab.id,
         closeIsVisible: hoveredTabID == tab.id,
+        isSleeping: store.sleepingTabIDs.contains(tab.id),
         onSelect: { store.perform(.tab(space: space.id, tab: tab.id)) },
         onClose: { store.closeTab(tab.id) },
         onHoverChanged: { isHovered in

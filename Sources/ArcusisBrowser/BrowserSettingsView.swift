@@ -313,6 +313,10 @@ struct BrowserSettingsView: View {
   }
 
   @AppStorage(DevelopmentModePreference.key) private var developmentModeEnabled = true
+  @AppStorage(SleepingTabPreferences.enabledKey) private var sleepInactiveTabs = true
+  @AppStorage(SleepingTabPreferences.timeoutMinutesKey) private var sleepTimeoutMinutes =
+    SleepingTabPreferences.defaultTimeoutMinutes
+  @AppStorage(SleepingTabPreferences.neverSleepHostsKey) private var neverSleepHosts = ""
 
   private var generalContent: some View {
     Form {
@@ -329,6 +333,34 @@ struct BrowserSettingsView: View {
               defaultStatus)
           }
         }
+      }
+      Section(SettingsL10n.string("Sleeping tabs")) {
+        Toggle(SettingsL10n.string("Sleep inactive tabs"), isOn: $sleepInactiveTabs)
+          .accessibilityIdentifier("settings-sleep-inactive-tabs")
+        Picker(
+          SettingsL10n.string("Inactive tabs are discarded after"), selection: $sleepTimeoutMinutes
+        ) {
+          Text(SettingsL10n.string("5 minutes")).tag(5)
+          Text(SettingsL10n.string("15 minutes")).tag(15)
+          Text(SettingsL10n.string("30 minutes")).tag(30)
+          Text(SettingsL10n.string("1 hour")).tag(60)
+          Text(SettingsL10n.string("2 hours")).tag(120)
+          Text(SettingsL10n.string("6 hours")).tag(360)
+        }
+        .disabled(!sleepInactiveTabs)
+        .accessibilityIdentifier("settings-sleep-timeout")
+        TextField(
+          SettingsL10n.string("Sites that never sleep"), text: $neverSleepHosts, axis: .vertical
+        )
+        .lineLimit(2...4)
+        .accessibilityIdentifier("settings-never-sleep-hosts")
+        Text(
+          SettingsL10n.string(
+            "One site per line. Pinned tabs, the tab you are looking at, and tabs playing sound stay awake."
+          )
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
       }
       Section(SettingsL10n.string("Developer")) {
         Toggle(

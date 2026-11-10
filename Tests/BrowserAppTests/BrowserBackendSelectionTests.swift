@@ -57,6 +57,10 @@ final class BrowserBackendSelectionTests: XCTestCase {
       "reloadPrivateTabID:windowID:contextID:mode:",
       "goBackPrivateTabID:windowID:contextID:",
       "goForwardPrivateTabID:windowID:contextID:",
+      "probePrivateTabLifecycleForTabID:windowID:contextID:completion:",
+      "sleepPrivateTabID:windowID:contextID:reason:completion:",
+      "wakePrivateTabID:windowID:contextID:completion:",
+      "evaluateInPrivateTabID:windowID:contextID:script:completion:",
       "windowForPrivateWindowID:contextID:",
       "hostViewForPrivateWindowID:contextID:",
       "viewForPrivateTabID:windowID:contextID:",
@@ -92,6 +96,10 @@ final class BrowserBackendSelectionTests: XCTestCase {
       "findInTabID:profileID:requestID:text:forward:",
       "stopFindingInTabID:",
       "evaluateInTabID:script:completion:",
+      "probeTabLifecycleForTabID:completion:",
+      "sleepTabID:reason:completion:",
+      "wakeTabID:completion:",
+      "freezeTabID:completion:",
       "bookmarksForProfileID:completion:",
       "applyBookmarkOperation:profileID:completion:",
       "historyForProfileID:limit:completion:",
@@ -184,6 +192,28 @@ final class BrowserBackendSelectionTests: XCTestCase {
       picture.fulfill()
     }
     wait(for: [site, picture], timeout: 1)
+  }
+
+  func testSleepingTabOperationsOverrideTheBaseRuntime() {
+    let names = [
+      "probeTabLifecycleForTabID:completion:",
+      "sleepTabID:reason:completion:",
+      "wakeTabID:completion:",
+      "freezeTabID:completion:",
+      "probePrivateTabLifecycleForTabID:windowID:contextID:completion:",
+      "sleepPrivateTabID:windowID:contextID:reason:completion:",
+      "wakePrivateTabID:windowID:contextID:completion:",
+      "evaluateInPrivateTabID:windowID:contextID:script:completion:",
+    ]
+    for name in names {
+      let selector = NSSelectorFromString(name)
+      let shaar = class_getInstanceMethod(ARCShaarRuntime.self, selector)
+      let base = class_getInstanceMethod(ARCChromiumRuntime.self, selector)
+      XCTAssertNotNil(shaar, name)
+      XCTAssertNotNil(base, name)
+      guard let shaar, let base else { continue }
+      XCTAssertNotEqual(method_getImplementation(shaar), method_getImplementation(base), name)
+    }
   }
 
   private func assertShaarOverrides(_ name: String) {

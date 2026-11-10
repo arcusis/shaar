@@ -56,4 +56,30 @@
     completion(result, error);
   }];
 }
+
+- (void)evaluateInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+                    contextID:(NSString *)contextID script:(NSString *)script
+                   completion:(void (^)(NSString *))completion {
+  if (!script.length) {
+    if (completion) completion(nil);
+    return;
+  }
+  [self privateDeveloperCall:@"Runtime.evaluate"
+                      params:@{@"expression": script, @"returnByValue": @YES}
+                       tabID:tabID windowID:windowID contextID:contextID
+                  completion:^(NSDictionary *result, NSError *error) {
+    NSDictionary *remote = [result[@"result"] isKindOfClass:NSDictionary.class]
+        ? result[@"result"] : nil;
+    id value = remote[@"value"];
+    if (error || result[@"exceptionDetails"] || !value) {
+      if (completion) completion(nil);
+      return;
+    }
+    NSData *json = [NSJSONSerialization dataWithJSONObject:value
+                                                   options:NSJSONWritingFragmentsAllowed
+                                                     error:nil];
+    NSString *text = json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : nil;
+    if (completion) completion(text);
+  }];
+}
 @end

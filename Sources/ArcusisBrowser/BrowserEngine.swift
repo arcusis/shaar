@@ -29,19 +29,6 @@ private struct NativeTabPlacement: Equatable {
 /// Owns one window's live tabs independently of its selected SwiftUI space.
 @MainActor @Observable
 final class BrowserEngine {
-  private static let tabSuspensionDelay: TimeInterval = 5 * 60
-  private static let suspensionSnapshotScript = """
-    ({x:scrollX,y:scrollY,edited:[...document.querySelectorAll('input,textarea,select,[contenteditable]')].some(e=>{
-      if(e.isContentEditable)return true;
-      if(e instanceof HTMLInputElement){
-        if(e.type==='checkbox'||e.type==='radio')return e.checked!==e.defaultChecked;
-        return e.value!==e.defaultValue;
-      }
-      if(e instanceof HTMLTextAreaElement)return e.value!==e.defaultValue;
-      if(e instanceof HTMLSelectElement)return [...e.options].some(o=>o.selected!==o.defaultSelected);
-      return true;
-    })})
-    """
   let runtime: ARCChromiumRuntime
   let events: BrowserRuntimeEvents
   let downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
@@ -85,9 +72,8 @@ final class BrowserEngine {
   @ObservationIgnored private var lastSpaceID: UUID?
   @ObservationIgnored private var lastTabID: UUID?
   @ObservationIgnored private var lastTabOrders: [UUID: [NativeTabPlacement]] = [:]
-  @ObservationIgnored private var inactiveSince: [UUID: Date] = [:]
-  @ObservationIgnored private var suspendedScrollPositions: [UUID: CGPoint] = [:]
-  @ObservationIgnored private var suspendingTabs: Set<UUID> = []
+  @ObservationIgnored let sleepingTabs = SleepingTabScheduler()
+  @ObservationIgnored var memoryPressureSource: DispatchSourceMemoryPressure?
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
   private(set) var favicons: [UUID: NSImage] = [:]
   /// Site host last associated with each tab's icon. An empty query for that host
@@ -223,6 +209,8 @@ final class BrowserEngine {
       }
       self.isClosed = true
       self.suspensionTask?.cancel()
+      self.memoryPressureSource?.cancel()
+      self.memoryPressureSource = nil
       for model in self.shaarDevTools.values { model.close() }
       self.shaarDevTools.removeAll()
       for model in self.inspectors.values where model.isOpen { model.close() }
@@ -262,7 +250,6 @@ final class BrowserEngine {
         return
       }
       self.store?.nativeDocumentCommitted(tab, profileID: profile)
-      self.restoreSuspendedScrollPosition(for: tab)
       if let model = self.developerModels[tab] {
         model.update(target: model.target, committed: true)
       }
@@ -537,9 +524,15 @@ final class BrowserEngine {
       }
       self.noteDocumentFavicon(icon, for: id, host: documentHost, loading: loading)
     }
+    callbacks.onTabLifecycle = { [weak self] identity, state, audible, capturing in
+      guard let self, let id = UUID(uuidString: identity), let store = self.store else { return }
+      self.sleepingTabs.apply(
+        state: state, audible: audible, capturing: capturing, id: id, store: store)
+    }
     callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity) else { return }
-      if self.suspendingTabs.remove(id) != nil { return }
+      self.sleepingTabs.forget(id)
+      self.store?.noteTabAwake(id)
       guard self.liveTabs.contains(id) || self.pages[id] != nil else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
@@ -617,85 +610,15 @@ final class BrowserEngine {
         self.suspendInactiveTabs()
       }
     }
-  }
-
-  func suspendInactiveTabs(now: Date = Date()) {
-    guard !isClosed, let store else { return }
-    let candidates =
-      store.session.spaces.flatMap(\.tabs)
-      + store.session.favoritePages.map(\.tab)
-    for tab in candidates {
-      guard canSuspend(tab.id, in: store)
-      else {
-        inactiveSince[tab.id] = nil
-        continue
-      }
-      let since = inactiveSince[tab.id] ?? now
-      inactiveSince[tab.id] = since
-      guard now.timeIntervalSince(since) >= Self.tabSuspensionDelay else { continue }
-      suspend(tab.id)
-    }
-  }
-
-  private func canSuspend(_ tabID: UUID, in store: BrowserStore) -> Bool {
-    guard liveTabs.contains(tabID),
-      let tab = store.session.page(forTabID: tabID)?.tab,
-      let profile = store.session.profileID(forTabID: tabID),
-      !tab.isPinned, !tab.keepAlive,
-      !store.visiblePageIDs.contains(tabID),
-      store.media.sessions[tabID]?.isPlaying != true,
-      mediaAccess[tabID]?.isCapturing != true,
-      inspectors[tabID] == nil, developerModels[tabID] == nil
-    else { return false }
-    // Download records have no source tab identity in the current bridge.
-    return !downloads.items(in: profile).contains { $0.state == .downloading }
-  }
-
-  private func suspend(_ tabID: UUID) {
-    guard let store, !suspendingTabs.contains(tabID), canSuspend(tabID, in: store)
-    else { return }
-    runtime.evaluate(
-      inTabID: tabID.uuidString,
-      script: Self.suspensionSnapshotScript
-    ) { [weak self] result in
-      MainActor.assumeIsolated {
-        guard let self, let store = self.store, let result, let data = result.data(using: .utf8),
-          let position = (try? JSONSerialization.jsonObject(with: data)) as? [String: NSNumber],
-          position["edited"]?.boolValue == false,
-          self.canSuspend(tabID, in: store)
-        else { return }
-        self.suspendedScrollPositions[tabID] = CGPoint(
-          x: CGFloat(position["x"]?.doubleValue ?? 0),
-          y: CGFloat(position["y"]?.doubleValue ?? 0))
-        self.suspendingTabs.insert(tabID)
-        self.inactiveSince[tabID] = nil
-        self.events.router.forgetTab(tabID.uuidString, windowID: self.windowID)
-        self.liveTabs.remove(tabID)
-        self.pages[tabID] = nil
-        self.mediaAccess[tabID] = nil
-        self.forgetMedia(tabID)
-        self.runtime.discardTabID(tabID.uuidString)
-      }
-    }
-  }
-
-  func restoreSuspendedScrollPosition(for tabID: UUID) {
-    guard let position = suspendedScrollPositions.removeValue(forKey: tabID) else { return }
-    // RTL documents can have a negative horizontal scroll offset in Chromium.
-    let x = position.x
-    let y = max(0, position.y)
-    runtime.evaluate(
-      inTabID: tabID.uuidString,
-      script: "requestAnimationFrame(()=>scrollTo(\(x),\(y))); true"
-    ) { _ in }
+    startSleepingTabWatch()
   }
 
   /// Drop documents before their saved tabs acquire a different engine profile.
   func discardReassignedTabs(_ ids: Set<UUID>) {
     for id in ids {
       failedTabs.remove(id)
-      suspendedScrollPositions[id] = nil
-      inactiveSince[id] = nil
+      sleepingTabs.forget(id)
+      store?.noteTabAwake(id)
       guard liveTabs.remove(id) != nil else { continue }
       events.router.forgetTab(id.uuidString, windowID: windowID)
       pages[id] = nil
@@ -774,8 +697,8 @@ final class BrowserEngine {
       // Ordinary tab close waits for Chromium's beforeunload decision. This path
       // handles confirmed space removal; profile files are deliberately retained.
       events.router.forgetTab(removed.uuidString, windowID: windowID)
-      suspendedScrollPositions[removed] = nil
-      inactiveSince[removed] = nil
+      sleepingTabs.forget(removed)
+      store.noteTabAwake(removed)
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
@@ -811,7 +734,7 @@ final class BrowserEngine {
             && (session.selectedPage?.tab.id == tab.id
               || store.selectedSplit?.tabIDs.contains(tab.id) == true),
           isLive: liveTabs.contains(tab.id),
-          lazy: lazyPinnedTabs || suspendedScrollPositions[tab.id] != nil,
+          lazy: lazyPinnedTabs,
           keepAlive: tab.keepAlive)
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
@@ -842,7 +765,7 @@ final class BrowserEngine {
       let decision = TabMaterializationPolicy.decision(
         isSelected: session.selectedSpace.selectedFavoriteID == favorite.id,
         isLive: liveTabs.contains(page.tab.id),
-        lazy: lazyPinnedTabs || suspendedScrollPositions[page.tab.id] != nil,
+        lazy: lazyPinnedTabs,
         keepAlive: page.tab.keepAlive)
       guard decision == .materialize else { continue }
       guard events.router.bindTab(page.tab.id.uuidString, windowID: windowID) else {
@@ -905,6 +828,7 @@ final class BrowserEngine {
     defer { reconciling = alreadyReconciling }
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
     if let selected = session.selectedPage?.tab.id {
+      wakeIfSleeping(selected)
       runtime.activateTabID(selected.uuidString)
       // Chromium can move the active WebContents to its own BrowserView while
       // processing native activation. Restore the page after that queued call.

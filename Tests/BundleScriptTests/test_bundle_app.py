@@ -463,6 +463,8 @@ class BundleAppTests(unittest.TestCase):
             "InspectorIdleSmoke",
             "--inspector-idle-smoke",
             "--probe-measure-inspector",
+            "--probe-favicon-url",
+            "--probe-favicon-restore",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

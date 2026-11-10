@@ -1,0 +1,70 @@
+# Copyright 2026 The Shaar Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../../scripts/build/ninja/devtools_entrypoint.gni")
+import("../../../../scripts/build/ninja/devtools_module.gni")
+import("../../visibility.gni")
+
+devtools_ui_module("overflow") {
+  sources = [
+    "OverflowFinder.ts",
+    "OverflowPage.ts",
+    "OverflowPanel.ts",
+  ]
+
+  ts_deps = [
+    "../../../core/common:bundle",
+    "../../../core/i18n:bundle",
+    "../../../core/sdk:bundle",
+    "../../../ui/legacy:bundle",
+    "../../../ui/lit:bundle",
+  ]
+}
+
+devtools_entrypoint("bundle") {
+  entrypoint = "overflow.ts"
+
+  ts_deps = [ ":overflow" ]
+
+  visibility = [
+    ":*",
+    "..:*",
+    "../*",
+    "../../../entrypoints/*",
+  ]
+
+  visibility += devtools_panels_visibility
+}
+
+devtools_entrypoint("meta") {
+  entrypoint = "overflow-meta.ts"
+
+  ts_deps = [
+    ":bundle",
+    "../../../core/i18n:bundle",
+    "../../../ui/legacy:bundle",
+  ]
+
+  visibility = [
+    ":*",
+    "..:*",
+    "../../../entrypoints/*",
+  ]
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [ "OverflowFinder.test.ts" ]
+
+  ts_deps = [
+    ":bundle",
+    "../../../core/common:bundle",
+    "../../../core/i18n:bundle",
+    "../../../core/sdk:bundle",
+    "../../../testing",
+    "../../../ui/legacy:bundle",
+    "../../../ui/lit:bundle",
+  ]
+}

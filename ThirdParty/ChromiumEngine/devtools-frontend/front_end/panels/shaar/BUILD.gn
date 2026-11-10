@@ -12,6 +12,7 @@ devtools_entrypoint("meta") {
   ts_deps = [
     "build-info:meta",
     "network-rules:meta",
+    "overflow:meta",
   ]
 
   visibility = [
@@ -26,5 +27,6 @@ group("unittests") {
   deps = [
     "build-info:unittests",
     "network-rules:unittests",
+    "overflow:unittests",
   ]
 }

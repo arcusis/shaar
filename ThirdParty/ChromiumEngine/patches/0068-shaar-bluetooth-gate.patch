@@ -15,7 +15,7 @@ diff --git a/device/bluetooth/bluetooth_adapter_mac.h b/device/bluetooth/bluetoo
 index f14537c..96a5a8c 100644
 --- a/device/bluetooth/bluetooth_adapter_mac.h
 +++ b/device/bluetooth/bluetooth_adapter_mac.h
-@@ -150,6 +150,16 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
+@@ -150,6 +150,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
    // Updates |devices_| to include the currently paired devices and notifies
    // observers.
    void AddPairedDevices();
@@ -25,14 +25,12 @@ index f14537c..96a5a8c 100644
 +  void ScheduleNameRefresh() const;
 +  void ApplyName(std::string name);
 +  void SchedulePairedDeviceRefresh();
-+  // |retained_devices| is a +1 NSArray from __bridge_retained, or nullptr.
-+  void ApplyPairedDevices(void* retained_devices);
-+  // |retained_device| is a +1 IOBluetoothDevice from __bridge_retained, or nullptr.
-+  void FinishConnectNotification(void* retained_device);
++  void ApplyPairedDevices(NSArray* devices);
++  void FinishConnectNotification(IOBluetoothDevice* device);
  
    std::string address_;
    bool classic_powered_ = false;
-@@ -188,6 +198,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
+@@ -188,6 +196,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
  
    scoped_refptr<BluetoothDevicesConnectListenerBridge> connect_listener_bridge_;
  
@@ -114,7 +112,7 @@ index efaadba..c413ae9 100644
  }
  
  - (void)deviceConnected:(IOBluetoothUserNotification*)notification
-@@ -182,7 +201,27 @@ - (void)deviceConnected:(IOBluetoothUserNotification*)notification
+@@ -182,7 +201,24 @@ - (void)deviceConnected:(IOBluetoothUserNotification*)notification
  }
  
  - (void)stopListening {
@@ -133,17 +131,14 @@ index efaadba..c413ae9 100644
 +  }
 +  if (device::ShaarBluetoothIOIsBlocked())
 +    return;
-+  void* retained = (__bridge_retained void*)notification;
-+  device::ShaarPostIOBluetooth(base::BindOnce([](void* retained) {
-+    IOBluetoothUserNotification* notification =
-+        (__bridge_transfer IOBluetoothUserNotification*)retained;
++  device::ShaarPostIOBluetooth(base::BindOnce([notification] {
 +    if (device::ShaarMayCallIOBluetooth())
 +      [notification unregister];
-+  }, retained));
++  }));
  }
  
  @end
-@@ -193,6 +232,8 @@ - (void)stopListening {
+@@ -193,6 +229,8 @@ - (void)stopListening {
  const int kPollIntervalMs = 500;
  
  bool IsDeviceSystemPaired(const std::string& device_address) {
@@ -152,7 +147,7 @@ index efaadba..c413ae9 100644
    IOBluetoothDevice* device = [IOBluetoothDevice
        deviceWithAddressString:base::SysUTF8ToNSString(device_address)];
    return device && [device isPaired];
-@@ -217,7 +258,20 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -217,7 +255,20 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  
  // static
  scoped_refptr<BluetoothAdapterMac> BluetoothAdapterMac::CreateAdapter() {
@@ -174,7 +169,7 @@ index efaadba..c413ae9 100644
  }
  
  // static
-@@ -256,7 +310,11 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -256,7 +307,11 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  std::string BluetoothAdapterMac::GetName() const {
@@ -187,7 +182,7 @@ index efaadba..c413ae9 100644
      return name_;
    }
  
-@@ -367,11 +425,42 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -367,11 +422,39 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  
  void BluetoothAdapterMac::OnConnectNotification(
      const std::string& device_address) {
@@ -203,28 +198,25 @@ index efaadba..c413ae9 100644
 +    base::ThreadPool::PostTask(
 +        FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
 +        base::BindOnce(
-+            [](base::OnceCallback<void(void*)> finish, std::string address) {
++            [](base::OnceCallback<void(IOBluetoothDevice*)> finish,
++               std::string address) {
 +              if (!ShaarMayCallIOBluetooth()) {
-+                std::move(finish).Run(nullptr);
++                std::move(finish).Run(nil);
 +                return;
 +              }
 +              IOBluetoothDevice* device = [IOBluetoothDevice
 +                  deviceWithAddressString:base::SysUTF8ToNSString(address)];
-+              std::move(finish).Run(device ? (__bridge_retained void*)device
-+                                           : nullptr);
++              std::move(finish).Run(device);
 +            },
 +            std::move(finish), device_address));
 +    return;
 +  }
    IOBluetoothDevice* device = [IOBluetoothDevice
        deviceWithAddressString:base::SysUTF8ToNSString(device_address)];
-+  FinishConnectNotification(device ? (__bridge_retained void*)device
-+                                   : nullptr);
++  FinishConnectNotification(device);
 +}
 +
-+void BluetoothAdapterMac::FinishConnectNotification(void* retained_device) {
-+  IOBluetoothDevice* device =
-+      (__bridge_transfer IOBluetoothDevice*)retained_device;
++void BluetoothAdapterMac::FinishConnectNotification(IOBluetoothDevice* device) {
    if (!device) {
 -    BLUETOOTH_LOG(ERROR) << "Failed to find device for address: "
 -                         << device_address;
@@ -232,7 +224,7 @@ index efaadba..c413ae9 100644
      return;
    }
    DeviceConnected(
-@@ -399,7 +488,20 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -399,7 +482,20 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  bool BluetoothAdapterMac::SetPoweredImpl(bool powered) {
@@ -254,7 +246,7 @@ index efaadba..c413ae9 100644
    return true;
  }
  
-@@ -409,25 +511,42 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -409,25 +505,42 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  void BluetoothAdapterMac::TriggerSystemPermissionPrompt() {
@@ -308,7 +300,7 @@ index efaadba..c413ae9 100644
    BluetoothLowEnergyAdapterApple::LazyInitialize();
    connect_listener_bridge_ =
        base::MakeRefCounted<BluetoothDevicesConnectListenerBridge>(
-@@ -448,8 +567,10 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -448,8 +561,10 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  BluetoothAdapterMac::HostControllerState
@@ -320,7 +312,7 @@ index efaadba..c413ae9 100644
    IOBluetoothHostController* controller =
        [IOBluetoothHostController defaultController];
    if (controller != nil) {
-@@ -462,6 +583,17 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -462,6 +577,17 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
    return state;
  }
  
@@ -338,7 +330,7 @@ index efaadba..c413ae9 100644
  void BluetoothAdapterMac::SetPresentForTesting(bool present) {
    is_present_for_testing_ = present;
  }
-@@ -473,6 +605,7 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -473,6 +599,7 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  
  void BluetoothAdapterMac::SetPowerStateFunctionForTesting(
      SetControllerPowerStateFunction power_state_function) {
@@ -346,7 +338,7 @@ index efaadba..c413ae9 100644
    power_state_function_ = std::move(power_state_function);
  }
  
-@@ -602,18 +735,118 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
+@@ -602,18 +729,117 @@ bool IsDeviceSystemPaired(const std::string& device_address) {
  }
  
  void BluetoothAdapterMac::AddPairedDevices() {
@@ -369,7 +361,7 @@ index efaadba..c413ae9 100644
 +    if ([device isPaired])
 +      [kept addObject:device];
    }
-+  ApplyPairedDevices((__bridge_retained void*)kept);
++  ApplyPairedDevices(kept);
 +}
 +
 +scoped_refptr<base::SingleThreadTaskRunner> AdapterUIRunner(
@@ -444,9 +436,9 @@ index efaadba..c413ae9 100644
 +  base::ThreadPool::PostTask(
 +      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
 +      base::BindOnce(
-+          [](base::OnceCallback<void(void*)> apply) {
++          [](base::OnceCallback<void(NSArray*)> apply) {
 +            if (!ShaarMayCallIOBluetooth()) {
-+              std::move(apply).Run(nullptr);
++              std::move(apply).Run(nil);
 +              return;
 +            }
 +            NSMutableArray* kept = [NSMutableArray array];
@@ -455,14 +447,13 @@ index efaadba..c413ae9 100644
 +              if ([device isPaired])
 +                [kept addObject:device];
 +            }
-+            std::move(apply).Run((__bridge_retained void*)kept);
++            std::move(apply).Run(kept);
 +          },
 +          std::move(apply)));
 +}
 +
-+void BluetoothAdapterMac::ApplyPairedDevices(void* retained_devices) {
++void BluetoothAdapterMac::ApplyPairedDevices(NSArray* devices) {
 +  paired_refresh_posted_ = false;
-+  NSArray* devices = (__bridge_transfer NSArray*)retained_devices;
 +  uint32_t count = 0;
 +  for (IOBluetoothDevice* device in devices) {
 +    ClassicDeviceAdded(
@@ -694,7 +685,7 @@ index b9fa727..6fc96d9 100644
  }
  
  - (void)deviceDisconnected:(IOBluetoothUserNotification*)notification
-@@ -80,7 +87,22 @@ - (void)deviceDisconnected:(IOBluetoothUserNotification*)notification
+@@ -80,7 +87,19 @@ - (void)deviceDisconnected:(IOBluetoothUserNotification*)notification
  }
  
  - (void)stopListening {
@@ -706,19 +697,16 @@ index b9fa727..6fc96d9 100644
 +    if (device::ShaarMayCallIOBluetooth()) {
 +      [notification unregister];
 +    } else if (!device::ShaarBluetoothIOIsBlocked()) {
-+      void* retained = (__bridge_retained void*)notification;
-+      device::ShaarPostIOBluetooth(base::BindOnce([](void* retained) {
-+        IOBluetoothUserNotification* notification =
-+            (__bridge_transfer IOBluetoothUserNotification*)retained;
++      device::ShaarPostIOBluetooth(base::BindOnce([notification] {
 +        if (device::ShaarMayCallIOBluetooth())
 +          [notification unregister];
-+      }, retained));
++      }));
 +    }
 +  }
  
    // Proactively clear the back-pointer so that any late notifications that
    // do arrive after the C++ BluetoothClassicDeviceMac has started
-@@ -140,6 +162,9 @@ BluetoothUUID ExtractUuid(IOBluetoothSDPDataElement* service_class_data) {
+@@ -140,6 +159,9 @@ BluetoothUUID ExtractUuid(IOBluetoothSDPDataElement* service_class_data) {
    return BluetoothUUID();
  }
  
@@ -728,7 +716,7 @@ index b9fa727..6fc96d9 100644
  BluetoothDevice::UUIDList GetUuids(IOBluetoothDevice* device) {
    BluetoothDevice::UUIDList uuids;
    for (IOBluetoothSDPServiceRecord* service_record in [device services]) {
-@@ -362,6 +387,8 @@ BluetoothUUID ExtractUuid(IOBluetoothSDPDataElement* service_class_data) {
+@@ -362,6 +384,8 @@ BluetoothUUID ExtractUuid(IOBluetoothSDPDataElement* service_class_data) {
  
  int BluetoothClassicDeviceMac::GetHostTransmitPower(
      BluetoothHCITransmitPowerLevelType power_level_type) const {
@@ -737,7 +725,7 @@ index b9fa727..6fc96d9 100644
    IOBluetoothHostController* controller =
        [IOBluetoothHostController defaultController];
  
-@@ -402,11 +429,16 @@ BluetoothUUID ExtractUuid(IOBluetoothSDPDataElement* service_class_data) {
+@@ -402,11 +426,14 @@ BluetoothUUID ExtractUuid(IOBluetoothSDPDataElement* service_class_data) {
  }
  
  void BluetoothClassicDeviceMac::StartListeningDisconnectEvent() {
@@ -747,12 +735,10 @@ index b9fa727..6fc96d9 100644
 -  }
    disconnect_listener_ =
        [[BluetoothDeviceDisconnectListener alloc] initWithDevice:this];
-+  void* retained = (__bridge_retained void*)disconnect_listener_;
-+  ShaarPostIOBluetooth(base::BindOnce([](void* retained) {
-+    BluetoothDeviceDisconnectListener* listener =
-+        (__bridge_transfer BluetoothDeviceDisconnectListener*)retained;
++  BluetoothDeviceDisconnectListener* __strong listener = disconnect_listener_;
++  ShaarPostIOBluetooth(base::BindOnce([listener] {
 +    [listener startListening];
-+  }, retained));
++  }));
  }
  
  }  // namespace device

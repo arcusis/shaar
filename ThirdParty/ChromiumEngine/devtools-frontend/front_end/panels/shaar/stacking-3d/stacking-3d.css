@@ -1,0 +1,195 @@
+/*
+ * Copyright 2026 The Shaar Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+  color: var(--sys-color-on-surface);
+  background: var(--sys-color-cdt-base);
+  font-family: var(--default-font-family);
+}
+
+.stacking {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background:
+    linear-gradient(180deg, var(--sys-color-surface3) 0, var(--sys-color-cdt-base) 112px);
+}
+
+.stacking-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--sys-color-divider-prominent);
+  background: var(--sys-color-base-container);
+  box-shadow: inset 3px 0 0 var(--sys-color-primary);
+}
+
+.stacking-modes {
+  display: flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sys-color-cdt-base-container);
+  border: 1px solid var(--sys-color-divider);
+}
+
+.stacking button {
+  height: 28px;
+  border: 1px solid var(--sys-color-divider);
+  border-radius: 7px;
+  background: var(--sys-color-cdt-base-container);
+  color: var(--sys-color-on-surface);
+  padding: 0 10px;
+  font: 12px var(--default-font-family);
+}
+
+.stacking-modes button {
+  height: 24px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.stacking-modes button[aria-pressed="true"] {
+  background: var(--sys-color-primary);
+  color: var(--sys-color-on-primary);
+}
+
+.stacking button:hover:not(:disabled) {
+  border-color: var(--sys-color-outline);
+}
+
+.stacking button:focus-visible,
+.stacking-list button:focus-visible,
+.stacking-canvas:focus-visible {
+  outline: 2px solid var(--sys-color-state-focus-ring);
+  outline-offset: 1px;
+}
+
+.stacking-capture,
+.stacking-empty button,
+.stacking-error button {
+  background: var(--sys-color-primary);
+  color: var(--sys-color-on-primary);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.stacking button:disabled {
+  opacity: 0.45;
+}
+
+.stacking-hint {
+  margin-left: auto;
+  color: var(--sys-color-on-surface-subtle);
+  font-size: 11px;
+}
+
+.stacking-status {
+  margin: 0;
+  padding: 6px 12px;
+  color: var(--sys-color-on-surface-subtle);
+  font-size: 12px;
+}
+
+.stacking-status.is-error {
+  color: var(--sys-color-error);
+}
+
+.stacking-note {
+  margin: 0 12px 8px;
+  color: var(--sys-color-on-surface-subtle);
+  font-size: 11px;
+}
+
+.stacking-empty,
+.stacking-error {
+  margin: 28px 20px;
+  max-width: 420px;
+}
+
+.stacking-empty h2,
+.stacking-error h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.stacking-empty p,
+.stacking-error p {
+  margin: 0 0 12px;
+  color: var(--sys-color-on-surface-subtle);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.stacking-stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.stacking-canvas {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  background:
+    radial-gradient(1200px 480px at 20% -10%, color-mix(in srgb, var(--sys-color-primary) 16%, transparent), transparent 60%),
+    var(--sys-color-cdt-base);
+}
+
+.stacking-canvas:active {
+  cursor: grabbing;
+}
+
+.stacking-list {
+  width: 232px;
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  list-style: none;
+  border-left: 1px solid var(--sys-color-divider);
+  background: var(--sys-color-base-container);
+}
+
+.stacking-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 28px;
+  margin: 0 0 4px;
+  padding: 5px 8px;
+  text-align: left;
+  line-height: 1.3;
+}
+
+.stacking-list button.is-selected {
+  border-color: var(--sys-color-primary);
+  box-shadow: inset 3px 0 0 var(--sys-color-primary);
+}
+
+.stacking-list button.is-below {
+  color: var(--sys-color-on-surface-subtle);
+}
+
+.stacking-row-name {
+  display: block;
+  font-weight: 600;
+}
+
+.stacking-row-reason {
+  display: block;
+  color: var(--sys-color-on-surface-subtle);
+  font-size: 11px;
+  font-weight: 400;
+}

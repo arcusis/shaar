@@ -22,6 +22,7 @@ export class APIOperationWatch extends Common.ObjectWrapper.ObjectWrapper<EventT
   readonly #rows = new Map<SDK.NetworkRequest.NetworkRequest, APIOperation>();
   // Weak so a finished parse cannot keep a request, and its post data, alive.
   readonly #generation = new WeakMap<SDK.NetworkRequest.NetworkRequest, number>();
+  readonly #finished = new WeakSet<SDK.NetworkRequest.NetworkRequest>();
   readonly #owners = new WeakMap<SDK.NetworkRequest.NetworkRequest, SDK.NetworkManager.NetworkManager>();
   readonly #listeners = new Map<SDK.NetworkManager.NetworkManager, Common.EventTarget.EventDescriptor[]>();
   #installed = false;
@@ -76,12 +77,14 @@ export class APIOperationWatch extends Common.ObjectWrapper.ObjectWrapper<EventT
 
   #onStarted = (event: Common.EventTarget.EventTargetEvent<SDK.NetworkManager.RequestStartedEvent>): void => {
     this.#remember(event.data.request, event.source);
-    void this.#refresh(event.data.request);
   };
 
   #onRequest = (event: Common.EventTarget.EventTargetEvent<SDK.NetworkRequest.NetworkRequest>): void => {
     this.#remember(event.data, event.source);
-    void this.#refresh(event.data);
+    if (event.type === SDK.NetworkManager.Events.RequestFinished && !this.#finished.has(event.data)) {
+      this.#finished.add(event.data);
+      void this.#refresh(event.data);
+    }
   };
 
   #onPrimaryPageChanged = (

@@ -132,6 +132,9 @@ const str_ = i18n.i18n.registerUIStrings('panels/shaar/graphql-trpc/APIOperation
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 const PAGE_STEP = 8;
+const ROW_HEIGHT = 32;
+const VIRTUALIZE_AFTER = 100;
+const VISIBLE_ROW_LIMIT = 50;
 
 interface OperationRow {
   request: SDK.NetworkRequest.NetworkRequest;
@@ -149,6 +152,7 @@ export class APIOperationsPanel extends UI.Panel.Panel {
   #selected: SDK.NetworkRequest.NetworkRequest|null = null;
   #banner: string|null = null;
   #scrollSelection = false;
+  #windowStart = 0;
 
   constructor() {
     super('shaar-graphql-trpc', /* useShadowDom */ true);
@@ -171,6 +175,11 @@ export class APIOperationsPanel extends UI.Panel.Panel {
   override performUpdate(): void {
     const visible = this.#visibleRows();
     const selected = visible.find(row => row.request === this.#selected) ?? null;
+    const selectedIndex = selected ? visible.indexOf(selected) : -1;
+    const windowStart = visible.length <= VIRTUALIZE_AFTER ? 0 : Math.max(0, Math.min(
+        visible.length - VISIBLE_ROW_LIMIT, selectedIndex >= 0 ? selectedIndex : this.#windowStart));
+    const windowEnd = visible.length <= VIRTUALIZE_AFTER ? visible.length :
+        Math.min(visible.length, windowStart + VISIBLE_ROW_LIMIT);
     const selectedId = selected ? this.#idFor(selected.request) : '';
     const errorCount = visible.reduce((count, row) => count + (row.operation.hasErrors ? 1 : 0), 0);
     const listKey = this.#onListKey;
@@ -181,7 +190,7 @@ export class APIOperationsPanel extends UI.Panel.Panel {
     // clang-format off
     render(html`
       <style>${panelCSS()}</style>
-      <div class="api" @keydown=${this.#onPanelKey}>
+      <div class="api" @keydown=${this.#onPanelKey} @scroll=${this.#onPanelScroll}>
         <header class="api-header">
           <div class="api-heading">
             <span class="api-mark" aria-hidden="true"></span>
@@ -217,7 +226,9 @@ export class APIOperationsPanel extends UI.Panel.Panel {
           </div>
           <div class="api-list" role="listbox" tabindex="0" aria-label=${i18nString(UIStrings.list)}
             aria-activedescendant=${selectedId} @keydown=${listKey}>
-            ${visible.map(row => rowTemplate(row, this.#idFor(row.request), row.request === this.#selected, rowClick))}
+            ${windowStart > 0 ? html`<div class="api-spacer" aria-hidden="true" style=${`height:${windowStart * ROW_HEIGHT}px`}></div>` : nothing}
+            ${visible.slice(windowStart, windowEnd).map(row => rowTemplate(row, this.#idFor(row.request), row.request === this.#selected, rowClick))}
+            ${windowEnd < visible.length ? html`<div class="api-spacer" aria-hidden="true" style=${`height:${(visible.length - windowEnd) * ROW_HEIGHT}px`}></div>` : nothing}
           </div>
         `}
         ${selected ? detailTemplate(selected, this.#openSelected, this.#copySelected) : nothing}
@@ -282,6 +293,7 @@ export class APIOperationsPanel extends UI.Panel.Panel {
       return;
     }
     this.#search = event.target.value;
+    this.#windowStart = 0;
     this.requestUpdate();
   };
 
@@ -292,8 +304,27 @@ export class APIOperationsPanel extends UI.Panel.Panel {
     const value = event.target.value;
     if (value === 'all' || value === 'graphql' || value === 'trpc' || value === 'errors') {
       this.#filter = value;
+      this.#windowStart = 0;
       this.requestUpdate();
     }
+  };
+
+  #onPanelScroll = (event: Event): void => {
+    if (!(event.currentTarget instanceof HTMLElement)) {
+      return;
+    }
+    const list = event.currentTarget.querySelector<HTMLElement>('.api-list');
+    if (!list) {
+      return;
+    }
+    const listTop = list.getBoundingClientRect().top - event.currentTarget.getBoundingClientRect().top +
+        event.currentTarget.scrollTop;
+    const start = Math.max(0, Math.floor((event.currentTarget.scrollTop - listTop) / ROW_HEIGHT));
+    if (Math.abs(start - this.#windowStart) < 10) {
+      return;
+    }
+    this.#windowStart = start;
+    this.requestUpdate();
   };
 
   #onPanelKey = (event: KeyboardEvent): void => {
@@ -653,6 +684,8 @@ function panelCSS(): string {
       padding: 0 8px;
     }
     .api-row {
+      box-sizing: border-box;
+      min-height: 32px;
       margin: 0;
       padding: 4px 6px;
       border-radius: 4px;

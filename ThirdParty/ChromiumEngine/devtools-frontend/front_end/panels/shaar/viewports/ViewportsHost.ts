@@ -31,10 +31,43 @@ const PHONE_PRESETS = new Set(['iphone15Pro', 'pixel8']);
 
 interface ViewState {
   id: number;
-  targetId: Protocol.Target.TargetID;
+  targetId: string;
   width: number;
   height: number;
   mobile: boolean;
+}
+
+export interface CreatedPage {
+  error?: string;
+  targetId?: string;
+}
+
+export interface ViewportPage {
+  id(): string;
+  inspectedURL(): string;
+  navigate(url: string): Promise<string|undefined>;
+  captureScreenshot(request: Protocol.Page.CaptureScreenshotRequest): Promise<{error?: string, data?: string}>;
+  setDeviceMetrics(request: Protocol.Emulation.SetDeviceMetricsOverrideRequest): Promise<string|undefined>;
+  setColorScheme(features: Protocol.Emulation.MediaFeature[]): Promise<string|undefined>;
+  insertText(text: string): Promise<string|undefined>;
+  dispatchMouse(request: Protocol.Input.DispatchMouseEventRequest): Promise<string|undefined>;
+}
+
+interface PageObserver {
+  targetAdded(page: ViewportPage): void;
+}
+
+export interface ViewportRoot {
+  createTarget(request: Protocol.Target.CreateTargetRequest): Promise<CreatedPage>;
+  closeTarget(targetId: string): Promise<void>;
+}
+
+export interface ViewportTargets {
+  rootTarget(): ViewportRoot|null;
+  primaryPageTarget(): {inspectedURL(): string}|null;
+  pageById(id: string): ViewportPage|null;
+  observePages(observer: PageObserver): void;
+  unobservePages(observer: PageObserver): void;
 }
 
 /**
@@ -46,6 +79,11 @@ export class SdkViewportHost implements ViewportHost {
   #lease = 0;
   #nextId = 1;
   #views = new Map<number, ViewState>();
+  #targets: ViewportTargets;
+
+  constructor(targets?: ViewportTargets) {
+    this.#targets = targets ?? new SdkViewportTargets();
+  }
 
   request(operation: ViewportOperation, payload: Record<string, unknown>): Promise<ViewportReply> {
     switch (operation) {
@@ -67,7 +105,7 @@ export class SdkViewportHost implements ViewportHost {
   async #open(): Promise<ViewportReply> {
     this.#lease += 1;
     await this.#dropTargets();
-    if (!SDK.TargetManager.TargetManager.instance().rootTarget()) {
+    if (!this.#targets.rootTarget()) {
       throw new Error('unavailable');
     }
     return {schemaVersion: 1, leaseID: this.#lease, colorScheme: 1, hover: 1, typing: 1};
@@ -91,31 +129,31 @@ export class SdkViewportHost implements ViewportHost {
     if (width === null || height === null || !sizeIsAllowed(width, height)) {
       throw new Error('failed');
     }
-    const root = SDK.TargetManager.TargetManager.instance().rootTarget();
+    const url = this.#urlForAdd(payload);
+    const root = this.#targets.rootTarget();
     if (!root) {
       throw new Error('unavailable');
     }
     const lease = this.#lease;
-    const created = await root.targetAgent().invoke_createTarget({
+    const created = await root.createTarget({
       url: '',
       hidden: true,
       background: true,
     });
-    if (created.getError() || !created.targetId) {
+    if (created.error || !created.targetId) {
       throw new Error('unavailable');
     }
     const targetId = created.targetId;
     try {
-      const target = await waitForTarget(targetId);
+      const target = await this.#waitForPage(targetId);
       if (lease !== this.#lease) {
         throw new Error('failed');
       }
       const mobile = PHONE_PRESETS.has(stringField(payload.preset));
       await this.#metrics(target, width, height, mobile, false);
-      const url = cloneUrl();
       if (url) {
-        const navigated = await target.pageAgent().invoke_navigate({url});
-        if (navigated.getError()) {
+        const navigated = await target.navigate(url);
+        if (navigated) {
           throw new Error('failed');
         }
       }
@@ -158,8 +196,8 @@ export class SdkViewportHost implements ViewportHost {
       }
       await Promise.all([...this.#views.values()].map(async view => {
         const target = this.#target(view);
-        const navigated = await target.pageAgent().invoke_navigate({url});
-        if (navigated.getError()) {
+        const navigated = await target.navigate(url);
+        if (navigated) {
           throw new Error('failed');
         }
       }));
@@ -171,8 +209,8 @@ export class SdkViewportHost implements ViewportHost {
         throw new Error('failed');
       }
       await Promise.all([...this.#views.values()].map(async view => {
-        const typed = await this.#target(view).inputAgent().invoke_insertText({text});
-        if (typed.getError()) {
+        const typed = await this.#target(view).insertText(text);
+        if (typed) {
           throw new Error('failed');
         }
       }));
@@ -185,10 +223,8 @@ export class SdkViewportHost implements ViewportHost {
       }
       const targets = this.#selected(payload);
       await Promise.all(targets.map(async view => {
-        const applied = await this.#target(view).emulationAgent().invoke_setEmulatedMedia({
-          features: [{name: 'prefers-color-scheme', value}],
-        });
-        if (applied.getError()) {
+        const applied = await this.#target(view).setColorScheme([{name: 'prefers-color-scheme', value}]);
+        if (applied) {
           throw new Error('failed');
         }
       }));
@@ -217,12 +253,12 @@ export class SdkViewportHost implements ViewportHost {
     }
     const view = this.#one(payload);
     const target = this.#target(view);
-    const shot = await target.pageAgent().invoke_captureScreenshot({
+    const shot = await target.captureScreenshot({
       format: Protocol.Page.CaptureScreenshotRequestFormat.Png,
       fromSurface: true,
       captureBeyondViewport: false,
     });
-    if (shot.getError() || !shot.data || shot.data.length > MAX_PNG_TEXT) {
+    if (shot.error || !shot.data || shot.data.length > MAX_PNG_TEXT) {
       throw new Error('failed');
     }
     const url = String(target.inspectedURL());
@@ -241,14 +277,14 @@ export class SdkViewportHost implements ViewportHost {
         throw new Error('failed');
       }
       await Promise.all([...this.#views.values()].map(async view => {
-        const sent = await this.#target(view).inputAgent().invoke_dispatchMouseEvent({
+        const sent = await this.#target(view).dispatchMouse({
           type: Protocol.Input.DispatchMouseEventRequestType.MouseWheel,
           x: Math.trunc(view.width / 2),
           y: Math.trunc(view.height / 2),
           deltaX,
           deltaY,
         });
-        if (sent.getError()) {
+        if (sent) {
           throw new Error('failed');
         }
       }));
@@ -261,43 +297,37 @@ export class SdkViewportHost implements ViewportHost {
     }
     const type = kind === 'hover' ? Protocol.Input.DispatchMouseEventRequestType.MouseMoved :
                                     Protocol.Input.DispatchMouseEventRequestType.MousePressed;
-    await Promise.all([...this.#views.values()].map(async view => {
-      const point = {
-        x: project(x, source.width, view.width),
-        y: project(y, source.height, view.height),
-      };
-      const agent = this.#target(view).inputAgent();
-      const request: Protocol.Input.DispatchMouseEventRequest = {
-        type,
-        x: point.x,
-        y: point.y,
+    const page = this.#target(source);
+    const request: Protocol.Input.DispatchMouseEventRequest = {
+      type,
+      x,
+      y,
+      button: Protocol.Input.MouseButton.Left,
+    };
+    if (kind === 'click') {
+      request.clickCount = 1;
+    }
+    const moved = await page.dispatchMouse(request);
+    if (moved) {
+      throw new Error('failed');
+    }
+    if (kind === 'click') {
+      const released = await page.dispatchMouse({
+        type: Protocol.Input.DispatchMouseEventRequestType.MouseReleased,
+        x,
+        y,
         button: Protocol.Input.MouseButton.Left,
-      };
-      if (kind === 'click') {
-        request.clickCount = 1;
-      }
-      const moved = await agent.invoke_dispatchMouseEvent(request);
-      if (moved.getError()) {
+        clickCount: 1,
+      });
+      if (released) {
         throw new Error('failed');
       }
-      if (kind === 'click') {
-        const released = await agent.invoke_dispatchMouseEvent({
-          type: Protocol.Input.DispatchMouseEventRequestType.MouseReleased,
-          x: point.x,
-          y: point.y,
-          button: Protocol.Input.MouseButton.Left,
-          clickCount: 1,
-        });
-        if (released.getError()) {
-          throw new Error('failed');
-        }
-      }
-    }));
+    }
   }
 
-  async #metrics(target: SDK.Target.Target, width: number, height: number, mobile: boolean,
+  async #metrics(target: ViewportPage, width: number, height: number, mobile: boolean,
                  landscape: boolean): Promise<void> {
-    const applied = await target.emulationAgent().invoke_setDeviceMetricsOverride({
+    const applied = await target.setDeviceMetrics({
       width,
       height,
       deviceScaleFactor: 1,
@@ -310,7 +340,7 @@ export class SdkViewportHost implements ViewportHost {
         angle: landscape ? 90 : 0,
       },
     });
-    if (applied.getError()) {
+    if (applied) {
       throw new Error('failed');
     }
   }
@@ -336,12 +366,61 @@ export class SdkViewportHost implements ViewportHost {
     return view;
   }
 
-  #target(view: ViewState): SDK.Target.Target {
-    const target = SDK.TargetManager.TargetManager.instance().targetById(view.targetId);
+  #target(view: ViewState): ViewportPage {
+    const target = this.#targets.pageById(view.targetId);
     if (!target) {
       throw new Error('unavailable');
     }
     return target;
+  }
+
+  #urlForAdd(payload: Record<string, unknown>): string {
+    const requested = payload.url;
+    if (typeof requested === 'string' && requested.length > 0) {
+      if (!httpUrl(requested)) {
+        throw new Error('failed');
+      }
+      return requested;
+    }
+    return this.#inspectedHttpURL();
+  }
+
+  #inspectedHttpURL(): string {
+    const page = this.#targets.primaryPageTarget();
+    const url = page ? page.inspectedURL() : '';
+    return httpUrl(url) ? url : '';
+  }
+
+  #waitForPage(id: string): Promise<ViewportPage> {
+    const existing = this.#targets.pageById(id);
+    if (existing) {
+      return Promise.resolve(existing);
+    }
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (page: ViewportPage|null): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        this.#targets.unobservePages(observer);
+        if (page) {
+          resolve(page);
+        } else {
+          reject(new Error('unavailable'));
+        }
+      };
+      const observer: PageObserver = {
+        targetAdded: (page): void => {
+          if (page.id() === id) {
+            finish(page);
+          }
+        },
+      };
+      const timer = setTimeout(() => finish(null), TARGET_WAIT_MS);
+      this.#targets.observePages(observer);
+    });
   }
 
   #sameLease(payload: Record<string, unknown>): boolean {
@@ -354,51 +433,99 @@ export class SdkViewportHost implements ViewportHost {
     await Promise.all(views.map(view => this.#closeTarget(view.targetId)));
   }
 
-  async #closeTarget(targetId: Protocol.Target.TargetID): Promise<void> {
-    const root = SDK.TargetManager.TargetManager.instance().rootTarget();
+  async #closeTarget(targetId: string): Promise<void> {
+    const root = this.#targets.rootTarget();
     if (!root) {
       return;
     }
-    await root.targetAgent().invoke_closeTarget({targetId});
+    await root.closeTarget(targetId);
   }
 }
 
-function waitForTarget(id: Protocol.Target.TargetID): Promise<SDK.Target.Target> {
-  const manager = SDK.TargetManager.TargetManager.instance();
-  const existing = manager.targetById(id);
-  if (existing) {
-    return Promise.resolve(existing);
+class SdkViewportTargets implements ViewportTargets {
+  #observers = new Map<PageObserver, SDK.TargetManager.Observer>();
+
+  #manager(): SDK.TargetManager.TargetManager {
+    return SDK.TargetManager.TargetManager.instance();
   }
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const observer = new SDK.TargetManager.Observer();
-    const finish = (target: SDK.Target.Target|null): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      manager.unobserveTargets(observer);
-      if (target) {
-        resolve(target);
-      } else {
-        reject(new Error('unavailable'));
-      }
+
+  rootTarget(): ViewportRoot|null {
+    const root = this.#manager().rootTarget();
+    if (!root) {
+      return null;
+    }
+    const agent = root.targetAgent();
+    return {
+      createTarget: async request => {
+        const created = await agent.invoke_createTarget(request);
+        return {error: created.getError(), targetId: created.targetId};
+      },
+      closeTarget: async targetId => {
+        await agent.invoke_closeTarget({targetId: targetId as Protocol.Target.TargetID});
+      },
     };
-    const timer = setTimeout(() => finish(null), TARGET_WAIT_MS);
-    observer.targetAdded = (target): void => {
-      if (target.id() === id) {
-        finish(target);
-      }
+  }
+
+  primaryPageTarget(): {inspectedURL(): string}|null {
+    const page = this.#manager().primaryPageTarget();
+    if (!page) {
+      return null;
+    }
+    return {inspectedURL: () => String(page.inspectedURL())};
+  }
+
+  pageById(id: string): ViewportPage|null {
+    const target = this.#manager().targetById(id as Protocol.Target.TargetID);
+    return target ? pageFromTarget(target) : null;
+  }
+
+  observePages(observer: PageObserver): void {
+    const wrapped = new SDK.TargetManager.Observer();
+    wrapped.targetAdded = (target): void => {
+      observer.targetAdded(pageFromTarget(target));
     };
-    manager.observeTargets(observer);
-  });
+    this.#observers.set(observer, wrapped);
+    this.#manager().observeTargets(wrapped);
+  }
+
+  unobservePages(observer: PageObserver): void {
+    const wrapped = this.#observers.get(observer);
+    this.#observers.delete(observer);
+    if (wrapped) {
+      this.#manager().unobserveTargets(wrapped);
+    }
+  }
 }
 
-function cloneUrl(): string {
-  const page = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
-  const url = page ? String(page.inspectedURL()) : '';
-  return httpUrl(url) ? url : '';
+function pageFromTarget(target: SDK.Target.Target): ViewportPage {
+  return {
+    id: () => target.id(),
+    inspectedURL: () => String(target.inspectedURL()),
+    navigate: async url => {
+      const navigated = await target.pageAgent().invoke_navigate({url});
+      return navigated.getError();
+    },
+    captureScreenshot: async request => {
+      const shot = await target.pageAgent().invoke_captureScreenshot(request);
+      return {error: shot.getError(), data: shot.data};
+    },
+    setDeviceMetrics: async request => {
+      const applied = await target.emulationAgent().invoke_setDeviceMetricsOverride(request);
+      return applied.getError();
+    },
+    setColorScheme: async features => {
+      const applied = await target.emulationAgent().invoke_setEmulatedMedia({features});
+      return applied.getError();
+    },
+    insertText: async text => {
+      const typed = await target.inputAgent().invoke_insertText({text});
+      return typed.getError();
+    },
+    dispatchMouse: async request => {
+      const sent = await target.inputAgent().invoke_dispatchMouseEvent(request);
+      return sent.getError();
+    },
+  };
 }
 
 function httpUrl(value: string): boolean {
@@ -451,11 +578,4 @@ function schemeFeature(value: unknown): string|null {
     return '';
   }
   return null;
-}
-
-function project(value: number, from: number, to: number): number {
-  if (from <= 0) {
-    return 0;
-  }
-  return Math.trunc(value * to / from);
 }

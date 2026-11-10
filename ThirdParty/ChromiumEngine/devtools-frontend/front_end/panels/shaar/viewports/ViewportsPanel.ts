@@ -54,7 +54,8 @@ const UIStrings = {
   /**
    * @description Short explanation under the toolbar.
    */
-  syncNote: 'Navigation, scroll, and clicks stay mirrored. Light and dark can sit side by side.',
+  syncNote:
+      'Each viewport is its own page load. Navigation and scroll stay mirrored. A click or hover stays on that viewport. Form state, SPA state, and post-click state can diverge.',
   /**
    * @description Heading shown before any viewport is open.
    */
@@ -62,7 +63,7 @@ const UIStrings = {
   /**
    * @description Empty state body.
    */
-  emptyBody: 'Add a phone and a desktop, then scroll or click once. Each size is a real page.',
+  emptyBody: 'Add a phone and a desktop. Each size is its own page load.',
   /**
    * @description Heading shown while the viewport lease is opening.
    */
@@ -202,7 +203,7 @@ export class ViewportsPanel extends UI.Panel.Panel {
     super('shaar-viewports', /* useShadowDom */ true);
     this.controller = new ViewportController(host);
     this.#stopListening = this.controller.listen(() => this.requestUpdate());
-    this.registerRequiredCSS(viewportsStyles as CSSInJS);
+    this.registerRequiredCSS(viewportsStyles);
     this.requestUpdate();
   }
 

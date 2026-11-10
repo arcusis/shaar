@@ -92,6 +92,10 @@ describeWithEnvironment('ViewportsPanel', () => {
     await Promise.resolve();
     panel.controller.stopPolling();
     panel.performUpdate();
+    const note = panel.contentElement.querySelector('.viewports-note');
+    assert.instanceOf(note, HTMLElement);
+    assert.include(note.textContent ?? '', 'own page load');
+    assert.include(note.textContent ?? '', 'post-click state can diverge');
     assert.lengthOf(panel.contentElement.querySelectorAll('.viewports-card'), 2);
     const shot = panel.contentElement.querySelector('.viewports-shot');
     assert.instanceOf(shot, HTMLButtonElement);

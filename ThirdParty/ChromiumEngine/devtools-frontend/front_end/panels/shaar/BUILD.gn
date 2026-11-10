@@ -9,6 +9,11 @@ import("../visibility.gni")
 devtools_entrypoint("meta") {
   entrypoint = "shaar-meta.ts"
 
+  # The meta bundle inlines each panel, so it waits for that panel's CSS.
+  deps = [
+    "viewports:css_files",
+  ]
+
   ts_deps = [
     "build-info:meta",
     "network-rules:meta",

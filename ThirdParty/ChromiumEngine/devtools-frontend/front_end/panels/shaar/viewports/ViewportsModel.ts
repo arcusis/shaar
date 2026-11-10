@@ -659,12 +659,14 @@ export class ViewportController {
     if (leaseID === null) {
       throw new Error('unavailable');
     }
+    const url = pageUrlIsValid(this.url) ? this.url : '';
     const reply = await this.#host.request('add', {
       schemaVersion: 1,
       leaseID,
       preset,
       width: spec.width,
       height: spec.height,
+      ...(url ? {url} : {}),
     });
     this.#assertSession(session);
     const nativeId = reply.viewportID;
@@ -688,7 +690,7 @@ export class ViewportController {
       id: `viewport-${nativeId}`,
       nativeId,
       preset,
-      url: this.frames[0]?.url ?? '',
+      url: url || this.frames[0]?.url || '',
       pngBase64: '',
       safeArea: spec.insets,
       orientation: 'portrait',

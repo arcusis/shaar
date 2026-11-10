@@ -13,6 +13,7 @@ class RecordingHost {
   failOpen = false;
   readonly #capabilities: {colorScheme?: number, hover?: number, typing?: number};
   #nextId = 1;
+  #url = 'https://example.com/';
 
   constructor(capabilities: {colorScheme?: number, hover?: number, typing?: number} = {
     colorScheme: 1,
@@ -24,6 +25,9 @@ class RecordingHost {
 
   request(operation: string, payload: Record<string, unknown>): Promise<Viewports.ViewportsHost.ViewportReply> {
     this.calls.push({operation, payload: {...payload}});
+    if (operation === 'action' && payload.kind === 'navigate' && typeof payload.url === 'string') {
+      this.#url = payload.url;
+    }
     if (operation === 'open') {
       if (this.failOpen) {
         return Promise.reject(new Error('unavailable'));
@@ -40,7 +44,7 @@ class RecordingHost {
       return Promise.resolve({
         schemaVersion: 1,
         viewportID: typeof viewportID === 'number' ? viewportID : 0,
-        url: 'https://example.com/',
+        url: this.#url,
         data: TINY_PNG,
       });
     }
@@ -171,6 +175,20 @@ describe('ViewportsModel', () => {
     await controller.typeIntoAll('');
     assert.strictEqual(host.calls.length, before);
     assert.strictEqual(controller.notice, 'invalid');
+    await controller.close();
+  });
+
+  it('adds the next viewport at the current url', async () => {
+    const host = new RecordingHost();
+    const controller = new Viewports.ViewportsModel.ViewportController(host);
+    await controller.open();
+    const opened = host.calls.filter(call => call.operation === 'add');
+    assert.isUndefined(opened[0].payload.url);
+    await controller.navigate('https://example.com/now');
+    await controller.add('ipad');
+    const added = host.calls.filter(call => call.operation === 'add');
+    assert.strictEqual(added[added.length - 1].payload.url, 'https://example.com/now');
+    assert.strictEqual(controller.frames[controller.frames.length - 1].url, 'https://example.com/now');
     await controller.close();
   });
 });

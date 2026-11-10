@@ -639,7 +639,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     if (self.onDeviceChooserEvent) {
       self.onDeviceChooserEvent(chooserEvent);
     } else {
-      [self resolveDeviceChooserRequestID:requestID index:nil];
+      [self resolveDeviceChooserRequestID:requestID optionID:nil];
     }
   }
   if (event->kind == SHAAR_EVENT_PERMISSION &&
@@ -735,7 +735,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     for (NSString *requestID in [_shaarCaptureRequests allKeysForObject:tabID])
       [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
     for (NSString *requestID in [_shaarDeviceChooserRequests allKeysForObject:tabID])
-      [self resolveDeviceChooserRequestID:requestID index:nil];
+      [self resolveDeviceChooserRequestID:requestID optionID:nil];
     for (NSString *requestID in [_shaarShareRequests allKeysForObject:tabID])
       [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
     [self cancelExtensionInstallRequestsForTabID:tabID];
@@ -1947,18 +1947,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   }
 }
 
-- (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(NSNumber *)index {
+- (void)resolveDeviceChooserRequestID:(NSString *)requestID optionID:(NSString *)optionID {
   if (!_shaarDeviceChooserAvailable) return;
   NSString *tabID = _shaarDeviceChooserRequests[requestID];
   if (!tabID) return;
   [_shaarDeviceChooserRequests removeObjectForKey:requestID];
-  BOOL select = index != nil && index.integerValue >= 0;
+  BOOL select = optionID.length > 0;
   NSMutableDictionary *payload = [@{
     @"schemaVersion": @1,
     @"id": requestID,
     @"action": select ? @"select" : @"cancel",
   } mutableCopy];
-  if (select) payload[@"index"] = @(index.integerValue);
+  if (select) payload[@"optionID"] = optionID;
   [self submitTabID:tabID operation:kShaarDeviceChooserDecision payload:payload];
 }
 

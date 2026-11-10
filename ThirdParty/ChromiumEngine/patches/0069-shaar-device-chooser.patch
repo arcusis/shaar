@@ -36,7 +36,7 @@ new file mode 100644
 index 0000000..94a7abe
 --- /dev/null
 +++ b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
-@@ -0,0 +1,460 @@
+@@ -0,0 +1,469 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -60,6 +60,7 @@ index 0000000..94a7abe
 +#include "base/task/current_thread.h"
 +#include "base/task/sequenced_task_runner.h"
 +#include "base/time/time.h"
++#include "base/unguessable_token.h"
 +#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 +#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
 +#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
@@ -211,9 +212,16 @@ index 0000000..94a7abe
 +    return published;
 +  }
 +
-+  bool SelectIndex(size_t index) {
-+    if (finishing_ || !controller_ || index >= controller_->NumOptions())
++  bool CanSelectOption(std::string_view option_id) const {
++    auto found = shown_options_.find(std::string(option_id));
++    return !finishing_ && controller_ && found != shown_options_.end() &&
++           found->second < controller_->NumOptions();
++  }
++
++  bool SelectOption(std::string_view option_id) {
++    if (!CanSelectOption(option_id))
 +      return false;
++    const size_t index = shown_options_.find(std::string(option_id))->second;
 +    selecting_ = true;
 +    controller_->set_view(nullptr);
 +    controller_->Select(std::vector<size_t>{index});
@@ -270,25 +278,31 @@ index 0000000..94a7abe
 +    payload.Set("pageURL", page_url_.spec());
 +    payload.Set("origin", origin_.spec());
 +    base::ListValue options;
++    std::map<std::string, size_t> shown_options;
 +    const size_t count = std::min(controller_->NumOptions(), kMaximumOptions);
 +    for (size_t index = 0; index < count; ++index) {
++      const std::string option_id = base::UnguessableToken::Create().ToString();
 +      base::DictValue option;
-+      option.Set("index", static_cast<int>(index));
++      option.Set("optionID", option_id);
 +      option.Set("name", ClampName(controller_->GetOption(index)));
 +      options.Append(std::move(option));
++      shown_options.emplace(option_id, index);
 +    }
-+    const bool can_grant = controller_->NumOptions() > 0;
++    const bool can_grant = count > 0;
 +    payload.Set("options", std::move(options));
 +    payload.Set("canGrant", can_grant);
 +    std::string json;
 +    if (!base::JSONWriter::Write(payload, &json))
 +      return false;
-+    return shaar::EmitEvent(
-+               engine_, SHAAR_EVENT_PERMISSION,
-+               {profile_id_.data(), profile_id_.size()}, {},
-+               {window_id_.data(), window_id_.size()},
-+               {tab_id_.data(), tab_id_.size()},
-+               {json.data(), json.size()}) == SHAAR_OK;
++    const bool published = shaar::EmitEvent(
++                               engine_, SHAAR_EVENT_PERMISSION,
++                               {profile_id_.data(), profile_id_.size()}, {},
++                               {window_id_.data(), window_id_.size()},
++                               {tab_id_.data(), tab_id_.size()},
++                               {json.data(), json.size()}) == SHAAR_OK;
++    if (published)
++      shown_options_ = std::move(shown_options);
++    return published;
 +  }
 +
 +  void TakeOwnership();
@@ -306,6 +320,7 @@ index 0000000..94a7abe
 +  content::GlobalRenderFrameHostId frame_id_;
 +  std::string transport_;
 +  std::unique_ptr<permissions::ChooserController> controller_;
++  std::map<std::string, size_t> shown_options_;
 +  bool announced_ = false;
 +  bool selecting_ = false;
 +  bool finishing_ = false;
@@ -317,11 +332,6 @@ index 0000000..94a7abe
 +SessionMap& Sessions() {
 +  static base::NoDestructor<SessionMap> sessions;
 +  return *sessions;
-+}
-+
-+uint64_t& NextID() {
-+  static base::NoDestructor<uint64_t> next(0);
-+  return *next;
 +}
 +
 +void DismissById(std::string id) {
@@ -371,13 +381,13 @@ index 0000000..94a7abe
 +  }
 +  if (*action != "select")
 +    return std::nullopt;
-+  if (!HasOnlyKeys(value, {"schemaVersion", "id", "action", "index"}))
++  if (!HasOnlyKeys(value, {"schemaVersion", "id", "action", "optionID"}))
 +    return std::nullopt;
-+  const std::optional<int> index = value.FindInt("index");
-+  if (!index || *index < 0)
++  const std::string* option_id = value.FindString("optionID");
++  if (!option_id || !ValidChooserID(*option_id))
 +    return std::nullopt;
 +  decision.select = true;
-+  decision.index = static_cast<size_t>(*index);
++  decision.option_id = *option_id;
 +  return decision;
 +}
 +
@@ -404,7 +414,7 @@ index 0000000..94a7abe
 +  if (!page_url.SchemeIsHTTPOrHTTPS() || !origin.SchemeIsHTTPOrHTTPS())
 +    return base::DoNothing();
 +
-+  const std::string id = std::to_string(++NextID());
++  const std::string id = base::UnguessableToken::Create().ToString();
 +  const std::string transport = controller->shaar_transport();
 +  auto session = std::make_unique<DeviceChooserSession>(
 +      id, engine, contents, identity->window, identity->tab,
@@ -459,14 +469,13 @@ index 0000000..94a7abe
 +    return Fail(error, SHAAR_NOT_FOUND, "device chooser page changed");
 +  }
 +  if (decision->select) {
-+    if (!session->controller() ||
-+        decision->index >= session->controller()->NumOptions()) {
++    if (!session->CanSelectOption(decision->option_id)) {
 +      return Fail(error, SHAAR_INVALID_ARGUMENT,
-+                  "device chooser index is out of range");
++                  "device chooser option is not in the shown snapshot");
 +    }
 +    Reply(ReplyContext{request_id, reply, reply_context},
 +          base::DictValue().Set("schemaVersion", 1));
-+    session->SelectIndex(decision->index);
++    session->SelectOption(decision->option_id);
 +    return SHAAR_OK;
 +  }
 +  Reply(ReplyContext{request_id, reply, reply_context},
@@ -531,7 +540,7 @@ index 0000000..93f0e80
 +struct DeviceChooserDecision {
 +  std::string id;
 +  bool select = false;
-+  size_t index = 0;
++  std::string option_id;
 +};
 +
 +std::optional<DeviceChooserDecision> ParseDeviceChooserDecision(
@@ -555,7 +564,7 @@ new file mode 100644
 index 0000000..7f71a01
 --- /dev/null
 +++ b/chrome/browser/shaar/chooser/shaar_device_chooser_unittest.cc
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,72 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -586,12 +595,12 @@ index 0000000..7f71a01
 +  EXPECT_FALSE(cancel->select);
 +
 +  base::DictValue select = Decision("select");
-+  select.Set("index", 0);
++  select.Set("optionID", "opaque-option-0");
 +  std::optional<shaar::chooser::DeviceChooserDecision> parsed =
 +      shaar::chooser::ParseDeviceChooserDecision(select);
 +  ASSERT_TRUE(parsed);
 +  EXPECT_TRUE(parsed->select);
-+  EXPECT_EQ(parsed->index, 0u);
++  EXPECT_EQ(parsed->option_id, "opaque-option-0");
 +}
 +
 +TEST(ShaarDeviceChooserTest, RejectsMalformedDecisions) {
@@ -605,9 +614,12 @@ index 0000000..7f71a01
 +
 +  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(Decision("select")));
 +
-+  base::DictValue negative = Decision("select");
-+  negative.Set("index", -1);
-+  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(negative));
++  base::DictValue indexed_select = Decision("select");
++  indexed_select.Set("index", 0);
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(indexed_select));
++
++  base::DictValue missing_option = Decision("select");
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(missing_option));
 +
 +  base::DictValue bad_id = Decision("cancel");
 +  bad_id.Set("id", "not an id");

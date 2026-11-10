@@ -36,15 +36,15 @@ enum DeviceChooserTransport: String, Equatable, Sendable {
 }
 
 struct DeviceChooserOption: Identifiable, Equatable, Sendable {
-  let index: Int
+  let optionID: String
   let title: String
   let detail: String
-  var id: Int { index }
+  var id: String { optionID }
 }
 
 enum DeviceChooserOptionPresentation {
-  static func isSelected(optionIndex: Int, selectedIndex: Int?) -> Bool {
-    selectedIndex == optionIndex
+  static func isSelected(optionID: String, selectedOptionID: String?) -> Bool {
+    selectedOptionID == optionID
   }
 }
 
@@ -87,25 +87,25 @@ struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
 struct DeviceChooserSelection {
   private(set) var options: [DeviceChooserOption]
   private(set) var revision: UUID
-  private(set) var index: Int?
+  private(set) var optionID: String?
 
-  init(options: [DeviceChooserOption], revision: UUID, selectedIndex: Int? = nil) {
+  init(options: [DeviceChooserOption], revision: UUID, selectedOptionID: String? = nil) {
     self.options = options
     self.revision = revision
-    self.index = options.contains { $0.index == selectedIndex } ? selectedIndex : nil
+    self.optionID = options.contains { $0.optionID == selectedOptionID } ? selectedOptionID : nil
   }
 
-  mutating func select(_ index: Int, from options: [DeviceChooserOption], revision: UUID) {
+  mutating func select(_ optionID: String, from options: [DeviceChooserOption], revision: UUID) {
     self.options = options
     self.revision = revision
-    self.index = options.contains { $0.index == index } ? index : nil
+    self.optionID = options.contains { $0.optionID == optionID } ? optionID : nil
   }
 
-  func selectedIndex(for options: [DeviceChooserOption], revision: UUID) -> Int? {
-    guard revision == self.revision, options == self.options, let index,
-      options.contains(where: { $0.index == index })
+  func selectedOptionID(for options: [DeviceChooserOption], revision: UUID) -> String? {
+    guard revision == self.revision, options == self.options, let optionID,
+      options.contains(where: { $0.optionID == optionID })
     else { return nil }
-    return index
+    return optionID
   }
 }
 
@@ -114,7 +114,7 @@ enum DeviceChooserIntake {
     "schemaVersion", "kind", "id", "transport", "pageURL", "origin", "options", "canGrant",
     "profileID", "tabID", "windowID",
   ]
-  private static let optionKeys: Set<String> = ["index", "name"]
+  private static let optionKeys: Set<String> = ["optionId", "name"]
   private static let identifierCharacters = CharacterSet(
     charactersIn: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-")
 
@@ -147,10 +147,11 @@ enum DeviceChooserIntake {
       let canGrant = payload["canGrant"] as? Bool
     else { return nil }
     var options: [DeviceChooserOption] = []
-    var seen: Set<Int> = []
+    var seen: Set<String> = []
     for raw in rawOptions {
       guard Set(raw.keys).isSubset(of: optionKeys),
-        let index = integer(raw["index"]), (0..<64).contains(index), seen.insert(index).inserted,
+        let optionID = raw["optionId"] as? String, isChooserID(optionID),
+        seen.insert(optionID).inserted,
         let name = raw["name"] as? String, name.utf8.count <= 256
       else { return nil }
       let sanitizedName = displayName(name)
@@ -166,7 +167,7 @@ enum DeviceChooserIntake {
       let title =
         !hasVisibleBase
         ? PanelsL10n.string("Unknown device") : sanitizedName
-      options.append(DeviceChooserOption(index: index, title: title, detail: ""))
+      options.append(DeviceChooserOption(optionID: optionID, title: title, detail: ""))
     }
     guard canGrant == !options.isEmpty else { return nil }
     return DeviceChooserRequest(
@@ -224,18 +225,18 @@ struct DeviceChooserConsent: View {
   }
 
   static func isOptionSelected(
-    _ optionIndex: Int, options: [DeviceChooserOption], selection: DeviceChooserSelection,
+    _ optionID: String, options: [DeviceChooserOption], selection: DeviceChooserSelection,
     revision: UUID
   ) -> Bool {
-    selection.selectedIndex(for: options, revision: revision) == optionIndex
+    selection.selectedOptionID(for: options, revision: revision) == optionID
   }
 
-  init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: Int? = nil) {
+  init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: String? = nil) {
     self.store = store
     self.request = request
     _selection = State(
       initialValue: DeviceChooserSelection(
-        options: request.options, revision: request.revision, selectedIndex: initialSelection))
+        options: request.options, revision: request.revision, selectedOptionID: initialSelection))
   }
 
   private var liveRequest: DeviceChooserRequest {
@@ -256,13 +257,12 @@ struct DeviceChooserConsent: View {
       Text(presented.transport.prompt)
       status(presented)
       HStack {
-        Button(PanelsL10n.string("Not now"), role: .cancel) { resolve(index: nil) }
+        Button(PanelsL10n.string("Not now"), role: .cancel) { resolve(optionID: nil) }
           .keyboardShortcut(.cancelAction)
         Spacer()
         Button(PanelsL10n.string("Connect")) {
-          resolve(
-            index: selection.selectedIndex(
-              for: presented.options, revision: presented.revision))
+          resolve(optionID: selection.selectedOptionID(
+            for: presented.options, revision: presented.revision))
         }
         .disabled(!canConnect(presented))
       }
@@ -275,7 +275,7 @@ struct DeviceChooserConsent: View {
 
   private func canConnect(_ presented: DeviceChooserRequest) -> Bool {
     guard presented.canGrant, presented.matches(store.session) else { return false }
-    return selection.selectedIndex(for: presented.options, revision: presented.revision) != nil
+    return selection.selectedOptionID(for: presented.options, revision: presented.revision) != nil
   }
 
   @ViewBuilder private func status(_ presented: DeviceChooserRequest) -> some View {
@@ -291,7 +291,7 @@ struct DeviceChooserConsent: View {
     } else {
       ForEach(presented.options) { option in
         Button {
-          selection.select(option.index, from: presented.options, revision: presented.revision)
+          selection.select(option.optionID, from: presented.options, revision: presented.revision)
         } label: {
           optionLabel(option, options: presented.options)
         }
@@ -299,7 +299,7 @@ struct DeviceChooserConsent: View {
         .accessibilityAddTraits(
           Self.optionAccessibilityTraits(
             isSelected: Self.isOptionSelected(
-              option.index, options: presented.options, selection: selection,
+              option.optionID, options: presented.options, selection: selection,
               revision: presented.revision)))
       }
     }
@@ -309,8 +309,8 @@ struct DeviceChooserConsent: View {
     _ option: DeviceChooserOption, options: [DeviceChooserOption]
   ) -> some View {
     let selected = DeviceChooserOptionPresentation.isSelected(
-      optionIndex: option.index,
-      selectedIndex: selection.selectedIndex(for: options, revision: liveRequest.revision))
+      optionID: option.optionID,
+      selectedOptionID: selection.selectedOptionID(for: options, revision: liveRequest.revision))
     return VStack(alignment: .leading, spacing: 2) {
       HStack {
         VStack(alignment: .leading, spacing: 2) {
@@ -333,8 +333,8 @@ struct DeviceChooserConsent: View {
     .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 
-  private func resolve(index: Int?) {
-    store.resolveDeviceChooser(request.id, optionIndex: index)
+  private func resolve(optionID: String?) {
+    store.resolveDeviceChooser(request.id, optionID: optionID)
     dismiss()
   }
 }

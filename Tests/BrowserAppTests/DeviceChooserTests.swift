@@ -136,7 +136,7 @@ struct DeviceChooserTests {
     let request = try #require(
       self.request(
         store, transport: "usb", id: "unsafe-name",
-        options: [["index": 0, "name": unsafeName]], canGrant: true))
+        options: [["optionId": "option-0", "name": unsafeName]], canGrant: true))
 
     #expect(request.options.first?.title == "Adapter\u{FFFD}\u{FFFD}txt.exe")
   }
@@ -147,37 +147,32 @@ struct DeviceChooserTests {
     let request = try #require(
       self.request(
         store, transport: "usb", id: "joined-name",
-        options: [["index": 0, "name": name]], canGrant: true))
+        options: [["optionId": "option-0", "name": name]], canGrant: true))
 
     #expect(request.options.first?.title == name)
   }
 
-  @Test func chooserRejectsFractionalAndOutOfRangeOptionIndexes() throws {
+  @Test func chooserRequiresUniqueOpaqueOptionIdentifiers() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
+    let valid = ["optionId": "opaque-option-0", "name": "Adapter"]
+    let parsed = try #require(
+      request(store, transport: "usb", id: "opaque-option", options: [valid], canGrant: true))
+    #expect(parsed.options.first?.optionID == "opaque-option-0")
 
-    for invalidIndex: Any in [0.5, 64] {
+    for invalidOptions in [
+      [["optionId": "bad id", "name": "Adapter"]],
+      [valid, valid],
+      [["index": 0, "name": "Adapter"]],
+    ] {
       let payload = event(
-        transport: "usb", id: "invalid-index", page: tab.url,
-        options: [["index": invalidIndex, "name": "Adapter"]], canGrant: true)
+        transport: "usb", id: "invalid-option-id", page: tab.url,
+        options: invalidOptions, canGrant: true)
       #expect(
         DeviceChooserIntake.request(
           tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
           payload: payload) == nil)
     }
-  }
-
-  @Test func chooserRejectsBooleanOptionIndexes() throws {
-    let store = try store()
-    let tab = try #require(store.session.selectedSpace.selectedTab)
-    let payload = event(
-      transport: "usb", id: "boolean-index", page: tab.url,
-      options: [["index": true, "name": "Adapter"]], canGrant: true)
-
-    #expect(
-      DeviceChooserIntake.request(
-        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-        payload: payload) == nil)
   }
 
   @Test func chooserDeviceNameMatchesTheEngineByteLimit() throws {
@@ -186,26 +181,26 @@ struct DeviceChooserTests {
     let accepted = try #require(
       request(
         store, transport: "usb", id: "max-name-bytes",
-        options: [["index": 0, "name": acceptedName]], canGrant: true))
+        options: [["optionId": "accepted", "name": acceptedName]], canGrant: true))
     #expect(accepted.options.first?.title == acceptedName)
 
     let oversizedName = String(repeating: "a", count: 257)
     #expect(
       request(
         store, transport: "usb", id: "oversized-name",
-        options: [["index": 0, "name": oversizedName]], canGrant: true) == nil)
+        options: [["optionId": "oversized", "name": oversizedName]], canGrant: true) == nil)
 
     let multibyteName = String(repeating: "🔌", count: 64)
     #expect(
       request(
         store, transport: "usb", id: "max-multibyte-name",
-        options: [["index": 0, "name": multibyteName]], canGrant: true)?.options.first?.title
+        options: [["optionId": "multibyte", "name": multibyteName]], canGrant: true)?.options.first?.title
         == multibyteName)
     let oversizedMultibyteName = String(repeating: "🔌", count: 65)
     #expect(
       request(
         store, transport: "usb", id: "oversized-multibyte-name",
-        options: [["index": 0, "name": oversizedMultibyteName]], canGrant: true) == nil)
+        options: [["optionId": "oversized-multibyte", "name": oversizedMultibyteName]], canGrant: true) == nil)
   }
 
   @Test func unnamedDevicesHaveAVisibleFallbackLabel() throws {
@@ -214,8 +209,8 @@ struct DeviceChooserTests {
       self.request(
         store, transport: "usb", id: "unnamed-device",
         options: [
-          ["index": 0, "name": ""],
-          ["index": 1, "name": "   "],
+          ["optionId": "empty", "name": ""],
+          ["optionId": "spaces", "name": "   "],
         ], canGrant: true))
 
     #expect(
@@ -240,16 +235,16 @@ struct DeviceChooserTests {
     let request = try #require(
       self.request(
         store, transport: "usb", id: "invisible-name",
-        options: [["index": 0, "name": "\u{FE0F}"]], canGrant: true))
+        options: [["optionId": "invisible", "name": "\u{FE0F}"]], canGrant: true))
     #expect(request.options.first?.title == PanelsL10n.string("Unknown device"))
   }
 
-  @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
+  @Test func sheetCancelRejectsWithoutADeviceOptionID() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
     let request = try #require(self.request(store, transport: "hid", id: "4"))
-    var decided: Int??
-    store.onDeviceChooserDecision = { _, index in decided = .some(index) }
+    var decided: String??
+    store.onDeviceChooserDecision = { _, optionID in decided = .some(optionID) }
     #expect(store.requestDeviceChooser(request))
     #expect(!store.requestDeviceChooser(request))
     let sheet = try #require(store.sheet)
@@ -257,14 +252,14 @@ struct DeviceChooserTests {
     #expect(sheet.isConsent)
     #expect(sheet.tabID == tab.id)
     #expect(sheet.matches(store.session))
-    store.resolveDeviceChooser(request.id, optionIndex: 0)
+    store.resolveDeviceChooser(request.id, optionID: "unlisted")
     #expect(decided == .some(nil))
     #expect(store.deviceChooserRequests.isEmpty)
     _ = DeviceChooserConsent(store: store, request: request).body
     let populated = DeviceChooserRequest(
       id: "9", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
       origin: tab.url, transport: .usb,
-      options: [DeviceChooserOption(index: 0, title: "Adapter", detail: "USB")],
+      options: [DeviceChooserOption(optionID: "opaque-option-0", title: "Adapter", detail: "USB")],
       bluetoothUnavailable: false, canGrant: true)
     _ = DeviceChooserConsent(store: store, request: populated, initialSelection: 0).body
     let unavailable = DeviceChooserRequest(
@@ -279,9 +274,9 @@ struct DeviceChooserTests {
     let request = try #require(
       self.request(
         store, transport: "usb", id: "navigation-cancel",
-        options: [["index": 0, "name": "Adapter"]], canGrant: true))
-    var decided: Int??
-    store.onDeviceChooserDecision = { _, index in decided = .some(index) }
+        options: [["optionId": "option-0", "name": "Adapter"]], canGrant: true))
+    var decided: String??
+    store.onDeviceChooserDecision = { _, optionID in decided = .some(optionID) }
 
     #expect(store.requestDeviceChooser(request))
     store.perform(.open(try #require(URL(string: "https://elsewhere.example/"))))
@@ -290,17 +285,17 @@ struct DeviceChooserTests {
     #expect(store.sheet == nil)
   }
 
-  @Test func sheetRejectsAnOptionIndexThatWasNotPresented() throws {
+  @Test func sheetRejectsAnOptionIDThatWasNotPresented() throws {
     let store = try store()
     let request = try #require(
       self.request(
         store, transport: "usb", id: "unlisted-option",
-        options: [["index": 2, "name": "Presented adapter"]], canGrant: true))
-    var decided: Int??
-    store.onDeviceChooserDecision = { _, index in decided = .some(index) }
+        options: [["optionId": "presented", "name": "Presented adapter"]], canGrant: true))
+    var decided: String??
+    store.onDeviceChooserDecision = { _, optionID in decided = .some(optionID) }
 
     #expect(store.requestDeviceChooser(request))
-    store.resolveDeviceChooser(request.id, optionIndex: 1)
+    store.resolveDeviceChooser(request.id, optionID: "missing")
 
     #expect(decided == .some(nil))
     #expect(store.deviceChooserRequests.isEmpty)
@@ -313,7 +308,7 @@ struct DeviceChooserTests {
     let updated = try #require(
       self.request(
         store, kind: "deviceChooserUpdated", transport: "usb", id: "7",
-        options: [["index": 0, "name": "USB serial adapter"]], canGrant: true))
+        options: [["optionId": "serial", "name": "USB serial adapter"]], canGrant: true))
     #expect(updated.canGrant)
     #expect(store.updateDeviceChooser(updated))
     guard case .deviceChooser(let shown) = store.sheet else {
@@ -349,28 +344,28 @@ struct DeviceChooserTests {
   }
 
   @Test func anUpdatedOptionListInvalidatesThePreviousSelection() {
-    let previous = [DeviceChooserOption(index: 0, title: "Adapter A", detail: "")]
-    let updated = [DeviceChooserOption(index: 0, title: "Adapter B", detail: "")]
+    let previous = [DeviceChooserOption(optionID: "option-a", title: "Adapter A", detail: "")]
+    let updated = [DeviceChooserOption(optionID: "option-b", title: "Adapter B", detail: "")]
     let revision = UUID()
     let updatedRevision = UUID()
     var selection = DeviceChooserSelection(options: previous, revision: revision)
-    selection.select(0, from: previous, revision: revision)
+    selection.select("option-a", from: previous, revision: revision)
 
-    #expect(selection.selectedIndex(for: previous, revision: revision) == 0)
-    #expect(selection.selectedIndex(for: updated, revision: updatedRevision) == nil)
-    selection.select(0, from: updated, revision: updatedRevision)
-    #expect(selection.selectedIndex(for: updated, revision: updatedRevision) == 0)
+    #expect(selection.selectedOptionID(for: previous, revision: revision) == "option-a")
+    #expect(selection.selectedOptionID(for: updated, revision: updatedRevision) == nil)
+    selection.select("option-b", from: updated, revision: updatedRevision)
+    #expect(selection.selectedOptionID(for: updated, revision: updatedRevision) == "option-b")
   }
 
   @Test func anIdenticalOptionRefreshInvalidatesThePreviousSelection() {
-    let options = [DeviceChooserOption(index: 0, title: "Same adapter", detail: "")]
+    let options = [DeviceChooserOption(optionID: "same", title: "Same adapter", detail: "")]
     let revision = UUID()
     let refreshedRevision = UUID()
     var selection = DeviceChooserSelection(options: options, revision: revision)
-    selection.select(0, from: options, revision: revision)
+    selection.select("same", from: options, revision: revision)
 
-    #expect(selection.selectedIndex(for: options, revision: revision) == 0)
-    #expect(selection.selectedIndex(for: options, revision: refreshedRevision) == nil)
+    #expect(selection.selectedOptionID(for: options, revision: revision) == "same")
+    #expect(selection.selectedOptionID(for: options, revision: refreshedRevision) == nil)
   }
 
   @Test func selectedDeviceOptionHasASelectedAccessibilityTrait() {
@@ -380,9 +375,9 @@ struct DeviceChooserTests {
   }
 
   @Test func selectedDevicePresentationTracksTheSelectedIndex() {
-    #expect(DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: 2))
-    #expect(!DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: 1))
-    #expect(!DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: nil))
+    #expect(DeviceChooserOptionPresentation.isSelected(optionID: "two", selectedOptionID: "two"))
+    #expect(!DeviceChooserOptionPresentation.isSelected(optionID: "two", selectedOptionID: "one"))
+    #expect(!DeviceChooserOptionPresentation.isSelected(optionID: "two", selectedOptionID: nil))
   }
 
   private func store() throws -> BrowserStore {

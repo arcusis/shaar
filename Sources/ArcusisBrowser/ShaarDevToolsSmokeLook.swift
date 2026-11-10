@@ -11,7 +11,8 @@ import AppKit
     report: ShaarDevToolsSmokeReport
   ) {
     guard let contentIdentifier,
-      let content = ShaarDevToolsSmokeAccess.element(identifier: contentIdentifier, in: root) as? NSView
+      let content = ShaarDevToolsSmokeAccess.element(identifier: contentIdentifier, in: root)
+        as? NSView
     else { return }
     var clip: String?
     var tiny: String?
@@ -54,8 +55,9 @@ import AppKit
   static func recordBlank(panel: String, in root: NSView, report: ShaarDevToolsSmokeReport) {
     let name = "look/blank/\(panel)"
     guard !report.contains(name) else { return }
-    guard let shell = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.shell", in: root) as? NSView
+    guard
+      let shell = ShaarDevToolsSmokeAccess.element(
+        identifier: "shaar.devtools.shell", in: root) as? NSView
     else { return }
     var labels = 0
     var text = ""
@@ -111,7 +113,9 @@ import AppKit
 
   private static func clippedText(_ view: NSView) -> String? {
     guard let field = view as? NSTextField, !field.isHiddenOrHasHiddenAncestor else { return nil }
-    guard field.bounds.width > 8, field.bounds.height > 0, field.bounds.height < 28 else { return nil }
+    guard field.bounds.width > 8, field.bounds.height > 0, field.bounds.height < 28 else {
+      return nil
+    }
     guard field.cell?.wraps != true, field.cell?.isScrollable != true else { return nil }
     guard view.enclosingScrollView == nil else { return nil }
     let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)

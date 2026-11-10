@@ -194,9 +194,10 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
       .network(ShaarNetworkEvent(id: UUID(), method: "GET", url: "/api/xhr", status: 200)))
     for _ in 0..<20 where shell.consoleCount < 1 || shell.networkCount < 1 { await Task.yield() }
     #expect(shell.streamAvailable)
-    #expect(shell.console.rows(from: shell.consoleEvents).contains {
-      $0.event.message == "qa-error"
-    })
+    #expect(
+      shell.console.rows(from: shell.consoleEvents).contains {
+        $0.event.message == "qa-error"
+      })
     #expect(shell.network.requests(from: shell.events).contains { $0.url == "/api/xhr" })
     shell.close()
   }
@@ -209,14 +210,18 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     let inspector = InspectorModel(target: target, engine: nil)
     shell.open(inspector: inspector)
     for _ in 0..<20 where !shell.streamAvailable { await Task.yield() }
-    transport.emit(.network(.init(
-      id: UUID(), method: "GET", url: "https://example.com/old",
-      status: 200, requestID: "old-1", phase: .response)))
+    transport.emit(
+      .network(
+        .init(
+          id: UUID(), method: "GET", url: "https://example.com/old",
+          status: 200, requestID: "old-1", phase: .response)))
     for _ in 0..<20 where shell.networkCount == 0 { await Task.yield() }
     shell.beginNavigation()
-    transport.emit(.network(.init(
-      id: UUID(), method: "GET", url: target.url.absoluteString,
-      status: nil, requestID: "document-1", phase: .request)))
+    transport.emit(
+      .network(
+        .init(
+          id: UUID(), method: "GET", url: target.url.absoluteString,
+          status: nil, requestID: "document-1", phase: .request)))
     for _ in 0..<20 where shell.networkCount == 0 { await Task.yield() }
     shell.updateTarget(target, committed: true)
     let requests = shell.network.requests(from: shell.events)

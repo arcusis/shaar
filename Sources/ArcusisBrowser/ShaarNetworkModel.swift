@@ -203,7 +203,8 @@ final class ShaarNetworkModel {
     for row in rows where !row.method.isEmpty && row.resource == .document {
       methodsByURL[row.url, default: []].insert(row.method)
     }
-    for index in rows.indices where rows[index].method.isEmpty && rows[index].resource == .document {
+    for index in rows.indices where rows[index].method.isEmpty && rows[index].resource == .document
+    {
       guard let methods = methodsByURL[rows[index].url], methods.count == 1,
         let method = methods.first
       else { continue }

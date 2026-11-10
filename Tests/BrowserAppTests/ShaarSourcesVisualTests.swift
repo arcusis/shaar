@@ -20,11 +20,16 @@ import XCTest
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
-    let script = #"const re=/https?:\/\/[^{};]+/g;function match(url){const label=`a;${url}`;return re.test(url)&&label.length>0;}"#
+    let script =
+      #"const re=/https?:\/\/[^{};]+/g;function match(url){const label=`a;${url}`;return re.test(url)&&label.length>0;}"#
     let fixture = ShaarPhase2FixtureTransport { command in
       switch command {
       case .resourceTree:
-        return ["items": [["url": "https://example.test/min.js", "type": "Script", "mimeType": "text/javascript"]]]
+        return [
+          "items": [
+            ["url": "https://example.test/min.js", "type": "Script", "mimeType": "text/javascript"]
+          ]
+        ]
       case .resourceContent:
         return ["items": [], "body": script, "base64Encoded": false]
       default: return ["items": []]
@@ -66,15 +71,27 @@ import XCTest
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://127.0.0.1:3211/")!)
-    let map = #"{"version":3,"sources":["src/App.vue"],"sourcesContent":["<template><h1>App</h1></template>"]}"#
-    let directive = "//# sourceMappingURL=data:application/json;base64,\(Data(map.utf8).base64EncodedString())"
+    let map =
+      #"{"version":3,"sources":["src/App.vue"],"sourcesContent":["<template><h1>App</h1></template>"]}"#
+    let directive =
+      "//# sourceMappingURL=data:application/json;base64,\(Data(map.utf8).base64EncodedString())"
     for mapped in [false, true] {
       let fixture = ShaarPhase2FixtureTransport { command in
         switch command {
         case .resourceTree:
-          return ["items": [["url": "http://127.0.0.1:3211/src/App.vue", "type": "Script", "mimeType": "text/javascript"]]]
+          return [
+            "items": [
+              [
+                "url": "http://127.0.0.1:3211/src/App.vue", "type": "Script",
+                "mimeType": "text/javascript",
+              ]
+            ]
+          ]
         case .resourceContent:
-          return ["items": [], "body": "const app=1;\n" + (mapped ? directive : ""), "base64Encoded": false]
+          return [
+            "items": [], "body": "const app=1;\n" + (mapped ? directive : ""),
+            "base64Encoded": false,
+          ]
         default: return ["items": []]
         }
       }

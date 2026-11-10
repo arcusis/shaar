@@ -950,7 +950,8 @@ final class ShaarDevToolsCSSOverviewModel {
   @ObservationIgnored private var generation = 0
   @ObservationIgnored private var usingFixture = false
   @ObservationIgnored private var reloadAgain = false
-  @ObservationIgnored private var pageSheets: (@MainActor () async throws -> [ShaarDevToolsCSSSheet])?
+  @ObservationIgnored private var pageSheets:
+    (@MainActor () async throws -> [ShaarDevToolsCSSSheet])?
 
   init(sources: ShaarSourcesModel) {
     self.sources = sources

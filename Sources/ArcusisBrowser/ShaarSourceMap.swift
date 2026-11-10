@@ -17,7 +17,9 @@ enum ShaarSourceMap {
     from script: String, resourceURL: URL,
     fetch: @Sendable (URL) async throws -> Data
   ) async throws -> [ShaarOriginalSource] {
-    guard let reference = DevelopmentSourceResolver.sourceMapReference(in: script) else { return [] }
+    guard let reference = DevelopmentSourceResolver.sourceMapReference(in: script) else {
+      return []
+    }
     let data: Data
     if reference.hasPrefix("data:") {
       guard let decoded = inlineData(reference) else { return [] }

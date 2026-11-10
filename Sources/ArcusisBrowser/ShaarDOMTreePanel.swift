@@ -587,7 +587,8 @@ private struct ShaarDOMSymbolButton: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(action: action) }
 
   func makeNSView(context: Context) -> NSButton {
-    let button = NSButton(title: "", target: context.coordinator, action: #selector(Coordinator.press))
+    let button = NSButton(
+      title: "", target: context.coordinator, action: #selector(Coordinator.press))
     button.isBordered = false
     button.imagePosition = .imageOnly
     button.imageScaling = .scaleProportionallyDown

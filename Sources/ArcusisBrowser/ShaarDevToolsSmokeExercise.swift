@@ -36,7 +36,8 @@ import ShaarEngineABI
     if await drag(handle, by: -80, shell: shell, context: context) {
       report.pass(
         "resize",
-        "Dragging the split handle changed the side panel from \(points(before)) to \(points(shell.rightWidth))")
+        "Dragging the split handle changed the side panel from \(points(before)) to \(points(shell.rightWidth))"
+      )
       return
     }
     guard let narrowed = await horizontalSplit(in: context) else {
@@ -47,12 +48,14 @@ import ShaarEngineABI
     if await drag(narrowed, by: 80, shell: shell, context: context) {
       report.pass(
         "resize",
-        "Dragging the split handle changed the side panel from \(points(stuck)) to \(points(shell.rightWidth))")
+        "Dragging the split handle changed the side panel from \(points(stuck)) to \(points(shell.rightWidth))"
+      )
       return
     }
     report.fail(
       "resize",
-      "Dragging the split handle left the width at \(points(shell.rightWidth)) from \(points(before))")
+      "Dragging the split handle left the width at \(points(shell.rightWidth)) from \(points(before))"
+    )
   }
 
   private static func points(_ width: CGFloat) -> Int { Int(width.rounded()) }
@@ -110,7 +113,8 @@ import ShaarEngineABI
       let reason = expandFailure ?? "requestChildNodes did not fill the row"
       report.fail(
         "dom-expand",
-        "Expanding a DOM row did not load children (\(reason)). A deeper document load found the node.")
+        "Expanding a DOM row did not load children (\(reason)). A deeper document load found the node."
+      )
     }
     guard await lock(main, shell: shell, inspector: inspector) else {
       failPanes("Could not lock main.grid", report: report)
@@ -159,7 +163,9 @@ import ShaarEngineABI
     let display = computed("display", inspector.styles)
     let padding = computed("padding-top", inspector.styles)
     if display == expectDisplay, padding?.contains("16") == true {
-      report.pass("inspector-computed", "Computed display is \(expectDisplay) and padding-top is \(padding ?? "")")
+      report.pass(
+        "inspector-computed",
+        "Computed display is \(expectDisplay) and padding-top is \(padding ?? "")")
       return
     }
     if display == nil, padding == nil {
@@ -323,7 +329,8 @@ import ShaarEngineABI
     }
     report.pass(
       "audit-run",
-      "Run audit finished. \(audit.violations) violations, \(audit.incomplete) need review, \(listed) listed.")
+      "Run audit finished. \(audit.violations) violations, \(audit.incomplete) need review, \(listed) listed."
+    )
   }
 
   private static func dragDOM(
@@ -334,7 +341,8 @@ import ShaarEngineABI
       return
     }
     guard let long = await element(shell.dom, id: "long") else {
-      report.fail("dom-drag", shell.dom.failure ?? "DOM drag had no #long element. \(census(shell.dom))")
+      report.fail(
+        "dom-drag", shell.dom.failure ?? "DOM drag had no #long element. \(census(shell.dom))")
       return
     }
     await shell.dom.loadChildrenIfNeeded(long.id)
@@ -424,13 +432,15 @@ import ShaarEngineABI
     guard let certificate = shell.securitySummary.certificate else {
       report.manual(
         "certificate",
-        "needs-manual. The fixture is HTTP, and Show certificate opens the system certificate sheet.")
+        "needs-manual. The fixture is HTTP, and Show certificate opens the system certificate sheet."
+      )
       return
     }
     let subject = certificate.subject.isEmpty ? "the leaf" : certificate.subject
     report.manual(
       "certificate",
-      "needs-manual. \(subject) is on the Security panel. The system certificate sheet cannot open while windows stay hidden.")
+      "needs-manual. \(subject) is on the Security panel. The system certificate sheet cannot open while windows stay hidden."
+    )
   }
 
   private static func openElements(
@@ -538,7 +548,10 @@ import ShaarEngineABI
   }
 
   private static func failPanes(_ detail: String, report: ShaarDevToolsSmokeReport) {
-    for name in ["inspector-styles", "inspector-computed", "inspector-box", "inspector-force", "inspector-a11y", "inspector-stale"] {
+    for name in [
+      "inspector-styles", "inspector-computed", "inspector-box", "inspector-force",
+      "inspector-a11y", "inspector-stale",
+    ] {
       report.fail(name, detail)
     }
   }

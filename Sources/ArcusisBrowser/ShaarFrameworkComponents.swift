@@ -176,7 +176,8 @@ enum ShaarFrameworkSnapshotParser {
       guard accessors.count <= 8,
         accessors.allSatisfy({ $0.utf16.count <= ShaarFrameworkLimits.key })
       else { throw ShaarFrameworkFailure(reason: "field") }
-      fields.append(ShaarFrameworkField(id: "\(index)", name: name, value: raw, accessors: accessors))
+      fields.append(
+        ShaarFrameworkField(id: "\(index)", name: name, value: raw, accessors: accessors))
     }
     return fields
   }
@@ -374,9 +375,14 @@ final class ShaarFrameworkComponentsModel {
       let group = "shaar-framework-props-\(UUID().uuidString)"
       let object = try await page.callFramework(
         "Runtime.evaluate", params: ["expression": expression, "objectGroup": group])
-      guard let rootID = (object["result"] as? [String: Any])?["objectId"] as? String else { return }
+      guard let rootID = (object["result"] as? [String: Any])?["objectId"] as? String else {
+        return
+      }
       defer {
-        Task { _ = try? await page.callFramework("Runtime.releaseObjectGroup", params: ["objectGroup": group]) }
+        Task {
+          _ = try? await page.callFramework(
+            "Runtime.releaseObjectGroup", params: ["objectGroup": group])
+        }
       }
       var objectID = rootID
       if !path.isEmpty {
@@ -394,9 +400,12 @@ final class ShaarFrameworkComponentsModel {
         params: ["objectId": objectID, "ownProperties": true, "accessorPropertiesOnly": true])
       let rows = accessors["result"] as? [[String: Any]] ?? []
       let property = path.isEmpty ? name : path
-      guard rows.contains(where: {
-        ($0["name"] as? String) == property && ($0["get"] as? [String: Any])?["type"] as? String == "function"
-      }) else { return }
+      guard
+        rows.contains(where: {
+          ($0["name"] as? String) == property
+            && ($0["get"] as? [String: Any])?["type"] as? String == "function"
+        })
+      else { return }
       let reply = try await page.callFramework(
         "Runtime.callFunctionOn",
         params: [
@@ -404,9 +413,11 @@ final class ShaarFrameworkComponentsModel {
           "arguments": [["value": property]], "returnByValue": true,
         ])
       guard token == generation, selectedID == nodeID,
-        nodeIndex < nodes.count, fieldIndex < nodes[nodeIndex].props.count else { return }
+        nodeIndex < nodes.count, fieldIndex < nodes[nodeIndex].props.count
+      else { return }
       let result = reply["result"] as? [String: Any] ?? [:]
-      let value = reply["exceptionDetails"] == nil
+      let value =
+        reply["exceptionDetails"] == nil
         ? Self.getterValue(result) : ShellL10n.string("Getter threw an exception")
       if path.isEmpty {
         nodes[nodeIndex].props[fieldIndex].value = value
@@ -419,7 +430,8 @@ final class ShaarFrameworkComponentsModel {
   }
 
   private static func getterValue(_ result: [String: Any]) -> String {
-    let value = result["description"] as? String
+    let value =
+      result["description"] as? String
       ?? result["value"].map { String(describing: $0) } ?? "undefined"
     return String(value.prefix(ShaarFrameworkLimits.value))
   }

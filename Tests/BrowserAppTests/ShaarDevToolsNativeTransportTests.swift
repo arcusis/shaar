@@ -139,18 +139,22 @@ import Testing
     let profile = target.profileID.uuidString
     transport.receive(
       tabID: identity, profileID: profile,
-      payload: try event(4, data: [
-        "requestID": "r1", "url": "https://example.com/", "method": "GET",
-        "requestHeaders": [["name": "Accept", "value": "text/html"]],
-        "truncated": false,
-      ]), sequence: 1)
+      payload: try event(
+        4,
+        data: [
+          "requestID": "r1", "url": "https://example.com/", "method": "GET",
+          "requestHeaders": [["name": "Accept", "value": "text/html"]],
+          "truncated": false,
+        ]), sequence: 1)
     transport.receive(
       tabID: identity, profileID: profile,
-      payload: try event(5, data: [
-        "requestID": "r1", "status": 200,
-        "responseHeaders": [["name": "Content-Type", "value": "text/html"]],
-        "truncated": false,
-      ]), sequence: 2)
+      payload: try event(
+        5,
+        data: [
+          "requestID": "r1", "status": 200,
+          "responseHeaders": [["name": "Content-Type", "value": "text/html"]],
+          "truncated": false,
+        ]), sequence: 2)
     guard case .event(let request)? = await stream.next(),
       case .event(let response)? = await stream.next()
     else {

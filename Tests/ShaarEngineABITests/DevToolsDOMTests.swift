@@ -119,10 +119,12 @@ struct DevToolsDOMTests {
       [
         "nodeId": index + 10, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
         "childNodeCount": 1,
-        "children": [[
-          "nodeId": index + 1_000, "nodeType": 3, "nodeName": "#text",
-          "nodeValue": "Row \(index)",
-        ]],
+        "children": [
+          [
+            "nodeId": index + 1_000, "nodeType": 3, "nodeName": "#text",
+            "nodeValue": "Row \(index)",
+          ]
+        ],
       ]
     }
     let envelope: [String: Any] = [
@@ -133,8 +135,9 @@ struct DevToolsDOMTests {
       sequence: 1, kind: 14, profileID: Data("profile-a".utf8), sessionID: Data(),
       windowID: Data("window-a".utf8), tabID: Data("tab-a".utf8),
       payloadJSON: try JSONSerialization.data(withJSONObject: envelope))
-    let decoded = try #require(ShaarDOMEventRouter.decode(
-      event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7))
+    let decoded = try #require(
+      ShaarDOMEventRouter.decode(
+        event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7))
     guard case .childrenSet(let parent, let children) = decoded.mutation else {
       Issue.record("Expected child set")
       return

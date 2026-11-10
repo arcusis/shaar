@@ -4,6 +4,7 @@
 - [[CI_Pipeline_Design]]
 - [[CI_Pipeline]]
 - [[Commit_Gates]]
+- [[Security_Posture]]
 - [[CI_Run_Time]]
 - [[CI_Parallel_Verification]]
 - [[Sparkle_Update_Simulation]]

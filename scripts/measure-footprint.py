@@ -71,13 +71,19 @@ ALLOWED_TAB_COUNTS = (1, 10, 30, 50, 100)
 WAIT_TRAPS = (
     "mach_msg_trap",
     "mach_msg2_trap",
+    "mach_msg_overwrite_trap",
     "semaphore_wait_trap",
+    "semaphore_wait_signal_trap",
     "semaphore_timedwait_trap",
+    "semaphore_timedwait_signal_trap",
+    "__semwait_signal",
     "__psynch_cvwait",
     "__psynch_mutexwait",
+    # __psynch_rw_rdlock, __psynch_rw_wrlock, and __psynch_rw_unlock.
+    "__psynch_rw_",
     "__ulock_wait",
     "swtch_pri",
-    # kevent64, __psynch_cvwait, and __workq_kernreturn are waits in idle samples.
+    # kevent64 and __workq_kernreturn are waits in idle samples.
     "kevent",
     "__workq_kernreturn",
 )
@@ -102,7 +108,7 @@ def parse_tab_counts(text):
     return counts
 
 
-def main_thread_sample(pid):
+def main_thread_sample(pid, copy_path=None):
     """Two-second sample of the Swift process main thread while the page is idle."""
     handle = tempfile.NamedTemporaryFile(
         prefix="shaar-main-thread-", suffix=".txt", delete=False)
@@ -122,7 +128,12 @@ def main_thread_sample(pid):
                 "mainThreadSample": "unavailable",
                 "mainThreadSampleError": (completed.stderr or "")[-500:],
             }
-        return parse_main_thread_sample(Path(path).read_text(errors="replace"))
+        text = Path(path).read_text(errors="replace")
+        if copy_path is not None:
+            destination = Path(copy_path)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(text)
+        return parse_main_thread_sample(text)
     except (OSError, subprocess.TimeoutExpired) as error:
         return {"mainThreadSample": "unavailable", "mainThreadSampleError": str(error)}
     finally:
@@ -161,6 +172,11 @@ def frame_is_wait(frame):
     return any(trap in frame for trap in WAIT_TRAPS)
 
 
+def frame_symbol(frame):
+    parts = frame.split(maxsplit=1)
+    return parts[0] if parts else ""
+
+
 def parse_main_thread_sample(text):
     lines = text.splitlines()
     start = None
@@ -197,38 +213,40 @@ def parse_main_thread_sample(text):
             "column": column,
             "count": count,
             "frame": frame,
-            "parent": None,
-            "waits": frame_is_wait(frame),
         })
+    leaf_waits = []
     for index, frame in enumerate(frames):
-        for earlier in range(index - 1, -1, -1):
-            if frames[earlier]["column"] < frame["column"]:
-                frame["parent"] = earlier
-                break
-    for frame in reversed(frames):
-        parent = frame["parent"]
-        if frame["waits"] and parent is not None:
-            frames[parent]["waits"] = True
-    wait_samples = 0
-    for index, frame in enumerate(frames):
-        if not frame_is_wait(frame["frame"]):
-            continue
-        nested = False
-        for later in frames[index + 1:]:
-            if later["column"] <= frame["column"]:
-                break
-            if frame_is_wait(later["frame"]):
-                nested = True
-                break
-        if not nested:
-            wait_samples += frame["count"]
+        leaf = 0
+        if frame_is_wait(frame["frame"]):
+            nested = False
+            for later in frames[index + 1:]:
+                if later["column"] <= frame["column"]:
+                    break
+                if frame_is_wait(later["frame"]):
+                    nested = True
+                    break
+            if not nested:
+                leaf = frame["count"]
+        leaf_waits.append(leaf)
+    wait_samples = sum(leaf_waits)
     top_busy = 0
+    top_column = -1
     top_frame = ""
-    for frame in frames:
-        if frame["waits"] or "start" in frame["frame"] or "dyld" in frame["frame"]:
+    for index, frame in enumerate(frames):
+        symbol = frame_symbol(frame["frame"])
+        # "start" is the dyld entry symbol. A substring match also drops startup frames.
+        if symbol == "start" or "dyld" in frame["frame"]:
             continue
-        if frame["count"] > top_busy:
-            top_busy = frame["count"]
+        waited = leaf_waits[index]
+        for later_index in range(index + 1, len(frames)):
+            if frames[later_index]["column"] <= frame["column"]:
+                break
+            waited += leaf_waits[later_index]
+        busy_count = frame["count"] - waited
+        deeper = busy_count == top_busy and frame["column"] > top_column
+        if busy_count > top_busy or (busy_count > 0 and deeper):
+            top_busy = busy_count
+            top_column = frame["column"]
             top_frame = frame["frame"][:180]
     busy = max(0, total - wait_samples)
     return {
@@ -243,7 +261,7 @@ def parse_main_thread_sample(text):
     }
 
 
-def measure_case(executable, port, tab_count, sample_seconds, eager, inspector):
+def measure_case(executable, port, tab_count, sample_seconds, eager, inspector, sample_copy=None):
     with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as temporary:
         root = Path(temporary)
         (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
@@ -313,7 +331,7 @@ def measure_case(executable, port, tab_count, sample_seconds, eager, inspector):
                 previous_time, previous_cpu = now, cpu
                 time.sleep(1)
             # Sample after the CPU window so the sampler's own cost stays out of idle CPU.
-            thread = main_thread_sample(process.pid) if process.poll() is None else {
+            thread = main_thread_sample(process.pid, sample_copy) if process.poll() is None else {
                 "mainThreadSample": "unavailable",
                 "mainThreadSampleError": "probe exited before the main-thread sample",
             }
@@ -397,6 +415,10 @@ def main():
         "--inspector", action="store_true",
         help="open Inspector, lock the page, and record how often it reads",
     )
+    parser.add_argument(
+        "--sample-out", type=Path, default=None,
+        help="Directory where each case's raw main-thread sample is copied before it is deleted.",
+    )
     args = parser.parse_args()
     tab_counts = parse_tab_counts(args.tab_counts)
     executable = args.app / "Contents/MacOS/ShaarVerification"
@@ -406,13 +428,16 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         counts = (1,) if args.inspector else tab_counts
-        cases = [
-            measure_case(
+        cases = []
+        for count in counts:
+            copy = None
+            if args.sample_out is not None:
+                mode = "eager" if args.eager else "lazy"
+                copy = args.sample_out / f"{count}-{mode}.txt"
+            cases.append(measure_case(
                 executable, server.server_port, count, args.sample_seconds,
-                args.eager, args.inspector,
-            )
-            for count in counts
-        ]
+                args.eager, args.inspector, copy,
+            ))
     finally:
         server.shutdown()
         server.server_close()

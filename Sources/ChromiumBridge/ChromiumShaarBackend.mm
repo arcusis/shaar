@@ -433,6 +433,10 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 }
 
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
+  if ([self isPrivateIdentity:profileID]) {
+    completion(ShaarError(@"Invalid profile identity or engine not ready."));
+    return;
+  }
   if (_shaarProfiles[profileID]) {
     NSMutableArray *waiters = _shaarProfileWaiters[profileID];
     if (waiters) [waiters addObject:[completion copy]];
@@ -498,6 +502,10 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 - (NSView *)hostView { return [self hostViewForWindowID:_shaarPrimaryWindowID]; }
 
 - (BOOL)createWindowID:(NSString *)windowID error:(NSError **)error {
+  if ([self privateIdentityOccupied:windowID]) {
+    if (error) *error = ShaarError(@"Invalid or reused native window identity.");
+    return NO;
+  }
   if (!_shaarEngine || _shaarWindows[windowID]) return NO;
   shaar_window *window = nullptr;
   shaar_error nativeError = EmptyError();
@@ -625,6 +633,10 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID
                url:(NSString *)url error:(NSError **)error {
+  if ([self isPrivateIdentity:tabID] || [self isPrivateIdentity:profileID]) {
+    if (error) *error = ShaarError(@"Private identities cannot enter regular tab ownership.");
+    return NO;
+  }
   if (![self isWindowOpenID:windowID]) {
     if (error) *error = ShaarStatusError(@"Shaar window is closed.", SHAAR_NOT_FOUND);
     return NO;

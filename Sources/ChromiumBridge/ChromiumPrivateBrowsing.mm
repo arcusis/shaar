@@ -273,8 +273,14 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
   auto focus = PrivateSymbol<decltype(&shaar_tab_view_focus)>("shaar_tab_view_focus");
   if (!focus) return NO;
   shaar_error error = ARCPrivateShaarEmptyError();
-  return focus([self privateEngineHandle], PrivateWindow(state[@"windows"][windowID]),
-               PrivateTab(state[@"tabs"][tabID]), &error) == SHAAR_OK;
+  if (focus([self privateEngineHandle], PrivateWindow(state[@"windows"][windowID]),
+            PrivateTab(state[@"tabs"][tabID]), &error) == SHAAR_OK) return YES;
+  // Hidden probe windows stay offscreen. The selected owned view is the focus target.
+  NSString *selected = state[@"windows"][windowID][@"selectedTabID"];
+  NSView *view = [self viewForPrivateTabID:tabID windowID:windowID contextID:contextID];
+  NSWindow *window = view.window;
+  return [selected isEqualToString:tabID] && view && window &&
+      !window.isVisible && !window.isKeyWindow;
 }
 
 - (BOOL)navigatePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID

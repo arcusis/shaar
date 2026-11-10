@@ -38,6 +38,7 @@ final class BrowserEngine {
   let autoPictureInPicture: AutoPictureInPicture
   let pictureInPictureEnterGate = PictureInPictureEnterGate()
   let pictureInPictureControls = PictureInPictureControls()
+  let savePromptPresenter = SavePromptPresenter()
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
   var onNativeWindowLost: (() -> Void)?
@@ -145,7 +146,7 @@ final class BrowserEngine {
 
   func focusPage(_ tabID: UUID) {
     guard !isClosed, let store, !store.commandIsOpen, store.sheet == nil,
-      store.pageFind == nil, store.libraryDrawerSection == nil,
+      store.pageFind == nil, store.libraryDrawerSection == nil, store.savePrompt == nil,
       store.session.selectedPage?.tab.id == tabID,
       runtime.windowID(forTabID: tabID.uuidString) == windowID,
       let view = runtime.view(forTabID: tabID.uuidString), let window = view.window,
@@ -212,6 +213,11 @@ final class BrowserEngine {
       for request in self.store?.externalAppRequests ?? [] {
         self.store?.resolveExternalApp(request.id, accepted: false)
       }
+      if let prompt = self.store?.savePrompt {
+        self.runtime.resolveSavePromptRequestID(prompt.id, decision: "dismiss")
+        self.store?.dismissSavePrompt(prompt.id)
+      }
+      self.savePromptPresenter.close()
       self.isClosed = true
       self.suspensionTask?.cancel()
       self.memoryPressureSource?.cancel()
@@ -381,6 +387,11 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveMedia(id, windowID: self.windowID, accepted: accepted)
     }
+    store.onSavePromptDecision = { [weak self] id, decision in
+      guard let self else { return }
+      self.savePromptPresenter.close()
+      self.events.resolveSavePrompt(id, windowID: self.windowID, decision: decision.rawValue)
+    }
     store.onDesktopCaptureDecision = { [weak self] id, sourceID in
       guard let self else { return }
       self.events.resolveDesktopCapture(id, windowID: self.windowID, sourceID: sourceID)
@@ -438,6 +449,14 @@ final class BrowserEngine {
     }
     callbacks.onWebsiteMediaDismissed = { [weak self] id in
       self?.store?.resolveWebsitePermission(id, accepted: false)
+    }
+    callbacks.onSavePromptRequest = { [weak self] payload in
+      self?.requestSavePrompt(payload)
+    }
+    callbacks.onSavePromptDismissed = { [weak self] id in
+      guard let self else { return }
+      self.store?.dismissSavePrompt(id)
+      self.savePromptPresenter.close()
     }
     store.onExternalAppDecision = { [weak self] id, accepted in
       guard let self else { return }
@@ -589,6 +608,10 @@ final class BrowserEngine {
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
       self.clearFavicon(id)
+      if let prompt = self.store?.savePrompt, prompt.tabID == id {
+        self.store?.dismissSavePrompt(prompt.id)
+        self.savePromptPresenter.close()
+      }
       self.store?.nativeTabClosed(id)
       if let store = self.store, store.session.page(forTabID: id)?.tab.isPinned == true,
         let profile = store.session.profileID(forTabID: id)
@@ -1154,6 +1177,26 @@ final class BrowserEngine {
         "The extension request could not be verified for this page and profile.")
       return
     }
+  }
+
+  private func requestSavePrompt(_ payload: [String: Any]) {
+    guard let id = payload["id"] as? String else { return }
+    guard payload["windowID"] as? String == windowID else {
+      events.resolveSavePrompt(id, windowID: windowID, decision: "dismiss")
+      return
+    }
+    guard let store, let request = SavePromptRequest(payload: payload),
+      store.requestSavePrompt(request)
+    else {
+      events.resolveSavePrompt(id, windowID: windowID, decision: "dismiss")
+      return
+    }
+    savePromptPresenter.sync(
+      request: store.savePrompt,
+      browserWindow: runtime.window(forID: windowID),
+      onDecision: { [weak store] promptID, decision in
+        store?.resolveSavePrompt(promptID, decision: decision)
+      })
   }
 
   private func requestWebsitePermission(_ payload: [String: Any]) {

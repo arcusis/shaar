@@ -202,6 +202,7 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSDictionary *> *_shaarInstallRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarPrintRequests;
   ShaarPrintReplyFunction _shaarPrintReply;
+  NSMutableDictionary<NSString *, NSString *> *_shaarSavePrompts;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
@@ -377,6 +378,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
   _shaarShareRequests = [NSMutableDictionary dictionary];
   _shaarPrintRequests = [NSMutableDictionary dictionary];
+  _shaarSavePrompts = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -464,6 +466,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarDeviceChooserRequests removeAllObjects];
   [_shaarShareRequests removeAllObjects];
   [_shaarInstallRequests removeAllObjects];
+  [_shaarSavePrompts removeAllObjects];
   _symbols.release(_shaarEngine);
   _shaarEngine = nullptr;
   return result == SHAAR_OK ? 0 : 1;
@@ -679,6 +682,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self cancelExtensionInstallRequestsForTabID:tabID];
     for (NSString *requestID in [_shaarPrintRequests allKeysForObject:tabID])
       [self resolvePrintRequestID:requestID accepted:NO];
+    for (NSString *requestID in [_shaarSavePrompts allKeysForObject:tabID])
+      [self resolveSavePromptRequestID:requestID decision:@"dismiss"];
     NSString *mappedWindowID = _shaarTabWindows[tabID];
     NSString *windowID = String(event->window_id);
     if (!windowID.length) windowID = mappedWindowID;
@@ -698,6 +703,29 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       self.onTabLifecycle(tabID, state, [payload[@"audible"] boolValue],
                           [payload[@"capturing"] boolValue]);
     }
+    return;
+  }
+  if (event->kind == kShaarEventSavePrompt) {
+    NSString *requestID = payload[@"id"];
+    if ([payload[@"kind"] isEqualToString:@"savePromptDismissed"]) {
+      if (!ShaarSavePromptDismissIsValid(payload) ||
+          ![_shaarSavePrompts[requestID] isEqualToString:tabID]) return;
+      [_shaarSavePrompts removeObjectForKey:requestID];
+      if (self.onSavePromptDismissed) self.onSavePromptDismissed(requestID);
+      return;
+    }
+    NSString *windowID = String(event->window_id);
+    if (!ShaarSavePromptRequestIsValid(payload) || _shaarSavePrompts[requestID] ||
+        !_shaarTabs[tabID] ||
+        ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+    _shaarSavePrompts[requestID] = tabID;
+    NSMutableDictionary *request = [payload mutableCopy];
+    request[@"profileID"] = profileID;
+    request[@"tabID"] = tabID;
+    request[@"windowID"] = windowID;
+    if (self.onSavePromptRequest) self.onSavePromptRequest(request);
+    else [self resolveSavePromptRequestID:requestID decision:@"dismiss"];
     return;
   }
   if (event->kind == SHAAR_EVENT_DOWNLOAD) {
@@ -2009,6 +2037,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [self submitTabID:tabID operation:SHAAR_OP_MEDIA_CAPTURE_REPLY
             payload:@{@"schemaVersion": @1, @"promptID": requestID,
                       @"decision": decision, @"sourceToken": token}];
+}
+
+- (void)resolveSavePromptRequestID:(NSString *)requestID decision:(NSString *)decision {
+  NSString *tabID = _shaarSavePrompts[requestID];
+  if (!tabID) return;
+  if (![decision isEqualToString:@"save"] && ![decision isEqualToString:@"dismiss"] &&
+      ![decision isEqualToString:@"never"]) {
+    decision = @"dismiss";
+  }
+  [_shaarSavePrompts removeObjectForKey:requestID];
+  [self submitTabID:tabID operation:kShaarSavePromptDecide
+            payload:@{@"schemaVersion": @1, @"id": requestID, @"decision": decision}];
 }
 
 - (void)dealloc {

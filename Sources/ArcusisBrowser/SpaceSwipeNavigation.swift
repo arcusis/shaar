@@ -185,7 +185,8 @@ final class SpaceSwipeWindowMonitor {
     guard let store, let window, let view = clientView, let pager = view.pager else { return event }
     let modalOwnsInput =
       store.commandIsOpen || store.sheet != nil || !store.installationRequests.isEmpty
-      || !store.websitePermissionRequests.isEmpty || store.libraryDrawerSection != nil
+      || !store.websitePermissionRequests.isEmpty || store.savePrompt != nil
+      || store.libraryDrawerSection != nil
       || window.attachedSheet != nil || NSApp.modalWindow != nil
     guard event.window === window, !modalOwnsInput, !event.modifierFlags.contains(.command) else {
       if tracking { pager.finish(store: store, cancelled: true) }
@@ -245,7 +246,8 @@ final class SpaceSwipeWindowMonitor {
     guard let store, let window else { return event }
     let modalOwnsInput =
       store.commandIsOpen || store.sheet != nil || !store.installationRequests.isEmpty
-      || !store.websitePermissionRequests.isEmpty || store.libraryDrawerSection != nil
+      || !store.websitePermissionRequests.isEmpty || store.savePrompt != nil
+      || store.libraryDrawerSection != nil
       || window.attachedSheet != nil
       || NSApp.modalWindow != nil
     let result = SpaceSwipeNavigationDecision.route(

@@ -226,6 +226,19 @@ final class BrowserRuntimeEvents {
       }
       receive(payload)
     }
+    runtime.onSavePromptRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let client = self.router.claim(.savePrompt, id: id, payload: payload),
+        let receive = client.onSavePromptRequest
+      else {
+        self.runtime.resolveSavePromptRequestID(id, decision: "dismiss")
+        return
+      }
+      receive(payload)
+    }
+    runtime.onSavePromptDismissed = { [weak self] id in
+      self?.router.client(for: .savePrompt, id: id, removing: true)?.onSavePromptDismissed?(id)
+    }
     runtime.onDownloadChanged = { [weak self] profile, record in
       for client in self?.router.clients(forProfile: profile) ?? [] {
         client.onDownloadChanged?(profile, record)
@@ -311,6 +324,11 @@ final class BrowserRuntimeEvents {
       return
     }
     runtime.resolveDeviceChooserRequestID(id, index: index.map(NSNumber.init(value:)))
+  }
+
+  func resolveSavePrompt(_ id: String, windowID: String, decision: String) {
+    guard router.consume(.savePrompt, id: id, windowID: windowID) else { return }
+    runtime.resolveSavePromptRequestID(id, decision: decision)
   }
 
   func applyBookmarkOperation(

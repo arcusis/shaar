@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 8u
+#define SHAAR_ENGINE_ABI_MINOR 11u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -130,6 +130,13 @@ typedef enum {
   SHAAR_OP_TAB_MOVE = 205,
   SHAAR_OP_TAB_ACTIVATION_RESOLVE = 206,
   SHAAR_OP_WINDOW_SET_BOUNDS = 207,
+
+  /* Sleeping tabs (#1467), ABI minor 11. An engine without this module
+   * returns SHAAR_UNSUPPORTED_CAPABILITY. */
+  SHAAR_OP_TAB_DISCARD = 208,
+  SHAAR_OP_TAB_FREEZE = 209,
+  SHAAR_OP_TAB_WAKE = 210,
+  SHAAR_OP_TAB_LIFECYCLE_GET = 211,
 
   SHAAR_OP_TAB_NAVIGATE = 300,
   SHAAR_OP_TAB_GO = 301,

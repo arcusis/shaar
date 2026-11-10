@@ -31,6 +31,7 @@
 #include "chrome/browser/shaar/media/shaar_media.h"
 #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
+#include "chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -55,11 +56,27 @@ struct shaar_window {
 };
 
 void CleanupTab(uint64_t serial);
+struct shaar_tab;
+void RebindFavicon(shaar_tab* tab);
+void RetargetDiscardedTab(shaar_tab* tab, content::WebContents* new_contents);
 
 struct shaar_tab : content::WebContentsObserver,
                    favicon::FaviconDriverObserver {
   shaar_tab(content::WebContents* contents, uint64_t serial)
       : content::WebContentsObserver(contents), serial(serial) {}
+  void RetargetWebContents(content::WebContents* contents) {
+    Observe(contents);
+  }
+  void AboutToBeDiscarded(content::WebContents* new_contents) override {
+    RetargetDiscardedTab(this, new_contents);
+  }
+  void WasDiscarded() override {
+    // Replace-path discard attaches tab helpers, including the favicon
+    // driver, only after AboutToBeDiscarded returns.
+    RebindFavicon(this);
+    shaar::tab_lifecycle::NoteDiscarded(engine, profile_id, session_id,
+                                        window_id, tab_id, web_contents());
+  }
   void WebContentsDestroyed() override {
     favicon_observation.Reset();
     // Drop the WebContents pointer before a queued view update can request it.
@@ -96,6 +113,42 @@ struct shaar_tab : content::WebContentsObserver,
       favicon_observation{this};
   std::string favicon_png;
 };
+
+void RebindFavicon(shaar_tab* tab) {
+  if (!tab || tab->favicon_observation.IsObserving())
+    return;
+  content::WebContents* contents = tab->web_contents();
+  if (!contents)
+    return;
+  if (auto* driver = favicon::ContentFaviconDriver::FromWebContents(contents))
+    tab->favicon_observation.Observe(driver);
+}
+
+void RetargetDiscardedTab(shaar_tab* tab, content::WebContents* new_contents) {
+  // The preserve path discards in place and passes the same WebContents.
+  if (!tab || !new_contents || new_contents == tab->web_contents())
+    return;
+  const bool can_bind =
+      tab->engine && tab->window && tab->browser && !tab->tab_id.empty();
+  if (!can_bind) {
+    shaar::windows_tabs::Registry().UnbindTab(tab->engine, tab->window, tab);
+    tab->RetargetWebContents(nullptr);
+    tab->favicon_observation.Reset();
+    return;
+  }
+  auto& registry = shaar::windows_tabs::Registry();
+  registry.UnbindTab(tab->engine, tab->window, tab);
+  tab->RetargetWebContents(new_contents);
+  registry.BindTab(tab->engine, tab->window, tab, tab->tab_id, tab->browser,
+                   new_contents);
+  if (registry.FindWebContents(tab->engine, tab->window, tab) != new_contents) {
+    registry.UnbindTab(tab->engine, tab->window, tab);
+    tab->RetargetWebContents(nullptr);
+    tab->favicon_observation.Reset();
+    return;
+  }
+  tab->favicon_observation.Reset();
+}
 
 namespace {
 

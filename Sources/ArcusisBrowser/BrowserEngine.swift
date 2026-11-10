@@ -414,9 +414,15 @@ final class BrowserEngine {
     }
     callbacks.onWebShareRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
-      guard let request = WebShareRequest(payload: payload),
-        let store = self.store, store.requestWebShare(request)
+      guard let request = WebShareRequest(payload: payload), let store = self.store else {
+        self.events.resolveWebShare(id, windowID: self.windowID, outcome: .cancelled)
+        return
+      }
+      store.rememberPermissionFrame(
+        request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
+      guard store.requestWebShare(request)
       else {
+        store.forgetPermissionFrame(request.tabID, matching: request.frameID)
         self.events.resolveWebShare(id, windowID: self.windowID, outcome: .cancelled)
         return
       }

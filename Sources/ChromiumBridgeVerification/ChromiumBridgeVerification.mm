@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstring>
 #include <dlfcn.h>
+#include <string>
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 
@@ -24,6 +25,14 @@
 namespace {
 // The testing-only operation is supplied by patch 0027 in the built engine.
 constexpr NSInteger kProbeNodeLiveOperation = 1094;
+std::string gProbeShareReplyID;
+int gProbeShareReplyOutcome = -1;
+
+shaar_error_code ProbeShareReply(const char *requestID, int shared) {
+  gProbeShareReplyID = requestID ? requestID : "";
+  gProbeShareReplyOutcome = shared;
+  return SHAAR_OK;
+}
 
 BOOL ProbeCaptureAllowed(void) {
   const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
@@ -133,6 +142,8 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
                  [@{tabID: profileID} mutableCopy]);
   object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
                  [@{tabID: windowID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarShareRequests"),
+                 [NSMutableDictionary dictionary]);
   NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
   NSString *eventWindow = validOwner ? windowID : @"FOREIGN-WINDOW";
   shaar_event event = {};
@@ -177,6 +188,54 @@ NSDictionary *ARCProbeDesktopCaptureEventDispatch(NSDictionary *payload, BOOL va
   event.payload_json = {(const char *)data.bytes, data.length};
   [runtime receiveEvent:&event];
   return received ?: @{};
+}
+
+NSDictionary *ARCProbeWebShareEventDispatch(NSDictionary *payload, uint32_t abiMinor,
+                                             BOOL validOwner) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  __block NSDictionary *received = nil;
+  runtime.onWebShareRequest = ^(NSDictionary *request) { received = request; };
+  NSString *tabID = NSUUID.UUID.UUIDString;
+  NSString *profileID = NSUUID.UUID.UUIDString;
+  NSString *windowID = NSUUID.UUID.UUIDString;
+  auto setIvar = ^(const char *name, const void *value, size_t size) {
+    Ivar ivar = class_getInstanceVariable(runtime.class, name);
+    if (!ivar) return;
+    void *address = (__bridge void *)runtime;
+    std::memcpy(static_cast<uint8_t *>(address) + ivar_getOffset(ivar), value, size);
+  };
+  BOOL available = abiMinor >= 15;
+  setIvar("_shaarWebShareAvailable", &available, sizeof(available));
+  using ReplyFunction = shaar_error_code (*)(const char *, int);
+  ReplyFunction reply = ProbeShareReply;
+  setIvar("_shaarShareReply", &reply, sizeof(reply));
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabs"),
+                 [@{tabID: [NSValue valueWithPointer:(void *)1]} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabProfiles"),
+                 [@{tabID: profileID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
+                 [@{tabID: windowID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarShareRequests"),
+                 [NSMutableDictionary dictionary]);
+  gProbeShareReplyID.clear();
+  gProbeShareReplyOutcome = -1;
+  NSMutableDictionary *eventPayload = [payload mutableCopy];
+  eventPayload[@"kind"] = @"webShareRequested";
+  NSData *data = [NSJSONSerialization dataWithJSONObject:eventPayload options:0 error:nil];
+  NSString *eventWindow = validOwner ? windowID : NSUUID.UUID.UUIDString;
+  shaar_event event = {};
+  event.size = sizeof(event);
+  event.kind = SHAAR_EVENT_PERMISSION;
+  event.profile_id = {profileID.UTF8String, profileID.length};
+  event.window_id = {eventWindow.UTF8String, eventWindow.length};
+  event.tab_id = {tabID.UTF8String, tabID.length};
+  event.payload_json = {(const char *)data.bytes, data.length};
+  [runtime receiveEvent:&event];
+  return @{
+    @"received": received ?: @{},
+    @"replyID": [NSString stringWithUTF8String:gProbeShareReplyID.c_str()] ?: @"",
+    @"replyOutcome": @(gProbeShareReplyOutcome),
+  };
 }
 
 NSDictionary *ARCProbeShaarDevToolsURLDispatch(NSDictionary *payload, BOOL validOwner) {

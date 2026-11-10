@@ -27,12 +27,16 @@ struct WebShareConsentTests {
       "tabID": tab.id.uuidString,
       "pageURL": tab.url.absoluteString,
       "origin": "https://example.com",
-      "frameID": "main-frame",
+      "frameID": "0123456789abcdef0123456789abcdef",
+      "userActivated": true,
       "title": title,
       "text": text,
     ]
     if let url { payload["url"] = url }
-    return try #require(WebShareRequest(payload: payload))
+    let share = try #require(WebShareRequest(payload: payload))
+    store.rememberPermissionFrame(
+      share.tabID, frameID: share.frameID, origin: share.requestingOrigin)
+    return share
   }
 
   @Test func parsesABoundShareAndBuildsTheSheetIdentity() throws {
@@ -43,6 +47,13 @@ struct WebShareConsentTests {
     #expect(share.sheetID == "web-share-\(share.id)")
     #expect(share.hostLabel == "example.com")
     #expect(share.matches(store.session))
+    #expect(
+      !share.matches(
+        store.session, frameID: "fedcba9876543210fedcba9876543210",
+        origin: share.requestingOrigin))
+    #expect(
+      !share.matches(
+        store.session, frameID: share.frameID, origin: URL(string: "https://other.example")))
     let items = share.sharingItems
     #expect((items[0] as? URL) == URL(string: "https://example.com/article"))
     #expect(items[1] as? String == "A page")
@@ -66,6 +77,7 @@ struct WebShareConsentTests {
       "pageURL": original.pageURL.absoluteString,
       "origin": original.requestingOrigin.absoluteString,
       "frameID": original.frameID,
+      "userActivated": true,
       "title": original.title,
       "text": original.text,
       "url": "https://example.com/article",
@@ -80,6 +92,7 @@ struct WebShareConsentTests {
       ("frameID", "" as Any),
       ("url", "file:///tmp/secret" as Any),
       ("url", 4 as Any),
+      ("url", ("https://example.com/" + String(repeating: "a", count: 4096)) as Any),
       ("title", String(repeating: "a", count: 2049) as Any),
       ("files", ["notes.txt"] as Any),
       ("files", "notes.txt" as Any),
@@ -87,6 +100,12 @@ struct WebShareConsentTests {
       var malformed = valid
       malformed[key] = value
       #expect(WebShareRequest(payload: malformed) == nil)
+    }
+
+    for activation in [nil, false, 1] as [Any?] {
+      var unactivated = valid
+      unactivated["userActivated"] = activation
+      #expect(WebShareRequest(payload: unactivated) == nil)
     }
 
     var empty = valid
@@ -125,6 +144,7 @@ struct WebShareConsentTests {
       "pageURL": share.pageURL.absoluteString,
       "origin": share.requestingOrigin.absoluteString,
       "frameID": "other-frame",
+      "userActivated": true,
       "title": "Other",
     ]
     let foreign = try #require(WebShareRequest(payload: payload))
@@ -160,6 +180,20 @@ struct WebShareConsentTests {
     WebShareSheet.finish(share, store: store, anchor: WebShareAnchor())
     #expect(outcome == .cancelled)
     #expect(store.sheet == nil)
+  }
+
+  @Test func changedFrameOrOriginCancelsAWebShare() throws {
+    let store = openedStore()
+    let share = try request(store)
+    var outcome: WebShareOutcome?
+    store.onWebShareDecision = { _, value in outcome = value }
+    #expect(store.requestWebShare(share))
+
+    store.rememberPermissionFrame(
+      share.tabID, frameID: "fedcba9876543210fedcba9876543210",
+      origin: URL(string: "https://other.example")!)
+    store.resolveWebShare(share.id, outcome: .shared)
+    #expect(outcome == .cancelled)
   }
 
   @Test func stalePageAndRendererFailureCancelTheShare() throws {

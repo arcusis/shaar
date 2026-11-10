@@ -57,7 +57,9 @@ enum BrowserSheet: Identifiable {
   var isConsent: Bool {
     switch self {
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
-    case .extensionInstall, .websitePermission, .desktopCapture, .webShare, .externalApp, .deviceChooser: true
+    case .extensionInstall, .websitePermission, .desktopCapture, .webShare, .externalApp,
+      .deviceChooser:
+      true
     }
   }
 

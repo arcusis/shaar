@@ -15,6 +15,7 @@
 
 
 #import <Security/Security.h>
+#import <CoreFoundation/CoreFoundation.h>
 
 #include <dlfcn.h>
 #include <cstdlib>
@@ -190,6 +191,7 @@ struct Symbols {
   BOOL _shaarMediaConsentAvailable;
   BOOL _shaarDesktopCaptureAvailable;
   BOOL _shaarDeviceChooserAvailable;
+  BOOL _shaarWebShareAvailable;
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
@@ -350,6 +352,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   // Desktop capture requests arrive with patch 0071. Minor 14 is that bump.
   _shaarDesktopCaptureAvailable = _symbols.abi_minor() >= 14;
   _shaarDeviceChooserAvailable = _symbols.abi_minor() >= kShaarDeviceChooserABIMinor;
+  _shaarWebShareAvailable = _symbols.abi_minor() >= 15;
   _symbols.tab_find = reinterpret_cast<decltype(_symbols.tab_find)>(
       dlsym(_shaarLibrary, "shaar_tab_find"));
   _shaarShareReply = reinterpret_cast<ShaarShareReplyFunction>(
@@ -540,7 +543,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     }
   }
   if (event->kind == SHAAR_EVENT_PERMISSION &&
-      [kind isEqualToString:@"webShareRequested"]) {
+      [kind isEqualToString:@"webShareRequested"] && _shaarWebShareAvailable) {
     [self receiveWebShareRequest:event payload:payload tabID:tabID profileID:profileID];
     return;
   }
@@ -1655,20 +1658,26 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
                        payload:(NSDictionary *)payload
                          tabID:(NSString *)tabID
                      profileID:(NSString *)profileID {
-  if (event->session_id.size) return;
+  if (!_shaarWebShareAvailable || event->session_id.size) return;
   NSString *windowID = String(event->window_id);
   NSString *requestID = payload[@"id"];
-  if (![payload[@"schemaVersion"] isEqual:@1] ||
-      ![requestID isKindOfClass:NSString.class] ||
-      ![[NSUUID alloc] initWithUUIDString:requestID] ||
-      _shaarShareRequests[requestID] ||
-      !_shaarTabs[tabID] ||
+  if (![requestID isKindOfClass:NSString.class] ||
+      requestID.length > 64 || ![[NSUUID alloc] initWithUUIDString:requestID] ||
+      _shaarShareRequests[requestID] || !_shaarTabs[tabID] ||
       ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
-      ![windowID isEqualToString:_shaarTabWindows[tabID]] ||
+      ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+  _shaarShareRequests[requestID] = tabID;
+  id activationValue = payload[@"userActivated"];
+  BOOL userActivated = [activationValue isKindOfClass:NSNumber.class] &&
+      CFGetTypeID((__bridge CFTypeRef)activationValue) == CFBooleanGetTypeID() &&
+      [activationValue boolValue];
+  if (![payload[@"schemaVersion"] isEqual:@1] || !userActivated ||
       ![self desktopCaptureField:payload[@"origin"] maxLength:2048] ||
       ![self desktopCaptureField:payload[@"pageURL"] maxLength:4096] ||
-      ![self desktopCaptureField:payload[@"frameID"] maxLength:256]) return;
-  _shaarShareRequests[requestID] = tabID;
+      ![self desktopCaptureField:payload[@"frameID"] maxLength:256]) {
+    [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
+    return;
+  }
   NSMutableDictionary *request = [payload mutableCopy];
   request[@"profileID"] = profileID;
   request[@"tabID"] = tabID;
@@ -1681,6 +1690,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (void)resolveWebShareRequestID:(NSString *)requestID outcome:(NSString *)outcome {
+  if (!_shaarWebShareAvailable) return;
   NSString *tabID = _shaarShareRequests[requestID];
   if (!tabID) return;
   [_shaarShareRequests removeObjectForKey:requestID];

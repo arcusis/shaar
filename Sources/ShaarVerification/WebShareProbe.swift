@@ -198,6 +198,7 @@ final class WebShareProbe {
       "pageURL": tab.url.absoluteString,
       "origin": origin.absoluteString,
       "frameID": "probe-frame",
+      "userActivated": true,
       "title": "Web share",
       "text": "A page worth sharing",
       "url": tab.url.absoluteString,

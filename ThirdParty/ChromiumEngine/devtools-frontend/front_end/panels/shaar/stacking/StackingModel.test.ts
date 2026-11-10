@@ -30,7 +30,8 @@ describe('StackingModel', () => {
     assert.deepEqual(Model.reasonsFor(element(1, 'div', {isolation: 'isolate'}), false), ['isolation']);
     assert.deepEqual(Model.reasonsFor(element(1, 'div', {willChange: 'transform'}), false), ['will-change']);
     assert.deepEqual(Model.reasonsFor(element(1, 'div', {contain: 'paint'}), false), ['contain']);
-    assert.deepEqual(Model.reasonsFor(element(1, 'div', {contain: 'layout'}), false), []);
+    assert.deepEqual(Model.reasonsFor(element(1, 'div', {contain: 'layout'}), false), ['contain']);
+    assert.deepEqual(Model.reasonsFor(element(1, 'div', {contain: 'content'}), false), ['contain']);
     assert.deepEqual(Model.reasonsFor(element(1, 'div', {filter: 'blur(1px)'}), false), ['filter']);
     assert.deepEqual(Model.reasonsFor(element(1, 'div', {mixBlendMode: 'multiply'}), false), ['mix-blend-mode']);
   });

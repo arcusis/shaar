@@ -620,7 +620,7 @@ function willChangeCreates(value: string): boolean {
 
 function containCreates(value: string): boolean {
   const names = tokens(value);
-  return names.includes('paint') || names.includes('strict') || names.includes('content');
+  return names.includes('layout') || names.includes('paint') || names.includes('strict') || names.includes('content');
 }
 
 function tokens(value: string): string[] {

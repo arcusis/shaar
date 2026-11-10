@@ -75,18 +75,37 @@ async function snapshotFromDom(root: SDK.DOMModel.DOMNode, cssModel: SDK.CSSMode
   if (!protocol) {
     return {elements: [], clipped: budget.clipped};
   }
+  const details = await readNodeMeasurements(
+      kept,
+      node => node.boxModel(),
+      node => cssModel.getComputedStyle(node.id));
   const boxes = new Map<number, {model?: {border?: number[], content?: number[]}}>();
   const styles = new Map<number, ProtocolComputedStyle>();
-  for (const node of kept) {
-    const model = await node.boxModel();
+  for (const detail of details) {
+    const {node, model, computed} = detail;
     if (model) {
       boxes.set(node.id, {model: {border: model.border, content: model.content}});
     }
-    const computed = await cssModel.getComputedStyle(node.id);
     styles.set(node.id, computedStyleReply(computed));
   }
   const snapshot = elementsFromDocument({root: protocol}, boxes, styles);
   return {elements: snapshot.elements, clipped: budget.clipped || snapshot.clipped};
+}
+
+export async function readNodeMeasurements<T, Box, Style>(
+    nodes: T[], readBox: (node: T) => Promise<Box>, readStyle: (node: T) => Promise<Style>):
+    Promise<Array<{node: T, model: Box, computed: Style}>> {
+  const measurements: Array<{node: T, model: Box, computed: Style}> = [];
+  const batchSize = 16;
+  for (let start = 0; start < nodes.length; start += batchSize) {
+    const batch = nodes.slice(start, start + batchSize);
+    const results = await Promise.all(batch.map(async node => {
+      const [model, computed] = await Promise.all([readBox(node), readStyle(node)]);
+      return {node, model, computed};
+    }));
+    measurements.push(...results);
+  }
+  return measurements;
 }
 
 function computedStyleReply(computed: Map<string, string>|null): ProtocolComputedStyle {

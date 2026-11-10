@@ -72,6 +72,7 @@ ts_library("unittests") {
   deps = [ ":css_files" ]
 
   sources = [
+    "StackingCapture.test.ts",
     "StackingModel.test.ts",
     "StackingPanel.test.ts",
   ]

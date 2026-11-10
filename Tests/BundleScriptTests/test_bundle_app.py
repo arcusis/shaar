@@ -468,6 +468,7 @@ class BundleAppTests(unittest.TestCase):
             "enum InspectorIdleSmoke {}\n"
             "enum ShaarDevToolsF12RouteSmoke {}\n"
             "enum WebsitePermissionPromptProbe {}\n"
+            "enum ShaarSavePromptProbe {}\n"
             "enum ShaarBrowsingEdgeProbe {}\n"
             "enum HttpsOnlyProbe {}\n"
             "enum SleepingTabsProbe {}\n"

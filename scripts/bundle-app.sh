@@ -28,11 +28,13 @@ seen_engine=false
 seen_updates=false
 seen_verification=false
 seen_preview_shaar_engine=false
+seen_mock_keychain=false
+mock_keychain=false
 while (($#)); do
   case "$1" in
     --configuration)
       if $seen_configuration || (($# < 2)) || [[ "$2" == --* ]]; then
-        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-updates] [--verification] [--preview-shaar-engine]' >&2
+        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-updates] [--verification] [--preview-shaar-engine] [--mock-keychain]' >&2
         exit 2
       fi
       case "$2" in
@@ -78,12 +80,35 @@ while (($#)); do
       preview_shaar_engine=true
       shift
       ;;
+    --mock-keychain)
+      if $seen_mock_keychain; then
+        echo 'Duplicate option: --mock-keychain' >&2
+        exit 2
+      fi
+      seen_mock_keychain=true
+      mock_keychain=true
+      shift
+      ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
+# Empty, 0, and false leave the flag's choice alone. 1 and true request the mock.
+case ${SHAAR_MOCK_KEYCHAIN:-} in
+  ''|0|false|FALSE|no|NO) ;;
+  1|true|TRUE|yes|YES) mock_keychain=true ;;
+  *)
+    echo 'SHAAR_MOCK_KEYCHAIN must be 1, true, 0, false, or unset.' >&2
+    exit 2
+    ;;
+esac
 # The update feed belongs only in release engine bundles; release.sh is its one caller.
 if $with_updates && { [[ "$configuration" != release ]] || ! $with_engine; }; then
   echo '--with-updates requires --configuration release and --with-engine.' >&2
+  exit 2
+fi
+# A Developer ID release must keep the login keychain. Refuse the mock before the build.
+if $with_updates && $mock_keychain; then
+  echo 'error: release bundles refuse ShaarUseMockKeychain. Unset SHAAR_MOCK_KEYCHAIN and omit --mock-keychain.' >&2
   exit 2
 fi
 # The verification harness drives the real engine and never ships, so it never carries a feed.
@@ -105,7 +130,6 @@ bundle_identifier=$SHAAR_BUNDLE_IDENTIFIER
 bundle_name=Shaar
 data_folder_name='Arcusis Browser'
 cache_folder_name=Shaar
-preview_keychain_key=''
 if $with_verification; then
   executable=ShaarVerification
   bundle_identifier=$SHAAR_VERIFICATION_BUNDLE_IDENTIFIER
@@ -119,7 +143,6 @@ elif $with_engine; then
     bundle_name='Shaar Engine Preview'
     data_folder_name='Shaar Engine Preview'
     cache_folder_name='Shaar Engine Preview'
-    preview_keychain_key='  <key>ShaarUseMockKeychain</key><true/>'
     app="build/Shaar Engine Preview.app"
   else
     app="build/Shaar.app"
@@ -238,6 +261,12 @@ if $with_updates; then
   <key>SUEnableAutomaticChecks</key><true/>
   <key>SUEnableInstallerLauncherService</key><true/>"
 fi
+# The engine preview always stays off the regular browser's Safe Storage item.
+# Other ad-hoc bundles opt in with SHAAR_MOCK_KEYCHAIN or --mock-keychain.
+mock_keychain_key=''
+if $preview_shaar_engine || $mock_keychain; then
+  mock_keychain_key='  <key>ShaarUseMockKeychain</key><true/>'
+fi
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -282,7 +311,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>NSLocationWhenInUseUsageDescription</key><string>Allow websites you approve to use your location, such as maps and delivery sites.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Allow websites you approve to connect to Bluetooth devices, such as security keys and phones used for passkey sign-in.</string>
 $update_keys
-$preview_keychain_key
+$mock_keychain_key
 </dict></plist>
 PLIST
 adhoc_sign "$app"

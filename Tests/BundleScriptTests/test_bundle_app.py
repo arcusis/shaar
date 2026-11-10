@@ -155,6 +155,7 @@ class BundleAppTests(unittest.TestCase):
             BUNDLE_TEST_BIN=str(self.binary_dir),
             BUNDLE_TEST_FRAMEWORK=str(self.framework),
         )
+        self.env.pop("SHAAR_MOCK_KEYCHAIN", None)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -289,6 +290,7 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual(plist["SUPublicEDKey"], config.public_ed_key)
         self.assertIs(plist["SUEnableAutomaticChecks"], True)
         self.assertIs(plist["SUEnableInstallerLauncherService"], True)
+        self.assertNotIn("ShaarUseMockKeychain", plist)
 
     def test_engine_bundle_uses_shaar_pin_without_backend_switch(self):
         result = self._run("--with-engine")
@@ -526,6 +528,52 @@ class BundleAppTests(unittest.TestCase):
         self.assertIn("ArcusisBrowser_Future.bundle", result.stderr)
         self.assertNotIn("codesign", self._log())
 
+    def test_mock_keychain_marks_every_adhoc_bundle(self):
+        cases = (
+            ((), "build/Shaar Shell.app"),
+            (("--with-engine",), "build/Shaar.app"),
+            (("--with-engine", "--configuration", "debug"), "build/Shaar Debug.app"),
+            (("--with-engine", "--verification"), "build/Shaar Verification.app"),
+            (("--mock-keychain",), "build/Shaar Shell.app"),
+        )
+        for args, app_path in cases:
+            with self.subTest(args=args):
+                environment = dict(self.env)
+                if "--mock-keychain" not in args:
+                    environment["SHAAR_MOCK_KEYCHAIN"] = "1"
+                result = self._run(*args, env=environment)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIs(self._info_plist(app_path)["ShaarUseMockKeychain"], True)
+
+    def test_regular_engine_bundle_keeps_the_real_keychain(self):
+        result = self._run("--with-engine")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("ShaarUseMockKeychain", self._info_plist("build/Shaar.app"))
+
+    def test_release_bundle_refuses_mock_keychain_before_build(self):
+        cases = (
+            (("--with-engine", "--with-updates"), {"SHAAR_MOCK_KEYCHAIN": "1"}),
+            (("--with-engine", "--with-updates", "--mock-keychain"), {}),
+            (("--with-engine", "--with-updates"), {"SHAAR_MOCK_KEYCHAIN": "true"}),
+        )
+        for args, extra in cases:
+            with self.subTest(args=args, extra=extra):
+                result = self._run(*args, env=dict(self.env, **extra))
+
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("ShaarUseMockKeychain", result.stderr)
+                self.assertEqual(self._log(), "")
+                self.assertFalse((self.root / "build/Shaar.app").exists())
+
+    def test_invalid_mock_keychain_value_fails_before_build(self):
+        result = self._run("--with-engine", env=dict(self.env, SHAAR_MOCK_KEYCHAIN="maybe"))
+
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("SHAAR_MOCK_KEYCHAIN", result.stderr)
+        self.assertEqual(self._log(), "")
+
     def test_invalid_duplicate_and_malformed_options_fail_before_build(self):
         invalid_arguments = (
             ("--unknown",),
@@ -535,6 +583,7 @@ class BundleAppTests(unittest.TestCase):
             ("--with-engine", "--with-engine"),
             ("--with-updates", "--with-updates"),
             ("--verification", "--verification"),
+            ("--mock-keychain", "--mock-keychain"),
             ("--configuration", "--with-engine"),
         )
         for args in invalid_arguments:

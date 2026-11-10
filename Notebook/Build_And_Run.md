@@ -19,6 +19,14 @@ All bundles include the Shaar app icon, `Resources/Branding/Shaar.icns`, generat
 
 `bash scripts/bundle-app.sh` without `--with-engine` builds `build/Shaar Shell.app`, a separate UI-only preview. `swift run ArcusisBrowser` also runs that preview without webpage rendering. `--with-engine --verification` builds the probe harness instead; see [[Verification_Harness]].
 
+## Agent hosts
+
+Machines that cannot answer a macOS password prompt export `SHAAR_MOCK_KEYCHAIN=1`. With that variable, or with `--mock-keychain`, `bundle-app.sh` writes `ShaarUseMockKeychain` into ad-hoc bundles: the shell, the engine app, debug builds, and the verification harness. The engine preview bundle always writes the key so it never shares the regular browser's Safe Storage item. `--with-updates` refuses the variable and the flag. [[Releasing]] refuses the variable before it builds, and refuses an `Info.plist` that still contains the key.
+
+On launch the bridge reads that key and `SHAAR_MOCK_KEYCHAIN`. It enables the mock keychain only when the running bundle's signature is ad hoc, with no signing certificate and no team identifier. A Developer ID signature ignores both and uses the login keychain.
+
+The pinned engine adds `--use-mock-keychain` only as part of `SHAAR_ENGINE_TESTING`. Ad-hoc bundles that take the mock path set that variable for the engine run. The same mode also passes `--use-fake-device-for-media-stream`, turns off renderer backgrounding and background timer throttling, and maps `trackertest.org` to `127.0.0.1`. Verification-only engine calls still require their own marked probe root. Splitting the mock keychain from those switches needs a new engine build; agent hosts do not rebuild Chromium for this.
+
 The former dual-export source runner has been removed. [[Engine_Source_Build]] documents its historical build process; a Shaar-only source build still needs native owner verification.
 
 Related: [[Source_And_Native_Verification]], [[Releasing]].

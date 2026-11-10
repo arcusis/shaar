@@ -40,6 +40,8 @@ Only `--notarize` contacts Apple, and only `--upload` writes to GitHub. `--uploa
 
 ## Signing
 
+`release.sh` stops before building when `SHAAR_MOCK_KEYCHAIN` is set, and stops again if the built `Info.plist` contains `ShaarUseMockKeychain`. The Developer ID app uses the login keychain. See [[Build_And_Run]].
+
 `release.sh` builds with `bundle-app.sh --with-engine --with-updates` and moves the bundle to `build/release/Shaar.app`, so no ad hoc bundle with a live feed stays behind. It fails if a shipped binary contains a path under the builder's home folder. It then re-signs inside out with Developer ID, the hardened runtime and a secure timestamp:
 
 - Chromium libraries, helpers, then the framework, in the same order as development bundles (`scripts/engine-signing.sh`). Each helper gets exactly the entitlements of the pinned upstream signature. The GPU and Renderer helpers carry `com.apple.security.cs.allow-jit`. No helper carries `allow-unsigned-executable-memory`.

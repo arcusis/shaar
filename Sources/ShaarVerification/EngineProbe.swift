@@ -38,6 +38,9 @@ final class EngineProbe {
   private let devtoolsRouteOnlyMode: Bool
   private let devtoolsPanelsOnlyMode: Bool
   private let frameworkComponentsOnlyMode: Bool
+  /// Counts the hidden footprint runner is allowed to open. 50 and 100 exist so
+  /// #1058 and #1467 can measure the same bundle without a one-off probe.
+  private static let measurementTabCounts: Set<Int> = [1, 10, 30, 50, 100]
   private let measurementTabCount: Int?
   private let measurementEager: Bool
   private let expectedAfterTermination: BrowserSession?
@@ -247,9 +250,9 @@ final class EngineProbe {
         throw ProbeFailure("Eager measurement requires --probe-measure-tabs.")
       }
       guard
-        measurementTabCount.map({ [1, 10, 30].contains($0) }) ?? !arguments.contains(
+        measurementTabCount.map({ measurementTabCounts.contains($0) }) ?? !arguments.contains(
           "--probe-measure-tabs")
-      else { throw ProbeFailure("Measurement tab count must be 1, 10, or 30.") }
+      else { throw ProbeFailure("Measurement tab count must be 1, 10, 30, 50, or 100.") }
       guard localizationMode == arguments.contains("--probe-localization") else {
         throw ProbeFailure("Localization mode dispatch mismatch.")
       }

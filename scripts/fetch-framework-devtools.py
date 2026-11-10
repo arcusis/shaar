@@ -2,7 +2,11 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
-"""Fetch pinned official CRXs and stage loopback-scoped component extensions."""
+"""Fetch pinned official CRXs and stage loopback-scoped component extensions.
+
+The CRX bytes stay in the gitignored build cache. Scorecard treats a committed
+`.crx` as a binary artifact, so the SHA-256 pin is the review control.
+"""
 
 import argparse
 import base64
@@ -113,6 +117,43 @@ def download(name, destination):
     destination.write_bytes(data)
 
 
+def archive_directory(explicit):
+    if explicit is not None:
+        return explicit
+    override = os.environ.get("SHAAR_FRAMEWORK_DEVTOOLS_CACHE", "").strip()
+    if override:
+        return Path(override)
+    return ROOT / "build" / "cache" / "framework-devtools"
+
+
+def archive_matches(name, archive):
+    if not archive.is_file():
+        return False
+    return hashlib.sha256(archive.read_bytes()).hexdigest() == PINS[name].sha256
+
+
+def fetch_archive(name, archive_dir):
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    archive = archive_dir / f"{name}.crx"
+    with tempfile.NamedTemporaryFile(dir=archive_dir, delete=False) as temp:
+        temporary = Path(temp.name)
+    try:
+        download(name, temporary)
+        if not archive_matches(name, temporary):
+            raise ValueError(f"{name}: fetched CRX differs from pinned SHA-256")
+        os.replace(temporary, archive)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return archive
+
+
+def ensure_archive(name, archive_dir, refresh):
+    archive = archive_dir / f"{name}.crx"
+    if not refresh and archive_matches(name, archive):
+        return archive
+    return fetch_archive(name, archive_dir)
+
+
 def unpack(name, archive_path, destination):
     pin = PINS[name]
     archive = archive_path.read_bytes()
@@ -166,31 +207,19 @@ def unpack(name, archive_path, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--archive-dir", type=Path, default=ROOT / "ThirdParty/FrameworkDevTools/archives")
+    parser.add_argument("--archive-dir", type=Path, help="cache directory for pinned CRX bytes")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--download", action="store_true", help="refresh archives from the official Chrome Web Store")
+    parser.add_argument("--download", action="store_true", help="re-fetch pinned archives even when the cache matches")
     args = parser.parse_args()
-    args.archive_dir.mkdir(parents=True, exist_ok=True)
+    archive_dir = archive_directory(args.archive_dir)
     for name in PINS:
-        archive = args.archive_dir / f"{name}.crx"
-        if args.download:
-            with tempfile.NamedTemporaryFile(dir=args.archive_dir, delete=False) as temp:
-                temporary = Path(temp.name)
-            try:
-                download(name, temporary)
-                if hashlib.sha256(temporary.read_bytes()).hexdigest() != PINS[name].sha256:
-                    raise ValueError(f"{name}: fetched CRX differs from pinned SHA-256")
-                os.replace(temporary, archive)
-            finally:
-                temporary.unlink(missing_ok=True)
-        if not archive.is_file():
-            raise FileNotFoundError(f"{archive}: run this script with --download")
+        ensure_archive(name, archive_dir, args.download)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=args.output.parent) as staging:
         staged = Path(staging) / "FrameworkDevTools"
         staged.mkdir()
         for name in PINS:
-            unpack(name, args.archive_dir / f"{name}.crx", staged / name)
+            unpack(name, archive_dir / f"{name}.crx", staged / name)
         shutil.copytree(ROOT / "ThirdParty/FrameworkDevTools/licenses", staged / "licenses")
         if args.output.exists():
             shutil.rmtree(args.output)

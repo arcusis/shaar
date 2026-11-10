@@ -154,6 +154,7 @@ class BundleAppTests(unittest.TestCase):
             BUNDLE_TEST_LOG=str(self.log),
             BUNDLE_TEST_BIN=str(self.binary_dir),
             BUNDLE_TEST_FRAMEWORK=str(self.framework),
+            SHAAR_FRAMEWORK_DEVTOOLS_CACHE=str(REPO / "build" / "cache" / "framework-devtools"),
         )
 
     def tearDown(self):
@@ -231,6 +232,11 @@ class BundleAppTests(unittest.TestCase):
     def _info_plist(self, app_path):
         with (self.root / app_path / "Contents" / "Info.plist").open("rb") as plist_file:
             return plistlib.load(plist_file)
+
+    def test_framework_devtools_crx_archives_are_not_tracked(self):
+        tracked = subprocess.check_output(["git", "ls-files"], cwd=REPO, text=True)
+        crx_paths = [line for line in tracked.splitlines() if line.endswith(".crx")]
+        self.assertEqual(crx_paths, [])
 
     def test_bundle_advertises_web_browsing_handoff(self):
         result = self._run()

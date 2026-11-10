@@ -216,7 +216,9 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
 
 extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
   NSSet<NSString *> *allowed = [NSSet setWithArray:@[
-    @"blank", @"popup", @"performance-input", @"arcusis-private-quit-activation"]];
+    @"blank", @"popup", @"plain", @"performance-input",
+    @"arcusis-download-probe", @"window-client-download",
+    @"external-consent-probe", @"arcusis-private-quit-activation"]];
   return [allowed containsObject:elementID];
 }
 

@@ -1264,7 +1264,6 @@ import Vision
     case .components: "Comps"
     case .console, .network: "Chromium DevTools"
     case .issues: "Issues"
-    case .application, .performance, .memory, .coverage, .sources: "Chromium DevTools"
     case .audits: "Audits"
     case .cssOverview: "CSS"
     case .security: "Security"
@@ -1274,6 +1273,7 @@ import Vision
     case .viewports: "Views"
     case .rendering: "Render"
     case .comparison: "WebKit"
+    default: "Chromium DevTools"
     }
   }
 
@@ -1288,7 +1288,6 @@ import Vision
     case .console, .network: []
     case .issues: ["No issues"]
     case .audits: ["Run an audit", "Entire page"]
-    case .application, .performance, .memory, .coverage, .sources: []
     case .cssOverview:
       [
         "style sheets", "This page has no style", "Colors", "Fonts", "Sheets", "declaration",
@@ -1300,6 +1299,7 @@ import Vision
     case .viewports: ["Add viewport", "Synced viewports"]
     case .rendering: ["Paint flashing", "Layout shift"]
     case .comparison: ["Refresh comparison", "Webkit-only", "WebKit comparison"]
+    default: []
     }
   }
 }
@@ -1389,29 +1389,16 @@ enum ShaarDevToolsSmokeSeverity: String {
     if let panel = prefixed(name, "tab-") { return (panel, "Select tab") }
     if let panel = prefixed(name, "capture-") { return (panel, "Offscreen capture") }
     if name == "probe-switches" { return ("Session", "Hidden probe switches") }
-    if name == "storage-workers" { return ("Application", "Service workers") }
-    if name == "storage-cookies" { return ("Application", "Cookies") }
-    if let area = prefixed(name, "storage-") { return ("Application", area) }
     if let panel = prefixed(name, "world-panel-") { return (panel, "Open panel") }
     if let panel = prefixed(name, "world-capture-") { return (panel, "Offscreen capture") }
-    if let area = prefixed(name, "world-storage-") { return ("Application", area) }
     switch name {
     case "page": return ("Session", "Open fixture")
     case "f12": return ("Session", "Press F12")
-    case "performance-vitals": return ("Performance", "Measure LCP and INP")
     case "world-inspect": return ("Elements", "Inspect body")
     case "world-style": return ("Elements", "Edit style")
     case "world2-elements-search": return ("Elements", "Search body")
     case "world2-elements-attribute": return ("Elements", "Edit attribute")
-    case "world2-source-open": return ("Sources", "Open source")
-    case "world2-source-pretty": return ("Sources", "Pretty print")
-    case "world2-source-map": return ("Sources", "Source map")
-    case "world2-source-map-content": return ("Sources", "Open original source")
     case "world2-websocket": return ("Network", "WebSocket")
-    case "world2-service-worker": return ("Application", "Service worker")
-    case "world2-cookie-edit": return ("Application", "Edit cookie")
-    case "world2-cookie-delete": return ("Application", "Delete cookie")
-    case "world2-performance-long-task": return ("Performance", "Long task")
     case "world2-dock-bottom": return ("Chrome", "Dock bottom")
     case "world2-dock-right": return ("Chrome", "Dock right")
     case "world2-theme-light": return ("Chrome", "Light mode")
@@ -1430,11 +1417,9 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "windows", "windows-final": return ("Session", "Windows stay hidden")
     case "quit-open": return ("Session", "Quit with DevTools open")
     case "restore": return ("Session", "Restore hidden window")
-    case "coverage-record": return ("Coverage", "Start and stop")
     case "media-capture": return ("Media", "Camera and microphone in use")
     case "media-stop": return ("Media", "Capture stops")
     case "touch": return ("Sensors", "Toggle touch")
-    case "memory-snapshot": return ("Memory", "Take heap snapshot")
     case "issues-badge": return ("Issues", "Badge count")
     case "painted-text": return ("Session", "How panels are read")
     case "inspector-styles": return ("Elements", "Styles")
@@ -1451,7 +1436,6 @@ enum ShaarDevToolsSmokeSeverity: String {
     case "recorder-export": return ("Recorder", "Export")
     case "elements-listeners": return ("Elements", "Event listeners")
     case "elements-search": return ("Elements", "Search")
-    case "performance-record": return ("Performance", "Record and stop")
     case "recorder": return ("Recorder", "Record and stop")
     case "rendering-paint": return ("Rendering", "Paint flashing")
     case "css-overview": return ("CSS overview", "Reload")

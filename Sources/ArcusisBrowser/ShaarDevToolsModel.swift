@@ -645,8 +645,7 @@ final class ShaarDevToolsModel {
 
   var commandMatches: [ShaarDevToolsCommandMatch] {
     return ShaarDevToolsCommandIndex.matches(
-      query: commandQuery, sections: sections, sources: sources.resources,
-      nodes: Array(dom.nodes.values))
+      query: commandQuery, sections: sections, nodes: Array(dom.nodes.values))
   }
 
   var clampedCommandSelection: Int {
@@ -683,12 +682,6 @@ final class ShaarDevToolsModel {
       self.section = section
     case .dock(let dock):
       self.dock = dock
-    case .source(let url):
-      section = .sources
-      sources.search = ""
-      guard let resource = sources.resources.first(where: { $0.url == url }) else { return }
-      let sources = sources
-      Task { await sources.select(resource) }
     case .element(let id):
       section = .elements
       dom.search = ""

@@ -825,8 +825,8 @@ import Foundation
     "Repro capture needs engine support",
     "Live Viewports need engine support",
     "WebKit comparison is unavailable for this tab",
-    "Use Chromium DevTools for Console and Network",
-    "Open Chromium DevTools for Console and Network",
+    "This panel is unavailable",
+    "Open Chromium DevTools",
   ]
 
   private static func namesEngineVersion(_ text: String) -> Bool {
@@ -920,7 +920,7 @@ import Foundation
 @MainActor final class DevToolsPanelResults {
   static let requiredPanels: Set<String> = [
     "f12-route", "shell-defaults", "security", "audits", "event-stream", "issues",
-    "network-rules", "source-bytes",
+    "network-rules",
     "css", "viewports", "masked-repro", "elements-live", "elements-inspector", "elements-scale",
     "split-shell",
   ]

@@ -73,7 +73,7 @@ import Testing
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
     let shell = ShaarDevToolsModel(target: target)
     let matches = ShaarDevToolsCommandIndex.matches(
-      query: "set", sections: shell.sections, sources: [], nodes: [])
+      query: "set", sections: shell.sections, nodes: [])
     #expect(matches.contains { $0.hit == .settings && $0.title == "Settings" })
     #expect(ShaarDevToolsCommandHit.settings.token == "settings")
     #expect(ShaarDevToolsCommandHit.settings.groupKey == nil)

@@ -9,7 +9,6 @@ import ShaarEngineABI
 enum ShaarDevToolsCommandHit: Equatable {
   case section(ShaarDevToolsSection)
   case dock(ShaarDevToolsDock)
-  case source(String)
   case element(Int)
   case settings
 
@@ -17,7 +16,6 @@ enum ShaarDevToolsCommandHit: Equatable {
     switch self {
     case .section(let section): "section:\(section.rawValue)"
     case .dock(let dock): "dock:\(dock.rawValue)"
-    case .source(let url): "source:\(url)"
     case .element(let id): "element:\(id)"
     case .settings: "settings"
     }
@@ -26,7 +24,6 @@ enum ShaarDevToolsCommandHit: Equatable {
   var groupKey: String? {
     switch self {
     case .section, .dock: nil
-    case .source: "Sources"
     case .element: "Elements"
     case .settings: nil
     }
@@ -35,7 +32,7 @@ enum ShaarDevToolsCommandHit: Equatable {
   var localizesTitle: Bool {
     switch self {
     case .section, .dock, .settings: true
-    case .source, .element: false
+    case .element: false
     }
   }
 }
@@ -69,13 +66,11 @@ enum ShaarDevToolsCommandIndex {
   static func matches(
     query: String,
     sections: [ShaarDevToolsSection],
-    sources: [ShaarSourceResource],
     nodes: [ShaarDOMNode]
   ) -> [ShaarDevToolsCommandMatch] {
     let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
     var result = actions(needle: needle, sections: sections)
     guard !needle.isEmpty else { return result }
-    result += sourceHits(needle, resources: sources)
     result += elementHits(needle, nodes: nodes)
     return result
   }
@@ -94,20 +89,6 @@ enum ShaarDevToolsCommandIndex {
     }
     if matches(needle, "Settings") {
       result.append(ShaarDevToolsCommandMatch(hit: .settings, title: "Settings", detail: ""))
-    }
-    return result
-  }
-
-  private static func sourceHits(_ needle: String, resources: [ShaarSourceResource])
-    -> [ShaarDevToolsCommandMatch]
-  {
-    var result: [ShaarDevToolsCommandMatch] = []
-    for resource in resources {
-      guard result.count < contentLimit else { break }
-      guard matches(needle, resource.name, resource.url, resource.type) else { continue }
-      result.append(
-        ShaarDevToolsCommandMatch(
-          hit: .source(resource.url), title: resource.name, detail: resource.type))
     }
     return result
   }

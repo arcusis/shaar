@@ -47,7 +47,7 @@ struct ShaarDevToolsCommandMenu: View {
     .frame(height: 36)
     .help(
       ShellL10n.string(
-        "Type to search panels, dock positions, console, network, sources, and elements."
+        "Type to search panels, dock positions, and elements."
       )
     )
   }

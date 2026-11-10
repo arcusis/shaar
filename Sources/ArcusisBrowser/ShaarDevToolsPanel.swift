@@ -350,12 +350,10 @@ struct ShaarDevToolsPanel: View {
         .foregroundStyle(.primary)
       Text(ShellL10n.string(unavailableMessage))
         .font(.system(size: 12, weight: .medium))
-      Button(
-        ShellL10n.string("Open Chromium DevTools for Console and Network"), action: openChromium
-      )
-      .help(ShellL10n.string("Open Chromium DevTools with Option-Shift-Command-I"))
-      .controlSize(.small)
-      .padding(.top, 3)
+      Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
+        .help(ShellL10n.string("Open Chromium DevTools with Option-Shift-Command-I"))
+        .controlSize(.small)
+        .padding(.top, 3)
       if let failure = nativeFailure {
         DisclosureGroup(ShellL10n.string("Technical details")) {
           Text(failure)
@@ -377,12 +375,12 @@ struct ShaarDevToolsPanel: View {
     if [.console, .network, .application, .sources, .performance, .memory, .coverage].contains(
       model.section)
     {
-      return "Use Chromium DevTools for Console and Network"
+      return "This panel is unavailable"
     }
     if model.section == .repro { return "Repro capture needs engine support" }
     if model.section == .viewports { return "Live Viewports need engine support" }
     if model.section == .comparison { return "WebKit comparison is unavailable for this tab" }
-    return "Use Chromium DevTools for Console and Network"
+    return "This panel is unavailable"
   }
 
   private var nativeFailure: String? {
@@ -433,7 +431,7 @@ struct ShaarDevToolsPanel: View {
     }
     if model.section == .rendering { return "Rendering changes are scoped to this tab" }
     if model.section == .comparison { return "WebKit comparison is scoped to this tab" }
-    return "Open Chromium DevTools for Console and Network"
+    return "Open Chromium DevTools"
   }
 
   private func moveSection(_ direction: MoveCommandDirection) {

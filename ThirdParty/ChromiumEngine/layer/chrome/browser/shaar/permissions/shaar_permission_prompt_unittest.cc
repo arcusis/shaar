@@ -60,5 +60,56 @@ TEST(ShaarPermissionPromptTest, PrivateGrantsDoNotPersist) {
             GrantPersistence::kProfile);
 }
 
+TEST(ShaarPermissionPromptTest, ReloadOrDetachDropsTheRequest) {
+  const FrameSnapshot stored = BoundFrame();
+  EXPECT_FALSE(FrameLeftTheRequest(stored, stored, false, false));
+  EXPECT_FALSE(FrameLeftTheRequest(stored, stored, true, false));
+
+  FrameSnapshot reloaded = stored;
+  reloaded.navigation_id = 43;
+  EXPECT_TRUE(FrameLeftTheRequest(stored, reloaded, false, false));
+  EXPECT_FALSE(FrameLeftTheRequest(stored, reloaded, true, false));
+
+  EXPECT_TRUE(FrameLeftTheRequest(stored, stored, false, true));
+
+  FrameSnapshot inactive = stored;
+  inactive.active = false;
+  EXPECT_TRUE(FrameLeftTheRequest(stored, inactive, false, false));
+
+  FrameSnapshot other = stored;
+  other.token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  other.navigation_id = 99;
+  EXPECT_FALSE(FrameLeftTheRequest(stored, other, false, false));
+  EXPECT_FALSE(FrameLeftTheRequest(stored, other, false, true));
+
+  FrameSnapshot missing;
+  EXPECT_FALSE(FrameLeftTheRequest(missing, missing, false, true));
+}
+
+TEST(ShaarPermissionPromptTest, PrivateProfileGrantIsNotPersisted) {
+  EXPECT_FALSE(GrantIsPersisted(GrantPersistence::kDeny));
+  EXPECT_FALSE(GrantIsPersisted(GrantPersistence::kThisVisit));
+  EXPECT_FALSE(GrantIsPersisted(GrantPersistence::kPrivateProtocol));
+  EXPECT_TRUE(GrantIsPersisted(GrantPersistence::kProfile));
+
+  EXPECT_FALSE(
+      GrantIsPersisted(PersistenceFor(true, true, true, false, false)));
+  EXPECT_FALSE(
+      GrantIsPersisted(PersistenceFor(true, true, true, true, false)));
+  EXPECT_FALSE(
+      GrantIsPersisted(PersistenceFor(true, true, true, false, true)));
+  EXPECT_FALSE(
+      GrantIsPersisted(PersistenceFor(true, true, true, true, true)));
+  EXPECT_FALSE(
+      GrantIsPersisted(PersistenceFor(false, true, true, false, false)));
+
+  EXPECT_FALSE(
+      GrantIsPersisted(PersistenceFor(true, true, false, true, false)));
+  EXPECT_TRUE(
+      GrantIsPersisted(PersistenceFor(true, true, false, false, false)));
+  EXPECT_TRUE(
+      GrantIsPersisted(PersistenceFor(true, true, false, false, true)));
+}
+
 }  // namespace
 }  // namespace shaar::permissions

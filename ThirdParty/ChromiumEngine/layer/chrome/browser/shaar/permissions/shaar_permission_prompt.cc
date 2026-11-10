@@ -26,8 +26,10 @@
 #include "components/permissions/request_type.h"
 #include "components/permissions/resolvers/permission_prompt_options.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -248,6 +250,55 @@ void Expire(std::string request_id) {
   Decide(std::move(pending), false);
 }
 
+// Watches the asking frame. A same-URL reload or a detached frame reuses the
+// dismiss path so Allow cannot reach a frame that is already gone.
+class FrameWatcher : public content::WebContentsObserver {
+ public:
+  FrameWatcher(content::WebContents* contents,
+               std::string request_id,
+               FrameSnapshot stored)
+      : content::WebContentsObserver(contents),
+        request_id_(std::move(request_id)),
+        stored_(std::move(stored)) {}
+
+  // The prompt destructor dismisses a request that is still pending.
+  ~FrameWatcher() override = default;
+
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle || !navigation_handle->HasCommitted())
+      return;
+    const FrameSnapshot live =
+        SnapshotFor(web_contents(), navigation_handle->GetRenderFrameHost());
+    const bool left = FrameLeftTheRequest(
+        stored_, live, navigation_handle->IsSameDocument(), false);
+    if (!left)
+      return;
+    PostExpire();
+  }
+
+  void RenderFrameDeleted(
+      content::RenderFrameHost* render_frame_host) override {
+    const FrameSnapshot live = SnapshotFor(web_contents(), render_frame_host);
+    if (!FrameLeftTheRequest(stored_, live, false, true))
+      return;
+    PostExpire();
+  }
+
+ private:
+  void PostExpire() {
+    if (posted_)
+      return;
+    posted_ = true;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&Expire, request_id_));
+  }
+
+  std::string request_id_;
+  FrameSnapshot stored_;
+  bool posted_ = false;
+};
+
 void DenyDelegate(
     base::WeakPtr<::permissions::PermissionPrompt::Delegate> delegate) {
   if (!delegate)
@@ -269,6 +320,7 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
   }
 
   ~ShaarPermissionPrompt() override {
+    frame_watcher_.reset();
     if (id_.empty())
       return;
     auto found = Pending().find(id_);
@@ -363,6 +415,8 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
                 page_url, origin, one_time_, private_profile, protocol_handler,
                 frame_snapshot.token, frame_snapshot.navigation_id,
                 delegate->GetWeakPtr()});
+    frame_watcher_ =
+        std::make_unique<FrameWatcher>(contents, id, frame_snapshot);
     const shaar_error_code emitted = shaar::EmitEvent(
         engine, SHAAR_EVENT_PERMISSION,
         {identity->profile_id.data(), identity->profile_id.size()}, {},
@@ -382,6 +436,7 @@ class ShaarPermissionPrompt : public ::permissions::PermissionPrompt {
 
   std::string id_;
   bool one_time_ = false;
+  std::unique_ptr<FrameWatcher> frame_watcher_;
 };
 
 std::vector<std::string_view> KindsFor(

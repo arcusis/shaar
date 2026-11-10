@@ -33,6 +33,18 @@ inline bool FrameStillBound(const FrameSnapshot& stored,
          stored.navigation_id == live.navigation_id;
 }
 
+// A same-document navigation keeps the request. The asking frame ends it when
+// that frame is deleted or a committed navigation replaces it. Another frame
+// does not.
+inline bool FrameLeftTheRequest(const FrameSnapshot& stored,
+                                const FrameSnapshot& live,
+                                bool same_document,
+                                bool frame_deleted) {
+  if (same_document || stored.token.empty() || stored.token != live.token)
+    return false;
+  return frame_deleted || !FrameStillBound(stored, live);
+}
+
 // Private profiles do not keep a grant in the parent profile. A private
 // protocol handler cannot use AcceptThisTime (that decision is forbidden),
 // so it is accepted onto the off-the-record registry, which does not persist.
@@ -55,6 +67,11 @@ inline GrantPersistence PersistenceFor(bool allowed,
   if (one_time || private_profile)
     return GrantPersistence::kThisVisit;
   return GrantPersistence::kProfile;
+}
+
+// Only a regular-profile Accept is written to the parent profile.
+inline bool GrantIsPersisted(GrantPersistence persistence) {
+  return persistence == GrantPersistence::kProfile;
 }
 
 // Returns a prompt when every request maps to the shared website sheet.

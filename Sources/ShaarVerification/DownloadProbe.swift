@@ -58,6 +58,7 @@ final class DownloadProbe {
     let b = store.session.spaces[1]
     let tabA = a.selectedTabID!
     let tabB = b.selectedTabID!
+    try await keepDownloadsInProbeFolder()
     if phase == "restart" {
       let saved = try String(
         contentsOf: root.appending(path: "initial-download-id"), encoding: .utf8)
@@ -171,6 +172,44 @@ final class DownloadProbe {
         to: root.appending(path: "initial-download-id"), atomically: true, encoding: .utf8)
     }
     return checks
+  }
+
+  /// Profile load on the engine probe does not apply a download folder.
+  /// Point each profile at the marked temporary directory before any transfer.
+  private func keepDownloadsInProbeFolder() async throws {
+    guard let shaar = runtime as? ARCShaarRuntime else {
+      throw DownloadProbeFailure("Downloads require the Shaar runtime.")
+    }
+    let destination = root.appending(path: "Downloads", directoryHint: .isDirectory)
+      .standardizedFileURL.resolvingSymlinksInPath()
+    try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+    for profile in store.session.profiles {
+      let acknowledged = try await acknowledgedDownloadDirectory(
+        shaar, profileID: profile.id, destination: destination)
+      let actual = acknowledged.standardizedFileURL.resolvingSymlinksInPath()
+      guard actual.path == destination.path else {
+        throw DownloadProbeFailure("Download directory escaped the disposable probe folder.")
+      }
+    }
+    checks.append("downloads stay in the disposable probe folder")
+  }
+
+  private func acknowledgedDownloadDirectory(
+    _ runtime: ARCShaarRuntime, profileID: UUID, destination: URL
+  ) async throws -> URL {
+    try await withCheckedThrowingContinuation { continuation in
+      runtime.configureDownloadDirectory(destination, profileID: profileID.uuidString) {
+        url, error in
+        if let error {
+          continuation.resume(throwing: error)
+        } else if let url {
+          continuation.resume(returning: url)
+        } else {
+          continuation.resume(
+            throwing: DownloadProbeFailure("Download directory was not acknowledged."))
+        }
+      }
+    }
   }
 
   private func begin(_ tab: UUID, name: String) async throws {

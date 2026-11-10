@@ -5,7 +5,7 @@
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 
-import * as GraphQLTRPC from './graphql-trpc.js';
+import type * as GraphQLTRPC from './graphql-trpc.js';
 
 const UIStrings = {
   /**
@@ -21,10 +21,13 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/shaar/graphql-trpc/graphql-trpc-meta.ts', UIStrings);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 
-try {
-  GraphQLTRPC.APIOperationWatch.installAPIOperationWatch();
-} catch {
-  // The panel installs the watch again when it is shown and reports a failure there.
+let loadedModule: (typeof GraphQLTRPC|undefined);
+
+async function loadModule(): Promise<typeof GraphQLTRPC> {
+  if (!loadedModule) {
+    loadedModule = await import('./graphql-trpc.js');
+  }
+  return loadedModule;
 }
 
 UI.ViewManager.registerViewExtension({
@@ -35,6 +38,7 @@ UI.ViewManager.registerViewExtension({
   order: 205,
   persistence: UI.ViewManager.ViewPersistence.CLOSEABLE,
   async loadView() {
+    const GraphQLTRPC = await loadModule();
     return new GraphQLTRPC.APIOperationsPanel.APIOperationsPanel();
   },
 });

@@ -154,4 +154,42 @@ enum PlatformParityVerdicts {
     return PlatformParityDecision(
       passed: passed, disposition: passed ? "pass" : "gap", evidence: evidence)
   }
+
+  /// `activate` and `makeKey` are window events. A note may already say `event `.
+  static func isActivationEvent(_ name: String) -> Bool {
+    let body = name.hasPrefix("event ") ? String(name.dropFirst(6)) : name
+    return body == "activate" || body == "makeKey" || body.hasPrefix("makeKey ")
+  }
+
+  /// A chooser is a modal, a visible window, a sheet, or a panel. The probe's own
+  /// window and activation notes are not choosers.
+  static func isChooserSurface(_ name: String, hostWindow: String = "") -> Bool {
+    if isActivationEvent(name) { return false }
+    if !hostWindow.isEmpty, name == hostWindow || name == "visible \(hostWindow)" {
+      return false
+    }
+    let folded = name.lowercased()
+    return folded.contains("modal") || folded.contains("visible") || folded.contains("sheet")
+      || folded.contains("panel")
+  }
+
+  static func deviceChooser(
+    outcome: String, sheet: String, surfaces: [String], hostWindow: String = ""
+  ) -> PlatformParityDecision {
+    let choosers = surfaces.filter { isChooserSurface($0, hostWindow: hostWindow) }
+    let appeared = !sheet.isEmpty || !choosers.isEmpty
+    let passed = outcome == "resolved" || appeared
+    let evidence: String
+    if passed && appeared {
+      evidence = "A chooser surface appeared."
+    } else if passed {
+      evidence = "The chooser request resolved."
+    } else if surfaces.contains(where: isActivationEvent) {
+      evidence = "activate and makeKey are window events, not a chooser."
+    } else {
+      evidence = "No chooser surface appeared."
+    }
+    return PlatformParityDecision(
+      passed: passed, disposition: passed ? "pass" : "gap", evidence: evidence)
+  }
 }

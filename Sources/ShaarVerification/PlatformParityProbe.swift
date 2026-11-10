@@ -82,6 +82,7 @@ private struct ParitySnapshot {
   var kinds: [String] = []
   var sheet = ""
   var surfaces: [String] = []
+  var events: [String] = []
   var downloads: [String] = []
   var extensions: [String] = []
   var installedMV3 = false
@@ -390,8 +391,8 @@ private struct ParitySnapshot {
       snapshot.pageTitle = text(value["title"])
       snapshot.pageText = text(value["text"])
     }
-    for name in SurfaceGuard.names(after: snapshot.surfaceBaseline) where !snapshot.surfaces.contains(name) {
-      snapshot.surfaces.append(name)
+    for name in SurfaceGuard.names(after: snapshot.surfaceBaseline) {
+      recordSurface(name, on: &snapshot)
     }
   }
 
@@ -583,17 +584,21 @@ private struct ParitySnapshot {
   private func chooserRow(
     _ snapshot: ParitySnapshot, item: String, delegate: String
   ) -> [String: Any] {
-    let outcome = text(snapshot.result["outcome"])
-    let surfaced = !snapshot.sheet.isEmpty || !chooserSurfaces(snapshot).isEmpty
-    let passed = outcome == "resolved" || surfaced
+    let decision = PlatformParityVerdicts.deviceChooser(
+      outcome: text(snapshot.result["outcome"]), sheet: snapshot.sheet,
+      surfaces: snapshot.surfaces, hostWindow: hostWindowName)
     return row(
-      item: item, passed: passed, delegate: delegate, evidence: describe(snapshot),
+      item: item, passed: decision.passed, disposition: decision.disposition,
+      delegate: delegate, evidence: "\(decision.evidence) \(describe(snapshot))",
       signals: signals(snapshot))
   }
 
   private func screenRow(_ snapshot: ParitySnapshot) -> [String: Any] {
     let tracks = intValue(snapshot.result["tracks"])
-    let passed = snapshot.sheet == "desktopCapture" || tracks > 0 || !chooserSurfaces(snapshot).isEmpty
+    let chooser = snapshot.surfaces.contains {
+      PlatformParityVerdicts.isChooserSurface($0, hostWindow: hostWindowName)
+    }
+    let passed = snapshot.sheet == "desktopCapture" || tracks > 0 || chooser
     return row(
       item: "Screen sharing picker", passed: passed, delegate: "DesktopCapturePicker",
       evidence: describe(snapshot), signals: signals(snapshot))
@@ -611,7 +616,11 @@ private struct ParitySnapshot {
   private func autofillRow(
     _ snapshot: ParitySnapshot, item: String, delegate: String
   ) -> [String: Any] {
-    let surfaced = !snapshot.sheet.isEmpty || !chooserSurfaces(snapshot).isEmpty
+    let surfaced =
+      !snapshot.sheet.isEmpty
+      || snapshot.surfaces.contains {
+        PlatformParityVerdicts.isChooserSurface($0, hostWindow: hostWindowName)
+      }
     return row(
       item: item, passed: surfaced, delegate: delegate, evidence: describe(snapshot),
       signals: signals(snapshot))
@@ -797,11 +806,16 @@ private struct ParitySnapshot {
       evidence: evidence, signals: [:])
   }
 
-  private func chooserSurfaces(_ snapshot: ParitySnapshot) -> [String] {
-    let own = context.map { String(describing: type(of: $0.window)) } ?? ""
-    return snapshot.surfaces.filter { name in
-      name != own && name != "visible \(own)"
+  private var hostWindowName: String {
+    context.map { String(describing: type(of: $0.window)) } ?? ""
+  }
+
+  private func recordSurface(_ name: String, on snapshot: inout ParitySnapshot) {
+    if PlatformParityVerdicts.isActivationEvent(name) {
+      if !snapshot.events.contains(name) { snapshot.events.append(name) }
+      return
     }
+    if !snapshot.surfaces.contains(name) { snapshot.surfaces.append(name) }
   }
 
   private func signals(_ snapshot: ParitySnapshot) -> [String: String] {
@@ -809,6 +823,7 @@ private struct ParitySnapshot {
       "kinds": snapshot.kinds.joined(separator: ","),
       "sheet": snapshot.sheet,
       "surfaces": snapshot.surfaces.joined(separator: ","),
+      "events": snapshot.events.joined(separator: ","),
       "security": snapshot.security,
       "href": snapshot.href,
       "committed": snapshot.committedURL,
@@ -838,6 +853,9 @@ private struct ParitySnapshot {
     if !snapshot.sheet.isEmpty { parts.append("sheet \(snapshot.sheet)") }
     if !snapshot.surfaces.isEmpty {
       parts.append("surfaces \(snapshot.surfaces.joined(separator: ", "))")
+    }
+    if !snapshot.events.isEmpty {
+      parts.append("events \(snapshot.events.joined(separator: ", "))")
     }
     if !snapshot.security.isEmpty { parts.append("security \(snapshot.security)") }
     let href = snapshot.href.isEmpty ? snapshot.committedURL : snapshot.href
@@ -1186,7 +1204,7 @@ extension NSWindow {
   }
 
   @objc fileprivate func parity_makeKey() {
-    SurfaceGuard.note("makeKey \(type(of: self))")
+    SurfaceGuard.note("event makeKey \(type(of: self))")
     // A hidden window can be key without coming on screen. Chromium's dialogs
     // abort, and later free a dangling pointer, when this call is dropped.
     guard !isVisible else { return }
@@ -1201,13 +1219,13 @@ extension NSWindow {
 
 extension NSApplication {
   @objc(parity_activate) fileprivate func parityActivate() {
-    SurfaceGuard.note("activate")
+    SurfaceGuard.note("event activate")
   }
 
   @objc(parity_activateIgnoringOtherApps:) fileprivate func parityActivateIgnoringOtherApps(
     _ ignore: Bool
   ) {
-    SurfaceGuard.note("activate")
+    SurfaceGuard.note("event activate")
   }
 
   @objc fileprivate func parity_runModal(for window: NSWindow) -> NSApplication.ModalResponse {

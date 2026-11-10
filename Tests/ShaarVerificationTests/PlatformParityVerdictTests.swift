@@ -220,4 +220,34 @@ struct PlatformParityVerdictTests {
     #expect(!decision.passed)
     #expect(decision.disposition == "gap")
   }
+
+  @Test func activateAndMakeKeyAreNotAChooser() {
+    let decision = PlatformParityVerdicts.deviceChooser(
+      outcome: "", sheet: "", surfaces: ["activate", "makeKey BrowserWindow"])
+    #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
+    let recorded = PlatformParityVerdicts.deviceChooser(
+      outcome: "", sheet: "", surfaces: ["event activate", "event makeKey BrowserWindow"])
+    #expect(!recorded.passed)
+  }
+
+  @Test func aModalPanelStillCountsAsAChooser() {
+    let decision = PlatformParityVerdicts.deviceChooser(
+      outcome: "", sheet: "", surfaces: ["modal NSOpenPanel", "event activate"])
+    #expect(decision.passed)
+    #expect(decision.disposition == "pass")
+  }
+
+  @Test func theProbeWindowIsNotAChooser() {
+    let decision = PlatformParityVerdicts.deviceChooser(
+      outcome: "", sheet: "", surfaces: ["visible BrowserWindow", "BrowserWindow"],
+      hostWindow: "BrowserWindow")
+    #expect(!decision.passed)
+  }
+
+  @Test func aResolvedChooserPassesWithoutASurface() {
+    let decision = PlatformParityVerdicts.deviceChooser(
+      outcome: "resolved", sheet: "", surfaces: ["activate", "makeKey BrowserWindow"])
+    #expect(decision.passed)
+  }
 }

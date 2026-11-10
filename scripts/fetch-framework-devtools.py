@@ -4,8 +4,11 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 """Fetch pinned official CRXs and stage loopback-scoped component extensions.
 
-The CRX bytes stay in the gitignored build cache. Scorecard treats a committed
-`.crx` as a binary artifact, so the SHA-256 pin is the review control.
+Builds download the pinned CRX bytes from the framework-devtools-pins GitHub
+release. The Chrome Web Store only serves the latest package, so a Web Store
+fetch would break after an upstream update. `--download` talks to the Web Store
+only when a maintainer is reviewing a new pin. Scorecard treats a committed
+`.crx` as a binary artifact, so the bytes stay in the gitignored build cache.
 """
 
 import argparse
@@ -17,13 +20,17 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import struct
+import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+RELEASE_REPOSITORY = "arcusis/shaar"
+RELEASE_TAG = "framework-devtools-pins"
 
 
 @dataclass(frozen=True)
@@ -103,18 +110,45 @@ def public_key_for_id(archive, expected_id):
     raise ValueError("CRX public key does not match expected extension ID")
 
 
-def download(name, destination):
-    extension_id = PINS[name].extension_id
+def release_asset_name(name):
+    return f"{name}-{PINS[name].version}.crx"
+
+
+def release_asset_url(name):
+    asset = release_asset_name(name)
+    return f"https://github.com/{RELEASE_REPOSITORY}/releases/download/{RELEASE_TAG}/{asset}"
+
+
+def web_store_url(name):
     query = urllib.parse.urlencode({
         "response": "redirect", "prodversion": "155.0.8059.84",
-        "acceptformat": "crx3", "x": f"id={extension_id}&uc",
+        "acceptformat": "crx3", "x": f"id={PINS[name].extension_id}&uc",
     })
-    url = "https://clients2.google.com/service/update2/crx?" + query
-    with urllib.request.urlopen(url, timeout=60) as response:
-        data = response.read(MAX_ARCHIVE_SIZE + 1)
+    return "https://clients2.google.com/service/update2/crx?" + query
+
+
+def read_bounded(response, name):
+    data = response.read(MAX_ARCHIVE_SIZE + 1)
     if len(data) > MAX_ARCHIVE_SIZE:
         raise ValueError(f"{name}: archive exceeds size limit")
-    destination.write_bytes(data)
+    return data
+
+
+def download_url(url, name, destination):
+    request = urllib.request.Request(url, headers={"User-Agent": "shaar-fetch-framework-devtools"})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            destination.write_bytes(read_bounded(response, name))
+    except urllib.error.HTTPError as error:
+        raise ValueError(f"{name}: download failed from {url} ({error.code})") from error
+
+
+def download_release(name, destination):
+    download_url(release_asset_url(name), name, destination)
+
+
+def download_web_store(name, destination):
+    download_url(web_store_url(name), name, destination)
 
 
 def archive_directory(explicit):
@@ -132,26 +166,35 @@ def archive_matches(name, archive):
     return hashlib.sha256(archive.read_bytes()).hexdigest() == PINS[name].sha256
 
 
-def fetch_archive(name, archive_dir):
+def install_pinned(name, archive_dir, download, source_label):
     archive_dir.mkdir(parents=True, exist_ok=True)
     archive = archive_dir / f"{name}.crx"
     with tempfile.NamedTemporaryFile(dir=archive_dir, delete=False) as temp:
         temporary = Path(temp.name)
     try:
         download(name, temporary)
-        if not archive_matches(name, temporary):
-            raise ValueError(f"{name}: fetched CRX differs from pinned SHA-256")
+        digest = hashlib.sha256(temporary.read_bytes()).hexdigest()
+        if digest != PINS[name].sha256:
+            candidate = archive_dir / f"{name}.crx.candidate"
+            os.replace(temporary, candidate)
+            raise ValueError(
+                f"{name}: {source_label} SHA-256 {digest} does not match pin "
+                f"{PINS[name].sha256}. Pinned cache left unchanged. Candidate: {candidate}"
+            )
         os.replace(temporary, archive)
     finally:
         temporary.unlink(missing_ok=True)
     return archive
 
 
-def ensure_archive(name, archive_dir, refresh):
+def ensure_archive(name, archive_dir, from_web_store):
     archive = archive_dir / f"{name}.crx"
-    if not refresh and archive_matches(name, archive):
+    if not from_web_store and archive_matches(name, archive):
         return archive
-    return fetch_archive(name, archive_dir)
+    if from_web_store:
+        return install_pinned(name, archive_dir, download_web_store, "Chrome Web Store package")
+    print(f"Fetching {release_asset_name(name)}", file=sys.stderr)
+    return install_pinned(name, archive_dir, download_release, "GitHub release asset")
 
 
 def unpack(name, archive_path, destination):
@@ -209,7 +252,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive-dir", type=Path, help="cache directory for pinned CRX bytes")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--download", action="store_true", help="re-fetch pinned archives even when the cache matches")
+    parser.add_argument(
+        "--download", action="store_true",
+        help="fetch the current Chrome Web Store packages to review a pin update",
+    )
     args = parser.parse_args()
     archive_dir = archive_directory(args.archive_dir)
     for name in PINS:

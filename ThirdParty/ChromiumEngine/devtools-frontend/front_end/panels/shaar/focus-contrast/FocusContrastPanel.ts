@@ -10,11 +10,13 @@ import {html, render} from '../../../ui/lit/lit.js';
 
 import {
   CLEAR_EXPRESSION,
+  MAX_WALK_NODES,
   nextRowIndex,
   NO_STOPS,
   NOT_DRAWN,
   NOT_READY,
   refreshFocusContrast,
+  walkDom,
   type FocusContrastCaller,
   type FocusContrastRow,
 } from './FocusContrast.js';
@@ -70,10 +72,14 @@ const UIStrings = {
   notDrawn: 'The overlay could not be drawn.',
   /**
    * @description Accessible name for a tab stop row. PH1 is the number. PH2 is the control name.
+   * @example {3} PH1
+   * @example {Submit} PH2
    */
   tabStopRow: 'Tab stop {PH1}, {PH2}',
   /**
    * @description Accessible name for a contrast row. PH1 is the ratio. PH2 is the text snippet.
+   * @example {2.5} PH1
+   * @example {Buy now} PH2
    */
   contrastRow: 'Contrast {PH1}, {PH2}',
 } as const;
@@ -482,6 +488,49 @@ class TargetCaller implements FocusContrastCaller {
     return response.result.value;
   }
 
+  async elementsTree(): Promise<unknown> {
+    const domModel = this.#target.model(SDK.DOMModel.DOMModel);
+    if (!domModel) {
+      return null;
+    }
+    const document = domModel.existingDocument() ?? await domModel.requestDocument();
+    if (!document) {
+      return null;
+    }
+    const loaded = loadedPayload(document, {seen: 0});
+    const index = walkDom(loaded);
+    if (index.focus.size > 0 || index.contrast.size > 0) {
+      return loaded;
+    }
+    const children = await queryMarkers(this.#target, domModel, document.id);
+    return {nodeId: document.id, children};
+  }
+
+  async accessibleNames(backendNodeIds: number[]): Promise<Map<number, string>> {
+    const names = new Map<number, string>();
+    const axModel = this.#target.model(SDK.AccessibilityModel.AccessibilityModel);
+    if (!axModel || backendNodeIds.length === 0) {
+      return names;
+    }
+    for (const backendNodeId of backendNodeIds) {
+      const response = await axModel.agent.invoke_getPartialAXTree({
+        backendNodeId: backendNodeId as Protocol.DOM.BackendNodeId,
+        fetchRelatives: false,
+      });
+      if (response.getError()) {
+        continue;
+      }
+      for (const node of response.nodes ?? []) {
+        const value = node.name?.value;
+        if (typeof value === 'string' && value.trim()) {
+          names.set(backendNodeId, value.trim().slice(0, 80));
+          break;
+        }
+      }
+    }
+    return names;
+  }
+
   async call(method: string, params: Record<string, unknown>): Promise<unknown> {
     const response = await dispatch(this.#target, method, params);
     const error = response.getError();
@@ -490,6 +539,62 @@ class TargetCaller implements FocusContrastCaller {
     }
     return response;
   }
+}
+
+function loadedPayload(node: SDK.DOMModel.DOMNode, counter: {seen: number}): Record<string, unknown>|null {
+  if (counter.seen >= MAX_WALK_NODES) {
+    return null;
+  }
+  counter.seen += 1;
+  const attributes: string[] = [];
+  for (const attribute of node.attributes()) {
+    attributes.push(attribute.name, attribute.value);
+  }
+  const children: Array<Record<string, unknown>> = [];
+  for (const child of node.children() ?? []) {
+    const payload = loadedPayload(child, counter);
+    if (payload) {
+      children.push(payload);
+    }
+  }
+  for (const shadow of node.shadowRoots()) {
+    const payload = loadedPayload(shadow, counter);
+    if (payload) {
+      children.push(payload);
+    }
+  }
+  const frame = node.contentDocument();
+  return {
+    nodeId: node.id,
+    backendNodeId: node.backendNodeId(),
+    attributes,
+    children,
+    contentDocument: frame ? loadedPayload(frame, counter) : null,
+  };
+}
+
+async function queryMarkers(
+    target: SDK.Target.Target, domModel: SDK.DOMModel.DOMModel,
+    rootId: Protocol.DOM.NodeId): Promise<unknown[]> {
+  const nodes: unknown[] = [];
+  for (const selector of ['[data-shaar-focus]', '[data-shaar-contrast]']) {
+    const ids = await domModel.querySelectorAll(rootId, selector) ?? [];
+    for (const nodeId of ids) {
+      const loaded = domModel.nodeForId(nodeId);
+      if (loaded) {
+        const payload = loadedPayload(loaded, {seen: 0});
+        if (payload) {
+          nodes.push(payload);
+        }
+        continue;
+      }
+      const described = await target.domAgent().invoke_describeNode({nodeId, depth: 1, pierce: false});
+      if (!described.getError() && described.node) {
+        nodes.push(described.node);
+      }
+    }
+  }
+  return nodes;
 }
 
 async function clearOverlay(target: SDK.Target.Target): Promise<void> {
@@ -561,35 +666,10 @@ async function dispatch(
     params: Record<string, unknown>): Promise<Protocol.ProtocolResponseWithError> {
   const nodeId = params.nodeId as Protocol.DOM.NodeId;
   switch (method) {
-    case 'DOM.enable':
-      return await target.domAgent().invoke_enable({});
-    case 'CSS.enable':
-      return await target.cssAgent().invoke_enable();
-    case 'DOM.getDocument':
-      return await target.domAgent().invoke_getDocument({
-        depth: typeof params.depth === 'number' ? params.depth : undefined,
-        pierce: params.pierce === true,
-      });
     case 'DOM.getBoxModel':
       return await target.domAgent().invoke_getBoxModel({nodeId});
-    case 'DOM.describeNode':
-      return await target.domAgent().invoke_describeNode({nodeId});
-    case 'DOM.performSearch':
-      return await target.domAgent().invoke_performSearch({query: String(params.query ?? '')});
-    case 'DOM.getSearchResults':
-      return await target.domAgent().invoke_getSearchResults({
-        searchId: String(params.searchId ?? ''),
-        fromIndex: typeof params.fromIndex === 'number' ? params.fromIndex : 0,
-        toIndex: typeof params.toIndex === 'number' ? params.toIndex : 0,
-      });
-    case 'DOM.discardSearchResults':
-      return await target.domAgent().invoke_discardSearchResults({searchId: String(params.searchId ?? '')});
-    case 'CSS.getComputedStyleForNode':
-      return await target.cssAgent().invoke_getComputedStyleForNode({nodeId});
     case 'CSS.getBackgroundColors':
       return await target.cssAgent().invoke_getBackgroundColors({nodeId});
-    case 'Accessibility.getFullAXTree':
-      return await target.accessibilityAgent().invoke_getFullAXTree({});
     default:
       throw new Error(method);
   }

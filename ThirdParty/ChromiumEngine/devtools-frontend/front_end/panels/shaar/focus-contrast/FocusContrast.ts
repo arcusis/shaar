@@ -26,6 +26,9 @@ export interface TextSample {
   id: number;
   snippet: string;
   origin: Point;
+  color: string;
+  fontSize: string;
+  fontWeight: string;
 }
 
 export interface Inventory {
@@ -69,7 +72,7 @@ export interface FocusContrastRow {
 export interface FocusContrastTrace {
   boxModel: boolean;
   backgroundColors: boolean;
-  fullAXTree: boolean;
+  axNames: boolean;
   computedStyle: boolean;
 }
 
@@ -84,8 +87,18 @@ export interface FocusContrastRefresh {
 
 export interface FocusContrastCaller {
   evaluate(expression: string): Promise<unknown>;
+  /** Markers from the Elements model. Not a DOM.getDocument(depth: -1) pull. */
+  elementsTree(): Promise<unknown>;
+  /** Accessible names for these stops only. Not Accessibility.getFullAXTree. */
+  accessibleNames(backendNodeIds: number[]): Promise<Map<number, string>>;
   call(method: string, params: Record<string, unknown>): Promise<unknown>;
 }
+
+/** Page walk and Elements walk stop after this many nodes. */
+export const MAX_WALK_NODES = 2000;
+
+/** 14pt. WCAG counts bold text at least this size as large. 14 * 96 / 72 = 18.666... */
+export const LARGE_BOLD_PX = 18.66;
 
 export const NO_STOPS = 'no-stops';
 export const NOT_DRAWN = 'not-drawn';
@@ -120,7 +133,7 @@ export function isLargeText(fontSizePx: number, fontWeight: number): boolean {
   if (fontSizePx >= 24) {
     return true;
   }
-  return fontSizePx >= 18.5 && fontWeight >= 700;
+  return fontSizePx >= LARGE_BOLD_PX && fontWeight >= 700;
 }
 
 export function failsAA(ratio: number, largeText: boolean): boolean {
@@ -292,6 +305,7 @@ export const CLEAR_EXPRESSION =
 export const COLLECT_EXPRESSION = `(() => {
   const maxStops = 30;
   const maxTexts = 30;
+  const maxNodes = 2000;
   const selector = 'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"]';
   const blocked = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'OPTION', 'SVG']);
 
@@ -391,12 +405,9 @@ export const COLLECT_EXPRESSION = `(() => {
     return !node || node.closest('#shaar-a11y-overlay') || node.closest('[data-shaar-inspector]');
   }
 
-  function shown(node) {
-    if (skipped(node) || node.closest('[inert]')) return false;
-    for (let current = node; current && current.nodeType === 1; current = current.parentElement) {
-      const style = getComputedStyle(current);
-      if (style.display === 'none' || style.visibility === 'hidden') return false;
-    }
+  function shown(node, style) {
+    if (!style || skipped(node) || node.closest('[inert]')) return false;
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
     const rect = node.getBoundingClientRect();
     return rect.width >= 1 || rect.height >= 1;
   }
@@ -423,36 +434,53 @@ export const COLLECT_EXPRESSION = `(() => {
   });
 
   const stops = [];
+  const texts = [];
   let truncated = false;
   let order = 0;
-  for (const node of document.querySelectorAll(selector)) {
-    if (stops.length >= maxStops) { truncated = true; break; }
-    if (skipped(node) || !shown(node) || node.matches(':disabled')) continue;
-    if (node.tagName === 'INPUT' && node.type === 'hidden') continue;
-    if (node.tabIndex < 0) continue;
-    const rect = node.getBoundingClientRect();
-    node.setAttribute('data-shaar-focus', String(stops.length + 1));
-    stops.push({
-      id: stops.length + 1,
-      tabIndex: node.tabIndex,
-      documentOrder: order,
-      name: label(node),
-      x: rect.left,
-      y: rect.top
-    });
-    order += 1;
-  }
-
-  const texts = [];
+  let seen = 0;
   function visit(node) {
-    if (texts.length >= maxTexts) { truncated = true; return; }
-    if (!node || skipped(node) || blocked.has(node.tagName)) return;
-    const snippet = ownText(node);
-    if (snippet && shown(node)) {
-      const rect = node.getBoundingClientRect();
-      node.setAttribute('data-shaar-contrast', String(texts.length + 1));
-      texts.push({id: texts.length + 1, snippet, x: rect.left, y: rect.top});
+    if (!node || node.nodeType !== 1) return;
+    if (seen >= maxNodes) { truncated = true; return; }
+    seen += 1;
+    if (skipped(node) || blocked.has(node.tagName)) return;
+    const style = getComputedStyle(node);
+    const visible = shown(node, style);
+    const focusable = visible && node.matches(selector) && !node.matches(':disabled') &&
+        !(node.tagName === 'INPUT' && node.type === 'hidden') && node.tabIndex >= 0;
+    if (focusable) {
+      if (stops.length >= maxStops) truncated = true;
+      else {
+        const rect = node.getBoundingClientRect();
+        node.setAttribute('data-shaar-focus', String(stops.length + 1));
+        stops.push({
+          id: stops.length + 1,
+          tabIndex: node.tabIndex,
+          documentOrder: order,
+          name: label(node),
+          x: rect.left,
+          y: rect.top
+        });
+        order += 1;
+      }
     }
+    const snippet = ownText(node);
+    if (visible && snippet) {
+      if (texts.length >= maxTexts) truncated = true;
+      else {
+        const rect = node.getBoundingClientRect();
+        node.setAttribute('data-shaar-contrast', String(texts.length + 1));
+        texts.push({
+          id: texts.length + 1,
+          snippet,
+          x: rect.left,
+          y: rect.top,
+          color: style.color,
+          fontSize: style.fontSize,
+          fontWeight: String(style.fontWeight)
+        });
+      }
+    }
+    if (seen >= maxNodes) { truncated = true; return; }
     for (const child of node.children) visit(child);
   }
   if (document.body) visit(document.body);
@@ -463,8 +491,6 @@ export async function refreshFocusContrast(
     caller: FocusContrastCaller, active: () => boolean): Promise<FocusContrastRefresh> {
   const trace = emptyTrace();
   try {
-    await caller.call('DOM.enable', {});
-    await caller.call('CSS.enable', {});
     if (!active()) {
       return cancelled(trace);
     }
@@ -475,12 +501,13 @@ export async function refreshFocusContrast(
     if (!active()) {
       return cancelled(trace);
     }
-    const index = await markerIndex(caller, inventory);
+    const index = walkDom(await caller.elementsTree());
     if (!active()) {
       return cancelled(trace);
     }
-    const names = await axNames(caller, trace);
-    const focus = await focusBadges(caller, orderFocusStops(inventory.stops), index, inventory, names, trace);
+    const ordered = orderFocusStops(inventory.stops);
+    const names = await namesForStops(caller, ordered, index, trace);
+    const focus = await focusBadges(caller, ordered, index, inventory, names, trace);
     const scored = await contrastBadges(caller, inventory, index, trace);
     if (!active()) {
       return cancelled(trace);
@@ -534,7 +561,7 @@ function emptyIndex(): DomIndex {
 }
 
 function emptyTrace(): FocusContrastTrace {
-  return {boxModel: false, backgroundColors: false, fullAXTree: false, computedStyle: false};
+  return {boxModel: false, backgroundColors: false, axNames: false, computedStyle: false};
 }
 
 function cancelled(trace: FocusContrastTrace): FocusContrastRefresh {
@@ -564,83 +591,23 @@ function failureMessage(error: unknown): string {
   return trimmed.slice(0, 180);
 }
 
-async function markerIndex(caller: FocusContrastCaller, inventory: Inventory): Promise<DomIndex> {
-  const document = asObject(await caller.call('DOM.getDocument', {depth: -1, pierce: true}));
-  let index = walkDom(document?.root);
-  const needsSearch = index.focus.size === 0 && index.contrast.size === 0 &&
-      (inventory.stops.length > 0 || inventory.texts.length > 0);
-  if (needsSearch) {
-    index = mergeIndex(
-        await searchMarkers(caller, '[data-shaar-focus]'), await searchMarkers(caller, '[data-shaar-contrast]'));
+async function namesForStops(
+    caller: FocusContrastCaller, stops: FocusStop[], index: DomIndex,
+    trace: FocusContrastTrace): Promise<Map<number, string>> {
+  const backendIds: number[] = [];
+  for (const stop of stops) {
+    const nodeId = index.focus.get(stop.id);
+    const backend = nodeId === undefined ? null : index.backend.get(nodeId) ?? null;
+    if (backend !== null) {
+      backendIds.push(backend);
+    }
   }
-  return index;
-}
-
-async function searchMarkers(caller: FocusContrastCaller, query: string): Promise<DomIndex> {
-  const found = asObject(await caller.call('DOM.performSearch', {query}));
-  const searchId = typeof found?.searchId === 'string' ? found.searchId : '';
-  const count = asInt(found?.resultCount) ?? 0;
-  if (count <= 0 || !searchId) {
-    return emptyIndex();
+  if (backendIds.length === 0) {
+    return new Map();
   }
   try {
-    const page = asObject(await caller.call(
-        'DOM.getSearchResults', {searchId, fromIndex: 0, toIndex: Math.min(count, 80)}));
-    const index = emptyIndex();
-    for (const nodeId of asInts(page?.nodeIds)) {
-      const described = asObject(await caller.call('DOM.describeNode', {nodeId}));
-      const node = asObject(described?.node);
-      if (node) {
-        readDomNode(node, index);
-      }
-    }
-    return index;
-  } finally {
-    try {
-      await caller.call('DOM.discardSearchResults', {searchId});
-    } catch {
-      // The search session is already finished.
-    }
-  }
-}
-
-function mergeIndex(left: DomIndex, right: DomIndex): DomIndex {
-  const focus = new Map(left.focus);
-  const contrast = new Map(left.contrast);
-  const backend = new Map(left.backend);
-  for (const [key, value] of right.focus) {
-    if (!focus.has(key)) {
-      focus.set(key, value);
-    }
-  }
-  for (const [key, value] of right.contrast) {
-    if (!contrast.has(key)) {
-      contrast.set(key, value);
-    }
-  }
-  for (const [key, value] of right.backend) {
-    if (!backend.has(key)) {
-      backend.set(key, value);
-    }
-  }
-  return {focus, contrast, backend};
-}
-
-async function axNames(caller: FocusContrastCaller, trace: FocusContrastTrace): Promise<Map<number, string>> {
-  try {
-    const tree = await caller.call('Accessibility.getFullAXTree', {});
-    trace.fullAXTree = true;
-    const names = new Map<number, string>();
-    for (const node of asArray(asObject(tree)?.nodes)) {
-      const fields = asObject(node);
-      const backendNodeId = asInt(fields?.backendDOMNodeId);
-      if (fields && backendNodeId !== null) {
-        const name = accessibleName({nodes: [fields]}, backendNodeId);
-        if (name) {
-          names.set(backendNodeId, name);
-        }
-      }
-    }
+    const names = await caller.accessibleNames(backendIds);
+    trace.axNames = true;
     return names;
   } catch {
     return new Map();
@@ -680,7 +647,10 @@ async function contrastBadges(
       limited += 1;
       continue;
     }
-    const style = await computedStyle(caller, nodeId, trace);
+    const style = textStyle(text);
+    if (style) {
+      trace.computedStyle = true;
+    }
     const colors = await backgroundColorsFor(caller, nodeId, trace);
     const decision = decideContrast(style, colors);
     if (!decision) {
@@ -719,15 +689,17 @@ async function originFor(
   }
 }
 
-async function computedStyle(caller: FocusContrastCaller, nodeId: number, trace: FocusContrastTrace):
-    Promise<unknown> {
-  try {
-    const style = await caller.call('CSS.getComputedStyleForNode', {nodeId});
-    trace.computedStyle = true;
-    return style;
-  } catch {
+function textStyle(text: TextSample): unknown|null {
+  if (!text.color || !text.fontSize || !text.fontWeight) {
     return null;
   }
+  return {
+    computedStyle: [
+      {name: 'color', value: text.color},
+      {name: 'font-size', value: text.fontSize},
+      {name: 'font-weight', value: text.fontWeight},
+    ],
+  };
 }
 
 async function backgroundColorsFor(caller: FocusContrastCaller, nodeId: number, trace: FocusContrastTrace):
@@ -742,7 +714,7 @@ async function backgroundColorsFor(caller: FocusContrastCaller, nodeId: number, 
 }
 
 function visit(node: Record<string, unknown>, depth: number, counter: {seen: number}, index: DomIndex): void {
-  if (depth > 64 || counter.seen >= 20000) {
+  if (depth > 64 || counter.seen >= MAX_WALK_NODES) {
     return;
   }
   counter.seen += 1;
@@ -844,7 +816,14 @@ function decodeText(value: unknown): TextSample|null {
   if (id === null || x === null || y === null) {
     return null;
   }
-  return {id, snippet: fields.snippet, origin: {x, y}};
+  return {
+    id,
+    snippet: fields.snippet,
+    origin: {x, y},
+    color: typeof fields.color === 'string' ? fields.color : '',
+    fontSize: typeof fields.fontSize === 'string' ? fields.fontSize : '',
+    fontWeight: typeof fields.fontWeight === 'string' ? fields.fontWeight : '',
+  };
 }
 
 function styleProperty(style: unknown, name: string): string|null {

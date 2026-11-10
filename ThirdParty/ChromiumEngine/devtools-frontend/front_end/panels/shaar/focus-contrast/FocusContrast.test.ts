@@ -24,8 +24,8 @@ describe('FocusContrast', () => {
     const white = {backgroundColors: ['rgb(255, 255, 255)']};
     const normal = Contrast.decideContrast(style('rgb(119, 119, 119)', '16px', '400'), white);
     const large = Contrast.decideContrast(style('rgb(119, 119, 119)', '24px', '400'), white);
-    const bold = Contrast.decideContrast(style('rgb(119, 119, 119)', '18.5px', 'bold'), white);
-    const almost = Contrast.decideContrast(style('rgb(119, 119, 119)', '18.4px', '700'), white);
+    const bold = Contrast.decideContrast(style('rgb(119, 119, 119)', '18.66px', 'bold'), white);
+    const almost = Contrast.decideContrast(style('rgb(119, 119, 119)', '18.5px', '700'), white);
     const ink = Contrast.decideContrast(style('rgb(17, 17, 17)', '16px', '400'), white);
     const boundary = Contrast.decideContrast(style('rgb(118, 118, 118)', '16px', '400'), white);
     assert.isNotNull(normal);
@@ -38,7 +38,10 @@ describe('FocusContrast', () => {
     assert.isTrue(large?.largeText);
     assert.isFalse(bold?.fails);
     assert.isTrue(bold?.largeText);
+    assert.isFalse(Contrast.isLargeText(18.5, 700));
+    assert.isTrue(Contrast.isLargeText(Contrast.LARGE_BOLD_PX, 700));
     assert.isTrue(almost?.fails);
+    assert.isFalse(almost?.largeText);
     assert.isFalse(ink?.fails);
     assert.isFalse(boundary?.fails);
   });
@@ -129,6 +132,9 @@ describe('FocusContrast', () => {
   it('keeps the page script on the text bounds', () => {
     assert.include(Contrast.COLLECT_EXPRESSION, String.raw`/\s+/g`);
     assert.include(Contrast.COLLECT_EXPRESSION, 'selectNodeContents');
+    assert.include(Contrast.COLLECT_EXPRESSION, 'maxNodes = 2000');
+    assert.strictEqual(Contrast.COLLECT_EXPRESSION.split('getComputedStyle').length - 1, 1);
+    assert.doesNotThrow(() => new Function(`return ${Contrast.COLLECT_EXPRESSION}`));
     assert.include(Contrast.COLLECT_EXPRESSION, 'y - 20');
     assert.include(Contrast.COLLECT_EXPRESSION, 'right + 6');
     assert.notInclude(Contrast.COLLECT_EXPRESSION, '__shaarA11yOverlay.paint');
@@ -165,25 +171,58 @@ describe('FocusContrast', () => {
     assert.notInclude(result.summary, 'failures');
     assert.isTrue(result.trace.boxModel);
     assert.isTrue(result.trace.backgroundColors);
-    assert.isTrue(result.trace.fullAXTree);
+    assert.isTrue(result.trace.axNames);
     assert.isTrue(result.trace.computedStyle);
-    assert.strictEqual(caller.methods.filter(method => method === 'Accessibility.getFullAXTree').length, 1);
+    assert.deepEqual(caller.nameIds, [[20, 21]]);
+    assert.notInclude(caller.methods, 'DOM.enable');
+    assert.notInclude(caller.methods, 'CSS.enable');
+    assert.notInclude(caller.methods, 'DOM.getDocument');
+    assert.notInclude(caller.methods, 'Accessibility.getFullAXTree');
+    assert.notInclude(caller.methods, 'CSS.getComputedStyleForNode');
     assert.include(caller.methods, 'DOM.getBoxModel');
     assert.include(caller.methods, 'CSS.getBackgroundColors');
-    assert.include(caller.methods, 'CSS.getComputedStyleForNode');
     assert.notInclude(result.badges.map(badge => badge.snippet), 'High contrast');
   });
 
-  it('falls back to a DOM search when the document walk misses the markers', async () => {
-    const caller = new FixtureCaller(true);
+  it('stops walking the elements tree at 2000 nodes', () => {
+    const children = [];
+    for (let index = 0; index < Contrast.MAX_WALK_NODES; index++) {
+      children.push({
+        nodeId: index + 2,
+        attributes: index === Contrast.MAX_WALK_NODES - 1 ? ['data-shaar-focus', '9'] : [],
+      });
+    }
+    const index = Contrast.walkDom({nodeId: 1, children});
+    assert.isFalse(index.focus.has(9));
+  });
+
+  it('keeps the page name when the elements tree has not loaded the stop', async () => {
+    const caller = new FixtureCaller();
+    caller.tree = {nodeId: 1};
+    caller.inventory = {
+      scrollX: 0,
+      scrollY: 0,
+      truncated: false,
+      stops: [{id: 1, tabIndex: 0, documentOrder: 0, name: 'Priority', x: 8, y: 12}],
+      texts: [{
+        id: 1,
+        snippet: 'Low contrast',
+        x: 8,
+        y: 40,
+        color: 'rgb(119, 119, 119)',
+        fontSize: '16px',
+        fontWeight: '400',
+      }],
+    };
     const result = await Contrast.refreshFocusContrast(caller, () => true);
     assert.isNull(result.failure);
     assert.strictEqual(result.badges.length, 1);
-    assert.strictEqual(result.badges[0].snippet, 'Priority control');
+    assert.strictEqual(result.badges[0].snippet, 'Priority');
     assert.include(result.summary, '1 tab stop');
     assert.include(result.summary, '1 not scored');
-    assert.include(caller.methods, 'DOM.performSearch');
-    assert.include(caller.methods, 'DOM.discardSearchResults');
+    assert.deepEqual(caller.nameIds, []);
+    assert.notInclude(caller.methods, 'DOM.performSearch');
+    assert.notInclude(caller.methods, 'DOM.getDocument');
   });
 
   it('clears a paint that finished after the overlay was turned off', async () => {
@@ -234,7 +273,8 @@ function style(color: string, size: string, weight: string): {computedStyle: Arr
 class FixtureCaller implements Focus.FocusContrast.FocusContrastCaller {
   methods: string[] = [];
   expressions: string[] = [];
-  search: boolean;
+  nameIds: number[][] = [];
+  tree: unknown = walkedDocument();
   inventory: unknown = {
     scrollX: 0,
     scrollY: 0,
@@ -245,23 +285,26 @@ class FixtureCaller implements Focus.FocusContrast.FocusContrastCaller {
       {id: 3, tabIndex: -1, documentOrder: 2, name: 'Minus', x: 80, y: 12},
     ],
     texts: [
-      {id: 1, snippet: 'Low contrast', x: 8, y: 40},
-      {id: 2, snippet: 'High contrast', x: 8, y: 70},
+      {
+        id: 1,
+        snippet: 'Low contrast',
+        x: 8,
+        y: 40,
+        color: 'rgb(119, 119, 119)',
+        fontSize: '16px',
+        fontWeight: '400',
+      },
+      {
+        id: 2,
+        snippet: 'High contrast',
+        x: 8,
+        y: 70,
+        color: 'rgb(17, 17, 17)',
+        fontSize: '16px',
+        fontWeight: '400',
+      },
     ],
   };
-
-  constructor(search = false) {
-    this.search = search;
-    if (search) {
-      this.inventory = {
-        scrollX: 0,
-        scrollY: 0,
-        truncated: false,
-        stops: [{id: 1, tabIndex: 0, documentOrder: 0, name: 'Priority', x: 8, y: 12}],
-        texts: [{id: 1, snippet: 'Low contrast', x: 8, y: 40}],
-      };
-    }
-  }
 
   async evaluate(expression: string): Promise<unknown> {
     this.expressions.push(expression);
@@ -271,37 +314,27 @@ class FixtureCaller implements Focus.FocusContrast.FocusContrastCaller {
     return this.inventory;
   }
 
+  async elementsTree(): Promise<unknown> {
+    return this.tree;
+  }
+
+  async accessibleNames(backendNodeIds: number[]): Promise<Map<number, string>> {
+    this.nameIds.push(backendNodeIds);
+    const names = new Map<number, string>();
+    if (backendNodeIds.includes(20)) {
+      names.set(20, 'Priority control');
+    }
+    return names;
+  }
+
   async call(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    void params;
     this.methods.push(method);
-    const nodeId = params.nodeId;
-    if (method === 'DOM.getDocument') {
-      return this.search ? {root: {nodeId: 1}} : {root: walkedDocument()};
-    }
-    if (method === 'DOM.performSearch') {
-      const query = String(params.query ?? '');
-      if (query.includes('contrast')) {
-        return {searchId: '', resultCount: 0};
-      }
-      return {searchId: 'focus', resultCount: 1};
-    }
-    if (method === 'DOM.getSearchResults') {
-      return {nodeIds: [2]};
-    }
-    if (method === 'DOM.describeNode') {
-      return {node: {nodeId: 2, backendNodeId: 20, attributes: ['data-shaar-focus', '1']}};
-    }
     if (method === 'DOM.getBoxModel') {
       return {model: {border: [8, 12, 40, 12, 40, 28, 8, 28]}};
     }
-    if (method === 'CSS.getComputedStyleForNode') {
-      const color = nodeId === 5 ? 'rgb(17, 17, 17)' : 'rgb(119, 119, 119)';
-      return style(color, '16px', '400');
-    }
     if (method === 'CSS.getBackgroundColors') {
       return {backgroundColors: ['rgb(255, 255, 255)']};
-    }
-    if (method === 'Accessibility.getFullAXTree') {
-      return {nodes: [{backendDOMNodeId: 20, name: {value: 'Priority control'}}]};
     }
     return {};
   }

@@ -1490,15 +1490,30 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
                   allowsProfileOnly:(BOOL)allowsProfileOnly
                              payload:(NSDictionary *)payload
                           completion:(void (^)(NSString *, shaar_error_code))completion {
+  return [self shaarSubmitExtensionOperation:operation profileID:profileID tabID:tabID
+                                     payload:payload completion:completion syncCode:NULL];
+}
+
+- (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
+                           profileID:(NSString *)profileID tabID:(NSString *)tabID
+                             payload:(NSDictionary *)payload
+                          completion:(void (^)(NSString *, shaar_error_code))completion
+                            syncCode:(shaar_error_code *)syncCode {
   shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
   NSString *windowID = tabID ? _shaarTabWindows[tabID] : _shaarPrimaryWindowID;
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   shaar_tab *tab = tabID ? (shaar_tab *)_shaarTabs[tabID].pointerValue : nullptr;
   const BOOL profileOnly = allowsProfileOnly && !tabID;
   if (!_shaarEngine || !profile || (!profileOnly && !window) || (tabID && (!tab ||
-      ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) return NO;
+      ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) {
+    if (syncCode) *syncCode = SHAAR_NOT_READY;
+    return NO;
+  }
   NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
-  if (!json) return NO;
+  if (!json) {
+    if (syncCode) *syncCode = SHAAR_INVALID_ARGUMENT;
+    return NO;
+  }
   shaar_scope scope = {};
   scope.size = sizeof(scope);
   scope.profile = profile;
@@ -1513,6 +1528,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
         reply(json, result ? result->error.code : SHAAR_CHROMIUM_ERROR);
       }, context, &error);
   if (status != SHAAR_OK) {
+    if (syncCode) *syncCode = error.code == SHAAR_OK ? SHAAR_CHROMIUM_ERROR : error.code;
     CFBridgingRelease(context);
     return NO;
   }

@@ -9,15 +9,15 @@ import SwiftUI
 struct ProfileExtensionsSection: View {
   let model: ExtensionManagerModel?
   let sharedModel: SharedExtensionSettingsModel?
-  let pageOrigin: String?
-  let selectedTabID: UUID?
+  let pageOrigin: () -> String?
+  let selectedTabID: () -> UUID?
   let onAddExtensions: () -> Void
   let onLoadUnpacked: () -> Void
   @State private var detailID: String?
 
   init(
     model: ExtensionManagerModel?, sharedModel: SharedExtensionSettingsModel? = nil,
-    pageOrigin: String? = nil, selectedTabID: UUID? = nil,
+    pageOrigin: @escaping () -> String? = { nil }, selectedTabID: @escaping () -> UUID? = { nil },
     onAddExtensions: @escaping () -> Void, onLoadUnpacked: @escaping () -> Void = {}
   ) {
     self.model = model
@@ -225,16 +225,16 @@ private struct ExtensionDeveloperControls: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Toggle(
-        SettingsL10n.string("Developer mode"),
-        isOn: Binding(get: { model.developerMode }, set: { model.setDeveloperMode($0) })
-      )
-      .accessibilityIdentifier("settings.extensions.developerMode")
-      .background { SettingsControlMarker(identifier: "settings.extensions.developerMode") }
+      SettingsCheckbox(
+        title: SettingsL10n.string("Developer mode"),
+        identifier: "settings.extensions.developerMode",
+        isOn: model.developerMode,
+        onChange: { model.setDeveloperMode($0) })
       if model.developerMode {
-        Button(SettingsL10n.string("Load unpacked…"), action: onLoadUnpacked)
-          .accessibilityIdentifier("settings.extensions.loadUnpacked")
-          .background { SettingsControlMarker(identifier: "settings.extensions.loadUnpacked") }
+        SettingsPushButton(
+          title: SettingsL10n.string("Load unpacked…"),
+          identifier: "settings.extensions.loadUnpacked",
+          action: onLoadUnpacked)
         Text(
           SettingsL10n.string(
             "Load an unpacked Manifest V3 extension from a folder on this Mac.")
@@ -254,11 +254,7 @@ private struct ExtensionInstallStatus: View {
 
   var body: some View {
     if let status = model.status {
-      Text(status)
-        .font(.caption)
-        .foregroundStyle(.red)
-        .accessibilityIdentifier("settings.extensions.status")
-        .background { SettingsControlMarker(identifier: "settings.extensions.status") }
+      SettingsStatusText(text: status, identifier: "settings.extensions.status")
     }
   }
 }
@@ -266,14 +262,15 @@ private struct ExtensionInstallStatus: View {
 struct ExtensionDetails: View {
   let model: ExtensionManagerModel
   let item: ManagedExtension
-  let pageOrigin: String?
-  let selectedTabID: UUID?
+  let pageOrigin: () -> String?
+  let selectedTabID: () -> UUID?
   let back: () -> Void
   @State private var confirmsRemoval = false
 
   init(
-    model: ExtensionManagerModel, item: ManagedExtension, pageOrigin: String? = nil,
-    selectedTabID: UUID? = nil, back: @escaping () -> Void
+    model: ExtensionManagerModel, item: ManagedExtension,
+    pageOrigin: @escaping () -> String? = { nil },
+    selectedTabID: @escaping () -> UUID? = { nil }, back: @escaping () -> Void
   ) {
     self.model = model
     self.item = item
@@ -303,21 +300,33 @@ struct ExtensionDetails: View {
       }
       detailSection(SettingsL10n.string("Permissions"), values: item.permissions)
       detailSection(SettingsL10n.string("Site access"), values: item.hostPermissions)
-      if let pageOrigin {
-        Menu {
-          ForEach(ExtensionSiteAccess.allCases) { access in
-            Button(access.title) {
-              model.setSiteAccess(
-                access, extensionID: item.id, origin: pageOrigin, tabID: selectedTabID)
-            }
-          }
-        } label: {
-          Text(
-            ExtensionSiteAccess.recognized(item.siteAccess)?.title
-              ?? SettingsL10n.string("Site access"))
+      Menu {
+        if let origin = pageOrigin() {
+          Text(origin)
         }
-        .accessibilityIdentifier("settings.extensions.siteAccess")
+        ForEach(ExtensionSiteAccess.allCases) { access in
+          Button(access.title) {
+            guard let origin = pageOrigin() else {
+              model.setSiteAccess(
+                access, extensionID: item.id, origin: "", tabID: selectedTabID())
+              return
+            }
+            model.setSiteAccess(
+              access, extensionID: item.id, origin: origin, tabID: selectedTabID())
+          }
+        }
+      } label: {
+        Text(
+          ExtensionSiteAccess.recognized(item.siteAccess)?.title
+            ?? SettingsL10n.string("Site access"))
       }
+      .accessibilityIdentifier("settings.extensions.siteAccess")
+      SettingsCheckbox(
+        title: SettingsL10n.string("Allow in private windows"),
+        identifier: "settings.extensions.privateWindows",
+        isOn: item.incognitoEnabled == true,
+        isEnabled: item.mayDisable,
+        onChange: { model.setIncognitoEnabled(item.id, enabled: $0) })
       ExtensionInstallStatus(model: model)
       Divider()
       Button(SettingsL10n.string("Remove Extension…"), role: .destructive) {

@@ -225,13 +225,14 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
   }
   NSString *tab = nil;
   if ([tabID isKindOfClass:NSString.class] && tabID.length) tab = tabID;
+  shaar_error_code syncCode = SHAAR_OK;
   BOOL accepted = [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_MANAGE
       profileID:validated tabID:tab payload:payload
       completion:^(NSString *json, shaar_error_code code) {
         if (code == SHAAR_OK) [ShaarExtensionState(self).lists removeObjectForKey:validated];
         completion(json, (NSInteger)code);
-      }];
-  if (!accepted) completion(nil, SHAAR_UNSUPPORTED_CAPABILITY);
+      } syncCode:&syncCode];
+  if (!accepted) completion(nil, syncCode == SHAAR_OK ? SHAAR_CHROMIUM_ERROR : syncCode);
 }
 
 - (void)shaarForgetExtensionListForProfileID:(NSString *)profileID {

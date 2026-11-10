@@ -18,6 +18,7 @@ struct ManagedExtension: Identifiable, Equatable, Decodable {
   let permissions: [String]
   let hostPermissions: [String]
   var siteAccess: String? = nil
+  var incognitoEnabled: Bool? = nil
 
   func help(actionTitle: String?) -> String {
     guard let title = actionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -93,9 +94,14 @@ enum ExtensionInstallNotice {
   static var installFailed: String {
     SettingsL10n.string("The extension could not be installed.")
   }
+
+  static var privateAccessRefused: String {
+    SettingsL10n.string("This Shaar engine cannot change private-window access yet.")
+  }
 }
 
-/// The page origin Shaar sends with a site-access change. Default ports stay omitted.
+/// The page origin Shaar sends with a site-access change. Default ports stay omitted,
+/// and an IPv6 host keeps its brackets.
 enum ExtensionPageOrigin {
   static func string(from url: URL) -> String? {
     guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -103,10 +109,18 @@ enum ExtensionPageOrigin {
       scheme == "http" || scheme == "https",
       let host = components.host?.lowercased(), !host.isEmpty
     else { return nil }
-    if let port = components.port {
-      return "\(scheme)://\(host):\(port)"
+    let bareHost =
+      host.hasPrefix("[") && host.hasSuffix("]")
+      ? String(host.dropFirst().dropLast()) : host
+    let formattedHost = bareHost.contains(":") ? "[\(bareHost)]" : bareHost
+    if let port = components.port, !isDefault(port, scheme: scheme) {
+      return "\(scheme)://\(formattedHost):\(port)"
     }
-    return "\(scheme)://\(host)"
+    return "\(scheme)://\(formattedHost)"
+  }
+
+  private static func isDefault(_ port: Int, scheme: String) -> Bool {
+    (scheme == "http" && port == 80) || (scheme == "https" && port == 443)
   }
 
   static func accepts(_ origin: String) -> Bool {
@@ -146,8 +160,12 @@ enum ExtensionManageReply: Equatable {
   case failed
 
   init(json: String?, code: Int) {
-    if code == 1 || code == 15 {
+    if code == 15 {
       self = .unsupported
+      return
+    }
+    if code == 1 {
+      self = .failed
       return
     }
     guard code == 0, let data = json?.data(using: .utf8),
@@ -249,7 +267,7 @@ enum ExtensionManageDelivery {
 }
 
 extension ARCChromiumRuntime {
-  /// Submits one extension-manage payload. A synchronous engine refusal is `unsupported`.
+  /// Submits one extension-manage payload. Code 15 is `unsupported`; code 1 is `failed`.
   func submitExtensionManage(
     profileID: UUID, tabID: UUID?, payload: [String: Any],
     completion: @escaping @MainActor (ExtensionManageReply) -> Void

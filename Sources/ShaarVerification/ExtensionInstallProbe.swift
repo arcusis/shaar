@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Foundation
+import ObjectiveC
 
 @testable import ArcusisBrowser
 
@@ -115,40 +116,56 @@ final class ExtensionInstallProbe {
     }
     content.layoutSubtreeIfNeeded()
     pump(0.3)
+    guard ExtensionInstallPanelStub.install() else {
+      finish(error: "The folder chooser could not be answered without a dialog.")
+      return
+    }
     var checks: [String: Bool] = [:]
     checks["settingsOpenedFromMenu"] = true
     checks["settingsWindowHidden"] = !settingsWindow.isVisible
-    let beforeIDs = ControlSearch.identifiers(in: content)
-    checks["profilesSectionControl"] = beforeIDs.contains("settings.section.profiles")
-    settings.selectSettingsSection(.profiles)
+    checks["profilesSectionControl"] =
+      ControlSearch.button("settings.section.profiles", in: content) != nil
     guard settings.selectProfile(profileID) else {
       finish(error: "The profile row could not be selected.", checks: checks)
+      return
+    }
+    guard ControlSearch.press("settings.section.profiles", in: content) else {
+      finish(error: "The Profiles section control could not be pressed.", checks: checks)
       return
     }
     pump(0.4)
     content.layoutSubtreeIfNeeded()
     ControlSearch.reveal("settings.extensions.developerMode", in: content)
     writePNG(content, name: "settings-extensions-before.png")
-    let developerIDs = ControlSearch.identifiers(in: content)
-    checks["developerModeControl"] = developerIDs.contains("settings.extensions.developerMode")
-    settings.setExtensionDeveloperMode(true, for: profileID)
+    checks["developerModeControl"] =
+      ControlSearch.button("settings.extensions.developerMode", in: content) != nil
+    guard ControlSearch.press("settings.extensions.developerMode", in: content) else {
+      finish(error: "Developer mode could not be turned on.", checks: checks)
+      return
+    }
     pump(0.4)
     content.layoutSubtreeIfNeeded()
-    let unpackedIDs = ControlSearch.identifiers(in: content)
-    checks["loadUnpackedControl"] = unpackedIDs.contains("settings.extensions.loadUnpacked")
+    checks["loadUnpackedControl"] =
+      ControlSearch.button("settings.extensions.loadUnpacked", in: content) != nil
     do { try writeFixture() } catch {
       finish(error: "Could not write the unpacked fixture.", checks: checks)
       return
     }
-    settings.loadUnpackedExtension(at: fixture, for: profileID)
-    let status = waitForStatus(in: settings)
+    ExtensionInstallPanelStub.directory = fixture
+    let loaded = ControlSearch.press("settings.extensions.loadUnpacked", in: content)
+    ExtensionInstallPanelStub.directory = nil
+    guard loaded else {
+      finish(error: "Load unpacked could not be pressed.", checks: checks)
+      return
+    }
+    let status = waitForStatus(in: content, settings: settings)
     acceptInstallPromptIfNeeded()
     pump(0.5)
     content.layoutSubtreeIfNeeded()
     ControlSearch.reveal("settings.extensions.status", in: content)
     writePNG(content, name: "settings-extensions-after.png")
     let installed = probeExtension(in: settings)
-    if status == ExtensionInstallNotice.engineRefused && installed == nil {
+    if status == ExtensionInstallNotice.installFailed && installed == nil {
       checks["engineRefusedUnpackedInstall"] = true
       checks["didNotPretendToInstall"] = true
     } else if let installed {
@@ -160,10 +177,11 @@ final class ExtensionInstallProbe {
     checks["windowsStayedHidden"] = NSApp.windows.allSatisfy { !$0.isVisible }
     let required = requiredChecks(checks)
     let failed = required.filter { checks[$0] != true }
+    let shown = ControlSearch.identifiers(in: content).sorted()
     finish(
       error: failed.isEmpty ? nil : "Failed checks: \(failed.joined(separator: ", "))",
-      checks: checks, status: settings.extensionStatus(for: profileID) ?? status,
-      installedID: installed?.id, identifiers: Array(unpackedIDs).sorted())
+      checks: checks, status: status ?? "",
+      installedID: installed?.id, identifiers: shown)
   }
 
   private func requiredChecks(_ checks: [String: Bool]) -> [String] {
@@ -188,8 +206,9 @@ final class ExtensionInstallProbe {
     checks["installedThroughProductPath"] = true
     checks["extensionListed"] = true
     checks["engineRefusedUnpackedInstall"] = false
-    settings.pinManagedExtension(item.id, for: profileID)
-    checks["extensionPinned"] = settings.pinnedExtensionIDs(for: profileID).contains(item.id)
+    let extensions = manager(settings)
+    extensions?.setPinned(item.id, pinned: true)
+    checks["extensionPinned"] = extensions?.pinnedIDs.contains(item.id) == true
     runtime.onExtensionPopup = { [weak self] payload in
       if payload["extensionID"] as? String == item.id { self?.popupOpened = true }
     }
@@ -200,29 +219,33 @@ final class ExtensionInstallProbe {
     checks["toolbarPopupOpened"] = popupOpened
     let origin = ExtensionPageOrigin.string(from: URL(string: "https://example.com")!)
     if let origin {
-      settings.setExtensionSiteAccess(
-        .onSite, id: item.id, origin: origin, tabID: selectedTabID, for: profileID)
+      extensions?.setSiteAccess(
+        .onSite, extensionID: item.id, origin: origin, tabID: selectedTabID)
       pump(1)
     }
     checks["siteAccessChanged"] =
       probeExtension(in: settings)?.siteAccess == ExtensionSiteAccess.onSite.rawValue
-    settings.setExtensionEnabled(false, id: item.id, for: profileID)
+    extensions?.setEnabled(item.id, enabled: false)
     pump(1)
     checks["extensionDisabled"] = probeExtension(in: settings)?.enabled == false
-    settings.removeManagedExtension(item.id, for: profileID)
+    extensions?.remove(item.id)
     pump(1)
     checks["extensionRemoved"] = probeExtension(in: settings) == nil
   }
 
-  private func waitForStatus(in settings: BrowserSettingsController) -> String? {
+  private func manager(_ settings: BrowserSettingsController) -> ExtensionManagerModel? {
+    settings.state.extensionManager(for: profileID)
+  }
+
+  private func waitForStatus(in root: NSView, settings: BrowserSettingsController) -> String? {
     let deadline = Date().addingTimeInterval(8)
     while Date() < deadline {
-      if let status = settings.extensionStatus(for: profileID) { return status }
+      if let status = ControlSearch.text("settings.extensions.status", in: root) { return status }
       if probeExtension(in: settings) != nil { return nil }
       if pendingInstall() != nil { return nil }
       pump(0.1)
     }
-    return settings.extensionStatus(for: profileID)
+    return ControlSearch.text("settings.extensions.status", in: root)
   }
 
   private func acceptInstallPromptIfNeeded() {
@@ -237,7 +260,7 @@ final class ExtensionInstallProbe {
   }
 
   private func probeExtension(in settings: BrowserSettingsController) -> ManagedExtension? {
-    settings.managedExtensions(for: profileID).first { $0.name == "Shaar Probe Extension" }
+    manager(settings)?.extensions.first { $0.name == "Shaar Probe Extension" }
   }
 
   private func writeFixture() throws {
@@ -316,12 +339,40 @@ final class ExtensionInstallProbe {
 @MainActor
 private enum ControlSearch {
   static func reveal(_ identifier: String, in root: NSView) {
-    guard let marker = view(identifier: identifier, in: root),
-      let scroll = marker.enclosingScrollView
+    guard let target = view(identifier: identifier, in: root),
+      let scroll = target.enclosingScrollView
     else { return }
-    let rect = marker.convert(marker.bounds, to: scroll.documentView)
+    let rect = target.convert(target.bounds, to: scroll.documentView)
     scroll.documentView?.scrollToVisible(rect.insetBy(dx: 0, dy: -80))
     root.layoutSubtreeIfNeeded()
+  }
+
+  static func press(_ identifier: String, in root: NSView) -> Bool {
+    guard let button = button(identifier, in: root), button.isEnabled else { return false }
+    button.performClick(nil)
+    return true
+  }
+
+  static func button(_ identifier: String, in root: NSView) -> NSButton? {
+    view(identifier: identifier, in: root) as? NSButton
+  }
+
+  static func text(_ identifier: String, in root: NSView) -> String? {
+    guard let field = view(identifier: identifier, in: root) as? NSTextField else { return nil }
+    return field.stringValue.isEmpty ? nil : field.stringValue
+  }
+
+  static func identifiers(in root: NSView) -> Set<String> {
+    var found: Set<String> = []
+    var pending: [NSView] = [root]
+    var seen: Set<ObjectIdentifier> = []
+    while let view = pending.popLast() {
+      if !seen.insert(ObjectIdentifier(view)).inserted { continue }
+      let identifier = view.accessibilityIdentifier()
+      if !identifier.isEmpty { found.insert(identifier) }
+      pending.append(contentsOf: view.subviews)
+    }
+    return found
   }
 
   private static func view(identifier: String, in root: NSView) -> NSView? {
@@ -334,31 +385,74 @@ private enum ControlSearch {
     }
     return nil
   }
+}
 
-  static func identifiers(in root: NSView) -> Set<String> {
-    var found: Set<String> = []
-    var pending: [NSObject] = [root]
-    var seen: Set<ObjectIdentifier> = []
-    while let object = pending.popLast() {
-      if !seen.insert(ObjectIdentifier(object)).inserted { continue }
-      if let identifier = ControlSearch.identifier(of: object), !identifier.isEmpty {
-        found.insert(identifier)
-      }
-      if let view = object as? NSView {
-        pending.append(contentsOf: view.subviews)
-        pending.append(
-          contentsOf: view.accessibilityChildren()?.compactMap { $0 as? NSObject } ?? [])
-      } else if let element = object as? NSAccessibilityElement {
-        pending.append(
-          contentsOf: element.accessibilityChildren()?.compactMap { $0 as? NSObject } ?? [])
-      }
+private typealias PanelRunModal = @convention(c) (AnyObject, Selector) -> Int
+private typealias PanelURL = @convention(c) (AnyObject, Selector) -> Unmanaged<NSURL>?
+
+/// Answers the product folder chooser inside this verification process. The shipping app
+/// still presents `NSOpenPanel`; the probe never does.
+enum ExtensionInstallPanelStub {
+  nonisolated(unsafe) static var directory: URL?
+  nonisolated(unsafe) private static var installed = false
+  nonisolated(unsafe) fileprivate static var originalRunModal: PanelRunModal?
+  nonisolated(unsafe) fileprivate static var originalURL: PanelURL?
+
+  static func install() -> Bool {
+    guard !installed else { return true }
+    let runModal = replace(
+      #selector(NSSavePanel.runModal), with: #selector(NSOpenPanel.shaarProbeRunModal),
+      original: &originalRunModal)
+    let url = replace(
+      #selector(getter: NSSavePanel.url), with: #selector(NSOpenPanel.shaarProbeURL),
+      original: &originalURL)
+    guard runModal, url else {
+      restore()
+      return false
     }
-    return found
+    installed = true
+    return true
   }
 
-  private static func identifier(of object: NSObject) -> String? {
-    if let view = object as? NSView { return view.accessibilityIdentifier() }
-    if let element = object as? NSAccessibilityElement { return element.accessibilityIdentifier() }
-    return nil
+  static func restore() {
+    restore(#selector(NSSavePanel.runModal), originalRunModal)
+    restore(#selector(getter: NSSavePanel.url), originalURL)
+    originalRunModal = nil
+    originalURL = nil
+    installed = false
+    directory = nil
+  }
+
+  private static func replace<Implementation>(
+    _ selector: Selector, with replacement: Selector, original: inout Implementation?
+  ) -> Bool {
+    guard original == nil,
+      let inherited = class_getInstanceMethod(NSOpenPanel.self, selector),
+      let added = class_getInstanceMethod(NSOpenPanel.self, replacement)
+    else { return false }
+    original = unsafeBitCast(method_getImplementation(inherited), to: Implementation.self)
+    method_setImplementation(inherited, method_getImplementation(added))
+    return true
+  }
+
+  private static func restore<Implementation>(_ selector: Selector, _ original: Implementation?) {
+    guard let original, let method = class_getInstanceMethod(NSOpenPanel.self, selector) else {
+      return
+    }
+    method_setImplementation(method, unsafeBitCast(original, to: IMP.self))
+  }
+}
+
+extension NSOpenPanel {
+  @objc func shaarProbeRunModal() -> NSApplication.ModalResponse {
+    if ExtensionInstallPanelStub.directory != nil { return .OK }
+    guard let original = ExtensionInstallPanelStub.originalRunModal else { return .cancel }
+    return NSApplication.ModalResponse(rawValue: original(self, #selector(NSSavePanel.runModal)))
+  }
+
+  @objc func shaarProbeURL() -> URL? {
+    if let directory = ExtensionInstallPanelStub.directory { return directory }
+    return ExtensionInstallPanelStub.originalURL?(self, #selector(getter: NSSavePanel.url))?
+      .takeUnretainedValue() as URL?
   }
 }

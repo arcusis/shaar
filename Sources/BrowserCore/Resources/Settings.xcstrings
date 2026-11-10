@@ -745,6 +745,8 @@
     "This Shaar engine cannot install extensions yet.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar הזה עדיין אינו יכול להתקין תוספים."}}}},
     "This Shaar engine cannot change extension site access yet.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar הזה עדיין אינו יכול לשנות את גישת התוסף לאתרים."}}}},
     "The extension could not be installed.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן להתקין את התוסף."}}}},
+    "Allow in private windows": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "אפשר בחלונות פרטיים"}}}},
+    "This Shaar engine cannot change private-window access yet.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar הזה עדיין אינו יכול לשנות גישה בחלונות פרטיים."}}}},
     "On click": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בלחיצה"}}}},
     "On this site": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "באתר הזה"}}}},
     "On all sites": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בכל האתרים"}}}},

@@ -38,34 +38,157 @@ enum BrowserSettingsAccessibility {
   }
 }
 
-/// Puts a Settings identifier on an AppKit view. A hidden window still builds this subview,
-/// which is how the extension probe finds the control without an accessibility client.
-struct SettingsControlMarker: NSViewRepresentable {
+/// A Settings button whose accessibility identifier is on the AppKit control itself.
+struct SettingsPressButton<Label: View>: NSViewRepresentable {
   let identifier: String
+  let accessibilityLabel: String
+  let selected: Bool
+  let action: () -> Void
+  let label: Label
 
-  func makeNSView(context: Context) -> NSView {
-    let view = NSView(frame: .zero)
-    view.setAccessibilityIdentifier(identifier)
-    return view
+  init(
+    identifier: String, accessibilityLabel: String, selected: Bool = false,
+    action: @escaping () -> Void, @ViewBuilder label: () -> Label
+  ) {
+    self.identifier = identifier
+    self.accessibilityLabel = accessibilityLabel
+    self.selected = selected
+    self.action = action
+    self.label = label()
   }
 
-  func updateNSView(_ view: NSView, context: Context) {
-    view.setAccessibilityIdentifier(identifier)
+  func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+  func makeNSView(context: Context) -> NSButton {
+    let button = SettingsRowButton()
+    button.title = ""
+    button.isBordered = false
+    button.setButtonType(.momentaryChange)
+    button.focusRingType = .none
+    button.setAccessibilityElement(true)
+    button.setAccessibilityIdentifier(identifier)
+    button.setAccessibilityLabel(accessibilityLabel)
+    button.setAccessibilitySelected(selected)
+    button.target = context.coordinator
+    button.action = #selector(Coordinator.press)
+    let host = NSHostingView(rootView: label)
+    host.translatesAutoresizingMaskIntoConstraints = false
+    button.addSubview(host)
+    NSLayoutConstraint.activate([
+      host.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+      host.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+      host.topAnchor.constraint(equalTo: button.topAnchor),
+      host.bottomAnchor.constraint(equalTo: button.bottomAnchor),
+    ])
+    return button
+  }
+
+  func updateNSView(_ button: NSButton, context: Context) {
+    button.title = ""
+    button.setAccessibilityIdentifier(identifier)
+    button.setAccessibilityLabel(accessibilityLabel)
+    button.setAccessibilitySelected(selected)
+    context.coordinator.action = action
+    guard let host = button.subviews.first as? NSHostingView<Label> else { return }
+    host.rootView = label
+  }
+
+  final class Coordinator: NSObject {
+    var action: () -> Void
+    init(action: @escaping () -> Void) { self.action = action }
+    @objc func press() { action() }
   }
 }
 
-/// Installs the section callback when Settings is built, including a hidden window.
-private struct SettingsSectionBridge: NSViewRepresentable {
-  let navigator: BrowserSettingsSectionNavigator
-  let select: (BrowserSettingsSection) -> Void
+private final class SettingsRowButton: NSButton {
+  override var intrinsicContentSize: NSSize {
+    let height = subviews.first?.fittingSize.height ?? 36
+    return NSSize(width: NSView.noIntrinsicMetric, height: height)
+  }
+}
 
-  func makeNSView(context: Context) -> NSView {
-    navigator.select = select
-    return NSView(frame: .zero)
+/// A checkbox whose accessibility identifier stays on the control while its window is hidden.
+struct SettingsCheckbox: NSViewRepresentable {
+  let title: String
+  let identifier: String
+  let isOn: Bool
+  var isEnabled: Bool = true
+  let onChange: (Bool) -> Void
+
+  func makeCoordinator() -> Coordinator { Coordinator(onChange: onChange) }
+
+  func makeNSView(context: Context) -> NSButton {
+    let button = NSButton(
+      checkboxWithTitle: title, target: context.coordinator,
+      action: #selector(Coordinator.changed(_:)))
+    button.setAccessibilityIdentifier(identifier)
+    button.state = isOn ? .on : .off
+    button.isEnabled = isEnabled
+    return button
   }
 
-  func updateNSView(_ view: NSView, context: Context) {
-    navigator.select = select
+  func updateNSView(_ button: NSButton, context: Context) {
+    button.title = title
+    button.isEnabled = isEnabled
+    button.setAccessibilityIdentifier(identifier)
+    let state: NSControl.StateValue = isOn ? .on : .off
+    if button.state != state { button.state = state }
+    context.coordinator.onChange = onChange
+  }
+
+  final class Coordinator: NSObject {
+    var onChange: (Bool) -> Void
+    init(onChange: @escaping (Bool) -> Void) { self.onChange = onChange }
+    @MainActor @objc func changed(_ sender: NSButton) { onChange(sender.state == .on) }
+  }
+}
+
+/// The extension status line. Its identifier is on the text field the page shows.
+struct SettingsStatusText: NSViewRepresentable {
+  let text: String
+  let identifier: String
+
+  func makeNSView(context: Context) -> NSTextField {
+    let field = NSTextField(labelWithString: text)
+    field.textColor = .systemRed
+    field.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+    field.lineBreakMode = .byWordWrapping
+    field.maximumNumberOfLines = 3
+    field.setAccessibilityIdentifier(identifier)
+    return field
+  }
+
+  func updateNSView(_ field: NSTextField, context: Context) {
+    field.stringValue = text
+    field.setAccessibilityIdentifier(identifier)
+  }
+}
+
+/// A push button whose accessibility identifier is on the AppKit button.
+struct SettingsPushButton: NSViewRepresentable {
+  let title: String
+  let identifier: String
+  let action: () -> Void
+
+  func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+  func makeNSView(context: Context) -> NSButton {
+    let button = NSButton(
+      title: title, target: context.coordinator, action: #selector(Coordinator.press))
+    button.setAccessibilityIdentifier(identifier)
+    return button
+  }
+
+  func updateNSView(_ button: NSButton, context: Context) {
+    button.title = title
+    button.setAccessibilityIdentifier(identifier)
+    context.coordinator.action = action
+  }
+
+  final class Coordinator: NSObject {
+    var action: () -> Void
+    init(action: @escaping () -> Void) { self.action = action }
+    @objc func press() { action() }
   }
 }
 
@@ -197,7 +320,6 @@ struct BrowserSettingsView: View {
   let onLoadUnpacked: (UUID) -> Void
   let pageOrigin: (UUID) -> String?
   let selectedTabID: (UUID) -> UUID?
-  let sectionNavigator: BrowserSettingsSectionNavigator
   let clearHistory: ((UUID) async throws -> Void)?
   let profileBackend: (any ProfileSettingsBackend)?
   let httpsOnlyModeEnabled: (UUID) -> Bool
@@ -233,7 +355,6 @@ struct BrowserSettingsView: View {
     onLoadUnpacked: @escaping (UUID) -> Void = { _ in },
     pageOrigin: @escaping (UUID) -> String? = { _ in nil },
     selectedTabID: @escaping (UUID) -> UUID? = { _ in nil },
-    sectionNavigator: BrowserSettingsSectionNavigator = BrowserSettingsSectionNavigator(),
     profileBackend: (any ProfileSettingsBackend)? = nil,
     clearHistory: ((UUID) async throws -> Void)? = nil,
     httpsOnlyModeEnabled: @escaping (UUID) -> Bool,
@@ -264,7 +385,6 @@ struct BrowserSettingsView: View {
     self.onLoadUnpacked = onLoadUnpacked
     self.pageOrigin = pageOrigin
     self.selectedTabID = selectedTabID
-    self.sectionNavigator = sectionNavigator
     self.clearHistory = clearHistory
     self.profileBackend = profileBackend
     self.httpsOnlyModeEnabled = httpsOnlyModeEnabled
@@ -276,9 +396,6 @@ struct BrowserSettingsView: View {
     HStack(spacing: 0) {
       categoryBar
       Divider()
-        .background {
-          SettingsSectionBridge(navigator: sectionNavigator) { selectedSection = $0 }
-        }
       Group {
         switch selectedSection {
         case .general:
@@ -318,9 +435,12 @@ struct BrowserSettingsView: View {
   private var categoryBar: some View {
     VStack(alignment: .leading, spacing: 3) {
       ForEach(BrowserSettingsSection.allCases) { section in
-        Button {
-          selectedSection = section
-        } label: {
+        SettingsPressButton(
+          identifier: "settings.section.\(section.rawValue)",
+          accessibilityLabel: section.title,
+          selected: selectedSection == section,
+          action: { selectedSection = section }
+        ) {
           HStack(spacing: 8) {
             Image(systemName: section.symbol)
               .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
@@ -336,12 +456,7 @@ struct BrowserSettingsView: View {
             }
           }
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("settings.section.\(section.rawValue)")
-        .background {
-          SettingsControlMarker(identifier: "settings.section.\(section.rawValue)")
-        }
-        .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
       Spacer()
     }
@@ -770,8 +885,8 @@ struct BrowserSettingsView: View {
         ProfileExtensionsSection(
           model: extensionManager(profile.id),
           sharedModel: sharedExtensions,
-          pageOrigin: pageOrigin(profile.id),
-          selectedTabID: selectedTabID(profile.id),
+          pageOrigin: { pageOrigin(profile.id) },
+          selectedTabID: { selectedTabID(profile.id) },
           onAddExtensions: { onAddExtensions(profile.id) },
           onLoadUnpacked: { onLoadUnpacked(profile.id) })
       }

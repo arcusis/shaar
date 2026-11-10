@@ -10,11 +10,6 @@ import SwiftUI
 
 typealias ProfileDownloadDirectoryApplier = @MainActor (UUID, URL?) async throws -> URL?
 
-/// Lets a hidden probe select a Settings section through the same action as its sidebar button.
-final class BrowserSettingsSectionNavigator {
-  var select: (BrowserSettingsSection) -> Void = { _ in }
-}
-
 @MainActor @Observable
 final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
@@ -34,7 +29,6 @@ final class BrowserSettingsState {
   var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
   var onAddProfile: () -> Void = {}
   var onRestart: (() -> String?)?
-  let sectionNavigator = BrowserSettingsSectionNavigator()
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
@@ -102,14 +96,41 @@ final class BrowserSettingsState {
   }
 
   func selectedTabID(for profileID: UUID) -> UUID? {
-    workspace.stores.values.first { $0.session.selectedSpace.profileID == profileID }?
-      .session.selectedPage?.tab.id
+    browserStoreForSiteAccess(profileID: profileID, keyWindow: NSApp.keyWindow)?.session
+      .selectedPage?.tab.id
   }
 
   func pageOrigin(for profileID: UUID) -> String? {
-    let store = workspace.stores.values.first { $0.session.selectedSpace.profileID == profileID }
-    guard let url = store?.session.selectedPage?.tab.url else { return nil }
+    guard
+      let url = browserStoreForSiteAccess(profileID: profileID, keyWindow: NSApp.keyWindow)?
+        .session.selectedPage?.tab.url
+    else { return nil }
     return ExtensionPageOrigin.string(from: url)
+  }
+
+  /// The browser window the user is looking at. Settings is often key, so the focused
+  /// browser window is the next choice. Another window is not a guess.
+  func browserStoreForSiteAccess(profileID: UUID, keyWindow: NSWindow?) -> BrowserStore? {
+    if let keyWindow, let store = store(for: keyWindow),
+      store.session.selectedSpace.profileID == profileID
+    {
+      return store
+    }
+    if let focusedID = workspace.workspace.focusedWindowID,
+      let focused = workspace.stores[focusedID],
+      focused.session.selectedSpace.profileID == profileID
+    {
+      return focused
+    }
+    return nil
+  }
+
+  private func store(for window: NSWindow) -> BrowserStore? {
+    guard let runtime else { return nil }
+    for (id, store) in workspace.stores {
+      if runtime.window(forID: id.uuidString) === window { return store }
+    }
+    return nil
   }
 
   func chooseUnpackedExtension(for profileID: UUID) {
@@ -345,7 +366,6 @@ private struct BrowserSettingsRoot: View {
       onLoadUnpacked: { state.chooseUnpackedExtension(for: $0) },
       pageOrigin: { state.pageOrigin(for: $0) },
       selectedTabID: { state.selectedTabID(for: $0) },
-      sectionNavigator: state.sectionNavigator,
       profileBackend: state.profileBackend,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
@@ -431,49 +451,6 @@ final class BrowserSettingsController: NSObject {
   }
 
   func setSidebarInitiallyVisible(_ value: Bool) { state.setSidebarInitiallyVisible(value) }
-
-  func selectSettingsSection(_ section: BrowserSettingsSection) {
-    state.sectionNavigator.select(section)
-  }
-
-  func setExtensionDeveloperMode(_ enabled: Bool, for profileID: UUID) {
-    state.extensionManager(for: profileID)?.setDeveloperMode(enabled)
-  }
-
-  func loadUnpackedExtension(at url: URL, for profileID: UUID) {
-    state.loadUnpackedExtension(at: url, for: profileID)
-  }
-
-  func extensionStatus(for profileID: UUID) -> String? {
-    state.extensionManager(for: profileID)?.status
-  }
-
-  func managedExtensions(for profileID: UUID) -> [ManagedExtension] {
-    state.extensionManager(for: profileID)?.extensions ?? []
-  }
-
-  func setExtensionEnabled(_ enabled: Bool, id: String, for profileID: UUID) {
-    state.extensionManager(for: profileID)?.setEnabled(id, enabled: enabled)
-  }
-
-  func removeManagedExtension(_ id: String, for profileID: UUID) {
-    state.extensionManager(for: profileID)?.remove(id)
-  }
-
-  func pinManagedExtension(_ id: String, for profileID: UUID) {
-    state.extensionManager(for: profileID)?.setPinned(id, pinned: true)
-  }
-
-  func pinnedExtensionIDs(for profileID: UUID) -> [String] {
-    state.extensionManager(for: profileID)?.pinnedIDs ?? []
-  }
-
-  func setExtensionSiteAccess(
-    _ access: ExtensionSiteAccess, id: String, origin: String, tabID: UUID?, for profileID: UUID
-  ) {
-    state.extensionManager(for: profileID)?.setSiteAccess(
-      access, extensionID: id, origin: origin, tabID: tabID)
-  }
 
   @discardableResult
   func createProfile(name: String) -> UUID? { state.createProfile(name: name) }

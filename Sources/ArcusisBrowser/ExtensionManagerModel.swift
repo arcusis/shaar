@@ -181,6 +181,29 @@ final class ExtensionManagerModel {
     }
   }
 
+  func setIncognitoEnabled(_ id: String, enabled: Bool) {
+    guard BrowserExtension.isValidID(id) else {
+      status = ExtensionInstallNotice.privateAccessRefused
+      return
+    }
+    status = nil
+    submitManage(
+      [
+        "schemaVersion": 1, "action": "setIncognitoEnabled", "extensionId": id,
+        "enabled": enabled,
+      ], tabID: nil
+    ) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .updated:
+        self.status = nil
+        self.refresh()
+      case .prompted, .unsupported, .failed:
+        self.status = ExtensionInstallNotice.privateAccessRefused
+      }
+    }
+  }
+
   func setSiteAccess(
     _ access: ExtensionSiteAccess, extensionID: String, origin: String, tabID: UUID?
   ) {

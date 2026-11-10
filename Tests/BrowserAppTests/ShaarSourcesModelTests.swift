@@ -27,7 +27,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let model = ShaarSourcesModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     #expect(model.failure == nil)
     #expect(model.displayedContent?.utf8.count == content.utf8.count)
@@ -73,7 +73,7 @@ import Testing
         return (content, false)
       })
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     #expect(model.displayedContent?.utf8.count == content.utf8.count)
     #expect(model.displayedLines?.count == 52_429)
@@ -133,7 +133,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let model = ShaarSourcesModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     #expect(model.resources.count == 3)
     #expect(model.displayedContent == "const answer = 42;")
@@ -192,7 +192,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let model = ShaarSourcesModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     let names = model.treeRows.map(\.name)
     let sourceFolder = try #require(names.firstIndex(of: "src"))
@@ -289,7 +289,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let model = ShaarSourcesModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     let panel = try #require(model.resources.first { $0.name == "panel.js" })
     await model.select(panel)
@@ -353,7 +353,7 @@ import Testing
         return Data(#"{"version":3,"sources":["webpack://_N_E/./src/app.ts"]}"#.utf8)
       })
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     await model.findLocalFiles(framework: .nextJS)
     #expect(model.localFiles.map(\.path) == [file.path])
@@ -383,7 +383,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let model = ShaarSourcesModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     #expect(model.treeRows.map(\.name).contains("Original sources"))
     #expect(model.treeRows.map(\.name).contains("App.vue"))
@@ -422,7 +422,7 @@ import Testing
             .utf8)
       })
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     let original = try #require(model.resources.first { $0.name == "main.ts" })
     await model.select(original)

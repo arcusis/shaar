@@ -49,6 +49,7 @@ final class ShaarPhase2Model {
   @ObservationIgnored private let transport: any ShaarPhase2Transport
   @ObservationIgnored private var task: Task<Void, Never>?
   @ObservationIgnored private var generation = 0
+  @ObservationIgnored private var availabilityWaiters: [CheckedContinuation<Bool, Never>] = []
 
   var nativeFailure: String? {
     (transport as? ShaarPhase2NativeTransport)?.panel.phase2Failure
@@ -72,6 +73,19 @@ final class ShaarPhase2Model {
     isOpen = false
     available = false
     events.removeAll()
+    finishAvailabilityWait(false)
+  }
+
+  /// Suspends until the current stream task reports availability.
+  func waitUntilAvailable() async -> Bool {
+    if available { return true }
+    return await withCheckedContinuation { continuation in
+      if available {
+        continuation.resume(returning: true)
+      } else {
+        availabilityWaiters.append(continuation)
+      }
+    }
   }
 
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
@@ -82,6 +96,7 @@ final class ShaarPhase2Model {
     task = nil
     available = false
     events.removeAll()
+    finishAvailabilityWait(false)
     if isOpen { startStream() }
   }
 
@@ -100,6 +115,7 @@ final class ShaarPhase2Model {
     let target = target
     let generation = generation
     task = Task { [weak self, transport] in
+      defer { self?.finishStream(generation) }
       for await message in transport.messages(for: target) {
         guard let self, self.isOpen, self.target == target,
           self.generation == generation
@@ -109,9 +125,24 @@ final class ShaarPhase2Model {
     }
   }
 
+  private func finishStream(_ streamGeneration: Int) {
+    guard generation == streamGeneration, !available else { return }
+    finishAvailabilityWait(false)
+  }
+
+  private func finishAvailabilityWait(_ ready: Bool) {
+    let waiters = availabilityWaiters
+    availabilityWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume(returning: ready)
+    }
+  }
+
   private func receive(_ message: ShaarPhase2Message) {
     switch message {
-    case .available: available = true
+    case .available:
+      available = true
+      finishAvailabilityWait(true)
     case .unavailable:
       available = false
       events.removeAll()

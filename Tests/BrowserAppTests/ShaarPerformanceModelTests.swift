@@ -47,7 +47,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let model = ShaarPerformanceModel(target: target, phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     await model.refresh()
     #expect(model.metrics["JSHeapUsedSize"] == 19_291_000)
     #expect(model.counters["nodes"] == 842)
@@ -100,7 +100,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let model = ShaarPerformanceModel(target: target, phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     model.startRecording()
     await model.refresh()
     #expect(model.capture == .recording)
@@ -167,7 +167,7 @@ import Testing
       })
     let model = ShaarPerformanceModel(target: target, phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     model.startRecording()
     await model.refresh()
     #expect(model.capture == .recording)

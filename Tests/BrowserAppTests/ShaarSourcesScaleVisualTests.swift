@@ -36,7 +36,8 @@ import XCTest
     let phase2 = ShaarPhase2Model(target: target, transport: fixture)
     let model = ShaarSourcesModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    let phase2Ready = await phase2.waitUntilAvailable()
+    XCTAssertTrue(phase2Ready)
     await model.refresh()
     if stage == "before" {
       XCTAssertNotNil(model.failure)
@@ -76,7 +77,8 @@ import XCTest
     let model = ShaarSourcesModel(
       phase2: phase2, inspectorContent: inspectorContent)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    let phase2Ready = await phase2.waitUntilAvailable()
+    XCTAssertTrue(phase2Ready)
     await model.refresh()
     if stage == "before" {
       XCTAssertNotNil(model.failure)

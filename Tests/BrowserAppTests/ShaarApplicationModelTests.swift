@@ -40,7 +40,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target(), transport: fixture)
     let model = ShaarApplicationModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     #expect(phase2.available)
     model.selectArea(.local)
     await model.refresh()
@@ -78,7 +78,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target(), transport: fixture)
     let model = ShaarApplicationModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     model.selectArea(.indexedDB)
     await model.refresh()
     model.selectDatabase("notes")
@@ -113,7 +113,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target(), transport: fixture)
     let model = ShaarApplicationModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     model.selectArea(.local)
     await model.refresh()
     await model.saveStorage(key: "shaar-probe", value: "edited")
@@ -139,7 +139,7 @@ import Testing
     let phase2 = ShaarPhase2Model(target: target(), transport: fixture)
     let model = ShaarApplicationModel(phase2: phase2)
     phase2.open()
-    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    #expect(await phase2.waitUntilAvailable())
     model.selectArea(.cache)
     await model.refresh()
     model.selectCache("cache-1")

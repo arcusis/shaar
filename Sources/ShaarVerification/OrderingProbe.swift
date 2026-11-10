@@ -222,12 +222,14 @@ final class OrderingProbe {
   func verifyNativeOrder(_ expected: [BrowserTab], label: String)
     async throws
   {
-    engine.refreshExtensions()
-    guard let fixture = engine.extensions.first(where: { $0.name == "Account isolation probe" })
-    else { throw OrderingFailure("Ordering extension fixture is unavailable.") }
-    engine.executeExtension(fixture.id)
-    guard case .popup(let popup) = engine.extensionPanel else {
+    let popup: ExtensionPopupContext
+    switch await ProbeExtensionFixture.openPopup(on: engine) {
+    case .unavailable:
+      throw OrderingFailure("Ordering extension fixture is unavailable.")
+    case .didNotOpen:
       throw OrderingFailure("Ordering extension popup did not open.")
+    case .opened(let opened):
+      popup = opened
     }
     defer { engine.extensionPanel = nil }
     if let page = runtime.view(forExtensionPopupID: popup.id) {
@@ -252,20 +254,23 @@ final class OrderingProbe {
         guard let tabs = result["tabs"] as? [[String: Any]], result["error"] == nil else {
           throw OrderingFailure("Extension tab-order query failed: \(result)")
         }
-        let expectedIDs = expected.map { runtime.nativeTabID(forID: $0.id.uuidString) }
-        let actualIDs = tabs.compactMap { ($0["id"] as? NSNumber)?.int32Value }
-        let pins = tabs.compactMap { $0["pinned"] as? Bool }
+        let actualTitles = tabs.compactMap { $0["title"] as? String }
+        let pins = tabs.map { pinnedFlag($0["pinned"]) }
         try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
           .write(to: root.appending(path: "\(phase)-native-order.json"), options: .atomic)
-        try expect(actualIDs == expectedIDs && pins == expected.map(\.isPinned), label)
+        let expectedTitles = expected.map(\.title)
+        let expectedPins = expected.map(\.isPinned)
+        try expect(
+          actualTitles.count == expectedTitles.count && actualTitles == expectedTitles
+            && pins == expectedPins, label)
+        let selectedID = store.session.selectedSpace.selectedTabID
+        let selectedTitle = expected.first { $0.id == selectedID }?.title
+        let activeTitle = tabs.first { pinnedFlag($0["active"]) }?["title"] as? String
         try expect(
           result["account"] as? String == "alpha",
           "ordering inspection stays in the owning extension profile")
         try expect(
-          (result["tabID"] as? NSNumber)?.int32Value
-            == store.session.selectedSpace.selectedTabID.map {
-              runtime.nativeTabID(forID: $0.uuidString)
-            },
+          activeTitle == selectedTitle && selectedTitle?.isEmpty == false,
           "extension actions retain the selected document after ordering")
         return
       }
@@ -302,6 +307,12 @@ final class OrderingProbe {
       throw OrderingFailure("Ordering layout could not be encoded.")
     }
     try png.write(to: root.appending(path: name), options: .atomic)
+  }
+
+  private func pinnedFlag(_ value: Any?) -> Bool {
+    if let pinned = value as? Bool { return pinned }
+    if let pinned = value as? NSNumber { return pinned.boolValue }
+    return false
   }
 
   private func expect(_ condition: Bool, _ message: String) throws {

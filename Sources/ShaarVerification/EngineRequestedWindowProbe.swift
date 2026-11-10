@@ -276,16 +276,18 @@ final class EngineRequestedWindowProbe {
     from context: NativeBrowserContext, tab: UUID, url: URL, type: String, token: String,
     moveExisting: Bool = false
   ) async throws {
-    context.engine.refreshExtensions()
-    guard
-      let extensionID = context.engine.extensions.first(where: {
-        $0.name == "Account isolation probe"
-      })?.id
-    else { throw WindowProbeFailure("Window worker extension missing.") }
-    context.engine.executeExtension(extensionID)
-    guard case .popup(let popup) = context.engine.extensionPanel,
-      let view = runtime.view(forExtensionPopupID: popup.id)
-    else { throw WindowProbeFailure("Window worker popup missing.") }
+    let popup: ExtensionPopupContext
+    switch await ProbeExtensionFixture.openPopup(on: context.engine) {
+    case .unavailable:
+      throw WindowProbeFailure("Window worker extension missing.")
+    case .didNotOpen:
+      throw WindowProbeFailure("Window worker popup missing.")
+    case .opened(let opened):
+      popup = opened
+    }
+    guard let view = runtime.view(forExtensionPopupID: popup.id) else {
+      throw WindowProbeFailure("Window worker popup missing.")
+    }
     let carrier = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 420, height: 560), styleMask: .borderless,
       backing: .buffered, defer: false)
@@ -337,14 +339,18 @@ final class EngineRequestedWindowProbe {
   private func nativeOrderMatches(
     _ context: NativeBrowserContext, expected: [Int32], selected: Int32
   ) async throws -> Bool {
-    context.engine.refreshExtensions()
-    guard
-      let id = context.engine.extensions.first(where: { $0.name == "Account isolation probe" })?.id
-    else { throw WindowProbeFailure("Order worker extension missing.") }
-    context.engine.executeExtension(id)
-    guard case .popup(let popup) = context.engine.extensionPanel,
-      let view = runtime.view(forExtensionPopupID: popup.id)
-    else { throw WindowProbeFailure("Order worker popup missing.") }
+    let popup: ExtensionPopupContext
+    switch await ProbeExtensionFixture.openPopup(on: context.engine) {
+    case .unavailable:
+      throw WindowProbeFailure("Order worker extension missing.")
+    case .didNotOpen:
+      throw WindowProbeFailure("Order worker popup missing.")
+    case .opened(let opened):
+      popup = opened
+    }
+    guard let view = runtime.view(forExtensionPopupID: popup.id) else {
+      throw WindowProbeFailure("Order worker popup missing.")
+    }
     let carrier = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 420, height: 560), styleMask: .borderless,
       backing: .buffered, defer: false)

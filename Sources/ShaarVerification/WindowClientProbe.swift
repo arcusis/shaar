@@ -185,18 +185,25 @@ final class WindowClientProbe {
       download.fileURL.map { FileManager.default.fileExists(atPath: $0.path) } == true,
       "download removal updates both clients without deleting the file")
 
-    primary.refreshExtensions()
-    guard
-      let extensionID = primary.extensions.first(where: { $0.name == "Account isolation probe" })?
-        .id
-    else {
+    let firstPopup: ExtensionPopupContext
+    let secondPopup: ExtensionPopupContext
+    switch await ProbeExtensionFixture.openPopup(on: primary) {
+    case .unavailable:
       throw WindowClientFailure("Authored extension fixture missing.")
+    case .didNotOpen:
+      throw WindowClientFailure("Application popup routing failed.")
+    case .opened(let opened):
+      firstPopup = opened
     }
-    primary.executeExtension(extensionID)
-    secondary.executeExtension(extensionID)
-    guard case .popup(let firstPopup) = primary.extensionPanel,
-      case .popup(let secondPopup) = secondary.extensionPanel,
-      let firstView = runtime.view(forExtensionPopupID: firstPopup.id),
+    switch await ProbeExtensionFixture.openPopup(on: secondary) {
+    case .unavailable:
+      throw WindowClientFailure("Authored extension fixture missing.")
+    case .didNotOpen:
+      throw WindowClientFailure("Application popup routing failed.")
+    case .opened(let opened):
+      secondPopup = opened
+    }
+    guard let firstView = runtime.view(forExtensionPopupID: firstPopup.id),
       let secondView = runtime.view(forExtensionPopupID: secondPopup.id)
     else { throw WindowClientFailure("Application popup routing failed.") }
     for view in [firstView, secondView] {

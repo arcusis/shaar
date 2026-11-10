@@ -101,7 +101,7 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     }
     const { account } = await chrome.storage.local.get("account");
     const tabs = message.action === "order"
-      ? (await chrome.tabs.query({ currentWindow: true })).map(({ id, index, pinned, active }) => ({ id, index, pinned, active }))
+      ? (await chrome.tabs.query({ currentWindow: true })).map(({ id, index, pinned, active, title }) => ({ id, index, pinned, active, title }))
       : null;
     return { account: account ?? null, tabID: tab?.id ?? null, tabURL: tab?.url ?? null,
       offscreen, tabs, serviceWorker: true };

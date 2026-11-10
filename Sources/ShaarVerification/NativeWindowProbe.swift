@@ -152,17 +152,14 @@ final class NativeWindowProbe {
         [tabA.uuidString], pinnedIDs: [], profileID: a.uuidString, windowID: second),
       "native ordering operates inside its owning window and profile")
 
-    engine.refreshExtensions()
-    guard
-      let extensionID = engine.extensions.first(where: { $0.name == "Account isolation probe" })?.id
-    else {
+    guard let extensionID = ProbeExtensionFixture.accountIsolationID else {
       throw NativeWindowFailure("Native-window extension fixture missing.")
     }
     try runtime.executeExtensionID(extensionID, tabID: first.uuidString)
-    let popupA = try popupID(in: primary)
+    let popupA = try await popupID(in: primary)
     try attachPopup(popupA)
     try runtime.executeExtensionID(extensionID, tabID: tabA.uuidString)
-    let popupB = try popupID(in: second)
+    let popupB = try await popupID(in: second)
     try attachPopup(popupB)
     try expect(
       popupA != popupB && runtime.view(forExtensionPopupID: popupA) != nil
@@ -251,8 +248,9 @@ final class NativeWindowProbe {
     runtime.stopFinding(inTabID: first.uuidString)
     runtime.activateTabID(tabB.uuidString)
     try attach(tabB, to: second)
+    popupPayloads[second] = nil
     try runtime.executeExtensionID(extensionID, tabID: tabB.uuidString)
-    let betaPopup = try popupID(in: second)
+    let betaPopup = try await popupID(in: second)
     try attachPopup(betaPopup)
     let betaContext = try await popupContext(betaPopup)
     observations["secondaryBetaPopup"] = betaContext
@@ -406,11 +404,12 @@ final class NativeWindowProbe {
     throw NativeWindowFailure("Web Store fit did not settle: \(label).")
   }
 
-  private func popupID(in window: String) throws -> String {
-    guard let id = popupPayloads[window]?["id"] as? String else {
-      throw NativeWindowFailure("Window-owned popup missing.")
+  private func popupID(in window: String) async throws -> String {
+    for _ in 0..<50 {
+      if let id = popupPayloads[window]?["id"] as? String { return id }
+      try await Task.sleep(for: .milliseconds(100))
     }
-    return id
+    throw NativeWindowFailure("Window-owned popup missing.")
   }
 
   private func attachPopup(_ id: String) throws {

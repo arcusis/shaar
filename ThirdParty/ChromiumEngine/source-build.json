@@ -287,7 +287,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0007-shaar-branding.patch",
-      "sha256": "6024afdebee559767a818da63fa8b432769cf352cfcca05827b9fc6e2f63c355"
+      "sha256": "e5441999b00f6e5ea644177eb26f59971710016410a27800bf0c95c76af57494"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0008-native-cocoa-display.patch",
@@ -504,6 +504,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0060-shaar-devtools-websocket-events.patch",
       "sha256": "d5eb8044fbe3a3ad01c9e64696ccd3a3457fc3a76f4dda33111379150209c952"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0061-shaar-icloud-passkey-window.patch",
+      "sha256": "52a8ac2dfecd135078052a1ca678900f0fec81859f148e093f91e2b0c9f0fc16"
     }
   ],
   "devtoolsFrontend157": {

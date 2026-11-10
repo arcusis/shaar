@@ -1,0 +1,18 @@
+--- a/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
++++ b/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
+@@ -1217,8 +1217,15 @@
+     const gfx::NativeWindow window = widget->GetNativeWindow();
+     if (window) {
+       discovery_factory->set_nswindow(window);
++      return;
+     }
+   }
++  // Shaar reparents the page into an NSWindow that is not a views::Widget.
++  // iCloud Keychain will not discover without that window.
++  const gfx::NativeWindow hosting = web_contents->GetTopLevelNativeWindow();
++  if (hosting) {
++    discovery_factory->set_nswindow(hosting);
++  }
+ }
+ void ChromeAuthenticatorRequestDelegate::ConfigureICloudKeychain(
+     RequestSource request_source,

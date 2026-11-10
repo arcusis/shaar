@@ -598,10 +598,8 @@ private struct ParitySnapshot {
 
   private func screenRow(_ snapshot: ParitySnapshot) -> [String: Any] {
     let tracks = intValue(snapshot.result["tracks"])
-    let chooser = snapshot.surfaces.contains {
-      PlatformParityVerdicts.isChooserSurface($0, browserWindows: browserWindowClassNames)
-    }
-    let passed = snapshot.sheet == "desktopCapture" || tracks > 0 || chooser
+    let outcome = text(snapshot.result["outcome"])
+    let passed = snapshot.sheet == "desktopCapture" || (outcome == "resolved" && tracks > 0)
     return row(
       item: "Screen sharing picker", passed: passed, delegate: "DesktopCapturePicker",
       evidence: describe(snapshot), signals: signals(snapshot))

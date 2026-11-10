@@ -1071,7 +1071,8 @@ final class BrowserEngine {
       request = shown
     }
     if let frameID = request.frameID {
-      store.rememberPermissionFrame(request.tabID, frameID: frameID)
+      store.rememberPermissionFrame(
+        request.tabID, frameID: frameID, origin: request.requestingOrigin)
     }
     guard store.requestWebsitePermission(request) else {
       store.forgetPermissionFrame(request.tabID, matching: request.frameID)

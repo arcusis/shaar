@@ -163,6 +163,7 @@ final class PlatformPromptProbe {
   private func finishPresented(_ request: DesktopCaptureRequest) async {
     await writeScreenshots(request)
     guard !finished else { return }
+    store.setDesktopCaptureSources(["screen:1:0"], for: request.id)
     store.resolveDesktopCapture(request.id, sourceID: "screen:1:0")
     checks["approved"] = decisions[request.id] == "screen:1:0"
     guard let cancel = boundRequest(), store.requestDesktopCapture(cancel) else {
@@ -196,7 +197,7 @@ final class PlatformPromptProbe {
       "tabID": tab.id.uuidString,
       "pageURL": tab.url.absoluteString,
       "origin": origin.absoluteString,
-      "frameID": "probe-frame",
+      "frameID": "0123456789abcdef0123456789abcdef",
       "sourceTypes": ["screen", "window", "tab"],
     ])
   }

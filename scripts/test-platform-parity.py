@@ -273,11 +273,16 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/screen":
             return page("screen", BUTTON, """
               document.getElementById('parity-action').onclick = () => {
+                let settled = false;
                 navigator.mediaDevices.getDisplayMedia({video:true}).then(stream => {
+                  settled = true;
                   const tracks = stream.getVideoTracks().length;
                   stream.getTracks().forEach(track => track.stop());
                   finish({outcome:'resolved', tracks});
-                }).catch(fail);
+                }).catch(error => { settled = true; fail(error); });
+                setTimeout(() => {
+                  if (!settled) finish({outcome:'pending'});
+                }, 3000);
               };
             """), html, []
         if route == "/payment":
@@ -514,17 +519,21 @@ def crashes_for_pids(before, pids):
     owned = [pid for pid in pids if pid]
     if not owned:
         return []
-    found = []
-    for name in sorted(crash_names() - before):
-        for directory in (CRASHES, CRASHES / "Retired"):
-            path = directory / name
-            if not path.is_file():
-                continue
-            text = path.read_text(errors="replace")[:12000]
-            if crash_matches_pids(text, owned):
-                found.append(name)
-                break
-    return found
+    deadline = time.monotonic() + 30
+    while True:
+        found = []
+        for name in sorted(crash_names() - before):
+            for directory in (CRASHES, CRASHES / "Retired"):
+                path = directory / name
+                if not path.is_file():
+                    continue
+                text = path.read_text(errors="replace")[:12000]
+                if crash_matches_pids(text, owned):
+                    found.append(name)
+                    break
+        if found or time.monotonic() >= deadline:
+            return found
+        time.sleep(0.5)
 
 
 def crash_names():

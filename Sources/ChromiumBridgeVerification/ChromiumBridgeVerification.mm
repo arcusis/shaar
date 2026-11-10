@@ -146,6 +146,39 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
   return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count)};
 }
 
+NSDictionary *ARCProbeDesktopCaptureEventDispatch(NSDictionary *payload, BOOL validOwner) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  __block NSDictionary *received = nil;
+  runtime.onDesktopCaptureRequest = ^(NSDictionary *request) { received = request; };
+  NSString *tabID = NSUUID.UUID.UUIDString;
+  NSString *profileID = NSUUID.UUID.UUIDString;
+  NSString *windowID = NSUUID.UUID.UUIDString;
+  Ivar available = class_getInstanceVariable(runtime.class, "_shaarDesktopCaptureAvailable");
+  if (available) {
+    void *runtimeAddress = (__bridge void *)runtime;
+    *reinterpret_cast<BOOL *>(static_cast<uint8_t *>(runtimeAddress) + ivar_getOffset(available)) = YES;
+  }
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabs"),
+                 [@{tabID: [NSValue valueWithPointer:(void *)1]} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabProfiles"),
+                 [@{tabID: profileID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
+                 [@{tabID: windowID} mutableCopy]);
+  NSMutableDictionary *eventPayload = [payload mutableCopy];
+  eventPayload[@"kind"] = @"desktopCaptureRequested";
+  NSData *data = [NSJSONSerialization dataWithJSONObject:eventPayload options:0 error:nil];
+  NSString *eventWindow = validOwner ? windowID : NSUUID.UUID.UUIDString;
+  shaar_event event = {};
+  event.size = sizeof(event);
+  event.kind = SHAAR_EVENT_PERMISSION;
+  event.profile_id = {profileID.UTF8String, profileID.length};
+  event.window_id = {eventWindow.UTF8String, eventWindow.length};
+  event.tab_id = {tabID.UTF8String, tabID.length};
+  event.payload_json = {(const char *)data.bytes, data.length};
+  [runtime receiveEvent:&event];
+  return received ?: @{};
+}
+
 NSDictionary *ARCProbeShaarDevToolsURLDispatch(NSDictionary *payload, BOOL validOwner) {
   ARCShaarRuntime *runtime = [ARCShaarRuntime new];
   __block NSDictionary *received = nil;

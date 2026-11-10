@@ -61,7 +61,9 @@ FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
 FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeShaarMediaPublicState(NSDictionary *native);
 /// Injects a scoped media event into a runtime without creating an engine or window.
 FOUNDATION_EXPORT NSDictionary *ARCProbeShaarMediaEventDispatch(
-  NSDictionary *payload, BOOL validOwner);
+    NSDictionary *payload, BOOL validOwner);
+FOUNDATION_EXPORT NSDictionary *ARCProbeDesktopCaptureEventDispatch(
+    NSDictionary *payload, BOOL validOwner);
 /// Injects a DevTools open-URL event and records its validated app callback.
 FOUNDATION_EXPORT NSDictionary *ARCProbeShaarDevToolsURLDispatch(
   NSDictionary *payload, BOOL validOwner);

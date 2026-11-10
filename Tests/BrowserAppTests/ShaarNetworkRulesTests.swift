@@ -271,6 +271,71 @@ private final class FakeNetworkRulesABIEngine: ShaarDevToolsSubmitting, @uncheck
     }
   }
 
+  @Test func jsonExchangeRoundTripsAndRejectsUnsafeFiles() throws {
+    var rule = ShaarNetworkRule()
+    rule.enabled = true
+    rule.method = "GET"
+    rule.url = "https://example.com/api"
+    rule.kind = .requestHeaders
+    rule.headers = [ShaarNetworkHeader(name: "X-Shaar-Probe", value: "changed")]
+    let data = try ShaarNetworkRuleExchange.data(from: [rule])
+    let loaded = try ShaarNetworkRuleExchange.rules(from: data)
+    #expect(loaded == [rule.normalizedForAction()])
+    let text = try #require(String(data: data, encoding: .utf8))
+    #expect(text.contains("\"kind\":\"requestHeaders\""))
+    #expect(!text.contains("bodyFilePath"))
+    let empty = Data("{\"schemaVersion\":1,\"rules\":[]}".utf8)
+    #expect(try ShaarNetworkRuleExchange.rules(from: empty).isEmpty)
+    #expect(throws: ShaarNetworkRuleError.self) {
+      try ShaarNetworkRuleExchange.rules(from: Data("[]".utf8))
+    }
+    let unsafe = """
+      {"schemaVersion":1,"rules":[{"id":"\(rule.id.uuidString)","enabled":true,"method":"GET","url":"javascript:alert(1)","kind":"mock","status":200,"headers":[],"bodyText":"x","redirectURL":"","delayMilliseconds":0}]}
+      """
+    #expect(throws: ShaarNetworkRuleError.self) {
+      try ShaarNetworkRuleExchange.rules(from: Data(unsafe.utf8))
+    }
+  }
+
+  @Test func jsonImportReplacesTheSiteAndFileBodiesBecomeText() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let body = root.appending(path: "body.txt")
+    try Data("from-the-file".utf8).write(to: body)
+    var saved = ShaarNetworkRule()
+    saved.enabled = true
+    saved.method = "POST"
+    saved.url = "http://localhost:3000/api"
+    saved.kind = .mock
+    saved.bodyText = "ignored"
+    saved.bodyFilePath = body.path
+    let transport = ShaarNetworkRulesFixtureTransport()
+    let model = ShaarNetworkRulesModel(
+      target: target(), store: ShaarNetworkRuleStore(root: root.appending(path: "store")),
+      transport: transport)
+    model.createNew()
+    model.draft = saved
+    try await model.saveDraft()
+    let exported = try model.exportDocument()
+    let portable = try ShaarNetworkRuleExchange.rules(from: exported)
+    #expect(portable.first?.bodyText == "from-the-file")
+    #expect(portable.first?.bodyFilePath == nil)
+    var replacement = ShaarNetworkRule()
+    replacement.enabled = false
+    replacement.method = "GET"
+    replacement.url = "http://localhost:3000/other"
+    replacement.kind = .delay
+    replacement.delayMilliseconds = 250
+    let file = try ShaarNetworkRuleExchange.data(from: [replacement])
+    try await model.importDocument(file)
+    #expect(model.rules.count == 1)
+    #expect(model.rules.first?.url == "http://localhost:3000/other")
+    #expect(model.rules.first?.delayMilliseconds == 250)
+    #expect(model.activeCount == 0)
+    #expect(transport.lastRules.isEmpty)
+  }
+
   private func request() -> ShaarNetworkRequest {
     ShaarNetworkRequest(
       id: "request-1", method: "GET", url: "http://localhost:3000/api",

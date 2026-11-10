@@ -5,10 +5,31 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct ShaarNetworkRulesFile: FileDocument {
+  static var readableContentTypes: [UTType] { [.json] }
+  var data: Data
+
+  init(data: Data = Data()) { self.data = data }
+
+  init(configuration: ReadConfiguration) throws {
+    guard let data = configuration.file.regularFileContents else {
+      throw ShaarNetworkRuleError.invalidDocument
+    }
+    self.data = data
+  }
+
+  func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+    FileWrapper(regularFileWithContents: data)
+  }
+}
+
 struct ShaarNetworkRulesEditor: View {
   @Bindable var model: ShaarNetworkRulesModel
   let openChromium: () -> Void
   @State private var selectingBodyFile = false
+  @State private var importingRules = false
+  @State private var exportingRules = false
+  @State private var exportFile = ShaarNetworkRulesFile()
 
   var body: some View {
     VStack(spacing: 0) {
@@ -53,6 +74,38 @@ struct ShaarNetworkRulesEditor: View {
       }
     }
     .accessibilityIdentifier("shaar.devtools.networkRulesEditor")
+    .fileImporter(isPresented: $importingRules, allowedContentTypes: [.json]) { result in
+      importRules(result)
+    }
+    .fileExporter(
+      isPresented: $exportingRules, document: exportFile, contentType: .json,
+      defaultFilename: "network-rules.json"
+    ) { result in
+      if case .failure(let error) = result { model.failure = error.localizedDescription }
+    }
+  }
+
+  private func importRules(_ result: Result<URL, Error>) {
+    Task {
+      do {
+        let url = try result.get()
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        try await model.importDocument(ShaarNetworkRuleExchange.readFile(at: url))
+      } catch {
+        model.failure = error.localizedDescription
+      }
+    }
+  }
+
+  private func beginExport() {
+    do {
+      exportFile = ShaarNetworkRulesFile(data: try model.exportDocument())
+      model.failure = nil
+      exportingRules = true
+    } catch {
+      model.failure = error.localizedDescription
+    }
   }
 
   private var unavailable: some View {
@@ -74,6 +127,27 @@ struct ShaarNetworkRulesEditor: View {
   }
 
   private var ruleList: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 12) {
+        Button(ShellL10n.string("Import JSON")) { importingRules = true }
+          .buttonStyle(.plain)
+          .help(ShellL10n.string("Replaces the saved rules for this site."))
+          .accessibilityIdentifier("shaar.devtools.networkRulesImport")
+        Button(ShellL10n.string("Export JSON"), action: beginExport)
+          .buttonStyle(.plain)
+          .disabled(model.rules.isEmpty)
+          .accessibilityIdentifier("shaar.devtools.networkRulesExport")
+        Spacer(minLength: 0)
+      }
+      .font(.system(size: 10))
+      .padding(.horizontal, 12)
+      .frame(height: 28)
+      Divider()
+      rulesScroll
+    }
+  }
+
+  private var rulesScroll: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 0) {
         if model.rules.isEmpty {

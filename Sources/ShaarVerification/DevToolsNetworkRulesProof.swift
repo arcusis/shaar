@@ -67,9 +67,13 @@ enum DevToolsNetworkRulePageFetch {
       let otherTab = try await proveSecondTabIsNotIntercepted()
       let project = try await proveProjectFolderScope()
       try await restoreOriginScope()
-      return "\(fromRow) \(disabled) \(otherTab) \(project)"
+      let exchanged = try await proveImportedRule()
+      let documents = try await proveDocumentsOnSideTab()
+      try await returnToFixtureTools()
+      return "\(fromRow) \(disabled) \(otherTab) \(project) \(exchanged) \(documents)"
     } catch {
       try? await restoreOriginScope()
+      try? await returnToFixtureTools()
       throw error
     }
   }
@@ -178,6 +182,168 @@ enum DevToolsNetworkRulePageFetch {
     return "Project folder applied, hid, and restored the saved rule."
   }
 
+  private func proveImportedRule() async throws -> String {
+    let address = absolute("/inspector-echo-header", query: "shaar-rule=import")
+    var rule = ShaarNetworkRule()
+    rule.enabled = true
+    rule.method = "GET"
+    rule.url = address
+    rule.kind = .mock
+    rule.status = 200
+    rule.bodyText = "shaar-imported-body"
+    rule.headers = [ShaarNetworkHeader(name: "X-Shaar-Mock", value: "imported")]
+    let file = try ShaarNetworkRuleExchange.data(from: [rule])
+    shell.rules.showingRules = true
+    try await shell.rules.importDocument(file)
+    guard shell.rules.activeCount == 1, shell.rules.rules.count == 1 else {
+      throw Failure("Import did not replace the site rules")
+    }
+    let fetched = try await fetch(address, step: "imported rule")
+    guard fetched.status == 200, fetched.header == "imported", fetched.body == "shaar-imported-body"
+    else {
+      throw Failure("Imported rule returned \(fetched.status) \(fetched.header) \(fetched.body)")
+    }
+    let exported = try shell.rules.exportDocument()
+    let roundTrip = try ShaarNetworkRuleExchange.rules(from: exported)
+    guard roundTrip.count == 1, roundTrip[0].url == address,
+      roundTrip[0].bodyText == "shaar-imported-body", roundTrip[0].enabled
+    else { throw Failure("Export did not round-trip the imported rule") }
+    try await disableEnabledRules()
+    return "Import replaced the site rules and export round-tripped them."
+  }
+
+  private struct RulesTab {
+    let id: UUID
+    let shell: ShaarDevToolsModel
+    let inspector: InspectorModel
+  }
+
+  /// Document loads run on another tab. Navigating the probed tab removes the
+  /// repro mask, and the engine then stops the screencast the later check needs.
+  private func proveDocumentsOnSideTab() async throws -> String {
+    let side = try await openRulesTab()
+    let document = try await proveDocumentLoad(on: side)
+    let live = try await proveLiveSiteDocument(on: side)
+    return "\(document) \(live)"
+  }
+
+  private func proveDocumentLoad(on side: RulesTab) async throws -> String {
+    let address = absolute("/inspector-tools", query: "shaar-rule=document")
+    guard let page = URL(string: address) else { throw Failure("Bad document rule URL") }
+    try await installDocumentRule(on: side.shell, url: address, marker: "shaar-document-mock")
+    guard engine.navigateCurrentPage(to: page) else {
+      throw Failure("Document navigation did not start")
+    }
+    do {
+      _ = try await waitForMarker(
+        "shaar-document-mock", step: "fixture document", tab: side.id, inspector: side.inspector)
+    } catch {
+      guard store.reloadCurrentPage(.bypassingCache) else { throw error }
+      _ = try await waitForMarker(
+        "shaar-document-mock", step: "fixture document reload", tab: side.id,
+        inspector: side.inspector)
+    }
+    try await disableEnabledRules(on: side.shell)
+    return "A document navigation returned the saved mock."
+  }
+
+  private func proveLiveSiteDocument(on side: RulesTab) async throws -> String {
+    try await disableEnabledRules(on: side.shell)
+    guard let page = URL(string: "https://example.com/") else {
+      throw Failure("Could not build the live site URL")
+    }
+    guard engine.navigateCurrentPage(to: page) else {
+      throw Failure("Live site navigation did not start")
+    }
+    _ = try await waitForMarker(
+      "This domain is for use in documentation examples without needing permission.",
+      step: "live site", attempts: 200, tab: side.id, inspector: side.inspector)
+    try await wait("rules followed the live site", attempts: 100) {
+      side.shell.rules.target.url.host == "example.com"
+    }
+    guard let href = try await side.inspector.evaluate("location.href") as? String,
+      href.hasPrefix("https://example.com")
+    else { throw Failure("Live site URL was not example.com") }
+    try await installDocumentRule(on: side.shell, url: href, marker: "shaar-example-mock")
+    guard store.reloadCurrentPage(.bypassingCache) else {
+      throw Failure("Live site reload did not start")
+    }
+    do {
+      _ = try await waitForMarker(
+        "shaar-example-mock", step: "live site document", attempts: 150, tab: side.id,
+        inspector: side.inspector)
+    } catch {
+      guard store.reloadCurrentPage(.bypassingCache) else { throw error }
+      _ = try await waitForMarker(
+        "shaar-example-mock", step: "live site document retry", attempts: 150, tab: side.id,
+        inspector: side.inspector)
+    }
+    try await disableEnabledRules(on: side.shell)
+    return "https://example.com/ loaded, then a document reload used the saved mock."
+  }
+
+  private func openRulesTab() async throws -> RulesTab {
+    let opened = try await openSecondTab()
+    guard let shell = engine.shaarDevTools[opened.id] else {
+      throw Failure("Second tab did not open its rules shell")
+    }
+    try await wait("side tab rules", attempts: 100) {
+      shell.rules.available && shell.rules.target.tabID == opened.id
+    }
+    return RulesTab(id: opened.id, shell: shell, inspector: opened.inspector)
+  }
+
+  private func installDocumentRule(
+    on shell: ShaarDevToolsModel, url: String, marker: String
+  ) async throws {
+    shell.rules.createNew()
+    shell.rules.showingRules = true
+    shell.rules.draft?.enabled = true
+    shell.rules.draft?.method = "GET"
+    shell.rules.draft?.url = url
+    shell.rules.draft?.kind = .mock
+    shell.rules.draft?.status = 200
+    shell.rules.draft?.headers = [
+      ShaarNetworkHeader(name: "Content-Type", value: "text/html; charset=utf-8")
+    ]
+    shell.rules.draft?.bodyText =
+      "<!doctype html><meta charset=\"utf-8\"><title>\(marker)</title><p>\(marker)</p>"
+    try await shell.rules.saveDraft()
+    guard shell.rules.activeCount == 1 else {
+      throw Failure("Document rule was not active (\(shell.rules.failure ?? "no error"))")
+    }
+  }
+
+  private func pageText(using inspector: InspectorModel) async -> String {
+    let value = try? await inspector.evaluate("document.body ? document.body.innerText : ''")
+    return value as? String ?? ""
+  }
+
+  private func waitForMarker(
+    _ marker: String, step: String, attempts: Int = 100, tab: UUID, inspector: InspectorModel
+  ) async throws -> String {
+    var last = ""
+    for _ in 0..<attempts {
+      if engine.pages[tab]?.loading == false {
+        last = await pageText(using: inspector)
+        if last.contains(marker) { return last }
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw Failure("\(step) did not show \(marker). Saw \(last.prefix(180))")
+  }
+
+  private func returnToFixtureTools() async throws {
+    try? await disableEnabledRules()
+    try await selectOriginalTab()
+    try await wait("fixture page after network rules", attempts: 50) {
+      self.engine.siteControlTarget?.tabID == self.tab
+        && self.engine.siteControlTarget?.url.path == "/inspector-tools"
+        && self.shell.rules.target.url.path == "/inspector-tools"
+    }
+    try await disableEnabledRules()
+  }
+
   private func restoreOriginScope() async throws {
     try await shell.rules.useProjectRoot(nil)
     try await disableEnabledRules()
@@ -275,6 +441,10 @@ enum DevToolsNetworkRulePageFetch {
   }
 
   private func disableEnabledRules() async throws {
+    try await disableEnabledRules(on: shell)
+  }
+
+  private func disableEnabledRules(on shell: ShaarDevToolsModel) async throws {
     let enabled = shell.rules.rules.filter(\.enabled)
     for rule in enabled {
       shell.rules.edit(rule)

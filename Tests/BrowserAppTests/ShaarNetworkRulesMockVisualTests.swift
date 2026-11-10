@@ -6,6 +6,8 @@ import AppKit
 import SwiftUI
 import XCTest
 
+@testable import ArcusisBrowser
+
 @MainActor final class ShaarNetworkRulesMockVisualTests: XCTestCase {
   func testRuleEditorMockRendersOffscreen() throws {
     guard ProcessInfo.processInfo.environment["SHAAR_NETWORK_RULES_CAPTURE"] == "1" else {
@@ -27,6 +29,50 @@ import XCTest
         to: root.appending(path: "mock-network-rules-\(suffix).png"))
       XCTAssertEqual(image.pixelsWide, 1040)
       XCTAssertEqual(image.pixelsHigh, 620)
+    }
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
+  func testSavedRuleListRendersImportAndExport() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_NETWORK_RULES_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen rules mock capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1482")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let storeRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: storeRoot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: storeRoot) }
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
+    let model = ShaarNetworkRulesModel(
+      target: target, store: ShaarNetworkRuleStore(root: storeRoot),
+      transport: ShaarNetworkRulesFixtureTransport())
+    model.createNew()
+    model.draft?.enabled = true
+    model.draft?.method = "GET"
+    model.draft?.url = "http://localhost:3000/api/orders"
+    model.draft?.kind = .mock
+    model.draft?.status = 200
+    model.draft?.bodyText = "{\"orders\":[]}"
+    try await model.saveDraft()
+    model.showingRules = true
+    XCTAssertNil(model.draft)
+    XCTAssertEqual(model.rules.count, 1)
+    for scheme in [ColorScheme.light, .dark] {
+      let suffix = scheme == .dark ? "dark" : "light"
+      let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
+      let view = ShaarNetworkRulesEditor(model: model, openChromium: {})
+        .frame(width: 340, height: 420)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .environment(\.colorScheme, scheme)
+      let image = try VisualCapture.renderOffscreen(
+        view, size: NSSize(width: 340, height: 420), appearance: appearance,
+        to: root.appending(path: "rules-import-export-\(suffix).png"))
+      XCTAssertEqual(image.pixelsWide, 340)
+      XCTAssertEqual(image.pixelsHigh, 420)
     }
     XCTAssertTrue(NSApp.keyWindow === previous)
   }

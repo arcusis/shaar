@@ -20,6 +20,7 @@ enum ShaarNetworkRuleError: LocalizedError {
   case invalidHeaders
   case invalidBody
   case invalidProject
+  case invalidDocument
   case unavailable
 
   var errorDescription: String? {
@@ -29,6 +30,7 @@ enum ShaarNetworkRuleError: LocalizedError {
     case .invalidHeaders: "Header names and values must be valid and bounded."
     case .invalidBody: "The response body must be a regular file or text up to 1 MB."
     case .invalidProject: "Choose an existing project folder."
+    case .invalidDocument: "The rules file must contain saved network rules."
     case .unavailable: "Network rules need engine support."
     }
   }
@@ -278,6 +280,20 @@ final class ShaarNetworkRulesModel {
     draft = rule
     showingRules = true
     failure = nil
+  }
+
+  func exportDocument() throws -> Data {
+    try ShaarNetworkRuleExchange.data(from: rules)
+  }
+
+  func importDocument(_ data: Data) async throws {
+    guard let project else { throw ShaarNetworkRuleError.invalidMatch }
+    let imported = try ShaarNetworkRuleExchange.rules(from: data)
+    try store.save(imported, for: project)
+    rules = imported
+    draft = nil
+    failure = nil
+    try await activate()
   }
 
   func saveDraft() async throws {

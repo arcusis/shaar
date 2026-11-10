@@ -1,0 +1,800 @@
+diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
+index 97789b2..3b1f8a7 100644
+--- a/chrome/browser/shaar/BUILD.gn
++++ b/chrome/browser/shaar/BUILD.gn
+@@ -101,6 +101,10 @@ source_set("engine") {
+     "media/shaar_media_permission.cc",
+     "media/shaar_media_permission.h",
+     # END media
++    # BEGIN device chooser
++    "chooser/shaar_device_chooser.cc",
++    "chooser/shaar_device_chooser.h",
++    # END device chooser
+     # BEGIN storage_keychain
+     "storage_keychain/shaar_storage_keychain.cc",
+     "storage_keychain/shaar_storage_keychain.h",
+@@ -148,6 +152,9 @@ source_set("engine") {
+     "//services/media_session/public/cpp",
+     "//services/media_session/public/mojom",
+     # END media
++    # BEGIN device chooser
++    "//components/permissions",
++    # END device chooser
+     "//components/download/content/public",
+     "//components/download/public/common:public",
+     "//extensions/browser",
+@@ -281,6 +288,7 @@ test("shaar_layer_unittests") {
+     "history/shaar_history_unittest.cc",
+     "lifecycle/shaar_module_registry_unittest.cc",
+     "media/shaar_media_unittest.cc",
++    "chooser/shaar_device_chooser_unittest.cc",
+     "navigation/shaar_navigation_unittest.cc",
+     "private_sessions/shaar_private_sessions_unittest.cc",
+     "profiles/shaar_profiles_unittest.cc",
+diff --git a/chrome/browser/shaar/chooser/shaar_device_chooser.cc b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
+new file mode 100644
+index 0000000..94a7abe
+--- /dev/null
++++ b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
+@@ -0,0 +1,460 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this
++// file, You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#include "chrome/browser/shaar/chooser/shaar_device_chooser.h"
++
++#include <algorithm>
++#include <cstddef>
++#include <cstring>
++#include <map>
++#include <string_view>
++#include <utility>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/memory/raw_ptr.h"
++#include "base/no_destructor.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/current_thread.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/time/time.h"
++#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
++#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
++#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
++#include "components/permissions/chooser_controller.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "url/gurl.h"
++
++namespace shaar::chooser {
++namespace {
++
++constexpr size_t kMaximumSessions = 8;
++constexpr size_t kMaximumOptions = 64;
++constexpr size_t kMaximumNameBytes = 256;
++constexpr size_t kMaximumArgumentsBytes = 4096;
++
++std::string ClampName(const std::u16string& text) {
++  std::string utf8 = base::UTF16ToUTF8(text);
++  if (utf8.size() <= kMaximumNameBytes)
++    return utf8;
++  utf8.resize(kMaximumNameBytes);
++  while (!utf8.empty() &&
++         (static_cast<unsigned char>(utf8.back()) & 0xC0) == 0x80) {
++    utf8.pop_back();
++  }
++  if (!utf8.empty() &&
++      (static_cast<unsigned char>(utf8.back()) & 0xC0) == 0xC0) {
++    utf8.pop_back();
++  }
++  return utf8;
++}
++
++bool ValidChooserID(std::string_view id) {
++  if (id.empty() || id.size() > 64)
++    return false;
++  for (char character : id) {
++    const bool digit = character >= '0' && character <= '9';
++    const bool upper = character >= 'A' && character <= 'Z';
++    const bool lower = character >= 'a' && character <= 'z';
++    if (!digit && !upper && !lower && character != '-')
++      return false;
++  }
++  return true;
++}
++
++bool HasOnlyKeys(const base::DictValue& dict,
++                 std::initializer_list<std::string_view> allowed) {
++  for (const auto item : dict) {
++    if (std::find(allowed.begin(), allowed.end(), item.first) == allowed.end())
++      return false;
++  }
++  return true;
++}
++
++struct ReplyContext {
++  shaar_request_id request_id;
++  shaar_reply_fn callback;
++  void* context;
++};
++
++void DeliverReply(ReplyContext request,
++                  shaar_error_code code,
++                  std::string payload,
++                  std::string message) {
++  shaar_result result{};
++  result.size = sizeof(result);
++  result.request_id = request.request_id;
++  result.error.size = sizeof(result.error);
++  result.error.code = code;
++  result.error.platform_code = 0;
++  result.error.message = {message.data(), message.size()};
++  result.payload_json = {payload.data(), payload.size()};
++  request.callback(request.context, &result);
++}
++
++void Reply(const ReplyContext& request, base::DictValue payload) {
++  std::string json;
++  base::JSONWriter::Write(base::Value(std::move(payload)), &json);
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&DeliverReply, request, SHAAR_OK,
++                                std::move(json), std::string()));
++}
++
++shaar_error_code Fail(shaar_error* error,
++                      shaar_error_code code,
++                      const char* message) {
++  if (error) {
++    const uint32_t size = error->size;
++    if (size >= offsetof(shaar_error, code) + sizeof(error->code))
++      error->code = code;
++    if (size >= offsetof(shaar_error, platform_code) +
++                    sizeof(error->platform_code)) {
++      error->platform_code = 0;
++    }
++    if (size >= offsetof(shaar_error, message) + sizeof(error->message))
++      error->message = {message, std::strlen(message)};
++  }
++  return code;
++}
++
++std::optional<base::DictValue> ParseArguments(shaar_bytes bytes) {
++  if (!bytes.data || bytes.size == 0 || bytes.size > kMaximumArgumentsBytes)
++    return std::nullopt;
++  auto parsed = base::JSONReader::Read(
++      std::string_view(bytes.data, bytes.size), base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_dict())
++    return std::nullopt;
++  return std::move(parsed->GetDict());
++}
++
++class DeviceChooserSession : public permissions::ChooserController::View {
++ public:
++  DeviceChooserSession(
++      std::string id, shaar_engine* engine, content::WebContents* contents,
++      shaar_window* window, shaar_tab* tab, std::string profile_id,
++      std::string window_id, std::string tab_id, GURL page_url, GURL origin,
++      content::GlobalRenderFrameHostId frame_id, std::string transport,
++      std::unique_ptr<permissions::ChooserController> controller)
++      : id_(std::move(id)),
++        engine_(engine),
++        contents_(contents),
++        window_(window),
++        tab_(tab),
++        profile_id_(std::move(profile_id)),
++        window_id_(std::move(window_id)),
++        tab_id_(std::move(tab_id)),
++        page_url_(std::move(page_url)),
++        origin_(std::move(origin)),
++        frame_id_(frame_id),
++        transport_(std::move(transport)),
++        controller_(std::move(controller)) {}
++
++  ~DeviceChooserSession() override {
++    if (!controller_)
++      return;
++    controller_->set_view(nullptr);
++    if (cancel_on_finish_)
++      controller_->Cancel();
++    controller_.reset();
++  }
++
++  void Attach() {
++    controller_->set_view(this);
++  }
++
++  bool Announce() {
++    const bool published = Publish("deviceChooserRequested");
++    announced_ = published;
++    return published;
++  }
++
++  bool SelectIndex(size_t index) {
++    if (finishing_ || !controller_ || index >= controller_->NumOptions())
++      return false;
++    selecting_ = true;
++    controller_->set_view(nullptr);
++    controller_->Select(std::vector<size_t>{index});
++    selecting_ = false;
++    RequestFinish(/*cancel=*/false);
++    return true;
++  }
++
++  void RequestFinish(bool cancel) {
++    if (selecting_)
++      return;
++    if (finishing_)
++      return;
++    finishing_ = true;
++    cancel_on_finish_ = cancel;
++    if (announced_)
++      Publish("deviceChooserDismissed");
++    TakeOwnership();
++  }
++
++  shaar_engine* engine() const { return engine_; }
++  content::WebContents* contents() const { return contents_; }
++  shaar_window* window() const { return window_; }
++  shaar_tab* tab() const { return tab_; }
++  const GURL& page_url() const { return page_url_; }
++  const GURL& origin() const { return origin_; }
++  content::GlobalRenderFrameHostId frame_id() const { return frame_id_; }
++  permissions::ChooserController* controller() const {
++    return controller_.get();
++  }
++
++  void OnOptionsInitialized() override { PublishUpdate(); }
++  void OnOptionAdded(size_t) override { PublishUpdate(); }
++  void OnOptionRemoved(size_t) override { PublishUpdate(); }
++  void OnOptionUpdated(size_t) override { PublishUpdate(); }
++  void OnAdapterEnabledChanged(bool) override { PublishUpdate(); }
++  void OnAdapterAuthorizationChanged(bool) override { PublishUpdate(); }
++  void OnRefreshStateChanged(bool) override { PublishUpdate(); }
++
++ private:
++  void PublishUpdate() {
++    if (announced_ && !finishing_)
++      Publish("deviceChooserUpdated");
++  }
++
++  bool Publish(const char* kind) {
++    if (!controller_ || !lifecycle::EngineIsReady(engine_))
++      return false;
++    base::DictValue payload;
++    payload.Set("schemaVersion", 1);
++    payload.Set("kind", kind);
++    payload.Set("id", id_);
++    payload.Set("transport", transport_);
++    payload.Set("pageURL", page_url_.spec());
++    payload.Set("origin", origin_.spec());
++    base::ListValue options;
++    const size_t count = std::min(controller_->NumOptions(), kMaximumOptions);
++    for (size_t index = 0; index < count; ++index) {
++      base::DictValue option;
++      option.Set("index", static_cast<int>(index));
++      option.Set("name", ClampName(controller_->GetOption(index)));
++      options.Append(std::move(option));
++    }
++    const bool can_grant = controller_->NumOptions() > 0;
++    payload.Set("options", std::move(options));
++    payload.Set("canGrant", can_grant);
++    std::string json;
++    if (!base::JSONWriter::Write(payload, &json))
++      return false;
++    return shaar::EmitEvent(
++               engine_, SHAAR_EVENT_PERMISSION,
++               {profile_id_.data(), profile_id_.size()}, {},
++               {window_id_.data(), window_id_.size()},
++               {tab_id_.data(), tab_id_.size()},
++               {json.data(), json.size()}) == SHAAR_OK;
++  }
++
++  void TakeOwnership();
++
++  std::string id_;
++  shaar_engine* engine_;
++  raw_ptr<content::WebContents> contents_;
++  shaar_window* window_;
++  shaar_tab* tab_;
++  std::string profile_id_;
++  std::string window_id_;
++  std::string tab_id_;
++  GURL page_url_;
++  GURL origin_;
++  content::GlobalRenderFrameHostId frame_id_;
++  std::string transport_;
++  std::unique_ptr<permissions::ChooserController> controller_;
++  bool announced_ = false;
++  bool selecting_ = false;
++  bool finishing_ = false;
++  bool cancel_on_finish_ = false;
++};
++
++using SessionMap = std::map<std::string, std::unique_ptr<DeviceChooserSession>>;
++
++SessionMap& Sessions() {
++  static base::NoDestructor<SessionMap> sessions;
++  return *sessions;
++}
++
++uint64_t& NextID() {
++  static base::NoDestructor<uint64_t> next(0);
++  return *next;
++}
++
++void DismissById(std::string id) {
++  auto found = Sessions().find(id);
++  if (found == Sessions().end())
++    return;
++  found->second->RequestFinish(/*cancel=*/true);
++}
++
++void DeviceChooserSession::TakeOwnership() {
++  auto found = Sessions().find(id_);
++  if (found == Sessions().end() || found->second.get() != this)
++    return;
++  std::unique_ptr<DeviceChooserSession> taken = std::move(found->second);
++  Sessions().erase(found);
++}
++
++bool FrameStillCurrent(const DeviceChooserSession& session,
++                       content::WebContents* contents) {
++  content::RenderFrameHost* frame =
++      content::RenderFrameHost::FromID(session.frame_id());
++  if (!frame || !frame->IsActive())
++    return false;
++  if (content::WebContents::FromRenderFrameHost(frame) != contents)
++    return false;
++  if (contents->GetLastCommittedURL() != session.page_url())
++    return false;
++  return frame->GetLastCommittedOrigin().GetURL() == session.origin();
++}
++
++}  // namespace
++
++std::optional<DeviceChooserDecision> ParseDeviceChooserDecision(
++    const base::DictValue& value) {
++  const std::optional<int> schema = value.FindInt("schemaVersion");
++  const std::string* id = value.FindString("id");
++  const std::string* action = value.FindString("action");
++  if (!schema || *schema != 1 || !id || !action || !ValidChooserID(*id))
++    return std::nullopt;
++  DeviceChooserDecision decision;
++  decision.id = *id;
++  if (*action == "cancel") {
++    if (!HasOnlyKeys(value, {"schemaVersion", "id", "action"}))
++      return std::nullopt;
++    decision.select = false;
++    return decision;
++  }
++  if (*action != "select")
++    return std::nullopt;
++  if (!HasOnlyKeys(value, {"schemaVersion", "id", "action", "index"}))
++    return std::nullopt;
++  const std::optional<int> index = value.FindInt("index");
++  if (!index || *index < 0)
++    return std::nullopt;
++  decision.select = true;
++  decision.index = static_cast<size_t>(*index);
++  return decision;
++}
++
++base::OnceClosure ShowDeviceChooser(
++    content::RenderFrameHost* owner,
++    std::unique_ptr<permissions::ChooserController> controller) {
++  if (!owner || !controller || !base::CurrentUIThread::IsSet())
++    return base::DoNothing();
++  content::WebContents* contents =
++      content::WebContents::FromRenderFrameHost(owner);
++  shaar_engine* engine = lifecycle::ActiveEngine();
++  if (!lifecycle::EngineIsReady(engine) || !contents || !owner->IsActive() ||
++      Sessions().size() >= kMaximumSessions) {
++    return base::DoNothing();
++  }
++  std::optional<windows_tabs::SelectedRegularTab> identity =
++      windows_tabs::Registry().FindSelectedRegularTab(engine, contents);
++  if (!identity || identity->profile_id.empty() || identity->window_id.empty() ||
++      identity->tab_id.empty()) {
++    return base::DoNothing();
++  }
++  const GURL page_url = contents->GetLastCommittedURL();
++  const GURL origin = owner->GetLastCommittedOrigin().GetURL();
++  if (!page_url.SchemeIsHTTPOrHTTPS() || !origin.SchemeIsHTTPOrHTTPS())
++    return base::DoNothing();
++
++  const std::string id = std::to_string(++NextID());
++  const std::string transport = controller->shaar_transport();
++  auto session = std::make_unique<DeviceChooserSession>(
++      id, engine, contents, identity->window, identity->tab,
++      identity->profile_id, identity->window_id, identity->tab_id, page_url,
++      origin, owner->GetGlobalId(), transport, std::move(controller));
++  DeviceChooserSession* raw = session.get();
++  Sessions().emplace(id, std::move(session));
++  raw->Attach();
++  if (!raw->Announce()) {
++    DismissById(id);
++    return base::DoNothing();
++  }
++  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++      FROM_HERE, base::BindOnce(&DismissById, id), base::Minutes(2));
++  return base::BindOnce(&DismissById, id);
++}
++
++shaar_error_code ApplyDeviceChooserDecision(
++    shaar_engine* engine, shaar_window* window, shaar_tab* tab,
++    shaar_operation operation, shaar_bytes arguments,
++    shaar_request_id request_id, shaar_reply_fn reply, void* reply_context,
++    shaar_error* error) {
++  if (operation != SHAAR_OP_DEVICE_CHOOSER_DECISION) {
++    return Fail(error, SHAAR_INVALID_ARGUMENT,
++                "unknown device chooser operation");
++  }
++  if (!base::CurrentUIThread::IsSet() || !engine || !window || !tab || !reply) {
++    return Fail(error, SHAAR_NOT_READY,
++                "device chooser decision is unavailable");
++  }
++  std::optional<base::DictValue> parsed = ParseArguments(arguments);
++  if (!parsed) {
++    return Fail(error, SHAAR_INVALID_ARGUMENT,
++                "invalid device chooser decision");
++  }
++  std::optional<DeviceChooserDecision> decision =
++      ParseDeviceChooserDecision(*parsed);
++  if (!decision) {
++    return Fail(error, SHAAR_INVALID_ARGUMENT,
++                "invalid device chooser decision");
++  }
++  auto found = Sessions().find(decision->id);
++  if (found == Sessions().end())
++    return Fail(error, SHAAR_NOT_FOUND, "device chooser is not open");
++  DeviceChooserSession* session = found->second.get();
++  content::WebContents* contents =
++      windows_tabs::Registry().FindWebContents(engine, window, tab);
++  if (!lifecycle::EngineIsReady(engine) || !contents ||
++      session->engine() != engine || session->window() != window ||
++      session->tab() != tab || session->contents() != contents ||
++      !FrameStillCurrent(*session, contents)) {
++    return Fail(error, SHAAR_NOT_FOUND, "device chooser page changed");
++  }
++  if (decision->select) {
++    if (!session->controller() ||
++        decision->index >= session->controller()->NumOptions()) {
++      return Fail(error, SHAAR_INVALID_ARGUMENT,
++                  "device chooser index is out of range");
++    }
++    Reply(ReplyContext{request_id, reply, reply_context},
++          base::DictValue().Set("schemaVersion", 1));
++    session->SelectIndex(decision->index);
++    return SHAAR_OK;
++  }
++  Reply(ReplyContext{request_id, reply, reply_context},
++        base::DictValue().Set("schemaVersion", 1));
++  session->RequestFinish(/*cancel=*/true);
++  return SHAAR_OK;
++}
++
++}  // namespace shaar::chooser
++
++shaar_error_code HandleDeviceChooserDecision(
++    shaar::ShaarEngineContext*, shaar_engine* engine, shaar_scope,
++    shaar_window* window, shaar_tab* tab, shaar_operation operation,
++    shaar_bytes arguments, shaar_request_id request_id, shaar_reply_fn reply,
++    void* reply_context, shaar_error* error) {
++  return shaar::chooser::ApplyDeviceChooserDecision(
++      engine, window, tab, operation, arguments, request_id, reply,
++      reply_context, error);
++}
++
++extern "C" void shaar_device_chooser_register(ShaarModuleRegistry* registry) {
++  if (!registry)
++    return;
++  registry->Register(SHAAR_OP_DEVICE_CHOOSER_DECISION,
++                     SHAAR_OP_DEVICE_CHOOSER_DECISION,
++                     &HandleDeviceChooserDecision);
++  static const ShaarModuleRegistry::Handler handlers =
++      &HandleDeviceChooserDecision;
++  registry->RegisterModule(SHAAR_MODULE_DEVICE_CHOOSER, &handlers);
++}
+diff --git a/chrome/browser/shaar/chooser/shaar_device_chooser.h b/chrome/browser/shaar/chooser/shaar_device_chooser.h
+new file mode 100644
+index 0000000..93f0e80
+--- /dev/null
++++ b/chrome/browser/shaar/chooser/shaar_device_chooser.h
+@@ -0,0 +1,47 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this
++// file, You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#ifndef CHROME_BROWSER_SHAAR_CHOOSER_SHAAR_DEVICE_CHOOSER_H_
++#define CHROME_BROWSER_SHAAR_CHOOSER_SHAAR_DEVICE_CHOOSER_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/functional/callback.h"
++#include "base/values.h"
++#include "chrome/browser/shaar/engine/shaar_module_registry.h"
++
++namespace content {
++class RenderFrameHost;
++}
++
++namespace permissions {
++class ChooserController;
++}
++
++namespace shaar::chooser {
++
++struct DeviceChooserDecision {
++  std::string id;
++  bool select = false;
++  size_t index = 0;
++};
++
++std::optional<DeviceChooserDecision> ParseDeviceChooserDecision(
++    const base::DictValue& value);
++
++base::OnceClosure ShowDeviceChooser(
++    content::RenderFrameHost* owner,
++    std::unique_ptr<permissions::ChooserController> controller);
++
++}  // namespace shaar::chooser
++
++shaar_error_code HandleDeviceChooserDecision(
++    shaar::ShaarEngineContext*, shaar_engine*, shaar_scope, shaar_window*,
++    shaar_tab*, shaar_operation, shaar_bytes, shaar_request_id, shaar_reply_fn,
++    void*, shaar_error*);
++extern "C" void shaar_device_chooser_register(ShaarModuleRegistry* registry);
++
++#endif  // CHROME_BROWSER_SHAAR_CHOOSER_SHAAR_DEVICE_CHOOSER_H_
+diff --git a/chrome/browser/shaar/chooser/shaar_device_chooser_unittest.cc b/chrome/browser/shaar/chooser/shaar_device_chooser_unittest.cc
+new file mode 100644
+index 0000000..7f71a01
+--- /dev/null
++++ b/chrome/browser/shaar/chooser/shaar_device_chooser_unittest.cc
+@@ -0,0 +1,69 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this
++// file, You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#include "chrome/browser/shaar/chooser/shaar_device_chooser.h"
++
++#include "base/values.h"
++#include "chrome/browser/shaar/engine/shaar_module_registry.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace {
++
++base::DictValue Decision(std::string action) {
++  base::DictValue value;
++  value.Set("schemaVersion", 1);
++  value.Set("id", "12");
++  value.Set("action", std::move(action));
++  return value;
++}
++
++}  // namespace
++
++TEST(ShaarDeviceChooserTest, ParsesCancelAndSelect) {
++  std::optional<shaar::chooser::DeviceChooserDecision> cancel =
++      shaar::chooser::ParseDeviceChooserDecision(Decision("cancel"));
++  ASSERT_TRUE(cancel);
++  EXPECT_EQ(cancel->id, "12");
++  EXPECT_FALSE(cancel->select);
++
++  base::DictValue select = Decision("select");
++  select.Set("index", 0);
++  std::optional<shaar::chooser::DeviceChooserDecision> parsed =
++      shaar::chooser::ParseDeviceChooserDecision(select);
++  ASSERT_TRUE(parsed);
++  EXPECT_TRUE(parsed->select);
++  EXPECT_EQ(parsed->index, 0u);
++}
++
++TEST(ShaarDeviceChooserTest, RejectsMalformedDecisions) {
++  base::DictValue extra = Decision("cancel");
++  extra.Set("transport", "usb");
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(extra));
++
++  base::DictValue indexed = Decision("cancel");
++  indexed.Set("index", 0);
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(indexed));
++
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(Decision("select")));
++
++  base::DictValue negative = Decision("select");
++  negative.Set("index", -1);
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(negative));
++
++  base::DictValue bad_id = Decision("cancel");
++  bad_id.Set("id", "not an id");
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(bad_id));
++
++  base::DictValue schema = Decision("cancel");
++  schema.Set("schemaVersion", 2);
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(schema));
++}
++
++TEST(ShaarDeviceChooserTest, RegistersItsModuleAndOperationHandler) {
++  ShaarModuleRegistry registry;
++  shaar_device_chooser_register(&registry);
++  EXPECT_NE(registry.FindModule(SHAAR_MODULE_DEVICE_CHOOSER), nullptr);
++  EXPECT_EQ(registry.Find(SHAAR_OP_DEVICE_CHOOSER_DECISION),
++            &HandleDeviceChooserDecision);
++}
+diff --git a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
+index c571ecd..6409824 100644
+--- a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
++++ b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
+@@ -36,6 +36,7 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_find_register);
+ // END find
+ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_devtools_register);
+ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_media_register);
++SHAAR_DECLARE_OPTIONAL_MODULE(shaar_device_chooser_register);
+ // BEGIN storage_keychain
+ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_storage_keychain_register);
+ // END storage_keychain
+@@ -203,6 +204,8 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
+     shaar_devtools_register(registry);
+   if (shaar_media_register)
+     shaar_media_register(registry);
++  if (shaar_device_chooser_register)
++    shaar_device_chooser_register(registry);
+   // BEGIN storage_keychain
+   if (shaar_storage_keychain_register)
+     shaar_storage_keychain_register(registry);
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index d345aa5..207fa3e 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -13,7 +13,7 @@ extern "C" {
+ #endif
+ 
+ #define SHAAR_ENGINE_ABI_MAJOR 1u
+-#define SHAAR_ENGINE_ABI_MINOR 12u
++#define SHAAR_ENGINE_ABI_MINOR 13u
+ #define SHAAR_EXPORT __attribute__((visibility("default")))
+ 
+ typedef struct shaar_engine shaar_engine;
+@@ -220,6 +220,9 @@ typedef enum {
+   SHAAR_OP_PROBE_MEDIA_GESTURE = 1107,
+   SHAAR_OP_MEDIA_PERMISSION_DECISION = 1108,
+   // END media
++  // BEGIN device chooser
++  SHAAR_OP_DEVICE_CHOOSER_DECISION = 1600,
++  // END device chooser
+   // BEGIN storage_keychain
+   SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400
+   // END storage_keychain
+@@ -241,6 +244,9 @@ enum { SHAAR_MODULE_SITE_DATA = 1201 };
+ // BEGIN media
+ enum { SHAAR_MODULE_MEDIA = 1203 };
+ // END media
++// BEGIN device chooser
++enum { SHAAR_MODULE_DEVICE_CHOOSER = 1600 };
++// END device chooser
+ 
+ // BEGIN devtools command and module IDs.
+ typedef enum {
+diff --git a/chrome/browser/ui/hid/hid_chooser_controller.cc b/chrome/browser/ui/hid/hid_chooser_controller.cc
+index 2e86152..3f7b397 100644
+--- a/chrome/browser/ui/hid/hid_chooser_controller.cc
++++ b/chrome/browser/ui/hid/hid_chooser_controller.cc
+@@ -96,6 +96,7 @@ HidChooserController::HidChooserController(
+       callback_(std::move(callback)),
+       initiator_document_(render_frame_host->GetWeakDocumentPtr()),
+       origin_(render_frame_host->GetMainFrame()->GetLastCommittedOrigin()) {
++  SetShaarTransport("hid");
+   // The use above of GetMainFrame is safe as content::HidService instances are
+   // not created for fenced frames.
+   DCHECK(!render_frame_host->IsNestedWithinFencedFrame());
+diff --git a/chrome/browser/ui/serial/serial_chooser_controller.cc b/chrome/browser/ui/serial/serial_chooser_controller.cc
+index 45d7f70..37c21e9 100644
+--- a/chrome/browser/ui/serial/serial_chooser_controller.cc
++++ b/chrome/browser/ui/serial/serial_chooser_controller.cc
+@@ -108,6 +108,7 @@ SerialChooserController::SerialChooserController(
+           std::move(allowed_bluetooth_service_class_ids)),
+       callback_(std::move(callback)),
+       initiator_document_(render_frame_host->GetWeakDocumentPtr()) {
++  SetShaarTransport("serial");
+   origin_ = render_frame_host->GetMainFrame()->GetLastCommittedOrigin();
+ 
+   auto* profile =
+diff --git a/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc b/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
+index 6f672ac..8cd8c6c 100644
+--- a/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
++++ b/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
+@@ -2,8 +2,10 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include <memory>
+ #include <string>
+ 
++#include "base/command_line.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -46,6 +48,17 @@
+ #include "extensions/common/extension.h"
+ #endif
+ 
++namespace content {
++class RenderFrameHost;
++}
++
++namespace shaar::chooser {
++base::OnceClosure ShowDeviceChooser(
++    content::RenderFrameHost* owner,
++    std::unique_ptr<permissions::ChooserController> controller)
++    __attribute__((weak_import));
++}  // namespace shaar::chooser
++
+ using bubble_anchor_util::AnchorConfiguration;
+ 
+ namespace {
+@@ -329,6 +342,13 @@ base::OnceClosure ShowDeviceChooserDialogForExtension(
+ base::OnceClosure ShowDeviceChooserDialog(
+     content::RenderFrameHost* owner,
+     std::unique_ptr<permissions::ChooserController> controller) {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    if (shaar::chooser::ShowDeviceChooser) {
++      return shaar::chooser::ShowDeviceChooser(owner, std::move(controller));
++    }
++    return base::DoNothing();
++  }
++
+   content::WeakDocumentPtr weak_document = owner->GetWeakDocumentPtr();
+   auto* contents = content::WebContents::FromRenderFrameHost(owner);
+ 
+diff --git a/chrome/browser/usb/usb_chooser_controller.cc b/chrome/browser/usb/usb_chooser_controller.cc
+index 084f267..ad33856 100644
+--- a/chrome/browser/usb/usb_chooser_controller.cc
++++ b/chrome/browser/usb/usb_chooser_controller.cc
+@@ -99,6 +99,7 @@ UsbChooserController::UsbChooserController(
+       options_(std::move(options)),
+       callback_(std::move(callback)),
+       render_frame_host_id_(render_frame_host->GetGlobalId()) {
++  SetShaarTransport("usb");
+   RenderFrameHost* main_frame = render_frame_host->GetMainFrame();
+   origin_ = main_frame->GetLastCommittedOrigin();
+   Profile* profile =
+diff --git a/components/permissions/bluetooth_chooser_controller.cc b/components/permissions/bluetooth_chooser_controller.cc
+index 9dc4430..5a88d7f 100644
+--- a/components/permissions/bluetooth_chooser_controller.cc
++++ b/components/permissions/bluetooth_chooser_controller.cc
+@@ -20,7 +20,9 @@ BluetoothChooserController::BluetoothChooserController(
+     content::RenderFrameHost* owner,
+     const content::BluetoothChooser::EventHandler& event_handler,
+     std::u16string title)
+-    : ChooserController(title), event_handler_(event_handler) {}
++    : ChooserController(title), event_handler_(event_handler) {
++  SetShaarTransport("bluetooth");
++}
+ 
+ BluetoothChooserController::~BluetoothChooserController() {
+   if (event_handler_) {
+diff --git a/components/permissions/chooser_controller.h b/components/permissions/chooser_controller.h
+index 87ccddf..24c11ce 100644
+--- a/components/permissions/chooser_controller.h
++++ b/components/permissions/chooser_controller.h
+@@ -193,10 +193,16 @@ class ChooserController {
+   void set_view(View* view) { view_ = view; }
+   View* view() const { return view_; }
+ 
++  // Stable transport tag for the Shaar chooser. Subclasses set this because
++  // the OK-button string is shared by more than one transport.
++  const char* shaar_transport() const { return shaar_transport_; }
++
+  protected:
++  void SetShaarTransport(const char* transport) { shaar_transport_ = transport; }
+   void set_title_for_testing(const std::u16string& title) { title_ = title; }
+ 
+  private:
++  const char* shaar_transport_ = "device";
+   std::u16string title_;
+   raw_ptr<View> view_ = nullptr;
+ };

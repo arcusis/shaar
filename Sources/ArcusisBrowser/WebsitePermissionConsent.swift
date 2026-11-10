@@ -35,10 +35,11 @@ struct WebsitePermissionConsent: View {
         Button(PanelsL10n.string("Not now"), role: .cancel) { resolve(accepted: false) }
           .keyboardShortcut(.cancelAction)
         Spacer()
-        Button(PanelsL10n.string(oneTime ? "Allow this time" : "Allow")) {
+        Button(WebsitePermissionSheetCopy.allowButton(isPrivate: store.isPrivate, oneTime: oneTime))
+        {
           resolve(accepted: true)
         }
-        .disabled(!request.matches(store.session))
+        .disabled(!store.websitePermissionIsCurrent(request))
       }
     }
     .padding(28).frame(width: 440)
@@ -54,10 +55,7 @@ struct WebsitePermissionConsent: View {
     localizedList(request.kinds.map(\.purpose))
   }
   private var scopeNote: String {
-    let duration =
-      oneTime
-      ? PanelsL10n.string("Only for this visit.")
-      : PanelsL10n.string("The site keeps this permission in this profile until you change it.")
+    let duration = WebsitePermissionSheetCopy.duration(isPrivate: store.isPrivate, oneTime: oneTime)
     return PanelsL10n.format(
       "%@ %@", .string(duration),
       .string(
@@ -78,6 +76,19 @@ struct WebsitePermissionConsent: View {
   private func resolve(accepted: Bool) {
     store.resolveWebsitePermission(request.id, accepted: accepted)
     dismiss()
+  }
+}
+
+enum WebsitePermissionSheetCopy {
+  static func allowButton(isPrivate: Bool, oneTime: Bool) -> String {
+    if isPrivate { return PanelsL10n.string("this visit only") }
+    if oneTime { return PanelsL10n.string("Allow this time") }
+    return PanelsL10n.string("Allow")
+  }
+
+  static func duration(isPrivate: Bool, oneTime: Bool) -> String {
+    if isPrivate || oneTime { return PanelsL10n.string("Only for this visit.") }
+    return PanelsL10n.string("The site keeps this permission in this profile until you change it.")
   }
 }
 

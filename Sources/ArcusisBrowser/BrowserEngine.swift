@@ -1114,24 +1114,28 @@ final class BrowserEngine {
 
   private func requestWebsitePermission(_ payload: [String: Any]) {
     guard let id = payload["id"] as? String else { return }
-    guard payload["windowID"] as? String == windowID else {
+    guard let store else {
       events.resolveMedia(id, windowID: windowID, accepted: false)
       return
     }
     extensionPanel = nil
-    guard let store,
-      let profile = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
-      let tab = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),
-      let page = (payload["pageURL"] as? String).flatMap(URL.init(string:)),
-      let origin = (payload["origin"] as? String).flatMap(URL.init(string:)),
-      let rawKinds = payload["permissions"] as? [String],
-      rawKinds.allSatisfy({ WebsitePermissionKind(rawValue: $0) != nil }),
-      let request = WebsitePermissionRequest(
-        id: id, profileID: profile, tabID: tab,
-        pageURL: page, requestingOrigin: origin,
-        kinds: rawKinds.compactMap(WebsitePermissionKind.init(rawValue:))),
-      store.requestWebsitePermission(request)
+    let knownTabs = Set(
+      store.session.spaces.flatMap(\.tabs).map(\.id) + store.session.favoritePages.map(\.tab.id))
+    let outstanding = Set(store.websitePermissionRequests.map(\.id))
+    guard
+      let request = WebsitePermissionEvent.request(
+        from: payload, windowID: windowID, outstandingIDs: outstanding, knownTabs: knownTabs)
     else {
+      events.resolveMedia(id, windowID: windowID, accepted: false)
+      notice = ShellL10n.string(
+        "This permission request is unavailable for the current page and profile.")
+      return
+    }
+    if let frameID = request.frameID {
+      store.rememberPermissionFrame(request.tabID, frameID: frameID)
+    }
+    guard store.requestWebsitePermission(request) else {
+      store.forgetPermissionFrame(request.tabID, matching: request.frameID)
       events.resolveMedia(id, windowID: windowID, accepted: false)
       notice = ShellL10n.string(
         "This permission request is unavailable for the current page and profile.")

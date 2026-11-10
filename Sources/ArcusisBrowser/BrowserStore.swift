@@ -43,6 +43,7 @@ struct SpaceRemovalImpact {
 final class BrowserStore {
   var session: BrowserSession
   private(set) var isPrivate = false
+  private var permissionFrames: [UUID: String] = [:]
   var privatePage: PrivatePageSession?
   var splitTabRecency: [UUID] = []
   var pendingSplitPlacement: SplitPlacement?
@@ -858,6 +859,9 @@ final class BrowserStore {
   }
 
   func nativeTabChanged(_ id: UUID, url: URL, title: String) {
+    if session.page(forTabID: id)?.tab.url != url {
+      permissionFrames[id] = nil
+    }
     if session.favoritePages.contains(where: { $0.tab.id == id }),
       let profileID = session.profileID(forTabID: id)
     {
@@ -980,6 +984,21 @@ final class BrowserStore {
     presentNextConsent()
   }
 
+  func rememberPermissionFrame(_ tabID: UUID, frameID: String) {
+    permissionFrames[tabID] = frameID
+  }
+
+  func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {
+    guard permissionFrames[tabID] == frameID else { return }
+    permissionFrames[tabID] = nil
+  }
+
+  func websitePermissionIsCurrent(_ request: WebsitePermissionRequest) -> Bool {
+    guard request.matches(session), rendererFailures[request.tabID] == nil else { return false }
+    guard let frameID = request.frameID else { return true }
+    return permissionFrames[request.tabID] == frameID
+  }
+
   func resolveWebsitePermission(_ id: String, accepted: Bool) {
     resolveConsent("permission-\(id)", accepted: accepted)
   }
@@ -1014,6 +1033,9 @@ final class BrowserStore {
     var allow =
       accepted && presented && request.matches(session)
       && request.tabID.map { rendererFailures[$0] == nil } == true
+    if case .websitePermission(let permission) = request {
+      allow = accepted && presented && websitePermissionIsCurrent(permission)
+    }
     if case .externalApp(let external) = request { allow = allow && external.canOpen }
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)

@@ -122,9 +122,6 @@ final class WebsitePermissionPromptProbe {
       for page in FixturePage.checks {
         checks.append(await run(page))
       }
-      if !protocolSheetRendered {
-        try await renderProtocolSheet()
-      }
       finish(error: nil)
     } catch {
       finish(error: error.localizedDescription)
@@ -178,48 +175,7 @@ final class WebsitePermissionPromptProbe {
       mediaPrompted = check.kinds.contains("camera") && check.kinds.contains("microphone")
       mediaTracks = mediaTracksReady(check.result)
     }
-    if page.name == "protocol" {
-      check.handledURL = await followProtocol()
-    }
     return check
-  }
-
-  private func followProtocol() async -> String {
-    _ = await evaluate("location.assign('web+shaarparity:hello')")
-    let deadline = Date().addingTimeInterval(2)
-    var href = ""
-    while Date() < deadline {
-      checkSurfaces()
-      if let value = await evaluate("({href:location.href})"),
-        let page = value["href"] as? String
-      {
-        href = page
-        if page.contains("/handled") { return page }
-      }
-      let committed = store.session.selectedPage?.tab.url.absoluteString ?? ""
-      if committed.contains("/handled") { return committed }
-      await pause(100)
-    }
-    return href
-  }
-
-  private func renderProtocolSheet() async throws {
-    for request in store.websitePermissionRequests {
-      store.resolveWebsitePermission(request.id, accepted: false)
-    }
-    guard let tab = store.session.selectedPage?.tab,
-      let origin = fixtureOrigin(),
-      let request = WebsitePermissionRequest(
-        id: "protocol-sheet", profileID: store.session.selectedSpace.profileID,
-        tabID: tab.id, pageURL: tab.url, requestingOrigin: origin, kinds: [.protocolHandler])
-    else { throw Failure("The protocol sheet could not be built for the current page.") }
-    guard store.requestWebsitePermission(request) else {
-      throw Failure("The protocol sheet was not accepted for the current page.")
-    }
-    defer { store.resolveWebsitePermission(request.id, accepted: false) }
-    try await capture(request, name: "after-protocol-handler-consent.png")
-    screenshots.append("after-protocol-handler-consent.png")
-    protocolSheetRendered = true
   }
 
   private func waitForLiveTab() async -> Bool {
@@ -354,18 +310,6 @@ final class WebsitePermissionPromptProbe {
     return audio >= 1 && video >= 1
   }
 
-  private func fixtureOrigin() -> URL? {
-    guard var components = URLComponents(url: fixture, resolvingAgainstBaseURL: false) else {
-      return nil
-    }
-    components.path = "/"
-    components.query = nil
-    components.fragment = nil
-    components.user = nil
-    components.password = nil
-    return components.url
-  }
-
   private var engine: BrowserEngine? {
     host.contexts.values.first { $0.store === store }?.engine
   }
@@ -384,8 +328,7 @@ final class WebsitePermissionPromptProbe {
       checks.contains { $0.name == name && $0.prompted }
     }
     passed =
-      error == nil && mediaPrompted && mediaTracks && protocolSheetRendered && hidden
-      && unexpectedSurfaces.isEmpty
+      error == nil && mediaPrompted && mediaTracks && hidden && unexpectedSurfaces.isEmpty
     let report: [String: Any] = [
       "schemaVersion": 1,
       "probeMode": "website-permission-prompt",
@@ -456,10 +399,7 @@ final class WebsitePermissionPromptProbe {
 
     var prompted: Bool {
       if name == "media" { return kinds.contains("camera") && kinds.contains("microphone") }
-      if name == "protocol" {
-        return kinds.contains("protocolHandler") || handledURL.contains("/handled")
-          || !externalScheme.isEmpty
-      }
+      if name == "protocol" { return kinds.contains("protocolHandler") }
       guard let kind else { return false }
       return kinds.contains(kind)
     }

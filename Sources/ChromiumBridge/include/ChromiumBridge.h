@@ -11,15 +11,6 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 /// Zoom that fits a page needing `requiredWidth` CSS pixels into `viewportWidth` points, clamped to 67%.
 FOUNDATION_EXPORT double ARCWebStoreFitZoom(double viewportWidth, double requiredWidth);
 
-/// Whether this call may enter IOBluetooth. `authorization` uses CoreBluetooth's values; allowed is 3.
-/// A main-thread call is refused. Missing usage text or any other authorization state is refused.
-FOUNDATION_EXPORT BOOL ShaarBluetoothMayCallIOBluetooth(
-    BOOL onMainThread, NSInteger authorization, BOOL hasUsageDescription);
-/// Reads the responsible process bundle and CoreBluetooth authorization. Does not prompt or touch IOBluetooth.
-FOUNDATION_EXPORT BOOL ShaarBluetoothIOIsBlocked(void);
-/// Installs the IOBluetooth guard. Call once before the Chromium framework is loaded.
-FOUNDATION_EXPORT void ShaarInstallBluetoothMainThreadGuard(void);
-
 /// Fixed extension-management operations; the bridge builds each script from a constant template.
 typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
   ARCExtensionManagementOperationList,

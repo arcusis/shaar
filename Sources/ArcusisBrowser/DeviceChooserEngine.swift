@@ -2,7 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import ChromiumBridge
 import Foundation
 
 extension BrowserEngine {
@@ -49,6 +48,6 @@ extension BrowserEngine {
     else { return nil }
     return DeviceChooserIntake.request(
       tabID: tabID, profileID: store.session.profileID(forTabID: tabID), pageURL: tab.url,
-      payload: payload, bluetoothBlocked: ShaarBluetoothIOIsBlocked())
+      payload: payload)
   }
 }

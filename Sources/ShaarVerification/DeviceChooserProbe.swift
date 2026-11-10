@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import Darwin
 import Foundation
 import SwiftUI
 
@@ -124,12 +125,28 @@ final class DeviceChooserProbe {
         return
       }
       let before = watchdog.maxStall
+      watchdog.beginChooser { [output] seconds in
+        let report: [String: Any] = [
+          "schemaVersion": 1, "probeMode": "device-choosers", "passed": false,
+          "maxStallSeconds": seconds, "chooserStallSeconds": seconds,
+          "allWindowsHidden": true, "rows": [], "screenshots": [],
+          "error": "The main thread stalled for \(seconds) seconds inside a device chooser.",
+        ]
+        if let data = try? JSONSerialization.data(
+          withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+        {
+          try? data.write(to: output, options: .atomic)
+        }
+        Darwin._exit(1)
+      }
       let clicked = await click()
       guard clicked else {
+        watchdog.endChooser()
         finish(error: "The trusted click on \(transport) did not land.")
         return
       }
       let (engineSheet, pageSettlement) = await outcome(context.store, transport: transport)
+      watchdog.endChooser()
       let stall = watchdog.maxStall - before
       guard windowsHidden else {
         finish(error: "A window became visible during \(transport).")
@@ -173,7 +190,7 @@ final class DeviceChooserProbe {
           finish(error: "The page disappeared before the \(transport) chooser preview.")
           return
         }
-        unavailable = kind.usesBluetooth && ShaarBluetoothIOIsBlocked()
+        unavailable = false
         canGrant = false
         let preview = DeviceChooserRequest(
           id: "shot-\(transport)", tabID: tab.id, profileID: profile, pageURL: tab.url,
@@ -326,15 +343,14 @@ final class DeviceChooserProbe {
     guard !finished else { return }
     finished = true
     watchdog.stop()
-    let blocked = ShaarBluetoothIOIsBlocked()
     let hidden = windowsHidden
     let rowsPassed = rows.count == 4 && rows.allSatisfy { $0["passed"] as? Bool == true }
     let chooserStall = rows.compactMap { $0["stallSeconds"] as? TimeInterval }.max() ?? 99
     // Lifetime stall includes engine startup. The chooser window is the hang signal.
-    passed = error == nil && rowsPassed && hidden && blocked && chooserStall < 1.5
+    passed = error == nil && rowsPassed && hidden && chooserStall < 1.5
     let report: [String: Any] = [
       "schemaVersion": 1, "probeMode": "device-choosers", "passed": passed,
-      "bluetoothIOBlocked": blocked, "maxStallSeconds": watchdog.maxStall,
+      "maxStallSeconds": watchdog.maxStall,
       "chooserStallSeconds": chooserStall, "allWindowsHidden": hidden,
       "rows": rows, "screenshots": screenshots, "error": error ?? "",
     ]
@@ -393,6 +409,24 @@ private final class MainThreadStallWatch: @unchecked Sendable {
   private var sentAt = Date()
   private var stall: TimeInterval = 0
   private var timer: DispatchSourceTimer?
+  private var chooserArmed = false
+  private var chooserFired = false
+  private var onChooserStall: ((TimeInterval) -> Void)?
+
+  func beginChooser(_ handler: @escaping (TimeInterval) -> Void) {
+    lock.lock()
+    chooserArmed = true
+    chooserFired = false
+    onChooserStall = handler
+    lock.unlock()
+  }
+
+  func endChooser() {
+    lock.lock()
+    chooserArmed = false
+    onChooserStall = nil
+    lock.unlock()
+  }
 
   func start() {
     let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
@@ -419,7 +453,16 @@ private final class MainThreadStallWatch: @unchecked Sendable {
     if ticket != acked {
       let age = now.timeIntervalSince(sentAt)
       if age > stall { stall = age }
+      let armed = chooserArmed
+      let fired = chooserFired
+      let handler = onChooserStall
+      if armed && !fired && age >= 1.5 {
+        chooserFired = true
+      }
       lock.unlock()
+      if armed && !fired && age >= 1.5 {
+        handler?(age)
+      }
       return
     }
     ticket += 1

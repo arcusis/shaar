@@ -10,6 +10,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import signal
 import subprocess
 import tempfile
 import threading
@@ -100,26 +101,36 @@ def main() -> None:
         ]
         environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                            SHAAR_ENGINE_TESTING="1", RUNNER_TEMP=str(root))
-        process = subprocess.run(command, env=environment, capture_output=True, text=True,
-                                 timeout=120, check=False)
+        process = subprocess.Popen(
+            command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, start_new_session=True)
+        try:
+            stdout, stderr = process.communicate(timeout=120)
+            returncode = process.returncode
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            stdout, stderr = process.communicate()
+            returncode = process.returncode if process.returncode not in (None, 0) else 124
+            stderr = (stderr or "") + "\nThe device chooser probe did not exit within 120 seconds."
         evidence = json.loads(report.read_text()) if report.exists() else None
         new_crashes = sorted(crash_names() - before)
         print(json.dumps({
-            "exitCode": process.returncode,
+            "exitCode": returncode,
             "passed": bool(evidence and evidence.get("passed")),
-            "bluetoothIOBlocked": evidence.get("bluetoothIOBlocked") if evidence else None,
             "maxStallSeconds": evidence.get("maxStallSeconds") if evidence else None,
             "rows": evidence.get("rows") if evidence else None,
-            "error": evidence.get("error") if evidence else process.stderr[-2000:],
+            "error": evidence.get("error") if evidence else (stderr or "")[-2000:],
             "newCrashes": new_crashes,
             "screenshots": [
                 str(data / name) for name in (evidence.get("screenshots") or [])
             ] if evidence else [],
         }, indent=2))
-        if process.stderr:
-            print(process.stderr[-2000:])
+        if stderr:
+            print(stderr[-2000:])
+        if stdout:
+            print(stdout[-500:])
         server.shutdown()
-        if process.returncode or not evidence or not evidence.get("passed") or new_crashes:
+        if returncode or not evidence or not evidence.get("passed") or new_crashes:
             raise SystemExit(1)
 
 

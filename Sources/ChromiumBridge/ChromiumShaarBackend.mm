@@ -323,7 +323,6 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
   _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
-  ShaarInstallBluetoothMainThreadGuard();
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
   if (!_shaarLibrary || !_symbols.Load(_shaarLibrary)) {

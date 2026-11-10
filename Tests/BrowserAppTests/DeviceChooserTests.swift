@@ -2,7 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import ChromiumBridge
 import Foundation
 import Testing
 
@@ -10,16 +9,6 @@ import Testing
 
 @Suite @MainActor
 struct DeviceChooserTests {
-  @Test func refusesIOBluetoothOnTheMainThreadOrWithoutPermission() {
-    #expect(ShaarBluetoothMayCallIOBluetooth(false, 3, true))
-    #expect(!ShaarBluetoothMayCallIOBluetooth(true, 3, true))
-    #expect(!ShaarBluetoothMayCallIOBluetooth(false, 0, true))
-    #expect(!ShaarBluetoothMayCallIOBluetooth(false, 1, true))
-    #expect(!ShaarBluetoothMayCallIOBluetooth(false, 2, true))
-    #expect(!ShaarBluetoothMayCallIOBluetooth(false, 3, false))
-    #expect(!ShaarBluetoothMayCallIOBluetooth(true, 0, false))
-  }
-
   @Test func parsesAnEngineChooserEventAndRejectsAPageTitle() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
@@ -36,16 +25,16 @@ struct DeviceChooserTests {
     #expect(
       DeviceChooserIntake.request(
         tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-        payload: ["title": "Docs"], bluetoothBlocked: true) == nil)
+        payload: ["title": "Docs"]) == nil)
   }
 
-  @Test func blockedSerialAndBluetoothCannotBeGrantedFromAnEmptyEvent() throws {
+  @Test func emptyChooserEventsCannotBeGranted() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    let serial = try #require(request(store, transport: "serial", id: "1", bluetoothBlocked: true))
-    #expect(serial.bluetoothUnavailable)
+    let serial = try #require(request(store, transport: "serial", id: "1"))
+    #expect(!serial.bluetoothUnavailable)
     #expect(!serial.canGrant)
-    let usb = try #require(request(store, transport: "usb", id: "3", bluetoothBlocked: true))
+    let usb = try #require(request(store, transport: "usb", id: "3"))
     #expect(!usb.bluetoothUnavailable)
     #expect(!usb.canGrant)
     var mismatch = event(transport: "usb", id: "5", page: tab.url)
@@ -53,13 +42,13 @@ struct DeviceChooserTests {
     #expect(
       DeviceChooserIntake.request(
         tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-        payload: mismatch, bluetoothBlocked: false) == nil)
+        payload: mismatch) == nil)
     var extra = event(transport: "hid", id: "6", page: tab.url)
     extra["previous"] = "HID"
     #expect(
       DeviceChooserIntake.request(
         tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-        payload: extra, bluetoothBlocked: false) == nil)
+        payload: extra) == nil)
   }
 
   @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
@@ -120,15 +109,14 @@ struct DeviceChooserTests {
 
   private func request(
     _ store: BrowserStore, kind: String = "deviceChooserRequested", transport: String, id: String,
-    options: [[String: Any]] = [], canGrant: Bool = false, bluetoothBlocked: Bool = false
+    options: [[String: Any]] = [], canGrant: Bool = false
   ) -> DeviceChooserRequest? {
     guard let tab = store.session.selectedSpace.selectedTab else { return nil }
     return DeviceChooserIntake.request(
       tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
       payload: event(
         kind: kind, transport: transport, id: id, page: tab.url, options: options,
-        canGrant: canGrant),
-      bluetoothBlocked: bluetoothBlocked)
+        canGrant: canGrant))
   }
 
   private func event(

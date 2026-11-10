@@ -79,7 +79,7 @@ enum DeviceChooserIntake {
 
   /// Parses `deviceChooserRequested` or `deviceChooserUpdated` from SHAAR_EVENT_PERMISSION.
   static func request(
-    tabID: UUID, profileID: UUID?, pageURL: URL, payload: [String: Any], bluetoothBlocked: Bool
+    tabID: UUID, profileID: UUID?, pageURL: URL, payload: [String: Any]
   ) -> DeviceChooserRequest? {
     guard let profileID, pageURL.scheme == "http" || pageURL.scheme == "https",
       Set(payload.keys).isSubset(of: payloadKeys),
@@ -107,10 +107,9 @@ enum DeviceChooserIntake {
       options.append(DeviceChooserOption(index: index, title: name, detail: ""))
     }
     guard canGrant == !options.isEmpty else { return nil }
-    let blocked = transport.usesBluetooth && bluetoothBlocked && options.isEmpty
     return DeviceChooserRequest(
       id: id, tabID: tabID, profileID: profileID, pageURL: pageURL, transport: transport,
-      options: options, bluetoothUnavailable: blocked, canGrant: canGrant)
+      options: options, bluetoothUnavailable: false, canGrant: canGrant)
   }
 
   private static func integer(_ value: Any?) -> Int? {

@@ -41,7 +41,6 @@ final class BrowserEngine {
   var onClosed: ((Bool) -> Void)?
   var onNativeWindowLost: (() -> Void)?
   var inspectors: [UUID: InspectorModel] = [:]
-  var shaarDevTools: [UUID: ShaarDevToolsModel] = [:]
   var developerModels: [UUID: DeveloperPageModel] = [:]
   var developmentPages: [UUID: DevelopmentPage] = [:]
   var developmentPageURLs: [UUID: URL] = [:]
@@ -201,7 +200,6 @@ final class BrowserEngine {
         self.events.router.client(forTab: tab.uuidString, nativeWindowID: self.windowID)
           === self.callbacks
       else { return false }
-      self.shaarDevTools[tab]?.beginNavigation()
       return self.runtime.navigateTabID(
         tab.uuidString, profileID: profile.uuidString, windowID: self.windowID,
         url: url.absoluteString)
@@ -215,8 +213,6 @@ final class BrowserEngine {
       self.suspensionTask?.cancel()
       self.memoryPressureSource?.cancel()
       self.memoryPressureSource = nil
-      for model in self.shaarDevTools.values { model.close() }
-      self.shaarDevTools.removeAll()
       for model in self.inspectors.values where model.isOpen { model.close() }
       self.inspectors.removeAll()
       for model in self.developerModels.values { model.close() }
@@ -263,9 +259,6 @@ final class BrowserEngine {
       if let inspector = self.inspectors[tab] {
         inspector.documentChanged(url: inspector.target.url, committed: true)
       }
-      if let shell = self.shaarDevTools[tab] {
-        shell.updateTarget(shell.target, committed: true)
-      }
     }
     callbacks.onAgentBridgeStatus = { [weak self] identity, owner, payload in
       guard let self, let tab = UUID(uuidString: identity),
@@ -276,15 +269,6 @@ final class BrowserEngine {
         let count = payload["connectionCount"] as? Int
       else { return }
       self.developerModels[tab]?.agentBridge.receive(enabled: enabled, connectionCount: count)
-    }
-    callbacks.onDevToolsPanelEvent = { [weak self] identity, owner, payload, sequence in
-      guard let self, let tab = UUID(uuidString: identity),
-        let profile = UUID(uuidString: owner),
-        self.store?.session.profileID(forTabID: tab) == profile,
-        self.runtime.windowID(forTabID: identity) == self.windowID
-      else { return }
-      self.shaarDevTools[tab]?.receiveNativePanelEvent(
-        tabID: identity, profileID: owner, payload: payload, sequence: sequence)
     }
     store.library.onLoad = { [weak self] key, limit, completion in
       guard let self, !self.isClosed else {
@@ -550,15 +534,10 @@ final class BrowserEngine {
       if startedLoading && self.store?.pageFind?.tabID == id {
         self.store?.dismissPageFind()
       }
-      let finishedLoading = self.pages[id]?.loading == true && !loading
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       self.store?.nativePageLoading(id, loading: loading)
       if let url = document {
         self.inspectors[id]?.documentChanged(url: url)
-        self.shaarDevTools[id]?.updateTarget(
-          SiteControlTarget(tabID: id, profileID: profile, url: url))
-        if !loading { self.shaarDevTools[id]?.refreshFrameworkComponents() }
-        if finishedLoading { self.shaarDevTools[id]?.pageDidFinishLoading() }
         self.developerDocumentChanged(id, url: url)
         self.updateDevelopmentPage(tabID: id, url: url, loading: loading)
         if let profile = self.store?.session.profileID(forTabID: id),
@@ -594,7 +573,6 @@ final class BrowserEngine {
       guard self.liveTabs.contains(id) || self.pages[id] != nil else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
-      self.shaarDevTools.removeValue(forKey: id)?.close()
       if let inspector = self.inspectors.removeValue(forKey: id), inspector.isOpen {
         inspector.close()
       }
@@ -680,7 +658,6 @@ final class BrowserEngine {
       guard liveTabs.remove(id) != nil else { continue }
       tabsAwaitingProfileReassignment.insert(id)
       pages[id] = nil
-      shaarDevTools.removeValue(forKey: id)?.close()
       if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }
       developerModels.removeValue(forKey: id)?.close()
       mediaAccess[id] = nil
@@ -718,7 +695,6 @@ final class BrowserEngine {
     else { return false }
     guard ensureLiveWindow() else { return false }
     if liveTabs.contains(tab) {
-      shaarDevTools[tab]?.beginNavigation()
       if runtime.reloadTabID(
         tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode)
       {
@@ -783,7 +759,6 @@ final class BrowserEngine {
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
-      shaarDevTools.removeValue(forKey: removed)?.close()
       if let inspector = inspectors.removeValue(forKey: removed), inspector.isOpen {
         inspector.close()
       }

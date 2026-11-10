@@ -202,15 +202,6 @@ enum ShaarDevToolsShortcut {
     return keyCode == 34 && flags == [.command, .option, .shift]
   }
 
-  static func isCommandMenu(_ event: NSEvent) -> Bool {
-    isCommandMenu(keyCode: event.keyCode, modifiers: event.modifierFlags)
-  }
-
-  /// ANSI P. Command-Shift-P opens the DevTools command menu while the tools are open.
-  static func isCommandMenu(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
-    let flags = modifiers.intersection([.command, .option, .control, .shift])
-    return keyCode == 35 && flags == [.command, .shift]
-  }
 }
 
 @MainActor

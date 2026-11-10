@@ -13,6 +13,7 @@ devtools_entrypoint("meta") {
     "build-info:meta",
     "network-rules:meta",
     "overflow:meta",
+    "focus-contrast:meta",
   ]
 
   visibility = [
@@ -28,5 +29,6 @@ group("unittests") {
     "build-info:unittests",
     "network-rules:unittests",
     "overflow:unittests",
+    "focus-contrast:unittests",
   ]
 }

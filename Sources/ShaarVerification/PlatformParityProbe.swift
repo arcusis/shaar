@@ -1247,16 +1247,16 @@ private enum SurfaceGuard {
     record.storeInstalled([
       exchange(
         NSWindow.self, #selector(NSWindow.orderFront(_:)),
-        #selector(NSWindow.parity_orderFront(_:)),
+        #selector(NSWindow.parityOrderFront(_:)),
         "orderFront"),
       exchange(
         NSWindow.self, #selector(NSWindow.makeKeyAndOrderFront(_:)),
-        #selector(NSWindow.parity_makeKeyAndOrderFront(_:)), "makeKeyAndOrderFront"),
+        #selector(NSWindow.parityMakeKeyAndOrderFront(_:)), "makeKeyAndOrderFront"),
       exchange(
         NSWindow.self, #selector(NSWindow.orderFrontRegardless),
-        #selector(NSWindow.parity_orderFrontRegardless), "orderFrontRegardless"),
+        #selector(NSWindow.parityOrderFrontRegardless), "orderFrontRegardless"),
       exchange(
-        NSWindow.self, #selector(NSWindow.makeKey), #selector(NSWindow.parity_makeKey), "makeKey"),
+        NSWindow.self, #selector(NSWindow.makeKey), #selector(NSWindow.parityMakeKey), "makeKey"),
       exchange(
         NSApplication.self, NSSelectorFromString("activate"),
         NSSelectorFromString("parity_activate"), "activate"),
@@ -1265,9 +1265,9 @@ private enum SurfaceGuard {
         NSSelectorFromString("parity_activateIgnoringOtherApps:"), "activateIgnoringOtherApps"),
       exchange(
         NSApplication.self, #selector(NSApplication.runModal(for:)),
-        #selector(NSApplication.parity_runModal(for:)), "runModal"),
+        #selector(NSApplication.parityRunModal(for:)), "runModal"),
       exchange(
-        NSSavePanel.self, #selector(NSSavePanel.runModal), #selector(NSSavePanel.parity_runModal),
+        NSSavePanel.self, #selector(NSSavePanel.runModal), #selector(NSSavePanel.parityRunModal),
         "savePanel"),
     ])
   }

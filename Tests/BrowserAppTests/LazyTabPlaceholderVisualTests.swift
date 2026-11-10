@@ -44,7 +44,9 @@ final class LazyTabPlaceholderVisualTests: XCTestCase {
       to: root.appendingPathComponent("lazy-tab-before-icon.png"),
       requiredText: ["Background"])
 
-    store.rememberFavicon(FaviconFixture.icon(.red), forTab: background.id)
+    store.faviconCache?.store(
+      FaviconFixture.icon(.red), for: background.id, profileID: profile.id,
+      host: background.url.host)
     XCTAssertNotNil(store.favicon(for: background, profileID: profile.id))
     _ = try await mounted.capture(
       to: root.appendingPathComponent("lazy-tab-after-icon.png"),

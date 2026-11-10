@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 12u
+#define SHAAR_ENGINE_ABI_MINOR 16u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -562,6 +562,8 @@ SHAAR_EXPORT shaar_error_code shaar_submit(
     shaar_reply_fn, void *reply_context, shaar_error *immediate_error);
 SHAAR_EXPORT shaar_error_code shaar_cancel_request(
     shaar_engine *, shaar_request_id, shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_print_reply(const char *request_id,
+                                                 int accepted);
 
 #ifdef __cplusplus
 }

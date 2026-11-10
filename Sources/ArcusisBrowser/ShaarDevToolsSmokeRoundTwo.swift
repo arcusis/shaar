@@ -43,7 +43,8 @@ import Foundation
     }
     await shell.dom.loadDocument(depth: 2)
     let created = try? await inspector.evaluate(
-      "(()=>{const node=document.createElement('div');node.id='shaar-round2-search';document.body.appendChild(node);return true})()")
+      "(()=>{const node=document.createElement('div');node.id='shaar-round2-search';document.body.appendChild(node);return true})()"
+    )
     let live = try? await inspector.evaluate(
       "document.getElementById('shaar-round2-search') !== null")
     await shell.dom.loadDocument(depth: 2)
@@ -67,7 +68,8 @@ import Foundation
       try? await Task.sleep(for: .milliseconds(50))
     }
     await settle(context)
-    let matched = pressed && finished && shell.dom.matchOrder.count > 0
+    let matched =
+      pressed && finished && shell.dom.matchOrder.count > 0
       && shell.dom.selected?.attributes.contains {
         $0.name == "id" && $0.value == "shaar-round2-search"
       } == true
@@ -92,7 +94,8 @@ import Foundation
       "document.getElementById('shaar-round2-search')?.getAttribute('data-shaar-round2')")
     record(
       value as? String == "edited", "world2-elements-attribute",
-      "Edited searched element attribute through Elements: \(String(describing: value))", report: report)
+      "Edited searched element attribute through Elements: \(String(describing: value))",
+      report: report)
     _ = try? await inspector.evaluate("document.getElementById('shaar-round2-search')?.remove()")
   }
 
@@ -177,13 +180,15 @@ import Foundation
         && (resource.name.hasSuffix(".vue") || resource.name.hasSuffix(".js")
           || resource.name.hasSuffix(".ts") || resource.name.hasSuffix(".tsx"))
     }
-    guard let chosen = candidates.first(where: { $0.name.hasSuffix(".vue") })
-      ?? candidates.first(where: { $0.name.hasSuffix(".js") })
+    guard
+      let chosen = candidates.first(where: { $0.name.hasSuffix(".vue") })
+        ?? candidates.first(where: { $0.name.hasSuffix(".js") })
     else {
       let names = shell.sources.resources.prefix(12).map(\.name).joined(separator: ", ")
       report.fail(
         "world2-source-open",
-        "No same-origin script or Vue resource in \(shell.sources.resources.count) entries: \(names)")
+        "No same-origin script or Vue resource in \(shell.sources.resources.count) entries: \(names)"
+      )
       return
     }
     await shell.sources.select(chosen)
@@ -237,7 +242,8 @@ import Foundation
       let mapped = shell.sources.content?.contains("sourceMappingURL") == true
       report.manual(
         "world2-source-map",
-        "\(chosen.name) includes sourceMappingURL=\(mapped); original-source navigation needs an interactive editor")
+        "\(chosen.name) includes sourceMappingURL=\(mapped); original-source navigation needs an interactive editor"
+      )
     }
   }
 
@@ -350,7 +356,8 @@ import Foundation
   ) async {
     shell.section = .application
     shell.application.selectArea(.cookies)
-    _ = try? await inspector.evaluate("document.cookie = 'shaar_round2=before; path=/'; document.cookie")
+    _ = try? await inspector.evaluate(
+      "document.cookie = 'shaar_round2=before; path=/'; document.cookie")
     await shell.cookies.refresh()
     guard let cookie = shell.cookies.cookies.first(where: { $0.name == "shaar_round2" }) else {
       report.fail("world2-cookie-edit", "Created first-party cookie not listed")
@@ -366,7 +373,8 @@ import Foundation
     await settle(context)
     _ = ShaarDevToolsSmokeAccess.capture(
       context.hosting, to: report.directory.appending(path: "world-round2-cookie-after-edit.png"))
-    let edited = !cookie.domain.hasPrefix(".") && matching.count == 1
+    let edited =
+      !cookie.domain.hasPrefix(".") && matching.count == 1
       && matching.first?.value == "after" && matching.first?.domain == cookie.domain
     record(
       edited, "world2-cookie-edit",
@@ -458,7 +466,8 @@ import Foundation
     } else {
       report.manual(
         "world2-keyboard",
-        "Offscreen arrow transitions \(reached)/\(shell.sections.count - 1); window never became key")
+        "Offscreen arrow transitions \(reached)/\(shell.sections.count - 1); window never became key"
+      )
     }
   }
 
@@ -468,7 +477,8 @@ import Foundation
     guard pageURL.host == "127.0.0.1", [3210, 3211].contains(pageURL.port ?? 0) else { return }
     let before = try? await inspector.evaluate("document.getElementById('hmr-token')?.textContent")
     guard before as? String == "before-edit" else {
-      report.fail("world2-hmr", "HMR marker absent before source edit: \(String(describing: before))")
+      report.fail(
+        "world2-hmr", "HMR marker absent before source edit: \(String(describing: before))")
       return
     }
     let marker = report.directory.appending(path: "hmr-ready")
@@ -496,7 +506,8 @@ import Foundation
   ) async {
     guard pageURL.port == 3210 else { return }
     let clicked = try? await inspector.evaluate(
-      "(()=>{const link=document.getElementById('spa-link');if(!link)return false;link.click();return true})()")
+      "(()=>{const link=document.getElementById('spa-link');if(!link)return false;link.click();return true})()"
+    )
     let navigated = await wait(attempts: 100) {
       shell.target.url.path == "/details"
     }

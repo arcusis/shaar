@@ -53,7 +53,10 @@ import Testing
     #expect(counter.props.first(where: { $0.name == "list" })?.accessors == ["1"])
     #expect(context.evaluateScript("globalThis.inspectorGetterCalls")?.toInt32() == 0)
     #expect(ShaarFrameworkPageScript.propsExpression(id: counter.id) != nil)
-    #expect(context.evaluateScript("globalThis.__shaarFrameworkProps?.[\"\(counter.id)\"] === counter.memoizedProps")?.toBool() == true)
+    #expect(
+      context.evaluateScript(
+        "globalThis.__shaarFrameworkProps?.[\"\(counter.id)\"] === counter.memoizedProps")?.toBool()
+        == true)
   }
 
   @Test func plainPageHasNoFrameworkTree() throws {
@@ -196,9 +199,10 @@ import Testing
     #expect(page.methods.isEmpty)
     #expect(model.selected?.props.first?.value == "(...)")
     await model.invokePropGetter(nodeID: "1", name: "lazy")
-    #expect(page.methods.prefix(3) == [
-      "Runtime.evaluate", "Runtime.getProperties", "Runtime.callFunctionOn",
-    ])
+    #expect(
+      page.methods.prefix(3) == [
+        "Runtime.evaluate", "Runtime.getProperties", "Runtime.callFunctionOn",
+      ])
     #expect(page.propertyParams?["ownProperties"] as? Bool == true)
     #expect(page.propertyParams?["accessorPropertiesOnly"] as? Bool == true)
     #expect(model.selected?.props.first?.value == "unexpected")
@@ -212,11 +216,14 @@ import Testing
     await model.refresh()
     #expect(page.methods.isEmpty)
     await model.invokePropGetter(nodeID: "1", name: "nested", path: "danger")
-    #expect(page.methods.prefix(4) == [
-      "Runtime.evaluate", "Runtime.getProperties", "Runtime.getProperties",
-      "Runtime.callFunctionOn",
-    ])
-    #expect(model.selected?.props.first(where: { $0.name == "nested" })?.invoked["danger"] == "unexpected")
+    #expect(
+      page.methods.prefix(4) == [
+        "Runtime.evaluate", "Runtime.getProperties", "Runtime.getProperties",
+        "Runtime.callFunctionOn",
+      ])
+    #expect(
+      model.selected?.props.first(where: { $0.name == "nested" })?.invoked["danger"] == "unexpected"
+    )
   }
 
   private func expectTree(
@@ -453,10 +460,12 @@ enum FrameworkFixture {
     case "Runtime.getProperties":
       propertyParams = params
       if params["accessorPropertiesOnly"] as? Bool == true {
-        return ["result": [
-          ["name": "lazy", "get": ["objectId": "getter-1", "type": "function"]],
-          ["name": "danger", "get": ["objectId": "getter-2", "type": "function"]],
-        ]]
+        return [
+          "result": [
+            ["name": "lazy", "get": ["objectId": "getter-1", "type": "function"]],
+            ["name": "danger", "get": ["objectId": "getter-2", "type": "function"]],
+          ]
+        ]
       }
       return ["result": [["name": "nested", "value": ["objectId": "nested-1"]]]]
     case "Runtime.callFunctionOn": return ["result": ["value": "unexpected"]]

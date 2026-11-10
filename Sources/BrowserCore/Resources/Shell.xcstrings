@@ -3865,7 +3865,9 @@
           }
         }
       }
-    }
+    },
+    "Getter threw an exception": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Getter threw an exception"}},"he":{"stringUnit":{"state":"translated","value":"קריאת ה-getter זרקה חריגה"}}}},
+    "Invoke getter": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Invoke getter"}},"he":{"stringUnit":{"state":"translated","value":"הפעלת ה-getter"}}}}
   },
   "version": "1.0"
 }

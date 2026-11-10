@@ -205,16 +205,18 @@ import Testing
     ]
     let page = [
       ShaarDevToolsCSSSheet(
-        name: "qa.css", url: "https://example.com/qa.css", text: ".qa-link { color: rgb(194, 65, 12); }"),
+        name: "qa.css", url: "https://example.com/qa.css",
+        text: ".qa-link { color: rgb(194, 65, 12); }"),
       ShaarDevToolsCSSSheet(
         name: "style", url: "https://example.com/#style-1", text: "body { color: #172033; }"),
     ]
     let merged = ShaarDevToolsCSSOverview.merging(page: page, resource: resource)
-    #expect(merged.map(\.url) == [
-      "https://example.com/qa.css",
-      "https://example.com/empty.css",
-      "https://example.com/#style-1",
-    ])
+    #expect(
+      merged.map(\.url) == [
+        "https://example.com/qa.css",
+        "https://example.com/empty.css",
+        "https://example.com/#style-1",
+      ])
     #expect(merged[0].text.contains("#c2410c"))
     let summary = ShaarDevToolsCSSOverview.summarize(merged)
     #expect(summary.examined == 3)
@@ -225,7 +227,10 @@ import Testing
   @Test func pageRowsDecodeInlineAndLinkedSheets() {
     let value: [[String: Any]] = [
       ["name": "style", "url": "https://example.com/#style-1", "text": "body { color: #172033; }"],
-      ["name": "qa.css", "url": "https://example.com/qa.css", "text": ".qa-link { color: #c2410c; }"],
+      [
+        "name": "qa.css", "url": "https://example.com/qa.css",
+        "text": ".qa-link { color: #c2410c; }",
+      ],
     ]
     let sheets = ShaarDevToolsCSSOverview.sheets(fromPage: value)
     #expect(sheets.map(\.name) == ["style", "qa.css"])
@@ -251,7 +256,7 @@ import Testing
     let page = [
       ShaarDevToolsCSSSheet(
         name: "qa.css", url: "https://example.com/qa.css",
-        text: ".qa-link { color: rgb(194, 65, 12); }"),
+        text: ".qa-link { color: rgb(194, 65, 12); }")
     ]
     let merged = ShaarDevToolsCSSOverview.merging(page: page, resource: resource)
     #expect(merged.map(\.name) == ["qa.css", "empty.css"])

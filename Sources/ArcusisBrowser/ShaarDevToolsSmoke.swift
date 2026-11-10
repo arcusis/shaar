@@ -161,8 +161,10 @@ import Vision
     shell: ShaarDevToolsModel, inspector: InspectorModel, context: NativeBrowserContext,
     report: ShaarDevToolsSmokeReport
   ) async {
-    let clicked = (try? await inspector.evaluate(
-      "(()=>{const link=document.querySelector('#spa-link');if(!link)return false;link.click();return true})()"))
+    let clicked =
+      (try? await inspector.evaluate(
+        "(()=>{const link=document.querySelector('#spa-link');if(!link)return false;link.click();return true})()"
+      ))
       as? Bool == true
     let navigated = await wait(attempts: 100) {
       context.engine.siteControlTarget?.url.path == "/details"
@@ -173,7 +175,8 @@ import Vision
     } else {
       report.fail(
         "spa-nav",
-        "Link clicked=\(clicked), path changed=\(navigated), lease=\(available), stream=\(shell.streamAvailable), target=\(shell.target.url.absoluteString), phase2 error=\(shell.nativePhase2Failure ?? "none")")
+        "Link clicked=\(clicked), path changed=\(navigated), lease=\(available), stream=\(shell.streamAvailable), target=\(shell.target.url.absoluteString), phase2 error=\(shell.nativePhase2Failure ?? "none")"
+      )
     }
     await shell.sources.refresh()
     if available && shell.sources.failure == nil {
@@ -363,19 +366,22 @@ import Vision
         let identity = shell.securitySummary.certificate
         let chain = try? await context.engine.certificateChain(for: shell.target)
         let chainCount = chain?.count ?? 0
-        let viewerButton = ShaarDevToolsSmokeAccess.element(
-          identifier: "shaar.devtools.showCertificate", in: context.hosting) != nil
+        let viewerButton =
+          ShaarDevToolsSmokeAccess.element(
+            identifier: "shaar.devtools.showCertificate", in: context.hosting) != nil
           || ShaarDevToolsSmokeAccess.shows(
             ShellL10n.string("Show certificate"),
             in: ShaarDevToolsSmokeAccess.renderedText(context.hosting))
-        let certificate = identity.map { value in
-          !value.subject.isEmpty && !value.issuer.isEmpty
-            && value.notBefore < value.notAfter
-            && !value.subjectAltNames.isEmpty
-            && chainCount > 0 && value.chainSubjects.count == chainCount
-            && viewerButton
-        } ?? false
-        let detail = "Identity \(identity == nil ? "absent" : "present"); SANs \(identity?.subjectAltNames.count ?? 0); chain \(chainCount); viewer button \(viewerButton)"
+        let certificate =
+          identity.map { value in
+            !value.subject.isEmpty && !value.issuer.isEmpty
+              && value.notBefore < value.notAfter
+              && !value.subjectAltNames.isEmpty
+              && chainCount > 0 && value.chainSubjects.count == chainCount
+              && viewerButton
+          } ?? false
+        let detail =
+          "Identity \(identity == nil ? "absent" : "present"); SANs \(identity?.subjectAltNames.count ?? 0); chain \(chainCount); viewer button \(viewerButton)"
         reportRealWorld(
           certificate, "world-certificate", detail, report: report)
       }
@@ -404,7 +410,8 @@ import Vision
     let appeared = await wait(attempts: 40) {
       ShaarDevToolsSmokeAccess.element(identifier: disclosure, in: context.hosting) != nil
     }
-    var pressed = appeared
+    var pressed =
+      appeared
       && ShaarDevToolsSmokeAccess.press(identifier: disclosure, in: context.hosting)
     if !pressed {
       for _ in 0..<4 {
@@ -417,7 +424,8 @@ import Vision
       }
     }
     if !shell.dom.expanded.contains(body.id) {
-      pressed = ShaarDevToolsSmokeAccess.pressDisclosureText("<body>", in: context.hosting)
+      pressed =
+        ShaarDevToolsSmokeAccess.pressDisclosureText("<body>", in: context.hosting)
         || pressed
     }
     let loaded = await wait(attempts: 80) {
@@ -630,7 +638,8 @@ import Vision
   ) async {
     report.note(
       "painted-text",
-      "A hidden window does not expose SwiftUI controls in the accessibility tree. The smoke reads the offscreen bitmap, and runs the button action when the press does not land.")
+      "A hidden window does not expose SwiftUI controls in the accessibility tree. The smoke reads the offscreen bitmap, and runs the button action when the press does not land."
+    )
     for section in shell.sections {
       let button = "shaar.devtools.\(section.rawValue.lowercased())"
       let started = Date()
@@ -656,7 +665,8 @@ import Vision
       }
       await settle(context)
       let painted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
-      recordTab(section, pressed: pressed && shell.section == section, painted: painted, report: report)
+      recordTab(
+        section, pressed: pressed && shell.section == section, painted: painted, report: report)
       recordSidebarTitle(painted, report: report)
       await provePanel(section, shell: shell, context: context, painted: painted, report: report)
       if section == .components {
@@ -674,7 +684,8 @@ import Vision
         report.fail("capture-\(section.rawValue)", "Offscreen capture failed")
       }
       if section == .components {
-        await proveComponentAccessorInvocation(shell, inspector: inspector, context: context, report: report)
+        await proveComponentAccessorInvocation(
+          shell, inspector: inspector, context: context, report: report)
       }
     }
     if !report.contains("look/clip/sidebar") {
@@ -725,7 +736,8 @@ import Vision
     if pressed, invoked, calls == 1 {
       report.pass("components-accessor-invoke", "Offscreen click invoked the getter once")
     } else {
-      let foundByID = ShaarDevToolsSmokeAccess.element(identifier: identifier, in: context.hosting) != nil
+      let foundByID =
+        ShaarDevToolsSmokeAccess.element(identifier: identifier, in: context.hosting) != nil
       report.fail(
         "components-accessor-invoke",
         "Found ID: \(foundByID); pressed: \(pressed); invoked: \(invoked); getter calls: \(calls.map(String.init) ?? "unknown")",
@@ -810,8 +822,9 @@ import Vision
       await settle(context)
       let touchSentence = "Touch emulation waits for the next engine build."
       let touchShowing = showsBanner(touchSentence, painted: painted, in: context.hosting)
-      let idleBanner = ShaarDevToolsSmokeAccess.element(
-        identifier: "shaar.devtools.sensorIdleNote", in: context.hosting) != nil
+      let idleBanner =
+        ShaarDevToolsSmokeAccess.element(
+          identifier: "shaar.devtools.sensorIdleNote", in: context.hosting) != nil
         || ShaarDevToolsSmokeAccess.shows("Idle emulation waits", in: painted)
       if shell.sensorTouchReady, shell.sensorIdleReady, !touchShowing, !idleBanner {
         report.pass(name, "Touch and idle are enabled")
@@ -823,17 +836,20 @@ import Vision
     case .rendering:
       _ = await wait(attempts: 80) { shell.rendering.overlayProbeFinished }
       await settle(context)
-      let note = ShaarDevToolsSmokeAccess.element(
-        identifier: "shaar.devtools.rendering.overlayNote", in: context.hosting) != nil
+      let note =
+        ShaarDevToolsSmokeAccess.element(
+          identifier: "shaar.devtools.rendering.overlayNote", in: context.hosting) != nil
         || ShaarDevToolsSmokeAccess.shows("Paint flashing waits", in: painted)
       if shell.rendering.overlayCommandsAvailable, !note {
         report.pass(name, "Paint flashing is available")
       } else {
-        report.fail(name, shell.rendering.failure ?? "Rendering overlay still waits for an engine build")
+        report.fail(
+          name, shell.rendering.failure ?? "Rendering overlay still waits for an engine build")
       }
     case .memory:
-      let gate = ShaarDevToolsSmokeAccess.element(
-        identifier: "shaar.devtools.memory.engineGate", in: context.hosting) != nil
+      let gate =
+        ShaarDevToolsSmokeAccess.element(
+          identifier: "shaar.devtools.memory.engineGate", in: context.hosting) != nil
         || ShaarDevToolsSmokeAccess.shows("Live heap snapshots need engine support", in: painted)
       if gate {
         report.fail(name, "Memory shows a needs-engine banner")
@@ -863,7 +879,9 @@ import Vision
           report: report)
       }
     case .network:
-      provePainted(name, section: section, root: panelRoot(section), painted: painted, in: context, report: report)
+      provePainted(
+        name, section: section, root: panelRoot(section), painted: painted, in: context,
+        report: report)
       await proveLoadRequests(shell, report: report)
       if shell.network.requests(from: shell.events).isEmpty {
         report.fail(
@@ -877,9 +895,13 @@ import Vision
         report.fail(name, "Shows the unavailable banner. \(reason)")
         return
       }
-      provePainted(name, section: section, root: panelRoot(section), painted: painted, in: context, report: report)
+      provePainted(
+        name, section: section, root: panelRoot(section), painted: painted, in: context,
+        report: report)
     default:
-      provePainted(name, section: section, root: panelRoot(section), painted: painted, in: context, report: report)
+      provePainted(
+        name, section: section, root: panelRoot(section), painted: painted, in: context,
+        report: report)
     }
   }
 
@@ -917,11 +939,13 @@ import Vision
     _ name: String, section: ShaarDevToolsSection, root: String?, painted: String,
     in context: NativeBrowserContext, report: ShaarDevToolsSmokeReport
   ) {
-    let found = root.map {
-      ShaarDevToolsSmokeAccess.element(identifier: $0, in: context.hosting) != nil
-    } ?? false
-    let blocked = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.streamUnavailable", in: context.hosting) != nil
+    let found =
+      root.map {
+        ShaarDevToolsSmokeAccess.element(identifier: $0, in: context.hosting) != nil
+      } ?? false
+    let blocked =
+      ShaarDevToolsSmokeAccess.element(
+        identifier: "shaar.devtools.streamUnavailable", in: context.hosting) != nil
       || ShaarDevToolsSmokeAccess.shows("needs engine support", in: painted)
     if blocked {
       report.fail(name, "Shows the unavailable banner")
@@ -1040,7 +1064,8 @@ import Vision
       identifier: "shaar.devtools.memory.snapshot", in: context.hosting)
     if !pressed { await shell.memory.takeSnapshot() }
     let finished = await wait(attempts: 150) {
-      shell.memory.snapshot != nil || shell.memory.failure != nil || shell.memory.support == .needsEngine
+      shell.memory.snapshot != nil || shell.memory.failure != nil
+        || shell.memory.support == .needsEngine
     }
     let gate = ShaarDevToolsSmokeAccess.element(
       identifier: "shaar.devtools.memory.engineGate", in: context.hosting)
@@ -1117,7 +1142,8 @@ import Vision
     if cache, shell.network.conditions.cacheDisabled, shell.network.conditions.failure == nil {
       report.pass("network-cache", "Disable cache is on")
     } else {
-      report.fail("network-cache", shell.network.conditions.failure ?? "Disable cache did not stick")
+      report.fail(
+        "network-cache", shell.network.conditions.failure ?? "Disable cache did not stick")
     }
     await ShaarNetworkMenuActions.chooseThrottle(.fast3G, conditions: shell.network.conditions)
     if shell.network.conditions.throttle == .fast3G, shell.network.conditions.failure == nil {
@@ -1128,8 +1154,9 @@ import Vision
         "network-throttle",
         shell.network.conditions.failure ?? "The throttle menu did nothing")
     }
-    let harPainted = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.networkHAR", in: context.hosting) != nil
+    let harPainted =
+      ShaarDevToolsSmokeAccess.element(
+        identifier: "shaar.devtools.networkHAR", in: context.hosting) != nil
       || ShaarDevToolsSmokeAccess.shows(
         "Export HAR", in: ShaarDevToolsSmokeAccess.renderedText(context.hosting))
     let harURL = report.directory.appending(path: "qa-network.har")
@@ -1152,10 +1179,12 @@ import Vision
     if !pressedRules { shell.rules.showingRules = true }
     await settle(context)
     let rulesPainted = ShaarDevToolsSmokeAccess.renderedText(context.hosting)
-    let rulesMissing = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.networkRulesUnavailable", in: context.hosting) != nil
+    let rulesMissing =
+      ShaarDevToolsSmokeAccess.element(
+        identifier: "shaar.devtools.networkRulesUnavailable", in: context.hosting) != nil
       || ShaarDevToolsSmokeAccess.shows("Network rules need engine support", in: rulesPainted)
-    let rulesOpen = shell.rules.showingRules
+    let rulesOpen =
+      shell.rules.showingRules
       && (ShaarDevToolsSmokeAccess.element(
         identifier: "shaar.devtools.networkRulesEditor", in: context.hosting) != nil
         || ShaarDevToolsSmokeAccess.shows("No saved rules", in: rulesPainted)
@@ -1276,16 +1305,19 @@ import Vision
   ) async {
     let ready = await wait(attempts: 80) {
       shell.dom.rootID != nil || shell.dom.failure != nil
-        || ShaarDevToolsSmokeAccess.element(identifier: "shaar.devtools.domRow", in: context.hosting)
+        || ShaarDevToolsSmokeAccess.element(
+          identifier: "shaar.devtools.domRow", in: context.hosting)
           != nil
         || ShaarDevToolsSmokeAccess.element(
           identifier: "shaar.devtools.domUnavailable", in: context.hosting) != nil
     }
-    let unavailable = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.domUnavailable", in: context.hosting) != nil
+    let unavailable =
+      ShaarDevToolsSmokeAccess.element(
+        identifier: "shaar.devtools.domUnavailable", in: context.hosting) != nil
       || ShaarDevToolsSmokeAccess.shows("DOM tree needs engine support", in: painted)
-    let blocked = ShaarDevToolsSmokeAccess.element(
-      identifier: "shaar.devtools.streamUnavailable", in: context.hosting) != nil
+    let blocked =
+      ShaarDevToolsSmokeAccess.element(
+        identifier: "shaar.devtools.streamUnavailable", in: context.hosting) != nil
     let pressed = ShaarDevToolsSmokeAccess.press(
       identifier: "shaar.devtools.domRow", in: context.hosting)
     if ready, unavailable == false, blocked == false, shell.dom.rootID != nil {
@@ -1411,7 +1443,8 @@ import Vision
     } else {
       report.fail("console-filter-all", "All did not clear the level filter")
     }
-    _ = ShaarDevToolsSmokeAccess.press(identifier: "shaar.devtools.consoleEntry", in: context.hosting)
+    _ = ShaarDevToolsSmokeAccess.press(
+      identifier: "shaar.devtools.consoleEntry", in: context.hosting)
     await settle(context)
     let consoleRows = shell.console.rows(from: shell.consoleEvents)
     let sawPageLog = consoleRows.contains { $0.event.message.contains("qa-log") }
@@ -1579,7 +1612,8 @@ import Vision
     if recording, idle, shell.performance.failure == nil {
       report.pass("performance-record", "Record and Stop ran")
     } else {
-      report.fail("performance-record", shell.performance.failure ?? "Record did not start and stop")
+      report.fail(
+        "performance-record", shell.performance.failure ?? "Record did not start and stop")
     }
   }
 
@@ -1663,8 +1697,12 @@ import Vision
   }
 
   private static func flowFiles(in directory: URL) -> [URL] {
-    let names = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-    return names.filter { $0.lastPathComponent.hasPrefix("shaar-flow-") && $0.pathExtension == "json" }
+    let names =
+      (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil))
+      ?? []
+    return names.filter {
+      $0.lastPathComponent.hasPrefix("shaar-flow-") && $0.pathExtension == "json"
+    }
   }
 
   private static func flowDocument(at url: URL) -> Bool {
@@ -1804,12 +1842,13 @@ import Vision
   }
 
   private static func postedF12(_ context: NativeBrowserContext) -> Bool {
-    guard let event = NSEvent.keyEvent(
-      with: .keyDown, location: .zero, modifierFlags: [],
-      timestamp: ProcessInfo.processInfo.systemUptime,
-      windowNumber: context.window.windowNumber, context: nil,
-      characters: "", charactersIgnoringModifiers: "",
-      isARepeat: false, keyCode: 111)
+    guard
+      let event = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: context.window.windowNumber, context: nil,
+        characters: "", charactersIgnoringModifiers: "",
+        isARepeat: false, keyCode: 111)
     else { return false }
     NSApp.sendEvent(event)
     return true
@@ -1970,9 +2009,10 @@ import Vision
     case .coverage: ["Coverage collection", "No coverage recorded"]
     case .audits: ["Run an audit", "Entire page"]
     case .sources: ["Filter resources", "Find in source"]
-    case .cssOverview: [
-      "style sheets", "This page has no style", "Colors", "Fonts", "Sheets", "declaration",
-    ]
+    case .cssOverview:
+      [
+        "style sheets", "This page has no style", "Colors", "Fonts", "Sheets", "declaration",
+      ]
     case .security: ["Not Secure", "loaded over HTTP"]
     case .sensors: ["Touch emulation", "Clear location"]
     case .repro: ["REPRO BUNDLE", "Create .shaarrepro"]
@@ -2391,7 +2431,9 @@ enum ShaarDevToolsSmokeAccess {
     return nil
   }
 
-  @MainActor private static func matches(_ object: NSObject, identifier: String?, label: String?) -> Bool {
+  @MainActor private static func matches(_ object: NSObject, identifier: String?, label: String?)
+    -> Bool
+  {
     if let identifier, axIdentifier(object) == identifier { return true }
     if let label, axLabel(object) == label { return true }
     return false
@@ -2426,7 +2468,8 @@ private final class ShaarDevToolsSmokeKeys: @unchecked Sendable {
   nonisolated(unsafe) weak var window: NSWindow?
 }
 
-private typealias ShaarDevToolsSmokeWindowOrder = @convention(c) (AnyObject, Selector, Int, Int) -> Void
+private typealias ShaarDevToolsSmokeWindowOrder =
+  @convention(c) (AnyObject, Selector, Int, Int) -> Void
 private nonisolated(unsafe) var shaarDevToolsSmokePreviousOrder: ShaarDevToolsSmokeWindowOrder?
 
 private func shaarDevToolsSmokeOrder(
@@ -2452,7 +2495,8 @@ private func shaarDevToolsSmokeOrder(
         NSWindow.self, NSSelectorFromString("orderWindow:relativeTo:"))
     else { throw InstallError.unavailable }
     let original = method_getImplementation(method)
-    shaarDevToolsSmokePreviousOrder = unsafeBitCast(original, to: ShaarDevToolsSmokeWindowOrder.self)
+    shaarDevToolsSmokePreviousOrder = unsafeBitCast(
+      original, to: ShaarDevToolsSmokeWindowOrder.self)
     let replacement = unsafeBitCast(
       shaarDevToolsSmokeOrder as ShaarDevToolsSmokeWindowOrder, to: IMP.self)
     method_setImplementation(method, replacement)

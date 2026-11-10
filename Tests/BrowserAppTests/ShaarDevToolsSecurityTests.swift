@@ -70,9 +70,10 @@ import Testing
     #expect(identity.subject.contains("localhost"))
     #expect(identity.subjectAltNames == ["localhost", "127.0.0.1"])
     #expect(identity.chainSubjects.contains { $0.contains("localhost") })
-    #expect(SiteCertificateChain.read([
-      "certificate": ["derChain": ["not DER"], "subjectAltNames": []]
-    ]) == nil)
+    #expect(
+      SiteCertificateChain.read([
+        "certificate": ["derChain": ["not DER"], "subjectAltNames": []]
+      ]) == nil)
   }
 }
 

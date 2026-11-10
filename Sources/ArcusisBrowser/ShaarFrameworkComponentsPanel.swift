@@ -200,7 +200,9 @@ struct ShaarFrameworkComponentsPanel: View {
                   title: "\(path): (...)",
                   identifier: "shaar.devtools.components.invoke.\(field.id).\(path)"
                 ) {
-                  Task { await model.invokePropGetter(nodeID: nodeID, name: field.name, path: path) }
+                  Task {
+                    await model.invokePropGetter(nodeID: nodeID, name: field.name, path: path)
+                  }
                 }
                 .padding(.leading, 104)
               }
@@ -274,7 +276,8 @@ private struct ShaarFrameworkInvokeButton: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(action: action) }
 
   func makeNSView(context: Context) -> NSButton {
-    let button = NSButton(title: title, target: context.coordinator, action: #selector(Coordinator.press))
+    let button = NSButton(
+      title: title, target: context.coordinator, action: #selector(Coordinator.press))
     button.isBordered = false
     button.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
     button.toolTip = ShellL10n.string("Invoke getter")

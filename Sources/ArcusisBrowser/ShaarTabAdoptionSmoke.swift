@@ -24,7 +24,9 @@ import Foundation
       runtime.onReady = { [weak host] in
         guard let host else { return }
         NSApp.setActivationPolicy(.prohibited)
-        Task { await exercise(host: host, runtime: runtime, pageURL: pageURL, outputURL: outputURL) }
+        Task {
+          await exercise(host: host, runtime: runtime, pageURL: pageURL, outputURL: outputURL)
+        }
       }
       return withExtendedLifetime(host) {
         let dataRoot = outputURL.deletingLastPathComponent().appending(path: "Chromium")
@@ -69,7 +71,8 @@ import Foundation
     context.store.perform(.open(pageURL))
     let ready = await wait {
       context.engine.siteControlTarget?.url == pageURL
-        && context.engine.siteControlTarget.flatMap { context.engine.pages[$0.tabID] }?.loading == false
+        && context.engine.siteControlTarget.flatMap { context.engine.pages[$0.tabID] }?.loading
+          == false
     }
     guard ready, let source = context.engine.siteControlTarget?.tabID else {
       return ["name": name, "passed": false, "detail": "Source page did not load"]
@@ -92,16 +95,21 @@ import Foundation
     } else {
       destinationState = nil
     }
-    let passed = clicked && adopted && sourceState?["clicked"] as? String == elementID
+    let passed =
+      clicked && adopted && sourceState?["clicked"] as? String == elementID
       && sourceState?["trusted"] as? String == "true"
       && destinationState?["marker"] as? String == "Cross-site destination loaded"
       && destination?.url.host == "localhost"
-      && destination.map { runtime.windowID(forTabID: $0.id.uuidString) == context.nativeID } == true
+      && destination.map { runtime.windowID(forTabID: $0.id.uuidString) == context.nativeID }
+        == true
       && host.contexts.values.allSatisfy { $0.store.rendererFailures.isEmpty }
       && NSApp.windows.allSatisfy { !$0.isVisible }
-    return ["name": name, "passed": passed, "clicked": clicked, "adopted": adopted,
-      "trusted": sourceState?["trusted"] ?? "", "destination": destination?.url.absoluteString ?? "",
-      "marker": destinationState?["marker"] ?? ""]
+    return [
+      "name": name, "passed": passed, "clicked": clicked, "adopted": adopted,
+      "trusted": sourceState?["trusted"] ?? "",
+      "destination": destination?.url.absoluteString ?? "",
+      "marker": destinationState?["marker"] ?? "",
+    ]
   }
 
   private static func tabs(in host: NativeBrowserHost) -> [BrowserTab] {
@@ -110,8 +118,11 @@ import Foundation
 
   private static func document(_ runtime: ARCChromiumRuntime, tab: UUID) async -> [String: Any]? {
     let json: String? = await withCheckedContinuation { continuation in
-      runtime.evaluate(inTabID: tab.uuidString, script:
-        "({clicked:document.documentElement.dataset.clicked||'',trusted:document.documentElement.dataset.trusted||'',marker:document.getElementById('destination')?.innerText||''})") {
+      runtime.evaluate(
+        inTabID: tab.uuidString,
+        script:
+          "({clicked:document.documentElement.dataset.clicked||'',trusted:document.documentElement.dataset.trusted||'',marker:document.getElementById('destination')?.innerText||''})"
+      ) {
         continuation.resume(returning: $0)
       }
     }

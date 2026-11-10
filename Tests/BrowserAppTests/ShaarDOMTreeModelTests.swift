@@ -547,29 +547,43 @@ enum ShaarDOMFixtureDocument {
       "nodeId": 99, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
       "attributes": ["id", "shaar-live-element"],
     ]
-    fixture.documentsByDepth[2] = ["root": [
-      "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
-      "children": [[
-        "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
-        "children": [[
-          "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
-          "childNodeCount": 1,
-        ]],
-      ]],
-    ]]
-    fixture.documentsByDepth[4] = ["root": [
-      "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
-      "children": [[
-        "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
-        "children": [[
-          "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
-          "children": [[
-            "nodeId": 99, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
-            "attributes": ["id", "shaar-live-element"],
-          ]],
-        ]],
-      ]],
-    ]]
+    fixture.documentsByDepth[2] = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+            "children": [
+              [
+                "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+                "childNodeCount": 1,
+              ]
+            ],
+          ]
+        ],
+      ]
+    ]
+    fixture.documentsByDepth[4] = [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": [
+          [
+            "nodeId": 2, "nodeType": 1, "nodeName": "HTML", "nodeValue": "",
+            "children": [
+              [
+                "nodeId": 3, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+                "children": [
+                  [
+                    "nodeId": 99, "nodeType": 1, "nodeName": "DIV", "nodeValue": "",
+                    "attributes": ["id", "shaar-live-element"],
+                  ]
+                ],
+              ]
+            ],
+          ]
+        ],
+      ]
+    ]
     let model = ShaarDOMTreeModel(target: target(), transport: fixture)
     model.open()
     for _ in 0..<20 where model.rootID == nil { await Task.yield() }
@@ -723,7 +737,8 @@ enum ShaarDOMFixtureDocument {
     model.open()
     for _ in 0..<20 where model.rootID == nil { await Task.yield() }
     fixture.send(
-      #"{"schemaVersion":1,"kind":"panelEvent","eventID":25,"leaseID":7,"data":{"parentNodeId":4,"nodes":[{"nodeId":9,"nodeType":1,"nodeName":"P","nodeValue":""}],"truncated":true}}"#)
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":25,"leaseID":7,"data":{"parentNodeId":4,"nodes":[{"nodeId":9,"nodeType":1,"nodeName":"P","nodeValue":""}],"truncated":true}}"#
+    )
     for _ in 0..<20 where model.nodes[9] == nil { await Task.yield() }
     #expect(model.rootID == 1)
     #expect(model.nodes[4]?.childrenIDs.contains(9) == true)

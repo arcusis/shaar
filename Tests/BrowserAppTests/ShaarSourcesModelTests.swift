@@ -249,7 +249,8 @@ import Testing
   }
 
   @Test func prettyPrintKeepsRegexAndTemplateLiteralsInMinifiedScript() {
-    let source = #"const re=/https?:\/\/[^{};]+/g;function match(url){const label=`a;${url}`;return re.test(url)&&label.length>0;}"#
+    let source =
+      #"const re=/https?:\/\/[^{};]+/g;function match(url){const label=`a;${url}`;return re.test(url)&&label.length>0;}"#
     let formatted = ShaarSourceFormatter.layout(source)
     #expect(formatted.contains(#"/https?:\/\/[^{};]+/g"#))
     #expect(formatted.contains(#"`a;${url}`"#))
@@ -363,14 +364,19 @@ import Testing
   @Test func sourceMapsAddOriginalFilesWithEmbeddedContent() async throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://127.0.0.1:3211/")!)
-    let map = #"{"version":3,"sourceRoot":"webpack://_N_E/","sources":["./src/App.vue","./src/main.ts"],"sourcesContent":["<template>App</template>","export const answer: number = 42"]}"#
+    let map =
+      #"{"version":3,"sourceRoot":"webpack://_N_E/","sources":["./src/App.vue","./src/main.ts"],"sourcesContent":["<template>App</template>","export const answer: number = 42"]}"#
     let inline = Data(map.utf8).base64EncodedString()
     let fixture = ShaarPhase2FixtureTransport { command in
       switch command {
       case .resourceTree:
         return ["items": [["url": "http://127.0.0.1:3211/assets/app.js", "type": "Script"]]]
       case .resourceContent:
-        return ["items": [], "body": "console.log(1);\n//# sourceMappingURL=data:application/json;base64,\(inline)", "base64Encoded": false]
+        return [
+          "items": [],
+          "body": "console.log(1);\n//# sourceMappingURL=data:application/json;base64,\(inline)",
+          "base64Encoded": false,
+        ]
       default: return ["items": []]
       }
     }
@@ -399,7 +405,10 @@ import Testing
       case .resourceTree:
         return ["items": [["url": "https://example.test/assets/main.js", "type": "Script"]]]
       case .resourceContent:
-        return ["items": [], "body": "(()=>{})();\n//# sourceMappingURL=main.js.map", "base64Encoded": false]
+        return [
+          "items": [], "body": "(()=>{})();\n//# sourceMappingURL=main.js.map",
+          "base64Encoded": false,
+        ]
       default: return ["items": []]
       }
     }
@@ -408,7 +417,9 @@ import Testing
       phase2: phase2,
       loadSourceData: { url in
         #expect(url.absoluteString == "https://example.test/assets/main.js.map")
-        return Data(#"{"version":3,"sources":["../src/main.ts"],"sourcesContent":["const answer: number = 42"]}"#.utf8)
+        return Data(
+          #"{"version":3,"sources":["../src/main.ts"],"sourcesContent":["const answer: number = 42"]}"#
+            .utf8)
       })
     phase2.open()
     for _ in 0..<20 where !phase2.available { await Task.yield() }

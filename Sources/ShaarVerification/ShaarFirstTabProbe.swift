@@ -53,7 +53,8 @@ final class ShaarFirstTabProbe {
       Self.isBundledFramework(framework, for: executable)
     else {
       throw Failure(
-        "The first-tab probe requires Shaar Verification.app and its bundled Chromium framework. Build it with scripts/bundle-app.sh --with-engine --verification.")
+        "The first-tab probe requires Shaar Verification.app and its bundled Chromium framework. Build it with scripts/bundle-app.sh --with-engine --verification."
+      )
     }
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)

@@ -123,9 +123,10 @@ public struct ShaarDOMSnapshot: Equatable, Sendable {
   static func decodeSubtree(_ fields: [String: Any], parentID: Int) -> [ShaarDOMNode]? {
     var nodes: [ShaarDOMNode] = []
     var seen: Set<Int> = []
-    guard append(
-      fields, parentID: parentID, relation: .child,
-      depth: 0, nodes: &nodes, seen: &seen) != nil
+    guard
+      append(
+        fields, parentID: parentID, relation: .child,
+        depth: 0, nodes: &nodes, seen: &seen) != nil
     else { return nil }
     return nodes
   }

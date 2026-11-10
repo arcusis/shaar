@@ -407,7 +407,8 @@ final class ShaarDOMTreeModel {
       self.matchIndex = next
       failure = nil
     } else {
-      failure = ShaarDOMFailure("DOM search found a match but could not reveal it")
+      failure =
+        ShaarDOMFailure("DOM search found a match but could not reveal it")
         .localizedDescription
     }
   }
@@ -664,7 +665,7 @@ final class ShaarDOMTreeModel {
     if event.truncated {
       switch event.mutation {
       case .childrenSet:
-        break // Keep the bounded children instead of losing the expanded tree.
+        break  // Keep the bounded children instead of losing the expanded tree.
       default:
         await loadDocument()
         return
@@ -705,7 +706,8 @@ final class ShaarDOMTreeModel {
         removeDescendants(of: id)
       }
       for child in children { nodes[child.id] = child }
-      let count = event.truncated
+      let count =
+        event.truncated
         ? max(parentNode.childCount, directChildren.count) : directChildren.count
       nodes[parent] = parentNode.replacing(
         childCount: count, childrenIDs: directChildren.map(\.id) + special)

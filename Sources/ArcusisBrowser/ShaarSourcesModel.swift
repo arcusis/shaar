@@ -238,13 +238,14 @@ final class ShaarSourcesModel {
       let reply = try await phase2.execute(.resourceTree)
       guard generation == self.generation else { return }
       let originals = resources.filter { $0.type == "Original" }
-      resources = (reply.items.compactMap { item in
-        guard let url = item.text["url"] else { return nil }
-        return ShaarSourceResource(
-          url: url, type: item.text["type"] ?? "Other",
-          mimeType: item.text["mimeType"] ?? "")
-      } + originals)
-      .sorted { $0.url.localizedStandardCompare($1.url) == .orderedAscending }
+      resources =
+        (reply.items.compactMap { item in
+          guard let url = item.text["url"] else { return nil }
+          return ShaarSourceResource(
+            url: url, type: item.text["type"] ?? "Other",
+            mimeType: item.text["mimeType"] ?? "")
+        } + originals)
+        .sorted { $0.url.localizedStandardCompare($1.url) == .orderedAscending }
       if !resources.contains(where: { $0.url == selectedURL }) {
         selectedURL = resources.first?.url
       }
@@ -439,16 +440,18 @@ final class ShaarSourcesModel {
   }
 
   private func addOriginalSources(from body: String, resourceURL: URL, generation: Int) async {
-    guard let originals = try? await ShaarSourceMap.load(
-      from: body, resourceURL: resourceURL, fetch: loadSourceData),
+    guard
+      let originals = try? await ShaarSourceMap.load(
+        from: body, resourceURL: resourceURL, fetch: loadSourceData),
       generation == self.generation
     else { return }
     for original in originals {
       let isNew = originalContent[original.url] == nil
       originalContent[original.url] = original.content
       if isNew {
-        resources.append(ShaarSourceResource(
-          url: original.url, type: "Original", mimeType: original.mimeType))
+        resources.append(
+          ShaarSourceResource(
+            url: original.url, type: "Original", mimeType: original.mimeType))
       }
     }
     resources.sort { $0.url.localizedStandardCompare($1.url) == .orderedAscending }

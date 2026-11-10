@@ -15,7 +15,8 @@ enum SidebarTabTitle {
   static let closeReserve: CGFloat = 22
 
   static func isMidwordClip(_ painted: String) -> Bool {
-    painted.range(of: #"Shaar DevToo(?!ls)"#, options: [.regularExpression, .caseInsensitive]) != nil
+    painted.range(of: #"Shaar DevToo(?!ls)"#, options: [.regularExpression, .caseInsensitive])
+      != nil
   }
 
   static func showsFullTitle(_ painted: String) -> Bool {

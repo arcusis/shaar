@@ -5,6 +5,8 @@
 import AppKit
 import Foundation
 
+@testable import ArcusisBrowser
+
 @MainActor enum ShaarDevToolsSmokeMedia {
   static func run(context: NativeBrowserContext, report: ShaarDevToolsSmokeReport) async {
     guard let tab = context.engine.siteControlTarget?.tabID else {

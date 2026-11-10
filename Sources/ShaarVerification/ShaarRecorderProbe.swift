@@ -7,6 +7,8 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
+@testable import ArcusisBrowser
+
 /// Replays one click on a hidden localhost page and checks that the page recorded it.
 @MainActor enum ShaarRecorderProbe {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {

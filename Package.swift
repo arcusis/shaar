@@ -90,6 +90,7 @@ let package = Package(
       name: "ShaarVerification",
       dependencies: [
         "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
+        "ShaarEngineABI",
       ],
       linkerSettings: bundleFrameworksLinkerSettings),
     .target(name: "BrowserTestSupport", path: "Tests/TestSupport"),

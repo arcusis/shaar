@@ -7,6 +7,8 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
+@testable import ArcusisBrowser
+
 /// Proves listener inspection from a window that is never ordered on screen.
 /// shaar.20 rejects DOMDebugger.getEventListeners and callFunctionOn arguments.
 @MainActor enum ShaarEventListenersProbe {

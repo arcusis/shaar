@@ -5,6 +5,8 @@
 import AppKit
 import Foundation
 
+@testable import ArcusisBrowser
+
 @MainActor extension ShaarDevToolsSmoke {
   static func exerciseRealWorldRoundTwo(
     shell: ShaarDevToolsModel, inspector: InspectorModel,

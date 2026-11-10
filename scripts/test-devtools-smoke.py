@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Exercise Shaar DevTools in the shipping bundle, hidden and offscreen."""
+"""Exercise Shaar DevTools in the verification bundle, hidden and offscreen."""
 
 import argparse
 from base64 import b64decode
@@ -184,11 +184,11 @@ def disposable_root(vitals_only=False):
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_APP = ROOT / "build/Shaar.app"
+DEFAULT_APP = ROOT / "build/Shaar Verification.app"
 SMOKE_SOURCES = (
-    ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmoke.swift",
-    ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmokeLook.swift",
-    ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSmokeExercise.swift",
+    ROOT / "Sources/ShaarVerification/ShaarDevToolsSmoke.swift",
+    ROOT / "Sources/ShaarVerification/ShaarDevToolsSmokeLook.swift",
+    ROOT / "Sources/ShaarVerification/ShaarDevToolsSmokeExercise.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsSplitHandle.swift",
     ROOT / "Sources/ArcusisBrowser/InspectorPage.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarNetworkPanel.swift",
@@ -197,7 +197,7 @@ SMOKE_SOURCES = (
     ROOT / "Sources/ArcusisBrowser/ShaarDOMTreeModel.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDOMDrop.swift",
     ROOT / "Sources/ArcusisBrowser/InspectorStylesView.swift",
-    ROOT / "Sources/ArcusisBrowser/ArcusisBrowser.swift",
+    ROOT / "Sources/ShaarVerification/ShaarVerificationMain.swift",
     ROOT / "Sources/ArcusisBrowser/SidebarTabRow.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsCSSOverview.swift",
     ROOT / "Sources/ArcusisBrowser/ShaarDevToolsModel.swift",
@@ -236,7 +236,7 @@ def swift_is_busy() -> bool:
 
 
 def ensure_app(app: Path, rebuild: bool) -> Path:
-    executable = app / "Contents/MacOS/ArcusisBrowser"
+    executable = app / "Contents/MacOS/ShaarVerification"
     reusable = (
         not rebuild
         and binary_has_flag(executable, b"--devtools-smoke")
@@ -246,17 +246,21 @@ def ensure_app(app: Path, rebuild: bool) -> Path:
         print(f"Reusing {app}", flush=True)
         return app
     if app != DEFAULT_APP:
-        raise SystemExit(f"{executable} is not a shipping bundle with --devtools-smoke")
+        raise SystemExit(f"{executable} is not a verification bundle with --devtools-smoke")
     if swift_is_busy():
         raise SystemExit("Another Swift build is running. Refusing to start a second one.")
-    print("Building the shipping bundle with scripts/bundle-app.sh --with-engine", flush=True)
+    print(
+        "Building the verification bundle with scripts/bundle-app.sh --with-engine --verification",
+        flush=True,
+    )
     environment = dict(os.environ, SHAAR_BUNDLE_SWIFT_JOBS="4")
     built = subprocess.run(
-        ["nice", "-n", "10", "bash", "scripts/bundle-app.sh", "--with-engine"],
+        ["nice", "-n", "10", "bash", "scripts/bundle-app.sh", "--with-engine", "--verification"],
         cwd=ROOT, env=environment, check=False,
     )
     if built.returncode != 0 or not binary_has_flag(executable, b"--devtools-smoke"):
-        raise SystemExit(f"Shipping bundle did not gain --devtools-smoke (exit {built.returncode})")
+        raise SystemExit(
+            f"Verification bundle did not gain --devtools-smoke (exit {built.returncode})")
     return app
 
 
@@ -350,7 +354,7 @@ def main():
     parser.add_argument("--vitals-only", action="store_true")
     options = parser.parse_args()
     app = ensure_app(options.app.resolve(), options.rebuild)
-    executable = app / "Contents/MacOS/ArcusisBrowser"
+    executable = app / "Contents/MacOS/ShaarVerification"
     if not FRAMEWORKS.is_file():
         parser.error(f"Component fixture is missing: {FRAMEWORKS}")
     Fixture.frameworks = FRAMEWORKS.read_bytes()

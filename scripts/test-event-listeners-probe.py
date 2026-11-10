@@ -74,9 +74,9 @@ def main():
     parser.add_argument("--app", required=True, type=Path)
     parser.add_argument("--receipt", required=True, type=Path)
     options = parser.parse_args()
-    executable = options.app / "Contents/MacOS/ArcusisBrowser"
+    executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
-        parser.error(f"App executable is missing: {executable}")
+        parser.error(f"Verification executable is missing: {executable}")
     with ThreadingHTTPServer(("127.0.0.1", 0), Page) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()

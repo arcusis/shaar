@@ -38,6 +38,12 @@ FOUNDATION_EXPORT NSString *ARCProbePrivateQuitDialogResult(
 /// Trusted clicks are limited to authored fixture element ids.
 FOUNDATION_EXPORT BOOL ARCProbeTrustedClickElementAllowed(NSString * _Nullable elementID);
 
+@interface ARCShaarRuntime (TrustedProbeClick)
+/// Trusted click on an authored fixture element. Requires testing mode and a hidden window.
+- (void)submitTrustedProbeClickInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                            completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+@end
+
 /// Decode a bounded PNG returned by Page.captureScreenshot; reject missing or malformed evidence.
 FOUNDATION_EXPORT NSData * _Nullable ARCProbePNGFromDevToolsResult(NSDictionary * _Nullable result);
 /// A popup id is the lowercase UUID the engine assigns to one extension host.

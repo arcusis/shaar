@@ -10,7 +10,7 @@ This builds `build/Shaar Verification.app`: the same engine, resources and Info.
 
 `ShaarVerification` reaches app internals through `@testable import ArcusisBrowser`, so its release build passes `-Xswiftc -enable-testing` in its own scratch path, `build/swiftpm/verification`. Shipping builds use `build/swiftpm/default`, build only the `ArcusisBrowser` product and never enable testing. `bundle-app.sh` rejects a shipping executable that contains the harness module, probe types or probe flags.
 
-Test-only engine entry points live in the explicit Clang submodule `ChromiumBridge.Verification` (`Sources/ChromiumBridge/include/ChromiumBridgeVerification.h`). Only the harness and its tests import it. Their implementations remain in the bridge because they read runtime state; each returns nothing unless the runtime started in testing mode with an owned, marked disposable probe root.
+Test-only engine entry points live in `ChromiumBridgeVerification` (`Sources/ChromiumBridgeVerification`). Only the harness and its tests import it. Each entry point returns nothing unless the runtime started in testing mode with an owned, marked disposable probe root. The trusted-click allowlist `ARCProbeTrustedClickElementAllowed` and `submitTrustedProbeClickInTabID:` live there. Smoke and probe launch flags dispatch from `ShaarVerificationMain`.
 
 The separate identifier was merged in [PR #330](https://github.com/arcusis/shaar/pull/330). Shipping verification still requires `com.arcusis.browser`; the bundled Chromium framework and helpers use Shaar identifiers. Identifier separation prevents shared macOS crash/restoration attribution and preferences domains. Pending-navigation shutdown behavior still needs native Shaar verification; see [[Quit_Exit_Verification]].
 

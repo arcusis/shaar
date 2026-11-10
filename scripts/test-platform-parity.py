@@ -634,11 +634,18 @@ def descendant_pids(pid):
     return seen
 
 
+def is_trackertest_host(value):
+    """True when a Host header names trackertest.org, with or without a port."""
+    parsed = urllib.parse.urlparse("//" + str(value or "").strip())
+    hostname = (parsed.hostname or "").rstrip(".")
+    return hostname == "trackertest.org"
+
+
 def trackertest_connections():
     with Handler.seen_lock:
         return [
             dict(item) for item in Handler.seen
-            if str(item.get("host", "")).startswith("trackertest.org")
+            if is_trackertest_host(item.get("host", ""))
         ]
 
 

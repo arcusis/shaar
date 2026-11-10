@@ -736,6 +736,18 @@
         }
       }
     },
+    "Developer mode": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מצב מפתח"}}}},
+    "Load unpacked…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "טעינת תוסף לא ארוז…"}}}},
+    "Load an unpacked Manifest V3 extension from a folder on this Mac.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "טענו תוסף Manifest V3 לא ארוז מתיקייה במק הזה."}}}},
+    "Turn on Developer mode to load an unpacked extension.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הפעילו מצב מפתח כדי לטעון תוסף לא ארוז."}}}},
+    "Choose a folder that contains a Manifest V3 extension.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בחרו תיקייה שמכילה תוסף Manifest V3."}}}},
+    "Choose an unpacked extension folder.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בחרו תיקייה של תוסף לא ארוז."}}}},
+    "This Shaar engine cannot install extensions yet.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar הזה עדיין אינו יכול להתקין תוספים."}}}},
+    "This Shaar engine cannot change extension site access yet.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar הזה עדיין אינו יכול לשנות את גישת התוסף לאתרים."}}}},
+    "The extension could not be installed.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן להתקין את התוסף."}}}},
+    "On click": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בלחיצה"}}}},
+    "On this site": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "באתר הזה"}}}},
+    "On all sites": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בכל האתרים"}}}},
     "Version %@": {
       "localizations": {
         "he": {

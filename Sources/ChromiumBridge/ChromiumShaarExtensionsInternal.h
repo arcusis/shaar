@@ -23,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSView *)shaarExtensionPopupViewForID:(NSString *)popupID
                                          windowID:(NSString *)windowID;
 - (void)shaarExtensionEvent:(const shaar_event *)event payload:(NSDictionary *)payload;
+- (void)shaarForgetExtensionListForProfileID:(NSString *)profileID;
 @end
 
 NS_ASSUME_NONNULL_END

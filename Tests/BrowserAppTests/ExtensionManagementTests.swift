@@ -113,6 +113,66 @@ struct ExtensionManagementTests {
     #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
   }
 
+  @Test func unpackedFolderRequiresAManifestV3Directory() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    #expect(ExtensionUnpackedFolder.directory(root) == nil)
+    try Data(#"{"manifest_version":2,"name":"Old"}"#.utf8).write(
+      to: root.appending(path: "manifest.json"))
+    #expect(ExtensionUnpackedFolder.directory(root) == nil)
+    try Data(#"{"manifest_version":3,"name":"Probe"}"#.utf8).write(
+      to: root.appending(path: "manifest.json"))
+    #expect(ExtensionUnpackedFolder.directory(root) == root.standardizedFileURL.path)
+    #expect(ExtensionUnpackedFolder.directory(URL(string: "https://example.com")!) == nil)
+  }
+
+  @Test func manageReplyMapsEngineRefusalsAndPromptedInstalls() throws {
+    #expect(ExtensionManageReply(json: nil, code: 1) == .unsupported)
+    #expect(ExtensionManageReply(json: nil, code: 15) == .unsupported)
+    #expect(
+      ExtensionManageReply(json: #"{"schemaVersion":1,"prompted":true}"#, code: 0) == .prompted)
+    #expect(ExtensionManageReply(json: #"{"schemaVersion":1,"updated":true}"#, code: 0) == .updated)
+    #expect(ExtensionManageReply(json: "true", code: 0) == .failed)
+    #expect(
+      ExtensionPageOrigin.string(from: URL(string: "https://example.com/path")!)
+        == "https://example.com")
+    #expect(ExtensionPageOrigin.accepts("https://example.com"))
+    #expect(!ExtensionPageOrigin.accepts("https://example.com/"))
+    let listed = try JSONDecoder().decode(
+      [ManagedExtension].self,
+      from: Data(
+        #"[{"id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","name":"Probe","version":"1","description":"","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[],"siteAccess":"onSite"}]"#
+          .utf8))
+    #expect(listed.first?.siteAccess == "onSite")
+  }
+
+  @Test @MainActor func developerModePersistsAndUnpackedLoadReportsTheEngineRefusal() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let profile = UUID()
+    let store = BrowserPreferencesStore(fileURL: file)
+    store.setExtensionDeveloperMode(true, for: profile)
+    #expect(BrowserPreferencesStore(fileURL: file).extensionDeveloperMode(for: profile))
+    store.setExtensionDeveloperMode(false, for: profile)
+    #expect(!BrowserPreferencesStore(fileURL: file).extensionDeveloperMode(for: profile))
+
+    let model = ExtensionManagerModel(profileID: profile, extensions: [])
+    let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try Data(#"{"manifest_version":3,"name":"Probe"}"#.utf8).write(
+      to: folder.appending(path: "manifest.json"))
+    model.loadUnpacked(at: folder, tabID: nil)
+    #expect(model.status == "Turn on Developer mode to load an unpacked extension.")
+    model.setDeveloperMode(true)
+    model.loadUnpacked(at: folder, tabID: nil)
+    #expect(model.status == "This Shaar engine cannot install extensions yet.")
+    let empty = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+    model.loadUnpacked(at: empty, tabID: nil)
+    #expect(model.status == "Choose a folder that contains a Manifest V3 extension.")
+  }
+
   @Test @MainActor func pinnedExtensionsPersistPerProfile() throws {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }

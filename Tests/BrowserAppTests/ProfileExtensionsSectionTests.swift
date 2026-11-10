@@ -73,12 +73,12 @@ final class ProfileExtensionsSectionTests: XCTestCase {
       ProfileExtensionsSection(model: model, onAddExtensions: {})
     }
     .padding(16)
-    .frame(width: 440, height: 230, alignment: .topLeading)
+    .frame(width: 440, height: 320, alignment: .topLeading)
     .background(Color(nsColor: .windowBackgroundColor))
 
     for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
       let mounted = try MountedChromeSidebar(
-        view: view, size: NSSize(width: 440, height: 230), appearance: appearance)
+        view: view, size: NSSize(width: 440, height: 320), appearance: appearance)
       defer { mounted.close() }
       _ = try await mounted.capture(
         to: root.appendingPathComponent("profile-extensions-\(name).png"),

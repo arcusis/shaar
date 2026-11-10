@@ -38,6 +38,21 @@ enum BrowserSettingsAccessibility {
   }
 }
 
+/// Installs the section callback when Settings is built, including a hidden window.
+private struct SettingsSectionBridge: NSViewRepresentable {
+  let navigator: BrowserSettingsSectionNavigator
+  let select: (BrowserSettingsSection) -> Void
+
+  func makeNSView(context: Context) -> NSView {
+    navigator.select = select
+    return NSView(frame: .zero)
+  }
+
+  func updateNSView(_ view: NSView, context: Context) {
+    navigator.select = select
+  }
+}
+
 struct BrowserSettingsProfile: Identifiable {
   let id: UUID
   let name: String
@@ -163,6 +178,10 @@ struct BrowserSettingsView: View {
   let extensionManager: (UUID) -> ExtensionManagerModel?
   let sharedExtensions: SharedExtensionSettingsModel?
   let onAddExtensions: (UUID) -> Void
+  let onLoadUnpacked: (UUID) -> Void
+  let pageOrigin: (UUID) -> String?
+  let selectedTabID: (UUID) -> UUID?
+  let sectionNavigator: BrowserSettingsSectionNavigator
   let clearHistory: ((UUID) async throws -> Void)?
   let profileBackend: (any ProfileSettingsBackend)?
   let httpsOnlyModeEnabled: (UUID) -> Bool
@@ -195,6 +214,10 @@ struct BrowserSettingsView: View {
     extensionManager: @escaping (UUID) -> ExtensionManagerModel? = { _ in nil },
     sharedExtensions: SharedExtensionSettingsModel? = nil,
     onAddExtensions: @escaping (UUID) -> Void = { _ in },
+    onLoadUnpacked: @escaping (UUID) -> Void = { _ in },
+    pageOrigin: @escaping (UUID) -> String? = { _ in nil },
+    selectedTabID: @escaping (UUID) -> UUID? = { _ in nil },
+    sectionNavigator: BrowserSettingsSectionNavigator = BrowserSettingsSectionNavigator(),
     profileBackend: (any ProfileSettingsBackend)? = nil,
     clearHistory: ((UUID) async throws -> Void)? = nil,
     httpsOnlyModeEnabled: @escaping (UUID) -> Bool,
@@ -222,6 +245,10 @@ struct BrowserSettingsView: View {
     self.extensionManager = extensionManager
     self.sharedExtensions = sharedExtensions
     self.onAddExtensions = onAddExtensions
+    self.onLoadUnpacked = onLoadUnpacked
+    self.pageOrigin = pageOrigin
+    self.selectedTabID = selectedTabID
+    self.sectionNavigator = sectionNavigator
     self.clearHistory = clearHistory
     self.profileBackend = profileBackend
     self.httpsOnlyModeEnabled = httpsOnlyModeEnabled
@@ -233,6 +260,9 @@ struct BrowserSettingsView: View {
     HStack(spacing: 0) {
       categoryBar
       Divider()
+        .background {
+          SettingsSectionBridge(navigator: sectionNavigator) { selectedSection = $0 }
+        }
       Group {
         switch selectedSection {
         case .general:
@@ -291,6 +321,7 @@ struct BrowserSettingsView: View {
           }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("settings.section.\(section.rawValue)")
         .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
       }
       Spacer()
@@ -720,7 +751,10 @@ struct BrowserSettingsView: View {
         ProfileExtensionsSection(
           model: extensionManager(profile.id),
           sharedModel: sharedExtensions,
-          onAddExtensions: { onAddExtensions(profile.id) })
+          pageOrigin: pageOrigin(profile.id),
+          selectedTabID: selectedTabID(profile.id),
+          onAddExtensions: { onAddExtensions(profile.id) },
+          onLoadUnpacked: { onLoadUnpacked(profile.id) })
       }
       Section {
         Button(SettingsL10n.string("Delete Profile…"), role: .destructive) {

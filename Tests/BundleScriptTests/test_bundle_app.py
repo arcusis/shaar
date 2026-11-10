@@ -486,6 +486,8 @@ class BundleAppTests(unittest.TestCase):
             "--probe-data-dir",
             "ShaarBrowsingQA",
             "--browsing-qa",
+            "ExtensionInstallProbe",
+            "--probe-extension-install",
             "InspectorIdleSmoke",
             "--inspector-idle-smoke",
             "--probe-measure-inspector",

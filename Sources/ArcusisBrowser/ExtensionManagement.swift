@@ -17,6 +17,7 @@ struct ManagedExtension: Identifiable, Equatable, Decodable {
   let mayDisable: Bool
   let permissions: [String]
   let hostPermissions: [String]
+  var siteAccess: String? = nil
 
   func help(actionTitle: String?) -> String {
     guard let title = actionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -56,6 +57,111 @@ enum ExtensionManagementOperation: Equatable {
   static func isValidProfileID(_ value: String) -> Bool {
     guard let id = UUID(uuidString: value) else { return false }
     return id.uuidString.caseInsensitiveCompare(value) == .orderedSame
+  }
+}
+
+enum ExtensionSiteAccess: String, CaseIterable, Identifiable {
+  case onClick
+  case onSite
+  case onAllSites
+
+  var id: String { rawValue }
+
+  var title: String {
+    switch self {
+    case .onClick: SettingsL10n.string("On click")
+    case .onSite: SettingsL10n.string("On this site")
+    case .onAllSites: SettingsL10n.string("On all sites")
+    }
+  }
+
+  static func recognized(_ raw: String?) -> ExtensionSiteAccess? {
+    guard let raw else { return nil }
+    return ExtensionSiteAccess(rawValue: raw)
+  }
+}
+
+enum ExtensionInstallNotice {
+  static var engineRefused: String {
+    SettingsL10n.string("This Shaar engine cannot install extensions yet.")
+  }
+
+  static var siteAccessRefused: String {
+    SettingsL10n.string("This Shaar engine cannot change extension site access yet.")
+  }
+
+  static var installFailed: String {
+    SettingsL10n.string("The extension could not be installed.")
+  }
+}
+
+/// The page origin Shaar sends with a site-access change. Default ports stay omitted.
+enum ExtensionPageOrigin {
+  static func string(from url: URL) -> String? {
+    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      let scheme = components.scheme?.lowercased(),
+      scheme == "http" || scheme == "https",
+      let host = components.host?.lowercased(), !host.isEmpty
+    else { return nil }
+    if let port = components.port {
+      return "\(scheme)://\(host):\(port)"
+    }
+    return "\(scheme)://\(host)"
+  }
+
+  static func accepts(_ origin: String) -> Bool {
+    guard let url = URL(string: origin) else { return false }
+    return string(from: url) == origin
+  }
+}
+
+/// A directory the user chose for an unpacked Manifest V3 extension.
+enum ExtensionUnpackedFolder {
+  static func directory(_ url: URL) -> String? {
+    guard url.isFileURL else { return nil }
+    let folder = url.standardizedFileURL
+    guard folder.path.hasPrefix("/"), !folder.path.contains("..") else { return nil }
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory),
+      isDirectory.boolValue
+    else { return nil }
+    let manifest = folder.appending(path: "manifest.json")
+    guard
+      let values = try? manifest.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+      values.isRegularFile == true, values.isSymbolicLink != true,
+      let data = try? Data(contentsOf: manifest), data.count <= 1_048_576,
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      object["manifest_version"] as? Int == 3,
+      let name = object["name"] as? String,
+      !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else { return nil }
+    return folder.path
+  }
+}
+
+enum ExtensionManageReply: Equatable {
+  case prompted
+  case updated
+  case unsupported
+  case failed
+
+  init(json: String?, code: Int) {
+    if code == 1 || code == 15 {
+      self = .unsupported
+      return
+    }
+    guard code == 0, let data = json?.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      object["schemaVersion"] as? Int == 1
+    else {
+      self = .failed
+      return
+    }
+    if object["prompted"] as? Bool == true {
+      self = .prompted
+      return
+    }
+    self = .updated
   }
 }
 
@@ -128,6 +234,19 @@ enum ExtensionIconLoader {
 }
 
 extension ARCChromiumRuntime {
+  /// Submits one extension-manage payload. A synchronous engine refusal is `unsupported`.
+  func submitExtensionManage(
+    profileID: UUID, tabID: UUID?, payload: [String: Any],
+    completion: @escaping @MainActor (ExtensionManageReply) -> Void
+  ) {
+    submitExtensionManage(
+      forProfileID: profileID.uuidString, tabID: tabID?.uuidString, payload: payload
+    ) { json, code in
+      let reply = ExtensionManageReply(json: json, code: code)
+      Task { @MainActor in completion(reply) }
+    }
+  }
+
   /// Runs one extension-management operation; the bridge builds the script from fixed templates.
   func manageExtensions(
     _ operation: ExtensionManagementOperation, profileID: UUID,

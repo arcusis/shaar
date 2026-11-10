@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import ssl
@@ -501,8 +502,9 @@ def partition_page(frame):
 
 
 def crash_matches_pids(text, pids):
+    """Match a crash report's pid field without treating 12 as 123."""
     return any(
-        f'"pid" : {pid}' in text or f'"pid": {pid}' in text
+        re.search(rf'"pid"\s*:\s*{int(pid)}\b', text)
         for pid in pids if pid
     )
 
@@ -657,10 +659,17 @@ def signal_exact_pids(pids):
 
 
 def stop_process_group(process, owned):
-    """Stop the probe and the helper PIDs recorded for its process group."""
+    """Stop the probe and the helper PIDs recorded for its process group.
+
+    The group is read again here. Helpers can start after the last remember,
+    and remember itself does nothing once the leader has already exited.
+    """
     if process is None:
         return []
     remember_owned_pids(process, owned)
+    for pid in pids_in_group(process.pid):
+        if pid > 1 and pid not in owned:
+            owned.append(pid)
     victims = pids_to_signal(owned, process.pid)
     if process.poll() is None and process.pid not in victims and pid_alive(process.pid):
         victims.insert(0, process.pid)
@@ -725,13 +734,17 @@ def checks_ran(rows):
     return False
 
 
-def run_completed(report, crashes):
-    """A setup failure can write rows and still leave the checklist unrun."""
+def run_completed(report, crashes, exit_code=0):
+    """A setup failure can write rows and still leave the checklist unrun.
+
+    A timed-out or crashed process is not a finished run, even when rows exist.
+    """
     return (
         report.get("completed") is True
         and report.get("allWindowsHidden") is True
         and not crashes
         and checks_ran(report.get("rows"))
+        and exit_code == 0
     )
 
 
@@ -877,7 +890,7 @@ def main():
     pin_path = options.app / "Contents/Resources/ChromiumEngine/pin.json"
     pin = json.loads(pin_path.read_text()) if pin_path.is_file() else {}
     rows = list(report.get("rows", []))
-    completed = run_completed(report, crashes)
+    completed = run_completed(report, crashes, exit_code)
     receipt = {
         "verificationExecutable": str(executable),
         "engineRelease": pin.get("releaseTag", ""),

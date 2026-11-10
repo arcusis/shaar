@@ -294,9 +294,13 @@ def crash_process(name):
             continue
         try:
             lines = path.read_text(errors="replace").splitlines()
-            body = json.loads("\n".join(lines[1:])) if len(lines) > 1 and lines[1].startswith("{") else {}
+            if len(lines) < 2 or not lines[1].startswith("{"):
+                return {"unreadable": True}
+            body = json.loads("\n".join(lines[1:]))
         except (OSError, json.JSONDecodeError):
-            return {}
+            return {"unreadable": True}
+        if not isinstance(body, dict):
+            return {"unreadable": True}
         return {
             "pid": body.get("pid"),
             "parentPid": body.get("parentPid"),
@@ -305,13 +309,18 @@ def crash_process(name):
     return {}
 
 
-def owned_crash(name, app_pid, launcher_pid):
-    info = crash_process(name)
+def crash_is_owned(info, app_pid, launcher_pid):
+    if info.get("unreadable"):
+        return True
     pid = info.get("pid")
     parent = info.get("parentPid")
     if app_pid is not None and (pid == app_pid or parent == app_pid):
         return True
     return launcher_pid is not None and parent == launcher_pid
+
+
+def owned_crash(name, app_pid, launcher_pid):
+    return crash_is_owned(crash_process(name), app_pid, launcher_pid)
 
 
 def browser_crash(name, app_pid, launcher_pid):
@@ -352,6 +361,11 @@ def note_cap_fails_its_row(rows, dialogs_truncated):
         return True
     hidden = [row for row in rows if row.get("name") == "Hidden windows"]
     return bool(hidden) and all(row.get("passed") is False for row in hidden)
+
+
+def process_stayed_up(finished_report, return_code, timed_out, quit_hung):
+    clean_exit = return_code == 0 and not timed_out and not quit_hung
+    return bool(finished_report) and clean_exit
 
 
 def evaluate_gate(product_rows, dialogs, harness_row, dialogs_truncated=False):
@@ -485,8 +499,7 @@ def main():
         ]
         product_rows = list(report.get("rows") or [])
         finished_report = report.get("complete") is True and not browser
-        clean_exit = return_code == 0 and not timed_out
-        app_finished = finished_report and (clean_exit or quit_hung)
+        app_finished = process_stayed_up(finished_report, return_code, timed_out, quit_hung)
         harness_row = {
             "name": "Browser process stayed up",
             "passed": app_finished,

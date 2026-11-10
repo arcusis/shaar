@@ -29,6 +29,16 @@ func browsingEdgeRecordNote(
   notes.append(note)
 }
 
+func browsingEdgePrintSurface(_ note: [String: String]) -> Bool {
+  let name = (note["class"] ?? "").lowercased()
+  let title = (note["title"] ?? "").lowercased()
+  return name.contains("print") || title.contains("print")
+}
+
+func browsingEdgeFileChooserOpened(_ note: [String: String]) -> Bool {
+  note["kind"] == "open-panel"
+}
+
 func browsingEdgeHiddenWindowsFailure(
   stillVisible: [String], notes: [[String: String]], notesDropped: Bool = false
 ) -> String? {
@@ -306,7 +316,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let sent = perform(item)
     try? await Task.sleep(for: .milliseconds(500))
     let fresh = Array(dialogs.snapshot().dropFirst(before))
-    let panel = fresh.contains(where: isPrintSurface)
+    let panel = fresh.contains(where: browsingEdgePrintSurface)
     dismissPrintSurfaces()
     let hidden = windowsHidden()
     return makeRow(
@@ -333,14 +343,6 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   private static func scaleText(_ value: Double?) -> String {
     guard let value else { return "nil" }
     return String(format: "%.3f", value)
-  }
-
-  private static func isPrintSurface(_ note: [String: String]) -> Bool {
-    let kind = note["kind"] ?? ""
-    let name = (note["class"] ?? "").lowercased()
-    let title = (note["title"] ?? "").lowercased()
-    if name.contains("print") || title.contains("print") { return true }
-    return kind == "modal" || kind == "sheet"
   }
 
   private static func dismissPrintSurfaces() {
@@ -850,10 +852,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let clicked = await click(runtime, tab: selectedID(context), element: "blank")
     try? await Task.sleep(for: .milliseconds(600))
     let fresh = Array(dialogs.snapshot().dropFirst(before))
-    let opened = fresh.contains {
-      $0["kind"] == "open-panel" || $0["kind"] == "save-panel" || $0["kind"] == "modal"
-        || $0["kind"] == "sheet"
-    }
+    let opened = fresh.contains(where: browsingEdgeFileChooserOpened)
     return makeRow(
       "File picker", clicked && opened && windowsHidden(),
       "clicked \(clicked), chooser \(opened), hidden \(windowsHidden()), \(describe(fresh))",

@@ -129,6 +129,10 @@ struct ExtensionManagementTests {
 
   @Test func manageReplyMapsEngineRefusalsAndPromptedInstalls() throws {
     #expect(ExtensionManageReply(json: nil, code: 1) == .failed)
+    #expect(
+      ExtensionManageReply(json: nil, code: 1, action: "setDeveloperMode") == .unsupported)
+    #expect(ExtensionManageReply(json: nil, code: 1, action: "loadUnpacked") == .unsupported)
+    #expect(ExtensionManageReply(json: nil, code: 1, action: "uninstall") == .failed)
     #expect(ExtensionManageReply(json: nil, code: 15) == .unsupported)
     #expect(
       ExtensionManageReply(json: #"{"schemaVersion":1,"prompted":true}"#, code: 0) == .prompted)
@@ -175,20 +179,22 @@ struct ExtensionManagementTests {
     store.setExtensionDeveloperMode(false, for: profile)
     #expect(!BrowserPreferencesStore(fileURL: file).extensionDeveloperMode(for: profile))
 
-    let model = ExtensionManagerModel(profileID: profile, extensions: [])
     let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     try Data(#"{"manifest_version":3,"name":"Probe"}"#.utf8).write(
       to: folder.appending(path: "manifest.json"))
+    let disabled = ExtensionManagerModel(profileID: profile, extensions: [])
+    disabled.loadUnpacked(at: folder, tabID: nil)
+    #expect(disabled.status == "Turn on Developer mode to load an unpacked extension.")
+    let model = ExtensionManagerModel(profileID: profile, extensions: [], developerMode: true)
     model.loadUnpacked(at: folder, tabID: nil)
-    #expect(model.status == "Turn on Developer mode to load an unpacked extension.")
-    model.setDeveloperMode(true)
-    model.loadUnpacked(at: folder, tabID: nil)
-    #expect(model.status == "This Shaar engine cannot install extensions yet.")
+    #expect(model.status == ExtensionInstallNotice.needsNewerEngine)
+    let invalidFolderModel = ExtensionManagerModel(
+      profileID: profile, extensions: [], developerMode: true)
     let empty = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
-    model.loadUnpacked(at: empty, tabID: nil)
-    #expect(model.status == "Choose a folder that contains a Manifest V3 extension.")
+    invalidFolderModel.loadUnpacked(at: empty, tabID: nil)
+    #expect(invalidFolderModel.status == "Choose a folder that contains a Manifest V3 extension.")
   }
 
   @Test func bridgeReportsInvalidArgumentAndAMissingEngineSeparately() {
@@ -213,7 +219,7 @@ struct ExtensionManagementTests {
     #expect(ExtensionManageReply(json: nil, code: invalid.code ?? 0) == .failed)
   }
 
-  @Test @MainActor func manageRepliesKeepAnInvalidArgumentFromLookingUnsupported() throws {
+  @Test @MainActor func manageRepliesReportDeveloperModeAndInstallRefusals() async throws {
     let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: folder) }
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -223,26 +229,52 @@ struct ExtensionManagementTests {
       BrowserPreferencesStore(
         fileURL: FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json"))
     }
-    let profile = UUID()
-    let refused = ScriptedManageRuntime(replies: [(nil, 15), (nil, 1)])
-    let model = ExtensionManagerModel.shared(
-      runtime: refused, preferences: preferences(), profileID: profile)
-    model.setDeveloperMode(true)
-    model.loadUnpacked(at: folder, tabID: nil)
-    #expect(model.status == ExtensionInstallNotice.installFailed)
-    #expect(refused.actions == ["setDeveloperMode", "setDeveloperMode"])
+    let togglePreferences = preferences()
+    let toggleRuntime = ScriptedManageRuntime(replies: [(nil, 1)])
+    let toggle = ExtensionManagerModel.shared(
+      runtime: toggleRuntime, preferences: togglePreferences, profileID: UUID())
+    toggle.setDeveloperMode(true)
+    await Task.yield()
+    #expect(!toggle.developerMode)
+    #expect(!togglePreferences.extensionDeveloperMode(for: toggle.profileID))
+    #expect(toggle.status == ExtensionInstallNotice.needsNewerEngine)
+    #expect(toggleRuntime.actions == ["setDeveloperMode"])
 
-    let unsupported = ScriptedManageRuntime(replies: [(nil, 15), (nil, 15), (nil, 15)])
-    let continued = ExtensionManagerModel.shared(
-      runtime: unsupported, preferences: preferences(), profileID: profile)
-    continued.setDeveloperMode(true)
-    continued.loadUnpacked(at: folder, tabID: nil)
-    #expect(continued.status == ExtensionInstallNotice.engineRefused)
-    #expect(unsupported.actions == ["setDeveloperMode", "setDeveloperMode", "loadUnpacked"])
+    let loadPreferences = preferences()
+    let loadProfile = UUID()
+    loadPreferences.setExtensionDeveloperMode(true, for: loadProfile)
+    let loadRuntime = ScriptedManageRuntime(
+      replies: [
+        (#"{"schemaVersion":1,"updated":true}"#, 0),
+        (#"{"schemaVersion":1,"updated":true}"#, 0), (nil, 1),
+      ])
+    let load = ExtensionManagerModel.shared(
+      runtime: loadRuntime, preferences: loadPreferences, profileID: loadProfile)
+    load.loadUnpacked(at: folder, tabID: nil)
+    await Task.yield()
+    #expect(load.developerMode)
+    #expect(loadPreferences.extensionDeveloperMode(for: loadProfile))
+    #expect(load.status == ExtensionInstallNotice.needsNewerEngine)
+    #expect(loadRuntime.actions == ["setDeveloperMode", "setDeveloperMode", "loadUnpacked"])
+
+    let failedPreferences = preferences()
+    let failedProfile = UUID()
+    failedPreferences.setExtensionDeveloperMode(true, for: failedProfile)
+    let failedRuntime = ScriptedManageRuntime(
+      replies: [
+        (#"{"schemaVersion":1,"updated":true}"#, 0),
+        (#"{"schemaVersion":1,"updated":true}"#, 0), (nil, 2),
+      ])
+    let failed = ExtensionManagerModel.shared(
+      runtime: failedRuntime, preferences: failedPreferences, profileID: failedProfile)
+    failed.loadUnpacked(at: folder, tabID: nil)
+    await Task.yield()
+    #expect(failed.status == ExtensionInstallNotice.installFailed)
+    #expect(failedRuntime.actions == ["setDeveloperMode", "setDeveloperMode", "loadUnpacked"])
 
     let privateAccess = ScriptedManageRuntime(replies: [(nil, 15)])
     let extensions = ExtensionManagerModel.shared(
-      runtime: privateAccess, preferences: preferences(), profileID: profile)
+      runtime: privateAccess, preferences: preferences(), profileID: UUID())
     extensions.setIncognitoEnabled(validID, enabled: true)
     #expect(extensions.status == ExtensionInstallNotice.privateAccessRefused)
     #expect(privateAccess.actions == ["setIncognitoEnabled"])

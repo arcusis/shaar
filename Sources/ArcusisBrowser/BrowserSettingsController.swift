@@ -143,13 +143,9 @@ final class BrowserSettingsState {
     panel.prompt = SettingsL10n.string("Choose")
     panel.message = SettingsL10n.string("Choose an unpacked extension folder.")
     if panel.runModal() == .OK, let url = panel.url {
-      loadUnpackedExtension(at: url, for: profileID)
+      extensionManager(for: profileID)?.loadUnpacked(
+        at: url, tabID: selectedTabID(for: profileID))
     }
-  }
-
-  func loadUnpackedExtension(at url: URL, for profileID: UUID) {
-    extensionManager(for: profileID)?.loadUnpacked(
-      at: url, tabID: selectedTabID(for: profileID))
   }
 
   var searchEngines: [BrowserSettingsChoice] {

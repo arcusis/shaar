@@ -225,16 +225,17 @@ private struct ExtensionDeveloperControls: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      SettingsCheckbox(
-        title: SettingsL10n.string("Developer mode"),
-        identifier: "settings.extensions.developerMode",
-        isOn: model.developerMode,
-        onChange: { model.setDeveloperMode($0) })
+      Toggle(
+        SettingsL10n.string("Developer mode"),
+        isOn: Binding(
+          get: { model.developerMode },
+          set: { model.setDeveloperMode($0) })
+      )
+      .toggleStyle(.checkbox)
+      .accessibilityIdentifier("settings.extensions.developerMode")
       if model.developerMode {
-        SettingsPushButton(
-          title: SettingsL10n.string("Load unpacked…"),
-          identifier: "settings.extensions.loadUnpacked",
-          action: onLoadUnpacked)
+        Button(SettingsL10n.string("Load unpacked…"), action: onLoadUnpacked)
+          .accessibilityIdentifier("settings.extensions.loadUnpacked")
         Text(
           SettingsL10n.string(
             "Load an unpacked Manifest V3 extension from a folder on this Mac.")
@@ -254,7 +255,10 @@ private struct ExtensionInstallStatus: View {
 
   var body: some View {
     if let status = model.status {
-      SettingsStatusText(text: status, identifier: "settings.extensions.status")
+      Text(status)
+        .font(.caption)
+        .foregroundStyle(.red)
+        .accessibilityIdentifier("settings.extensions.status")
     }
   }
 }
@@ -321,12 +325,15 @@ struct ExtensionDetails: View {
             ?? SettingsL10n.string("Site access"))
       }
       .accessibilityIdentifier("settings.extensions.siteAccess")
-      SettingsCheckbox(
-        title: SettingsL10n.string("Allow in private windows"),
-        identifier: "settings.extensions.privateWindows",
-        isOn: item.incognitoEnabled == true,
-        isEnabled: item.mayDisable,
-        onChange: { model.setIncognitoEnabled(item.id, enabled: $0) })
+      Toggle(
+        SettingsL10n.string("Allow in private windows"),
+        isOn: Binding(
+          get: { item.incognitoEnabled == true },
+          set: { model.setIncognitoEnabled(item.id, enabled: $0) })
+      )
+      .toggleStyle(.checkbox)
+      .disabled(!item.mayDisable)
+      .accessibilityIdentifier("settings.extensions.privateWindows")
       ExtensionInstallStatus(model: model)
       Divider()
       Button(SettingsL10n.string("Remove Extension…"), role: .destructive) {

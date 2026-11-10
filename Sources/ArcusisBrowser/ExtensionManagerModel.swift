@@ -46,7 +46,7 @@ final class ExtensionManagerModel {
       runtime: runtime, preferences: preferences, profileID: profileID)
     models[key] = WeakExtensionManager(model)
     model.refresh()
-    if model.developerMode { model.submitDeveloperMode(true) }
+    if model.developerMode { model.verifyStoredDeveloperMode() }
     return model
   }
 
@@ -136,10 +136,39 @@ final class ExtensionManagerModel {
   }
 
   func setDeveloperMode(_ enabled: Bool) {
+    let previousValue = developerMode
     developerMode = enabled
     status = nil
     preferences?.setExtensionDeveloperMode(enabled, for: profileID)
-    submitDeveloperMode(enabled)
+    submitDeveloperMode(enabled) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .updated:
+        self.status = nil
+      case .unsupported:
+        self.restoreDeveloperMode(previousValue)
+        self.status = ExtensionInstallNotice.needsNewerEngine
+      case .prompted, .failed:
+        self.restoreDeveloperMode(previousValue)
+        self.status = ExtensionInstallNotice.developerModeFailed
+      }
+    }
+  }
+
+  private func verifyStoredDeveloperMode() {
+    submitDeveloperMode(true) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .updated:
+        self.status = nil
+      case .unsupported:
+        self.restoreDeveloperMode(false)
+        self.status = ExtensionInstallNotice.needsNewerEngine
+      case .prompted, .failed:
+        self.restoreDeveloperMode(false)
+        self.status = ExtensionInstallNotice.developerModeFailed
+      }
+    }
   }
 
   func loadUnpacked(at url: URL, tabID: UUID?) {
@@ -160,25 +189,39 @@ final class ExtensionManagerModel {
       ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": true], tabID: nil
     ) { [weak self] modeReply in
       guard let self else { return }
-      if case .failed = modeReply {
+      switch modeReply {
+      case .updated:
+        self.submitUnpackedLoad(payload, tabID: tabID)
+      case .unsupported:
+        self.restoreDeveloperMode(false)
+        self.status = ExtensionInstallNotice.needsNewerEngine
+      case .prompted, .failed:
+        self.restoreDeveloperMode(false)
         self.status = ExtensionInstallNotice.installFailed
-        return
-      }
-      self.submitManage(payload, tabID: tabID) { [weak self] reply in
-        guard let self else { return }
-        switch reply {
-        case .prompted:
-          self.status = nil
-        case .updated:
-          self.status = nil
-          self.refresh()
-        case .unsupported:
-          self.status = ExtensionInstallNotice.engineRefused
-        case .failed:
-          self.status = ExtensionInstallNotice.installFailed
-        }
       }
     }
+  }
+
+  private func submitUnpackedLoad(_ payload: [String: Any], tabID: UUID?) {
+    submitManage(payload, tabID: tabID) { [weak self] reply in
+      guard let self else { return }
+      switch reply {
+      case .prompted:
+        self.status = nil
+      case .updated:
+        self.status = nil
+        self.refresh()
+      case .unsupported:
+        self.status = ExtensionInstallNotice.needsNewerEngine
+      case .failed:
+        self.status = ExtensionInstallNotice.installFailed
+      }
+    }
+  }
+
+  private func restoreDeveloperMode(_ enabled: Bool) {
+    developerMode = enabled
+    preferences?.setExtensionDeveloperMode(enabled, for: profileID)
   }
 
   func setIncognitoEnabled(_ id: String, enabled: Bool) {
@@ -231,10 +274,12 @@ final class ExtensionManagerModel {
     }
   }
 
-  fileprivate func submitDeveloperMode(_ enabled: Bool) {
+  fileprivate func submitDeveloperMode(
+    _ enabled: Bool, completion: @escaping @MainActor (ExtensionManageReply) -> Void
+  ) {
     submitManage(
-      ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": enabled], tabID: nil
-    ) { _ in }
+      ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": enabled], tabID: nil,
+      completion: completion)
   }
 
   private func mutate(_ operation: ExtensionManagementOperation) {

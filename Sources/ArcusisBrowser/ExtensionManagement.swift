@@ -83,8 +83,8 @@ enum ExtensionSiteAccess: String, CaseIterable, Identifiable {
 }
 
 enum ExtensionInstallNotice {
-  static var engineRefused: String {
-    SettingsL10n.string("This Shaar engine cannot install extensions yet.")
+  static var needsNewerEngine: String {
+    SettingsL10n.string("This feature needs a newer Shaar engine.")
   }
 
   static var siteAccessRefused: String {
@@ -93,6 +93,10 @@ enum ExtensionInstallNotice {
 
   static var installFailed: String {
     SettingsL10n.string("The extension could not be installed.")
+  }
+
+  static var developerModeFailed: String {
+    SettingsL10n.string("Developer mode could not be changed.")
   }
 
   static var privateAccessRefused: String {
@@ -159,13 +163,15 @@ enum ExtensionManageReply: Equatable {
   case unsupported
   case failed
 
-  init(json: String?, code: Int) {
+  init(json: String?, code: Int, action: String? = nil) {
     if code == 15 {
       self = .unsupported
       return
     }
     if code == 1 {
-      self = .failed
+      self =
+        ["setDeveloperMode", "loadUnpacked"].contains(action ?? "")
+        ? .unsupported : .failed
       return
     }
     guard code == 0, let data = json?.data(using: .utf8),
@@ -267,15 +273,16 @@ enum ExtensionManageDelivery {
 }
 
 extension ARCChromiumRuntime {
-  /// Submits one extension-manage payload. Code 15 is `unsupported`; code 1 is `failed`.
+  /// Submits one extension-manage payload and interprets legacy refusal codes by action.
   func submitExtensionManage(
     profileID: UUID, tabID: UUID?, payload: [String: Any],
     completion: @escaping @MainActor (ExtensionManageReply) -> Void
   ) {
+    let action = payload["action"] as? String
     submitExtensionManage(
       forProfileID: profileID.uuidString, tabID: tabID?.uuidString, payload: payload
     ) { json, code in
-      let reply = ExtensionManageReply(json: json, code: code)
+      let reply = ExtensionManageReply(json: json, code: code, action: action)
       ExtensionManageDelivery.deliver(reply, to: completion)
     }
   }

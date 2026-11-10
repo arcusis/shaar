@@ -15,6 +15,7 @@ enum ShaarNetworkFilter: String, CaseIterable, Sendable {
   case document = "Doc"
   case socket = "WS"
   case errors = "Errors"
+  case api = "API"
 }
 
 struct ShaarNetworkRequest: Identifiable, Equatable, Sendable {
@@ -32,6 +33,7 @@ struct ShaarNetworkRequest: Identifiable, Equatable, Sendable {
   var responseHeaders: [ShaarNetworkHeader]
   var payload: String?
   var responseBody: String?
+  var apiOperation: ShaarAPIOperation? = nil
   var responseIsBinary = false
   var previewData: Data?
   var frames: [ShaarWebSocketFrame] = []
@@ -95,6 +97,8 @@ final class ShaarNetworkModel {
   @ObservationIgnored var loadBody: (@MainActor (String) async throws -> ShaarStoredResponseBody)?
   @ObservationIgnored private var lastEvents: [ShaarDevToolsEvent] = []
   @ObservationIgnored private var loadingBodyIDs: Set<String> = []
+  @ObservationIgnored private var apiObservations: [ShaarAPIObservation] = []
+  @ObservationIgnored private var apiObservationFloor: [String: Int] = [:]
 
   enum DetailTab: String, CaseIterable {
     case headers = "Headers"
@@ -112,9 +116,24 @@ final class ShaarNetworkModel {
   }
 
   func resetLog() {
+    for observation in apiObservations {
+      let seen = apiObservationFloor[observation.install] ?? 0
+      if observation.id > seen { apiObservationFloor[observation.install] = observation.id }
+    }
+    apiObservations = []
     responseBodies.removeAll()
     loadingBodyIDs.removeAll()
     clearSelection()
+  }
+
+  func replaceAPIObservations(_ next: [ShaarAPIObservation]) {
+    let fresh = next.filter { observation in
+      let seen = apiObservationFloor[observation.install] ?? 0
+      return observation.id > seen
+    }
+    guard fresh != apiObservations else { return }
+    apiObservations = fresh
+    scheduleRows(from: lastEvents)
   }
 
   func selectAdjacent(in rows: [ShaarNetworkRequest], forward: Bool, from focusedID: String? = nil)
@@ -142,10 +161,12 @@ final class ShaarNetworkModel {
     let statusFilter = statusFilter
     let search = search
     let bodies = responseBodies
+    let observations = apiObservations
     let failureLabel = ShellL10n.string("Request failed")
     projection.schedule {
-      let requests = Self.applyBodies(
-        Self.buildRequests(events, failureLabel: failureLabel), bodies: bodies)
+      let requests = Self.applyOperations(
+        Self.applyBodies(Self.buildRequests(events, failureLabel: failureLabel), bodies: bodies),
+        observations: observations)
       let visible = Self.filterRequests(
         requests, filter: filter, status: statusFilter, search: search)
       return ShaarNetworkProjection(
@@ -156,7 +177,9 @@ final class ShaarNetworkModel {
   }
 
   func exportRequests(from events: [ShaarDevToolsEvent]) -> [ShaarNetworkRequest] {
-    Self.applyBodies(requests(from: events), bodies: responseBodies)
+    Self.applyOperations(
+      Self.applyBodies(requests(from: events), bodies: responseBodies),
+      observations: apiObservations)
   }
 
   func loadResponseBody(id: String) async {
@@ -214,7 +237,9 @@ final class ShaarNetworkModel {
 
   func visibleRequests(from events: [ShaarDevToolsEvent]) -> [ShaarNetworkRequest] {
     Self.filterRequests(
-      Self.applyBodies(requests(from: events), bodies: responseBodies),
+      Self.applyOperations(
+        Self.applyBodies(requests(from: events), bodies: responseBodies),
+        observations: apiObservations),
       filter: filter, status: statusFilter, search: search)
   }
 
@@ -224,13 +249,70 @@ final class ShaarNetworkModel {
   ) -> [ShaarNetworkRequest] {
     let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
     return requests.filter { row in
-      if filter == .errors && !row.isError { return false }
-      if filter != .all && filter != .errors && filter != row.resource { return false }
-      guard status.matches(row) else { return false }
-      return needle.isEmpty || row.url.localizedStandardContains(needle)
-        || row.method.localizedStandardContains(needle)
-        || row.status.map(String.init)?.contains(needle) == true
+      guard matchesFilter(row, filter: filter), status.matches(row) else { return false }
+      return matchesSearch(row, needle: needle)
     }
+  }
+
+  nonisolated private static func matchesFilter(
+    _ row: ShaarNetworkRequest, filter: ShaarNetworkFilter
+  ) -> Bool {
+    switch filter {
+    case .all: return true
+    case .errors: return row.isError || row.apiOperation?.hasErrors == true
+    case .api: return row.apiOperation != nil
+    case .fetch, .script, .style, .image, .document, .socket: return filter == row.resource
+    }
+  }
+
+  nonisolated private static func matchesSearch(
+    _ row: ShaarNetworkRequest, needle: String
+  ) -> Bool {
+    if needle.isEmpty { return true }
+    if row.url.localizedStandardContains(needle) { return true }
+    if row.method.localizedStandardContains(needle) { return true }
+    if row.status.map(String.init)?.contains(needle) == true { return true }
+    guard let operation = row.apiOperation else { return false }
+    if operation.name.localizedStandardContains(needle) { return true }
+    return operation.columnText.localizedStandardContains(needle)
+  }
+
+  nonisolated private static func applyOperations(
+    _ rows: [ShaarNetworkRequest], observations: [ShaarAPIObservation]
+  ) -> [ShaarNetworkRequest] {
+    if observations.isEmpty && !rows.contains(where: rowMightHaveOperation) { return rows }
+    var queues: [String: [ShaarAPIObservation]] = [:]
+    for observation in observations {
+      let key = ShaarAPIOperation.matchKey(method: observation.method, url: observation.url)
+      queues[key, default: []].append(observation)
+    }
+    return rows.map { row in
+      let matched = dequeue(&queues, method: row.method, url: row.url)
+      if matched == nil && !rowMightHaveOperation(row) { return row }
+      guard
+        let operation = ShaarAPIOperation.combine(
+          method: row.method, url: row.url, payload: row.payload,
+          responseBody: row.responseBody, observation: matched)
+      else { return row }
+      var copy = row
+      copy.apiOperation = operation
+      return copy
+    }
+  }
+
+  nonisolated private static func rowMightHaveOperation(_ row: ShaarNetworkRequest) -> Bool {
+    if row.payload != nil { return true }
+    return ShaarAPIOperation.urlMightMatch(row.url)
+  }
+
+  nonisolated private static func dequeue(
+    _ queues: inout [String: [ShaarAPIObservation]], method: String, url: String
+  ) -> ShaarAPIObservation? {
+    let key = ShaarAPIOperation.matchKey(method: method, url: url)
+    guard var queue = queues[key], !queue.isEmpty else { return nil }
+    let first = queue.removeFirst()
+    queues[key] = queue
+    return first
   }
 
   nonisolated private static func applyBodies(
@@ -281,6 +363,10 @@ final class ShaarNetworkModel {
 
   func agentCopyText(for row: ShaarNetworkRequest) -> String {
     var lines = ["\(row.method) \(row.url)"]
+    if let operation = row.apiOperation {
+      lines.append("Operation: \(operation.columnText)")
+      if operation.hasErrors { lines.append("Response has errors") }
+    }
     if let status = row.status { lines.append("Status: \(status)") }
     if let mimeType = row.mimeType { lines.append("Type: \(mimeType)") }
     if let encodedBytes = row.encodedBytes { lines.append("Size: \(encodedBytes) bytes") }

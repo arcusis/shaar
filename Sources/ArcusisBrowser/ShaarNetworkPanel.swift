@@ -6,6 +6,12 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+private enum ShaarNetworkTableLayout {
+  static let width: CGFloat = 860
+  static let nameWidth: CGFloat = 160
+  static let operationWidth: CGFloat = 150
+}
+
 struct ShaarNetworkPanel: View {
   @Bindable var model: ShaarNetworkModel
   @Bindable var rules: ShaarNetworkRulesModel
@@ -143,6 +149,7 @@ struct ShaarNetworkPanel: View {
           ShellL10n.string("Use Left and Right Arrow to move through network filters.")
         )
         .accessibilityLabel(ShellL10n.string(filter.accessibilityName))
+        .accessibilityIdentifier(filter.accessibilityIdentifier)
         .accessibilityAddTraits(selected ? .isSelected : [])
       }
       Spacer(minLength: 4)
@@ -231,7 +238,7 @@ struct ShaarNetworkPanel: View {
             Text(ShellL10n.string(emptyListMessage))
               .font(.system(size: 11))
               .foregroundStyle(.primary)
-              .frame(width: 700, height: 130)
+              .frame(width: ShaarNetworkTableLayout.width, height: 130)
           }
           ForEach(currentRows) { row in
             Button {
@@ -256,7 +263,7 @@ struct ShaarNetworkPanel: View {
             Divider()
           }
         }
-        .frame(width: 700)
+        .frame(width: ShaarNetworkTableLayout.width)
         .frame(minHeight: geometry.size.height, alignment: .top)
         .devToolsDataDirection()
       }
@@ -276,7 +283,13 @@ struct ShaarNetworkPanel: View {
   private func requestLabel(_ row: ShaarNetworkRequest) -> String {
     let status = row.status.map(String.init) ?? ShellL10n.string("Pending")
     let failure = row.failure.map { ", \(ShellL10n.string("Failed")): \($0)" } ?? ""
-    return "\(row.method), \(row.name), \(status), \(row.url)\(failure)"
+    return "\(row.method), \(row.name), \(status), \(row.url)\(operationLabel(row))\(failure)"
+  }
+
+  private func operationLabel(_ row: ShaarNetworkRequest) -> String {
+    guard let operation = row.apiOperation else { return "" }
+    let marker = operation.hasErrors ? ", \(ShellL10n.string("Response has errors"))" : ""
+    return ", \(operation.columnText)\(marker)"
   }
 
   private var emptyListMessage: String {
@@ -290,7 +303,8 @@ struct ShaarNetworkPanel: View {
     HStack(spacing: 8) {
       tableLabel("Status", width: 48)
       tableLabel("Method", width: 52)
-      tableLabel("Name", width: 200)
+      tableLabel("Name", width: ShaarNetworkTableLayout.nameWidth)
+      tableLabel("Operation", width: ShaarNetworkTableLayout.operationWidth)
       tableLabel("Type", width: 70)
       tableLabel("Size", width: 60)
       tableLabel("Time", width: 56)
@@ -316,7 +330,9 @@ struct ShaarNetworkPanel: View {
         .foregroundStyle(.primary)
         .frame(width: 48, alignment: .leading)
       Text(row.method).frame(width: 52, alignment: .leading)
-      Text(row.name).lineLimit(1).frame(width: 200, alignment: .leading)
+      Text(row.name).lineLimit(1).frame(
+        width: ShaarNetworkTableLayout.nameWidth, alignment: .leading)
+      operationCell(row)
       Text(ShellL10n.string(row.resource.rawValue))
         .frame(width: 70, alignment: .leading)
       Text(sizeLabel(row.encodedBytes)).frame(width: 60, alignment: .leading)
@@ -341,6 +357,16 @@ struct ShaarNetworkPanel: View {
     .contentShape(Rectangle())
   }
 
+  private func operationCell(_ row: ShaarNetworkRequest) -> some View {
+    let failed = row.apiOperation?.hasErrors == true
+    return Text(row.apiOperation?.columnText ?? "")
+      .lineLimit(1)
+      .foregroundStyle(failed ? Color.red : Color.primary)
+      .frame(width: ShaarNetworkTableLayout.operationWidth, alignment: .leading)
+      .accessibilityIdentifier("shaar.devtools.networkOperation")
+      .accessibilityValue(failed ? ShellL10n.string("Response has errors") : "")
+  }
+
   private func waterfall(
     _ row: ShaarNetworkRequest, first: TimeInterval, last: TimeInterval
   ) -> some View {
@@ -360,10 +386,21 @@ struct ShaarNetworkPanel: View {
     if let selected {
       VStack(spacing: 0) {
         HStack(spacing: 8) {
-          Text(selected.name)
-            .font(.system(size: 11, weight: .semibold))
-            .lineLimit(1)
-            .devToolsDataDirection()
+          VStack(alignment: .leading, spacing: 2) {
+            Text(selected.name)
+              .font(.system(size: 11, weight: .semibold))
+              .lineLimit(1)
+            if let operation = selected.apiOperation {
+              Text(operation.columnText)
+                .font(.system(size: 10, design: .monospaced))
+                .lineLimit(1)
+                .foregroundStyle(operation.hasErrors ? Color.red : Color.secondary)
+                .accessibilityIdentifier("shaar.devtools.networkOperationDetail")
+                .accessibilityValue(
+                  operation.hasErrors ? ShellL10n.string("Response has errors") : "")
+            }
+          }
+          .devToolsDataDirection()
           Spacer(minLength: 4)
           Button {
             rules.create(from: selected)
@@ -451,6 +488,15 @@ struct ShaarNetworkPanel: View {
       VStack(alignment: .leading, spacing: 12) {
         detailValue("Request URL", row.url)
         detailValue("Request Method", row.method)
+        if let operation = row.apiOperation {
+          detailValue("Operation", operation.columnText)
+          if operation.hasErrors {
+            Text(ShellL10n.string("Response has errors"))
+              .font(.system(size: 10, weight: .medium))
+              .foregroundStyle(Color.red)
+              .accessibilityIdentifier("shaar.devtools.networkOperationError")
+          }
+        }
         if let status = row.status { detailValue("Status", String(status)) }
         headerSection("Request headers", row.requestHeaders)
         headerSection("Response headers", row.responseHeaders)
@@ -643,7 +689,13 @@ extension ShaarNetworkFilter {
     case .document: "Documents"
     case .socket: "WebSockets"
     case .errors: "Errors"
+    case .api: "API requests"
     }
+  }
+
+  fileprivate var accessibilityIdentifier: String {
+    if self == .api { return "shaar.devtools.networkAPI" }
+    return "shaar.devtools.networkFilter"
   }
 }
 

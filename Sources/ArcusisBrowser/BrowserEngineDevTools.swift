@@ -75,12 +75,40 @@ extension BrowserEngine {
         localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()],
         allowsWebKitComparison: store?.isPrivate != true)
     }
+    if let shaar = runtime as? ARCShaarRuntime {
+      attachAPIOperations(to: shell, runtime: shaar)
+    }
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector
     attachDevToolsSecurity(to: shell)
     shell.updateTarget(target)
     shell.open(inspector: inspector)
     return true
+  }
+
+  private func attachAPIOperations(to shell: ShaarDevToolsModel, runtime: ARCShaarRuntime) {
+    let windowID = windowID
+    shell.installAPIOperations = { [weak shell, weak runtime] in
+      guard let shell, let runtime else { return nil }
+      return await ShaarAPIOperationCapture.install(
+        runtime: runtime, target: shell.target, windowID: windowID)
+    }
+    shell.reevaluateAPIOperations = { [weak shell, weak runtime] in
+      guard let shell, let runtime else { return false }
+      return await ShaarAPIOperationCapture.evaluate(
+        runtime: runtime, target: shell.target, windowID: windowID)
+    }
+    shell.readAPIOperations = { [weak shell, weak runtime] in
+      guard let shell, let runtime else { return nil }
+      return await ShaarAPIOperationCapture.snapshot(
+        runtime: runtime, target: shell.target, windowID: windowID)
+    }
+    shell.removeAPIOperations = { [weak shell, weak runtime] identifier, disposeScript in
+      guard let shell, let runtime else { return }
+      await ShaarAPIOperationCapture.remove(
+        runtime: runtime, target: shell.target, windowID: windowID,
+        identifier: identifier, disposeScript: disposeScript)
+    }
   }
 
   private func attachDevToolsSecurity(to shell: ShaarDevToolsModel) {

@@ -436,6 +436,16 @@ final class ShaarDevToolsModel {
   @ObservationIgnored var sensorFixture: (@MainActor (ShaarDevToolsSensorCommand) -> Void)?
   @ObservationIgnored var sendSensorCommand:
     (@MainActor (ShaarDevToolsSensorCommand) async throws -> Void)?
+  @ObservationIgnored var installAPIOperations: (@MainActor () async -> String?)?
+  @ObservationIgnored var reevaluateAPIOperations: (@MainActor () async -> Bool)?
+  @ObservationIgnored var readAPIOperations: (@MainActor () async -> String?)?
+  @ObservationIgnored var removeAPIOperations: (@MainActor (String?, Bool) async -> Void)?
+  @ObservationIgnored private var apiCaptureTask: Task<Void, Never>?
+  @ObservationIgnored private var apiScriptID: String?
+  @ObservationIgnored private var apiSnapshot = ""
+  @ObservationIgnored private var apiInstalling = false
+  @ObservationIgnored private var apiCaptureGeneration = 0
+  private(set) var apiCaptureInstalled = false
   @ObservationIgnored weak var sensorEngine: BrowserEngine?
   @ObservationIgnored var sensorGeneration = 0
   var sections: [ShaarDevToolsSection] {
@@ -569,6 +579,18 @@ final class ShaarDevToolsModel {
     if section == .elements { dom.open() }
     if section == .components { framework.activate() }
     if section == .comparison && allowsWebKitComparison { comparison.open(inspector: inspector) }
+    startAPICapture()
+  }
+
+  func prepareAPICapture() async {
+    if installAPIOperations == nil {
+      apiCaptureInstalled = true
+      return
+    }
+    for _ in 0..<50 {
+      if apiCaptureInstalled { return }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
   }
 
   func close() {
@@ -577,6 +599,7 @@ final class ShaarDevToolsModel {
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
+    stopAPICapture()
     cancelLocalTasks()
     streamAvailable = false
     repro.history.stop()
@@ -621,6 +644,66 @@ final class ShaarDevToolsModel {
     closeSettings()
     resetSensors()
     isOpen = false
+  }
+
+  private func startAPICapture() {
+    apiCaptureTask?.cancel()
+    apiCaptureTask = nil
+    apiCaptureGeneration += 1
+    let generation = apiCaptureGeneration
+    apiSnapshot = ""
+    guard installAPIOperations != nil else {
+      apiCaptureInstalled = true
+      return
+    }
+    apiCaptureInstalled = false
+    apiCaptureTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      await self.refreshAPICaptureScript(generation: generation)
+      while !Task.isCancelled, self.isOpen, generation == self.apiCaptureGeneration {
+        if let raw = await self.readAPIOperations?(), raw != self.apiSnapshot {
+          self.apiSnapshot = raw
+          self.network.replaceAPIObservations(ShaarAPIObservation.list(from: raw))
+        }
+        try? await Task.sleep(for: .milliseconds(400))
+      }
+    }
+  }
+
+  private func stopAPICapture() {
+    apiCaptureGeneration += 1
+    apiCaptureTask?.cancel()
+    apiCaptureTask = nil
+    apiCaptureInstalled = false
+    apiInstalling = false
+    apiSnapshot = ""
+    let identifier = apiScriptID
+    apiScriptID = nil
+    let generation = apiCaptureGeneration
+    let remove = removeAPIOperations
+    Task { @MainActor [weak self] in
+      let stillCurrent = self?.apiCaptureGeneration == generation
+      await remove?(identifier, stillCurrent)
+    }
+  }
+
+  private func refreshAPICaptureScript(generation: Int) async {
+    guard isOpen, generation == apiCaptureGeneration, installAPIOperations != nil else { return }
+    if apiScriptID != nil {
+      _ = await reevaluateAPIOperations?()
+      apiCaptureInstalled = true
+      return
+    }
+    guard !apiInstalling else { return }
+    apiInstalling = true
+    let identifier = await installAPIOperations?()
+    apiInstalling = false
+    guard isOpen, generation == apiCaptureGeneration else {
+      await removeAPIOperations?(identifier, false)
+      return
+    }
+    apiScriptID = identifier
+    apiCaptureInstalled = identifier != nil
   }
 
   func toggleCommandMenu() {
@@ -939,7 +1022,9 @@ final class ShaarDevToolsModel {
   /// Read again once the page has finished loading.
   func pageDidFinishLoading() {
     guard isOpen else { return }
+    let generation = apiCaptureGeneration
     Task { [weak self] in
+      await self?.refreshAPICaptureScript(generation: generation)
       await self?.cssOverview.reload(force: true)
       guard let self else { return }
       await self.dom.loadDocument()

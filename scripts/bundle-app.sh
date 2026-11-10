@@ -31,6 +31,8 @@ assert_no_verification_code() {
     -e --probe-website-permission \
     -e ShaarBrowsingEdgeProbe \
     -e --browsing-edge-probe \
+    -e --platform-parity-probe \
+    -e parity-action \
     "$1"
   then
     echo "Verification code found in $1." >&2

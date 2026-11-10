@@ -475,6 +475,8 @@ class BundleAppTests(unittest.TestCase):
             "--probe-website-permission",
             "ShaarBrowsingEdgeProbe",
             "--browsing-edge-probe",
+            "--platform-parity-probe",
+            "parity-action",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

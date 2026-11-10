@@ -64,6 +64,9 @@ const MAX_URL_LENGTH = 8192;
 const MAX_PNG_TEXT = 11_184_816;
 const MAX_PNG_BYTES = 8 * 1024 * 1024;
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+// First 12 base64 characters are the 8-byte signature plus the next byte.
+const PNG_HEADER_TEXT = 12;
+const PNG_HEADER_PREFIX = 'iVBORw0KGg';
 
 const EMPTY_CAPABILITIES: Capabilities = {
   colorScheme: false,
@@ -196,8 +199,38 @@ function rotateInsets(insets: Insets, orientation: Orientation): Insets {
   return {top: insets.right, right: insets.bottom, bottom: insets.left, left: insets.top};
 }
 
+function pngHeaderIsValid(encoded: string): boolean {
+  if (encoded.length < PNG_HEADER_TEXT || encoded.length > MAX_PNG_TEXT || encoded.length % 4 !== 0) {
+    return false;
+  }
+  let padding = 0;
+  if (encoded.charCodeAt(encoded.length - 1) === 61) {
+    padding = encoded.charCodeAt(encoded.length - 2) === 61 ? 2 : 1;
+  }
+  const decodedLength = (encoded.length / 4) * 3 - padding;
+  if (decodedLength < PNG_MAGIC.length || decodedLength > MAX_PNG_BYTES || !encoded.startsWith(PNG_HEADER_PREFIX)) {
+    return false;
+  }
+  // The poll path only needs the signature. The contact sheet decodes the image.
+  let header: string;
+  try {
+    header = atob(encoded.slice(0, PNG_HEADER_TEXT));
+  } catch {
+    return false;
+  }
+  if (header.length < PNG_MAGIC.length) {
+    return false;
+  }
+  for (let index = 0; index < PNG_MAGIC.length; index++) {
+    if (header.charCodeAt(index) !== PNG_MAGIC[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function pngBytes(encoded: string): Uint8Array|null {
-  if (encoded.length < 1 || encoded.length > MAX_PNG_TEXT) {
+  if (!pngHeaderIsValid(encoded)) {
     return null;
   }
   let binary: string;
@@ -213,11 +246,6 @@ function pngBytes(encoded: string): Uint8Array|null {
   for (let index = 0; index < binary.length; index++) {
     bytes[index] = binary.charCodeAt(index);
   }
-  for (let index = 0; index < PNG_MAGIC.length; index++) {
-    if (bytes[index] !== PNG_MAGIC[index]) {
-      return null;
-    }
-  }
   return bytes;
 }
 
@@ -226,7 +254,7 @@ export function decodeFrameReply(reply: ViewportReply, nativeId: number): {url: 
       typeof reply.data !== 'string') {
     return null;
   }
-  if (!pageUrlIsValid(reply.url) || !pngBytes(reply.data)) {
+  if (!pageUrlIsValid(reply.url) || !pngHeaderIsValid(reply.data)) {
     return null;
   }
   return {url: reply.url, pngBase64: reply.data};
@@ -304,6 +332,8 @@ export class ViewportController {
   #session = 0;
   #leaseID: number|null = null;
   #timer: number|null = null;
+  #job: Promise<void>|null = null;
+  #follow: Promise<void>|null = null;
   #openPromise: Promise<void>|null = null;
   #urlDirty = false;
   #lastHover = '';
@@ -394,7 +424,8 @@ export class ViewportController {
   startPolling(): void {
     this.stopPolling();
     this.#timer = window.setInterval(() => {
-      void this.refresh();
+      // A poll skips when a capture is already running, so four viewports stay at or under 2 Hz.
+      void this.refresh(false);
     }, FRAME_POLL_MS);
   }
 
@@ -405,7 +436,30 @@ export class ViewportController {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(demand = true): Promise<void> {
+    if (this.#job) {
+      if (!demand) {
+        return;
+      }
+      if (!this.#follow) {
+        this.#follow = this.#job.then(() => {
+          this.#follow = null;
+          return this.refresh(true);
+        });
+      }
+      await this.#follow;
+      return;
+    }
+    const job = this.#captureFrames().finally(() => {
+      if (this.#job === job) {
+        this.#job = null;
+      }
+    });
+    this.#job = job;
+    await job;
+  }
+
+  async #captureFrames(): Promise<void> {
     const session = this.#session;
     const leaseID = this.#leaseID;
     if (leaseID === null) {
@@ -565,7 +619,7 @@ export class ViewportController {
       return;
     }
     this.#lastHover = key;
-    await this.#action({kind: 'hover', viewportID: frame.nativeId, x: point.x, y: point.y});
+    await this.#action({kind: 'hover', viewportID: frame.nativeId, x: point.x, y: point.y}, false);
   }
 
   async typeIntoAll(text: string): Promise<void> {
@@ -699,7 +753,7 @@ export class ViewportController {
     this.#emit();
   }
 
-  async #action(fields: Record<string, unknown>): Promise<boolean> {
+  async #action(fields: Record<string, unknown>, notify = true): Promise<boolean> {
     const leaseID = this.#leaseID;
     if (this.status !== 'ready' || leaseID === null) {
       this.notice = 'invalid';
@@ -712,8 +766,11 @@ export class ViewportController {
       if (session !== this.#session) {
         return false;
       }
+      const changed = this.notice !== null;
       this.notice = null;
-      this.#emit();
+      if (notify || changed) {
+        this.#emit();
+      }
       return true;
     } catch {
       if (session === this.#session) {

@@ -78,6 +78,7 @@ export interface ViewportTargets {
 export class SdkViewportHost implements ViewportHost {
   #lease = 0;
   #nextId = 1;
+  #reserved = 0;
   #views = new Map<number, ViewState>();
   #targets: ViewportTargets;
 
@@ -121,7 +122,7 @@ export class SdkViewportHost implements ViewportHost {
   }
 
   async #add(payload: Record<string, unknown>): Promise<ViewportReply> {
-    if (!this.#sameLease(payload) || this.#views.size >= MAX_VIEWS) {
+    if (!this.#sameLease(payload) || this.#views.size + this.#reserved >= MAX_VIEWS) {
       throw new Error('failed');
     }
     const width = finiteNumber(payload.width);
@@ -135,38 +136,44 @@ export class SdkViewportHost implements ViewportHost {
       throw new Error('unavailable');
     }
     const lease = this.#lease;
-    const created = await root.createTarget({
-      url: '',
-      hidden: true,
-      background: true,
-    });
-    if (created.error || !created.targetId) {
-      throw new Error('unavailable');
-    }
-    const targetId = created.targetId;
+    // Count the slot before createTarget so parallel adds cannot both pass the cap.
+    this.#reserved += 1;
     try {
-      const target = await this.#waitForPage(targetId);
-      if (lease !== this.#lease) {
-        throw new Error('failed');
+      const created = await root.createTarget({
+        url: '',
+        hidden: true,
+        background: true,
+      });
+      if (created.error || !created.targetId) {
+        throw new Error('unavailable');
       }
-      const mobile = PHONE_PRESETS.has(stringField(payload.preset));
-      await this.#metrics(target, width, height, mobile, false);
-      if (url) {
-        const navigated = await target.navigate(url);
-        if (navigated) {
+      const targetId = created.targetId;
+      try {
+        const target = await this.#waitForPage(targetId);
+        if (lease !== this.#lease) {
           throw new Error('failed');
         }
+        const mobile = PHONE_PRESETS.has(stringField(payload.preset));
+        await this.#metrics(target, width, height, mobile, false);
+        if (url) {
+          const navigated = await target.navigate(url);
+          if (navigated) {
+            throw new Error('failed');
+          }
+        }
+        if (lease !== this.#lease) {
+          throw new Error('failed');
+        }
+        const viewportID = this.#nextId;
+        this.#nextId += 1;
+        this.#views.set(viewportID, {id: viewportID, targetId, width, height, mobile});
+        return {schemaVersion: 1, viewportID};
+      } catch (error) {
+        await this.#closeTarget(targetId);
+        throw error;
       }
-      if (lease !== this.#lease) {
-        throw new Error('failed');
-      }
-      const viewportID = this.#nextId;
-      this.#nextId += 1;
-      this.#views.set(viewportID, {id: viewportID, targetId, width, height, mobile});
-      return {schemaVersion: 1, viewportID};
-    } catch (error) {
-      await this.#closeTarget(targetId);
-      throw error;
+    } finally {
+      this.#reserved -= 1;
     }
   }
 

@@ -11,9 +11,11 @@ const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8
 class RecordingHost {
   readonly calls: Array<{operation: string, payload: Record<string, unknown>}> = [];
   failOpen = false;
+  holdFrames = false;
   readonly #capabilities: {colorScheme?: number, hover?: number, typing?: number};
   #nextId = 1;
   #url = 'https://example.com/';
+  #releaseFrame: () => void = () => {};
 
   constructor(capabilities: {colorScheme?: number, hover?: number, typing?: number} = {
     colorScheme: 1,
@@ -21,6 +23,11 @@ class RecordingHost {
     typing: 1,
   }) {
     this.#capabilities = capabilities;
+  }
+
+  releaseFrames(): void {
+    this.holdFrames = false;
+    this.#releaseFrame();
   }
 
   request(operation: string, payload: Record<string, unknown>): Promise<Viewports.ViewportsHost.ViewportReply> {
@@ -40,15 +47,25 @@ class RecordingHost {
       return Promise.resolve({schemaVersion: 1, viewportID});
     }
     if (operation === 'frame') {
-      const viewportID = payload.viewportID;
-      return Promise.resolve({
-        schemaVersion: 1,
-        viewportID: typeof viewportID === 'number' ? viewportID : 0,
-        url: this.#url,
-        data: TINY_PNG,
+      const reply = this.#frameReply(payload);
+      if (!this.holdFrames) {
+        return Promise.resolve(reply);
+      }
+      return new Promise(resolve => {
+        this.#releaseFrame = () => resolve(reply);
       });
     }
     return Promise.resolve({schemaVersion: 1});
+  }
+
+  #frameReply(payload: Record<string, unknown>): Viewports.ViewportsHost.ViewportReply {
+    const viewportID = payload.viewportID;
+    return {
+      schemaVersion: 1,
+      viewportID: typeof viewportID === 'number' ? viewportID : 0,
+      url: this.#url,
+      data: TINY_PNG,
+    };
   }
 }
 
@@ -175,6 +192,96 @@ describe('ViewportsModel', () => {
     await controller.typeIntoAll('');
     assert.strictEqual(host.calls.length, before);
     assert.strictEqual(controller.notice, 'invalid');
+    await controller.close();
+  });
+
+  it('checks the png signature without decoding the image', () => {
+    const original = globalThis.atob;
+    const seen: string[] = [];
+    globalThis.atob = (value: string) => {
+      seen.push(value);
+      return original(value);
+    };
+    try {
+      const decoded = Viewports.ViewportsModel.decodeFrameReply({
+        schemaVersion: 1,
+        viewportID: 3,
+        url: 'https://example.com/a',
+        data: TINY_PNG,
+      },
+                                                                3);
+      assert.strictEqual(decoded?.pngBase64, TINY_PNG);
+      assert.deepEqual(seen.map(value => value.length), [12]);
+      seen.length = 0;
+      assert.isNull(Viewports.ViewportsModel.decodeFrameReply({
+        schemaVersion: 1,
+        viewportID: 3,
+        url: 'https://example.com/a',
+        data: 'A'.repeat(TINY_PNG.length),
+      },
+                                                              3));
+      assert.lengthOf(seen, 0);
+    } finally {
+      globalThis.atob = original;
+    }
+  });
+
+  it('skips an overlapping poll and still runs a demanded capture', async () => {
+    const host = new RecordingHost();
+    const controller = new Viewports.ViewportsModel.ViewportController(host);
+    await controller.open();
+    host.holdFrames = true;
+    const started = host.calls.filter(call => call.operation === 'frame').length;
+    const running = controller.refresh(false);
+    await Promise.resolve();
+    const during = host.calls.filter(call => call.operation === 'frame').length;
+    assert.strictEqual(during, started + 1);
+    await controller.refresh(false);
+    assert.strictEqual(host.calls.filter(call => call.operation === 'frame').length, during);
+    const demanded = controller.refresh(true);
+    host.releaseFrames();
+    await running;
+    await demanded;
+    assert.strictEqual(host.calls.filter(call => call.operation === 'frame').length, during + 3);
+    await controller.close();
+  });
+
+  it('polls no faster than twice a second', () => {
+    const originalSet = window.setInterval;
+    const originalClear = window.clearInterval;
+    let delay = 0;
+    window.setInterval = ((_handler: TimerHandler, timeout?: number) => {
+                           delay = Number(timeout);
+                           return 1;
+                         }) as typeof window.setInterval;
+    window.clearInterval = (() => {}) as typeof window.clearInterval;
+    try {
+      const controller = new Viewports.ViewportsModel.ViewportController(new RecordingHost());
+      controller.startPolling();
+      assert.isAtLeast(delay, 500);
+      controller.stopPolling();
+    } finally {
+      window.setInterval = originalSet;
+      window.clearInterval = originalClear;
+    }
+  });
+
+  it('does not notify listeners when a hover leaves the panel unchanged', async () => {
+    const host = new RecordingHost();
+    const controller = new Viewports.ViewportsModel.ViewportController(host);
+    await controller.open();
+    const phone = controller.frames[0];
+    let updates = 0;
+    const stop = controller.listen(() => {
+      updates += 1;
+    });
+    await controller.click(phone.id, 10, 20);
+    assert.strictEqual(updates, 1);
+    await controller.hover(phone.id, 11, 21);
+    await controller.hover(phone.id, 30, 40);
+    assert.strictEqual(updates, 1);
+    assert.lengthOf(actionPayloads(host, 'hover'), 2);
+    stop();
     await controller.close();
   });
 

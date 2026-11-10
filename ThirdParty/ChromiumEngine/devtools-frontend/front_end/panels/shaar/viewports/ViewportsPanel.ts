@@ -198,6 +198,10 @@ export class ViewportsPanel extends UI.Panel.Panel {
   #stageHeight = 520;
   #resizeObserver: ResizeObserver|null = null;
   #stopListening: () => void;
+  #hoverFrame = 0;
+  #hoverId = '';
+  #hoverX = 0;
+  #hoverY = 0;
 
   constructor(host: ViewportHost = new SdkViewportHost()) {
     super('shaar-viewports', /* useShadowDom */ true);
@@ -217,12 +221,14 @@ export class ViewportsPanel extends UI.Panel.Panel {
   }
 
   override willHide(): void {
+    this.#cancelHover();
     this.controller.stopPolling();
     void this.controller.close();
     super.willHide();
   }
 
   override onDetach(): void {
+    this.#cancelHover();
     this.controller.stopPolling();
     void this.controller.close();
     this.#resizeObserver?.disconnect();
@@ -513,7 +519,31 @@ export class ViewportsPanel extends UI.Panel.Panel {
     if (!point) {
       return;
     }
-    void this.controller.hover(frame.id, point.x, point.y);
+    this.#hoverId = frame.id;
+    this.#hoverX = point.x;
+    this.#hoverY = point.y;
+    if (this.#hoverFrame !== 0) {
+      return;
+    }
+    this.#hoverFrame = window.requestAnimationFrame(() => {
+      this.#hoverFrame = 0;
+      const id = this.#hoverId;
+      const x = this.#hoverX;
+      const y = this.#hoverY;
+      this.#hoverId = '';
+      if (!id) {
+        return;
+      }
+      void this.controller.hover(id, x, y);
+    });
+  }
+
+  #cancelHover(): void {
+    if (this.#hoverFrame !== 0) {
+      window.cancelAnimationFrame(this.#hoverFrame);
+      this.#hoverFrame = 0;
+    }
+    this.#hoverId = '';
   }
 
   #onWheel = (event: WheelEvent): void => {

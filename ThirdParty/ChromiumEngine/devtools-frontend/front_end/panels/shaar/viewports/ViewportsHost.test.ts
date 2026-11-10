@@ -9,6 +9,7 @@ import * as Viewports from './viewports.js';
 class FakeTargets {
   inspected = 'https://inspected.example/start';
   failNavigate = false;
+  holdCreate = false;
   beforeNavigate: (() => Promise<unknown>)|null = null;
   readonly created: Array<{url?: string, hidden?: boolean, background?: boolean, width?: number}> = [];
   readonly closed: string[] = [];
@@ -16,6 +17,14 @@ class FakeTargets {
   readonly mice = new Map<string, Array<{type: string, x: number, y: number}>>();
   readonly ids: string[] = [];
   #pages = new Map<string, Viewports.ViewportsHost.ViewportPage>();
+  #createWaiters: Array<() => void> = [];
+
+  releaseCreates(): void {
+    const waiters = this.#createWaiters.splice(0);
+    for (const waiter of waiters) {
+      waiter();
+    }
+  }
 
   rootTarget(): Viewports.ViewportsHost.ViewportRoot|null {
     return {
@@ -32,7 +41,12 @@ class FakeTargets {
         const id = `target-${this.ids.length + 1}`;
         this.ids.push(id);
         this.#pages.set(id, this.#page(id));
-        return Promise.resolve({targetId: id});
+        if (!this.holdCreate) {
+          return Promise.resolve({targetId: id});
+        }
+        return new Promise(resolve => {
+          this.#createWaiters.push(() => resolve({targetId: id}));
+        });
       },
       closeTarget: async targetId => {
         this.closed.push(targetId);
@@ -168,6 +182,31 @@ describe('SdkViewportHost', () => {
       assert.strictEqual(error.message, 'failed');
     }
     assert.deepEqual(targets.closed, ['target-1']);
+  });
+
+  it('reserves each slot before creating the target', async () => {
+    const targets = new FakeTargets();
+    targets.holdCreate = true;
+    const {host, leaseID} = await openHost(targets);
+    const payload = {schemaVersion: 1, leaseID, preset: 'desktop', width: 1280, height: 800};
+    const pending = [
+      host.request('add', payload),
+      host.request('add', payload),
+      host.request('add', payload),
+      host.request('add', payload),
+    ];
+    try {
+      await host.request('add', payload);
+      assert.fail('a fifth viewport should be refused while four are reserved');
+    } catch (error) {
+      assert.instanceOf(error, Error);
+      assert.strictEqual(error.message, 'failed');
+    }
+    assert.lengthOf(targets.created, 4);
+    targets.releaseCreates();
+    const added = await Promise.all(pending);
+    assert.deepEqual(added.map(reply => reply.viewportID), [1, 2, 3, 4]);
+    await host.request('close', {schemaVersion: 1, leaseID});
   });
 
   it('sends a click and a hover to the source viewport only', async () => {

@@ -13,6 +13,7 @@ const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8
 
 class RecordingHost {
   failOpen = false;
+  readonly hovers: Array<Record<string, unknown>> = [];
   readonly #capabilities: {colorScheme?: number, hover?: number, typing?: number};
   #nextId = 1;
 
@@ -21,6 +22,9 @@ class RecordingHost {
   }
 
   request(operation: string, payload: Record<string, unknown>): Promise<Viewports.ViewportsHost.ViewportReply> {
+    if (operation === 'action' && payload.kind === 'hover') {
+      this.hovers.push(payload);
+    }
     if (operation === 'open') {
       if (this.failOpen) {
         return Promise.reject(new Error('unavailable'));
@@ -102,6 +106,51 @@ describeWithEnvironment('ViewportsPanel', () => {
     assert.strictEqual(shot.textContent.trim(), 'Screenshot all');
     assert.isNull(panel.contentElement.querySelector('.viewports-match'));
     assert.isNull(panel.contentElement.querySelector('.viewports-type'));
+  });
+
+  it('coalesces pointer moves into one hover per frame', async () => {
+    const host = new RecordingHost({hover: 1});
+    const panel = panelFor(host);
+    renderElementIntoDOM(panel);
+    await panel.controller.open();
+    panel.controller.stopPolling();
+    panel.performUpdate();
+    const screen = panel.contentElement.querySelector('.viewports-screen');
+    assert.instanceOf(screen, HTMLElement);
+    const rect = {left: 0, top: 0, width: 393, height: 852, right: 393, bottom: 852, x: 0, y: 0, toJSON: () => ({})};
+    screen.getBoundingClientRect = () => rect as DOMRect;
+    let schedules = 0;
+    const queued: FrameRequestCallback[] = [];
+    const originalFrame = window.requestAnimationFrame;
+    const originalCancel = window.cancelAnimationFrame;
+    window.requestAnimationFrame = (callback: FrameRequestCallback): number => {
+      schedules += 1;
+      queued.push(callback);
+      return 7;
+    };
+    window.cancelAnimationFrame = (): void => {
+      queued.splice(0, queued.length);
+    };
+    try {
+      const move = (x: number, y: number): void => {
+        screen.dispatchEvent(new MouseEvent('mousemove', {bubbles: true, clientX: x, clientY: y}));
+      };
+      move(10, 20);
+      move(30, 40);
+      assert.strictEqual(schedules, 1);
+      assert.lengthOf(host.hovers, 0);
+      const run = queued[0];
+      if (run) {
+        run(0);
+      }
+      await Promise.resolve();
+      assert.lengthOf(host.hovers, 1);
+      assert.strictEqual(host.hovers[0].x, 30);
+      assert.strictEqual(host.hovers[0].y, 40);
+    } finally {
+      window.requestAnimationFrame = originalFrame;
+      window.cancelAnimationFrame = originalCancel;
+    }
   });
 
   it('shows the shared scheme menu and the type field when the engine allows them', async () => {

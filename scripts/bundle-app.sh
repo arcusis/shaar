@@ -27,6 +27,8 @@ assert_no_verification_code() {
     -e --probe-favicon-restore \
     -e ShaarDevToolsF12RouteSmoke \
     -e --devtools-f12-route \
+    -e WebsitePermissionPromptProbe \
+    -e --probe-website-permission \
     "$1"
   then
     echo "Verification code found in $1." >&2

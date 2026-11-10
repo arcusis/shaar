@@ -42,6 +42,23 @@ struct SiteDataTests {
     #expect(arguments["origin"] as? String == "https://example.com")
   }
 
+  @Test func settingsAcceptRememberedMidiAndProtocolHandlers() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await fake.setResponse(
+      """
+      {"schemaVersion":1,"settings":{"midi":{"value":"allow","isDefault":false},"protocolHandlers":{"value":"allow","isDefault":false}}}
+      """)
+    let values = try await adapter.settings(origin: "https://example.com")
+    #expect(values["midi"] == ShaarSiteSetting(value: .allow, isDefault: false))
+    #expect(values["protocolHandlers"] == ShaarSiteSetting(value: .allow, isDefault: false))
+    let callsAfterRead = await fake.calls.count
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.set(origin: "https://example.com", type: "protocolHandlers", value: .allow)
+    }
+    #expect(await fake.calls.count == callsAfterRead)
+  }
+
   @Test func resetAndClearOperationsUseTypedSchemas() async throws {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)

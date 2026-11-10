@@ -87,6 +87,25 @@ struct WebsitePermissionConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func protocolHandlerUsesTheSharedConsentSheet() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let request = try #require(
+      WebsitePermissionRequest(
+        id: "protocol-1", profileID: store.session.selectedSpace.profileID,
+        tabID: tab.id, pageURL: tab.url, requestingOrigin: URL(string: "https://meet.google.com")!,
+        kinds: [.protocolHandler]))
+    #expect(store.requestWebsitePermission(request))
+    #expect(store.sheet?.id == "permission-protocol-1")
+    #expect(WebsitePermissionKind.protocolHandler.title == PanelsL10n.string("this protocol"))
+    #expect(
+      WebsitePermissionKind.protocolHandler.purpose
+        == PanelsL10n.string("open links that use this protocol"))
+    #expect(WebsitePermissionKind.protocolHandler.symbol == "link")
+    let allowsOneTime = request.kinds.allSatisfy { $0.supportsOneTimeGrant }
+    #expect(!allowsOneTime)
+  }
+
   @Test func permissionPromptDismissesPendingSplitCommand() throws {
     let store = store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

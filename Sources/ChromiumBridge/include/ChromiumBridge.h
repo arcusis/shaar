@@ -122,7 +122,10 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onExtensionPopup)(NSDictionary<NSString *, id> *popup);
 @property(copy, nullable) void (^onExtensionPopupClosed)(NSString *popupID);
 @property(copy, nullable) void (^onExtensionPopupSize)(NSString *popupID, NSSize size);
+/// websiteMediaRequested and websitePermissionRequested share this callback.
+/// Both payloads carry schemaVersion, id, pageURL, origin, and permissions.
 @property(copy, nullable) void (^onWebsiteMediaRequest)(NSDictionary<NSString *, id> *request);
+/// websiteMediaDismissed and websitePermissionDismissed share this callback.
 @property(copy, nullable) void (^onWebsiteMediaDismissed)(NSString *requestID);
 /// A page called getDisplayMedia; the request is bound to its live tab and frame.
 @property(copy, nullable) void (^onDesktopCaptureRequest)(NSDictionary<NSString *, id> *request);

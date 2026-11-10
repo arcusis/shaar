@@ -95,6 +95,7 @@ struct ProfileSitePermission: Identifiable, Equatable {
     case "automaticDownloads": return SettingsL10n.string("Automatic Downloads")
     case "cookies": return SettingsL10n.string("Cookies")
     case "midi": return "MIDI"
+    case "protocolHandlers": return SettingsL10n.string("Protocol Handlers")
     case "sensors": return SettingsL10n.string("Sensors")
     case "windowManagement": return SettingsL10n.string("Window Management")
     case "localFonts": return SettingsL10n.string("Local Fonts")

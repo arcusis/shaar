@@ -94,6 +94,7 @@ extension WebsitePermissionKind {
     case .windowManagement: PanelsL10n.string("window management")
     case .localFonts: PanelsL10n.string("local fonts")
     case .storageAccess: PanelsL10n.string("cookies across sites")
+    case .protocolHandler: PanelsL10n.string("this protocol")
     }
   }
 
@@ -109,6 +110,7 @@ extension WebsitePermissionKind {
     case .windowManagement: PanelsL10n.string("open and place windows on your displays")
     case .localFonts: PanelsL10n.string("use fonts installed on this Mac")
     case .storageAccess: PanelsL10n.string("use its cookies while embedded in other sites")
+    case .protocolHandler: PanelsL10n.string("open links that use this protocol")
     }
   }
 
@@ -124,6 +126,7 @@ extension WebsitePermissionKind {
     case .windowManagement: "macwindow.on.rectangle"
     case .localFonts: "textformat"
     case .storageAccess: "network"
+    case .protocolHandler: "link"
     }
   }
 }

@@ -8,7 +8,7 @@ import Foundation
 /// Website permissions the engine forwards for a decision, named as the engine reports them.
 public enum WebsitePermissionKind: String, Sendable, CaseIterable {
   case camera, microphone, location, notifications, clipboard, midi
-  case multipleDownloads, windowManagement, localFonts, storageAccess
+  case multipleDownloads, windowManagement, localFonts, storageAccess, protocolHandler
 
   /// Chromium can grant these for the current visit only; the rest are remembered when allowed.
   public var supportsOneTimeGrant: Bool {

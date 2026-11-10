@@ -170,7 +170,9 @@ public struct ShaarSiteDataAdapter: Sendable {
   public func set(origin: String, type: String, value: ShaarSiteSettingValue) async throws
     -> ShaarSiteSetting
   {
-    guard Self.settingNames.contains(type) else { throw ShaarSiteDataError.malformedResponse }
+    guard Self.settableSettingNames.contains(type) else {
+      throw ShaarSiteDataError.malformedResponse
+    }
     let root = try await submit(
       .settingsSet,
       [
@@ -298,6 +300,13 @@ public struct ShaarSiteDataAdapter: Sendable {
 
   private static let settingNames: Set<String> = [
     "microphone", "camera", "location", "notifications", "popups", "sound",
+    "midi", "protocolHandlers",
+  ]
+
+  /// Protocol handlers are listed and reset with the other exceptions. They are
+  /// not a content setting, so the exceptions editor cannot assign them.
+  private static let settableSettingNames: Set<String> = [
+    "microphone", "camera", "location", "notifications", "popups", "sound", "midi",
   ]
 
   private static func decodeCookiePolicy(_ root: [String: Any]) throws

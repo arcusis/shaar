@@ -108,24 +108,45 @@ struct DeviceChooserTests {
     let request = try #require(
       self.request(
         store, transport: "usb", id: "unsafe-name",
-        options: [["index": 0, "name": unsafeName]], canGrant: true))
+        options: [["optionID": "unsafe-option", "name": unsafeName]], canGrant: true))
 
     #expect(request.options.first?.title == "Adapter\u{FFFD}\u{FFFD}txt.exe")
   }
 
-  @Test func chooserRejectsFractionalAndOutOfRangeOptionIndexes() throws {
+  @Test func chooserRejectsMalformedAndLegacyOptionIdentifiers() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
 
-    for invalidIndex: Any in [0.5, 64] {
+    for invalidOption: [String: Any] in [
+      ["optionID": "bad option", "name": "Adapter"],
+      ["optionID": String(repeating: "a", count: 65), "name": "Adapter"],
+      ["index": 0, "name": "Adapter"],
+    ] {
       let payload = event(
         transport: "usb", id: "invalid-index", page: tab.url,
-        options: [["index": invalidIndex, "name": "Adapter"]], canGrant: true)
+        options: [invalidOption], canGrant: true)
       #expect(
         DeviceChooserIntake.request(
           tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
           payload: payload) == nil)
     }
+  }
+
+  @Test func chooserOptionsRequireUniqueOpaqueIdentifiers() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let valid = ["optionID": "opaque-option-0", "name": "Adapter"]
+    let parsedRequest = try #require(
+      self.request(store, transport: "usb", id: "opaque-session", options: [valid], canGrant: true))
+    #expect(parsedRequest.options.first?.optionID == "opaque-option-0")
+
+    let duplicate = event(
+      transport: "usb", id: "opaque-session", page: tab.url,
+      options: [valid, valid], canGrant: true)
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: duplicate) == nil)
   }
 
   @Test func unnamedDevicesHaveAVisibleFallbackLabel() throws {
@@ -134,8 +155,8 @@ struct DeviceChooserTests {
       self.request(
         store, transport: "usb", id: "unnamed-device",
         options: [
-          ["index": 0, "name": ""],
-          ["index": 1, "name": "   "],
+          ["optionID": "unnamed-0", "name": ""],
+          ["optionID": "unnamed-1", "name": "   "],
         ], canGrant: true))
 
     #expect(request.options.map(\.title) == [
@@ -143,12 +164,12 @@ struct DeviceChooserTests {
     ])
   }
 
-  @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
+  @Test func sheetCancelRejectsWithoutADeviceOptionID() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
     let request = try #require(self.request(store, transport: "hid", id: "4"))
-    var decided: Int??
-    store.onDeviceChooserDecision = { _, index in decided = .some(index) }
+    var decided: String??
+    store.onDeviceChooserDecision = { _, optionID in decided = .some(optionID) }
     #expect(store.requestDeviceChooser(request))
     #expect(!store.requestDeviceChooser(request))
     let sheet = try #require(store.sheet)
@@ -156,21 +177,38 @@ struct DeviceChooserTests {
     #expect(sheet.isConsent)
     #expect(sheet.tabID == tab.id)
     #expect(sheet.matches(store.session))
-    store.resolveDeviceChooser(request.id, optionIndex: 0)
+    store.resolveDeviceChooser(request.id, optionID: "opaque-option-0")
     #expect(decided == .some(nil))
     #expect(store.deviceChooserRequests.isEmpty)
     _ = DeviceChooserConsent(store: store, request: request).body
     let populated = DeviceChooserRequest(
       id: "9", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
       origin: tab.url, transport: .usb,
-      options: [DeviceChooserOption(index: 0, title: "Adapter", detail: "USB")],
+      options: [DeviceChooserOption(optionID: "opaque-option-0", title: "Adapter", detail: "USB")],
       bluetoothUnavailable: false, canGrant: true)
-    _ = DeviceChooserConsent(store: store, request: populated, initialSelection: 0).body
+    _ = DeviceChooserConsent(
+      store: store, request: populated, initialSelection: "opaque-option-0").body
     let unavailable = DeviceChooserRequest(
       id: "8", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
       origin: tab.url, transport: .bluetooth, options: [], bluetoothUnavailable: true,
       canGrant: false)
     _ = DeviceChooserConsent(store: store, request: unavailable).body
+  }
+
+  @Test func sheetResolutionReturnsOnlyTheSelectedOpaqueOptionID() throws {
+    let store = try store()
+    let optionID = "opaque-device-7"
+    let request = try #require(
+      self.request(
+        store, transport: "usb", id: "opaque-selection",
+        options: [["optionID": optionID, "name": "Adapter"]], canGrant: true))
+    var decisions: [String?] = []
+    store.onDeviceChooserDecision = { _, selected in decisions.append(selected) }
+
+    #expect(store.requestDeviceChooser(request))
+    store.resolveDeviceChooser(request.id, optionID: optionID)
+    #expect(decisions == [optionID])
+    #expect(store.deviceChooserRequests.isEmpty)
   }
 
   @Test func anUpdateReplacesTheOpenDeviceList() throws {
@@ -180,7 +218,7 @@ struct DeviceChooserTests {
     let updated = try #require(
       self.request(
         store, kind: "deviceChooserUpdated", transport: "usb", id: "7",
-        options: [["index": 0, "name": "USB serial adapter"]], canGrant: true))
+        options: [["optionID": "usb-option-7", "name": "USB serial adapter"]], canGrant: true))
     #expect(updated.canGrant)
     #expect(store.updateDeviceChooser(updated))
     guard case .deviceChooser(let shown) = store.sheet else {
@@ -188,6 +226,7 @@ struct DeviceChooserTests {
       return
     }
     #expect(shown.options.map(\.title) == ["USB serial adapter"])
+    #expect(shown.options.map(\.optionID) == ["usb-option-7"])
     #expect(shown.canGrant)
     store.dismissDeviceChooserFromEngine(updated.id)
     #expect(store.deviceChooserRequests.isEmpty)
@@ -216,28 +255,28 @@ struct DeviceChooserTests {
   }
 
   @Test func anUpdatedOptionListInvalidatesThePreviousSelection() {
-    let previous = [DeviceChooserOption(index: 0, title: "Adapter A", detail: "")]
-    let updated = [DeviceChooserOption(index: 0, title: "Adapter B", detail: "")]
+    let previous = [DeviceChooserOption(optionID: "adapter-a", title: "Adapter A", detail: "")]
+    let updated = [DeviceChooserOption(optionID: "adapter-b", title: "Adapter B", detail: "")]
     let revision = UUID()
     let updatedRevision = UUID()
     var selection = DeviceChooserSelection(options: previous, revision: revision)
-    selection.select(0, from: previous, revision: revision)
+    selection.select("adapter-a", from: previous, revision: revision)
 
-    #expect(selection.selectedIndex(for: previous, revision: revision) == 0)
-    #expect(selection.selectedIndex(for: updated, revision: updatedRevision) == nil)
-    selection.select(0, from: updated, revision: updatedRevision)
-    #expect(selection.selectedIndex(for: updated, revision: updatedRevision) == 0)
+    #expect(selection.selectedOptionID(for: previous, revision: revision) == "adapter-a")
+    #expect(selection.selectedOptionID(for: updated, revision: updatedRevision) == nil)
+    selection.select("adapter-b", from: updated, revision: updatedRevision)
+    #expect(selection.selectedOptionID(for: updated, revision: updatedRevision) == "adapter-b")
   }
 
   @Test func anIdenticalOptionRefreshInvalidatesThePreviousSelection() {
-    let options = [DeviceChooserOption(index: 0, title: "Same adapter", detail: "")]
+    let options = [DeviceChooserOption(optionID: "same-adapter", title: "Same adapter", detail: "")]
     let revision = UUID()
     let refreshedRevision = UUID()
     var selection = DeviceChooserSelection(options: options, revision: revision)
-    selection.select(0, from: options, revision: revision)
+    selection.select("same-adapter", from: options, revision: revision)
 
-    #expect(selection.selectedIndex(for: options, revision: revision) == 0)
-    #expect(selection.selectedIndex(for: options, revision: refreshedRevision) == nil)
+    #expect(selection.selectedOptionID(for: options, revision: revision) == "same-adapter")
+    #expect(selection.selectedOptionID(for: options, revision: refreshedRevision) == nil)
   }
 
   @Test func selectedDeviceOptionHasASelectedAccessibilityTrait() {

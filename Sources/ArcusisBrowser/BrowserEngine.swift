@@ -48,6 +48,7 @@ final class BrowserEngine {
   let windowID: String
   private let callbacks: BrowserRuntimeClient
   let autoPictureInPicture: AutoPictureInPicture
+  let pictureInPictureEnterGate = PictureInPictureEnterGate()
   let pictureInPictureControls = PictureInPictureControls()
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
@@ -128,7 +129,8 @@ final class BrowserEngine {
     self.events = events
     self.downloadDirectoryApplier = downloadDirectoryApplier
     self.windowID = windowID ?? runtime.primaryWindowID
-    autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
+    autoPictureInPicture = AutoPictureInPicture(
+      engine: .chromium(runtime, gate: pictureInPictureEnterGate))
     callbacks = BrowserRuntimeClient(windowID: self.windowID) { [weak store] in
       Set(store?.session.profiles.map { $0.id.uuidString } ?? [])
     }
@@ -822,8 +824,10 @@ final class BrowserEngine {
         lastTabOrders[profile] = positions
       }
     }
-    // Before the switch, so the leaving page still counts as visible to Chromium.
+    // Ask for picture-in-picture, and let that request reach the page, before the
+    // leaving tab is hidden. YouTube pauses on hide, and a paused video is skipped.
     handOffPictureInPicture()
+    pictureInPictureEnterGate.waitUntilIdle()
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
     if let selected = session.selectedPage?.tab.id {
       runtime.activateTabID(selected.uuidString)

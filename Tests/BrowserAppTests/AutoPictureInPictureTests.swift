@@ -142,6 +142,33 @@ final class AutoPictureInPictureTests: XCTestCase {
     XCTAssertTrue(store.automaticPictureInPictureAllowed(forTab: video))
   }
 
+  func testEnterGateWaitsUntilTheRequestIsAnswered() {
+    let gate = PictureInPictureEnterGate()
+    let started = gate.begin()
+    DispatchQueue.main.async { gate.end(generation: started) }
+    gate.waitUntilIdle(timeout: 1)
+    XCTAssertEqual(gate.pending, 0)
+  }
+
+  func testEnterGateDoesNotWaitWhenNothingWasRequested() {
+    let gate = PictureInPictureEnterGate()
+    let start = Date()
+    gate.waitUntilIdle(timeout: 1)
+    XCTAssertLessThan(Date().timeIntervalSince(start), 0.1)
+  }
+
+  func testEnterGateDropsALostReplySoTheNextSwitchDoesNotStall() {
+    let gate = PictureInPictureEnterGate()
+    _ = gate.begin()
+    let start = Date()
+    gate.waitUntilIdle(timeout: 0.12)
+    XCTAssertEqual(gate.pending, 0)
+    XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(start), 0.1)
+    let next = Date()
+    gate.waitUntilIdle(timeout: 1)
+    XCTAssertLessThan(Date().timeIntervalSince(next), 0.1)
+  }
+
   func testSiteSettingPersists() {
     let file = FileManager.default.temporaryDirectory.appending(
       path: "\(UUID().uuidString)/preferences.json")

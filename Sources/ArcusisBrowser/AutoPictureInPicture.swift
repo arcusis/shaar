@@ -93,3 +93,49 @@ final class AutoPictureInPicture {
     return allowed(page)
   }
 }
+
+/// Counts outstanding picture-in-picture enter requests.
+/// Tab activation waits for these so the page can call requestPictureInPicture
+/// before a site that pauses on hide, such as YouTube, rejects the request.
+/// The engine answers on the main thread; the lock covers that reply.
+final class PictureInPictureEnterGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var pendingCount = 0
+  private var epoch = 0
+
+  var pending: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return pendingCount
+  }
+
+  func begin() -> Int {
+    lock.lock()
+    defer { lock.unlock() }
+    pendingCount += 1
+    return epoch
+  }
+
+  func end(generation started: Int) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard started == epoch, pendingCount > 0 else { return }
+    pendingCount -= 1
+  }
+
+  /// Returns as soon as every request issued so far has been answered.
+  /// A lost reply is dropped at the timeout so the next tab switch does not stall.
+  func waitUntilIdle(timeout: TimeInterval = 0.3) {
+    guard pending > 0 else { return }
+    let deadline = Date().addingTimeInterval(timeout)
+    while pending > 0 && Date() < deadline {
+      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.02))
+    }
+    lock.lock()
+    if pendingCount > 0 {
+      epoch += 1
+      pendingCount = 0
+    }
+    lock.unlock()
+  }
+}

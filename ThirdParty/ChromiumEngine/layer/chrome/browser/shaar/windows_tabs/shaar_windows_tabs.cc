@@ -213,6 +213,15 @@ content::WebContents* BrowserTabRegistryImpl::FindWebContentsByID(
   return nullptr;
 }
 
+content::WebContents* BrowserTabRegistryImpl::FindWebContentsByID(
+    shaar_engine* engine,
+    std::string_view id) {
+  for (const auto& entry : tabs_)
+    if (entry.engine == engine && entry.id == id)
+      return entry.contents;
+  return nullptr;
+}
+
 std::string_view BrowserTabRegistryImpl::TabID(shaar_engine* engine,
                                                shaar_window* window,
                                                shaar_tab* tab) {

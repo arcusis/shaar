@@ -327,15 +327,18 @@ def browser_crash(name, app_pid, launcher_pid):
     return owned_crash(name, app_pid, launcher_pid)
 
 
+def row_accepted(row):
+    return row.get("passed") is True and row.get("proven") is not False
+
+
+def report_passed(rows):
+    return bool(rows) and all(row_accepted(row) for row in rows)
+
+
 def markdown_table(rows):
     lines = ["## Part B", "", "| Check | Result | Detail |", "| --- | --- | --- |"]
     for row in rows:
-        if row.get("proven") is False:
-            result = "NOT PROVEN"
-        elif row.get("passed") is True:
-            result = "PASS"
-        else:
-            result = "FAIL"
+        result = "PASS" if row_accepted(row) else "FAIL"
         detail = " ".join(str(row.get("detail", "")).split())
         if len(detail) > 220:
             detail = detail[:217] + "..."
@@ -411,6 +414,7 @@ def main():
     quit_hung = False
     stderr = ""
     root = None
+    gate = False
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -451,11 +455,11 @@ def main():
             name for name in crashes
             if name not in browser and "Helper" in name and owned_crash(name, app_pid, os.getpid())
         ]
-        rows = list(report.get("rows") or [])
+        product_rows = list(report.get("rows") or [])
         finished_report = report.get("complete") is True and not browser
         clean_exit = return_code == 0 and not timed_out
         app_finished = finished_report and (clean_exit or quit_hung)
-        rows.append({
+        harness_row = {
             "name": "Browser process stayed up",
             "passed": app_finished,
             "proven": True,
@@ -463,7 +467,9 @@ def main():
                 f"exit {return_code}, timedOut {timed_out}, quitHung {quit_hung}, "
                 f"browser reports {len(browser)}, helper reports {len(helper)}"
             ),
-        })
+        }
+        rows = product_rows + [harness_row]
+        gate = report_passed(product_rows) and row_accepted(harness_row)
         receipt = {
             "verificationExecutable": str(executable),
             "exitCode": return_code,
@@ -476,9 +482,7 @@ def main():
             "browserCrashReports": browser,
             "helperCrashReports": helper,
             "stderrTail": (stderr or "")[-4000:],
-            "passed": app_finished and all(
-                row.get("passed") is True or row.get("proven") is False for row in rows
-            ),
+            "passed": gate,
         }
         options.receipt.parent.mkdir(parents=True, exist_ok=True)
         options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
@@ -495,7 +499,7 @@ def main():
         }, indent=2))
         if root is not None:
             shutil.rmtree(root, ignore_errors=True)
-    if not app_finished:
+    if not gate:
         raise SystemExit(1)
 
 

@@ -10,8 +10,8 @@ import Foundation
 
 @testable import ArcusisBrowser
 
-/// Records dialogs and panels on the main run loop, then dismisses them.
-/// Hidden runs must not leave a password prompt, file panel, or alert on screen.
+/// Records panels the probe asked for and cancels file choosers.
+/// A visible browser window is left where it is, so the hidden-windows row can fail.
 private final class DialogGuard: NSObject, @unchecked Sendable {
   private let lock = NSLock()
   private var running = false
@@ -57,32 +57,33 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   @MainActor
   @objc private func sweepOnMain() {
     if let modal = NSApp.modalWindow {
-      record(modal, kind: "modal")
-      NSApp.abortModal()
+      if let panel = modal as? NSSavePanel {
+        recordChooser(panel)
+      } else {
+        record(modal, kind: "modal")
+      }
     }
     for window in NSApp.windows {
-      if let panel = window as? NSOpenPanel {
-        record(panel, kind: "open-panel")
-        panel.cancel(nil)
-        panel.orderOut(nil)
-        continue
-      }
       if let panel = window as? NSSavePanel {
-        record(panel, kind: "save-panel")
-        panel.cancel(nil)
-        panel.orderOut(nil)
+        recordChooser(panel)
         continue
       }
       if let sheet = window.attachedSheet {
         record(sheet, kind: "sheet")
-        window.endSheet(sheet)
-        sheet.orderOut(nil)
       }
       if window.isVisible {
         record(window, kind: "visible")
-        window.orderOut(nil)
       }
     }
+  }
+
+  @MainActor
+  private func recordChooser(_ panel: NSSavePanel) {
+    let kind = panel is NSOpenPanel ? "open-panel" : "save-panel"
+    record(panel, kind: kind)
+    guard panel.isVisible else { return }
+    panel.cancel(nil)
+    panel.orderOut(nil)
   }
 
   @MainActor
@@ -122,7 +123,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
 }
 
 /// Exercises heavy pages, dialogs, downloads, popups, find, zoom, print,
-/// and renderer recovery in one hidden shipping window.
+/// and renderer recovery in one hidden verification window.
 @MainActor enum ShaarBrowsingEdgeProbe {
   private static let snapshotScript = """
     ({ready:document.documentElement.dataset.ready||'',\
@@ -189,8 +190,9 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       return
     }
     dialogs.start()
-    for row in zoomAndPrintRows() { report.add(row) }
     report.add(await checkFind(context, runtime, pageURL))
+    report.add(await checkPageZoom(context, runtime))
+    report.add(await checkPrint(dialogs))
     report.add(await checkHuge(context, runtime, pageURL))
     report.add(await checkScroll(context, runtime, pageURL))
     report.add(contentsOf: await checkMedia(context, runtime, pageURL))
@@ -203,7 +205,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     report.add(await checkCrash(context))
     report.add(contentsOf: await checkDialogs(context, runtime, pageURL, dialogs))
     cancelActiveDownloads(context)
-    let stray = hideStrayWindows()
+    let stray = visibleWindowLabels()
     if !stray.isEmpty {
       report.add(
         makeRow(
@@ -213,23 +215,86 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     }
   }
 
-  private static func zoomAndPrintRows() -> [[String: Any]] {
-    let items = menuLines()
-    let view = items.filter { $0.menuID == "View" }.map(\.title).joined(separator: ", ")
-    let window = items.filter { $0.menuID == "Window" }.map(\.title).joined(separator: ", ")
-    let file = items.filter { $0.menuID == "File" }.map(\.title).joined(separator: ", ")
-    let zoom = items.contains(where: isPageZoom)
-    let printCommand = items.contains(where: isPrintCommand)
-    return [
-      makeRow(
-        "Page zoom", zoom,
-        zoom
-          ? "A page zoom command is in the menu."
-          : "No Zoom In, Zoom Out, or Actual Size command. View: \(view). Window: \(window)."),
-      makeRow(
-        "Print", printCommand,
-        printCommand ? "A Print command is in the menu." : "No Print command. File: \(file)."),
-    ]
+  private static func checkPageZoom(
+    _ context: NativeBrowserContext, _ runtime: ARCShaarRuntime
+  ) async -> [String: Any] {
+    let view = menuTitles(menuID: "View")
+    let before = await pageScale(runtime, context)
+    guard let item = firstItem(where: isPageZoom) else {
+      return makeRow("Page zoom", false, "No Zoom In command to invoke. View: \(view).")
+    }
+    let title = item.title
+    let sent = perform(item)
+    try? await Task.sleep(for: .milliseconds(400))
+    let after = await pageScale(runtime, context)
+    let changed = scaleChanged(before, after)
+    let hidden = windowsHidden()
+    return makeRow(
+      "Page zoom", sent && changed && hidden,
+      "invoked \(title), sent \(sent), scale \(scaleText(before)) to \(scaleText(after)), hidden \(hidden)"
+    )
+  }
+
+  private static func checkPrint(_ dialogs: DialogGuard) async -> [String: Any] {
+    let file = menuTitles(menuID: "File")
+    guard let item = firstItem(where: isPrintCommand) else {
+      return makeRow("Print", false, "No Print command to invoke. File: \(file).")
+    }
+    let title = item.title
+    let before = dialogs.snapshot().count
+    let sent = perform(item)
+    try? await Task.sleep(for: .milliseconds(500))
+    let fresh = Array(dialogs.snapshot().dropFirst(before))
+    let panel = fresh.contains(where: isPrintSurface)
+    dismissPrintSurfaces()
+    let hidden = windowsHidden()
+    return makeRow(
+      "Print", sent && panel && hidden,
+      "invoked \(title), sent \(sent), panel \(panel), hidden \(hidden), \(describe(fresh))")
+  }
+
+  private static func pageScale(
+    _ runtime: ARCShaarRuntime, _ context: NativeBrowserContext
+  ) async -> Double? {
+    let json = await evaluate(
+      runtime, tab: selectedID(context), script: "({scale:window.devicePixelRatio})", seconds: 3)
+    guard let value = object(from: json)?["scale"] else { return nil }
+    if let number = value as? NSNumber { return number.doubleValue }
+    if let number = value as? Double { return number }
+    return nil
+  }
+
+  private static func scaleChanged(_ before: Double?, _ after: Double?) -> Bool {
+    guard let before, let after else { return false }
+    return abs(after - before) > 0.05
+  }
+
+  private static func scaleText(_ value: Double?) -> String {
+    guard let value else { return "nil" }
+    return String(format: "%.3f", value)
+  }
+
+  private static func isPrintSurface(_ note: [String: String]) -> Bool {
+    let kind = note["kind"] ?? ""
+    let name = (note["class"] ?? "").lowercased()
+    let title = (note["title"] ?? "").lowercased()
+    if name.contains("print") || title.contains("print") { return true }
+    return kind == "modal" || kind == "sheet"
+  }
+
+  private static func dismissPrintSurfaces() {
+    for window in NSApp.windows where window.className.lowercased().contains("print") {
+      window.orderOut(nil)
+    }
+  }
+
+  private static func perform(_ item: NSMenuItem) -> Bool {
+    guard let action = item.action else { return false }
+    return NSApp.sendAction(action, to: item.target, from: item)
+  }
+
+  private static func menuTitles(menuID: String) -> String {
+    menuLines().filter { $0.menuID == menuID }.map(\.title).joined(separator: ", ")
   }
 
   private static func isPageZoom(_ item: MenuLine) -> Bool {
@@ -1015,13 +1080,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     }
   }
 
-  private static func hideStrayWindows() -> [String] {
-    var titles: [String] = []
-    for window in NSApp.windows where window.isVisible {
-      titles.append(window.title.isEmpty ? window.className : window.title)
-      window.orderOut(nil)
+  private static func visibleWindowLabels() -> [String] {
+    NSApp.windows.filter(\.isVisible).map { window in
+      window.title.isEmpty ? window.className : window.title
     }
-    return titles
   }
 
   private static func describe(_ notes: [[String: String]]) -> String {
@@ -1135,6 +1197,33 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     return lines
   }
 
+  private static func firstItem(where matches: (MenuLine) -> Bool) -> NSMenuItem? {
+    func walk(_ menu: NSMenu?, parentTitle: String, parentID: String) -> NSMenuItem? {
+      guard let menu else { return nil }
+      let menuID = menu.identifier?.rawValue ?? parentID
+      for item in menu.items {
+        let title = item.title
+        let itemID = item.identifier?.rawValue ?? ""
+        let key = item.keyEquivalent
+        let modifiers = item.keyEquivalentModifierMask
+        let submenu = item.submenu
+        let separator = item.isSeparatorItem
+        if !separator {
+          let line = MenuLine(
+            menuTitle: parentTitle, menuID: menuID, title: title,
+            itemID: itemID, key: key, modifiers: modifiers)
+          if matches(line) { return item }
+        }
+        let childID = itemID.isEmpty ? title : itemID
+        if let found = walk(submenu, parentTitle: title, parentID: childID) {
+          return found
+        }
+      }
+      return nil
+    }
+    return walk(NSApp.mainMenu, parentTitle: "", parentID: "")
+  }
+
   private struct MenuLine {
     let menuTitle: String
     let menuID: String
@@ -1203,7 +1292,7 @@ private final class EdgeProbeReport {
   }
 
   private func publish(complete: Bool, hidden: Bool, dialogs: [[String: String]]) {
-    let passed = complete && hidden && rows.allSatisfy { $0["passed"] as? Bool == true }
+    let passed = complete && hidden && !rows.isEmpty && rows.allSatisfy(rowAccepted)
     edgeProbeWrite(
       [
         "passed": passed, "complete": complete, "allWindowsHidden": hidden,
@@ -1223,6 +1312,10 @@ private final class EdgeProbeOnce: @unchecked Sendable {
     fired = true
     return true
   }
+}
+
+private func rowAccepted(_ row: [String: Any]) -> Bool {
+  (row["passed"] as? Bool) == true && (row["proven"] as? Bool) != false
 }
 
 private func edgeProbeWrite(_ value: [String: Any], to url: URL) {

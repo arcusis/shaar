@@ -335,6 +335,26 @@ def report_passed(rows):
     return bool(rows) and all(row_accepted(row) for row in rows)
 
 
+def visible_notes(dialogs):
+    return [note for note in dialogs or [] if note.get("kind") == "visible"]
+
+
+def visible_notes_fail_their_row(rows, dialogs):
+    flashed = visible_notes(dialogs)
+    if not flashed:
+        return True
+    hidden = [row for row in rows if row.get("name") == "Hidden windows"]
+    return bool(hidden) and all(row.get("passed") is False for row in hidden)
+
+
+def evaluate_gate(product_rows, dialogs, harness_row):
+    return (
+        report_passed(product_rows)
+        and visible_notes_fail_their_row(product_rows, dialogs)
+        and row_accepted(harness_row)
+    )
+
+
 def markdown_table(rows):
     lines = ["## Part B", "", "| Check | Result | Detail |", "| --- | --- | --- |"]
     for row in rows:
@@ -469,7 +489,7 @@ def main():
             ),
         }
         rows = product_rows + [harness_row]
-        gate = report_passed(product_rows) and row_accepted(harness_row)
+        gate = evaluate_gate(product_rows, report.get("dialogs") or [], harness_row)
         receipt = {
             "verificationExecutable": str(executable),
             "exitCode": return_code,

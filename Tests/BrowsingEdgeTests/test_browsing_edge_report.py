@@ -35,6 +35,38 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         ]
         self.assertFalse(PROBE.report_passed(rows))
 
+    def test_visible_note_fails_a_hidden_windows_row_that_claims_a_pass(self):
+        rows = [{"name": "Hidden windows", "passed": True, "proven": True}]
+        dialogs = [{"kind": "visible", "title": "Leak"}]
+        harness = {"passed": True, "proven": True}
+        self.assertFalse(PROBE.visible_notes_fail_their_row(rows, dialogs))
+        self.assertFalse(PROBE.evaluate_gate(rows, dialogs, harness))
+
+    def test_visible_note_requires_the_failed_row_the_gate_reads(self):
+        rows = [
+            {"name": "Find in page", "passed": True, "proven": True},
+            {"name": "Hidden windows", "passed": False, "proven": True},
+        ]
+        dialogs = [{"kind": "visible", "title": "Leak"}]
+        harness = {"passed": True, "proven": True}
+        self.assertTrue(PROBE.visible_notes_fail_their_row(rows, dialogs))
+        self.assertFalse(PROBE.report_passed(rows))
+        self.assertFalse(PROBE.evaluate_gate(rows, dialogs, harness))
+
+    def test_visible_note_with_no_hidden_windows_row_fails_the_gate(self):
+        rows = [{"name": "Find in page", "passed": True, "proven": True}]
+        dialogs = [{"kind": "visible", "class": "NSWindow"}]
+        self.assertFalse(PROBE.visible_notes_fail_their_row(rows, dialogs))
+        self.assertFalse(PROBE.evaluate_gate(
+            rows, dialogs, {"passed": True, "proven": True}))
+
+    def test_open_panel_does_not_count_as_a_visible_window(self):
+        rows = [{"name": "Hidden windows", "passed": True, "proven": True}]
+        dialogs = [{"kind": "open-panel", "class": "NSOpenPanel", "title": "Open"}]
+        harness = {"passed": True, "proven": True}
+        self.assertTrue(PROBE.visible_notes_fail_their_row(rows, dialogs))
+        self.assertTrue(PROBE.evaluate_gate(rows, dialogs, harness))
+
     def test_real_passes_are_accepted(self):
         rows = [
             {"passed": True, "proven": True},

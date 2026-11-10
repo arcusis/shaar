@@ -10,6 +10,27 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+func browsingEdgeHiddenWindowsFailure(
+  stillVisible: [String], notes: [[String: String]]
+) -> String? {
+  let flashed = notes.compactMap { note -> String? in
+    guard note["kind"] == "visible" else { return nil }
+    let title = note["title"] ?? ""
+    if !title.isEmpty { return title }
+    let name = note["class"] ?? ""
+    return name.isEmpty ? "window" : name
+  }
+  var parts: [String] = []
+  if !flashed.isEmpty {
+    parts.append("Visible during the run: \(flashed.joined(separator: ", "))")
+  }
+  if !stillVisible.isEmpty {
+    parts.append("Still visible: \(stillVisible.joined(separator: ", "))")
+  }
+  if parts.isEmpty { return nil }
+  return parts.joined(separator: ". ")
+}
+
 /// Records panels the probe asked for and cancels file choosers.
 /// A visible browser window is left where it is, so the hidden-windows row can fail.
 private final class DialogGuard: NSObject, @unchecked Sendable {
@@ -206,10 +227,9 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     report.add(contentsOf: await checkDialogs(context, runtime, pageURL, dialogs))
     cancelActiveDownloads(context)
     let stray = visibleWindowLabels()
-    if !stray.isEmpty {
-      report.add(
-        makeRow(
-          "Hidden windows", false, "Visible windows remained: \(stray.joined(separator: ", "))"))
+    let notes = dialogs.snapshot()
+    if let detail = browsingEdgeHiddenWindowsFailure(stillVisible: stray, notes: notes) {
+      report.add(makeRow("Hidden windows", false, detail))
     } else {
       report.add(makeRow("Hidden windows", true, "No window was left visible"))
     }

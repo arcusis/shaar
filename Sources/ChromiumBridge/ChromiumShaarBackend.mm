@@ -1293,8 +1293,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     completion(nil, ShaarError(@"Invalid Shaar history limit."));
     return;
   }
+  // The shipped engine accepts a history query while the visit page is shorter
+  // than the request. The widest page is requested, and the caller's bound comes back.
   [self submitProfileID:profileID operation:SHAAR_OP_HISTORY_QUERY
-                payload:@{@"schemaVersion": @1, @"maxUrls": @(limit),
+                payload:@{@"schemaVersion": @1, @"maxUrls": @5000,
                           @"maxVisitsPerUrl": @1}
              completion:^(NSDictionary *result, NSError *error) {
     NSArray *entries = result[@"entries"];
@@ -1304,6 +1306,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     }
     NSMutableArray<NSDictionary *> *rows = [NSMutableArray arrayWithCapacity:entries.count];
     for (id entry in entries) {
+      if ((NSInteger)rows.count >= limit) break;
       if (![entry isKindOfClass:NSDictionary.class] ||
           ![entry[@"url"] isKindOfClass:NSString.class] ||
           ![entry[@"title"] isKindOfClass:NSString.class] ||

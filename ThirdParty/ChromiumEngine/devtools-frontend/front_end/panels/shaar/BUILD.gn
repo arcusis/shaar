@@ -21,6 +21,10 @@ devtools_entrypoint("meta") {
   ]
   ts_deps = [ "build-info:meta" ]
   ts_deps += [ "graphql-trpc:meta" ]
+  # Same reason as viewports:meta: this bundle inlines the panel until the
+  # entrypoint is listed in the GRD file.
+  deps = [ "viewports:css_files" ]
+    "viewports:meta",
 
   visibility = [
     ":*",
@@ -43,4 +47,5 @@ group("unittests") {
   ]
   deps = [ "build-info:unittests" ]
   deps += [ "graphql-trpc:unittests" ]
+    "viewports:unittests",
 }

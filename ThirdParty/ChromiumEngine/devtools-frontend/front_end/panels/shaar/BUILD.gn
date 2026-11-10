@@ -19,6 +19,8 @@ devtools_entrypoint("meta") {
     "copy-for-agent:meta",
     "graphql-trpc:meta",
   ]
+  ts_deps = [ "build-info:meta" ]
+  ts_deps += [ "graphql-trpc:meta" ]
 
   visibility = [
     ":*",
@@ -39,4 +41,6 @@ group("unittests") {
     "copy-for-agent:unittests",
     "graphql-trpc:unittests",
   ]
+  deps = [ "build-info:unittests" ]
+  deps += [ "graphql-trpc:unittests" ]
 }

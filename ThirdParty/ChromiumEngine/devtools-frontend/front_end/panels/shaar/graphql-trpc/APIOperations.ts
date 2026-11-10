@@ -4,7 +4,7 @@
 
 // Same naming rules as ShaarAPIOperation in the app. The stored operation is
 // the name, the call type, and an error flag. Post data and response text
-// are not stored. Error checks use the first 8000 characters of the response.
+// are not stored. Error checks scan the first 8000 characters for a JSON key.
 
 export const APIKind = {
   GRAPHQL: 'graphql',
@@ -452,23 +452,6 @@ function isProcedureName(name: string): boolean {
   return true;
 }
 
-function graphqlErrors(value: unknown): boolean {
-  if (Array.isArray(value)) {
-    return value.some(item => graphqlErrors(item));
-  }
-  if (!isRecord(value) || !Array.isArray(value.errors)) {
-    return false;
-  }
-  return value.errors.length > 0;
-}
-
-function trpcErrors(value: unknown): boolean {
-  if (Array.isArray(value)) {
-    return value.some(item => trpcErrors(item));
-  }
-  return isRecord(value) && isRecord(value.error);
-}
-
 export function responseSample(body: string|null): string|null {
   if (body === null || body.length <= RESPONSE_READ_LIMIT) {
     return body;
@@ -477,11 +460,98 @@ export function responseSample(body: string|null): string|null {
 }
 
 function responseHasErrors(kind: APIKind, body: string|null): boolean {
-  const value = jsonValue(responseSample(body));
-  if (value === undefined) {
+  const sample = responseSample(body);
+  if (!sample) {
     return false;
   }
-  return kind === APIKind.GRAPHQL ? graphqlErrors(value) : trpcErrors(value);
+  // Scan the bounded text. JSON.parse of a cut body throws and would hide an
+  // errors key that sits inside the window.
+  return kind === APIKind.GRAPHQL ? hasGraphQLErrors(sample) : hasTRPCError(sample);
+}
+
+function hasGraphQLErrors(sample: string): boolean {
+  return hasJsonKey(sample, 'errors', valueIsNonEmptyArray);
+}
+
+function hasTRPCError(sample: string): boolean {
+  return hasJsonKey(sample, 'error', valueIsObject);
+}
+
+function valueIsNonEmptyArray(sample: string, index: number): boolean {
+  if (index >= sample.length || sample[index] !== '[') {
+    return false;
+  }
+  const content = skipJsonSpace(sample, index + 1);
+  return content < sample.length && sample[content] !== ']';
+}
+
+function valueIsObject(sample: string, index: number): boolean {
+  return index < sample.length && sample[index] === '{';
+}
+
+function hasJsonKey(sample: string, keyName: string, valueAt: (sample: string, index: number) => boolean): boolean {
+  let index = 0;
+  while (index < sample.length) {
+    if (sample[index] !== '"') {
+      index++;
+      continue;
+    }
+    const token = readJsonString(sample, index);
+    if (!token) {
+      return false;
+    }
+    index = token.end;
+    if (token.text !== keyName) {
+      continue;
+    }
+    const colon = skipJsonSpace(sample, index);
+    if (colon >= sample.length || sample[colon] !== ':') {
+      continue;
+    }
+    if (valueAt(sample, skipJsonSpace(sample, colon + 1))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+interface JsonStringToken {
+  text: string;
+  end: number;
+}
+
+function readJsonString(sample: string, start: number): JsonStringToken|null {
+  let text = '';
+  let index = start + 1;
+  while (index < sample.length) {
+    const char = sample[index];
+    if (char === '\\') {
+      if (index + 1 >= sample.length) {
+        return null;
+      }
+      text += sample[index + 1];
+      index += 2;
+      continue;
+    }
+    if (char === '"') {
+      return {text, end: index + 1};
+    }
+    text += char;
+    index++;
+  }
+  return null;
+}
+
+function skipJsonSpace(sample: string, index: number): number {
+  let cursor = index;
+  while (cursor < sample.length) {
+    const char = sample[cursor];
+    if (char !== ' ' && char !== '\n' && char !== '\r' && char !== '\t') {
+      break;
+    }
+    cursor++;
+  }
+  return cursor;
 }
 
 function jsonValue(body: string|null): unknown {

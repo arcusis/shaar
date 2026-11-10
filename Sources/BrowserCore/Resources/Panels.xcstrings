@@ -2802,6 +2802,16 @@
         }
       }
     },
+    "open links that use this protocol": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לפתוח קישורים שמשתמשים בפרוטוקול זה"
+          }
+        }
+      }
+    },
     "see text and images you copy": {
       "localizations": {
         "he": {
@@ -2818,6 +2828,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "להציג התראות"
+          }
+        }
+      }
+    },
+    "this protocol": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרוטוקול זה"
           }
         }
       }

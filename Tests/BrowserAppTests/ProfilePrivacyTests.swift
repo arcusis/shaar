@@ -156,6 +156,11 @@ struct ProfilePrivacyTests {
     #expect(model.failure != nil && model.sites.count == 1 && model.message == nil)
   }
 
+  @Test func protocolHandlerExceptionUsesTheSettingsTitle() {
+    let permission = ProfileSitePermission(id: "protocolHandlers", value: .allow)
+    #expect(permission.title == SettingsL10n.string("Protocol Handlers"))
+  }
+
   @Test func defaultsOmittedAndMalformedExceptionsRejected() throws {
     #expect(
       try ProfileSitePermission.exceptions(["camera": ["value": "default", "isDefault": true]])

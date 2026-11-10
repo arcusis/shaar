@@ -58,6 +58,7 @@
     "File System": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מערכת קבצים"}}}},
     "Keyboard Lock": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "נעילת מקלדת"}}}},
     "Pointer Lock": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "נעילת מצביע"}}}},
+    "Protocol Handlers": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מטפלי פרוטוקול"}}}},
     "Camera Pan, Tilt and Zoom": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "תנועת מצלמה, הטיה וזום"}}}},
     "Blocked": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חסום"}}}},
     "Ask": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לשאול"}}}},

@@ -55,6 +55,22 @@ shaar_error EmptyError() {
 
 void IgnoreReply(void *, const shaar_result *) {}
 
+// Camera and microphone keep the websiteMedia* names. Later prompts use
+// websitePermission* with the same payload, so one sheet can answer both.
+BOOL ShaarWebsitePermissionEvent(NSString *kind, BOOL *dismissed) {
+  if ([kind isEqualToString:@"websiteMediaDismissed"] ||
+      [kind isEqualToString:@"websitePermissionDismissed"]) {
+    *dismissed = YES;
+    return YES;
+  }
+  if ([kind isEqualToString:@"websiteMediaRequested"] ||
+      [kind isEqualToString:@"websitePermissionRequested"]) {
+    *dismissed = NO;
+    return YES;
+  }
+  return NO;
+}
+
 struct Symbols {
   decltype(&shaar_abi_minor) abi_minor = nullptr;
   decltype(&shaar_engine_create) create = nullptr;
@@ -351,18 +367,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   }
   NSString *tabID = String(event->tab_id);
   NSString *profileID = String(event->profile_id).uppercaseString;
+  BOOL websitePermissionDismissed = NO;
   if (event->kind == SHAAR_EVENT_PERMISSION &&
-      [kind isEqualToString:@"websiteMediaDismissed"]) {
-    NSString *requestID = payload[@"id"];
-    if (![payload[@"schemaVersion"] isEqual:@1] ||
-        ![requestID isKindOfClass:NSString.class] ||
-        ![_shaarMediaRequests[requestID] isEqualToString:tabID]) return;
-    [_shaarMediaRequests removeObjectForKey:requestID];
-    if (self.onWebsiteMediaDismissed) self.onWebsiteMediaDismissed(requestID);
-    return;
-  }
-  if (event->kind == SHAAR_EVENT_PERMISSION &&
-      [kind isEqualToString:@"websiteMediaRequested"]) {
+      ShaarWebsitePermissionEvent(kind, &websitePermissionDismissed)) {
+    if (websitePermissionDismissed) {
+      NSString *requestID = payload[@"id"];
+      if (![payload[@"schemaVersion"] isEqual:@1] ||
+          ![requestID isKindOfClass:NSString.class] ||
+          ![_shaarMediaRequests[requestID] isEqualToString:tabID]) return;
+      [_shaarMediaRequests removeObjectForKey:requestID];
+      if (self.onWebsiteMediaDismissed) self.onWebsiteMediaDismissed(requestID);
+      return;
+    }
     NSString *windowID = String(event->window_id);
     NSString *requestID = payload[@"id"];
     if (!_shaarMediaConsentAvailable || event->session_id.size ||

@@ -77,6 +77,8 @@ import Testing
     kinds: [.notifications, .location, .clipboard])
   #expect(request?.kinds == [.location, .notifications, .clipboard])
   #expect(WebsitePermissionKind(rawValue: "location") == .location)
+  #expect(WebsitePermissionKind(rawValue: "protocolHandler") == .protocolHandler)
+  #expect(!WebsitePermissionKind.protocolHandler.supportsOneTimeGrant)
   #expect(
     WebsitePermissionKind.allCases.filter(\.supportsOneTimeGrant) == [
       .camera, .microphone, .location,

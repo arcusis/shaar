@@ -218,7 +218,8 @@ extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
   NSSet<NSString *> *allowed = [NSSet setWithArray:@[
     @"blank", @"popup", @"plain", @"performance-input",
     @"arcusis-download-probe", @"window-client-download",
-    @"external-consent-probe", @"arcusis-private-quit-activation"]];
+    @"external-consent-probe", @"arcusis-private-quit-activation",
+    @"parity-action"]];
   return [allowed containsObject:elementID];
 }
 

@@ -1,6 +1,6 @@
 # Device chooser evidence
 
-These shots are the sheet the engine permission event presents. They were rendered offscreen from that SwiftUI view inside a hidden verification run of `scripts/test-device-choosers.py`. No window was ordered on screen. The pinned engine does not send the device-chooser event yet, so the live page calls the real navigator API. Chromium rejects Serial, Bluetooth, and USB with NotFoundError. Web HID resolves with an empty list, which is Chromium's result when no device is selected. Connect stays off until that event includes a device. The populated USB shot is the same sheet with two example rows so the selection state is visible.
+These are offscreen renders of the SwiftUI device chooser, including its empty and populated states. The hidden verification run uses a trusted click, invokes the real Web APIs, and receives each settled result through the native DevTools completion callback. It does not read a page-owned result variable. On the pinned engine, the chooser event is not sent yet, so these captures use the SwiftUI view directly. Serial, Bluetooth, and USB returned `NotFoundError`; HID resolved with an empty list. The main thread recorded no stall, the Bluetooth run reached `IOBluetoothDeviceInquiry`, all windows stayed hidden, and the run produced no new crash report. Connect stays off until the chooser event includes a device.
 
 ![Serial, Bluetooth unavailable](serial-chooser.png)
 

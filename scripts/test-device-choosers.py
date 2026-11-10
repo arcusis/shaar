@@ -18,36 +18,14 @@ import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 CRASHES = Path.home() / "Library/Logs/DiagnosticReports"
-CALLS = {
-    "serial": "navigator.serial.requestPort()",
-    "bluetooth": "navigator.bluetooth.requestDevice({acceptAllDevices:true})",
-    "usb": "navigator.usb.requestDevice({filters:[]})",
-    "hid": "navigator.hid.requestDevice({filters:[]})",
-}
-
-
 class Fixture(BaseHTTPRequestHandler):
     def do_GET(self):
         kind = self.path.strip("/").split("?", 1)[0]
-        call = CALLS.get(kind)
-        if call is None:
+        if kind not in {"serial", "bluetooth", "usb", "hid"}:
             self.send_error(404)
             return
         body = f"""<!doctype html><meta charset="utf-8"><title>{kind}</title>
-<button id="parity-action">Request</button>
-<script>
-document.getElementById("parity-action").addEventListener("click", () => {{
-  ({call}).then((value) => {{
-    const count = Array.isArray(value) ? value.length : (value == null ? 0 : 1);
-    window.__shaarChooserResult = {{ok: true, count: count}};
-  }}, (error) => {{
-    window.__shaarChooserResult = {{
-      error: error && error.name ? error.name : "Error",
-      message: String(error && error.message || error)
-    }};
-  }});
-}});
-</script>"""
+<button id="parity-action" type="button">Request</button>"""
         data = body.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

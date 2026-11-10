@@ -28,6 +28,7 @@ final class DeviceChooserProbe {
   private var passed = false
   private var rows: [[String: Any]] = []
   private var screenshots: [String] = []
+  private var pageSettlements: [String: PageSettlement] = [:]
 
   private init(arguments: [String]) throws {
     func value(after flag: String) throws -> String {
@@ -145,6 +146,12 @@ final class DeviceChooserProbe {
         finish(error: "The trusted click on \(transport) did not land.")
         return
       }
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        if let result = await self.evaluateChooserCall(transport) {
+          self.pageSettlements[transport] = result
+        }
+      }
       let (engineSheet, pageSettlement) = await outcome(context.store, transport: transport)
       watchdog.endChooser()
       let stall = watchdog.maxStall - before
@@ -172,7 +179,7 @@ final class DeviceChooserProbe {
         }
         context.store.resolveDeviceChooser(engineSheet.id, optionIndex: nil)
         context.store.sheetDidDismiss()
-        settled = await waitForSettlement()
+        settled = await waitForSettlement(transport)
         guard settled?.isChooserDismissal(for: transport) == true else {
           finish(error: mismatch(transport, settled))
           return
@@ -206,7 +213,7 @@ final class DeviceChooserProbe {
       }
       rows.append([
         "transport": transport, "passed": true, "stallSeconds": stall,
-        "engineSheet": engineSheet != nil, "bluetoothUnavailable": unavailable,
+        "engineSheet": engineSheet != nil,
         "canGrant": canGrant, "pageResult": settled?.summary ?? "",
       ])
     }
@@ -240,7 +247,6 @@ final class DeviceChooserProbe {
       let path = await evaluate("location.pathname")
       let loading = context.engine.pages[tabID]?.loading == true
       if path?.contains("/\(transport)") == true, !loading {
-        _ = await evaluate("window.__shaarChooserResult = null; true")
         return windowsHidden
       }
       try? await Task.sleep(for: .milliseconds(100))
@@ -255,34 +261,51 @@ final class DeviceChooserProbe {
       if case .deviceChooser(let request) = store.sheet, request.transport.rawValue == transport {
         return (request, nil)
       }
-      if let found = await settlement() { return (nil, found) }
+      if let found = pageSettlements[transport] { return (nil, found) }
       try? await Task.sleep(for: .milliseconds(100))
     }
     return (nil, nil)
   }
 
-  private func waitForSettlement() async -> PageSettlement? {
+  private func waitForSettlement(_ transport: String) async -> PageSettlement? {
     for _ in 0..<50 {
-      if let found = await settlement() { return found }
+      if let found = pageSettlements[transport] { return found }
       try? await Task.sleep(for: .milliseconds(100))
     }
     return nil
   }
 
-  private func settlement() async -> PageSettlement? {
-    guard let raw = await evaluate("window.__shaarChooserResult"),
-      !raw.isEmpty, raw != "null"
-    else { return nil }
-    guard let data = raw.data(using: .utf8),
-      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { return PageSettlement(raw: raw) }
-    if let error = object["error"] as? String, !error.isEmpty {
-      return PageSettlement(errorName: error, message: object["message"] as? String, raw: raw)
+  private func evaluateChooserCall(_ transport: String) async -> PageSettlement? {
+    let calls = [
+      "serial": "navigator.serial.requestPort()",
+      "bluetooth": "navigator.bluetooth.requestDevice({acceptAllDevices:true})",
+      "usb": "navigator.usb.requestDevice({filters:[]})",
+      "hid": "navigator.hid.requestDevice({filters:[]})",
+    ]
+    guard let call = calls[transport] else { return nil }
+    let expression = """
+      (async () => {
+        if (!navigator.userActivation.isActive) {
+          return {error: "NotAllowedError", message: "The trusted chooser click did not activate the page."};
+        }
+        try {
+          const value = await \(call);
+          let count = 0;
+          if (Array.isArray(value)) count = value.length;
+          else if (value != null) count = 1;
+          return {ok: true, count};
+        } catch (error) {
+          return {error: error && error.name ? error.name : "Error",
+                  message: String(error && error.message || error)};
+        }
+      })()
+      """
+    return await withCheckedContinuation { continuation in
+      runtime.evaluateDeviceChooserProbe(inTabID: tabID.uuidString, expression: expression) {
+        raw in
+        continuation.resume(returning: raw.flatMap(PageSettlement.init(raw:)))
+      }
     }
-    if (object["ok"] as? Bool) == true, let count = object["count"] as? Int {
-      return PageSettlement(resolvedCount: count, raw: raw)
-    }
-    return PageSettlement(raw: raw)
   }
 
   private func mismatch(_ transport: String, _ seen: PageSettlement?) -> String {
@@ -378,6 +401,19 @@ final class DeviceChooserProbe {
     var message: String? = nil
     var resolvedCount: Int? = nil
     var raw: String
+
+    init?(raw: String) {
+      guard let data = raw.data(using: .utf8),
+        let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else { return nil }
+      self.raw = raw
+      if let error = object["error"] as? String, !error.isEmpty {
+        errorName = error
+        message = object["message"] as? String
+      } else if (object["ok"] as? Bool) == true, let count = object["count"] as? Int {
+        resolvedCount = count
+      }
+    }
 
     var summary: String {
       if let errorName {

@@ -1291,6 +1291,35 @@ extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
 
 @end
 
+@implementation ARCShaarRuntime (DeviceChooserProbe)
+
+- (void)evaluateDeviceChooserProbeInTabID:(NSString *)tabID
+                               expression:(NSString *)expression
+                               completion:(void (NS_SWIFT_UI_ACTOR ^)(NSString *))completion {
+  if (!completion || !ProbeCaptureAllowed() || !ARCProbePopupExpression(expression)) {
+    if (completion) completion(nil);
+    return;
+  }
+  NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [self windowIDForTabID:tabID];
+  if (!profileID || ![self shaarDevToolsOwnsTabID:tabID profileID:profileID
+                                         windowID:windowID]) {
+    completion(nil);
+    return;
+  }
+  [self shaarDevToolsCall:@"Runtime.evaluate"
+                  params:@{@"expression": expression,
+                           @"returnByValue": @YES,
+                           @"awaitPromise": @YES}
+              capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER
+                   tabID:tabID profileID:profileID windowID:windowID
+              completion:^(NSDictionary *result, NSError *error) {
+    completion(error ? nil : ARCProbeEvaluationJSON(result));
+  }];
+}
+
+@end
+
 @implementation ARCShaarRuntime (Verification)
 - (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
   if (!ProbeCaptureAllowed()) return nil;

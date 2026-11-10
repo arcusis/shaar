@@ -45,6 +45,14 @@ FOUNDATION_EXPORT BOOL ARCProbeTrustedClickElementAllowed(NSString * _Nullable e
                             completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 @end
 
+@interface ARCShaarRuntime (DeviceChooserProbe)
+/// Runs an authored probe expression and returns its settled promise through the native DevTools callback.
+- (void)evaluateDeviceChooserProbeInTabID:(NSString *)tabID
+                               expression:(NSString *)expression
+                               completion:(void (NS_SWIFT_UI_ACTOR ^)(NSString * _Nullable))completion
+    NS_SWIFT_UI_ACTOR;
+@end
+
 /// Decode a bounded PNG returned by Page.captureScreenshot; reject missing or malformed evidence.
 FOUNDATION_EXPORT NSData * _Nullable ARCProbePNGFromDevToolsResult(NSDictionary * _Nullable result);
 /// A popup id is the lowercase UUID the engine assigns to one extension host.

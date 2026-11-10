@@ -16,6 +16,7 @@ devtools_entrypoint("meta") {
     "focus-contrast:meta",
     "stacking-3d:meta",
     "stacking:meta",
+    "copy-for-agent:meta",
   ]
 
   visibility = [
@@ -34,5 +35,6 @@ group("unittests") {
     "focus-contrast:unittests",
     "stacking-3d:unittests",
     "stacking:unittests",
+    "copy-for-agent:unittests",
   ]
 }

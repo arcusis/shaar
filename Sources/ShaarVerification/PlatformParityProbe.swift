@@ -84,6 +84,7 @@ private struct ParitySnapshot {
   var surfaces: [String] = []
   var downloads: [String] = []
   var extensions: [String] = []
+  var installedMV3 = false
   var mediaTitle = ""
   var pictureInPicture = false
   var security = ""
@@ -127,11 +128,7 @@ private struct ParitySnapshot {
 
   func execute() async {
     defer {
-      preferences = readPreferences()
-      if !rows.contains(where: { $0["item"] as? String == "Safe Browsing state" }) {
-        rows.append(safeBrowsingRow())
-      }
-      completed = true
+      replaceSafeBrowsingRow()
       SurfaceGuard.stopWatchdog()
       publish()
       host.events.quit()
@@ -170,10 +167,7 @@ private struct ParitySnapshot {
     }
     let partition = await runPartition()
     rows.append(partition)
-    preferences = readPreferences()
-    if !rows.contains(where: { $0["item"] as? String == "Safe Browsing state" }) {
-      rows.append(safeBrowsingRow())
-    }
+    replaceSafeBrowsingRow()
     publish()
     // Device choosers can block the main thread inside a system framework.
     // An in-progress row is on disk before each one starts, so a hang names the check
@@ -188,6 +182,20 @@ private struct ParitySnapshot {
       rows.append(contentsOf: verdicts(check, snapshot))
       publish()
     }
+    let measured = rows.contains { row in
+      let item = row["item"] as? String ?? ""
+      let result = row["result"] as? String ?? ""
+      return item != "Setup" && item != "Safe Browsing state" && result != "in progress"
+    }
+    if measured {
+      completed = true
+    }
+  }
+
+  private func replaceSafeBrowsingRow() {
+    preferences = readPreferences()
+    rows.removeAll { $0["item"] as? String == "Safe Browsing state" }
+    rows.append(safeBrowsingRow())
   }
 
   private func deviceChecks() -> [ParityCheck] {
@@ -557,13 +565,11 @@ private struct ParitySnapshot {
   private func permissionRow(
     _ snapshot: ParitySnapshot, item: String, kind: String, delegate: String
   ) -> [String: Any] {
-    let prompted = snapshot.kinds.contains(kind)
-    let resolved = text(snapshot.result["outcome"]) == "resolved"
-    let passed = prompted || (resolved && kind != "location" && kind != "notifications")
-      || (kind == "location" && resolved)
-      || (kind == "notifications" && resolved && text(snapshot.result["state"]) == "granted")
+    let decision = PlatformParityVerdicts.permissionPrompt(
+      kind: kind, kinds: snapshot.kinds, outcome: text(snapshot.result["outcome"]))
     return row(
-      item: item, passed: passed, delegate: delegate, evidence: describe(snapshot),
+      item: item, passed: decision.passed, disposition: decision.disposition,
+      delegate: delegate, evidence: "\(decision.evidence) \(describe(snapshot))",
       signals: signals(snapshot))
   }
 
@@ -653,13 +659,13 @@ private struct ParitySnapshot {
   }
 
   private func printRow(_ snapshot: ParitySnapshot) -> [String: Any] {
-    let outcome = text(snapshot.result["outcome"])
-    let before = flag(snapshot.result["before"])
-    let surfaced = snapshot.surfaces.contains { $0.localizedCaseInsensitiveContains("print") }
-    let passed = outcome == "afterprint" || before || surfaced
+    let decision = PlatformParityVerdicts.printSurface(
+      outcome: text(snapshot.result["outcome"]), beforePrint: flag(snapshot.result["before"]),
+      surfaces: snapshot.surfaces)
     return row(
-      item: "Print", passed: passed, delegate: "PrintViewManager",
-      evidence: describe(snapshot), signals: signals(snapshot))
+      item: "Print", passed: decision.passed, disposition: decision.disposition,
+      delegate: "PrintViewManager",
+      evidence: "\(decision.evidence) \(describe(snapshot))", signals: signals(snapshot))
   }
 
   private func paymentRow(_ snapshot: ParitySnapshot) -> [String: Any] {
@@ -691,11 +697,13 @@ private struct ParitySnapshot {
   }
 
   private func extensionsRow(_ snapshot: ParitySnapshot) -> [String: Any] {
-    let listed = snapshot.extensions.isEmpty ? "product list empty" : snapshot.extensions.joined(separator: "; ")
+    let decision = PlatformParityVerdicts.extensions(
+      listed: snapshot.extensions, installedMV3: snapshot.installedMV3)
     return row(
-      item: "Extensions (MV3) basics", passed: !snapshot.extensions.isEmpty,
+      item: "Extensions (MV3) basics", passed: decision.passed,
+      disposition: decision.disposition,
       delegate: "local MV3 install",
-      evidence: "\(listed). \(describe(snapshot))", signals: signals(snapshot))
+      evidence: "\(decision.evidence) \(describe(snapshot))", signals: signals(snapshot))
   }
 
   private func pwaRow(_ snapshot: ParitySnapshot) -> [String: Any] {
@@ -739,37 +747,26 @@ private struct ParitySnapshot {
   }
 
   private func partitionRow(write: ParitySnapshot, read: ParitySnapshot) -> [String: Any] {
-    let first = text(write.result["stored"])
-    let second = text(read.result["stored"])
-    let cookie = text(read.result["cookie"])
-    let leaked = cookie.contains("legacy=1")
-    let wrote = first == "alpha"
-    let partitioned = wrote && second.isEmpty && !leaked
-    let evidence = "write stored=\(first) error=\(text(write.result["storageError"])) cookie=\(text(write.result["cookie"])); read stored=\(second) error=\(text(read.result["storageError"])) cookie=\(cookie); policy=\(read.cookiesBlocked)"
-    let disposition = text(write.result["mode"]).isEmpty && text(read.result["mode"]).isEmpty ? "probe" : "gap"
+    let decision = PlatformParityVerdicts.partition(
+      writeOpened: write.opened, readOpened: read.opened,
+      writeMode: text(write.result["mode"]), writeStored: text(write.result["stored"]),
+      readMode: text(read.result["mode"]), readStored: text(read.result["stored"]),
+      readCookie: text(read.result["cookie"]))
     return row(
-      item: "Storage partitioning / third-party cookies", passed: partitioned,
-      disposition: partitioned ? "pass" : disposition,
+      item: "Storage partitioning / third-party cookies", passed: decision.passed,
+      disposition: decision.disposition,
       delegate: "storage partitioning and third-party cookie blocking",
-      evidence: evidence, signals: signals(read))
+      evidence: "\(decision.evidence) policy=\(read.cookiesBlocked)", signals: signals(read))
   }
 
   private func safeBrowsingRow() -> [String: Any] {
-    let enabled = preferences["safebrowsing.enabled"]
-    if preferences.isEmpty {
-      return probeRow("Safe Browsing state", evidence: "No Chromium preferences file was written.")
-    }
-    if enabled == "false" {
-      return row(
-        item: "Safe Browsing state", passed: false, delegate: "Safe Browsing enabled state",
-        evidence: "safebrowsing.enabled is false. \(preferenceSummary())", signals: preferences)
-    }
-    let evidence = enabled == "true"
-      ? "safebrowsing.enabled is true. \(preferenceSummary())"
-      : "No safebrowsing.enabled override; Chromium's default leaves Safe Browsing on. \(preferenceSummary())"
+    let enabled = preferences["safebrowsing.enabled"] ?? ""
+    let decision = PlatformParityVerdicts.safeBrowsing(
+      preferenceFilePresent: !preferences.isEmpty, enabled: enabled)
     return row(
-      item: "Safe Browsing state", passed: true, delegate: "Safe Browsing enabled state",
-      evidence: evidence, signals: preferences)
+      item: "Safe Browsing state", passed: decision.passed, disposition: decision.disposition,
+      delegate: "Safe Browsing enabled state",
+      evidence: "\(decision.evidence) \(preferenceSummary())", signals: preferences)
   }
 
   private func preferenceSummary() -> String {

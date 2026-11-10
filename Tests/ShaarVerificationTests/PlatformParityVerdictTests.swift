@@ -93,4 +93,131 @@ struct PlatformParityVerdictTests {
     #expect(!PlatformParityVerdicts.loopbackMapped(""))
     #expect(!PlatformParityVerdicts.loopbackMapped("93.184.216.34"))
   }
+
+  @Test func resolvedClipboardWithoutAPromptFails() {
+    let decision = PlatformParityVerdicts.permissionPrompt(
+      kind: "clipboard", kinds: [], outcome: "resolved")
+    #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
+  }
+
+  @Test func resolvedMidiWithoutAPromptFails() {
+    let decision = PlatformParityVerdicts.permissionPrompt(
+      kind: "midi", kinds: [], outcome: "resolved")
+    #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
+  }
+
+  @Test func resolvedStorageAccessWithoutAPromptFails() {
+    let decision = PlatformParityVerdicts.permissionPrompt(
+      kind: "storageAccess", kinds: [], outcome: "resolved")
+    #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
+  }
+
+  @Test func grantedNotificationWithoutAPromptFails() {
+    let decision = PlatformParityVerdicts.permissionPrompt(
+      kind: "notifications", kinds: [], outcome: "resolved")
+    #expect(!decision.passed)
+  }
+
+  @Test func resolvedLocationWithoutAPromptFails() {
+    let decision = PlatformParityVerdicts.permissionPrompt(
+      kind: "location", kinds: [], outcome: "resolved")
+    #expect(!decision.passed)
+  }
+
+  @Test func observedPermissionPromptPasses() {
+    let decision = PlatformParityVerdicts.permissionPrompt(
+      kind: "midi", kinds: ["midi"], outcome: "resolved")
+    #expect(decision.passed)
+    #expect(decision.disposition == "pass")
+  }
+
+  @Test func beforePrintWithoutAPrintSurfaceFails() {
+    let decision = PlatformParityVerdicts.printSurface(
+      outcome: "called", beforePrint: true, surfaces: ["BrowserWindow"])
+    #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
+  }
+
+  @Test func afterPrintWithoutAPrintSurfaceFails() {
+    let decision = PlatformParityVerdicts.printSurface(
+      outcome: "afterprint", beforePrint: true, surfaces: [])
+    #expect(!decision.passed)
+  }
+
+  @Test func printSurfacePasses() {
+    let decision = PlatformParityVerdicts.printSurface(
+      outcome: "called", beforePrint: true, surfaces: ["modal NSPrintPanel"])
+    #expect(decision.passed)
+  }
+
+  @Test func listedExtensionWithoutAnInstallFails() {
+    let decision = PlatformParityVerdicts.extensions(
+      listed: ["Helper 1.0 enabled=true"], installedMV3: false)
+    #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
+  }
+
+  @Test func emptyExtensionListWithoutAnInstallFails() {
+    let decision = PlatformParityVerdicts.extensions(listed: [], installedMV3: false)
+    #expect(!decision.passed)
+  }
+
+  @Test func installedMV3ExtensionPassesWhenItIsListed() {
+    let decision = PlatformParityVerdicts.extensions(
+      listed: ["Parity 1.0 enabled=true"], installedMV3: true)
+    #expect(decision.passed)
+  }
+
+  @Test func installFlagWithAnEmptyListFails() {
+    let decision = PlatformParityVerdicts.extensions(listed: [], installedMV3: true)
+    #expect(!decision.passed)
+  }
+
+  @Test func missingSafeBrowsingPrefIsAProbe() {
+    let absentFile = PlatformParityVerdicts.safeBrowsing(
+      preferenceFilePresent: false, enabled: "")
+    #expect(!absentFile.passed)
+    #expect(absentFile.disposition == "probe")
+    let absentKey = PlatformParityVerdicts.safeBrowsing(
+      preferenceFilePresent: true, enabled: "")
+    #expect(!absentKey.passed)
+    #expect(absentKey.disposition == "probe")
+  }
+
+  @Test func safeBrowsingEnabledPassesAndDisabledFails() {
+    let enabled = PlatformParityVerdicts.safeBrowsing(
+      preferenceFilePresent: true, enabled: "true")
+    #expect(enabled.passed)
+    let disabled = PlatformParityVerdicts.safeBrowsing(
+      preferenceFilePresent: true, enabled: "false")
+    #expect(!disabled.passed)
+    #expect(disabled.disposition == "gap")
+  }
+
+  @Test func unreadPartitionFrameDoesNotPass() {
+    let decision = PlatformParityVerdicts.partition(
+      writeOpened: true, readOpened: false, writeMode: "write", writeStored: "alpha",
+      readMode: "", readStored: "", readCookie: "")
+    #expect(!decision.passed)
+    #expect(decision.disposition == "probe")
+  }
+
+  @Test func partitionPassesWhenTheReadFrameOpenedAndTheWriteLanded() {
+    let decision = PlatformParityVerdicts.partition(
+      writeOpened: true, readOpened: true, writeMode: "write", writeStored: "alpha",
+      readMode: "read", readStored: "", readCookie: "part=1")
+    #expect(decision.passed)
+    #expect(decision.disposition == "pass")
+  }
+
+  @Test func partitionFailsWhenTheReadStillSeesTheWrite() {
+    let decision = PlatformParityVerdicts.partition(
+      writeOpened: true, readOpened: true, writeMode: "write", writeStored: "alpha",
+      readMode: "read", readStored: "alpha", readCookie: "legacy=1")
+    #expect(!decision.passed)
+    #expect(decision.disposition == "gap")
+  }
 }

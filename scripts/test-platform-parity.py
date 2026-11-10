@@ -500,10 +500,18 @@ def partition_page(frame):
     """)
 
 
-def crashes_for_pid(before, pid):
-    if pid is None:
+def crash_matches_pids(text, pids):
+    return any(
+        f'"pid" : {pid}' in text or f'"pid": {pid}' in text
+        for pid in pids if pid
+    )
+
+
+def crashes_for_pids(before, pids):
+    """Crash reports for the probe and any helper PID this run owned."""
+    owned = [pid for pid in pids if pid]
+    if not owned:
         return []
-    needles = (f'"pid" : {pid}', f'"pid": {pid}')
     found = []
     for name in sorted(crash_names() - before):
         for directory in (CRASHES, CRASHES / "Retired"):
@@ -511,7 +519,7 @@ def crashes_for_pid(before, pid):
             if not path.is_file():
                 continue
             text = path.read_text(errors="replace")[:12000]
-            if any(needle in text for needle in needles):
+            if crash_matches_pids(text, owned):
                 found.append(name)
                 break
     return found
@@ -565,55 +573,111 @@ def in_progress_is_stale(path, seconds=90):
     return time.time() - path.stat().st_mtime > seconds
 
 
-def stop_process_group(process):
-    """Stop the probe and helpers that are still in its process group.
+def parse_group_pids(text, pgid):
+    """PIDs whose process-group column is exactly pgid."""
+    found = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        pid = int(parts[0])
+        if pid <= 1 or int(parts[1]) != pgid or pid in found:
+            continue
+        found.append(pid)
+    return found
 
-    A pid that has already exited is left alone. Signaling it can hit a recycled
-    process group and raise EPERM.
-    """
+
+def pids_in_group(pgid):
+    result = subprocess.run(
+        ["ps", "-axo", "pid=,pgid="], capture_output=True, text=True, timeout=5)
+    if result.returncode != 0:
+        return []
+    return parse_group_pids(result.stdout, pgid)
+
+
+def pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def process_group(pid):
+    try:
+        return os.getpgid(pid)
+    except OSError:
+        return None
+
+
+def remember_owned_pids(process, owned):
+    """Record the probe PID and helpers while that process still owns the group."""
     if process is None or process.poll() is not None:
         return
-    pgid = process.pid
-    children = descendant_pids(pgid)
-    try:
-        if os.getpgid(pgid) != pgid:
-            process.kill()
-            process.wait(timeout=5)
-            return
-    except OSError:
+    if process_group(process.pid) != process.pid:
         return
-    try:
-        os.killpg(pgid, signal.SIGTERM)
-    except OSError:
-        try:
-            process.kill()
-        except OSError:
-            return
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        pass
-    if process.poll() is None:
-        try:
-            os.killpg(pgid, signal.SIGKILL)
-        except OSError:
+    found = []
+    for pid in [process.pid, *descendant_pids(process.pid), *pids_in_group(process.pid)]:
+        if pid > 1 and pid not in found:
+            found.append(pid)
+    owned[:] = found
+
+
+def pids_to_signal(recorded, probe_pid):
+    """Exact PIDs that are still the probe or still in its process group.
+
+    A recycled PID has a different group and is left alone. The group id is
+    never signaled.
+    """
+    chosen = []
+    for pid in recorded:
+        if pid <= 1 or not pid_alive(pid):
+            continue
+        group = process_group(pid)
+        if group is None:
+            continue
+        if pid == probe_pid or group == probe_pid:
+            chosen.append(pid)
+    return chosen
+
+
+def signal_exact_pids(pids):
+    """SIGTERM, then SIGKILL, each recorded PID. Returns the PIDs that were signaled."""
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        pending = [pid for pid in pids if pid_alive(pid)]
+        if not pending:
+            break
+        for pid in pending:
             try:
-                process.kill()
+                os.kill(pid, sig)
             except OSError:
                 pass
+        time.sleep(0.2 if sig == signal.SIGTERM else 0)
+    return pids
+
+
+def stop_process_group(process, owned):
+    """Stop the probe and the helper PIDs recorded for its process group."""
+    if process is None:
+        return []
+    remember_owned_pids(process, owned)
+    victims = pids_to_signal(owned, process.pid)
+    if process.poll() is None and process.pid not in victims and pid_alive(process.pid):
+        victims.insert(0, process.pid)
+    signal_exact_pids(victims)
+    if process.poll() is None:
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            pass
-    for pid in children:
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            continue
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+            try:
+                os.kill(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+    return victims
 
 
 def descendant_pids(pid):
@@ -647,6 +711,28 @@ def trackertest_connections():
             dict(item) for item in Handler.seen
             if is_trackertest_host(item.get("host", ""))
         ]
+
+
+def checks_ran(rows):
+    """True when a checklist row finished. Setup and Safe Browsing do not count."""
+    for row in rows or []:
+        item = str(row.get("item", ""))
+        if item in {"", "Setup", "Safe Browsing state"}:
+            continue
+        if row.get("result") == "in progress":
+            continue
+        return True
+    return False
+
+
+def run_completed(report, crashes):
+    """A setup failure can write rows and still leave the checklist unrun."""
+    return (
+        report.get("completed") is True
+        and report.get("allWindowsHidden") is True
+        and not crashes
+        and checks_ran(report.get("rows"))
+    )
 
 
 def read_report(path):
@@ -723,6 +809,7 @@ def main():
     exit_code = 1
     probe_pid = None
     process = None
+    owned_pids = []
     http = https = None
     with Handler.seen_lock:
         Handler.seen.clear()
@@ -758,6 +845,7 @@ def main():
             probe_pid = process.pid
             deadline = time.monotonic() + 600
             while process.poll() is None:
+                remember_owned_pids(process, owned_pids)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     exit_code = 124
@@ -769,7 +857,7 @@ def main():
                     if report_path.is_file() and in_progress_is_stale(report_path):
                         exit_code = 124
                         break
-            stop_process_group(process)
+            stop_process_group(process, owned_pids)
             err_file.close()
             stderr = tail(err_path.read_text(errors="replace")) if err_path.is_file() else ""
             report = read_report(report_path)
@@ -777,16 +865,19 @@ def main():
             stderr = tail(f"{stderr}\n{error}")
             report = read_report(report_path)
     finally:
-        stop_process_group(process)
+        stop_process_group(process, owned_pids)
         for server in (http, https):
             if server is not None:
                 server.shutdown()
         shutil.rmtree(root, ignore_errors=True)
-    crashes = crashes_for_pid(before, probe_pid)
+    watched = list(owned_pids)
+    if probe_pid and probe_pid not in watched:
+        watched.append(probe_pid)
+    crashes = crashes_for_pids(before, watched)
     pin_path = options.app / "Contents/Resources/ChromiumEngine/pin.json"
     pin = json.loads(pin_path.read_text()) if pin_path.is_file() else {}
     rows = list(report.get("rows", []))
-    completed = report.get("completed") is True and report.get("allWindowsHidden") is True and not crashes
+    completed = run_completed(report, crashes)
     receipt = {
         "verificationExecutable": str(executable),
         "engineRelease": pin.get("releaseTag", ""),

@@ -62,9 +62,32 @@ struct SavePromptTests {
     var decisions: [SavePromptRequest.Decision] = []
     store.onSavePromptDecision = { _, decision in decisions.append(decision) }
     #expect(store.requestSavePrompt(request))
-    store.perform(.open(URL(string: "https://example.com/")!))
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.nativeTabChanged(tab.id, url: URL(string: "https://example.com/")!, title: "Other")
+    #expect(store.savePrompt == request)
     store.resolveSavePrompt(request.id, decision: .save)
     #expect(decisions == [.dismiss])
+  }
+
+  @Test func switchingTabsDismissesTheOffer() throws {
+    let store = store()
+    let request = try request(store)
+    var decisions: [SavePromptRequest.Decision] = []
+    store.onSavePromptDecision = { _, decision in decisions.append(decision) }
+    #expect(store.requestSavePrompt(request))
+    store.perform(.open(URL(string: "http://127.0.0.1:9/login")!))
+    #expect(store.savePrompt == nil)
+    #expect(decisions == [.dismiss])
+  }
+
+  @Test func aPrivateWindowRejectsTheOffer() throws {
+    let session = try BrowserSession.privateWindow(sourceProfileID: UUID(), firstTabID: UUID())
+    let store = BrowserStore(privateSession: session)
+    store.perform(.open(URL(string: "http://127.0.0.1:9/password")!))
+    let request = try request(store)
+    #expect(!request.matches(store.session, inPrivateWindow: true))
+    #expect(!store.requestSavePrompt(request))
+    #expect(store.savePrompt == nil)
   }
 
   @Test func neverForACardIsDismissed() throws {

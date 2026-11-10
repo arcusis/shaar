@@ -57,10 +57,20 @@ private func payload(
   #expect(SavePromptRequest(payload: payload(prompt: "card", update: true)) == nil)
   #expect(SavePromptRequest(payload: payload(origin: "http://user:secret@127.0.0.1:9")) == nil)
   #expect(SavePromptRequest(payload: payload(page: "http://127.0.0.1:9/saved?x=1")) == nil)
+  #expect(SavePromptRequest(payload: payload(detail: "user\u{202E}admin")) == nil)
+  #expect(SavePromptRequest(payload: payload(detail: "user\u{200B}name")) == nil)
+  #expect(SavePromptRequest(payload: payload(detail: "user\u{2066}name")) == nil)
+  #expect(SavePromptRequest(payload: payload(detail: "\u{FEFF}user")) == nil)
+  #expect(SavePromptRequest(payload: payload(detail: "עברית")) != nil)
   #expect(SavePromptRequest(payload: payload(origin: "http://example.com")) != nil)
   var missing = payload()
   missing.removeValue(forKey: "detail")
   #expect(SavePromptRequest(payload: missing) == nil)
+}
+
+@Test func savePromptRejectsQueryPagesUntilTheLayerStripsThem() {
+  #expect(SavePromptRequest(payload: payload(page: "http://127.0.0.1:9/login?next=/home")) == nil)
+  #expect(SavePromptRequest(payload: payload(page: "http://127.0.0.1:9/login")) != nil)
 }
 
 @Test func savePromptNeverAppliesOnlyToANewPassword() {

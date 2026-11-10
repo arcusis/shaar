@@ -7,7 +7,9 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 
-/// Hidden shipping check for Chromium save offers. The current engine does not emit them yet,
+@testable import ArcusisBrowser
+
+/// Hidden verification check for Chromium save offers. The current engine does not emit them yet,
 /// so a missing bubble fails this probe instead of being reported as saved.
 @MainActor enum ShaarSavePromptProbe {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
@@ -131,7 +133,7 @@ import Foundation
   ) async -> Bool {
     guard let tab = context.engine.siteControlTarget?.tabID else { return false }
     return await withCheckedContinuation { continuation in
-      runtime.submitTrustedProbeClick(inTabID: tab.uuidString, elementID: "parity-action") {
+      runtime.submitTrustedProbeClick(inTabID: tab.uuidString, elementID: "plain") {
         continuation.resume(returning: $0)
       }
     }

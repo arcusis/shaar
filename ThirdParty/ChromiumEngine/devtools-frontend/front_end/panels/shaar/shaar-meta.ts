@@ -6,3 +6,4 @@
 // "<feature>:meta" dep in BUILD.gn in this directory. Do not add another
 // import to devtools_app.ts.
 import './build-info/build-info-meta.js';
+import './network-rules/network-rules-meta.js';

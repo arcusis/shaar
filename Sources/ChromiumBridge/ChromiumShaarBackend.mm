@@ -1382,8 +1382,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   NSString *windowID = tabID ? _shaarTabWindows[tabID] : _shaarPrimaryWindowID;
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   shaar_tab *tab = tabID ? (shaar_tab *)_shaarTabs[tabID].pointerValue : nullptr;
-  const BOOL profileOnly = operation == SHAAR_OP_EXTENSION_LIST ||
-      operation == SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS;
+  const BOOL profileOnly = operation == SHAAR_OP_EXTENSION_LIST || !tabID;
   if (!_shaarEngine || !profile || (!profileOnly && !window) || (tabID && (!tab ||
       ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) return NO;
   NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];

@@ -69,6 +69,7 @@ HARNESS_ID_RE = re.compile(
 OBJC_STRING_RE = re.compile(r'@"((?:[^"\\\n]|\\.)*)"')
 SWIFT_STRING_RE = re.compile(r'(?<![A-Za-z0-9_\\@])"((?:[^"\\\n]|\\.)*)"')
 ENGINE_TESTING = "SHAAR_ENGINE_TESTING"
+PROBE_OPERATION_RE = re.compile(r"\bSHAAR_OP_PROBE_[A-Z0-9_]+\b")
 ENGINE_TESTING_WRITE = re.compile(
     r'\b(?:setenv|unsetenv)\s*\(\s*"SHAAR_ENGINE_TESTING"'
 )
@@ -201,20 +202,78 @@ def line_findings(
     return found
 
 
-def engine_start_file(text: str) -> bool:
-    return "runWithDataDirectory:" in text and "testing:" in text
+def strip_comments(text: str) -> str:
+    """Replace comments with spaces while preserving strings and line numbers."""
+    result = list(text)
+    index = 0
+    quote = None
+    while index < len(text):
+        char = text[index]
+        if quote:
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in ('"', "'"):
+            quote = char
+            index += 1
+            continue
+        if text.startswith("//", index):
+            end = text.find("\n", index)
+            end = len(text) if end == -1 else end
+            for position in range(index, end):
+                result[position] = " "
+            index = end
+            continue
+        if text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            end = len(text) if end == -1 else end + 2
+            for position in range(index, end):
+                if result[position] != "\n":
+                    result[position] = " "
+            index = end
+            continue
+        index += 1
+    return "".join(result)
+
+
+def engine_start_span(path: Path, text: str) -> tuple[int, int] | None:
+    if path.as_posix().endswith("Sources/ChromiumBridge/ChromiumShaarBackend.mm"):
+        cleaned = strip_comments(text)
+        signature = re.compile(
+            r"-\s*\(int\)runWithDataDirectory:\s*\(NSURL\s*\*\)directory\s+"
+            r"testing:\s*\(BOOL\)testing\s*\{"
+        )
+        match = signature.search(cleaned)
+        if match:
+            depth = 1
+            for position in range(match.end(), len(cleaned)):
+                if cleaned[position] == "{":
+                    depth += 1
+                elif cleaned[position] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return match.start(), position + 1
+    return None
 
 
 def engine_testing_findings(path: Path, text: str) -> list[str]:
     """The engine start may set the variable. Every other read is a harness leak."""
-    start = engine_start_file(text)
+    cleaned = strip_comments(text)
+    allowed = engine_start_span(path, text)
+    allowed_writes = {
+        match.start() + match.group(0).index(ENGINE_TESTING)
+        for match in ENGINE_TESTING_WRITE.finditer(cleaned)
+        if allowed and allowed[0] <= match.start() < allowed[1]
+    }
     found = []
-    for number, line in enumerate(text.splitlines(), 1):
-        code = line.split("//", 1)[0]
-        if ENGINE_TESTING not in code:
+    for match in re.finditer(re.escape(ENGINE_TESTING), cleaned):
+        if match.start() in allowed_writes:
             continue
-        if start and ENGINE_TESTING_WRITE.search(code):
-            continue
+        number = cleaned.count("\n", 0, match.start()) + 1
         found.append(f"{path}:{number}: {ENGINE_TESTING}")
     return found
 
@@ -226,6 +285,10 @@ def source_findings(root: Path, symbols: set[str], flags: set[str], ids: set[str
             text = path.read_text(encoding="utf-8", errors="replace")
             found.extend(line_findings(path, text, symbols, flags, ids))
             found.extend(engine_testing_findings(path, text))
+            found.extend(
+                f"{path}:{text.count(chr(10), 0, match.start()) + 1}: {match.group(0)}"
+                for match in PROBE_OPERATION_RE.finditer(strip_comments(text))
+            )
     return found
 
 
@@ -283,13 +346,20 @@ def symbol_present(data: bytes, name: bytes) -> bool:
     return False
 
 
+def binary_symbol_is_harness(name: str) -> bool:
+    if name.startswith(("ShaarVerification", "ChromiumBridgeVerification")):
+        return True
+    separated = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", name).lower()
+    return bool(re.search(r"(?:^|-)(?:probe|parity|smoke|harness)(?:-|$)", separated))
+
+
 def binary_findings(path: Path, symbols: set[str], flags: set[str], ids: set[str]) -> list[str]:
     if not path.is_file():
         return [f"{path}: shipping executable is missing"]
     data = path.read_bytes()
     found = []
     for label in sorted(symbols):
-        if symbol_present(data, label.encode("utf-8")):
+        if binary_symbol_is_harness(label) and symbol_present(data, label.encode("utf-8")):
             found.append(f"{path}: {label}")
     for label in sorted(flags):
         if first_bounded(data, label.encode("utf-8")):
@@ -303,6 +373,8 @@ def binary_findings(path: Path, symbols: set[str], flags: set[str], ids: set[str
             found.append(f"{path}: {text}")
     if TESTING_BYTES.search(data):
         found.append(f"{path}: testing: true")
+    for match in re.finditer(br"SHAAR_OP_PROBE_[A-Z0-9_]+", data):
+        found.append(f"{path}: {match.group(0).decode('ascii')}")
     return found
 
 

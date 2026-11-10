@@ -116,20 +116,26 @@ final class PlatformPromptProbe {
       return
     }
     checks["pageReady"] = true
-    await spoofTitle()
+    await spoofTitle(deadline: deadline)
   }
 
-  private func spoofTitle() async {
+  private func spoofTitle(deadline: Date) async {
     let marker = "\u{2060}shaar-prompt\u{2060}display\u{2060}\(UUID().uuidString)"
     let literal = Self.javaScriptString(marker)
     let script = "(() => { document.title = \(literal); return document.title === \(literal); })()"
-    let applied = await evaluate(script)
-    try? await Task.sleep(for: .milliseconds(800))
+    var last = ""
+    while !finished && Date() < deadline {
+      last = (await evaluate(script))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      if last == "true" { break }
+      await pause()
+    }
     guard !finished else { return }
-    if applied != "true" {
-      finish(error: "The title spoof did not land.")
+    if last != "true" {
+      finish(error: "The title spoof did not land (\(last)).")
       return
     }
+    try? await Task.sleep(for: .milliseconds(800))
+    guard !finished else { return }
     if store.sheet != nil {
       finish(error: "A page title opened a sheet.")
       return

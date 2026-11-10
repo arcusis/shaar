@@ -20,41 +20,52 @@ struct DeviceChooserTests {
     #expect(!ShaarBluetoothMayCallIOBluetooth(true, 0, false))
   }
 
-  @Test func parsesTheTitleSignalAndIgnoresOrdinaryTitles() throws {
-    let signal = try title(kind: "bluetooth", id: "2-20", previous: "Docs")
-    let parsed = try #require(DeviceChooserSignal.parse(title: signal))
-    #expect(parsed.id == "2-20")
-    #expect(parsed.transport == .bluetooth)
-    #expect(parsed.previousTitle == "Docs")
-    #expect(DeviceChooserSignal.parse(title: "Docs") == nil)
-    #expect(DeviceChooserSignal.parse(title: DeviceChooserSignal.prefix + "{") == nil)
-    #expect(!DeviceChooserSignal.isSignalID("quote\"id"))
-  }
-
-  @Test func blockedSerialAndBluetoothCannotBeGranted() throws {
+  @Test func parsesAnEngineChooserEventAndRejectsAPageTitle() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    let serial = try #require(DeviceChooserIntake.request(
-      tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-      title: title(kind: "serial", id: "1-10", previous: "Serial"), bluetoothBlocked: true))
+    let parsed = try #require(
+      request(store, kind: "deviceChooserRequested", transport: "bluetooth", id: "2"))
+    #expect(parsed.id == "2")
+    #expect(parsed.transport == .bluetooth)
+    #expect(parsed.pageURL == tab.url)
+    #expect(parsed.options.isEmpty)
+    #expect(!parsed.canGrant)
+    #expect(DeviceChooserIntake.isChooserID("2"))
+    #expect(!DeviceChooserIntake.isChooserID(""))
+    #expect(!DeviceChooserIntake.isChooserID("quote\"id"))
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: ["title": "Docs"], bluetoothBlocked: true) == nil)
+  }
+
+  @Test func blockedSerialAndBluetoothCannotBeGrantedFromAnEmptyEvent() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let serial = try #require(request(store, transport: "serial", id: "1", bluetoothBlocked: true))
     #expect(serial.bluetoothUnavailable)
     #expect(!serial.canGrant)
-    #expect(serial.transport == .serial)
-    let usb = try #require(DeviceChooserIntake.request(
-      tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-      title: title(kind: "usb", id: "3-30", previous: "USB"), bluetoothBlocked: true))
+    let usb = try #require(request(store, transport: "usb", id: "3", bluetoothBlocked: true))
     #expect(!usb.bluetoothUnavailable)
-    #expect(DeviceChooserIntake.request(
-      tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-      title: "USB", bluetoothBlocked: true) == nil)
+    #expect(!usb.canGrant)
+    var mismatch = event(transport: "usb", id: "5", page: tab.url)
+    mismatch["canGrant"] = true
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: mismatch, bluetoothBlocked: false) == nil)
+    var extra = event(transport: "hid", id: "6", page: tab.url)
+    extra["previous"] = "HID"
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: extra, bluetoothBlocked: false) == nil)
   }
 
   @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    let request = try #require(DeviceChooserIntake.request(
-      tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-      title: title(kind: "hid", id: "4-40", previous: "HID"), bluetoothBlocked: false))
+    let request = try #require(self.request(store, transport: "hid", id: "4"))
     var decided: Int??
     store.onDeviceChooserDecision = { _, index in decided = .some(index) }
     #expect(store.requestDeviceChooser(request))
@@ -69,29 +80,36 @@ struct DeviceChooserTests {
     #expect(store.deviceChooserRequests.isEmpty)
     _ = DeviceChooserConsent(store: store, request: request).body
     let populated = DeviceChooserRequest(
-      id: "preview", signalID: "9-90", tabID: tab.id,
-      profileID: store.session.selectedSpace.profileID, pageURL: tab.url, transport: .usb,
+      id: "9", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+      transport: .usb,
       options: [DeviceChooserOption(index: 0, title: "Adapter", detail: "USB")],
       bluetoothUnavailable: false, canGrant: true)
     _ = DeviceChooserConsent(store: store, request: populated, initialSelection: 0).body
     let unavailable = DeviceChooserRequest(
-      id: "bluetooth-preview", signalID: "8-80", tabID: tab.id,
-      profileID: store.session.selectedSpace.profileID, pageURL: tab.url, transport: .bluetooth,
-      options: [], bluetoothUnavailable: true, canGrant: false)
+      id: "8", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+      transport: .bluetooth, options: [], bluetoothUnavailable: true, canGrant: false)
     _ = DeviceChooserConsent(store: store, request: unavailable).body
   }
 
-  @Test func installScriptSkipsBluetoothTransportsWhenBlocked() {
-    let blocked = DeviceChooserScript.install(bluetoothBlocked: true)
-    #expect(blocked.contains("const blocked = true"))
-    #expect(blocked.contains("\"serial\", !blocked"))
-    #expect(blocked.contains("\"bluetooth\", !blocked"))
-    #expect(blocked.contains("\\u2060shaar-chooser:"))
-    let open = DeviceChooserScript.install(bluetoothBlocked: false)
-    #expect(open.contains("const blocked = false"))
-    let settle = DeviceChooserScript.settle(signalID: "1-10", action: "reject")
-    #expect(settle.contains("\"1-10\""))
-    #expect(settle.contains("\"reject\""))
+  @Test func anUpdateReplacesTheOpenDeviceList() throws {
+    let store = try store()
+    let opened = try #require(self.request(store, transport: "usb", id: "7"))
+    #expect(store.requestDeviceChooser(opened))
+    let updated = try #require(
+      self.request(
+        store, kind: "deviceChooserUpdated", transport: "usb", id: "7",
+        options: [["index": 0, "name": "USB serial adapter"]], canGrant: true))
+    #expect(updated.canGrant)
+    #expect(store.updateDeviceChooser(updated))
+    guard case .deviceChooser(let shown) = store.sheet else {
+      Issue.record("The chooser sheet was not updated.")
+      return
+    }
+    #expect(shown.options.map(\.title) == ["USB serial adapter"])
+    #expect(shown.canGrant)
+    store.dismissDeviceChooserFromEngine(updated.id)
+    #expect(store.deviceChooserRequests.isEmpty)
+    #expect(store.sheet == nil)
   }
 
   private func store() throws -> BrowserStore {
@@ -100,10 +118,27 @@ struct DeviceChooserTests {
     return store
   }
 
-  private func title(kind: String, id: String, previous: String) throws -> String {
-    let data = try JSONSerialization.data(withJSONObject: [
-      "id": id, "kind": kind, "previous": previous,
-    ])
-    return DeviceChooserSignal.prefix + String(decoding: data, as: UTF8.self)
+  private func request(
+    _ store: BrowserStore, kind: String = "deviceChooserRequested", transport: String, id: String,
+    options: [[String: Any]] = [], canGrant: Bool = false, bluetoothBlocked: Bool = false
+  ) -> DeviceChooserRequest? {
+    guard let tab = store.session.selectedSpace.selectedTab else { return nil }
+    return DeviceChooserIntake.request(
+      tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+      payload: event(
+        kind: kind, transport: transport, id: id, page: tab.url, options: options,
+        canGrant: canGrant),
+      bluetoothBlocked: bluetoothBlocked)
+  }
+
+  private func event(
+    kind: String = "deviceChooserRequested", transport: String, id: String, page: URL,
+    options: [[String: Any]] = [], canGrant: Bool = false
+  ) -> [String: Any] {
+    [
+      "schemaVersion": 1, "kind": kind, "id": id, "transport": transport,
+      "pageURL": page.absoluteString, "origin": page.absoluteString, "options": options,
+      "canGrant": canGrant, "profileID": "profile", "tabID": "tab", "windowID": "window",
+    ]
   }
 }

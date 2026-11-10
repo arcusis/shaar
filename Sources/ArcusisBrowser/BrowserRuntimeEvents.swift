@@ -167,6 +167,36 @@ final class BrowserRuntimeEvents {
     runtime.onExternalAppDismissed = { [weak self] id in
       self?.router.client(for: .externalApp, id: id, removing: true)?.onExternalAppDismissed?(id)
     }
+    runtime.onDeviceChooserEvent = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String, let kind = payload["kind"] as? String
+      else { return }
+      if kind == "deviceChooserRequested" {
+        guard let client = self.router.claim(.deviceChooser, id: id, payload: payload),
+          let receive = client.onDeviceChooserEvent
+        else {
+          self.runtime.resolveDeviceChooserRequestID(id, index: nil)
+          return
+        }
+        receive(payload)
+        return
+      }
+      if kind == "deviceChooserDismissed" {
+        self.router.client(for: .deviceChooser, id: id, removing: true)?.onDeviceChooserEvent?(
+          payload)
+        return
+      }
+      guard kind == "deviceChooserUpdated" else { return }
+      guard let client = self.router.client(for: .deviceChooser, id: id),
+        let receive = client.onDeviceChooserEvent
+      else {
+        if let owner = self.router.client(for: .deviceChooser, id: id)?.windowID {
+          _ = self.router.consume(.deviceChooser, id: id, windowID: owner)
+        }
+        self.runtime.resolveDeviceChooserRequestID(id, index: nil)
+        return
+      }
+      receive(payload)
+    }
     runtime.onDownloadChanged = { [weak self] profile, record in
       for client in self?.router.clients(forProfile: profile) ?? [] {
         client.onDownloadChanged?(profile, record)
@@ -233,6 +263,11 @@ final class BrowserRuntimeEvents {
   func resolveExternalApp(_ id: String, windowID: String, accepted: Bool) {
     guard router.consume(.externalApp, id: id, windowID: windowID) else { return }
     runtime.resolveExternalAppRequestID(id, accepted: accepted)
+  }
+
+  func resolveDeviceChooser(_ id: String, windowID: String, index: Int?) {
+    guard router.consume(.deviceChooser, id: id, windowID: windowID) else { return }
+    runtime.resolveDeviceChooserRequestID(id, index: index.map(NSNumber.init(value:)))
   }
 
   func applyBookmarkOperation(

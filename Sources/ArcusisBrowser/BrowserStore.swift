@@ -1078,7 +1078,28 @@ final class BrowserStore {
     consentRequests.removeAll { $0.id == sheetID }
     if presentedConsentID == sheetID { presentedConsentID = nil }
     if presented { sheet = nil }
-    onDeviceChooserDecision?(chooser, grantedDeviceIndex(chooser, optionIndex: optionIndex, presented: presented))
+    onDeviceChooserDecision?(
+      chooser, grantedDeviceIndex(chooser, optionIndex: optionIndex, presented: presented))
+    presentNextConsent()
+  }
+
+  func updateDeviceChooser(_ request: DeviceChooserRequest) -> Bool {
+    guard let index = consentRequests.firstIndex(where: { $0.id == request.sheetID }),
+      case .deviceChooser = consentRequests[index], request.matches(session)
+    else { return false }
+    consentRequests[index] = .deviceChooser(request)
+    if sheet?.id == request.sheetID { sheet = .deviceChooser(request) }
+    return true
+  }
+
+  func dismissDeviceChooserFromEngine(_ id: String) {
+    let sheetID = "chooser-\(id)"
+    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID {
+      presentedConsentID = nil
+      if sheet?.id == sheetID { sheet = nil }
+    }
     presentNextConsent()
   }
 

@@ -10,8 +10,10 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
-/// Hidden proof that Web Serial and Web Bluetooth return without freezing the main thread,
-/// and that USB, Serial, Bluetooth, and HID each present the device chooser.
+/// Hidden proof that Web Serial, Web Bluetooth, Web USB, and Web HID call the real navigator
+/// APIs and return without freezing the main thread. A sheet appears only when the engine
+/// sends a device-chooser permission event. Serial, Bluetooth, and USB reject with
+/// NotFoundError when Chromium closes the chooser. Web HID resolves with an empty list.
 @MainActor
 final class DeviceChooserProbe {
   private let runtime: ARCShaarRuntime
@@ -36,7 +38,8 @@ final class DeviceChooserProbe {
       ShaarFirstTabProbe.isBundledFramework(framework, for: executable)
     else {
       throw Failure(
-        "The device chooser probe requires Shaar Verification.app. Build it with scripts/bundle-app.sh --with-engine --verification.")
+        "The device chooser probe requires Shaar Verification.app. Build it with scripts/bundle-app.sh --with-engine --verification."
+      )
     }
     output = URL(filePath: try value(after: "--probe-output"))
     let dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
@@ -116,7 +119,7 @@ final class DeviceChooserProbe {
         return
       }
       guard await ready(context, transport: transport) else {
-        finish(error: "\(transport) did not install the chooser hook.")
+        finish(error: "\(transport) did not finish loading.")
         return
       }
       let before = watchdog.maxStall
@@ -125,19 +128,8 @@ final class DeviceChooserProbe {
         finish(error: "The trusted click on \(transport) did not land.")
         return
       }
-      guard let request = await waitForChooser(context.store, transport: transport) else {
-        finish(error: "\(transport) did not present a device chooser.")
-        return
-      }
+      let (engineSheet, pageSettlement) = await outcome(context.store, transport: transport)
       let stall = watchdog.maxStall - before
-      do {
-        let name = "\(transport)-chooser.png"
-        try render(request, store: context.store, name: name)
-        screenshots.append(name)
-      } catch {
-        finish(error: "Could not render the \(transport) chooser: \(error)")
-        return
-      }
       guard windowsHidden else {
         finish(error: "A window became visible during \(transport).")
         return
@@ -146,15 +138,58 @@ final class DeviceChooserProbe {
         finish(error: "\(transport) stalled the main thread for \(stall) seconds.")
         return
       }
-      context.store.resolveDeviceChooser(request.id, optionIndex: nil)
-      context.store.sheetDidDismiss()
-      guard await rejected() else {
-        finish(error: "\(transport) did not reject with NotFoundError.")
-        return
+      let unavailable: Bool
+      let canGrant: Bool
+      let settled: PageSettlement?
+      if let engineSheet {
+        unavailable = engineSheet.bluetoothUnavailable
+        canGrant = engineSheet.canGrant
+        do {
+          let name = "\(transport)-chooser.png"
+          try render(engineSheet, store: context.store, name: name)
+          screenshots.append(name)
+        } catch {
+          finish(error: "Could not render the \(transport) chooser: \(error)")
+          return
+        }
+        context.store.resolveDeviceChooser(engineSheet.id, optionIndex: nil)
+        context.store.sheetDidDismiss()
+        settled = await waitForSettlement()
+        guard settled?.isChooserDismissal(for: transport) == true else {
+          finish(error: mismatch(transport, settled))
+          return
+        }
+      } else {
+        settled = pageSettlement
+        guard pageSettlement?.isChooserDismissal(for: transport) == true else {
+          finish(error: mismatch(transport, pageSettlement))
+          return
+        }
+        guard let tab = context.store.session.selectedSpace.selectedTab,
+          let profile = context.store.session.profileID(forTabID: tab.id),
+          let kind = DeviceChooserTransport(rawValue: transport)
+        else {
+          finish(error: "The page disappeared before the \(transport) chooser preview.")
+          return
+        }
+        unavailable = kind.usesBluetooth && ShaarBluetoothIOIsBlocked()
+        canGrant = false
+        let preview = DeviceChooserRequest(
+          id: "shot-\(transport)", tabID: tab.id, profileID: profile, pageURL: tab.url,
+          transport: kind, options: [], bluetoothUnavailable: unavailable, canGrant: false)
+        do {
+          let name = "\(transport)-chooser.png"
+          try render(preview, store: context.store, name: name)
+          screenshots.append(name)
+        } catch {
+          finish(error: "Could not render the \(transport) chooser: \(error)")
+          return
+        }
       }
       rows.append([
         "transport": transport, "passed": true, "stallSeconds": stall,
-        "bluetoothUnavailable": request.bluetoothUnavailable, "canGrant": request.canGrant,
+        "engineSheet": engineSheet != nil, "bluetoothUnavailable": unavailable,
+        "canGrant": canGrant, "pageResult": settled?.summary ?? "",
       ])
     }
     guard let context = host.contexts.values.first,
@@ -165,7 +200,7 @@ final class DeviceChooserProbe {
       return
     }
     let preview = DeviceChooserRequest(
-      id: "preview", signalID: "9-90", tabID: tab.id, profileID: profile, pageURL: tab.url,
+      id: "preview", tabID: tab.id, profileID: profile, pageURL: tab.url,
       transport: .usb,
       options: [
         DeviceChooserOption(index: 0, title: "USB serial adapter", detail: "Example vendor"),
@@ -185,9 +220,8 @@ final class DeviceChooserProbe {
   private func ready(_ context: NativeBrowserContext, transport: String) async -> Bool {
     for _ in 0..<120 {
       let path = await evaluate("location.pathname")
-      let installed = await evaluate("window.__shaarChooserInstalled === true")
       let loading = context.engine.pages[tabID]?.loading == true
-      if path?.contains("/\(transport)") == true, installed == "true", !loading {
+      if path?.contains("/\(transport)") == true, !loading {
         _ = await evaluate("window.__shaarChooserResult = null; true")
         return windowsHidden
       }
@@ -196,26 +230,51 @@ final class DeviceChooserProbe {
     return false
   }
 
-  private func waitForChooser(_ store: BrowserStore, transport: String) async -> DeviceChooserRequest? {
+  private func outcome(
+    _ store: BrowserStore, transport: String
+  ) async -> (DeviceChooserRequest?, PageSettlement?) {
     for _ in 0..<80 {
       if case .deviceChooser(let request) = store.sheet, request.transport.rawValue == transport {
-        return request
+        return (request, nil)
       }
+      if let found = await settlement() { return (nil, found) }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    return (nil, nil)
+  }
+
+  private func waitForSettlement() async -> PageSettlement? {
+    for _ in 0..<50 {
+      if let found = await settlement() { return found }
       try? await Task.sleep(for: .milliseconds(100))
     }
     return nil
   }
 
-  private func rejected() async -> Bool {
-    for _ in 0..<50 {
-      if await evaluate("window.__shaarChooserResult && window.__shaarChooserResult.error")?
-        .contains("NotFoundError") == true
-      {
-        return true
-      }
-      try? await Task.sleep(for: .milliseconds(100))
+  private func settlement() async -> PageSettlement? {
+    guard let raw = await evaluate("window.__shaarChooserResult"),
+      !raw.isEmpty, raw != "null"
+    else { return nil }
+    guard let data = raw.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return PageSettlement(raw: raw) }
+    if let error = object["error"] as? String, !error.isEmpty {
+      return PageSettlement(errorName: error, message: object["message"] as? String, raw: raw)
     }
-    return false
+    if (object["ok"] as? Bool) == true, let count = object["count"] as? Int {
+      return PageSettlement(resolvedCount: count, raw: raw)
+    }
+    return PageSettlement(raw: raw)
+  }
+
+  private func mismatch(_ transport: String, _ seen: PageSettlement?) -> String {
+    let actual = seen?.summary ?? "pending"
+    if transport == "hid" {
+      return
+        "hid settled as \(actual). Chromium resolves requestDevice with an empty list when no device is selected."
+    }
+    return
+      "\(transport) settled as \(actual). Chromium rejects this call with NotFoundError when no device is selected."
   }
 
   private func click() async -> Bool {
@@ -228,7 +287,9 @@ final class DeviceChooserProbe {
 
   private func evaluate(_ script: String) async -> String? {
     await withCheckedContinuation { continuation in
-      runtime.evaluate(inTabID: tabID.uuidString, script: script) { continuation.resume(returning: $0) }
+      runtime.evaluate(inTabID: tabID.uuidString, script: script) {
+        continuation.resume(returning: $0)
+      }
     }
   }
 
@@ -292,6 +353,28 @@ final class DeviceChooserProbe {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
         self?.runtime.quit()
       }
+    }
+  }
+
+  private struct PageSettlement {
+    var errorName: String? = nil
+    var message: String? = nil
+    var resolvedCount: Int? = nil
+    var raw: String
+
+    var summary: String {
+      if let errorName {
+        let detail = message.map { ": \($0)" } ?? ""
+        return "\(errorName)\(detail)"
+      }
+      if let resolvedCount {
+        return "resolved \(resolvedCount)"
+      }
+      return raw
+    }
+
+    func isChooserDismissal(for transport: String) -> Bool {
+      transport == "hid" ? resolvedCount == 0 : errorName == "NotFoundError"
     }
   }
 

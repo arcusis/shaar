@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Prove device choosers in a hidden verification bundle without a main-thread stall."""
+"""Prove the real device APIs return in a hidden verification bundle without a main-thread stall."""
 
 import argparse
 import json
@@ -36,8 +36,15 @@ class Fixture(BaseHTTPRequestHandler):
 <button id="parity-action">Request</button>
 <script>
 document.getElementById("parity-action").addEventListener("click", () => {{
-  ({call}).then(() => {{ window.__shaarChooserResult = {{ok: true}}; }},
-    (error) => {{ window.__shaarChooserResult = {{error: error.name, message: String(error.message)}}; }});
+  ({call}).then((value) => {{
+    const count = Array.isArray(value) ? value.length : (value == null ? 0 : 1);
+    window.__shaarChooserResult = {{ok: true, count: count}};
+  }}, (error) => {{
+    window.__shaarChooserResult = {{
+      error: error && error.name ? error.name : "Error",
+      message: String(error && error.message || error)
+    }};
+  }});
 }});
 </script>"""
         data = body.encode()

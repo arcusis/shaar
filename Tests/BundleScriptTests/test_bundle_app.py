@@ -503,6 +503,7 @@ class BundleAppTests(unittest.TestCase):
             "--sleeping-tabs-probe",
             "--probe-device-choosers",
             "DeviceChooserProbe",
+            "shaar-chooser:",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

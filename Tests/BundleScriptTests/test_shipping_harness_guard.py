@@ -293,6 +293,18 @@ class ShippingHarnessGuardTests(unittest.TestCase):
     def test_engine_testing_string_in_the_binary_is_allowed(self):
         self.binary.write_bytes(b"prefix SHAAR_ENGINE_TESTING suffix")
         self.assertEqual(GUARD.findings(self.root, self.binary), [])
+    def test_forged_chooser_channel_fails_in_shipping_source(self):
+        self.plant(
+            "Sources/ArcusisBrowser/Planted.swift",
+            "let title = \"shaar-chooser:usb\"\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("shaar-chooser:" in item for item in found), found)
+
+    def test_forged_chooser_channel_fails_in_the_binary(self):
+        self.binary.write_bytes(b"prefix shaar-chooser: suffix")
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("shaar-chooser:" in item for item in found), found)
 
     def test_shared_product_dispatch_flag_is_allowed(self):
         self.plant(

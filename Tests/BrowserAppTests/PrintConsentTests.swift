@@ -75,7 +75,7 @@ struct PrintConsentTests {
       ("id", "not-a-uuid" as Any),
       ("pageURL", "file:///tmp/page" as Any),
       ("pageURL", ("https://example.com/" + String(repeating: "a", count: 4096)) as Any),
-      ("origin", "http://example.com" as Any),
+      ("origin", "file:///tmp/page" as Any),
       ("origin", "https://example.com/path" as Any),
       ("frameID", "short" as Any),
       ("title", String(repeating: "a", count: 2049) as Any),
@@ -85,6 +85,10 @@ struct PrintConsentTests {
       #expect(PrintRequest(payload: malformed) == nil)
     }
     #expect(tab.id == print.tabID)
+
+    var httpOrigin = valid
+    httpOrigin["origin"] = "http://example.com"
+    #expect(PrintRequest(payload: httpOrigin) != nil)
   }
 
   @Test func onlyThePresentedCurrentRequestCanContinueToPrint() throws {

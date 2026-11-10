@@ -28,7 +28,7 @@ struct PrintRequest: Identifiable, Equatable {
       let frameID = payload["frameID"] as? String,
       Self.isFrameToken(frameID),
       NavigationInput.isWebURL(pageURL),
-      Self.isSecureOrigin(requestingOrigin),
+      Self.isWebOrigin(requestingOrigin),
       let title = Self.boundedTitle(payload["title"])
     else { return nil }
     self.id = id
@@ -65,7 +65,7 @@ struct PrintRequest: Identifiable, Equatable {
     }
   }
 
-  private static func isSecureOrigin(_ origin: URL) -> Bool {
+  private static func isWebOrigin(_ origin: URL) -> Bool {
     guard origin.host() != nil,
       origin.path.isEmpty || origin.path == "/",
       origin.query == nil,
@@ -73,10 +73,7 @@ struct PrintRequest: Identifiable, Equatable {
       origin.user == nil,
       origin.password == nil
     else { return false }
-    let scheme = origin.scheme?.lowercased()
-    if scheme == "https" { return true }
-    let host = origin.host()?.lowercased() ?? ""
-    return scheme == "http" && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host)
+    return ["http", "https"].contains(origin.scheme?.lowercased() ?? "")
   }
 
   private static func boundedTitle(_ value: Any?) -> String? {

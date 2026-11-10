@@ -14,6 +14,7 @@ _shaar_profile_close
 _shaar_profile_delete
 _shaar_profile_get_state
 _shaar_profile_set_state
+_shaar_profile_set_https_only
 _shaar_profile_get_path
 _shaar_private_session_open
 _shaar_private_session_close

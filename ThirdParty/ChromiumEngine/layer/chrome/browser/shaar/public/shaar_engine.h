@@ -419,6 +419,10 @@ SHAAR_EXPORT shaar_error_code shaar_profile_get_state(
 SHAAR_EXPORT shaar_error_code shaar_profile_set_state(
     shaar_profile *, shaar_bytes state_key, shaar_bytes value_json,
     shaar_error *error);
+/* enabled is 0 or 1. Missing from older engines; the app treats that as
+ * "applies the next time this profile opens." */
+SHAAR_EXPORT shaar_error_code shaar_profile_set_https_only(
+    shaar_profile *, int enabled, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_profile_get_path(
     shaar_profile *, shaar_bytes *path, shaar_error *error);
 /* END Shaar profiles module ABI exports. */

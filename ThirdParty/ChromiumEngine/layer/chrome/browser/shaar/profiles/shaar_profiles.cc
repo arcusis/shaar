@@ -35,6 +35,7 @@
 #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+#include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/prefs/pref_service.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -169,6 +170,19 @@ void Reply(shaar_reply_fn callback,
   callback(context, &result);
 }
 
+void ApplyDefaultHttpsOnlyMode(Profile* profile) {
+  if (!profile)
+    return;
+  PrefService* prefs = profile->GetPrefs();
+  if (!prefs)
+    return;
+  if (prefs->IsManagedPreference(prefs::kHttpsOnlyModeEnabled))
+    return;
+  if (prefs->HasPrefPath(prefs::kHttpsOnlyModeEnabled))
+    return;
+  prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, true);
+}
+
 void OnProfileReady(shaar_profile* handle,
                     shaar_reply_fn callback,
                     void* context,
@@ -212,6 +226,8 @@ void OnProfileReady(shaar_profile* handle,
   shaar::EmitEvent(handle->engine, SHAAR_EVENT_PROFILE,
                    {handle->id.data(), handle->id.size()}, {}, {},
                    {}, {payload.data(), payload.size()});
+  // Keep this below patch 0033's hunk. The reply is what the app waits on.
+  ApplyDefaultHttpsOnlyMode(profile);
   Reply(callback, context, request_id, SHAAR_OK, handle->id);
   for (const auto& waiter : handle->waiters)
     Reply(waiter.callback, waiter.context, waiter.request_id, SHAAR_OK, handle->id);
@@ -609,6 +625,29 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_set_state(
                      {profile->id.data(), profile->id.size()}, {}, {},
                      {}, {payload.data(), payload.size()});
   }
+  return Fail(SHAAR_OK, "", error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_set_https_only(
+    shaar_profile* profile, int enabled, shaar_error* error) {
+  if (!profile || !pthread_main_np())
+    return Fail(SHAAR_INVALID_ARGUMENT, "invalid https-only request", error);
+  if (enabled != 0 && enabled != 1)
+    return Fail(SHAAR_INVALID_ARGUMENT, "https-only must be 0 or 1", error);
+  if (!IsRegisteredProfile(profile))
+    return Fail(SHAAR_NOT_FOUND, "profile handle is stale", error);
+  if (!profile->ready || !profile->native)
+    return Fail(SHAAR_NOT_READY, "profile is not ready", error);
+  if (profile->deleting)
+    return Fail(SHAAR_CONFLICT, "profile deletion is pending", error);
+  PrefService* prefs = profile->native->GetPrefs();
+  if (!prefs)
+    return Fail(SHAAR_NOT_READY, "profile preferences are unavailable", error);
+  if (prefs->IsManagedPreference(prefs::kHttpsOnlyModeEnabled))
+    return Fail(SHAAR_POLICY_BLOCKED, "https-only mode is managed", error);
+  const bool next = enabled == 1;
+  if (prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled) != next)
+    prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, next);
   return Fail(SHAAR_OK, "", error);
 }
 

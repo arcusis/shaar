@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as i18n from '../../core/i18n/i18n.js';
-import * as UI from '../../ui/legacy/legacy.js';
-import {html, render} from '../../ui/lit/lit.js';
+import * as i18n from '../../../core/i18n/i18n.js';
+import * as UI from '../../../ui/legacy/legacy.js';
+import {html, render} from '../../../ui/lit/lit.js';
 
 const UIStrings = {
   /**
@@ -25,16 +25,16 @@ const UIStrings = {
   devtoolsFrontend: 'DevTools frontend',
 } as const;
 
-const str_ = i18n.i18n.registerUIStrings('panels/shaar/ShaarPanel.ts', UIStrings);
+const str_ = i18n.i18n.registerUIStrings('panels/shaar/build-info/BuildInfoPanel.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-const OVERLAY_ID = 'shaar-devtools-frontend';
-const CHROMIUM_VERSION = '157.0.8103.51';
-const DEVTOOLS_FRONTEND_REVISION = '12ada949de6a27116dea47c600da5322f44c64f4';
+export const OVERLAY_ID = 'shaar-devtools-frontend';
+export const CHROMIUM_VERSION = '157.0.8103.51';
+export const DEVTOOLS_FRONTEND_REVISION = '12ada949de6a27116dea47c600da5322f44c64f4';
 
-export class ShaarPanel extends UI.Panel.Panel {
+export class BuildInfoPanel extends UI.Panel.Panel {
   constructor() {
-    super('shaar', /* useShadowDom */ true);
+    super('shaar-build-info', /* useShadowDom */ true);
     this.requestUpdate();
   }
 

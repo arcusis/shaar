@@ -13,7 +13,7 @@ import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAY = (
-    ROOT / "ThirdParty/ChromiumEngine/devtools-frontend/src/front_end/panels/shaar"
+    ROOT / "ThirdParty/ChromiumEngine/devtools-frontend/front_end/panels/shaar"
 )
 
 

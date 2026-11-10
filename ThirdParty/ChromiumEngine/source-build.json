@@ -497,6 +497,8 @@
     "chromium": "157.0.8103.51",
     "devtoolsFrontendRevision": "12ada949de6a27116dea47c600da5322f44c64f4",
     "overlay": "ThirdParty/ChromiumEngine/devtools-frontend",
+    "featureRoot": "ThirdParty/ChromiumEngine/devtools-frontend/front_end/panels/shaar",
+    "registration": "ThirdParty/ChromiumEngine/devtools-frontend/front_end/panels/shaar/shaar-meta.ts",
     "copyTo": "third_party/devtools-frontend/src/front_end/panels/shaar",
     "stageScript": "scripts/stage-shaar-devtools-frontend.py",
     "replacesPatch": "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",

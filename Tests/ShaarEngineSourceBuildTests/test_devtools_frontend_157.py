@@ -19,7 +19,8 @@ THEME = ROOT / "ThirdParty/ChromiumEngine/patches/0061-shaar-devtools-theme-157.
 REGISTRATION = (
     ROOT / "ThirdParty/ChromiumEngine/patches/0062-shaar-devtools-frontend-registration.patch"
 )
-PANEL = OVERLAY / "src/front_end/panels/shaar"
+PANEL = OVERLAY / "front_end/panels/shaar"
+FEATURE = PANEL / "build-info"
 
 
 def load_stage():
@@ -48,13 +49,31 @@ class DevToolsFrontend157Tests(unittest.TestCase):
         self.assertIn("../../panels/shaar:meta", source)
 
     def test_proof_panel_lists_the_pinned_build(self):
-        panel = (PANEL / "ShaarPanel.ts").read_text()
+        panel = (FEATURE / "BuildInfoPanel.ts").read_text()
         self.assertIn("shaar-devtools-frontend", panel)
         self.assertIn("157.0.8103.51", panel)
         self.assertIn("12ada949de6a27116dea47c600da5322f44c64f4", panel)
-        meta = (PANEL / "shaar-meta.ts").read_text()
+        meta = (FEATURE / "build-info-meta.ts").read_text()
         self.assertIn("registerViewExtension", meta)
         self.assertIn("ViewLocationValues.PANEL", meta)
+
+    def test_each_feature_has_one_registration_line(self):
+        features = sorted(
+            path.name
+            for path in PANEL.iterdir()
+            if path.is_dir() and (path / "BUILD.gn").is_file()
+        )
+        self.assertEqual(features, ["build-info"])
+        registration = (PANEL / "shaar-meta.ts").read_text()
+        imports = [
+            line
+            for line in registration.splitlines()
+            if line.startswith("import './")
+        ]
+        self.assertEqual(imports, ["import './build-info/build-info-meta.js';"])
+        build = (PANEL / "BUILD.gn").read_text()
+        self.assertIn('"build-info:meta"', build)
+        self.assertEqual(registration.count("import './"), len(features))
 
     def test_patches_are_pinned_for_the_157_checkout(self):
         manifest = json.loads(MANIFEST.read_text())
@@ -67,6 +86,14 @@ class DevToolsFrontend157Tests(unittest.TestCase):
         self.assertEqual(
             frontend["overlay"],
             "ThirdParty/ChromiumEngine/devtools-frontend",
+        )
+        self.assertEqual(
+            frontend["featureRoot"],
+            "ThirdParty/ChromiumEngine/devtools-frontend/front_end/panels/shaar",
+        )
+        self.assertEqual(
+            frontend["registration"],
+            "ThirdParty/ChromiumEngine/devtools-frontend/front_end/panels/shaar/shaar-meta.ts",
         )
         self.assertEqual(
             frontend["copyTo"],
@@ -101,9 +128,13 @@ class DevToolsFrontend157Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "front_end" / "panels" / "shaar"
             staged = stage.stage(PANEL, destination)
-            self.assertIn("ShaarPanel.ts", staged)
+            self.assertIn("shaar-meta.ts", staged)
+            self.assertIn("build-info/BuildInfoPanel.ts", staged)
             self.assertIn("BUILD.gn", staged)
-            self.assertEqual((destination / "ShaarPanel.ts").read_bytes(), (PANEL / "ShaarPanel.ts").read_bytes())
+            self.assertEqual(
+                (destination / "build-info" / "BuildInfoPanel.ts").read_bytes(),
+                (FEATURE / "BuildInfoPanel.ts").read_bytes(),
+            )
 
 
 if __name__ == "__main__":

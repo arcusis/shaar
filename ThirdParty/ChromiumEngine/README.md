@@ -13,7 +13,9 @@ module checks remain future work; this migration does not build Chromium locally
 
 Chromium 157 DevTools is a separate `devtoolsFrontend157` record. It is not part
 of the Chromium 155 `patches` list, and `0014-shaar-devtools-theme.patch` stays
-on this pin. The 157 checkout copies `devtools-frontend/` into
+on this pin. Each Shaar panel lives in
+`devtools-frontend/front_end/panels/shaar/<feature>/` and adds one import to
+`shaar-meta.ts`. The 157 checkout copies that directory into
 `third_party/devtools-frontend/src/front_end/panels/shaar`, then applies
 `0061-shaar-devtools-theme-157.patch` and
 `0062-shaar-devtools-frontend-registration.patch`. See

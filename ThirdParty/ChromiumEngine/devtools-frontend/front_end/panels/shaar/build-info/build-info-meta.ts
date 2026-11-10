@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as i18n from '../../core/i18n/i18n.js';
-import * as UI from '../../ui/legacy/legacy.js';
+import * as i18n from '../../../core/i18n/i18n.js';
+import * as UI from '../../../ui/legacy/legacy.js';
 
-import type * as Shaar from './shaar.js';
+import type * as BuildInfo from './build-info.js';
 
 const UIStrings = {
   /**
@@ -18,27 +18,27 @@ const UIStrings = {
   showShaar: 'Show Shaar',
 } as const;
 
-const str_ = i18n.i18n.registerUIStrings('panels/shaar/shaar-meta.ts', UIStrings);
+const str_ = i18n.i18n.registerUIStrings('panels/shaar/build-info/build-info-meta.ts', UIStrings);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 
-let loadedShaarModule: (typeof Shaar|undefined);
+let loadedBuildInfoModule: (typeof BuildInfo|undefined);
 
-async function loadShaarModule(): Promise<typeof Shaar> {
-  if (!loadedShaarModule) {
-    loadedShaarModule = await import('./shaar.js');
+async function loadBuildInfoModule(): Promise<typeof BuildInfo> {
+  if (!loadedBuildInfoModule) {
+    loadedBuildInfoModule = await import('./build-info.js');
   }
-  return loadedShaarModule;
+  return loadedBuildInfoModule;
 }
 
 UI.ViewManager.registerViewExtension({
   location: UI.ViewManager.ViewLocationValues.PANEL,
-  id: 'shaar',
+  id: 'shaar-build-info',
   title: i18nLazyString(UIStrings.shaar),
   commandPrompt: i18nLazyString(UIStrings.showShaar),
   order: 200,
   persistence: UI.ViewManager.ViewPersistence.CLOSEABLE,
   async loadView() {
-    const Shaar = await loadShaarModule();
-    return new Shaar.ShaarPanel.ShaarPanel();
+    const BuildInfo = await loadBuildInfoModule();
+    return new BuildInfo.BuildInfoPanel.BuildInfoPanel();
   },
 });

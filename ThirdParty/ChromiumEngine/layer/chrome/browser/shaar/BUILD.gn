@@ -106,6 +106,10 @@ source_set("engine") {
     "storage_keychain/shaar_storage_keychain.h",
     "storage_keychain/shaar_storage_keychain_lifecycle_adapter.cc",
     # END storage_keychain
+    # BEGIN quit_probe
+    "quit_probe/shaar_quit_probe.mm",
+    "quit_probe/shaar_quit_probe.h",
+    # END quit_probe
   ]
   cflags_objcc = [ "-fobjc-arc" ]
   frameworks = [ "AppKit.framework" ]
@@ -269,6 +273,12 @@ test("shaar_media_unittests") {
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END media
+# BEGIN quit_probe
+test("shaar_quit_probe_unittests") {
+  sources = [ "quit_probe/shaar_quit_probe_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END quit_probe
 
 test("shaar_layer_unittests") {
   data_deps = [ "//chrome:packed_resources" ]
@@ -284,6 +294,7 @@ test("shaar_layer_unittests") {
     "navigation/shaar_navigation_unittest.cc",
     "private_sessions/shaar_private_sessions_unittest.cc",
     "profiles/shaar_profiles_unittest.cc",
+    "quit_probe/shaar_quit_probe_unittest.cc",
     "site_data/shaar_site_data_unittest.cc",
     "storage_keychain/shaar_storage_keychain_unittest.cc",
     "storage_keychain/shaar_keychain_deadline_unittest.mm",

@@ -7,7 +7,6 @@
 from pathlib import Path
 import hashlib
 import json
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -24,6 +23,31 @@ def layer_digest(files):
     for name, file_digest in sorted(files.items()):
         digest.update(name.encode("utf-8") + b"\0" + file_digest.encode("ascii") + b"\n")
     return digest.hexdigest()
+
+
+def patch_target_files():
+    return sorted({
+        line[6:]
+        for line in PATCH.read_text().splitlines()
+        if line.startswith("+++ b/")
+    })
+
+
+def patch_origin_layer_files():
+    patch_path = str(PATCH.relative_to(ROOT))
+    revision = subprocess.run(
+        ["git", "-C", str(ROOT), "log", "-1", "--format=%H", "--diff-filter=A", "--", patch_path],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    files = {}
+    for path in patch_target_files():
+        source_path = f"ThirdParty/ChromiumEngine/layer/{path}"
+        content = subprocess.run(
+            ["git", "-C", str(ROOT), "show", f"{revision}:{source_path}"],
+            capture_output=True, check=True,
+        ).stdout
+        files[path] = content
+    return files
 
 
 class TabLifecyclePatchTests(unittest.TestCase):
@@ -76,10 +100,14 @@ class TabLifecyclePatchTests(unittest.TestCase):
         self.assertEqual(layer_digest(files), manifest["layer"]["sha256"])
 
     def test_patch_round_trips_onto_the_previous_layer(self):
+        expected_files = patch_origin_layer_files()
         with tempfile.TemporaryDirectory() as raw:
             tree = Path(raw)
             current = tree / "current"
-            shutil.copytree(LAYER / "chrome", current / "chrome")
+            for name, contents in expected_files.items():
+                path = current / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(contents)
             reverse = subprocess.run(
                 ["git", "-C", str(current), "apply", "--reverse", "--check", str(PATCH)],
                 capture_output=True, text=True)
@@ -91,15 +119,11 @@ class TabLifecyclePatchTests(unittest.TestCase):
                 ["git", "-C", str(current), "apply", "--check", str(PATCH)],
                 capture_output=True, text=True)
             self.assertEqual(forward.returncode, 0, forward.stderr)
-            previous = tree / "previous"
-            shutil.copytree(current / "chrome", previous / "chrome")
             subprocess.run(
                 ["git", "-C", str(current), "apply", str(PATCH)],
                 check=True)
-            difference = subprocess.run(
-                ["diff", "-ru", str(current / "chrome/browser/shaar"), str(LAYER / "chrome/browser/shaar")],
-                capture_output=True, text=True)
-            self.assertEqual(difference.returncode, 0, difference.stdout)
+            for name, contents in expected_files.items():
+                self.assertEqual((current / name).read_bytes(), contents, name)
 
 
 if __name__ == "__main__":

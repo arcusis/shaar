@@ -12,6 +12,7 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
   let pageURL: URL
   let requestingOrigin: URL
   let frameID: String
+  let allowedKinds: Set<DesktopCaptureSource.Kind>
 
   init?(payload: [String: Any]) {
     guard let id = payload["id"] as? String,
@@ -36,12 +37,34 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
         && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(
           requestingOrigin.host()?.lowercased() ?? ""))
     guard secureOrigin else { return nil }
+    guard let allowedKinds = Self.allowedKinds(from: payload["sourceTypes"]) else { return nil }
     self.id = id
     self.profileID = profileID
     self.tabID = tabID
     self.pageURL = pageURL
     self.requestingOrigin = requestingOrigin
     self.frameID = frameID
+    self.allowedKinds = allowedKinds
+  }
+
+  func allows(_ kind: DesktopCaptureSource.Kind) -> Bool {
+    allowedKinds.contains(kind)
+  }
+
+  /// Missing source types mean the engine asked for a screen, a window, and a tab.
+  private static func allowedKinds(from value: Any?) -> Set<DesktopCaptureSource.Kind>? {
+    guard let value else { return [.display, .window, .tab] }
+    guard let names = value as? [String], !names.isEmpty else { return nil }
+    var kinds: Set<DesktopCaptureSource.Kind> = []
+    for name in names {
+      switch name {
+      case "screen": kinds.insert(.display)
+      case "window": kinds.insert(.window)
+      case "tab": kinds.insert(.tab)
+      default: return nil
+      }
+    }
+    return kinds
   }
 
   var sheetID: String { "desktop-capture-\(id)" }

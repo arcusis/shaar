@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+"""Prove a page title cannot open the screen-sharing picker, and a bound request can."""
+
+import argparse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import threading
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CRASHES = Path.home() / "Library/Logs/DiagnosticReports"
+PAGE = """<!doctype html>
+<meta charset="utf-8">
+<title>Display capture</title>
+<p>Screen sharing picker fixture</p>
+"""
+
+
+class Fixture(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.split("?", 1)[0] != "/screen":
+            self.send_error(404)
+            return
+        body = PAGE.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        return
+
+
+def crash_names():
+    names = set()
+    for directory in (CRASHES, CRASHES / "Retired"):
+        if not directory.is_dir():
+            continue
+        names.update(
+            path.name for path in directory.iterdir()
+            if path.suffix in {".ips", ".crash"}
+            and path.name.startswith(("Shaar", "ArcusisBrowser", "Chromium"))
+        )
+    return names
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
+    parser.add_argument("--receipt", type=Path, default=ROOT / "build/platform-prompts/receipt.json")
+    options = parser.parse_args()
+    executable = options.app / "Contents/MacOS/ShaarVerification"
+    framework = options.app / "Contents/Frameworks/Chromium Framework.framework"
+    if not executable.is_file():
+        parser.error(f"Missing verification app: {executable}")
+    before = crash_names()
+    with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as temporary:
+            root = Path(temporary)
+            marker = root / ".arcusis-probe"
+            marker.write_text("arcusis-engine-probe-v1\n")
+            marker.chmod(0o600)
+            home = root / "home"
+            home.mkdir()
+            report = root / "report.json"
+            page = f"http://127.0.0.1:{server.server_port}/screen"
+            environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
+                               SHAAR_ENGINE_TESTING="1", SHAAR_MOCK_KEYCHAIN="1")
+            process = subprocess.run(
+                [str(executable), "--probe-platform-prompts",
+                 "--probe-framework", str(framework),
+                 "--probe-output", str(report), "--probe-data-dir", str(root),
+                 "--probe-url", page],
+                env=environment, capture_output=True, text=True, timeout=90, check=False)
+            evidence = json.loads(report.read_text()) if report.is_file() else None
+            shots = {
+                name: (root / name).is_file()
+                for name in ("picker-before.png", "picker-after.png")
+            }
+            if evidence and evidence.get("passed"):
+                shot_dir = options.receipt.parent
+                shot_dir.mkdir(parents=True, exist_ok=True)
+                for name in shots:
+                    source = root / name
+                    if source.is_file():
+                        (shot_dir / name).write_bytes(source.read_bytes())
+        server.shutdown()
+    crashes = sorted(crash_names() - before)
+    receipt = {
+        "verificationExecutable": str(executable),
+        "exitCode": process.returncode,
+        "report": evidence,
+        "screenshots": shots,
+        "crashReports": crashes,
+        "stderrTail": process.stderr[-4000:],
+        "passed": process.returncode == 0 and bool(evidence and evidence.get("passed"))
+        and all(shots.values()) and not crashes,
+    }
+    options.receipt.parent.mkdir(parents=True, exist_ok=True)
+    options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
+    print(json.dumps({key: receipt[key] for key in (
+        "exitCode", "passed", "screenshots", "crashReports")}, indent=2))
+    if evidence:
+        print(json.dumps({"checks": evidence.get("checks"), "error": evidence.get("error"),
+                          "outcome": evidence.get("outcome")}, indent=2))
+    if not receipt["passed"]:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

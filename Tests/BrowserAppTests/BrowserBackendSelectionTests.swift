@@ -99,6 +99,7 @@ final class BrowserBackendSelectionTests: XCTestCase {
       "importHistoryRows:source:profileID:completion:",
       "nativeTabIDForID:",
       "resolveExternalAppRequestID:accepted:",
+      "resolveDesktopCaptureRequestID:sourceID:",
     ] {
       assertShaarOverrides(selector)
     }

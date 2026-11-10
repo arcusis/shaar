@@ -479,6 +479,7 @@ class BundleAppTests(unittest.TestCase):
             "parity-action",
             "--probe-https-only",
             "HttpsOnlyProbe",
+            "--probe-platform-prompts",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

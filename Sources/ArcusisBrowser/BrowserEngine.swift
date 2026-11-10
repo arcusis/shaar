@@ -523,7 +523,8 @@ final class BrowserEngine {
         if let profile = self.store?.session.profileID(forTabID: id),
           self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true
         {
-          self.store?.nativeFavoritePageChanged(id, profileID: profile, url: url, title: title)
+          self.store?.nativeFavoritePageChanged(
+            id, profileID: profile, url: url, title: title)
         } else {
           self.store?.nativeTabChanged(id, url: url, title: title)
         }

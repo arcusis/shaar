@@ -198,6 +198,92 @@ struct DesktopCaptureConsentTests {
     #expect(rendererDecisions == [nil])
   }
 
+  @Test func aPageTitleCannotOpenTheCaptureSheet() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let marker = "\u{2060}shaar-prompt\u{2060}display\u{2060}\(UUID().uuidString)"
+    store.nativeTabChanged(tab.id, url: tab.url, title: marker)
+    #expect(store.sheet == nil)
+    #expect(store.session.selectedSpace.selectedTab?.title == marker)
+  }
+
+  @Test func rejectsAnUnsolicitedCaptureRequest() throws {
+    let store = store()
+    let capture = try request(store)
+    var payload: [String: Any] = [
+      "id": UUID().uuidString,
+      "profileID": capture.profileID.uuidString,
+      "tabID": UUID().uuidString,
+      "pageURL": capture.pageURL.absoluteString,
+      "origin": capture.requestingOrigin.absoluteString,
+      "frameID": "other-frame",
+    ]
+    let foreign = try #require(DesktopCaptureRequest(payload: payload))
+    #expect(!store.requestDesktopCapture(foreign))
+    #expect(store.sheet == nil)
+
+    payload["tabID"] = capture.tabID.uuidString
+    payload["sourceTypes"] = ["printer"]
+    #expect(DesktopCaptureRequest(payload: payload) == nil)
+    payload["sourceTypes"] = ["tab"]
+    let tabsOnly = try #require(DesktopCaptureRequest(payload: payload))
+    #expect(tabsOnly.allowedKinds == [.tab])
+    #expect(store.requestDesktopCapture(tabsOnly))
+    var decision: String?
+    store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID }
+    store.resolveDesktopCapture(tabsOnly.id, sourceID: "tab:\(capture.tabID.uuidString):0")
+    #expect(decision == "tab:\(capture.tabID.uuidString):0")
+    #expect(store.sheet == nil)
+  }
+
+  @Test func privateWindowListsOnlyItsOwnTab() throws {
+    let regular = store()
+    let regularTab = try #require(regular.session.selectedSpace.selectedTab)
+    let privateTab = UUID()
+    let privateSession = try BrowserSession.privateWindow(
+      sourceProfileID: regular.session.selectedSpace.profileID, firstTabID: privateTab)
+    let listed = DesktopCaptureCatalog.tabSources(
+      session: privateSession, profileID: privateSession.selectedSpace.profileID,
+      requestingTabID: privateTab)
+    #expect(listed.map(\.id) == ["tab:\(privateTab.uuidString):0"])
+    #expect(listed.allSatisfy { !$0.id.contains(regularTab.id.uuidString) })
+
+    let other = try #require(
+      regular.session.spaces.first { $0.profileID != regular.session.selectedSpace.profileID })
+    let own = DesktopCaptureCatalog.tabSources(
+      session: regular.session, profileID: regular.session.selectedSpace.profileID,
+      requestingTabID: regularTab.id)
+    let otherIDs = Set(other.tabs.map { "tab:\($0.id.uuidString):0" })
+    #expect(own.allSatisfy { !otherIDs.contains($0.id) })
+  }
+
+  @Test func tabSourcesStayAvailableWithoutScreenRecording() throws {
+    let store = store()
+    let capture = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let tabs = DesktopCaptureCatalog.tabSources(
+      session: store.session, profileID: capture.profileID, requestingTabID: capture.tabID)
+    let denied = DesktopCaptureCatalog.listing(tabs: tabs, screens: [], screenAccessFailed: true)
+    #expect(denied.error == nil)
+    #expect(denied.note == DesktopCaptureCatalog.screenAccessNote)
+    #expect(denied.sources.first?.id == "tab:\(tab.id.uuidString):0")
+    #expect(denied.sources.first?.label == PanelsL10n.string("This Tab"))
+
+    let screen = DesktopCaptureSource(id: "screen:1:0", name: "Main Display", kind: .display)
+    let window = DesktopCaptureSource(id: "window:4:0", name: "Notes", kind: .window)
+    let ready = DesktopCaptureCatalog.listing(
+      tabs: tabs, screens: [screen, window], screenAccessFailed: false)
+    #expect(ready.sources.map(\.kind) == [.tab, .display, .window])
+    #expect(ready.note == nil)
+    #expect(window.label.contains("Notes"))
+    let other = DesktopCaptureSource(id: "tab:other:0", name: "Mail", kind: .tab)
+    #expect(other.label == PanelsL10n.format("Tab: %@", .string("Mail")))
+
+    let empty = DesktopCaptureCatalog.listing(tabs: [], screens: [], screenAccessFailed: true)
+    #expect(empty.error == DesktopCaptureCatalog.screenAccessNote)
+    #expect(empty.sources.isEmpty)
+  }
+
   @Test func staleProfileAndNavigationInvalidateRequestOwnership() throws {
     let browser = store()
     let capture = try request(browser, id: UUID().uuidString)

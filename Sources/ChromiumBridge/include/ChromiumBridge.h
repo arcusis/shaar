@@ -127,7 +127,7 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onWebsiteMediaRequest)(NSDictionary<NSString *, id> *request);
 /// websiteMediaDismissed and websitePermissionDismissed share this callback.
 @property(copy, nullable) void (^onWebsiteMediaDismissed)(NSString *requestID);
-/// A page called getDisplayMedia; the request is bound to its live tab and frame.
+/// The engine asked the app to choose a capture source for a live tab.
 @property(copy, nullable) void (^onDesktopCaptureRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onDesktopCaptureDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);

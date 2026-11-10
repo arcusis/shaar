@@ -38,6 +38,7 @@ final class BrowserRuntimeClient {
   var onTabActivated: ((String, String) -> Void)?
   var onRendererGone: ((String, String, String, Int32) -> Void)?
   var onDocumentCommitted: ((String, String) -> Void)?
+  var onTabLifecycle: ((String, String, Bool, Bool) -> Void)?
   var onNewTab: ((String, String, String, String?, Bool) -> Void)?
 
   init(windowID: String, profileIDs: @escaping () -> Set<String>) {

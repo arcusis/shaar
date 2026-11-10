@@ -44,6 +44,8 @@ final class BrowserStore {
   var session: BrowserSession
   private(set) var isPrivate = false
   private var permissionFrames: [UUID: String] = [:]
+  /// Tabs Chromium has discarded or frozen. Not saved with the session.
+  private(set) var sleepingTabIDs: Set<UUID> = []
   var privatePage: PrivatePageSession?
   var splitTabRecency: [UUID] = []
   var pendingSplitPlacement: SplitPlacement?
@@ -628,7 +630,26 @@ final class BrowserStore {
     return Set(space.tabs.filter { $0.folderID == folderID }.map(\.id)) == ids
   }
 
+  func noteTabSleeping(_ id: UUID) {
+    guard session.page(forTabID: id) != nil else { return }
+    sleepingTabIDs.insert(id)
+  }
+
+  func noteTabAwake(_ id: UUID) {
+    sleepingTabIDs.remove(id)
+  }
+
+  /// A successful wake, a wake of the tab on screen, or a wake of a closed tab
+  /// drops the sleeping mark. A failed wake of a background tab keeps it.
+  func resolveWake(_ id: UUID, accepted: Bool) {
+    let onScreen = session.selectedPage?.tab.id == id || visiblePageIDs.contains(id)
+    if accepted || onScreen || session.page(forTabID: id) == nil {
+      noteTabAwake(id)
+    }
+  }
+
   func nativeTabClosed(_ id: UUID) {
+    sleepingTabIDs.remove(id)
     let requested = requestedTabCloses.remove(id) != nil
     // WebContents destruction also reports "closed". Losing a native document
     // is not permission to delete a saved pin.

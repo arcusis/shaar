@@ -161,6 +161,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID);
+/// Chromium discarded, froze, or woke a tab. `state` is active, frozen, or discarded.
+@property(copy, nullable) void (^onTabLifecycle)(NSString *tabID, NSString *state, BOOL audible, BOOL capturing);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onTabActivated)(NSString *tabID, NSString *profileID);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateTabChanged)(NSString *contextID, NSString *windowID,
     NSString *tabID, NSString *url, NSString *title, BOOL loading, BOOL canGoBack, BOOL canGoForward);
@@ -171,6 +173,11 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateNavigationFailed)(NSString *contextID, NSString *windowID, NSString *tabID, NSString *message);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateTabClosed)(NSString *contextID, NSString *windowID,
     NSString *tabID);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateTabLifecycle)(NSString *contextID,
+    NSString *windowID, NSString *tabID, NSString *state, BOOL audible, BOOL capturing);
+/// Camera, microphone, or screen capture on an off-the-record tab.
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateMediaAccess)(NSString *contextID,
+    NSString *windowID, NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateWindowClosed)(NSString *contextID, NSString *windowID);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onRendererGone)(NSString *tabID, NSString *profileID, NSString *status, int exitCode);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDocumentCommitted)(NSString *tabID, NSString *profileID);
@@ -208,6 +215,15 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (void)clearActiveTab;
 - (void)closeTabID:(NSString *)tabID;
 - (void)discardTabID:(NSString *)tabID;
+/// Asks a live tab for lifecycle state. A missing handler returns unsupported immediately.
+- (void)probeTabLifecycleForTabID:(NSString *)tabID
+                       completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL capable))completion NS_SWIFT_UI_ACTOR;
+- (void)sleepTabID:(NSString *)tabID reason:(NSString *)reason
+        completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL accepted))completion NS_SWIFT_UI_ACTOR;
+- (void)wakeTabID:(NSString *)tabID
+       completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL accepted))completion NS_SWIFT_UI_ACTOR;
+- (void)freezeTabID:(NSString *)tabID
+         completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL accepted))completion NS_SWIFT_UI_ACTOR;
 - (void)goBackInTabID:(NSString *)tabID;
 - (void)goForwardInTabID:(NSString *)tabID;
 - (void)reloadTabID:(NSString *)tabID;
@@ -406,6 +422,17 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
                     mode:(ARCPageReloadMode)mode;
 - (BOOL)goBackPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (BOOL)goForwardPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
+- (void)probePrivateTabLifecycleForTabID:(NSString *)tabID windowID:(NSString *)windowID
+                              contextID:(NSString *)contextID
+                             completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL capable))completion NS_SWIFT_UI_ACTOR;
+- (void)sleepPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
+                   reason:(NSString *)reason
+               completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL accepted))completion NS_SWIFT_UI_ACTOR;
+- (void)wakePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
+              completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL accepted))completion NS_SWIFT_UI_ACTOR;
+- (void)evaluateInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+                    contextID:(NSString *)contextID script:(NSString *)script
+                   completion:(void (NS_SWIFT_UI_ACTOR ^)(NSString * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
              requestID:(NSString *)requestID text:(NSString *)text forward:(BOOL)forward;
 - (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;

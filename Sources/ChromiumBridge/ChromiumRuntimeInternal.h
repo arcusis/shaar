@@ -14,6 +14,10 @@ NSString *ARCValidatedProfileID(NSString *profileID);
 typedef void (*ARCPictureInPictureWindowObserver)(NSWindow *window);
 void ARCSetPictureInPictureWindowObserver(ARCPictureInPictureWindowObserver observer);
 
+@interface ARCShaarRuntime (TabLifecycle)
+- (BOOL)tabLifecycleSupported;
+@end
+
 @interface ARCShaarRuntime (DevToolsTransport)
 - (BOOL)shaarPrivateDevToolsSubmit:(NSUInteger)operation tabID:(NSString *)tabID
                         windowID:(NSString *)windowID contextID:(NSString *)contextID

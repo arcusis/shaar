@@ -470,6 +470,7 @@ class BundleAppTests(unittest.TestCase):
             "enum WebsitePermissionPromptProbe {}\n"
             "enum ShaarBrowsingEdgeProbe {}\n"
             "enum HttpsOnlyProbe {}\n"
+            "enum SleepingTabsProbe {}\n"
             "let flag = \"--browsing-qa\"\n"
             "let elementID = \"parity-action\"\n"
             "if arguments.contains(\"--devtools-f12-route\") {}\n"
@@ -498,6 +499,8 @@ class BundleAppTests(unittest.TestCase):
             "HttpsOnlyProbe",
             "--probe-platform-prompts",
             "testing: true",
+            "SleepingTabsProbe",
+            "--sleeping-tabs-probe",
         ):
             with self.subTest(marker=marker):
                 self.log.unlink(missing_ok=True)

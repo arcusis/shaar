@@ -51,6 +51,9 @@ final class BrowserRuntimeEvents {
     runtime.onDocumentCommitted = { [weak self] id, profile in
       self?.tabClient(id)?.onDocumentCommitted?(id, profile)
     }
+    runtime.onTabLifecycle = { [weak self] id, state, audible, capturing in
+      self?.tabClient(id)?.onTabLifecycle?(id, state, audible, capturing)
+    }
     runtime.onNewTab = { [weak self] id, profile, address, opener, foreground in
       guard self?.router.isQuitting == false else { return }
       guard let self, let window = self.runtime.windowID(forTabID: id),

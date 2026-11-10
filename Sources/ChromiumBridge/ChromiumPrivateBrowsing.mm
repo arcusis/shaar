@@ -50,6 +50,16 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
     [status[@"trackerDomainCount"] intValue] > 0 &&
     [status[@"trackerRulesRevision"] length] > 0;
 }
+
+const shaar_operation kShaarOpPrivateTabDiscard = (shaar_operation)208;
+const shaar_operation kShaarOpPrivateTabWake = (shaar_operation)210;
+const shaar_operation kShaarOpPrivateTabLifecycleGet = (shaar_operation)211;
+
+void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
+  if (!completion) return;
+  if (NSThread.isMainThread) completion(accepted);
+  else dispatch_async(dispatch_get_main_queue(), ^{ completion(accepted); });
+}
 }  // namespace
 
 @implementation ARCShaarRuntime (PrivateBrowsing)
@@ -300,6 +310,76 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
       operation, payload, ^(NSDictionary *reply) {});
 }
 
+- (void)probePrivateTabLifecycleForTabID:(NSString *)tabID windowID:(NSString *)windowID
+                              contextID:(NSString *)contextID
+                             completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    PrivateLifecycleFinish(completion, NO);
+    return;
+  }
+  [self submitPrivateLifecycle:kShaarOpPrivateTabLifecycleGet tabID:tabID
+                    windowID:windowID contextID:contextID
+                     payload:@{@"schemaVersion": @1}
+                  completion:^(BOOL accepted, NSString *state) {
+    BOOL capable = accepted && ([state isEqualToString:@"active"] ||
+        [state isEqualToString:@"frozen"] || [state isEqualToString:@"discarded"]);
+    PrivateLifecycleFinish(completion, capable);
+  }];
+}
+
+- (void)submitPrivateLifecycle:(shaar_operation)operation tabID:(NSString *)tabID
+                      windowID:(NSString *)windowID contextID:(NSString *)contextID
+                       payload:(NSDictionary *)payload
+                    completion:(void (^)(BOOL accepted, NSString *state))completion {
+  if (!completion) return;
+  if (![self privateTabOwned:tabID windowID:windowID contextID:contextID]) {
+    completion(NO, nil);
+    return;
+  }
+  NSDictionary *state = ARCPrivateShaarState(self);
+  BOOL submitted = ARCPrivateShaarSubmit(
+      self, PrivateScope(state[@"contexts"][contextID]),
+      PrivateWindow(state[@"windows"][windowID]), PrivateTab(state[@"tabs"][tabID]),
+      operation, payload, ^(NSDictionary *reply) {
+        if (reply[@"error"]) {
+          completion(NO, nil);
+          return;
+        }
+        NSString *value = [reply[@"state"] isKindOfClass:NSString.class] ? reply[@"state"] : @"";
+        completion(YES, value);
+      });
+  if (!submitted) completion(NO, nil);
+}
+
+- (void)sleepPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+               contextID:(NSString *)contextID reason:(NSString *)reason
+              completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    PrivateLifecycleFinish(completion, NO);
+    return;
+  }
+  NSString *discardReason = reason.length ? reason : @"proactive";
+  [self submitPrivateLifecycle:kShaarOpPrivateTabDiscard tabID:tabID windowID:windowID
+                    contextID:contextID
+                      payload:@{@"schemaVersion": @1, @"reason": discardReason}
+                   completion:^(BOOL accepted, NSString *state) {
+    PrivateLifecycleFinish(completion, accepted && [state isEqualToString:@"discarded"]);
+  }];
+}
+
+- (void)wakePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+              contextID:(NSString *)contextID completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    PrivateLifecycleFinish(completion, NO);
+    return;
+  }
+  [self submitPrivateLifecycle:kShaarOpPrivateTabWake tabID:tabID windowID:windowID
+                    contextID:contextID payload:@{@"schemaVersion": @1}
+                   completion:^(BOOL accepted, NSString *state) {
+    PrivateLifecycleFinish(completion, accepted && [state isEqualToString:@"active"]);
+  }];
+}
+
 - (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
                  contextID:(NSString *)contextID {
   return [self reloadPrivateTabID:tabID windowID:windowID contextID:contextID
@@ -485,6 +565,15 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
   if (!context ||
       [context[@"sourceProfileID"] caseInsensitiveCompare:profileID] != NSOrderedSame)
     return;
+  if (event->kind == SHAAR_EVENT_TAB && [payload[@"kind"] isEqual:@"lifecycle"]) {
+    if ([self privateTabOwned:tabID windowID:windowID contextID:contextID] &&
+        self.onPrivateTabLifecycle) {
+      NSString *state = [payload[@"state"] isKindOfClass:NSString.class] ? payload[@"state"] : @"";
+      self.onPrivateTabLifecycle(contextID, windowID, tabID, state,
+                                 [payload[@"audible"] boolValue], [payload[@"capturing"] boolValue]);
+    }
+    return;
+  }
   if (event->kind == SHAAR_EVENT_TAB && [payload[@"kind"] isEqual:@"closed"]) {
     if ([state[@"tabs"][tabID][@"contextID"] isEqual:contextID])
       [self finishPrivateTabID:tabID];
@@ -493,6 +582,23 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
   if (event->kind == SHAAR_EVENT_WINDOW && [payload[@"kind"] isEqual:@"closed"]) {
     if ([state[@"windows"][windowID][@"contextID"] isEqual:contextID])
       [self finishPrivateWindowID:windowID];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_MEDIA) {
+    if ([self privateTabOwned:tabID windowID:windowID contextID:contextID] &&
+        [payload[@"schemaVersion"] isEqual:@1] &&
+        [payload[@"kind"] isEqualToString:@"capture_changed"] &&
+        self.onPrivateMediaAccess) {
+      NSNumber *camera = payload[@"camera"];
+      NSNumber *microphone = payload[@"microphone"];
+      NSNumber *screen = payload[@"screen"];
+      if ([camera isKindOfClass:NSNumber.class] &&
+          [microphone isKindOfClass:NSNumber.class] &&
+          [screen isKindOfClass:NSNumber.class]) {
+        self.onPrivateMediaAccess(contextID, windowID, tabID, @{
+          @"camera": camera, @"microphone": microphone, @"screen": screen});
+      }
+    }
     return;
   }
   if (event->kind != SHAAR_EVENT_NAVIGATION ||

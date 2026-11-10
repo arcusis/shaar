@@ -102,6 +102,37 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 - (void)discardTabID:(NSString *)tabID {}
 
+- (void)probeTabLifecycleForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (completion) completion(NO);
+}
+- (void)sleepTabID:(NSString *)tabID reason:(NSString *)reason completion:(void (^)(BOOL))completion {
+  if (completion) completion(NO);
+}
+- (void)wakeTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (completion) completion(NO);
+}
+- (void)freezeTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (completion) completion(NO);
+}
+- (void)probePrivateTabLifecycleForTabID:(NSString *)tabID windowID:(NSString *)windowID
+                              contextID:(NSString *)contextID completion:(void (^)(BOOL))completion {
+  if (completion) completion(NO);
+}
+- (void)sleepPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+               contextID:(NSString *)contextID reason:(NSString *)reason
+              completion:(void (^)(BOOL))completion {
+  if (completion) completion(NO);
+}
+- (void)wakePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+              contextID:(NSString *)contextID completion:(void (^)(BOOL))completion {
+  if (completion) completion(NO);
+}
+- (void)evaluateInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+                    contextID:(NSString *)contextID script:(NSString *)script
+                   completion:(void (^)(NSString *))completion {
+  if (completion) completion(nil);
+}
+
 - (BOOL)createWindowID:(NSString *)windowID error:(NSError **)error {
   if (error) *error = ARCBridgeError(@"Shaar engine unavailable.");
   return NO;

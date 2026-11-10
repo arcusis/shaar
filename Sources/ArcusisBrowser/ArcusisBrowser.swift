@@ -27,6 +27,7 @@ public enum BrowserLaunch {
           showSettings: arguments.contains("--settings"),
           showSettingsProfiles: arguments.contains("--settings-profiles"),
           showSettingsProfileEditor: arguments.contains("--settings-profile-editor"),
+          showSleepingTab: arguments.contains("--sleeping-tab"),
           firstRunStep: value(after: "--first-run-step", in: arguments)
             .flatMap(Int.init).flatMap(FirstRunStep.init(rawValue:)),
           firstRunFromDiskImage: arguments.contains("--first-run-from-dmg"))
@@ -63,7 +64,7 @@ public enum BrowserLaunch {
     to url: URL, showCommand: Bool, commandQuery: String?, commandFilter: CommandFilter?,
     compact: Bool, hideSidebar: Bool, showSpaceEditor: Bool,
     showExtensionConsent: Bool, showRecentDownloads: Bool, showSettings: Bool,
-    showSettingsProfiles: Bool, showSettingsProfileEditor: Bool,
+    showSettingsProfiles: Bool, showSettingsProfileEditor: Bool, showSleepingTab: Bool,
     firstRunStep: FirstRunStep?, firstRunFromDiskImage: Bool
   ) throws {
     if let firstRunStep {
@@ -85,6 +86,7 @@ public enum BrowserLaunch {
       compact: compact, showSpaceEditor: showSpaceEditor, showExtensionConsent: showExtensionConsent
     )
     let store = BrowserStore.preview(showCommand: showCommand)
+    if showSleepingTab { markPreviewTabSleeping(store) }
     store.sidebarIsVisible = !hideSidebar
     if showCommand {
       stageCommandPreview(store, query: commandQuery ?? "", filter: commandFilter)
@@ -113,6 +115,14 @@ public enum BrowserLaunch {
       throw CocoaError(.fileWriteUnknown)
     }
     try png.write(to: url, options: .atomic)
+  }
+
+  /// Marks a background preview tab sleeping so the sidebar indicator can be captured offscreen.
+  @MainActor private static func markPreviewTabSleeping(_ store: BrowserStore) {
+    let tabs = store.session.spaces.flatMap(\.tabs)
+    let selected = store.session.selectedPage?.tab.id
+    let target = tabs.first { $0.id != selected } ?? tabs.last
+    if let target { store.noteTabSleeping(target.id) }
   }
 
   /// Gives the launcher closed tabs, a Favorite, history and Actions to show without an engine.

@@ -168,6 +168,9 @@ struct Symbols {
                       profileID:(NSString *)profileID;
 - (BOOL)submitTabID:(NSString *)tabID operation:(shaar_operation)operation
             payload:(NSDictionary *)payload;
+- (void)submitTabID:(NSString *)tabID operation:(shaar_operation)operation
+            payload:(NSDictionary *)payload
+         completion:(void (^)(NSDictionary *, NSError *))completion;
 - (BOOL)submitWindowID:(NSString *)windowID profileID:(NSString *)profileID
              operation:(shaar_operation)operation payload:(NSDictionary *)payload;
 - (void)finishProfileLoadID:(NSString *)profileID error:(NSError *)error;
@@ -178,6 +181,32 @@ struct Symbols {
 @end
 
 #include "ChromiumShaarFeatureTransport.inc"
+
+static const shaar_operation kShaarOpTabDiscard = (shaar_operation)208;
+static const shaar_operation kShaarOpTabFreeze = (shaar_operation)209;
+static const shaar_operation kShaarOpTabWake = (shaar_operation)210;
+static const shaar_operation kShaarOpTabLifecycleGet = (shaar_operation)211;
+
+static void ShaarFinishOnMain(void (^completion)(BOOL), BOOL accepted) {
+  if (!completion) return;
+  if (NSThread.isMainThread) completion(accepted);
+  else dispatch_async(dispatch_get_main_queue(), ^{ completion(accepted); });
+}
+
+static BOOL ShaarLifecycleAccepted(NSDictionary *reply, NSError *error,
+                                   NSArray<NSString *> *states) {
+  if (error) return NO;
+  NSString *state = [reply[@"state"] isKindOfClass:NSString.class] ? reply[@"state"] : @"";
+  return [states containsObject:state];
+}
+
+/// A failed submit, including INVALID_ARGUMENT and UNSUPPORTED_CAPABILITY, is not a lifecycle.
+static BOOL ShaarLifecycleProbeCapable(NSDictionary *reply, NSError *error) {
+  if (error || [reply[@"error"] isKindOfClass:NSString.class] ||
+      [reply[@"error"] isKindOfClass:NSNumber.class]) return NO;
+  NSString *state = [reply[@"state"] isKindOfClass:NSString.class] ? reply[@"state"] : @"";
+  return [@[@"active", @"frozen", @"discarded"] containsObject:state];
+}
 
 static void ShaarEventCallback(void *context, const shaar_event *event) {
   ARCPerformShaarEventCallback(^{
@@ -506,6 +535,14 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [_shaarTabWindows removeObjectForKey:tabID];
     [_shaarTabProfiles removeObjectForKey:tabID];
     if (self.onTabClosed) self.onTabClosed(tabID);
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"lifecycle"]) {
+    if (_shaarTabs[tabID] && self.onTabLifecycle) {
+      NSString *state = [payload[@"state"] isKindOfClass:NSString.class] ? payload[@"state"] : @"";
+      self.onTabLifecycle(tabID, state, [payload[@"audible"] boolValue],
+                          [payload[@"capturing"] boolValue]);
+    }
     return;
   }
   if (event->kind == SHAAR_EVENT_DOWNLOAD) {
@@ -928,6 +965,60 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (void)discardTabID:(NSString *)tabID { [self closeTabID:tabID]; }
 
+- (BOOL)tabLifecycleSupported {
+  // Operations 208-211 arrive with ABI minor 11. An older engine must not
+  // discard or freeze, even if a submit would return unsupported.
+  return _symbols.abi_minor && _symbols.abi_minor() >= 11;
+}
+
+- (void)probeTabLifecycleForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    ShaarFinishOnMain(completion, NO);
+    return;
+  }
+  [self submitTabID:tabID operation:kShaarOpTabLifecycleGet
+            payload:@{@"schemaVersion": @1}
+         completion:^(NSDictionary *reply, NSError *error) {
+    ShaarFinishOnMain(completion, ShaarLifecycleProbeCapable(reply, error));
+  }];
+}
+
+- (void)sleepTabID:(NSString *)tabID reason:(NSString *)reason
+        completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    ShaarFinishOnMain(completion, NO);
+    return;
+  }
+  NSString *discardReason = reason.length ? reason : @"proactive";
+  [self submitTabID:tabID operation:kShaarOpTabDiscard
+            payload:@{@"schemaVersion": @1, @"reason": discardReason}
+         completion:^(NSDictionary *reply, NSError *error) {
+    ShaarFinishOnMain(completion, ShaarLifecycleAccepted(reply, error, @[@"discarded"]));
+  }];
+}
+
+- (void)wakeTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    ShaarFinishOnMain(completion, NO);
+    return;
+  }
+  [self submitTabID:tabID operation:kShaarOpTabWake payload:@{@"schemaVersion": @1}
+         completion:^(NSDictionary *reply, NSError *error) {
+    ShaarFinishOnMain(completion, ShaarLifecycleAccepted(reply, error, @[@"active"]));
+  }];
+}
+
+- (void)freezeTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (![self tabLifecycleSupported]) {
+    ShaarFinishOnMain(completion, NO);
+    return;
+  }
+  [self submitTabID:tabID operation:kShaarOpTabFreeze payload:@{@"schemaVersion": @1}
+         completion:^(NSDictionary *reply, NSError *error) {
+    ShaarFinishOnMain(completion, ShaarLifecycleAccepted(reply, error, @[@"frozen", @"discarded"]));
+  }];
+}
+
 - (BOOL)submitTabID:(NSString *)tabID operation:(shaar_operation)operation
             payload:(NSDictionary *)payload {
   NSString *windowID = _shaarTabWindows[tabID];
@@ -944,6 +1035,49 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   return _symbols.submit(_shaarEngine, scope, window, tab, operation,
                          {(const char *)json.bytes, json.length}, _nextRequestID++,
                          IgnoreReply, nullptr, &error) == SHAAR_OK;
+}
+
+- (void)submitTabID:(NSString *)tabID operation:(shaar_operation)operation
+            payload:(NSDictionary *)payload
+         completion:(void (^)(NSDictionary *, NSError *))completion {
+  NSString *windowID = _shaarTabWindows[tabID];
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  shaar_tab *tab = (shaar_tab *)_shaarTabs[tabID].pointerValue;
+  shaar_profile *profile = (shaar_profile *)_shaarProfiles[_shaarTabProfiles[tabID]].pointerValue;
+  NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  if (!window || !tab || !profile || !json || !_shaarEngine) {
+    completion(nil, ShaarError(@"Shaar tab operation is unavailable."));
+    return;
+  }
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = profile;
+  void (^reply)(NSDictionary *, NSError *) = [completion copy];
+  void *context = (__bridge_retained void *)reply;
+  shaar_error error = EmptyError();
+  shaar_error_code status = _symbols.submit(
+      _shaarEngine, scope, window, tab, operation,
+      {(const char *)json.bytes, json.length}, _nextRequestID++,
+      [](void *context, const shaar_result *result) {
+        void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
+        if (!result || result->error.code != SHAAR_OK) {
+          finish(nil, ShaarError(@"Shaar tab operation failed."));
+          return;
+        }
+        NSData *bytes = [NSData dataWithBytes:result->payload_json.data ?: ""
+                                      length:result->payload_json.size];
+        NSDictionary *value = bytes.length
+            ? [NSJSONSerialization JSONObjectWithData:bytes options:0 error:nil] : @{};
+        if (![value isKindOfClass:NSDictionary.class]) {
+          finish(nil, ShaarError(@"Shaar returned an invalid tab response."));
+          return;
+        }
+        finish(value, nil);
+      }, context, &error);
+  if (status != SHAAR_OK) {
+    CFBridgingRelease(context);
+    completion(nil, ShaarError(@"Shaar rejected the tab operation."));
+  }
 }
 
 - (void)submitProfileID:(NSString *)profileID operation:(shaar_operation)operation

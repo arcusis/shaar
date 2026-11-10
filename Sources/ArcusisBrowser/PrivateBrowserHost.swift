@@ -88,6 +88,22 @@ final class PrivateBrowserHost {
       else { return }
       owner.page.tabClosed(id)
     }
+    runtime.onPrivateTabLifecycle = {
+      [weak self] context, window, tab, state, audible, capturing in
+      guard let owner = self?.owner(context: context, window: window),
+        let id = UUID(uuidString: tab)
+      else { return }
+      owner.page.applyLifecycle(id, state: state, audible: audible, capturing: capturing)
+    }
+    runtime.onPrivateMediaAccess = { [weak self] context, window, tab, access in
+      guard let owner = self?.owner(context: context, window: window),
+        let id = UUID(uuidString: tab)
+      else { return }
+      owner.page.noteMediaAccess(
+        id, camera: access["camera"]?.boolValue ?? false,
+        microphone: access["microphone"]?.boolValue ?? false,
+        screen: access["screen"]?.boolValue ?? false)
+    }
     runtime.onPrivateWindowClosed = { [weak self] context, window in
       self?.windowClosed(context: context, window: window)
     }
@@ -113,6 +129,8 @@ final class PrivateBrowserHost {
     runtime.onPrivateTabSelected = nil
     runtime.onPrivateFindResult = nil
     runtime.onPrivateTabClosed = nil
+    runtime.onPrivateTabLifecycle = nil
+    runtime.onPrivateMediaAccess = nil
     runtime.onPrivateWindowClosed = nil
     for owner in owners.values { retire(owner) }
     owners.removeAll()

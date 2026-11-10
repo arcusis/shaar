@@ -1243,6 +1243,22 @@
         }
       }
     },
+    "Sleeping": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sleeping"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רדומה"
+          }
+        }
+      }
+    },
     "Close tab": {
       "localizations": {
         "en": {

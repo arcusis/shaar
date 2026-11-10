@@ -24,6 +24,8 @@ UNIT_COVERAGE_EXCLUDES = {
     ("ShaarVerification", "WebsitePermissionPromptProbe.swift"),
     # This route requires a staged native Shaar engine and hidden host; Swift unit tests cannot run it.
     ("ShaarVerification", "DevToolsRouteProbe.swift"),
+    # Idle discard needs a hidden engine window. Its pass and fail paths run there.
+    ("ShaarVerification", "SleepingTabsProbe.swift"),
     # The deleted private window and its native-session replacement are covered by the hosted
     # private-window and private-multitab engine shards. Shared BrowserWindow UI stays measured.
     ("ArcusisBrowser", "PrivateBrowserWindow.swift"),

@@ -32,7 +32,11 @@ final class PrivatePageSession {
   @ObservationIgnored private var pendingHTTPTabID: UUID?
   @ObservationIgnored private var approvedHTTP: Set<UUID> = []
   @ObservationIgnored private(set) weak var store: BrowserStore?
-  @ObservationIgnored private var liveTabs: Set<UUID>
+  @ObservationIgnored private(set) var liveTabs: Set<UUID>
+  @ObservationIgnored let sleepingTabs = SleepingTabScheduler()
+  @ObservationIgnored var mediaAccess: [UUID: MediaAccessState] = [:]
+  @ObservationIgnored var suspensionTask: Task<Void, Never>?
+  @ObservationIgnored var memoryPressureSource: DispatchSourceMemoryPressure?
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var selectedTabID: UUID?
   @ObservationIgnored var onEmpty: (() -> Void)?
@@ -64,6 +68,7 @@ final class PrivatePageSession {
       self.runtime.stopFinding(
         inPrivateTabID: tabID.uuidString, windowID: self.windowID, contextID: self.contextID)
     }
+    startSleepingTabWatch()
   }
 
   var selectedState: PageState? {
@@ -88,11 +93,13 @@ final class PrivatePageSession {
       }
     }
     for id in liveTabs.subtracting(expected) { close(id) }
-    if let selected = store.session.selectedPage?.tab.id,
-      selected != selectedTabID, liveTabs.contains(selected),
-      runtime.selectPrivateTabID(selected.uuidString, windowID: windowID, contextID: contextID)
-    {
-      selectedTabID = selected
+    if let selected = store.session.selectedPage?.tab.id {
+      wakeIfSleeping(selected)
+      if selected != selectedTabID, liveTabs.contains(selected),
+        runtime.selectPrivateTabID(selected.uuidString, windowID: windowID, contextID: contextID)
+      {
+        selectedTabID = selected
+      }
     }
     for id in store.selectedSplit?.tabIDs ?? [] {
       runtime.view(
@@ -174,10 +181,18 @@ final class PrivatePageSession {
     guard let store, store.session.page(forTabID: id) != nil else { return }
     if pendingHTTPTabID != id { cancelHTTP() }
     selectedTabID = id
+    wakeIfSleeping(id)
     _ = store.nativeTabActivated(id, profileID: store.session.selectedSpace.profileID)
   }
 
+  func noteMediaAccess(_ id: UUID, camera: Bool, microphone: Bool, screen: Bool) {
+    mediaAccess[id] = MediaAccessState(camera: camera, microphone: microphone, screen: screen)
+  }
+
   func tabClosed(_ id: UUID) {
+    sleepingTabs.forget(id)
+    store?.noteTabAwake(id)
+    mediaAccess[id] = nil
     guard liveTabs.remove(id) != nil else { return }
     shaarDevTools.removeValue(forKey: id)?.close()
     if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }
@@ -191,6 +206,7 @@ final class PrivatePageSession {
 
   func retireInspectors() {
     isClosed = true
+    stopSleepingTabWatch()
     for model in shaarDevTools.values { model.close() }
     shaarDevTools.removeAll()
     for model in inspectors.values where model.isOpen { model.close() }

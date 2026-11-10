@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 11u
+#define SHAAR_ENGINE_ABI_MINOR 12u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -79,7 +79,10 @@ typedef enum {
   SHAAR_EVENT_SITE_DATA = 12,
   SHAAR_EVENT_EXTENSION = 13,
   SHAAR_EVENT_DEVTOOLS = 14,
-  SHAAR_EVENT_MEDIA = 15
+  SHAAR_EVENT_MEDIA = 15,
+  // BEGIN save_prompts
+  SHAAR_EVENT_SAVE_PROMPT = 16
+  // END save_prompts
 } shaar_event_kind;
 typedef struct {
   uint32_t size;
@@ -228,8 +231,11 @@ typedef enum {
   SHAAR_OP_MEDIA_PERMISSION_DECISION = 1108,
   // END media
   // BEGIN storage_keychain
-  SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400
+  SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400,
   // END storage_keychain
+  // BEGIN save_prompts
+  SHAAR_OP_SAVE_PROMPT_DECIDE = 1500
+  // END save_prompts
 } shaar_operation;
 
 // Private sessions module IDs.
@@ -248,6 +254,9 @@ enum { SHAAR_MODULE_SITE_DATA = 1201 };
 // BEGIN media
 enum { SHAAR_MODULE_MEDIA = 1203 };
 // END media
+// BEGIN save_prompts
+enum { SHAAR_MODULE_SAVE_PROMPTS = 1500 };
+// END save_prompts
 
 // BEGIN devtools command and module IDs.
 typedef enum {

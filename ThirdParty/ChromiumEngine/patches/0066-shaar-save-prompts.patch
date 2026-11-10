@@ -1,0 +1,239 @@
+diff --git a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc b/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
+--- a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
++++ b/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
+@@ -10,6 +10,7 @@
+ #include <utility>
+ 
+ #include "base/auto_reset.h"
++#include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -119,6 +120,22 @@
+ 
+ int ManagePasswordsUIController::save_fallback_timeout_in_seconds_ = 90;
+ 
++namespace content {
++class WebContents;
++}
++
++namespace shaar::save_prompts {
++
++// Decisions are 1 save, 2 dismiss, and 3 never for a new password.
++bool OfferSavePrompt(content::WebContents* contents,
++                     const char* prompt,
++                     const char* detail,
++                     bool update,
++                     base::OnceCallback<void(int)> decision)
++    __attribute__((weak_import));
++
++}  // namespace shaar::save_prompts
++
+ namespace {
+ 
+ using Logger = autofill::SavePasswordProgressLogger;
+@@ -1570,6 +1587,56 @@
+ }
+ 
+ void ManagePasswordsUIController::ShowBubble() {
++  const auto state = GetState();
++  const bool is_save = state == password_manager::ui::PENDING_PASSWORD_STATE;
++  const bool is_update =
++      state == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE;
++  if ((is_save || is_update) &&
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    auto decision = base::BindOnce(
++        [](base::WeakPtr<ManagePasswordsUIController> controller, bool update,
++           int choice) {
++          if (!controller)
++            return;
++          const auto current = controller->GetState();
++          const bool still_pending =
++              current == password_manager::ui::PENDING_PASSWORD_STATE ||
++              current == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE;
++          if (choice == 1 && still_pending) {
++            const password_manager::PasswordForm& pending =
++                controller->GetPendingPassword();
++            controller->SavePassword(pending.username_value,
++                                     pending.password_value);
++            return;
++          }
++          if (choice == 3 && !update &&
++              current == password_manager::ui::PENDING_PASSWORD_STATE) {
++            controller->NeverSavePassword();
++            return;
++          }
++          if (!update &&
++              current == password_manager::ui::PENDING_PASSWORD_STATE) {
++            controller->OnNotNowClicked();
++            return;
++          }
++          if (update &&
++              current ==
++                  password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
++            controller->OnNopeUpdateClicked();
++          }
++        },
++        weak_ptr_factory_.GetWeakPtr(), is_update);
++    const std::string detail =
++        base::UTF16ToUTF8(GetPendingPassword().username_value);
++    if (shaar::save_prompts::OfferSavePrompt) {
++      shaar::save_prompts::OfferSavePrompt(web_contents(), "password",
++                                           detail.c_str(), is_update,
++                                           std::move(decision));
++    } else {
++      std::move(decision).Run(2);
++    }
++    return;
++  }
+   if (TabDialogs* tab_dialogs = TabDialogs::FromWebContents(web_contents())) {
+     tab_dialogs->ShowManagePasswordsBubble(user_action_);
+   }
+diff --git a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
+--- a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
++++ b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
+@@ -11,6 +11,8 @@
+ #include <utility>
+ 
+ #include "base/auto_reset.h"
++#include "base/command_line.h"
++#include "base/functional/bind.h"
+ #include "base/logging.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -59,6 +61,23 @@
+ #include "ui/base/resource/resource_bundle.h"
+ #include "ui/base/window_open_disposition.h"
+ 
++
++namespace content {
++class WebContents;
++}
++
++namespace shaar::save_prompts {
++
++// Decisions are 1 save, 2 dismiss, and 3 never for a new password.
++bool OfferSavePrompt(content::WebContents* contents,
++                     const char* prompt,
++                     const char* detail,
++                     bool update,
++                     base::OnceCallback<void(int)> decision)
++    __attribute__((weak_import));
++
++}  // namespace shaar::save_prompts
++
+ namespace autofill {
+ 
+ namespace {
+@@ -115,6 +134,38 @@
+     payments::PaymentsAutofillClient::SaveCreditCardOptions options,
+     payments::PaymentsAutofillClient::LocalSaveCardPromptCallback
+         save_card_prompt_callback) {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    if (current_bubble_type_ == PaymentsBubbleType::kUploadComplete)
++      HideBubble(/*initiated_by_bubble_manager=*/false);
++    const std::string detail =
++        base::UTF16ToUTF8(card.NetworkAndLastFourDigits());
++    SetupLocalSave(card, options, std::move(save_card_prompt_callback));
++    auto decision = base::BindOnce(
++        [](base::WeakPtr<SaveCardBubbleControllerImpl> controller, int choice) {
++          if (!controller)
++            return;
++          if (choice == 1) {
++            controller->OnSaveButton({});
++            return;
++          }
++          if (!controller->local_save_card_prompt_callback_.is_null()) {
++            std::move(controller->local_save_card_prompt_callback_)
++                .Run(payments::PaymentsAutofillClient::SaveCardOfferUserDecision::
++                         kDeclined);
++          }
++          controller->current_bubble_type_ = PaymentsBubbleType::kInactive;
++        },
++        weak_ptr_factory_.GetWeakPtr());
++    if (shaar::save_prompts::OfferSavePrompt) {
++      shaar::save_prompts::OfferSavePrompt(web_contents(), "card",
++                                           detail.c_str(), /*update=*/false,
++                                           std::move(decision));
++    } else {
++      std::move(decision).Run(2);
++    }
++    return;
++  }
++
+   // If the confirmation view is still showing, close it before showing the new
+   // offer.
+   if (current_bubble_type_ == PaymentsBubbleType::kUploadComplete) {
+diff --git a/chrome/browser/ui/autofill/chrome_autofill_client.cc b/chrome/browser/ui/autofill/chrome_autofill_client.cc
+--- a/chrome/browser/ui/autofill/chrome_autofill_client.cc
++++ b/chrome/browser/ui/autofill/chrome_autofill_client.cc
+@@ -250,7 +250,24 @@
+ #include "chrome/browser/compose/chrome_compose_client.h"
+ #include "components/compose/core/browser/compose_manager.h"
+ #endif
++
++
++namespace content {
++class WebContents;
++}
+ 
++namespace shaar::save_prompts {
++
++// Decisions are 1 save, 2 dismiss, and 3 never for a new password.
++bool OfferSavePrompt(content::WebContents* contents,
++                     const char* prompt,
++                     const char* detail,
++                     bool update,
++                     base::OnceCallback<void(int)> decision)
++    __attribute__((weak_import));
++
++}  // namespace shaar::save_prompts
++
+ namespace autofill {
+ 
+ namespace {
+@@ -863,6 +880,44 @@
+           : SaveUpdateAddressProfilePromptMode::kSaveNewProfile,
+       std::move(callback));
+ #else
++  if (save_address_bubble_type != SaveAddressBubbleType::kMigrateToAccount &&
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    std::string detail;
++    auto append_field = [&](FieldType type) {
++      const std::string part =
++          base::UTF16ToUTF8(profile.GetInfo(type, GetAppLocale()));
++      if (part.empty())
++        return;
++      if (!detail.empty())
++        detail.append(", ");
++      detail.append(part);
++    };
++    append_field(NAME_FULL);
++    append_field(ADDRESS_HOME_LINE1);
++    append_field(ADDRESS_HOME_CITY);
++    auto decision = base::BindOnce(
++        [](base::WeakPtr<ChromeAutofillClient> client, AutofillProfile saved,
++           AddressProfileSavePromptCallback callback, int choice) {
++          if (!client || !callback)
++            return;
++          if (choice == 1) {
++            std::move(callback).Run(AddressPromptUserDecision::kAccepted,
++                                    saved);
++            return;
++          }
++          std::move(callback).Run(AddressPromptUserDecision::kDeclined,
++                                  std::nullopt);
++        },
++        weak_ptr_factory_.GetWeakPtr(), profile, std::move(callback));
++    if (shaar::save_prompts::OfferSavePrompt) {
++      shaar::save_prompts::OfferSavePrompt(web_contents(), "address",
++                                           detail.c_str(), /*update=*/false,
++                                           std::move(decision));
++    } else {
++      std::move(decision).Run(2);
++    }
++    return;
++  }
+   AddressBubblesController::SetUpAndShowSaveOrUpdateAddressBubble(
+       web_contents(), profile, original_profile, save_address_bubble_type,
+       !GetPersonalDataManager().address_data_manager().GetProfiles().empty(),

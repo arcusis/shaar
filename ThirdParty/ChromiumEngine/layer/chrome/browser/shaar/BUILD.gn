@@ -117,6 +117,10 @@ source_set("engine") {
     "tab_lifecycle/shaar_tab_lifecycle.cc",
     "tab_lifecycle/shaar_tab_lifecycle.h",
     # END tab_lifecycle
+    # BEGIN save_prompts
+    "save_prompts/shaar_save_prompts.cc",
+    "save_prompts/shaar_save_prompts.h",
+    # END save_prompts
   ]
   cflags_objcc = [ "-fobjc-arc" ]
   frameworks = [ "AppKit.framework" ]
@@ -321,6 +325,12 @@ test("shaar_quit_probe_unittests") {
   }
 }
 # END quit_probe
+# BEGIN save_prompts
+test("shaar_save_prompts_unittests") {
+  sources = [ "save_prompts/shaar_save_prompts_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END save_prompts
 
 test("shaar_layer_unittests") {
   data_deps = [ "//chrome:packed_resources" ]
@@ -333,6 +343,7 @@ test("shaar_layer_unittests") {
     "history/shaar_history_unittest.cc",
     "lifecycle/shaar_module_registry_unittest.cc",
     "media/shaar_media_unittest.cc",
+    "save_prompts/shaar_save_prompts_unittest.cc",
     "navigation/shaar_navigation_unittest.cc",
     "private_sessions/shaar_private_sessions_unittest.cc",
     "profiles/shaar_profiles_unittest.cc",

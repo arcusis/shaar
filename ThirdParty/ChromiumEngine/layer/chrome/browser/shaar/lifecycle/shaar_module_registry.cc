@@ -42,6 +42,9 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_storage_keychain_register);
 // BEGIN tab_lifecycle
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_tab_lifecycle_register);
 // END tab_lifecycle
+// BEGIN save_prompts
+SHAAR_DECLARE_OPTIONAL_MODULE(shaar_save_prompts_register);
+// END save_prompts
 #undef SHAAR_DECLARE_OPTIONAL_MODULE
 
 namespace {
@@ -214,6 +217,10 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
   if (shaar_tab_lifecycle_register)
     shaar_tab_lifecycle_register(registry);
   // END tab_lifecycle
+  // BEGIN save_prompts
+  if (shaar_save_prompts_register)
+    shaar_save_prompts_register(registry);
+  // END save_prompts
 }
 
 ShaarModuleRegistry& ModuleRegistry() {

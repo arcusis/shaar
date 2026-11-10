@@ -32,16 +32,29 @@ class LayerCompileFixesPatchTests(unittest.TestCase):
         self.assertIn("SHAAR_OP_SITE_COOKIE_SET = 710", source)
         self.assertIn("SHAAR_OP_SITE_COOKIE_DELETE = 711", source)
 
-    def test_patch_is_pinned_last(self):
+    def test_compile_fixes_stay_before_patches_that_use_them(self):
+        # 0050 edits the same two files and already calls GetProfile(), so 0048 stays ahead of it.
         patches = json.loads(MANIFEST.read_text())["patches"]
         files = [entry["file"] for entry in patches]
-        self.assertEqual(files[-1], str(PATCH.relative_to(ROOT)))
+        compile_fixes = str(PATCH.relative_to(ROOT))
+        capture = "ThirdParty/ChromiumEngine/patches/0050-shaar-media-capture-events.patch"
         self.assertLess(
             files.index("ThirdParty/ChromiumEngine/patches/0019-shaar-site-cookie-items.patch"),
-            files.index(str(PATCH.relative_to(ROOT))),
+            files.index(compile_fixes),
         )
-        matching = [entry for entry in patches if entry["file"] == str(PATCH.relative_to(ROOT))]
+        self.assertLess(files.index(compile_fixes), files.index(capture))
+        matching = [entry for entry in patches if entry["file"] == compile_fixes]
+        self.assertEqual(len(matching), 1)
         self.assertEqual(matching[0]["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest())
+        restored = (
+            "+        tab.browser->profile()->IsOffTheRecord()",
+            "+  static base::NoDestructor<uint64_t> next(0);",
+            "+  const GURL origin = request.security_origin.GetOrigin();",
+        )
+        for entry in patches[files.index(compile_fixes) + 1:]:
+            text = (ROOT / entry["file"]).read_text()
+            for line in restored:
+                self.assertNotIn(line, text, entry["file"])
 
 
 if __name__ == "__main__":

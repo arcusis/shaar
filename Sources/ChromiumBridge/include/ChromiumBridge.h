@@ -55,6 +55,12 @@ typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
 FOUNDATION_EXPORT void ARCConfigureLocalization(NSURL *bundleURL, NSString *languageIdentifier);
 FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 
+/// The plist or host asked for the mock keychain, and the bundle is ad-hoc signed.
+/// Developer ID and any other team signature never qualify.
+FOUNDATION_EXPORT BOOL ARCMockKeychainEnabled(BOOL requested, BOOL adHocSigned);
+/// True only for an ad-hoc signature with no certificate and no team identifier.
+FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @protocol ARCBrowserCoreBackend <NSObject>
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing;

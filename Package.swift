@@ -36,7 +36,7 @@ let package = Package(
       name: "ChromiumBridge",
       publicHeadersPath: "include",
       cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
-      linkerSettings: [.linkedFramework("AppKit")]
+      linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Security")]
     ),
     // BEGIN Shaar navigation C ABI shim.
     .target(

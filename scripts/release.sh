@@ -59,6 +59,14 @@ if $upload && $allow_unsigned; then
   exit 2
 fi
 [[ -s "$notes" ]] || { echo "error: release notes file is missing or empty: $notes" >&2; exit 1; }
+# Agent hosts export this so ad-hoc bundles skip the login keychain. A release must not.
+case ${SHAAR_MOCK_KEYCHAIN:-} in
+  ''|0|false|FALSE|no|NO) ;;
+  *)
+    echo 'error: SHAAR_MOCK_KEYCHAIN is set. Release builds use the login keychain and refuse the mock.' >&2
+    exit 1
+    ;;
+esac
 
 # release_feed.py verifies the update signature with the hash-pinned scripts/release-requirements.txt.
 python="${PYTHON:-.venv/bin/python}"
@@ -120,6 +128,10 @@ echo '==> Building engine bundle with the update feed'
 bash scripts/bundle-app.sh --with-engine --with-updates
 # Move rather than copy so no ad hoc build with a live update feed stays behind.
 mv build/Shaar.app "$app"
+if /usr/bin/grep -q '<key>ShaarUseMockKeychain</key>' "$app/Contents/Info.plist"; then
+  echo 'error: release app Info.plist must not contain ShaarUseMockKeychain.' >&2
+  exit 1
+fi
 
 echo '==> Checking shipped binaries for build-machine paths'
 # A path under the builder's home folder reveals their user name to everyone who installs Shaar.

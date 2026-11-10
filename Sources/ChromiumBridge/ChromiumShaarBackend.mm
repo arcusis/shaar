@@ -11,6 +11,8 @@
 #import "ChromiumMediaSession.h"
 #import "ChromiumShaarActivation.h"
 
+#import <Security/Security.h>
+
 #include <dlfcn.h>
 #include <cstdlib>
 #include <cstring>
@@ -154,6 +156,56 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   });
 }
 
+static BOOL ARCInfoBool(id value) {
+  return [value respondsToSelector:@selector(boolValue)] && [value boolValue];
+}
+
+static BOOL ARCEnvironmentRequestsMockKeychain(void) {
+  const char *value = getenv("SHAAR_MOCK_KEYCHAIN");
+  if (!value) return NO;
+  if (std::strcmp(value, "1") == 0) return YES;
+  if (std::strcmp(value, "true") == 0 || std::strcmp(value, "TRUE") == 0) return YES;
+  if (std::strcmp(value, "yes") == 0 || std::strcmp(value, "YES") == 0) return YES;
+  return NO;
+}
+
+static BOOL ARCSignatureIsAdHoc(CFDictionaryRef information) {
+  CFTypeRef flags = CFDictionaryGetValue(information, kSecCodeInfoFlags);
+  int32_t value = 0;
+  if (!flags || CFGetTypeID(flags) != CFNumberGetTypeID()) return NO;
+  if (!CFNumberGetValue((CFNumberRef)flags, kCFNumberSInt32Type, &value)) return NO;
+  if ((value & kSecCodeSignatureAdhoc) == 0) return NO;
+  CFTypeRef certificates = CFDictionaryGetValue(information, kSecCodeInfoCertificates);
+  if (certificates && CFGetTypeID(certificates) == CFArrayGetTypeID()
+      && CFArrayGetCount((CFArrayRef)certificates) > 0) {
+    return NO;
+  }
+  CFTypeRef team = CFDictionaryGetValue(information, kSecCodeInfoTeamIdentifier);
+  if (team && CFGetTypeID(team) == CFStringGetTypeID() && CFStringGetLength((CFStringRef)team) > 0) {
+    return NO;
+  }
+  return YES;
+}
+
+BOOL ARCMockKeychainEnabled(BOOL requested, BOOL adHocSigned) {
+  return requested && adHocSigned;
+}
+
+BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
+  NSURL *url = bundle.bundleURL;
+  if (!url.isFileURL) return NO;
+  SecStaticCodeRef code = NULL;
+  OSStatus status = SecStaticCodeCreateWithPath((__bridge CFURLRef)url, kSecCSDefaultFlags, &code);
+  if (status != errSecSuccess || !code) return NO;
+  CFDictionaryRef information = NULL;
+  status = SecCodeCopySigningInformation(code, kSecCSSigningInformation, &information);
+  CFRelease(code);
+  if (status != errSecSuccess || !information) return NO;
+  BOOL adHoc = ARCSignatureIsAdHoc(information);
+  CFRelease(information);
+  return adHoc;
+}
+
 @implementation ARCShaarRuntime
 
 - (NSString *)startupNotice { return _shaarStartupNotice; }
@@ -214,13 +266,17 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   config.on_event = ShaarEventCallback;
   config.event_context = (__bridge void *)self;
   shaar_error error = EmptyError();
-  // shaar.6 has a fixed Safe Storage keychain identity shared with the regular app.
-  BOOL previewBundle = [NSBundle.mainBundle.bundleIdentifier
-      isEqualToString:@"com.arcusis.browser.engine-preview"];
+  // The pinned engine adds --use-mock-keychain only inside SHAAR_ENGINE_TESTING.
+  // Developer ID signatures ignore the request and keep the login keychain.
   id mockKeychainSetting = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ShaarUseMockKeychain"];
-  BOOL previewMockKeychain = previewBundle &&
-      [mockKeychainSetting respondsToSelector:@selector(boolValue)] && [mockKeychainSetting boolValue];
-  setenv("SHAAR_ENGINE_TESTING", testing || previewMockKeychain ? "1" : "0", 1);
+  BOOL requested = ARCInfoBool(mockKeychainSetting) || ARCEnvironmentRequestsMockKeychain();
+  BOOL adHoc = NO;
+  if (requested) adHoc = ARCBundleIsAdHocSigned(NSBundle.mainBundle);
+  BOOL mockKeychain = ARCMockKeychainEnabled(requested, adHoc);
+  const char *engineTesting = "0";
+  if (testing) engineTesting = "1";
+  if (mockKeychain) engineTesting = "1";
+  setenv("SHAAR_ENGINE_TESTING", engineTesting, 1);
   if (_symbols.create(&config, &_shaarEngine, &error) != SHAAR_OK) {
     unsetenv("SHAAR_ENGINE_TESTING");
     return 1;

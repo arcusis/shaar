@@ -30,8 +30,11 @@ class ReleaseScriptOptionTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def _run(self, *args, python=sys.executable):
+    def _run(self, *args, python=sys.executable, env=None):
         environment = os.environ | {"PATH": f"{self.tools}:{os.environ['PATH']}", "PYTHON": python}
+        environment.pop("SHAAR_MOCK_KEYCHAIN", None)
+        if env:
+            environment.update(env)
         return subprocess.run(
             ["bash", str(SCRIPT), *args], cwd=REPO, env=environment, capture_output=True, text=True
         )
@@ -66,6 +69,15 @@ class ReleaseScriptOptionTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("release-requirements.txt", result.stderr)
         self.assertNotIn("unexpected", result.stderr)
+
+    def test_mock_keychain_is_refused_before_any_tool_runs(self):
+        result = self._run("--notes", str(self.notes), env={"SHAAR_MOCK_KEYCHAIN": "1"})
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("SHAAR_MOCK_KEYCHAIN", result.stderr)
+        self.assertIn("login keychain", result.stderr)
+        self.assertNotIn("unexpected", result.stderr)
+        self.assertNotIn("Building", result.stdout)
 
     def test_missing_signing_identity_stops_before_build(self):
         result = self._run("--notes", str(self.notes))

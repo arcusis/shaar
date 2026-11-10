@@ -110,7 +110,31 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
   }
 }
 
+public enum WebsitePermissionIntake: Equatable, Sendable {
+  case show(WebsitePermissionRequest)
+  /// The id is already on screen. The new event is dropped and the live request stays.
+  case ignoreDuplicate
+  case deny
+}
+
 public enum WebsitePermissionEvent {
+  /// A repeated id is ignored. Any other event that is not a current-page request is denied.
+  public static func intake(
+    from payload: [String: Any],
+    windowID: String,
+    outstandingIDs: Set<String>,
+    knownTabs: Set<UUID>
+  ) -> WebsitePermissionIntake {
+    if let id = payload["id"] as? String, outstandingIDs.contains(id) {
+      return .ignoreDuplicate
+    }
+    guard
+      let request = request(
+        from: payload, windowID: windowID, outstandingIDs: outstandingIDs, knownTabs: knownTabs)
+    else { return .deny }
+    return .show(request)
+  }
+
   /// Accepts one permission event. Unknown kinds, a repeated id, the wrong tab, or
   /// schemaVersion other than 1 produce no request. Website permission prompts require a frame token.
   public static func request(
@@ -145,9 +169,9 @@ public enum WebsitePermissionEvent {
   }
 
   private static func schemaVersion(_ payload: [String: Any]) -> Int? {
-    if let value = payload["schemaVersion"] as? Int { return value }
-    if let number = payload["schemaVersion"] as? NSNumber { return number.intValue }
-    return nil
+    guard let number = payload["schemaVersion"] as? NSNumber else { return nil }
+    if CFGetTypeID(number) == CFBooleanGetTypeID() { return nil }
+    return number.intValue
   }
 
   private static func suppliedFrameID(_ payload: [String: Any]) -> String? {

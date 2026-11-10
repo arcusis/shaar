@@ -11,4 +11,16 @@ import Testing
   @Test func missingProbeArgumentsFailBeforeLaunch() {
     #expect(WebsitePermissionPromptProbe.run(arguments: ["--probe-website-permission"]) == 1)
   }
+
+  @Test func passedRequiresTheFourWebsitePrompts() {
+    let ready = WebsitePermissionProbeVerdict.passed(
+      error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
+      unexpectedSurfaces: [], promptedNames: ["media"])
+    #expect(!ready)
+    let complete = WebsitePermissionProbeVerdict.passed(
+      error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
+      unexpectedSurfaces: [],
+      promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"])
+    #expect(complete)
+  }
 }

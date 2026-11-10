@@ -15,8 +15,10 @@ import ObjectiveC
 /// Runs in the verification harness. Loopback fixtures only; windows stay off screen.
 @MainActor enum PlatformParityProbe {
   static func run(frameworkURL: URL, outputURL: URL, httpBase: URL?, httpsBase: URL?) -> Int32 {
-    guard let httpBase, httpBase.scheme == "http", httpBase.host == "127.0.0.1", httpBase.port != nil,
-      let httpsBase, httpsBase.scheme == "https", httpsBase.host == "127.0.0.1", httpsBase.port != nil
+    guard let httpBase, httpBase.scheme == "http", httpBase.host == "127.0.0.1",
+      httpBase.port != nil,
+      let httpsBase, httpsBase.scheme == "https", httpsBase.host == "127.0.0.1",
+      httpsBase.port != nil
     else { return 2 }
     let directory = outputURL.deletingLastPathComponent()
     do {
@@ -137,9 +139,12 @@ private struct ParitySnapshot {
     SurfaceGuard.install()
     let missing = SurfaceGuard.installed.filter { $0.hasPrefix("missing") }
     guard missing.isEmpty else {
-      rows.append(probeRow(
-        "Setup",
-        evidence: "Surface guard did not install before the window was restored. \(missing.joined(separator: ", "))"))
+      rows.append(
+        probeRow(
+          "Setup",
+          evidence:
+            "Surface guard did not install before the window was restored. \(missing.joined(separator: ", "))"
+        ))
       return
     }
     SurfaceGuard.startWatchdog()
@@ -151,9 +156,10 @@ private struct ParitySnapshot {
       rows.append(probeRow("Setup", evidence: "No hidden window."))
       return
     }
-    let ready = await run(ParityCheck(
-      item: "Ready", path: "/ready", base: .http, click: false, seconds: 8,
-      allowMedia: false, tolerateErrorPage: false), loadTimeout: 25)
+    let ready = await run(
+      ParityCheck(
+        item: "Ready", path: "/ready", base: .http, click: false, seconds: 8,
+        allowMedia: false, tolerateErrorPage: false), loadTimeout: 25)
     guard text(ready.result["outcome"]) == "ready" else {
       rows.append(probeRow("Setup", evidence: "The fixture page did not load. \(describe(ready))"))
       return
@@ -312,7 +318,9 @@ private struct ParitySnapshot {
   }
 
   private func runPartition() async -> [String: Any] {
-    guard let context else { return probeRow("Storage partitioning / third-party cookies", evidence: "No window.") }
+    guard let context else {
+      return probeRow("Storage partitioning / third-party cookies", evidence: "No window.")
+    }
     let writeURL = pageURL(path: "/partition-a", base: .http)
     let readURL = pageURL(path: "/partition-b", base: .plainHost)
     guard let writeURL, let readURL else {
@@ -482,48 +490,85 @@ private struct ParitySnapshot {
     if check.click && !snapshot.clicked && snapshot.result.isEmpty && snapshot.kinds.isEmpty
       && snapshot.sheet.isEmpty && snapshot.surfaces.isEmpty
     {
-      return [probeRow(check.item, evidence: "The hidden trusted click did not land. \(describe(snapshot))")]
+      return [
+        probeRow(
+          check.item, evidence: "The hidden trusted click did not land. \(describe(snapshot))")
+      ]
     }
     if !snapshot.opened && !check.tolerateErrorPage {
-      return [probeRow(check.item, evidence: "The fixture page did not load. \(describe(snapshot))")]
+      return [
+        probeRow(check.item, evidence: "The fixture page did not load. \(describe(snapshot))")
+      ]
     }
     if snapshot.scriptStalled && text(snapshot.result["outcome"]).isEmpty && snapshot.kinds.isEmpty
       && snapshot.sheet.isEmpty
     {
-      return [probeRow(
-        check.item, evidence: "The page script stalled before a result. \(describe(snapshot))")]
+      return [
+        probeRow(
+          check.item, evidence: "The page script stalled before a result. \(describe(snapshot))")
+      ]
     }
     switch check.item {
     case "Camera and microphone": return mediaRows(snapshot)
     case "Geolocation permission":
-      return [permissionRow(snapshot, item: check.item, kind: "location", delegate: "GeolocationPermissionContext")]
+      return [
+        permissionRow(
+          snapshot, item: check.item, kind: "location", delegate: "GeolocationPermissionContext")
+      ]
     case "Notifications permission":
-      return [permissionRow(snapshot, item: check.item, kind: "notifications", delegate: "NotificationPermissionContext")]
+      return [
+        permissionRow(
+          snapshot, item: check.item, kind: "notifications",
+          delegate: "NotificationPermissionContext")
+      ]
     case "MIDI permission":
-      return [permissionRow(snapshot, item: check.item, kind: "midi", delegate: "MidiPermissionContext")]
+      return [
+        permissionRow(snapshot, item: check.item, kind: "midi", delegate: "MidiPermissionContext")
+      ]
     case "Storage access permission":
       if snapshot.result.isEmpty, !snapshot.kinds.contains("storageAccess") {
-        return [probeRow(
-          check.item,
-          evidence: "The click reached the iframe element, and the frame never reported a storage-access result. \(describe(snapshot))")]
+        return [
+          probeRow(
+            check.item,
+            evidence:
+              "The click reached the iframe element, and the frame never reported a storage-access result. \(describe(snapshot))"
+          )
+        ]
       }
-      return [permissionRow(snapshot, item: check.item, kind: "storageAccess", delegate: "StorageAccessPermissionContext")]
+      return [
+        permissionRow(
+          snapshot, item: check.item, kind: "storageAccess",
+          delegate: "StorageAccessPermissionContext")
+      ]
     case "Clipboard permission":
       let message = text(snapshot.result["message"])
-      if message.localizedCaseInsensitiveContains("not focused"), !snapshot.kinds.contains("clipboard") {
-        return [probeRow(
-          check.item,
-          evidence: "The hidden window is not focused, so clipboard never reached a permission prompt. \(describe(snapshot))")]
+      if message.localizedCaseInsensitiveContains("not focused"),
+        !snapshot.kinds.contains("clipboard")
+      {
+        return [
+          probeRow(
+            check.item,
+            evidence:
+              "The hidden window is not focused, so clipboard never reached a permission prompt. \(describe(snapshot))"
+          )
+        ]
       }
-      return [permissionRow(snapshot, item: check.item, kind: "clipboard", delegate: "ClipboardPermissionContext")]
+      return [
+        permissionRow(
+          snapshot, item: check.item, kind: "clipboard", delegate: "ClipboardPermissionContext")
+      ]
     case "WebAuthn/passkeys": return [webAuthnRow(snapshot)]
     case "File System Access pickers":
       return [chooserRow(snapshot, item: check.item, delegate: "SelectFileDialog")]
     case "Web Share": return [chooserRow(snapshot, item: check.item, delegate: "ShareService")]
-    case "Web Bluetooth chooser": return [chooserRow(snapshot, item: check.item, delegate: "BluetoothChooser")]
-    case "Web USB chooser": return [chooserRow(snapshot, item: check.item, delegate: "UsbChooserController")]
-    case "Web HID chooser": return [chooserRow(snapshot, item: check.item, delegate: "HidChooserController")]
-    case "Web Serial chooser": return [chooserRow(snapshot, item: check.item, delegate: "SerialChooser")]
+    case "Web Bluetooth chooser":
+      return [chooserRow(snapshot, item: check.item, delegate: "BluetoothChooser")]
+    case "Web USB chooser":
+      return [chooserRow(snapshot, item: check.item, delegate: "UsbChooserController")]
+    case "Web HID chooser":
+      return [chooserRow(snapshot, item: check.item, delegate: "HidChooserController")]
+    case "Web Serial chooser":
+      return [chooserRow(snapshot, item: check.item, delegate: "SerialChooser")]
     case "Screen sharing picker": return [screenRow(snapshot)]
     case "Payment Request": return [paymentRow(snapshot)]
     case "Protocol handlers": return [protocolRow(snapshot)]
@@ -680,12 +725,14 @@ private struct ParitySnapshot {
 
   private func paymentRow(_ snapshot: ParitySnapshot) -> [String: Any] {
     let message = text(snapshot.result["message"])
-    let backgroundTab = message.localizedCaseInsensitiveContains("background tab")
+    let backgroundTab =
+      message.localizedCaseInsensitiveContains("background tab")
       || message.localizedCaseInsensitiveContains("preview page")
     if backgroundTab {
       return row(
         item: "Payment Request", passed: false, disposition: "probe", delegate: "PaymentRequestUI",
-        evidence: "The hidden tab is a background tab, so Payment Request refused to show UI. \(describe(snapshot))",
+        evidence:
+          "The hidden tab is a background tab, so Payment Request refused to show UI. \(describe(snapshot))",
         signals: signals(snapshot))
     }
     return chooserRow(snapshot, item: "Payment Request", delegate: "PaymentRequestUI")
@@ -698,7 +745,8 @@ private struct ParitySnapshot {
     if !shown && !downloaded && committed {
       return row(
         item: "PDF viewer", passed: false, disposition: "probe", delegate: "Chromium PDF viewer",
-        evidence: "The PDF URL loaded and was not downloaded. The main document did not expose the page text. \(describe(snapshot))",
+        evidence:
+          "The PDF URL loaded and was not downloaded. The main document did not expose the page text. \(describe(snapshot))",
         signals: signals(snapshot))
     }
     return row(
@@ -717,7 +765,8 @@ private struct ParitySnapshot {
   }
 
   private func pwaRow(_ snapshot: ParitySnapshot) -> [String: Any] {
-    let prompted = text(snapshot.result["outcome"]) == "prompt" || snapshot.sheet == "extensionInstall"
+    let prompted =
+      text(snapshot.result["outcome"]) == "prompt" || snapshot.sheet == "extensionInstall"
     return row(
       item: "PWA install", passed: prompted, delegate: "AppBannerManager / beforeinstallprompt",
       evidence: describe(snapshot), signals: signals(snapshot))
@@ -727,7 +776,8 @@ private struct ParitySnapshot {
     let peer = text(snapshot.result["peer"])
     loopbackPeer = peer
     let passed = PlatformParityVerdicts.loopbackMapped(peer)
-    let evidence = passed
+    let evidence =
+      passed
       ? "Testing mode passes --host-resolver-rules=MAP trackertest.org 127.0.0.1. TCP peer was \(peer). \(describe(snapshot))"
       : "trackertest.org did not connect to 127.0.0.1. \(describe(snapshot))"
     return row(
@@ -739,7 +789,8 @@ private struct ParitySnapshot {
   private func httpsFirstRow(_ snapshot: ParitySnapshot) -> [String: Any] {
     let decision = PlatformParityVerdicts.httpsFirst(
       href: snapshot.href, committedURL: snapshot.committedURL, pageText: snapshot.pageText,
-      outcome: text(snapshot.result["outcome"]), security: snapshot.security, loopbackPeer: loopbackPeer)
+      outcome: text(snapshot.result["outcome"]), security: snapshot.security,
+      loopbackPeer: loopbackPeer)
     return row(
       item: "HTTPS-first", passed: decision.passed, disposition: decision.disposition,
       delegate: "HttpsOnlyMode interstitial",
@@ -748,7 +799,8 @@ private struct ParitySnapshot {
 
   private func certificateRow(_ snapshot: ParitySnapshot) -> [String: Any] {
     let decision = PlatformParityVerdicts.certificate(
-      security: snapshot.security, pageText: snapshot.pageText, outcome: text(snapshot.result["outcome"]),
+      security: snapshot.security, pageText: snapshot.pageText,
+      outcome: text(snapshot.result["outcome"]),
       href: snapshot.href, committedURL: snapshot.committedURL)
     return row(
       item: "Certificate errors", passed: decision.passed, disposition: decision.disposition,
@@ -878,11 +930,15 @@ private struct ParitySnapshot {
     var parts: [String] = []
     let outcome = text(snapshot.result["outcome"])
     if !outcome.isEmpty { parts.append("outcome \(outcome)") }
-    for key in ["name", "message", "state", "widevine", "clearkey", "code", "title", "create", "peer"] {
+    for key in [
+      "name", "message", "state", "widevine", "clearkey", "code", "title", "create", "peer",
+    ] {
       let value = text(snapshot.result[key])
       if !value.isEmpty { parts.append("\(key) \(value)") }
     }
-    if !snapshot.kinds.isEmpty { parts.append("permissions \(snapshot.kinds.joined(separator: ", "))") }
+    if !snapshot.kinds.isEmpty {
+      parts.append("permissions \(snapshot.kinds.joined(separator: ", "))")
+    }
     if !snapshot.sheet.isEmpty { parts.append("sheet \(snapshot.sheet)") }
     if !snapshot.surfaces.isEmpty {
       parts.append("surfaces \(snapshot.surfaces.joined(separator: ", "))")
@@ -953,7 +1009,9 @@ private struct ParitySnapshot {
     }
   }
 
-  private func evaluate(in context: NativeBrowserContext, _ script: String) async -> ScriptEvaluation {
+  private func evaluate(in context: NativeBrowserContext, _ script: String) async
+    -> ScriptEvaluation
+  {
     guard let tab = selectedTabID(in: context) else {
       return ScriptEvaluation(value: nil, timedOut: false)
     }
@@ -1027,7 +1085,8 @@ private struct ParitySnapshot {
   }
 
   private func readPreferences() -> [String: String] {
-    guard let enumerator = FileManager.default.enumerator(at: dataRoot, includingPropertiesForKeys: nil)
+    guard
+      let enumerator = FileManager.default.enumerator(at: dataRoot, includingPropertiesForKeys: nil)
     else { return [:] }
     var found: [String: String] = [:]
     for case let url as URL in enumerator where url.lastPathComponent == "Preferences" {
@@ -1187,16 +1246,17 @@ private enum SurfaceGuard {
     guard record.selectors.isEmpty else { return }
     record.storeInstalled([
       exchange(
-        NSWindow.self, #selector(NSWindow.orderFront(_:)), #selector(NSWindow.parity_orderFront(_:)),
+        NSWindow.self, #selector(NSWindow.orderFront(_:)),
+        #selector(NSWindow.parityOrderFront(_:)),
         "orderFront"),
       exchange(
         NSWindow.self, #selector(NSWindow.makeKeyAndOrderFront(_:)),
-        #selector(NSWindow.parity_makeKeyAndOrderFront(_:)), "makeKeyAndOrderFront"),
+        #selector(NSWindow.parityMakeKeyAndOrderFront(_:)), "makeKeyAndOrderFront"),
       exchange(
         NSWindow.self, #selector(NSWindow.orderFrontRegardless),
-        #selector(NSWindow.parity_orderFrontRegardless), "orderFrontRegardless"),
+        #selector(NSWindow.parityOrderFrontRegardless), "orderFrontRegardless"),
       exchange(
-        NSWindow.self, #selector(NSWindow.makeKey), #selector(NSWindow.parity_makeKey), "makeKey"),
+        NSWindow.self, #selector(NSWindow.makeKey), #selector(NSWindow.parityMakeKey), "makeKey"),
       exchange(
         NSApplication.self, NSSelectorFromString("activate"),
         NSSelectorFromString("parity_activate"), "activate"),
@@ -1205,9 +1265,9 @@ private enum SurfaceGuard {
         NSSelectorFromString("parity_activateIgnoringOtherApps:"), "activateIgnoringOtherApps"),
       exchange(
         NSApplication.self, #selector(NSApplication.runModal(for:)),
-        #selector(NSApplication.parity_runModal(for:)), "runModal"),
+        #selector(NSApplication.parityRunModal(for:)), "runModal"),
       exchange(
-        NSSavePanel.self, #selector(NSSavePanel.runModal), #selector(NSSavePanel.parity_runModal),
+        NSSavePanel.self, #selector(NSSavePanel.runModal), #selector(NSSavePanel.parityRunModal),
         "savePanel"),
     ])
   }
@@ -1224,29 +1284,32 @@ private enum SurfaceGuard {
 }
 
 extension NSWindow {
-  @objc fileprivate func parity_orderFront(_ sender: Any?) {
+  @objc(parity_orderFront:) fileprivate func parityOrderFront(_ sender: Any?) {
     SurfaceGuard.note(String(describing: type(of: self)))
   }
 
-  @objc fileprivate func parity_makeKeyAndOrderFront(_ sender: Any?) {
+  @objc(parity_makeKeyAndOrderFront:) fileprivate func parityMakeKeyAndOrderFront(
+    _ sender: Any?
+  ) {
     SurfaceGuard.note(String(describing: type(of: self)))
   }
 
-  @objc fileprivate func parity_orderFrontRegardless() {
+  @objc(parity_orderFrontRegardless) fileprivate func parityOrderFrontRegardless() {
     SurfaceGuard.note(String(describing: type(of: self)))
   }
 
-  @objc fileprivate func parity_makeKey() {
+  @objc(parity_makeKey) fileprivate func parityMakeKey() {
     SurfaceGuard.note("event makeKey \(type(of: self))")
     // A hidden window can be key without coming on screen. Chromium's dialogs
     // abort, and later free a dangling pointer, when this call is dropped.
     guard !isVisible else { return }
-    guard let implementation = class_getMethodImplementation(
-      NSWindow.self, #selector(NSWindow.parity_makeKey))
+    guard
+      let implementation = class_getMethodImplementation(
+        NSWindow.self, #selector(NSWindow.parityMakeKey))
     else { return }
     let original = unsafeBitCast(
       implementation, to: (@convention(c) (AnyObject, Selector) -> Void).self)
-    original(self, #selector(NSWindow.parity_makeKey))
+    original(self, #selector(NSWindow.parityMakeKey))
   }
 }
 
@@ -1261,14 +1324,16 @@ extension NSApplication {
     SurfaceGuard.note("event activate")
   }
 
-  @objc fileprivate func parity_runModal(for window: NSWindow) -> NSApplication.ModalResponse {
+  @objc(parity_runModalForWindow:) fileprivate func parityRunModal(
+    for window: NSWindow
+  ) -> NSApplication.ModalResponse {
     SurfaceGuard.note("modal \(type(of: window))")
     return .abort
   }
 }
 
 extension NSSavePanel {
-  @objc fileprivate func parity_runModal() -> NSApplication.ModalResponse {
+  @objc(parity_runModal) fileprivate func parityRunModal() -> NSApplication.ModalResponse {
     SurfaceGuard.note(String(describing: type(of: self)))
     return .cancel
   }

@@ -1293,6 +1293,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     completion(nil, ShaarError(@"Invalid Shaar history limit."));
     return;
   }
+  // Keep the engine query bounded to the number of rows this caller needs.
   [self submitProfileID:profileID operation:SHAAR_OP_HISTORY_QUERY
                 payload:@{@"schemaVersion": @1, @"maxUrls": @(limit),
                           @"maxVisitsPerUrl": @1}
@@ -1304,6 +1305,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     }
     NSMutableArray<NSDictionary *> *rows = [NSMutableArray arrayWithCapacity:entries.count];
     for (id entry in entries) {
+      if ((NSInteger)rows.count >= limit) break;
       if (![entry isKindOfClass:NSDictionary.class] ||
           ![entry[@"url"] isKindOfClass:NSString.class] ||
           ![entry[@"title"] isKindOfClass:NSString.class] ||

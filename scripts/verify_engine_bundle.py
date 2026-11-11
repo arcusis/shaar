@@ -315,6 +315,33 @@ def _check_bundle_tree(app: Path, framework: Path, owner: int) -> None:
                 raise VerifyError("bundle_input_not_regular")
 
 
+def _contains_bytes(path: Path, needle: bytes) -> bool:
+    overlap = b""
+    with path.open("rb") as stream:
+        while block := stream.read(1024 * 1024):
+            data = overlap + block
+            if needle in data:
+                return True
+            overlap = data[-(len(needle) - 1):]
+    return False
+
+
+def _check_runtime_bundle_names(binary: Path, versioned: Path) -> None:
+    expected = (
+        b"Chromium Framework.framework",
+        b"Chromium Framework",
+        b"Chromium Helper.app/Contents/MacOS/Chromium Helper",
+    )
+    if not all(_contains_bytes(binary, name) for name in expected):
+        raise VerifyError("runtime_bundle_name_mismatch")
+    framework_binary = versioned / "Chromium Framework"
+    helper_binary = versioned / "Helpers/Chromium Helper.app/Contents/MacOS/Chromium Helper"
+    if not framework_binary.is_file() or not helper_binary.is_file():
+        raise VerifyError("runtime_bundle_artifact_missing")
+    if not _contains_bytes(helper_binary, b"../../../../Chromium Framework"):
+        raise VerifyError("runtime_helper_framework_name_mismatch")
+
+
 def _bundle_metadata(app: Path) -> tuple[Path, Path, list[tuple[Path, str]]]:
     owner = os.getuid()
     try:
@@ -345,6 +372,7 @@ def _bundle_metadata(app: Path) -> tuple[Path, Path, list[tuple[Path, str]]]:
     _contained_framework_links(framework)
     _check_bundle_tree(app, framework, owner)
     versioned = framework / "Versions" / os.readlink(framework / "Versions/Current")
+    _check_runtime_bundle_names(versioned / "Chromium Framework", versioned)
     framework_plist = _read_regular(versioned / "Resources/Info.plist", MAX_METADATA_BYTES, owner)
     try:
         engine_info = plistlib.loads(framework_plist)

@@ -61,7 +61,10 @@ class EngineBundleVerifierTests(unittest.TestCase):
         })
         (self.versioned / "Resources/data.bin").write_bytes(self.payload)
         (self.versioned / "Resources/Info.plist").write_bytes(self.engine_plist)
-        (self.versioned / "Chromium Framework").write_bytes(b"framework binary")
+        (self.versioned / "Chromium Framework").write_bytes(
+            b"Chromium Framework.framework\0Chromium Framework\0"
+            b"Chromium Helper.app/Contents/MacOS/Chromium Helper\0"
+        )
         for name, target in {
             "Chromium Framework": "Versions/Current/Chromium Framework",
             "Helpers": "Versions/Current/Helpers",
@@ -86,7 +89,12 @@ class EngineBundleVerifierTests(unittest.TestCase):
             }))
             (helper / "Contents/Resources").mkdir()
             shutil.copy2(verifier.SHAAR_ICON, helper / "Contents/Resources/Shaar.icns")
-            (helper / "Contents/MacOS" / executable).write_bytes(b"helper fixture")
+            helper_binary = helper / "Contents/MacOS" / executable
+            helper_binary.write_bytes(
+                b"../../../../Chromium Framework"
+                if name == "Chromium Helper.app"
+                else b"helper fixture"
+            )
             self.helper_map[name] = identifier
         pin = {
             "schemaVersion": 1, "sourceKind": "shaar",
@@ -189,6 +197,17 @@ class EngineBundleVerifierTests(unittest.TestCase):
         helper = self.helpers / "Chromium Helper.app/Contents"
         (helper / "Resources/Shaar.icns").write_bytes(b"not the Shaar icon")
         self.assertEqual(self.verify()["reason"], "helper_icon_mismatch")
+
+    def test_embedded_runtime_names_must_match_packaged_framework_and_helper(self):
+        (self.versioned / "Chromium Framework").write_bytes(b"Shaar Framework.framework")
+        self.assertEqual(self.verify()["reason"], "runtime_bundle_name_mismatch")
+        self.reset()
+        helper = self.helpers / "Chromium Helper.app/Contents/MacOS/Chromium Helper"
+        helper.write_bytes(b"../../../../Shaar Framework")
+        self.assertEqual(self.verify()["reason"], "runtime_helper_framework_name_mismatch")
+        self.reset()
+        (self.versioned / "Helpers/Chromium Helper.app/Contents/MacOS/Chromium Helper").unlink()
+        self.assertEqual(self.verify()["reason"], "runtime_bundle_artifact_missing")
 
     def test_verifier_checks_the_shipping_identifier_and_rejects_the_harness_identifier(self):
         config = release_feed.load_config(REPO / "scripts/release-config.sh")

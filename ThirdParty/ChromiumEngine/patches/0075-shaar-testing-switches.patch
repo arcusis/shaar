@@ -1,0 +1,118 @@
+--- a/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc
++++ b/chrome/browser/shaar/lifecycle/shaar_lifecycle.cc
+@@ -18,6 +18,8 @@
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+ #include "base/memory/raw_ptr.h"
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
+ #include "chrome/browser/chrome_browser_main.h"
+ #include "chrome/browser/chrome_browser_main_extra_parts.h"
+ #include "chrome/browser/chrome_content_browser_client.h"
+@@ -85,6 +87,46 @@
+          marker == "arcusis-engine-probe-v1\n";
+ }
+ 
++// SHAAR_ENGINE_TEST_SWITCHES is a whitespace-delimited list of switches. It is
++// read only in verification mode and cannot override the engine's fixed args.
++void AppendTestingSwitches(std::vector<std::string>& arguments) {
++  const char* raw_switches = std::getenv("SHAAR_ENGINE_TEST_SWITCHES");
++  if (!raw_switches || !*raw_switches)
++    return;
++
++  const std::vector<std::string> switches = base::SplitString(
++      raw_switches, " \t\r\n", base::TRIM_WHITESPACE,
++      base::SPLIT_WANT_NONEMPTY);
++  std::vector<std::string> validated_switches;
++  for (const std::string& option : switches) {
++    if (!base::StartsWith(option, "--") || option.size() <= 2)
++      return;
++    const size_t equals = option.find('=');
++    const std::string name = option.substr(2, equals - 2);
++    if (name.empty() || name.find_first_not_of(
++                            "abcdefghijklmnopqrstuvwxyz0123456789-") !=
++                            std::string::npos) {
++      return;
++    }
++
++    for (const std::string& existing : arguments) {
++      if (!base::StartsWith(existing, "--"))
++        continue;
++      const size_t existing_equals = existing.find('=');
++      if (existing.substr(2, existing_equals - 2) == name)
++        return;
++    }
++    for (const std::string& validated : validated_switches) {
++      const size_t validated_equals = validated.find('=');
++      if (validated.substr(2, validated_equals - 2) == name)
++        return;
++    }
++    validated_switches.push_back(option);
++  }
++  arguments.insert(arguments.end(), validated_switches.begin(),
++                   validated_switches.end());
++}
++
+ shaar_error_code Fail(shaar_error_code code,
+                       const char* message,
+                       int32_t platform_code,
+@@ -251,6 +293,7 @@
+     // Private privacy fixtures use this synthetic tracker hostname with the
+     // owned loopback server. Never send those requests to the public network.
+     arguments.push_back("--host-resolver-rules=MAP trackertest.org 127.0.0.1");
++    AppendTestingSwitches(arguments);
+   }
+   if (!locale.empty())
+     arguments.push_back("--lang=" + locale);
+--- a/chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc
++++ b/chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc
+@@ -7,6 +7,8 @@
+ 
+ #include <algorithm>
+ 
++#include "base/scoped_environment_variable_override.h"
++#include "base/strings/string_util.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "components/keep_alive_registry/keep_alive_registry.h"
+ #include "components/keep_alive_registry/scoped_keep_alive.h"
+@@ -43,6 +45,40 @@
+   }
+ }
+ 
++TEST(ShaarLifecycleProbeTest, ExtraSwitchesAreOptInForVerificationOnly) {
++  base::ScopedEnvironmentVariableOverride switches(
++      "SHAAR_ENGINE_TEST_SWITCHES",
++      "--vmodule=form_data_importer=2,credit_card_save_manager=2,"
++      "password_form_manager=2,address_form_data_importer=2,"
++      "address_profile_save_manager=2 --enable-logging=stderr");
++  const auto production = shaar::lifecycle::ChromeMainArguments(
++      "/test/Shaar", "/tmp/prod", "en", false);
++  const auto verification = shaar::lifecycle::ChromeMainArguments(
++      "/test/Shaar", "/tmp/probe", "en", true);
++  EXPECT_EQ(std::find(production.begin(), production.end(),
++                      "--enable-logging=stderr"),
++            production.end());
++  EXPECT_NE(std::find(verification.begin(), verification.end(),
++                      "--enable-logging=stderr"),
++            verification.end());
++  EXPECT_NE(std::find_if(verification.begin(), verification.end(),
++                         [](const std::string& argument) {
++                           return base::StartsWith(argument, "--vmodule=");
++                         }),
++            verification.end());
++
++  base::ScopedEnvironmentVariableOverride protected_switch(
++      "SHAAR_ENGINE_TEST_SWITCHES",
++      "--vmodule=foo=2 --user-data-dir=/tmp/other");
++  const auto rejected = shaar::lifecycle::ChromeMainArguments(
++      "/test/Shaar", "/tmp/probe", "en", true);
++  EXPECT_EQ(std::find_if(rejected.begin(), rejected.end(),
++                         [](const std::string& argument) {
++                           return base::StartsWith(argument, "--vmodule=");
++                         }),
++            rejected.end());
++}
++
+ TEST(ShaarLifecycleProbeTest, ClosingDevToolsKeepsHostAliveUntilExplicitRelease) {
+   auto host = shaar::lifecycle::CreateHostKeepAlive();
+   {

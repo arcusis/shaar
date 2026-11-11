@@ -110,7 +110,7 @@ enum DeviceChooserIntake {
     "schemaVersion", "kind", "id", "transport", "pageURL", "origin", "options", "canGrant",
     "profileID", "tabID", "windowID",
   ]
-  private static let optionKeys: Set<String> = ["optionID", "name"]
+  private static let optionKeys: Set<String> = ["optionId", "name"]
   private static let identifierCharacters = CharacterSet(
     charactersIn: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-")
 
@@ -143,7 +143,7 @@ enum DeviceChooserIntake {
     var seen: Set<String> = []
     for raw in rawOptions {
       guard Set(raw.keys).isSubset(of: optionKeys),
-        let optionID = raw["optionID"] as? String, isChooserID(optionID),
+        let optionID = raw["optionId"] as? String, isChooserID(optionID),
         seen.insert(optionID).inserted,
         let name = raw["name"] as? String, name.utf8.count <= 256
       else { return nil }

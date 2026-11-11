@@ -221,7 +221,7 @@ import SwiftUI
     let identity = model.target.tabID.uuidString
     let runtime = engine.runtime
     try expect(
-      engine.showDeveloperTools(for: model.target),
+      engine.openChromiumDeveloperTools(for: model.target),
       "built-in DevTools opens while simulations are active")
     for _ in 0..<100 {
       if let tools = runtime.devToolsView(forTabID: identity),

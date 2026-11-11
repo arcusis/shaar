@@ -406,21 +406,6 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     .newPrivateWindow, .newMiniWindow, .quit,
   ]
 
-  private func presentDevToolsCommandMenu() -> Bool {
-    if privateHost?.hasActiveWindow == true {
-      return privateHost?.presentDevToolsCommandMenu() ?? false
-    }
-    if activeContext?.engine.toggleDevToolsCommandMenu() == true { return true }
-    let key = keyWindow()
-    for context in contexts.values
-    where ShaarDevToolsCommandShortcut.toggleFloating(
-      shells: context.engine.shaarDevTools.values, window: key)
-    {
-      return true
-    }
-    return privateHost?.presentDevToolsCommandMenu() ?? false
-  }
-
   func perform(_ command: BrowserMenuCommand) {
     guard canPerform(command) else { return }
     if performAppCommand(command) { return }
@@ -573,7 +558,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
-    case .developerTools: context.engine.togglePublicDeveloperTools()
+    case .developerTools: context.engine.toggleChromiumDeveloperTools()
     case .chromiumDeveloperTools: context.engine.toggleChromiumDeveloperTools()
     case .inspector: context.engine.toggleInspector()
     case .inspectorCopy:
@@ -1340,13 +1325,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     return main
   }
 
-  /// F12 follows the public route. Option-Shift-Command-I opens the Chromium
-  /// dock directly. Option-Command-I is the one Developer Tools menu item.
+  /// F12 and Option-Shift-Command-I open the Chromium DevTools dock.
   @discardableResult
   func performDeveloperToolsKey(_ event: NSEvent) -> Bool {
     let command: BrowserMenuCommand
     if ShaarDevToolsShortcut.isF12(event) {
-      command = ShaarDevToolsRoute.f12Command()
+      command = .developerTools
     } else if ShaarDevToolsShortcut.isDirectChromiumShortcut(event) {
       command = .chromiumDeveloperTools
     } else {
@@ -1430,9 +1414,6 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       guard let self, let menu = self.menu, NSApp.mainMenu === menu else { return event }
       if self.performDeveloperToolsKey(event) {
-        return nil
-      }
-      if ShaarDevToolsShortcut.isCommandMenu(event), self.presentDevToolsCommandMenu() {
         return nil
       }
       guard

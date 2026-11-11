@@ -131,39 +131,6 @@ enum ShaarVerificationMain {
       return ShaarPasskeyAvailabilitySmoke.run(
         frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
     }
-    if let launch = harnessLaunch("--devtools-smoke", arguments) {
-      let mode = launch.remainder ?? "fixture"
-      let spaOnly = mode == "spa-only"
-      let roundTwo = mode == "round-two"
-      return ShaarDevToolsSmoke.run(
-        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page,
-        realWorld: mode == "real-world" || spaOnly || roundTwo,
-        spaOnly: spaOnly, roundTwo: roundTwo)
-    }
-    if let launch = harnessLaunch("--devtools-capability-probe", arguments) {
-      return NativeDevToolsCapabilityProbe.run(
-        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
-    }
-    if let launch = harnessLaunch("--rendering-probe", arguments) {
-      return ShaarRenderingProbe.run(
-        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
-    }
-    if let launch = harnessLaunch("--recorder-probe", arguments) {
-      return ShaarRecorderProbe.run(
-        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
-    }
-    if let launch = harnessLaunch("--sensors-probe", arguments) {
-      return ShaarSensorsProbe.run(
-        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
-    }
-    if let launch = harnessLaunch("--event-listeners-probe", arguments) {
-      return ShaarEventListenersProbe.run(
-        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
-    }
-    if let launch = harnessLaunch("--audits-probe", arguments) {
-      return InspectorAuditProbe.run(
-        frameworkURL: launch.framework, outputURL: launch.output, pageURL: launch.page)
-    }
     return nil
   }
 

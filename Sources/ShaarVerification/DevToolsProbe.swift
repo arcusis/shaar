@@ -57,7 +57,7 @@ final class DevToolsProbe {
     guard let target = engine.siteControlTarget, let card = runtime.view(forTabID: identity)
     else { throw Failure("No selected page card") }
     try expect(
-      engine.showDeveloperTools(for: target), "site-control action opens built-in DevTools")
+      engine.openChromiumDeveloperTools(for: target), "site-control action opens built-in DevTools")
     try await wait("DevTools docks inside the selected page card") {
       self.isDocked(identity, in: card)
     }
@@ -88,17 +88,18 @@ final class DevToolsProbe {
       runtime.devToolsView(forTabID: other.uuidString) == nil, "inspector remains scoped to its tab"
     )
     try expect(
-      !engine.showDeveloperTools(for: target), "stale site-panel target cannot open another tab")
+      !engine.openChromiumDeveloperTools(for: target),
+      "stale site-panel target cannot open another tab")
     store.perform(.tab(space: space, tab: tab))
     try await wait("returning restores the original inspector") {
       !tools.isHiddenOrHasHiddenAncestor && tools.superview === card
     }
-    engine.toggleDeveloperTools()
+    engine.toggleChromiumDeveloperTools()
     try await wait("shortcut action closes DevTools and restores the full page") {
       runtime.devToolsView(forTabID: identity) == nil && card.subviews.count == 1
         && page.frame == card.bounds && !page.isHidden
     }
-    engine.toggleDeveloperTools()
+    engine.toggleChromiumDeveloperTools()
     do {
       try await wait("reopening restores the engine's remembered dock layout") {
         self.isDocked(identity, in: card)
@@ -112,7 +113,7 @@ final class DevToolsProbe {
     }
     try expect(
       runtime.view(forTabID: identity) === card, "opening and closing preserve page-card identity")
-    engine.toggleDeveloperTools()
+    engine.toggleChromiumDeveloperTools()
     try await wait("DevTools closes before testing Inspect") {
       runtime.devToolsView(forTabID: identity) == nil && card.subviews.count == 1
         && page.frame == card.bounds && !page.isHidden

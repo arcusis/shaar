@@ -2,10 +2,8 @@
 
 The before and after Site Controls captures use the same offscreen fixture in light and dark appearance. The label changed from “Shaar DevTools” to “Developer Tools.”
 
-The `before-site-controls-*` images were rendered with the production label from `origin/production`; the `after-site-controls-*` images were rendered from the follow-up source. The offscreen render test passed for both versions.
+The Console, Network, Application, Sources, Performance, Memory, and Coverage captures show the retired panels before deletion. `after-legacy-shell-issues.png` records the intermediate navigation after those groups were removed and before the final shell retirement.
 
-The Console and Network screenshots show the retired legacy panels before deletion. `after-legacy-shell-issues.png` shows the remaining shell navigation without those panels; the Shaar Inspector remains in the page layout.
+`f12-chromium-dock.png` and `option-command-i-chromium-dock.png` are the full offscreen browser-host captures after the final retirement. The hidden Chromium DevTools route smoke passed both shortcuts; all windows stayed hidden and no new crash reports appeared. The Inspector idle smoke also passed with `inspectorOpen: true`, all windows hidden, and no new crash reports. `build/Shaar.app` and the separate verification harness were built with the pinned engine.
 
-The hidden route probe passed F12 and Option-Command-I opening Chromium DevTools, F12 closing the legacy shell, and the legacy-shell default route. All windows remained hidden and the probe found no new crash reports.
-
-The second retirement slice removes Application, Sources, Performance, Memory, and Coverage from legacy navigation. The `before-application.png`, `before-sources.png`, `before-performance.png`, `before-memory.png`, and `before-coverage.png` files are representative offscreen captures from the earlier panel work. `after-legacy-shell-issues.png` shows the remaining shell after those routes were removed; Shaar Inspector remains available.
+Shaar Inspector remains available in the browser page layout. Chromium DevTools opens from F12, Option-Command-I, and the Developer Tools menu command.

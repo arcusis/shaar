@@ -25,7 +25,6 @@ final class PrivatePageSession {
   let windowID: String
   private(set) var pages: [UUID: PageState] = [:]
   var inspectors: [UUID: InspectorModel] = [:]
-  var shaarDevTools: [UUID: ShaarDevToolsModel] = [:]
   private(set) var isClosed = false
   private(set) var failure: String?
   private(set) var pendingHTTP: URL?
@@ -35,6 +34,7 @@ final class PrivatePageSession {
   @ObservationIgnored private(set) var liveTabs: Set<UUID>
   @ObservationIgnored let sleepingTabs = SleepingTabScheduler()
   @ObservationIgnored var mediaAccess: [UUID: MediaAccessState] = [:]
+  @ObservationIgnored var privateDeveloperTools: Set<UUID> = []
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
   @ObservationIgnored var memoryPressureSource: DispatchSourceMemoryPressure?
   @ObservationIgnored private var reconciling = false
@@ -175,6 +175,7 @@ final class PrivatePageSession {
 
   func close(_ id: UUID) {
     guard liveTabs.contains(id) else { return }
+    privateDeveloperTools.remove(id)
     runtime.closePrivateTabID(id.uuidString, windowID: windowID, contextID: contextID) { _ in }
   }
 
@@ -183,19 +184,12 @@ final class PrivatePageSession {
     back: Bool, forward: Bool
   ) {
     guard liveTabs.contains(id) || store?.session.page(forTabID: id) != nil else { return }
-    let finishedLoading = pages[id]?.loading == true && !loading
     if let parsed = URL(string: url) {
       inspectors[id]?.documentChanged(
         url: parsed, committed: loading && pages[id]?.loading == false)
-      if let profile = store?.session.profileID(forTabID: id) {
-        shaarDevTools[id]?.updateTarget(
-          SiteControlTarget(tabID: id, profileID: profile, url: parsed),
-          committed: loading && pages[id]?.loading == false)
-      }
     }
     if loading, store?.pageFind?.tabID == id { store?.dismissPageFind() }
     pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
-    if finishedLoading { shaarDevTools[id]?.pageDidFinishLoading() }
     if let parsed = URL(string: url) {
       if parsed.absoluteString != "about:blank" { failure = nil }
       store?.nativeTabChanged(id, url: parsed, title: title)
@@ -218,8 +212,8 @@ final class PrivatePageSession {
     sleepingTabs.forget(id)
     store?.noteTabAwake(id)
     mediaAccess[id] = nil
+    privateDeveloperTools.remove(id)
     guard liveTabs.remove(id) != nil else { return }
-    shaarDevTools.removeValue(forKey: id)?.close()
     if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }
     pages[id] = nil
     if store?.pageFind?.tabID == id { store?.dismissPageFind() }
@@ -232,8 +226,6 @@ final class PrivatePageSession {
   func retireInspectors() {
     isClosed = true
     stopSleepingTabWatch()
-    for model in shaarDevTools.values { model.close() }
-    shaarDevTools.removeAll()
     for model in inspectors.values where model.isOpen { model.close() }
     inspectors.removeAll()
   }
@@ -264,74 +256,24 @@ final class PrivatePageSession {
     if model.isOpen { model.close() } else { model.open() }
   }
 
-  @discardableResult
-  func toggleDevToolsCommandMenu() -> Bool {
-    guard let target = inspectorTarget,
-      let shell = shaarDevTools[target.tabID], shell.isOpen
-    else { return false }
-    shell.toggleCommandMenu()
-    return true
-  }
-
-  /// F12 and Option-Command-I. The Chromium dock is the public path.
   func togglePublicDeveloperTools() {
-    let shell = inspectorTarget.flatMap { shaarDevTools[$0.tabID] }
-    ShaarDevToolsRoute.performPublicToggle(
-      shell: shell,
-      toggleShell: { self.toggleDeveloperTools() },
-      toggleChromium: { self.toggleChromiumDeveloperTools() })
-  }
-
-  func toggleDeveloperTools() {
-    guard let target = inspectorTarget else { return }
-    if let shell = shaarDevTools[target.tabID], shell.isOpen {
-      shell.close()
-      return
-    }
-    let viewportsTransport: any ShaarViewportsTransport
-    let renderingTransport: any ShaarRenderingTransport
-    let listenersTransport: any ShaarEventListenersTransport
-    if let shaar = runtime as? ARCShaarRuntime {
-      viewportsTransport = ShaarViewportsNativeTransport(
-        requester: ShaarViewportRuntimeRequester(
-          runtime: shaar, windowID: windowID, contextID: contextID))
-      renderingTransport = ShaarRenderingNativeTransport(
-        runtime: shaar, windowID: windowID, contextID: contextID)
-      listenersTransport = ShaarEventListenersLiveTransport(session: self)
-    } else {
-      viewportsTransport = ShaarViewportsPendingTransport()
-      renderingTransport = ShaarRenderingPendingTransport()
-      listenersTransport = ShaarEventListenersPendingTransport()
-    }
-    let shell =
-      shaarDevTools[target.tabID]
-      ?? ShaarDevToolsModel(
-        target: target, viewportsTransport: viewportsTransport,
-        renderingTransport: renderingTransport, listenersTransport: listenersTransport)
-    let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, privateSession: self)
-    shaarDevTools[target.tabID] = shell
-    inspectors[target.tabID] = inspector
-    shell.updateTarget(target)
-    shell.open(inspector: inspector)
-  }
-
-  func openChromiumDeveloperTools(for tabID: UUID) {
-    guard !isClosed, liveTabs.contains(tabID) else { return }
-    runtime.toggleDevTools(
-      forPrivateTabID: tabID.uuidString, windowID: windowID, contextID: contextID
-    ) { [weak self] error in
-      if let error { self?.failure = error.localizedDescription }
-    }
+    toggleChromiumDeveloperTools()
   }
 
   func toggleChromiumDeveloperTools() {
     guard let target = inspectorTarget else { return }
-    ShaarDevToolsRoute.closeOpenShell(shaarDevTools[target.tabID])
     runtime.toggleDevTools(
       forPrivateTabID: target.tabID.uuidString,
       windowID: windowID, contextID: contextID
     ) { [weak self] error in
-      if let error { self?.failure = error.localizedDescription }
+      guard let self else { return }
+      if let error {
+        self.failure = error.localizedDescription
+      } else if self.privateDeveloperTools.contains(target.tabID) {
+        self.privateDeveloperTools.remove(target.tabID)
+      } else {
+        self.privateDeveloperTools.insert(target.tabID)
+      }
     }
   }
 

@@ -64,21 +64,12 @@ import Foundation
     var rows: [[String: Any]] = []
     defer {
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
-      let passed = rows.count == 4 && rows.allSatisfy { $0["passed"] as? Bool == true } && hidden
+      let passed = rows.count == 2 && rows.allSatisfy { $0["passed"] as? Bool == true } && hidden
       write(
         ["passed": passed, "rows": rows, "allWindowsHidden": hidden],
         to: outputURL)
       host.events.quit()
     }
-    let suiteName = "shaar.devtools.f12-route-smoke"
-    guard let suite = ShaarDevToolsRoute.isolateLegacyShell(suite: suiteName) else {
-      rows.append([
-        "name": "setup", "passed": false,
-        "detail": "Could not isolate the legacy-shell default",
-      ])
-      return
-    }
-    defer { ShaarDevToolsRoute.restoreLegacyShellDefaults(suite: suiteName) }
     do {
       try host.restore()
       guard let context = host.contexts.values.first else { throw Failure("No hidden window") }
@@ -95,7 +86,6 @@ import Foundation
       }
       probeKey.window = context.window
       if context.window.isVisible { context.window.orderOut(nil) }
-      closeLegacyShell(context: context, tab: tab)
       rows.append(
         await proveChromiumShortcut(
           name: "f12", context: context, host: host, tab: tab, outputURL: outputURL,
@@ -108,17 +98,9 @@ import Foundation
           fire: {
             postToShortcutMonitor(host: host, event: optionCommandIEvent(in: context.window))
           }))
-      rows.append(await proveF12ClosesOpenShell(context: context, host: host, tab: tab))
-      suite.set(true, forKey: ShaarDevToolsRoute.legacyShellDefaultsKey)
-      rows.append(await proveLegacyShell(context: context, host: host, tab: tab))
     } catch {
       rows.append(["name": "setup", "passed": false, "detail": error.localizedDescription])
     }
-  }
-
-  private static func closeLegacyShell(context: NativeBrowserContext, tab: UUID) {
-    guard context.engine.shaarDevTools[tab]?.isOpen == true else { return }
-    context.engine.toggleDeveloperTools()
   }
 
   private static func proveChromiumShortcut(
@@ -131,20 +113,16 @@ import Foundation
         "notice": context.engine.notice ?? "",
       ]
     }
-    closeLegacyShell(context: context, tab: tab)
-    let shellBefore = context.engine.shaarDevTools[tab]?.isOpen == true
     let fired = fire()
     if context.window.isVisible { context.window.orderOut(nil) }
     let opened = await wait {
       chromiumDockIsOpen(context: context, tab: tab)
-        && context.engine.shaarDevTools[tab]?.isOpen != true
     }
     let shot = snapshot(context: context, tab: tab, name: name, outputURL: outputURL)
     let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
-    let passed = fired && opened && !shellBefore && hidden
+    let passed = fired && opened && hidden
     var row: [String: Any] = [
       "name": name, "passed": passed, "fired": fired, "chromiumDock": opened,
-      "legacyShell": context.engine.shaarDevTools[tab]?.isOpen == true,
       "windowsHidden": hidden, "snapshot": shot,
       "notice": context.engine.notice ?? "",
     ]
@@ -157,59 +135,6 @@ import Foundation
     return row
   }
 
-  private static func proveF12ClosesOpenShell(
-    context: NativeBrowserContext, host: NativeBrowserHost, tab: UUID
-  ) async -> [String: Any] {
-    if let detail = await closeChromiumDock(context: context, tab: tab) {
-      return ["name": "f12-closes-legacy-shell", "passed": false, "detail": detail]
-    }
-    guard let target = context.engine.siteControlTarget, target.tabID == tab else {
-      return ["name": "f12-closes-legacy-shell", "passed": false, "detail": "No page target"]
-    }
-    let shown = context.engine.showDeveloperTools(for: target)
-    let shellBefore = context.engine.shaarDevTools[tab]?.isOpen == true
-    let fired = postToShortcutMonitor(host: host, event: f12Event(in: context.window))
-    if context.window.isVisible { context.window.orderOut(nil) }
-    let settled = await wait {
-      context.engine.shaarDevTools[tab]?.isOpen != true
-        && chromiumDockIsOpen(context: context, tab: tab)
-    }
-    let shellClosed = context.engine.shaarDevTools[tab]?.isOpen != true
-    let dockOpen = chromiumDockIsOpen(context: context, tab: tab)
-    let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
-    var row: [String: Any] = [
-      "name": "f12-closes-legacy-shell",
-      "passed": shown && shellBefore && fired && settled && hidden,
-      "fired": fired, "legacyShell": !shellClosed, "chromiumDock": dockOpen,
-      "windowsHidden": hidden, "notice": context.engine.notice ?? "",
-    ]
-    if !fired {
-      row["detail"] = fireDetail(name: "f12-closes-legacy-shell", context: context, host: host)
-    }
-    return row
-  }
-
-  private static func proveLegacyShell(
-    context: NativeBrowserContext, host: NativeBrowserHost, tab: UUID
-  ) async -> [String: Any] {
-    if let detail = await closeChromiumDock(context: context, tab: tab) {
-      return ["name": "legacy-shell", "passed": false, "detail": detail]
-    }
-    let fired = postToShortcutMonitor(host: host, event: f12Event(in: context.window))
-    if context.window.isVisible { context.window.orderOut(nil) }
-    let shell = await wait { context.engine.shaarDevTools[tab]?.isOpen == true }
-    try? await Task.sleep(for: .milliseconds(400))
-    let chromiumClosed = !chromiumDockIsOpen(context: context, tab: tab)
-    let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
-    var row: [String: Any] = [
-      "name": "legacy-shell", "passed": fired && shell && chromiumClosed && hidden,
-      "fired": fired, "legacyShell": shell, "chromiumDock": !chromiumClosed,
-      "windowsHidden": hidden, "notice": context.engine.notice ?? "",
-    ]
-    if !fired { row["detail"] = fireDetail(name: "legacy-shell", context: context, host: host) }
-    return row
-  }
-
   private static func fireDetail(
     name: String, context: NativeBrowserContext, host: NativeBrowserHost
   ) -> String {
@@ -219,7 +144,7 @@ import Foundation
     } else {
       event = f12Event(in: context.window)
     }
-    let command = ShaarDevToolsRoute.f12Command()
+    let command = BrowserMenuCommand.developerTools
     let recognized = event.map(ShaarDevToolsShortcut.isF12) ?? false
     let menuMatches = NSApp.mainMenu === host.menu
     return "event=\(event != nil) f12=\(recognized) "
@@ -296,9 +221,10 @@ import Foundation
   ) -> String {
     guard let card = context.engine.runtime.view(forTabID: tab.uuidString),
       card.bounds.width > 1, card.bounds.height > 1,
-      let rep = card.bitmapImageRepForCachingDisplay(in: card.bounds)
+      context.hosting.bounds.width > 1, context.hosting.bounds.height > 1,
+      let rep = context.hosting.bitmapImageRepForCachingDisplay(in: context.hosting.bounds)
     else { return "" }
-    card.cacheDisplay(in: card.bounds, to: rep)
+    context.hosting.cacheDisplay(in: context.hosting.bounds, to: rep)
     guard let data = rep.representation(using: .png, properties: [:]) else { return "" }
     let url = outputURL.deletingLastPathComponent().appending(path: "\(name).png")
     do {

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
-index 97789b2..3b1f8a7 100644
+index 7356dc475b..84d5c15f8a 100644
 --- a/chrome/browser/shaar/BUILD.gn
 +++ b/chrome/browser/shaar/BUILD.gn
 @@ -101,6 +101,10 @@ source_set("engine") {
@@ -23,11 +23,12 @@ index 97789b2..3b1f8a7 100644
      "//components/download/content/public",
      "//components/download/public/common:public",
      "//extensions/browser",
-@@ -281,6 +288,7 @@ test("shaar_layer_unittests") {
+@@ -343,7 +343,8 @@ test("shaar_layer_unittests") {
      "history/shaar_history_unittest.cc",
      "lifecycle/shaar_module_registry_unittest.cc",
      "media/shaar_media_unittest.cc",
 +    "chooser/shaar_device_chooser_unittest.cc",
+     "save_prompts/shaar_save_prompts_unittest.cc",
      "navigation/shaar_navigation_unittest.cc",
      "private_sessions/shaar_private_sessions_unittest.cc",
      "profiles/shaar_profiles_unittest.cc",
@@ -651,7 +652,7 @@ index 0000000000..8faba9cbde
 +            &HandleDeviceChooserDecision);
 +}
 diff --git a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
-index c571ecd..6409824 100644
+index e95969ad9a..442a59351b 100644
 --- a/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
 +++ b/chrome/browser/shaar/lifecycle/shaar_module_registry.cc
 @@ -36,6 +36,7 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_find_register);
@@ -672,7 +673,7 @@ index c571ecd..6409824 100644
    if (shaar_storage_keychain_register)
      shaar_storage_keychain_register(registry);
 diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
-index d345aa5..207fa3e 100644
+index 39bd59ffd2..07aefc1e32 100644
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
 @@ -13,7 +13,7 @@ extern "C" {
@@ -692,12 +693,15 @@ index d345aa5..207fa3e 100644
 +  SHAAR_OP_DEVICE_CHOOSER_DECISION = 1600,
 +  // END device chooser
    // BEGIN storage_keychain
-   SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400
+   SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400,
    // END storage_keychain
-@@ -241,6 +244,9 @@ enum { SHAAR_MODULE_SITE_DATA = 1201 };
+@@ -254,9 +257,12 @@ enum { SHAAR_MODULE_MEDIA = 1203 };
  // BEGIN media
  enum { SHAAR_MODULE_MEDIA = 1203 };
  // END media
+ // BEGIN save_prompts
+ enum { SHAAR_MODULE_SAVE_PROMPTS = 1500 };
+ // END save_prompts
 +// BEGIN device chooser
 +enum { SHAAR_MODULE_DEVICE_CHOOSER = 1600 };
 +// END device chooser

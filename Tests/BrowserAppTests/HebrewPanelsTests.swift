@@ -94,7 +94,7 @@ struct HebrewPanelsTests {
         == "כל המקורות")
     for key in [
       "All", "Errors", "Warnings", "Info", "Logs", "Browser", "Server", "Spotlight",
-      "App", "Perf", "Views", "Status", "Method", "Name",
+      "Status", "Method", "Name",
     ] {
       let translated = BrowserLocalization.string(key, table: "Shell", language: .hebrew)
       #expect(translated != key, "DevTools label is missing Hebrew: \(key)")

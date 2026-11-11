@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import BrowserCore
 import ChromiumBridge
 import Foundation
@@ -56,6 +57,23 @@ struct TabSuspensionTests {
     #expect(runtime.evaluatedScripts.count == 1)
     #expect(store.sleepingTabIDs.isEmpty)
     #expect(engine.liveTabs.contains(edited.id))
+  }
+
+  @Test func aTabWithChromiumDevToolsOpenStaysAwake() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let inspected = BrowserTab(url: URL(string: "https://inspected.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, inspected])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = [active.id, inspected.id]
+    runtime.devToolsOpenTabIDs.insert(inspected.id.uuidString)
+
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+
+    #expect(runtime.slept.isEmpty)
+    #expect(runtime.evaluatedScripts.isEmpty)
+    #expect(store.sleepingTabIDs.isEmpty)
   }
 
   @Test func editedFormsKeepAliveAndDownloadsStayAwake() throws {
@@ -371,6 +389,7 @@ private final class SuspensionTestRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var lifecycleCapable = true
   nonisolated(unsafe) var wakeAccepted = true
   nonisolated(unsafe) var holdSleepCompletion = false
+  nonisolated(unsafe) var devToolsOpenTabIDs: Set<String> = []
   nonisolated(unsafe) var heldSleep: (@MainActor @Sendable (Bool) -> Void)?
 
   override func evaluate(
@@ -390,6 +409,11 @@ private final class SuspensionTestRuntime: ARCChromiumRuntime {
   }
 
   override func windowID(forTabID tabID: String) -> String? { primaryWindowID }
+
+  override func devToolsView(forTabID tabID: String) -> NSView? {
+    let isOpen = devToolsOpenTabIDs.contains(tabID)
+    return MainActor.assumeIsolated { isOpen ? NSView() : nil }
+  }
 
   override func discardTabID(_ tabID: String) {
     discardedTabIDs.append(tabID)

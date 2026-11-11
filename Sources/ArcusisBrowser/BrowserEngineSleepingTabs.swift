@@ -99,7 +99,10 @@ extension BrowserEngine {
       isPlaying: { store.media.sessions[$0]?.isPlaying == true },
       isCapturing: { self.mediaAccess[$0]?.isCapturing == true },
       hasInspector: { self.inspectors[$0] != nil },
-      hasDeveloperTools: { self.developerModels[$0] != nil },
+      hasDeveloperTools: {
+        self.developerModels[$0] != nil
+          || self.runtime.devToolsView(forTabID: $0.uuidString) != nil
+      },
       profileIsDownloading: { id in
         store.session.profileID(forTabID: id).map { profile in
           self.downloads.items(in: profile).contains { $0.state == .downloading }

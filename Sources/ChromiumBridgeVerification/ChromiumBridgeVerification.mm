@@ -1813,7 +1813,8 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
             ownerCurrent, error.localizedDescription));
         ARCCompletePrivateQuitDialogCancellation(ownerCurrent, error.localizedDescription, ^{
           [runtime endPrivateQuitCDPHoldForTabID:tabID owner:owner completion:^(BOOL ended) {
-            completion(ended);
+            if (!ended) NSLog(@"Private quit probe hold cleanup did not settle after dialog cancellation.");
+            completion(YES);
           }];
         }, ^{
           completion(NO);

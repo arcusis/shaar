@@ -11,9 +11,9 @@ SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser
 # its crash reports, preferences and saved window state away from the installed app.
 SHAAR_VERIFICATION_BUNDLE_IDENTIFIER=com.arcusis.browser.verification
 # Apple's Major.Minor.Patch version shown to users; the release tag is v<this>.
-SHAAR_BUNDLE_VERSION=0.1.0
+SHAAR_BUNDLE_VERSION=0.2.0
 # Strictly increasing build number. Sparkle orders updates by this value.
-SHAAR_BUILD_VERSION=1
+SHAAR_BUILD_VERSION=2
 SHAAR_MINIMUM_SYSTEM_VERSION=26.0
 
 # GitHub Releases in this repository hold the DMG, the Sparkle ZIP and appcast.xml. The Release

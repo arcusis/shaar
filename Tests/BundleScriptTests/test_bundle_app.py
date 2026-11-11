@@ -402,7 +402,7 @@ class BundleAppTests(unittest.TestCase):
 
     def test_unsafe_release_config_is_rejected_before_bash_sources_it(self):
         config = self.root / "scripts" / "release-config.sh"
-        config.write_text(config.read_text().replace("SHAAR_BUILD_VERSION=1", "SHAAR_BUILD_VERSION=1;touch pwned"))
+        config.write_text(config.read_text().replace("SHAAR_BUILD_VERSION=2", "SHAAR_BUILD_VERSION=2;touch pwned"))
 
         result = self._run("--with-engine")
 

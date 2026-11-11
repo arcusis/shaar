@@ -221,6 +221,9 @@ typedef enum {
   SHAAR_OP_PROBE_TRUSTED_CLICK = 1093,
   // Testing only: open Node frontend against a local inspector fixture.
   SHAAR_OP_PROBE_NODE_LIVE = 1094,
+  // Testing only: inspect a popup owned by the selected fixture tab.
+  SHAAR_OP_PROBE_POPUP_EVALUATE = 1095,
+  SHAAR_OP_PROBE_POPUP_CAPTURE = 1096,
   // END devtools operation IDs.
 
   // BEGIN media
@@ -367,7 +370,8 @@ typedef enum {
   SHAAR_DEVTOOLS_NETWORK_GET_COOKIES = 41,
   SHAAR_DEVTOOLS_NETWORK_SET_COOKIE = 42,
   SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES = 43,
-  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44
+  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44,
+  SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 45
 } shaar_devtools_command;
 typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
 // END devtools command and module IDs.

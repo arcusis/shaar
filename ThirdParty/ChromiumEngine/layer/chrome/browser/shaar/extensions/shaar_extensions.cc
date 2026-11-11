@@ -30,6 +30,7 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -369,8 +370,10 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
 
   if (operation == SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS) {
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
-    if (!testing || std::strcmp(testing, "1") != 0)
-      return Fail(SHAAR_POLICY_BLOCKED, "component audit requires testing mode", error);
+    if (!testing || std::strcmp(testing, "1") != 0 ||
+        !shaar::lifecycle::HasOwnedProbeRoot(engine))
+      return Fail(SHAAR_POLICY_BLOCKED,
+                  "component audit requires testing mode and owned probe root", error);
     if (!HasOnlyKeys(input, {"schemaVersion"}))
       return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema", error);
     auto* loader = extensions::ComponentLoader::Get(profile);

@@ -61,9 +61,14 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
                            content::WebContents* contents,
                            shaar_operation operation,
                            int capability);
-// Strict testing-only click schema and policy. Coordinates are viewport pixels.
-bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y);
+// Strict testing-only click schema and policy. Selectors are fixture element IDs.
+bool ParseProbeClickArguments(shaar_bytes args_json,
+                              int* x,
+                              int* y,
+                              std::string* element_id);
 bool ParseNodeProbePort(shaar_bytes args_json, int* port);
+bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
+                              std::string* popup_id, std::string* expression);
 bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
                        bool never_shown, const GURL& url);
 void EmitFrontendStateEvent(shaar_engine* engine,

@@ -175,7 +175,7 @@ BrowserTabRegistryImpl::FindSelectedRegularTab(
     return std::nullopt;
   for (const auto& tab : tabs_) {
     if (tab.engine != engine || tab.contents != contents || !tab.browser ||
-        tab.browser->profile()->IsOffTheRecord())
+        tab.browser->GetProfile()->IsOffTheRecord())
       continue;
     for (const auto& window : windows_) {
       if (window.engine != engine || window.handle != tab.window ||

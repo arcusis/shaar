@@ -66,8 +66,8 @@ PendingMap& Pending() {
 }
 
 uint64_t& NextRequestID() {
-  static base::NoDestructor<uint64_t> next(uint64_t{0});
-  return *next;
+  static uint64_t next = 0;
+  return next;
 }
 
 const char* DecisionName(int code) {

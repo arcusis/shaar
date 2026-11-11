@@ -24,6 +24,7 @@
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace shaar::media {
 namespace {
@@ -52,8 +53,8 @@ PendingMap& Pending() {
 }
 
 uint64_t& NextRequestID() {
-  static base::NoDestructor<uint64_t> next(0);
-  return *next;
+  static uint64_t next = 0;
+  return next;
 }
 
 void Finish(std::string_view request_id, bool allowed) {
@@ -135,7 +136,7 @@ void RequestWebsiteMediaPermission(
   }
 
   const GURL page_url = contents->GetLastCommittedURL();
-  const GURL origin = request.security_origin.GetOrigin();
+  const GURL origin = url::Origin::Create(request.security_origin).GetURL();
   if (!page_url.SchemeIsHTTPOrHTTPS() || !origin.SchemeIsHTTPOrHTTPS()) {
     std::move(decision).Run(false);
     return;

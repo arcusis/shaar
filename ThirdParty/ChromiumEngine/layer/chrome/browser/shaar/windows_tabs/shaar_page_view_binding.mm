@@ -16,6 +16,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/contents_container_view.h"
+#include "chrome/browser/ui/views/frame/contents_web_view.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
@@ -72,14 +74,17 @@ void DetachChromePresentation(Browser* browser, content::WebContents* contents,
   if (!browser || !contents || !host)
     return;
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  if (!browser_view || !browser_view->contents_web_view() ||
-      browser_view->contents_web_view()->web_contents() != contents)
+  ContentsContainerView* container =
+      browser_view ? browser_view->GetContentsContainerViewFor(contents)
+                   : nullptr;
+  ContentsWebView* contents_view = container ? container->contents_view() : nullptr;
+  if (!contents_view || contents_view->web_contents() != contents)
     return;
   NSView* native_view = contents->GetNativeView().GetNativeNSView();
   NSView* parent = native_view.window == host->window()
                        ? native_view.superview : nil;
   const NSRect frame = native_view.frame;
-  browser_view->contents_web_view()->SetWebContents(nullptr);
+  contents_view->SetWebContents(nullptr);
   if (parent) {
     [parent addSubview:native_view];
     native_view.frame = frame;

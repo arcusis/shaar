@@ -31,3 +31,56 @@
    chrome_framework_version = chrome_version_full
  
    verify_dynamic_libraries = !is_component_build && !is_asan && !is_ubsan_any
+
+--- a/chrome/common/chrome_constants.cc
++++ b/chrome/common/chrome_constants.cc
+@@ -39,7 +39,7 @@
+ const base::FilePath::CharType kBrowserProcessExecutableName[] =
+     FPL(PRODUCT_FULLNAME_STRING);
+ const base::FilePath::CharType kHelperProcessExecutableName[] =
+-    FPL(PRODUCT_FULLNAME_STRING " Helper");
++    FPL("Chromium Helper");
+ #elif BUILDFLAG(IS_ANDROID)
+ // NOTE: Keep it synced with the process names defined in AndroidManifest.xml.
+ const base::FilePath::CharType kBrowserProcessExecutableName[] = FPL("chrome");
+@@ -69,8 +69,7 @@
+ const base::FilePath::CharType kChromiumBrowserProcessExecutablePath[] =
+     FPL("Chromium.app/Contents/MacOS/Chromium");
+ const base::FilePath::CharType kHelperProcessExecutablePath[] =
+-    FPL(PRODUCT_FULLNAME_STRING
+-        " Helper.app/Contents/MacOS/" PRODUCT_FULLNAME_STRING " Helper");
++    FPL("Chromium Helper.app/Contents/MacOS/Chromium Helper");
+ #elif BUILDFLAG(IS_ANDROID)
+ const base::FilePath::CharType kBrowserProcessExecutablePath[] = FPL("chrome");
+ const base::FilePath::CharType kHelperProcessExecutablePath[] = FPL("chrome");
+@@ -81,9 +80,9 @@
+ 
+ #if BUILDFLAG(IS_MAC)
+ const base::FilePath::CharType kFrameworkName[] =
+-    FPL(PRODUCT_FULLNAME_STRING " Framework.framework");
++    FPL("Chromium Framework.framework");
+ const base::FilePath::CharType kFrameworkExecutableName[] =
+-    FPL(PRODUCT_FULLNAME_STRING " Framework");
++    FPL("Chromium Framework");
+ const char kMacHelperSuffixAlerts[] = " (Alerts)";
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+--- a/chrome/app/chrome_exe_main_mac.cc
++++ b/chrome/app/chrome_exe_main_mac.cc
+@@ -184,13 +184,12 @@
+   // go up to find the main dylib.
+   static constexpr char entry_symbol[] = "ChromeMain";
+   static constexpr char rel_path[] =
+-      "../../../../" PRODUCT_FULLNAME_STRING " Framework";
++      "../../../../Chromium Framework";
+ #else                             // defined(HELPER_EXECUTABLE)
+   static constexpr char entry_symbol[] = "ChromeMain";
+   static constexpr char rel_path[] =
+-      "../Frameworks/" PRODUCT_FULLNAME_STRING
+-      " Framework.framework/Versions/" CHROME_VERSION_STRING
+-      "/" PRODUCT_FULLNAME_STRING " Framework";
++      "../Frameworks/Chromium Framework.framework/Versions/"
++      CHROME_VERSION_STRING "/Chromium Framework";
+ #endif                            // defined(RENDERER_HELPER_EXECUTABLE)
+ 
+   // Slice off the last part of the main executable path, and append the

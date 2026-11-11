@@ -64,8 +64,8 @@ PendingMap& Pending() {
 }
 
 uint64_t& NextRequestID() {
-  static base::NoDestructor<uint64_t> next(0);
-  return *next;
+  static uint64_t next = 0;
+  return next;
 }
 
 // EmitEvent can ask the app to decide before the manager stores this prompt.
@@ -130,8 +130,7 @@ std::vector<std::string> KindsFor(
   if (!delegate)
     return std::monostate{};
   const auto& requests = delegate->Requests();
-  if (requests.empty() || !requests.front() ||
-      !requests.front()->request_type_if_present())
+  if (requests.empty() || !requests.front())
     return std::monostate{};
   if (requests.front()->GetContentSettingsType() !=
       ContentSettingsType::GEOLOCATION_WITH_OPTIONS)

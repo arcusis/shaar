@@ -7,6 +7,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/test/base/testing_profile.h"
+#include "content/public/test/browser_task_environment.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/custom_handlers/protocol_handler.h"
@@ -135,6 +136,7 @@ TEST(ShaarPermissionPromptTest, AppendedPermissionWasNotShownAndCannotBeGranted)
 }
 
 TEST(ShaarPermissionPromptTest, OTRDecisionLeavesParentPermissionStoresAlone) {
+  content::BrowserTaskEnvironment task_environment;
   TestingProfile profile;
   Profile* otr = profile.GetPrimaryOTRProfile(/*create_if_needed=*/true);
   ASSERT_NE(otr, nullptr);
@@ -158,18 +160,18 @@ TEST(ShaarPermissionPromptTest, OTRDecisionLeavesParentPermissionStoresAlone) {
       otr_settings->GetContentSetting(origin, origin, type);
 
   auto* registry_factory =
-      custom_handlers::ProtocolHandlerRegistryFactory::GetInstance();
+      ProtocolHandlerRegistryFactory::GetInstance();
   registry_factory->SetTestingFactoryAndUse(
       &profile,
-      custom_handlers::ProtocolHandlerRegistryFactory::GetDefaultFactory());
+      ProtocolHandlerRegistryFactory::GetDefaultFactory());
   registry_factory->SetTestingFactoryAndUse(
       otr,
-      custom_handlers::ProtocolHandlerRegistryFactory::GetDefaultFactory());
+      ProtocolHandlerRegistryFactory::GetDefaultFactory());
   auto* parent_registry =
-      custom_handlers::ProtocolHandlerRegistryFactory::GetForBrowserContext(
+      ProtocolHandlerRegistryFactory::GetForBrowserContext(
           &profile);
   auto* otr_registry =
-      custom_handlers::ProtocolHandlerRegistryFactory::GetForBrowserContext(
+      ProtocolHandlerRegistryFactory::GetForBrowserContext(
           otr);
   ASSERT_NE(parent_registry, nullptr);
   ASSERT_NE(otr_registry, nullptr);
@@ -180,7 +182,7 @@ TEST(ShaarPermissionPromptTest, OTRDecisionLeavesParentPermissionStoresAlone) {
   const size_t parent_protocol_handlers_before =
       parent_registry->GetHandlersFor("web+shaartest").size();
 
-  ::testing::StrictMock<permissions::MockPermissionPromptDelegate> delegate;
+  ::testing::StrictMock<::permissions::MockPermissionPromptDelegate> delegate;
   EXPECT_CALL(delegate, AcceptThisTime(::testing::_)).Times(1);
   const GrantPersistence location_persistence = DecideGrant(
       &delegate, true, true, otr->IsOffTheRecord(), false, false,

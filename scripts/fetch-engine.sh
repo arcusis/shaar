@@ -8,8 +8,8 @@ cd "$(dirname "$0")/.."
 [[ $(uname -m) == arm64 ]] || { echo 'Pinned engine requires Apple silicon.' >&2; exit 1; }
 pin=ThirdParty/ChromiumEngine/pin.json
 jq -e '.schemaVersion == 1 and .sourceKind == "shaar" and
-  (.releaseTag | test("^engine-155\\.0\\.8059\\.84-shaar\\.[1-9][0-9]*$")) and
-  (.asset | test("^ShaarEngine-155\\.0\\.8059\\.84-shaar\\.[1-9][0-9]*\\.tar\\.xz$")) and
+  (.releaseTag | test("^engine-157\\.0\\.8103\\.51-shaar\\.[1-9][0-9]*$")) and
+  (.asset | test("^ShaarEngine-157\\.0\\.8103\\.51-shaar\\.[1-9][0-9]*\\.tar\\.xz$")) and
   (.sha256 | test("^[0-9a-f]{64}$"))' "$pin" >/dev/null
 tag=$(jq -er .releaseTag "$pin")
 asset=$(jq -er .asset "$pin")

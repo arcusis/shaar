@@ -1,6 +1,6 @@
 # Draft release notes — Shaar 0.2.0 / Chromium 157
 
-For app version 0.2.0 after v0.1.0. Final wording must match the signed, QA-approved build. Save prompts are out of this release. iCloud Keychain passkeys are pending David's answer and signed-build proof, so neither is included in the user-facing copy below. English `<li>` lines are the input to `scripts/release.sh --notes`; the Hebrew version is for the user-facing announcement/changelog.
+For app version 0.2.0 after v0.1.0. Final wording must match the signed, QA-approved build. English `<li>` lines are the input to `scripts/release.sh --notes`; the Hebrew version is for the user-facing announcement/changelog.
 
 ## English
 

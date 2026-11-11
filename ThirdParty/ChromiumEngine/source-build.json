@@ -321,7 +321,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0007-shaar-branding.patch",
-      "sha256": "d1d835d847b01a2d7d68108565c967dad9135e820a680500bf5ad5fc2e7d2f40"
+      "sha256": "69950067abd4a1361790a94b1165711e06150e872c1d1bf187862fa506671bb0"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0008-native-cocoa-display.patch",

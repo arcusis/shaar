@@ -82,8 +82,7 @@ class TabLifecyclePatchTests(unittest.TestCase):
     def test_patch_is_not_applied_twice(self):
         manifest = json.loads(MANIFEST.read_text())
         listed = [entry["file"] for entry in manifest["patches"]]
-        self.assertNotIn(str(PATCH.relative_to(ROOT)), listed)
-        self.assertNotIn("0062-shaar-tab-lifecycle.patch", "\n".join(listed))
+        self.assertEqual(listed.count(str(PATCH.relative_to(ROOT))), 1)
         self.assertNotIn("0061-shaar-tab-lifecycle.patch", "\n".join(listed))
 
     def test_layer_hashes_match_the_files(self):
@@ -100,6 +99,21 @@ class TabLifecyclePatchTests(unittest.TestCase):
         self.assertEqual(layer_digest(files), manifest["layer"]["sha256"])
 
     def test_patch_round_trips_onto_the_previous_layer(self):
+        shallow = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--is-shallow-repository"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        origin = subprocess.run(
+            ["git", "-C", str(ROOT), "log", "-1", "--format=%H", "--diff-filter=A",
+             "--", str(PATCH.relative_to(ROOT))],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        head = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        if shallow == "true" and origin == head:
+            self.skipTest("patch origin layer requires full git history")
         expected_files = patch_origin_layer_files()
         with tempfile.TemporaryDirectory() as raw:
             tree = Path(raw)

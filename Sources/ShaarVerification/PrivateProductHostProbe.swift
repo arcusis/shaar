@@ -190,9 +190,23 @@ final class PrivateProductHostProbe {
         "beforeUnloadActivated": beforeUnloadActivated,
         "beforeUnloadHandlerInstalled": beforeUnloadHandlerInstalled,
       ])
-    guard beforeUnloadActivated, await prepareNativeQuitCancellation(on: normalTabID) else {
+    guard beforeUnloadActivated else {
       throw PrivateWindowFailure(
         "Normal fixture page could not arm beforeunload with renderer user activation.")
+    }
+    let quitCancellationPrepared = await prepareNativeQuitCancellation(on: normalTabID)
+    writeQuitDiagnostic(
+      "nativeQuitCancellationPreparation", owner: quitOwner, normalWindow: normalWindow,
+      normalTabID: normalTabID,
+      values: [
+        "beforeUnloadActivated": beforeUnloadActivated,
+        "beforeUnloadHandlerInstalled": beforeUnloadHandlerInstalled,
+        "nativeQuitCancellationPrepared": quitCancellationPrepared,
+      ])
+    guard quitCancellationPrepared else {
+      throw PrivateWindowFailure(
+        "Normal fixture page could not prepare native quit cancellation "
+          + "after beforeunload was armed.")
     }
     let firstHoldAudit = runtime.privateQuitCDPHoldAudit(forTabID: normalTabID) ?? [:]
     let firstHoldConfirmed =
@@ -767,6 +781,9 @@ final class PrivateProductHostProbe {
       item["privateQuitDialogCancelResult"] =
         runtime.privateProbeAudit(forContextID: owner.contextID)?[
           "privateQuitDialogCancelResult"] as? String ?? "unknown"
+      item["privateQuitPreparationResult"] =
+        runtime.privateProbeAudit(forContextID: owner.contextID)?[
+          "privateQuitPreparationResult"] as? String ?? "unknown"
     }
     if let normalTabID {
       let selection = runtime.normalProbeSelectionAudit(forTabID: normalTabID)

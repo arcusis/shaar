@@ -285,6 +285,9 @@ final class ExtensionProbe {
     for _ in 0..<50 {
       ProbeHiddenWindows.orderOutVisibleWindows()
       if let value = await evaluatePopup(id, expression: expression) as? [String: Any] {
+        if let error = value["probeError"] as? String {
+          throw ExtensionProbeFailure("MV3 popup evaluation failed: \(error)")
+        }
         return value
       }
       try await Task.sleep(for: .milliseconds(100))

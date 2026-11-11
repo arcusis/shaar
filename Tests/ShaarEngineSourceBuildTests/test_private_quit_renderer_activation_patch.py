@@ -40,9 +40,9 @@ def fetch_tag_close_manager() -> bytes:
 
 
 class PrivateQuitRendererActivationPatchTests(unittest.TestCase):
-    def test_157_hook_is_not_in_the_155_patch_list(self):
+    def test_157_hook_is_pinned_in_the_157_patch_list(self):
         files = [entry["file"] for entry in json.loads(MANIFEST.read_text())["patches"]]
-        self.assertNotIn(str(PATCH.relative_to(ROOT)), files)
+        self.assertIn(str(PATCH.relative_to(ROOT)), files)
         self.assertIn(str(LEGACY.relative_to(ROOT)), files)
         self.assertIn("ResetTryToCloseWindow", LEGACY.read_text())
 

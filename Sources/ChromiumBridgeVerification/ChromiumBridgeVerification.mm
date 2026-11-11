@@ -893,9 +893,12 @@ void ARCCompletePrivateQuitDialogCancellation(
       @"documentStates": documentStates,
       @"probeEvaluationError": context[@"probeEvaluationError"] ?: @""};
   NSString *cancelResult = context[@"privateQuitDialogCancelResult"];
-  if (![cancelResult isKindOfClass:NSString.class]) return audit;
   NSMutableDictionary *withCancelResult = [audit mutableCopy];
-  withCancelResult[@"privateQuitDialogCancelResult"] = cancelResult;
+  if ([cancelResult isKindOfClass:NSString.class])
+    withCancelResult[@"privateQuitDialogCancelResult"] = cancelResult;
+  NSString *prepareResult = context[@"privateQuitPreparationResult"];
+  if ([prepareResult isKindOfClass:NSString.class])
+    withCancelResult[@"privateQuitPreparationResult"] = prepareResult;
   return withCancelResult;
 }
 - (BOOL)privateProbeCaptureIsReadyForTabID:(NSString *)tabID windowID:(NSString *)windowID
@@ -1048,7 +1051,6 @@ void ARCCompletePrivateQuitDialogCancellation(
 @end
 
 static const NSInteger kProbePageDisableCommand = 62;
-static const NSInteger kProbePageHandleJavaScriptDialogCommand = 63;
 static const void *kPrivateQuitHoldOwnersKey = &kPrivateQuitHoldOwnersKey;
 
 BOOL ARCProbeDevToolsCommandIsUnknown(NSString *message) {
@@ -1108,9 +1110,9 @@ static NSString *ProbeQuitHoldExpression(NSString *event) {
       @"(()=>{const key='%@';const holds=window.__arcusisPrivateQuitCDPHolds||"
       "(window.__arcusisPrivateQuitCDPHolds=Object.create(null));"
       "holds[key]={started:true,timedOut:false};"
-      "return new Promise(resolve=>{const timer=setTimeout(()=>{holds[key].timedOut=true;"
-      "resolve(true)},30000);addEventListener(key,()=>{clearTimeout(timer);"
-      "delete holds[key];resolve(true)},{once:true});});})()", event];
+      "const timer=setTimeout(()=>{holds[key].timedOut=true;delete holds[key]},30000);"
+      "addEventListener(key,()=>{clearTimeout(timer);delete holds[key]},{once:true});"
+      "return holds[key]})()", event];
 }
 
 static NSString *ProbeQuitHoldStateExpression(NSString *event) {
@@ -1127,6 +1129,14 @@ static NSDictionary *ProbeDevToolsPayload(NSInteger command, NSDictionary *param
   return @{@"schemaVersion": @1,
            @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
            @"command": @(command), @"params": params ?: @{}};
+}
+
+static NSDictionary *ProbeQuitDialogCancellationPayload(void) {
+  return @{@"schemaVersion": @1,
+           @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
+           @"command": @(SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG),
+           @"probeQuitDialogCancellation": @YES,
+           @"params": @{@"accept": @NO}};
 }
 
 static NSString *ProbeEvaluateString(NSDictionary *result) {
@@ -1171,6 +1181,21 @@ static void RecordPrivateQuitDialogResult(ARCShaarRuntime *runtime, NSString *re
   }
 }
 
+static void RecordPrivateQuitPreparationResult(ARCShaarRuntime *runtime, NSString *result) {
+  for (id context in [ARCPrivateShaarState(runtime)[@"contexts"] objectEnumerator]) {
+    if ([context isKindOfClass:NSMutableDictionary.class] &&
+        ![context[@"privateQuitPreparationResult"] isKindOfClass:NSString.class])
+      context[@"privateQuitPreparationResult"] = result;
+  }
+}
+
+static void ClearPrivateQuitPreparationResult(ARCShaarRuntime *runtime) {
+  for (id context in [ARCPrivateShaarState(runtime)[@"contexts"] objectEnumerator]) {
+    if ([context isKindOfClass:NSMutableDictionary.class])
+      [context removeObjectForKey:@"privateQuitPreparationResult"];
+  }
+}
+
 static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *tabID,
                                             NSDictionary *owner) {
   if (!ProbeCaptureAllowed()) return @"probe-root";
@@ -1205,6 +1230,7 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
   NSString *event = [@"arcusis-private-quit-cdp-" stringByAppendingString:NSUUID.UUID.UUIDString];
   if (!ProbeQuitHoldEventIsSafe(event) || !PrivateQuitProbeTabIsEligible(self, tabID) ||
       PrivateQuitHoldOwners(self)[tabID]) {
+    RecordPrivateQuitPreparationResult(self, @"cdp-hold-target-ineligible-or-already-owned");
     completion(NO);
     return;
   }
@@ -1219,19 +1245,23 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
   accepted = [self shaarDevToolsSubmit:SHAAR_OP_DEVTOOLS_CALL tabID:tabID
       profileID:profileID windowID:windowID
       payload:ProbeDevToolsPayload(SHAAR_DEVTOOLS_RUNTIME_EVALUATE, @{
-          @"expression": ProbeQuitHoldExpression(event), @"awaitPromise": @YES})
+          @"expression": ProbeQuitHoldExpression(event), @"returnByValue": @YES})
       completion:^(NSDictionary *, NSError *error) {
         if (!accepted) return;
         ARCShaarRuntime *runtime = weakSelf;
         NSMutableDictionary *current = PrivateQuitHoldOwners(runtime)[tabID];
-        if (current == owner) current[@"holdCommandPending"] = @NO;
         if (!runtime || current != owner) return;
-        if (error || !PrivateQuitHoldOwnerCurrent(runtime, tabID, owner))
-          owner[@"holdConfirmedPending"] = @NO;
+        if (!error && PrivateQuitHoldOwnerCurrent(runtime, tabID, owner)) return;
+        owner[@"holdCommandPending"] = @NO;
+        owner[@"holdConfirmedPending"] = @NO;
+        RecordPrivateQuitPreparationResult(runtime, error ?
+            [@"cdp-hold-evaluation-error:" stringByAppendingString:error.localizedDescription] :
+            @"cdp-hold-owner-changed");
         [runtime endPrivateQuitCDPHoldForTabID:tabID owner:owner completion:^(BOOL ended) {}];
       }];
   if (!accepted) {
     [PrivateQuitHoldOwners(self) removeObjectForKey:tabID];
+    RecordPrivateQuitPreparationResult(self, @"cdp-hold-evaluation-not-accepted");
     completion(NO);
     return;
   }
@@ -1242,6 +1272,10 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
     ARCShaarRuntime *runtime = weakSelf;
     BOOL current = runtime && PrivateQuitHoldOwnerCurrent(runtime, tabID, owner);
     if (error || !current) {
+      if (runtime)
+        RecordPrivateQuitPreparationResult(runtime, error ?
+            [@"cdp-page-enable-error:" stringByAppendingString:error.localizedDescription] :
+            @"cdp-hold-owner-changed-before-page-enable");
       if (runtime && PrivateQuitHoldOwners(runtime)[tabID] == owner)
         [runtime endPrivateQuitCDPHoldForTabID:tabID owner:owner completion:^(BOOL ended) {}];
       completion(NO);
@@ -1259,6 +1293,20 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
               ProbeQuitHoldStateIsPending(result) &&
               [verifiedOwner[@"holdCommandPending"] boolValue];
           if (verifiedOwner == owner) verifiedOwner[@"holdConfirmedPending"] = @(pending);
+          if (!pending && verified) {
+            NSString *reason = @"cdp-hold-command-not-pending";
+            if (verifyError) {
+              reason = [@"cdp-hold-state-error:" stringByAppendingString:
+                  verifyError.localizedDescription];
+            } else if (verifiedOwner != owner) {
+              reason = @"cdp-hold-owner-changed-during-state-check";
+            } else if (!PrivateQuitHoldOwnerCurrent(verified, tabID, owner)) {
+              reason = @"cdp-hold-owner-stale-during-state-check";
+            } else if (!ProbeQuitHoldStateIsPending(result)) {
+              reason = @"cdp-hold-state-not-pending";
+            }
+            RecordPrivateQuitPreparationResult(verified, reason);
+          }
           if (!pending && verified && verifiedOwner == owner)
             [verified endPrivateQuitCDPHoldForTabID:tabID owner:owner completion:^(BOOL ended) {}];
           completion(pending);
@@ -1335,9 +1383,6 @@ extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
   return [allowed containsObject:elementID];
 }
 
-using ShaarQuitActivate = shaar_error_code (*)(
-    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *, int, int,
-    shaar_request_id, shaar_reply_fn, void *, shaar_error *);
 using ShaarQuitPrepare = shaar_error_code (*)(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *, shaar_request_id,
     shaar_reply_fn, void *, shaar_error *);
@@ -1347,26 +1392,27 @@ using ShaarQuitRelease = shaar_error_code (*)(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *, shaar_error *);
 
 struct QuitProbeSymbols {
-  ShaarQuitActivate activate;
   ShaarQuitPrepare prepare;
   ShaarQuitPrepare cancel;
   ShaarQuitAudit audit;
   ShaarQuitRelease release;
 };
 
-static BOOL QuitProbeSymbolsAvailable(QuitProbeSymbols *symbols) {
-  symbols->activate = reinterpret_cast<ShaarQuitActivate>(
-      dlsym(RTLD_DEFAULT, "shaar_test_renderer_activate"));
+static void *QuitProbeSymbol(ARCShaarRuntime *runtime, const char *name) {
+  void *library = ShaarProbeField<void *>(runtime, "_shaarLibrary");
+  return library ? dlsym(library, name) : nullptr;
+}
+
+static BOOL QuitProbeSymbolsAvailable(ARCShaarRuntime *runtime, QuitProbeSymbols *symbols) {
   symbols->prepare = reinterpret_cast<ShaarQuitPrepare>(
-      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_prepare"));
+      QuitProbeSymbol(runtime, "shaar_test_quit_dialog_prepare"));
   symbols->cancel = reinterpret_cast<ShaarQuitPrepare>(
-      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_cancel"));
+      QuitProbeSymbol(runtime, "shaar_test_quit_dialog_cancel"));
   symbols->audit = reinterpret_cast<ShaarQuitAudit>(
-      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_audit"));
+      QuitProbeSymbol(runtime, "shaar_test_quit_dialog_audit"));
   symbols->release = reinterpret_cast<ShaarQuitRelease>(
-      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_release"));
-  return symbols->activate && symbols->prepare && symbols->cancel && symbols->audit &&
-      symbols->release;
+      QuitProbeSymbol(runtime, "shaar_test_quit_dialog_release"));
+  return symbols->prepare && symbols->cancel && symbols->audit && symbols->release;
 }
 
 static uint64_t ProbeNextRequestID(ARCShaarRuntime *runtime) {
@@ -1389,14 +1435,6 @@ static BOOL ProbeRegularTarget(ARCShaarRuntime *runtime, NSString *tabID,
   *window = (shaar_window *)[ProbeTable(runtime, "_shaarWindows")[windowID] pointerValue];
   *tab = (shaar_tab *)[ProbeTable(runtime, "_shaarTabs")[tabID] pointerValue];
   return *engine && scope->profile && *window && *tab;
-}
-
-static BOOL ProbeWindowsHidden(NSView *view) {
-  if (!view.window || view.window.isVisible) return NO;
-  for (NSWindow *window in NSApp.windows) {
-    if (window.isVisible) return NO;
-  }
-  return YES;
 }
 
 static void ProbeQuitReply(void *context, const shaar_result *result) {
@@ -1437,56 +1475,6 @@ static void ProbeQuitCall(
   }
 }
 
-static void ProbeActivateElement(ARCShaarRuntime *runtime, NSString *tabID, NSString *elementID,
-    QuitProbeSymbols symbols, void (^completion)(BOOL)) {
-  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
-  if (!testing || std::strcmp(testing, "1") != 0 || !ARCProbeTrustedClickElementAllowed(elementID)) {
-    completion(NO);
-    return;
-  }
-  if (!ProbeWindowsHidden([runtime viewForTabID:tabID])) {
-    completion(NO);
-    return;
-  }
-  shaar_engine *engine = nullptr;
-  shaar_scope scope = {};
-  shaar_window *window = nullptr;
-  shaar_tab *tab = nullptr;
-  if (!ProbeRegularTarget(runtime, tabID, &engine, &scope, &window, &tab)) {
-    completion(NO);
-    return;
-  }
-  NSString *script = [NSString stringWithFormat:
-      @"(()=>{const e=document.getElementById('%@');if(!e)return null;const r=e.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()",
-      elementID];
-  __weak ARCShaarRuntime *weakRuntime = runtime;
-  [runtime evaluateInTabID:tabID script:script completion:^(NSString *result) {
-    ARCShaarRuntime *ready = weakRuntime;
-    NSData *data = [result dataUsingEncoding:NSUTF8StringEncoding];
-    NSDictionary *point = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    NSNumber *x = [point isKindOfClass:NSDictionary.class] ? point[@"x"] : nil;
-    NSNumber *y = [point isKindOfClass:NSDictionary.class] ? point[@"y"] : nil;
-    shaar_engine *liveEngine = nullptr;
-    shaar_scope liveScope = {};
-    shaar_window *liveWindow = nullptr;
-    shaar_tab *liveTab = nullptr;
-    if (!ready || ![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class] ||
-        !ProbeRegularTarget(ready, tabID, &liveEngine, &liveScope, &liveWindow, &liveTab)) {
-      completion(NO);
-      return;
-    }
-    ProbeQuitCall(ready, liveEngine, liveScope, liveWindow, liveTab,
-        ^shaar_error_code(shaar_request_id requestID, shaar_reply_fn reply, void *context,
-                          shaar_error *error) {
-          return symbols.activate(liveEngine, liveScope, liveWindow, liveTab, x.intValue,
-                                  y.intValue, requestID, reply, context, error);
-        }, ^(NSDictionary *reply, NSError *error) {
-          if (error) NSLog(@"Trusted probe click: %@", error.localizedDescription);
-          completion(!error && [reply[@"submitted"] boolValue]);
-        });
-  }];
-}
-
 static void ProbePrepareNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
     QuitProbeSymbols symbols, void (^completion)(BOOL)) {
   NSMutableDictionary *existing = PrivateQuitHoldOwners(runtime)[tabID];
@@ -1514,6 +1502,17 @@ static void ProbePrepareNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
         BOOL stillEligible = ready && PrivateQuitProbeTabIsEligible(ready, tabID);
         NSMutableDictionary *existing = ready ? PrivateQuitHoldOwners(ready)[tabID] : nil;
         BOOL foreign = existing && ![existing[@"nativeHold"] boolValue];
+        NSString *result = @"native-refused";
+        if (error) {
+          result = error.localizedDescription;
+        } else if (prepared) {
+          result = @"native-prepared";
+        } else if (!stillEligible) {
+          result = @"native-target-changed";
+        } else if (foreign) {
+          result = @"native-hold-owned";
+        }
+        if (ready) RecordPrivateQuitPreparationResult(ready, result);
         if (ARCProbeNativePrepareShouldReleaseHold(ready != nil, replyFailed, prepared,
                                                   stillEligible, foreign)) {
           shaar_error releaseError = ARCPrivateShaarEmptyError();
@@ -1698,7 +1697,7 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
 - (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
   if (!ProbeCaptureAllowed()) return nil;
   QuitProbeSymbols symbols = {};
-  if (QuitProbeSymbolsAvailable(&symbols)) {
+  if (QuitProbeSymbolsAvailable(self, &symbols)) {
     NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
     BOOL current = owner && PrivateQuitHoldOwnerCurrent(self, tabID, owner);
     if (!ARCProbeNativeHoldAuditVisible(current, [owner[@"nativeHold"] boolValue]))
@@ -1719,7 +1718,9 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
 - (void)preparePrivateQuitCancellationProbeTabID:(NSString *)tabID
                                       completion:(void (^)(BOOL))completion {
   if (!completion) return;
+  ClearPrivateQuitPreparationResult(self);
   if (!PrivateQuitProbeTabIsEligible(self, tabID)) {
+    RecordPrivateQuitPreparationResult(self, @"target-ineligible");
     completion(NO);
     return;
   }
@@ -1733,13 +1734,28 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
       completion:^(NSDictionary *result, NSError *error) {
         ARCShaarRuntime *runtime = weakSelf;
         NSString *href = ProbeEvaluateString(result);
-        if (!runtime || error || !PrivateQuitProbeTabIsEligible(runtime, tabID) ||
-            !ARCProbeLoopbackDocumentURL(href)) {
+        if (!runtime) {
+          completion(NO);
+          return;
+        }
+        if (error) {
+          RecordPrivateQuitPreparationResult(runtime, error.localizedDescription);
+          completion(NO);
+          return;
+        }
+        if (!PrivateQuitProbeTabIsEligible(runtime, tabID)) {
+          RecordPrivateQuitPreparationResult(runtime, @"target-ineligible-after-url-check");
+          completion(NO);
+          return;
+        }
+        if (!ARCProbeLoopbackDocumentURL(href)) {
+          RecordPrivateQuitPreparationResult(runtime, href.length ?
+              [@"not-loopback:" stringByAppendingString:href] : @"document-url-missing");
           completion(NO);
           return;
         }
         QuitProbeSymbols symbols = {};
-        if (QuitProbeSymbolsAvailable(&symbols)) {
+        if (QuitProbeSymbolsAvailable(runtime, &symbols)) {
           ProbePrepareNativeHold(runtime, tabID, symbols, completion);
           return;
         }
@@ -1747,12 +1763,25 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
             windowID:windowID payload:ProbeDevToolsPayload(kProbePageDisableCommand, @{})
             completion:^(NSDictionary *, NSError *probeError) {
               ARCShaarRuntime *ready = weakSelf;
-              if (!ready || !PrivateQuitProbeTabIsEligible(ready, tabID) ||
-                  ARCProbeDevToolsCommandIsUnknown(probeError.localizedDescription)) {
+              if (!ready) {
                 completion(NO);
                 return;
               }
-              [ready beginPrivateQuitCDPHoldForTabID:tabID completion:completion];
+              if (!PrivateQuitProbeTabIsEligible(ready, tabID)) {
+                RecordPrivateQuitPreparationResult(ready, @"target-ineligible-after-page-disable");
+                completion(NO);
+                return;
+              }
+              if (ARCProbeDevToolsCommandIsUnknown(probeError.localizedDescription)) {
+                RecordPrivateQuitPreparationResult(ready, probeError.localizedDescription);
+                completion(NO);
+                return;
+              }
+              [ready beginPrivateQuitCDPHoldForTabID:tabID completion:^(BOOL prepared) {
+                RecordPrivateQuitPreparationResult(ready, prepared ?
+                    @"cdp-hold-prepared" : @"cdp-hold-not-confirmed");
+                completion(prepared);
+              }];
             }];
       }];
 }
@@ -1768,7 +1797,7 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
     return;
   }
   QuitProbeSymbols symbols = {};
-  if ([owner[@"nativeHold"] boolValue] && QuitProbeSymbolsAvailable(&symbols)) {
+  if ([owner[@"nativeHold"] boolValue] && QuitProbeSymbolsAvailable(self, &symbols)) {
     ProbeCancelNativeHold(self, tabID, owner, symbols, completion);
     return;
   }
@@ -1777,7 +1806,7 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
   __weak ARCShaarRuntime *weakSelf = self;
   [self shaarDevToolsSubmit:SHAAR_OP_DEVTOOLS_CALL tabID:tabID profileID:profileID
       windowID:windowID
-      payload:ProbeDevToolsPayload(kProbePageHandleJavaScriptDialogCommand, @{@"accept": @NO})
+      payload:ProbeQuitDialogCancellationPayload()
       completion:^(NSDictionary *, NSError *error) {
         ARCShaarRuntime *runtime = weakSelf;
         if (!runtime) {
@@ -1789,7 +1818,8 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
             ownerCurrent, error.localizedDescription));
         ARCCompletePrivateQuitDialogCancellation(ownerCurrent, error.localizedDescription, ^{
           [runtime endPrivateQuitCDPHoldForTabID:tabID owner:owner completion:^(BOOL ended) {
-            completion(ended);
+            if (!ended) NSLog(@"Private quit probe hold cleanup did not settle after dialog cancellation.");
+            completion(YES);
           }];
         }, ^{
           completion(NO);
@@ -1815,7 +1845,14 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
                 completion:^(NSDictionary *reply, NSError *error) {
     ARCShaarRuntime *runtime = weakRuntime;
     NSDictionary *current = runtime ? ProbePopupOwner(runtime, popupID) : nil;
-    if (error || ![current isEqualToDictionary:owner]) {
+    if (error) {
+      NSData *data = [NSJSONSerialization dataWithJSONObject:@{
+        @"probeError": error.localizedDescription ?: @"Engine popup evaluation failed."
+      } options:NSJSONWritingFragmentsAllowed error:nil];
+      completion(data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil);
+      return;
+    }
+    if (![current isEqualToDictionary:owner]) {
       completion(nil);
       return;
     }
@@ -1855,12 +1892,7 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
     completion(NO);
     return;
   }
-  QuitProbeSymbols symbols = {};
-  if (!QuitProbeSymbolsAvailable(&symbols)) {
-    [self submitTrustedProbeClickInTabID:tabID elementID:elementID completion:completion];
-    return;
-  }
-  ProbeActivateElement(self, tabID, elementID, symbols, completion);
+  [self submitTrustedProbeClickInTabID:tabID elementID:elementID completion:completion];
 }
 - (NSDictionary *)privateNavigationProbeAuditForTabID:(NSString *)tabID {
   if (!ProbeCaptureAllowed()) return nil;

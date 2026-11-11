@@ -244,15 +244,14 @@ final class DeviceChooserProbe {
       transport: .usb,
       options: [
         DeviceChooserOption(
-          optionID: "example-option-0", title: "USB serial adapter", detail: "Example vendor"),
+          optionID: "preview-a", title: "USB serial adapter", detail: "Example vendor"),
         DeviceChooserOption(
-          optionID: "example-option-1", title: "Keyboard", detail: "Example vendor"),
+          optionID: "preview-b", title: "Keyboard", detail: "Example vendor"),
       ],
       bluetoothUnavailable: false, canGrant: true)
     do {
       try render(
-        preview, store: context.store, name: "usb-populated.png",
-        selection: "example-option-0")
+        preview, store: context.store, name: "usb-populated.png", selection: "preview-a")
       screenshots.append("usb-populated.png")
     } catch {
       finish(error: "Could not render the populated chooser: \(error)")

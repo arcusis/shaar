@@ -1958,7 +1958,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     @"id": requestID,
     @"action": select ? @"select" : @"cancel",
   } mutableCopy];
-  if (select) payload[@"optionID"] = optionID;
+  if (select) payload[@"optionId"] = optionID;
   [self submitTabID:tabID operation:kShaarDeviceChooserDecision payload:payload];
 }
 

@@ -120,7 +120,7 @@ struct TabSuspensionTests {
     #expect(engine.liveTabs.contains(inactive.id))
   }
 
-  @Test func aFailedCapabilityProbeCanSucceedOnALaterTick() throws {
+  @Test func aFailedCapabilityProbeCanSleepWhenALaterTickIsIdle() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let inactive = BrowserTab(url: URL(string: "https://inactive.example")!)
     let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
@@ -137,9 +137,28 @@ struct TabSuspensionTests {
     runtime.lifecycleCapable = true
     engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
     #expect(engine.sleepingTabs.capability == .capable)
+    #expect(runtime.slept.map(\.0) == [inactive.id.uuidString])
+    #expect(store.sleepingTabIDs == [inactive.id])
+  }
+
+  @Test func anIdleTickDuringCapabilityProbeIsRetriedWithItsNewTimestamp() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let inactive = BrowserTab(url: URL(string: "https://inactive.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = [active.id, inactive.id]
+    engine.sleepingTabs.capability = .unknown
+    runtime.holdLifecycleProbe = true
+
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+    #expect(engine.sleepingTabs.capability == .probing)
     #expect(runtime.slept.isEmpty)
 
-    engine.suspendInactiveTabs(now: start.addingTimeInterval(10 * 60 + 2))
+    runtime.deliverHeldLifecycleProbe()
+
+    #expect(engine.sleepingTabs.capability == .capable)
     #expect(runtime.slept.map(\.0) == [inactive.id.uuidString])
     #expect(store.sleepingTabIDs == [inactive.id])
   }
@@ -387,9 +406,11 @@ private final class SuspensionTestRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var privateWoke: [String] = []
   nonisolated(unsafe) var evaluationResult = "{\"edited\":false}"
   nonisolated(unsafe) var lifecycleCapable = true
+  nonisolated(unsafe) var holdLifecycleProbe = false
   nonisolated(unsafe) var wakeAccepted = true
   nonisolated(unsafe) var holdSleepCompletion = false
   nonisolated(unsafe) var devToolsOpenTabIDs: Set<String> = []
+  nonisolated(unsafe) var heldLifecycleProbe: (@MainActor @Sendable (Bool) -> Void)?
   nonisolated(unsafe) var heldSleep: (@MainActor @Sendable (Bool) -> Void)?
 
   override func evaluate(
@@ -422,7 +443,18 @@ private final class SuspensionTestRuntime: ARCChromiumRuntime {
   override func probeTabLifecycle(
     forTabID tabID: String, completion: @escaping @MainActor @Sendable (Bool) -> Void
   ) {
+    if holdLifecycleProbe {
+      heldLifecycleProbe = completion
+      return
+    }
     finish(lifecycleCapable, completion)
+  }
+
+  func deliverHeldLifecycleProbe(_ capable: Bool = true) {
+    let completion = heldLifecycleProbe
+    heldLifecycleProbe = nil
+    guard let completion else { return }
+    finish(capable, completion)
   }
 
   override func sleepTabID(

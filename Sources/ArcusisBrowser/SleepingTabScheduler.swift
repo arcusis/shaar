@@ -37,6 +37,8 @@ final class SleepingTabScheduler {
   private var audible: [UUID: Bool] = [:]
   private var capturing: [UUID: Bool] = [:]
   private var urgentPending = false
+  private var deferredProbeCandidates: [Candidate]?
+  private var deferredProbeNow: Date?
 
   func forget(_ id: UUID) {
     inactiveSince[id] = nil
@@ -92,26 +94,32 @@ final class SleepingTabScheduler {
     guard let sample = candidates.first(where: \.isLive)?.id else { return }
     switch capability {
     case .unknown:
+      _ = stamped(candidates, now: now, rules: rules)
+      rememberProbeRequest(candidates, now: now)
       capability = .probing
       probe(sample) { [weak self] capable in
         guard let self else { return }
         guard capable else {
           self.capability = .unknown
+          self.clearDeferredProbeRequest()
           return
         }
         self.capability = .capable
+        let deferred = self.takeDeferredProbeRequest(
+          fallbackCandidates: candidates, fallbackNow: now)
         let runUrgent = self.urgentPending
         self.urgentPending = false
         if runUrgent {
           self.consider(
-            candidates, now: now, sleeping: sleeping, urgent: true, probe: probe,
+            deferred.candidates, now: deferred.now, sleeping: sleeping, urgent: true, probe: probe,
             evaluate: evaluate, sleep: sleep, fresh: fresh, onSlept: onSlept)
         }
         self.consider(
-          candidates, now: now, sleeping: sleeping, urgent: false, probe: probe,
+          deferred.candidates, now: deferred.now, sleeping: sleeping, urgent: false, probe: probe,
           evaluate: evaluate, sleep: sleep, fresh: fresh, onSlept: onSlept)
       }
     case .probing:
+      rememberProbeRequest(candidates, now: now)
       return
     case .capable:
       if urgent { urgentPending = false }
@@ -119,6 +127,28 @@ final class SleepingTabScheduler {
         candidates, now: now, sleeping: sleeping, urgent: urgent, rules: rules,
         evaluate: evaluate, sleep: sleep, fresh: fresh, onSlept: onSlept)
     }
+  }
+
+  private func rememberProbeRequest(_ candidates: [Candidate], now: Date) {
+    deferredProbeCandidates = candidates
+    if deferredProbeNow.map({ now > $0 }) ?? true {
+      deferredProbeNow = now
+    }
+  }
+
+  private func takeDeferredProbeRequest(
+    fallbackCandidates: [Candidate], fallbackNow: Date
+  ) -> (candidates: [Candidate], now: Date) {
+    defer { clearDeferredProbeRequest() }
+    return (
+      deferredProbeCandidates ?? fallbackCandidates,
+      deferredProbeNow ?? fallbackNow
+    )
+  }
+
+  private func clearDeferredProbeRequest() {
+    deferredProbeCandidates = nil
+    deferredProbeNow = nil
   }
 
   private func requestSleep(

@@ -93,6 +93,9 @@ import Foundation
           continuation.resume(returning: value)
         }
       }
+      let backgroundCandidate = context.engine.sleepingCandidates(in: context.store).first {
+        $0.id == background
+      }
       let before = context.store.session.spaces.flatMap(\.tabs).map(\.id)
       let now = Date()
       context.engine.suspendInactiveTabs(now: now)
@@ -102,23 +105,43 @@ import Foundation
       let stillListed = after.contains(background)
       let stillLive = context.engine.liveTabs.contains(background)
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
+      context.engine.wakeIfSleeping(background)
+      let awake = await wait { !context.store.sleepingTabIDs.contains(background) }
+      let awakeLive = context.engine.liveTabs.contains(background)
       let rendererFailures = context.store.rendererFailures.count
       let passed =
-        capable && sleeping && stillListed && stillLive && hidden
-        && before.contains(background) && rendererFailures == 0
+        capable && sleeping && stillListed && stillLive && awake && awakeLive
+        && hidden && before.contains(background) && rendererFailures == 0
       payload = [
         "passed": passed,
         "capable": capable,
         "backgroundStillListed": stillListed,
         "backgroundStillLive": stillLive,
         "sleeping": sleeping,
+        "awakeAfterWake": awake && awakeLive,
         "tabCount": after.count,
         "allWindowsHidden": hidden,
         "rendererFailures": rendererFailures,
+        "schedulerCapability": capabilityName(context.engine.sleepingTabs.capability),
+        "backgroundCandidateLive": backgroundCandidate?.isLive ?? false,
+        "backgroundCandidateVisible": backgroundCandidate?.isVisible ?? false,
+        "backgroundCandidatePinned": backgroundCandidate?.isPinned ?? false,
+        "backgroundCandidateKeepAlive": backgroundCandidate?.keepAlive ?? false,
+        "backgroundCandidatePrivateActive": backgroundCandidate?.isPrivateActive ?? false,
+        "backgroundCandidatePlaying": backgroundCandidate?.isPlaying ?? false,
+        "backgroundCandidateCapturing": backgroundCandidate?.isCapturing ?? false,
+        "backgroundCandidateHasInspector": backgroundCandidate?.hasInspector ?? false,
+        "backgroundCandidateHasDeveloperTools": backgroundCandidate?.hasDeveloperTools ?? false,
+        "backgroundCandidateHasDeveloperModel": context.engine.developerModels[background] != nil,
+        "backgroundCandidateHasDeveloperToolsView": runtime.devToolsView(
+          forTabID: background.uuidString) != nil,
+        "backgroundCandidateProfileIsDownloading": backgroundCandidate?.profileIsDownloading
+          ?? false,
       ]
       if let error = probeFailure(
-        capable: capable, sleeping: sleeping, stillListed: stillListed, stillLive: stillLive,
-        hidden: hidden, wasOpen: before.contains(background), rendererFailures: rendererFailures)
+        capable: capable, sleeping: sleeping, awake: awake && awakeLive,
+        stillListed: stillListed, stillLive: stillLive, hidden: hidden,
+        wasOpen: before.contains(background), rendererFailures: rendererFailures)
       {
         payload["error"] = error
       }
@@ -128,17 +151,26 @@ import Foundation
   }
 
   private static func probeFailure(
-    capable: Bool, sleeping: Bool, stillListed: Bool, stillLive: Bool, hidden: Bool,
+    capable: Bool, sleeping: Bool, awake: Bool, stillListed: Bool, stillLive: Bool, hidden: Bool,
     wasOpen: Bool, rendererFailures: Int
   ) -> String? {
     if !capable { return "The engine cannot discard this tab" }
     if !sleeping { return "The background tab stayed awake" }
+    if !awake { return "The background tab did not wake" }
     if !stillListed { return "The background tab left the window" }
     if !stillLive { return "The background tab is no longer live" }
     if !hidden { return "A window became visible" }
     if !wasOpen { return "The background tab was not open before sleep" }
     if rendererFailures != 0 { return "The renderer failed" }
     return nil
+  }
+
+  private static func capabilityName(_ capability: SleepingTabScheduler.Capability) -> String {
+    switch capability {
+    case .unknown: return "unknown"
+    case .probing: return "probing"
+    case .capable: return "capable"
+    }
   }
 
   private static func wait(_ condition: () -> Bool) async -> Bool {

@@ -100,8 +100,7 @@ extension BrowserEngine {
       isCapturing: { self.mediaAccess[$0]?.isCapturing == true },
       hasInspector: { self.inspectors[$0] != nil },
       hasDeveloperTools: {
-        self.developerModels[$0] != nil
-          || self.runtime.devToolsView(forTabID: $0.uuidString) != nil
+        self.runtime.devToolsView(forTabID: $0.uuidString) != nil
       },
       profileIsDownloading: { id in
         store.session.profileID(forTabID: id).map { profile in

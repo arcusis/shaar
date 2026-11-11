@@ -160,6 +160,31 @@ std::optional<std::string> OpenPopup(shaar_engine* engine,
   return popup_id;
 }
 
+content::WebContents* ProbePopupContents(shaar_engine* engine,
+                                         shaar_profile* profile,
+                                         shaar_window* window,
+                                         shaar_tab* tab,
+                                         std::string_view popup_id) {
+  if (!engine || !profile || !window || !tab || popup_id.empty())
+    return nullptr;
+  auto entry = Popups().find(std::string(popup_id));
+  if (entry == Popups().end())
+    return nullptr;
+  PopupHost& host = entry->second;
+  if (host.engine != engine || host.profile != profile ||
+      host.window != window || host.owner_tab != tab ||
+      shaar::windows_tabs::Registry().FindTabWindow(tab) != window)
+    return nullptr;
+  content::WebContents* contents = host.host ? host.host->host_contents() : nullptr;
+  if (!contents || !host.browser ||
+      contents->GetBrowserContext() != host.browser->GetProfile())
+    return nullptr;
+  NSView* view = contents->GetNativeView().GetNativeNSView();
+  if (!view || !view.window || view.window.isVisible)
+    return nullptr;
+  return contents;
+}
+
 bool ClosePopup(shaar_engine* engine,
                 shaar_profile* profile,
                 std::string_view popup_id) {

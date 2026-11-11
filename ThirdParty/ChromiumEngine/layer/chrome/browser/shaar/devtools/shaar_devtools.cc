@@ -7,6 +7,7 @@
 #include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
 #include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
 #include "chrome/browser/devtools/devtools_settings.h"
+#include "chrome/browser/shaar/extensions/shaar_extensions.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
 #include <stddef.h>
@@ -33,6 +34,7 @@
 #include "base/containers/span.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
@@ -59,6 +61,7 @@
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "content/public/browser/visibility.h"
+#include "content/public/common/isolated_world_ids.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
@@ -217,6 +220,8 @@ constexpr CommandEntry kCommands[] = {
      true},
     {SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE,
      "Emulation.setSafeAreaInsetsOverride", false, true},
+    {SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG,
+     "Page.handleJavaScriptDialog", false, true},
 };
 
 struct ReplyContext {
@@ -387,8 +392,11 @@ void DispatchTrustedClick(content::RenderWidgetHost* widget, int x, int y) {
 class ProbeTrustedClick final
     : public base::RefCountedThreadSafe<ProbeTrustedClick> {
  public:
-  ProbeTrustedClick(ReplyContext reply, int x, int y)
-      : reply_(reply), x_(x), y_(y) {}
+  ProbeTrustedClick(ReplyContext reply,
+                    int x,
+                    int y,
+                    std::string element_id)
+      : reply_(reply), x_(x), y_(y), element_id_(std::move(element_id)) {}
 
   void Start(content::WebContents* contents) {
     contents_ = contents->GetWeakPtr();
@@ -437,12 +445,55 @@ class ProbeTrustedClick final
   void OnFrame(const gfx::Image&) {
     if (finished_)
       return;
+    auto* contents = contents_.get();
+    if (!contents || !Activate()) {
+      Fail();
+      return;
+    }
+    if (element_id_.empty()) {
+      Dispatch(x_, y_);
+      return;
+    }
+    auto* frame = contents->GetPrimaryMainFrame();
+    if (!frame) {
+      Fail();
+      return;
+    }
+    const std::string script =
+        "(()=>{const e=document.getElementById('" + element_id_ +
+        "');if(!e)return null;const r=e.getBoundingClientRect();return "
+        "{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()";
+    frame->ExecuteJavaScriptForTests(
+        base::UTF8ToUTF16(script),
+        base::BindOnce(&ProbeTrustedClick::OnElementPoint,
+                       base::WrapRefCounted(this)),
+        content::ISOLATED_WORLD_ID_GLOBAL);
+  }
+
+  void OnElementPoint(base::Value result) {
+    if (finished_)
+      return;
+    const base::DictValue* point = result.GetIfDict();
+    const std::optional<int> x = point ? point->FindInt("x") : std::nullopt;
+    const std::optional<int> y = point ? point->FindInt("y") : std::nullopt;
+    auto* contents = contents_.get();
+    auto* view = contents ? contents->GetRenderWidgetHostView() : nullptr;
+    if (!x || !y || *x < 0 || *y < 0 || !view ||
+        *x >= view->GetViewBounds().width() ||
+        *y >= view->GetViewBounds().height() || !Activate()) {
+      Fail();
+      return;
+    }
+    Dispatch(*x, *y);
+  }
+
+  void Dispatch(int x, int y) {
     auto* widget = Activate();
     if (!widget) {
       Fail();
       return;
     }
-    DispatchTrustedClick(widget, x_, y_);
+    DispatchTrustedClick(widget, x, y);
     finished_ = true;
     timer_.Stop();
     Reply(reply_, SHAAR_OK, R"({"schemaVersion":1,"submitted":true})");
@@ -469,6 +520,7 @@ class ProbeTrustedClick final
   ReplyContext reply_;
   int x_;
   int y_;
+  std::string element_id_;
   base::WeakPtr<content::WebContents> contents_;
   base::ScopedClosureRunner capturer_;
   base::OneShotTimer timer_;
@@ -610,6 +662,8 @@ bool ValidateParams(shaar_devtools_command command,
           "runImmediately", "worldContextId"});
     case SHAAR_DEVTOOLS_PAGE_REMOVE_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT:
       return ParamsHaveOnly(params, {"identifier"});
+    case SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG:
+      return ParamsHaveOnly(params, {"accept", "promptText"});
     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
       return ParamsHaveOnly(params, {"urls"});
     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
@@ -712,6 +766,8 @@ bool HasRequiredFields(shaar_devtools_command command,
       return HasRequiredString(params, "source");
     case SHAAR_DEVTOOLS_PAGE_REMOVE_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT:
       return HasRequiredString(params, "identifier");
+    case SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG:
+      return HasRequiredBoolean(params, "accept");
     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
       return !params.Find("urls") || params.FindList("urls") != nullptr;
     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
@@ -963,7 +1019,9 @@ shaar_error_code DecodeOperation(shaar_operation operation,
   if (operation != SHAAR_OP_DEVTOOLS_CALL ||
       !(ExactKeys(root, {"schemaVersion", "capability", "command", "params"}) ||
         ExactKeys(root, {"schemaVersion", "capability", "command", "params",
-                         "probeVisibleForRenderer"})) ||
+                         "probeVisibleForRenderer"}) ||
+        ExactKeys(root, {"schemaVersion", "capability", "command", "params",
+                         "probeQuitDialogCancellation"})) ||
       root.FindInt("schemaVersion") != 1 ||
       !root.FindInt("capability") || !root.FindInt("command") ||
       !root.FindDict("params")) {
@@ -972,7 +1030,7 @@ shaar_error_code DecodeOperation(shaar_operation operation,
   }
   const int cap = *root.FindInt("capability");
   const int id = *root.FindInt("command");
-  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 44) {
+  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 45) {
     *reason = "unknown DevTools capability or command";
     return SHAAR_INVALID_ARGUMENT;
   }
@@ -981,6 +1039,22 @@ shaar_error_code DecodeOperation(shaar_operation operation,
   if (!ProtocolMethod(*capability, *command)) {
     *reason = "DevTools command is not allowed for this capability";
     return SHAAR_UNSUPPORTED_CAPABILITY;
+  }
+  if (id == SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG ||
+      root.contains("probeQuitDialogCancellation")) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    if (!testing || std::strcmp(testing, "1") != 0) {
+      *reason = "quit dialog cancellation probe requires testing mode";
+      return SHAAR_POLICY_BLOCKED;
+    }
+    if (id != SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG ||
+        cap != kDeveloper ||
+        root.FindBool("probeQuitDialogCancellation") != true ||
+        root.FindDict("params")->size() != 1 ||
+        root.FindDict("params")->FindBool("accept") != false) {
+      *reason = "invalid quit dialog cancellation probe";
+      return SHAAR_INVALID_ARGUMENT;
+    }
   }
   if (!ValidateParams(*command, *root.FindDict("params"))) {
     *reason = "DevTools command parameters are invalid";
@@ -1010,9 +1084,44 @@ shaar_error_code DecodeOperation(shaar_operation operation,
 
 }  // namespace
 
+namespace {
+
+struct ProbeCaptureLeaseRegistry {
+  uint64_t next_id = 1;
+  std::map<uint64_t, base::WeakPtr<content::WebContents>> leases;
+};
+
+ProbeCaptureLeaseRegistry& GetProbeCaptureLeaseRegistry() {
+  static base::NoDestructor<ProbeCaptureLeaseRegistry> registry;
+  return *registry;
+}
+
+std::optional<uint64_t> RegisterProbeCaptureLease(
+    content::WebContents* contents) {
+  auto& registry = GetProbeCaptureLeaseRegistry();
+  for (auto it = registry.leases.begin(); it != registry.leases.end();) {
+    if (!it->second)
+      it = registry.leases.erase(it);
+    else {
+      if (it->second.get() == contents)
+        return std::nullopt;
+      ++it;
+    }
+  }
+  const uint64_t lease_id = registry.next_id++;
+  registry.leases.emplace(lease_id, contents->GetWeakPtr());
+  return lease_id;
+}
+
+void ReleaseProbeCaptureLease(uint64_t lease_id) {
+  GetProbeCaptureLeaseRegistry().leases.erase(lease_id);
+}
+
+}  // namespace
+
 base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents) {
-  static base::NoDestructor<std::set<content::WebContents*>> leased;
-  if (!leased->insert(contents).second)
+  auto lease_id = RegisterProbeCaptureLease(contents);
+  if (!lease_id)
     return {};
   const content::Visibility original_visibility = contents->GetVisibility();
   auto weak_contents = contents->GetWeakPtr();
@@ -1024,7 +1133,7 @@ base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents
   if (weak_contents)
     weak_contents->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
   return base::ScopedClosureRunner(base::BindOnce(
-      [](std::set<content::WebContents*>* leased, content::WebContents* key,
+      [](uint64_t lease_id,
          base::WeakPtr<content::WebContents> weak_contents,
          content::Visibility visibility,
          base::ScopedClosureRunner capturer) {
@@ -1032,9 +1141,9 @@ base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents
             weak_contents->GetVisibility() == content::Visibility::VISIBLE)
           weak_contents->UpdateWebContentsVisibility(visibility);
         capturer.RunAndReset();
-        leased->erase(key);
+        ReleaseProbeCaptureLease(lease_id);
       },
-      leased.get(), contents, std::move(weak_contents), original_visibility,
+      *lease_id, std::move(weak_contents), original_visibility,
       std::move(capturer)));
 }
 
@@ -1259,22 +1368,45 @@ scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
   return IsProtocolPageTargetFor(contents, host.get()) ? host : nullptr;
 }
 
-bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y) {
-  if (!x || !y || !args_json.data || args_json.size > 128)
+bool ParseProbeClickArguments(shaar_bytes args_json,
+                              int* x,
+                              int* y,
+                              std::string* element_id) {
+  if (!x || !y || !element_id || !args_json.data || args_json.size == 0 ||
+      args_json.size > 256)
     return false;
   auto value = base::JSONReader::Read(
       std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
   if (!value || !value->is_dict() ||
-      !ExactKeys(value->GetDict(), {"schemaVersion", "x", "y"}) ||
       value->GetDict().FindInt("schemaVersion") != 1)
     return false;
-  auto point_x = value->GetDict().FindInt("x");
-  auto point_y = value->GetDict().FindInt("y");
+  const auto& dict = value->GetDict();
+  const std::string* requested_element = dict.FindString("elementID");
+  if (requested_element && ExactKeys(dict, {"schemaVersion", "elementID"})) {
+    if (requested_element->empty() || requested_element->size() > 128)
+      return false;
+    for (const char character : *requested_element) {
+      if (!((character >= 'a' && character <= 'z') ||
+            (character >= 'A' && character <= 'Z') ||
+            (character >= '0' && character <= '9') || character == '_' ||
+            character == '-'))
+        return false;
+    }
+    *x = 0;
+    *y = 0;
+    *element_id = *requested_element;
+    return true;
+  }
+  if (!ExactKeys(dict, {"schemaVersion", "x", "y"}))
+    return false;
+  auto point_x = dict.FindInt("x");
+  auto point_y = dict.FindInt("y");
   if (!point_x || !point_y || *point_x < 0 || *point_y < 0 ||
       *point_x >= 8192 || *point_y >= 8192)
     return false;
   *x = *point_x;
   *y = *point_y;
+  element_id->clear();
   return true;
 }
 
@@ -1291,6 +1423,41 @@ bool ParseNodeProbePort(shaar_bytes args_json, int* port) {
   if (!value_port || *value_port < 1 || *value_port > 65535)
     return false;
   *port = *value_port;
+  return true;
+}
+
+bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
+                              std::string* popup_id, std::string* expression) {
+  if (!popup_id || (evaluate && !expression) || !args_json.data ||
+      args_json.size == 0 || args_json.size > 16384)
+    return false;
+  auto value = base::JSONReader::Read(
+      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+  if (!value || !value->is_dict() ||
+      value->GetDict().FindInt("schemaVersion") != 1)
+    return false;
+  const auto& dict = value->GetDict();
+  if (evaluate ? !ExactKeys(dict, {"schemaVersion", "popupId", "expression"})
+               : !ExactKeys(dict, {"schemaVersion", "popupId"}))
+    return false;
+  const std::string* id = dict.FindString("popupId");
+  if (!id || id->size() != 36)
+    return false;
+  for (size_t i = 0; i < id->size(); ++i) {
+    const char c = (*id)[i];
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      if (c != '-') return false;
+    } else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+      return false;
+    }
+  }
+  *popup_id = *id;
+  if (!evaluate)
+    return true;
+  const std::string* script = dict.FindString("expression");
+  if (!script || script->empty() || script->size() > 8192)
+    return false;
+  *expression = *script;
   return true;
 }
 
@@ -1424,23 +1591,74 @@ shaar_error_code HandleDevToolsOperation(
       return Fail(error, SHAAR_POLICY_BLOCKED, "trusted click probe is unavailable");
     int x = 0;
     int y = 0;
-    if (!ParseProbeClickArguments(args_json, &x, &y))
+    std::string element_id;
+    if (!ParseProbeClickArguments(args_json, &x, &y, &element_id))
       return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid trusted click point");
     auto* view = contents->GetRenderWidgetHostView();
     if (!view || !view->GetRenderWidgetHost() ||
-        x >= view->GetViewBounds().width() || y >= view->GetViewBounds().height())
+        (element_id.empty() &&
+         (x >= view->GetViewBounds().width() || y >= view->GetViewBounds().height())))
       return Fail(error, SHAAR_NOT_READY, "trusted click viewport unavailable");
     base::MakeRefCounted<ProbeTrustedClick>(
-        ReplyContext{request_id, reply, reply_context}, x, y)
+        ReplyContext{request_id, reply, reply_context}, x, y,
+        std::move(element_id))
         ->Start(contents);
+    return SHAAR_OK;
+  }
+  if (operation == SHAAR_OP_PROBE_POPUP_EVALUATE ||
+      operation == SHAAR_OP_PROBE_POPUP_CAPTURE) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    const bool selected = context->browser_tabs->IsSelectedWebContents(
+        engine, window, tab, contents);
+    const bool evaluate = operation == SHAAR_OP_PROBE_POPUP_EVALUATE;
+    if (!ProbeWindowAllowed(testing && std::strcmp(testing, "1") == 0,
+                            shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
+                            shaar::windows_tabs::HasNeverShownPageHost(window, contents),
+                            contents->GetLastCommittedURL()) || !scope.profile ||
+        scope.private_session)
+      return Fail(error, SHAAR_POLICY_BLOCKED, "popup probe is unavailable");
+    if (request_id > static_cast<uint64_t>(INT_MAX))
+      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid popup probe request");
+    std::string popup_id;
+    std::string expression;
+    if (!ParseProbePopupArguments(args_json, evaluate, &popup_id,
+                                  evaluate ? &expression : nullptr))
+      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid popup probe arguments");
+    content::WebContents* popup = shaar::extensions_host::ProbePopupContents(
+        engine, scope.profile, window, tab, popup_id);
+    if (!popup)
+      return Fail(error, SHAAR_NOT_FOUND, "popup probe target is unavailable");
+    if (!evaluate) {
+      base::MakeRefCounted<ProbeCaptureRequest>(
+          ReplyContext{request_id, reply, reply_context})->Start(popup);
+      return SHAAR_OK;
+    }
+    auto* frame = popup->GetPrimaryMainFrame();
+    if (!frame)
+      return Fail(error, SHAAR_NOT_READY, "popup probe frame is unavailable");
+    base::DictValue params;
+    params.Set("expression", expression);
+    params.Set("returnByValue", true);
+    base::DictValue protocol;
+    protocol.Set("id", static_cast<int>(request_id));
+    protocol.Set("method", "Runtime.evaluate");
+    protocol.Set("params", std::move(params));
+    std::string request_json;
+    if (!base::JSONWriter::Write(base::Value(std::move(protocol)), &request_json))
+      return Fail(error, SHAAR_CHROMIUM_ERROR, "could not serialize popup probe");
+    if (!StartProtocolRequest(ProtocolAgentHostFor(popup), request_id, reply,
+                              reply_context, request_json,
+                              frame->GetDevToolsFrameToken().ToString(), {}))
+      return Fail(error, SHAAR_NOT_READY, "popup probe attach was denied");
     return SHAAR_OK;
   }
   if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
       operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
-    if (!testing || std::strcmp(testing, "1") != 0)
+    if (!testing || std::strcmp(testing, "1") != 0 ||
+        !shaar::lifecycle::HasOwnedProbeRoot(engine))
       return Fail(error, SHAAR_POLICY_BLOCKED,
-                  "DevTools route probe requires testing mode");
+                  "DevTools route probe requires testing mode and owned probe root");
     if (!context->browser_tabs->IsSelectedWebContents(engine, window, tab,
                                                         contents))
       return Fail(error, SHAAR_NOT_READY,
@@ -1528,9 +1746,10 @@ shaar_error_code HandleDevToolsOperation(
   if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
       operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
-    if (!testing || std::strcmp(testing, "1") != 0)
+    if (!testing || std::strcmp(testing, "1") != 0 ||
+        !shaar::lifecycle::HasOwnedProbeRoot(engine))
       return Fail(error, SHAAR_POLICY_BLOCKED,
-                  "DevTools route probe requires testing mode");
+                  "DevTools route probe requires testing mode and owned probe root");
     if (!context->browser_tabs->IsSelectedWebContents(engine, window, tab,
                                                         contents))
       return Fail(error, SHAAR_NOT_READY,
@@ -1583,8 +1802,10 @@ shaar_error_code HandleDevToolsOperation(
     if (!HasEmptyVersionedSchema(args_json))
       return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid capture probe schema");
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
-    if (!testing || std::strcmp(testing, "1") != 0)
-      return Fail(error, SHAAR_POLICY_BLOCKED, "capture probe requires testing mode");
+    if (!testing || std::strcmp(testing, "1") != 0 ||
+        !shaar::lifecycle::HasOwnedProbeRoot(engine))
+      return Fail(error, SHAAR_POLICY_BLOCKED,
+                  "capture probe requires testing mode and owned probe root");
     if (!context->browser_tabs->IsSelectedWebContents(engine, window, tab,
                                                         contents))
       return Fail(error, SHAAR_NOT_READY, "capture probe requires selected tab");
@@ -1596,6 +1817,17 @@ shaar_error_code HandleDevToolsOperation(
   int capability = 0;
   shaar_devtools_command parsed_command = SHAAR_DEVTOOLS_RUNTIME_EVALUATE;
   if (operation == SHAAR_OP_DEVTOOLS_CALL) {
+    auto envelope = args_json.data
+        ? base::JSONReader::Read(std::string_view(args_json.data, args_json.size),
+                                 base::JSON_PARSE_RFC)
+        : std::nullopt;
+    const base::DictValue* root = envelope && envelope->is_dict()
+                                      ? &envelope->GetDict() : nullptr;
+    if (root && (root->contains("probeQuitDialogCancellation") ||
+                 root->contains("probeVisibleForRenderer")) &&
+        !shaar::lifecycle::HasOwnedProbeRoot(engine))
+      return Fail(error, SHAAR_POLICY_BLOCKED,
+                  "DevTools test command requires an owned probe root");
     shaar_devtools_capability parsed_capability;
     base::DictValue params;
     std::string reason;

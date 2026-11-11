@@ -1,0 +1,300 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+index c90bcf7e..f109d4a8 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -34,6 +34,7 @@
+ #include "base/containers/span.h"
+ #include "base/json/json_reader.h"
+ #include "base/json/json_writer.h"
++#include "base/strings/utf_string_conversions.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/no_destructor.h"
+ #include "base/task/sequenced_task_runner.h"
+@@ -60,6 +61,7 @@
+ #include "third_party/blink/public/common/input/web_mouse_event.h"
+ #include "ui/gfx/geometry/point_f.h"
+ #include "content/public/browser/visibility.h"
++#include "content/public/common/isolated_world_ids.h"
+ #include "ui/gfx/codec/png_codec.h"
+ #include "ui/gfx/geometry/size.h"
+ #include "ui/gfx/image/image.h"
+@@ -390,8 +392,11 @@ void DispatchTrustedClick(content::RenderWidgetHost* widget, int x, int y) {
+ class ProbeTrustedClick final
+     : public base::RefCountedThreadSafe<ProbeTrustedClick> {
+  public:
+-  ProbeTrustedClick(ReplyContext reply, int x, int y)
+-      : reply_(reply), x_(x), y_(y) {}
++  ProbeTrustedClick(ReplyContext reply,
++                    int x,
++                    int y,
++                    std::string element_id)
++      : reply_(reply), x_(x), y_(y), element_id_(std::move(element_id)) {}
+ 
+   void Start(content::WebContents* contents) {
+     contents_ = contents->GetWeakPtr();
+@@ -440,12 +445,55 @@ class ProbeTrustedClick final
+   void OnFrame(const gfx::Image&) {
+     if (finished_)
+       return;
++    auto* contents = contents_.get();
++    if (!contents || !Activate()) {
++      Fail();
++      return;
++    }
++    if (element_id_.empty()) {
++      Dispatch(x_, y_);
++      return;
++    }
++    auto* frame = contents->GetPrimaryMainFrame();
++    if (!frame) {
++      Fail();
++      return;
++    }
++    const std::string script =
++        "(()=>{const e=document.getElementById('" + element_id_ +
++        "');if(!e)return null;const r=e.getBoundingClientRect();return "
++        "{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()";
++    frame->ExecuteJavaScriptForTests(
++        base::UTF8ToUTF16(script),
++        base::BindOnce(&ProbeTrustedClick::OnElementPoint,
++                       base::WrapRefCounted(this)),
++        content::ISOLATED_WORLD_ID_GLOBAL);
++  }
++
++  void OnElementPoint(base::Value result) {
++    if (finished_)
++      return;
++    const base::DictValue* point = result.GetIfDict();
++    const std::optional<int> x = point ? point->FindInt("x") : std::nullopt;
++    const std::optional<int> y = point ? point->FindInt("y") : std::nullopt;
++    auto* contents = contents_.get();
++    auto* view = contents ? contents->GetRenderWidgetHostView() : nullptr;
++    if (!x || !y || *x < 0 || *y < 0 || !view ||
++        *x >= view->GetViewBounds().width() ||
++        *y >= view->GetViewBounds().height() || !Activate()) {
++      Fail();
++      return;
++    }
++    Dispatch(*x, *y);
++  }
++
++  void Dispatch(int x, int y) {
+     auto* widget = Activate();
+     if (!widget) {
+       Fail();
+       return;
+     }
+-    DispatchTrustedClick(widget, x_, y_);
++    DispatchTrustedClick(widget, x, y);
+     finished_ = true;
+     timer_.Stop();
+     Reply(reply_, SHAAR_OK, R"({"schemaVersion":1,"submitted":true})");
+@@ -472,6 +520,7 @@ class ProbeTrustedClick final
+   ReplyContext reply_;
+   int x_;
+   int y_;
++  std::string element_id_;
+   base::WeakPtr<content::WebContents> contents_;
+   base::ScopedClosureRunner capturer_;
+   base::OneShotTimer timer_;
+@@ -1035,9 +1084,44 @@ shaar_error_code DecodeOperation(shaar_operation operation,
+ 
+ }  // namespace
+ 
++namespace {
++
++struct ProbeCaptureLeaseRegistry {
++  uint64_t next_id = 1;
++  std::map<uint64_t, base::WeakPtr<content::WebContents>> leases;
++};
++
++ProbeCaptureLeaseRegistry& GetProbeCaptureLeaseRegistry() {
++  static base::NoDestructor<ProbeCaptureLeaseRegistry> registry;
++  return *registry;
++}
++
++std::optional<uint64_t> RegisterProbeCaptureLease(
++    content::WebContents* contents) {
++  auto& registry = GetProbeCaptureLeaseRegistry();
++  for (auto it = registry.leases.begin(); it != registry.leases.end();) {
++    if (!it->second)
++      it = registry.leases.erase(it);
++    else {
++      if (it->second.get() == contents)
++        return std::nullopt;
++      ++it;
++    }
++  }
++  const uint64_t lease_id = registry.next_id++;
++  registry.leases.emplace(lease_id, contents->GetWeakPtr());
++  return lease_id;
++}
++
++void ReleaseProbeCaptureLease(uint64_t lease_id) {
++  GetProbeCaptureLeaseRegistry().leases.erase(lease_id);
++}
++
++}  // namespace
++
+ base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents) {
+-  static base::NoDestructor<std::set<content::WebContents*>> leased;
+-  if (!leased->insert(contents).second)
++  auto lease_id = RegisterProbeCaptureLease(contents);
++  if (!lease_id)
+     return {};
+   const content::Visibility original_visibility = contents->GetVisibility();
+   auto weak_contents = contents->GetWeakPtr();
+@@ -1049,7 +1133,7 @@ base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents
+   if (weak_contents)
+     weak_contents->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
+   return base::ScopedClosureRunner(base::BindOnce(
+-      [](std::set<content::WebContents*>* leased, content::WebContents* key,
++      [](uint64_t lease_id,
+          base::WeakPtr<content::WebContents> weak_contents,
+          content::Visibility visibility,
+          base::ScopedClosureRunner capturer) {
+@@ -1057,9 +1141,9 @@ base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents
+             weak_contents->GetVisibility() == content::Visibility::VISIBLE)
+           weak_contents->UpdateWebContentsVisibility(visibility);
+         capturer.RunAndReset();
+-        leased->erase(key);
++        ReleaseProbeCaptureLease(lease_id);
+       },
+-      leased.get(), contents, std::move(weak_contents), original_visibility,
++      *lease_id, std::move(weak_contents), original_visibility,
+       std::move(capturer)));
+ }
+ 
+@@ -1284,22 +1368,45 @@ scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
+   return IsProtocolPageTargetFor(contents, host.get()) ? host : nullptr;
+ }
+ 
+-bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y) {
+-  if (!x || !y || !args_json.data || args_json.size > 128)
++bool ParseProbeClickArguments(shaar_bytes args_json,
++                              int* x,
++                              int* y,
++                              std::string* element_id) {
++  if (!x || !y || !element_id || !args_json.data || args_json.size == 0 ||
++      args_json.size > 256)
+     return false;
+   auto value = base::JSONReader::Read(
+       std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+   if (!value || !value->is_dict() ||
+-      !ExactKeys(value->GetDict(), {"schemaVersion", "x", "y"}) ||
+       value->GetDict().FindInt("schemaVersion") != 1)
+     return false;
+-  auto point_x = value->GetDict().FindInt("x");
+-  auto point_y = value->GetDict().FindInt("y");
++  const auto& dict = value->GetDict();
++  const std::string* requested_element = dict.FindString("elementID");
++  if (requested_element && ExactKeys(dict, {"schemaVersion", "elementID"})) {
++    if (requested_element->empty() || requested_element->size() > 128)
++      return false;
++    for (const char character : *requested_element) {
++      if (!((character >= 'a' && character <= 'z') ||
++            (character >= 'A' && character <= 'Z') ||
++            (character >= '0' && character <= '9') || character == '_' ||
++            character == '-'))
++        return false;
++    }
++    *x = 0;
++    *y = 0;
++    *element_id = *requested_element;
++    return true;
++  }
++  if (!ExactKeys(dict, {"schemaVersion", "x", "y"}))
++    return false;
++  auto point_x = dict.FindInt("x");
++  auto point_y = dict.FindInt("y");
+   if (!point_x || !point_y || *point_x < 0 || *point_y < 0 ||
+       *point_x >= 8192 || *point_y >= 8192)
+     return false;
+   *x = *point_x;
+   *y = *point_y;
++  element_id->clear();
+   return true;
+ }
+ 
+@@ -1484,14 +1591,17 @@ shaar_error_code HandleDevToolsOperation(
+       return Fail(error, SHAAR_POLICY_BLOCKED, "trusted click probe is unavailable");
+     int x = 0;
+     int y = 0;
+-    if (!ParseProbeClickArguments(args_json, &x, &y))
++    std::string element_id;
++    if (!ParseProbeClickArguments(args_json, &x, &y, &element_id))
+       return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid trusted click point");
+     auto* view = contents->GetRenderWidgetHostView();
+     if (!view || !view->GetRenderWidgetHost() ||
+-        x >= view->GetViewBounds().width() || y >= view->GetViewBounds().height())
++        (element_id.empty() &&
++         (x >= view->GetViewBounds().width() || y >= view->GetViewBounds().height())))
+       return Fail(error, SHAAR_NOT_READY, "trusted click viewport unavailable");
+     base::MakeRefCounted<ProbeTrustedClick>(
+-        ReplyContext{request_id, reply, reply_context}, x, y)
++        ReplyContext{request_id, reply, reply_context}, x, y,
++        std::move(element_id))
+         ->Start(contents);
+     return SHAAR_OK;
+   }
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.h b/chrome/browser/shaar/devtools/shaar_devtools.h
+index 1daad957..51a6a1ee 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools.h
+@@ -61,8 +61,11 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
+                            content::WebContents* contents,
+                            shaar_operation operation,
+                            int capability);
+-// Strict testing-only click schema and policy. Coordinates are viewport pixels.
+-bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y);
++// Strict testing-only click schema and policy. Selectors are fixture element IDs.
++bool ParseProbeClickArguments(shaar_bytes args_json,
++                              int* x,
++                              int* y,
++                              std::string* element_id);
+ bool ParseNodeProbePort(shaar_bytes args_json, int* port);
+ bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
+                               std::string* popup_id, std::string* expression);
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+index 3610c10e..a2e29de4 100644
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -87,17 +87,26 @@ shaar_bytes Bytes(const std::string& value) {
+ TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
+   int x = -1;
+   int y = -1;
++  std::string element_id;
+   EXPECT_TRUE(ParseProbeClickArguments(
+-      Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &x, &y));
++      Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &x, &y,
++      &element_id));
+   EXPECT_EQ(20, x);
+   EXPECT_EQ(30, y);
++  EXPECT_TRUE(element_id.empty());
++  EXPECT_TRUE(ParseProbeClickArguments(
++      Bytes(R"({"schemaVersion":1,"elementID":"parity-action"})"), &x,
++      &y, &element_id));
++  EXPECT_EQ("parity-action", element_id);
+   for (const std::string invalid : {
+            R"({"schemaVersion":1,"x":-1,"y":2})",
+            R"({"schemaVersion":1,"x":20,"y":8192})",
+            R"({"schemaVersion":1,"x":20.5,"y":2})",
+            R"({"schemaVersion":1,"x":20,"y":2,"method":"open"})",
+-           R"({"schemaVersion":2,"x":20,"y":2})"}) {
+-    EXPECT_FALSE(ParseProbeClickArguments(Bytes(invalid), &x, &y));
++           R"({"schemaVersion":2,"x":20,"y":2})",
++           "{\"schemaVersion\":1,\"elementID\":\"bad';alert(1)\"}"}) {
++    EXPECT_FALSE(ParseProbeClickArguments(Bytes(invalid), &x, &y,
++                                          &element_id));
+   }
+   int port = 0;
+   EXPECT_TRUE(ParseNodeProbePort(
+@@ -131,7 +140,7 @@ TEST(ShaarDevToolsTest, PopupProbeArgumentsStayBoundToOneHiddenPopup) {
+   EXPECT_EQ(popup, id);
+   EXPECT_EQ("window.probeState", expression);
+   EXPECT_TRUE(ParseProbePopupArguments(
+-      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup + "}"),
++      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup + "\"}"),
+       false, &id, nullptr));
+   EXPECT_FALSE(ParseProbePopupArguments(
+       Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup +

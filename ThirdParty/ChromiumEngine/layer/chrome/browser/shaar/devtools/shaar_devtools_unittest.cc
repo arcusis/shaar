@@ -87,17 +87,26 @@ shaar_bytes Bytes(const std::string& value) {
 TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
   int x = -1;
   int y = -1;
+  std::string element_id;
   EXPECT_TRUE(ParseProbeClickArguments(
-      Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &x, &y));
+      Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &x, &y,
+      &element_id));
   EXPECT_EQ(20, x);
   EXPECT_EQ(30, y);
+  EXPECT_TRUE(element_id.empty());
+  EXPECT_TRUE(ParseProbeClickArguments(
+      Bytes(R"({"schemaVersion":1,"elementID":"parity-action"})"), &x,
+      &y, &element_id));
+  EXPECT_EQ("parity-action", element_id);
   for (const std::string invalid : {
            R"({"schemaVersion":1,"x":-1,"y":2})",
            R"({"schemaVersion":1,"x":20,"y":8192})",
            R"({"schemaVersion":1,"x":20.5,"y":2})",
            R"({"schemaVersion":1,"x":20,"y":2,"method":"open"})",
-           R"({"schemaVersion":2,"x":20,"y":2})"}) {
-    EXPECT_FALSE(ParseProbeClickArguments(Bytes(invalid), &x, &y));
+           R"({"schemaVersion":2,"x":20,"y":2})",
+           "{\"schemaVersion\":1,\"elementID\":\"bad';alert(1)\"}"}) {
+    EXPECT_FALSE(ParseProbeClickArguments(Bytes(invalid), &x, &y,
+                                          &element_id));
   }
   int port = 0;
   EXPECT_TRUE(ParseNodeProbePort(
@@ -118,6 +127,32 @@ TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
   EXPECT_FALSE(ProbeWindowAllowed(true, true, true, false, fixture));
   EXPECT_FALSE(ProbeWindowAllowed(true, true, true, true,
                                  GURL("https://example.com/")));
+}
+
+TEST(ShaarDevToolsTest, PopupProbeArgumentsStayBoundToOneHiddenPopup) {
+  const char* popup = "11111111-2222-4333-8444-555555555555";
+  std::string id;
+  std::string expression;
+  EXPECT_TRUE(ParseProbePopupArguments(
+      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup +
+            R"(","expression":"window.probeState"})"),
+      true, &id, &expression));
+  EXPECT_EQ(popup, id);
+  EXPECT_EQ("window.probeState", expression);
+  EXPECT_TRUE(ParseProbePopupArguments(
+      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup + "\"}"),
+      false, &id, nullptr));
+  EXPECT_FALSE(ParseProbePopupArguments(
+      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup +
+            R"(","expression":"1","awaitPromise":true})"),
+      true, &id, &expression));
+  EXPECT_FALSE(ParseProbePopupArguments(
+      Bytes(R"({"schemaVersion":1,"popupId":"NOT-A-POPUP","expression":"1"})"),
+      true, &id, &expression));
+  EXPECT_FALSE(ParseProbePopupArguments(
+      Bytes(std::string(R"({"schemaVersion":1,"popupId":")") + popup +
+            R"(","expression":""})"),
+      true, &id, &expression));
 }
 
 class FakeDevToolsRuntime final : public DevToolsRuntimeServices {
@@ -398,6 +433,38 @@ TEST(ShaarDevToolsTest, CommandMapIsCapabilityScoped) {
   EXPECT_STREQ("Page.captureScreenshot",
                ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
                               SHAAR_DEVTOOLS_PAGE_CAPTURE_SCREENSHOT));
+  EXPECT_STREQ("Page.handleJavaScriptDialog",
+               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
+                              SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG));
+  EXPECT_EQ(nullptr,
+            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
+                           SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG));
+}
+
+TEST(ShaarDevToolsTest, QuitDialogCancellationIsRestrictedToTestingProbes) {
+  const std::string envelope =
+      R"({"schemaVersion":1,"capability":2,"command":45,"probeQuitDialogCancellation":true,"params":{"accept":false}})";
+  std::string encoded;
+  std::string reason;
+  {
+    base::ScopedEnvironmentVariableOverride env("SHAAR_ENGINE_TESTING", "0");
+    EXPECT_EQ(SHAAR_POLICY_BLOCKED,
+              EncodeProtocolRequest(Bytes(envelope), 44, &encoded, &reason));
+  }
+  base::ScopedEnvironmentVariableOverride env("SHAAR_ENGINE_TESTING", "1");
+  EXPECT_EQ(SHAAR_OK,
+            EncodeProtocolRequest(Bytes(envelope), 44, &encoded, &reason))
+      << reason;
+  EXPECT_NE(std::string::npos, encoded.find("Page.handleJavaScriptDialog"));
+  EXPECT_EQ(std::string::npos, encoded.find("probeQuitDialogCancellation"));
+  for (const std::string invalid : {
+           R"({"schemaVersion":1,"capability":2,"command":45,"params":{"accept":false}})",
+           R"({"schemaVersion":1,"capability":2,"command":45,"probeQuitDialogCancellation":true,"params":{"accept":true}})",
+           R"({"schemaVersion":1,"capability":2,"command":45,"probeQuitDialogCancellation":true,"params":{"accept":false,"promptText":"unused"}})",
+           R"({"schemaVersion":1,"capability":1,"command":45,"probeQuitDialogCancellation":true,"params":{"accept":false}})"}) {
+    EXPECT_NE(SHAAR_OK,
+              EncodeProtocolRequest(Bytes(invalid), 44, &encoded, &reason));
+  }
 }
 
 TEST(ShaarDevToolsTest, SafeAreaInsetsAreBoundedAndDeveloperOnly) {
@@ -837,6 +904,10 @@ TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_PROBE_CAPTURE_TAB));
   EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_TRUSTED_CLICK));
   EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_NODE_LIVE));
+  EXPECT_EQ(&HandleDevToolsOperation,
+            registry.Find(SHAAR_OP_PROBE_POPUP_EVALUATE));
+  EXPECT_EQ(&HandleDevToolsOperation,
+            registry.Find(SHAAR_OP_PROBE_POPUP_CAPTURE));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_UI_SHOW));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CONTROL_STATUS));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_OPEN));

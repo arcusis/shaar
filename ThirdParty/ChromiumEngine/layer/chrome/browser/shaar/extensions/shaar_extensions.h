@@ -21,6 +21,9 @@ class GURL;
 namespace extensions {
 class Extension;
 }
+namespace content {
+class WebContents;
+}
 
 namespace shaar {
 struct ExtensionsModuleHandlers {
@@ -61,6 +64,10 @@ std::optional<std::string> OpenPopup(shaar_engine*,
                                      const extensions::Extension&,
                                      const GURL&);
 bool ClosePopup(shaar_engine*, shaar_profile*, std::string_view);
+// Returns a popup tied to the exact owned tab only while its native window is hidden.
+content::WebContents* ProbePopupContents(shaar_engine*, shaar_profile*,
+                                         shaar_window*, shaar_tab*,
+                                         std::string_view popup_id);
 bool RegisterBundledManager(Profile*);
 std::string_view FrameworkDevToolsID(std::string_view name);
 bool FrameworkDevToolsManifestIsLocal(std::string_view manifest);

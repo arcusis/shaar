@@ -44,7 +44,7 @@ struct SiteControlsButton: View {
           showCertificate: { showCertificate(model) },
           showDeveloperTools: {
             self.model = nil
-            _ = engine.openChromiumDeveloperTools(for: model.target.tabID)
+            _ = engine.openChromiumDeveloperTools(for: model.target)
           },
           close: { self.model = nil },
           inspectElement: {

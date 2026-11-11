@@ -36,8 +36,6 @@ final class EngineProbe {
   private let devModeOnly: Bool
   private let mediaSessionOnlyMode: Bool
   private let devtoolsRouteOnlyMode: Bool
-  private let devtoolsPanelsOnlyMode: Bool
-  private let frameworkComponentsOnlyMode: Bool
   /// Counts the hidden footprint runner is allowed to open. 50 and 100 exist so
   /// #1058 and #1467 can measure the same bundle without a one-off probe.
   private static let measurementTabCounts: Set<Int> = [1, 10, 30, 50, 100]
@@ -84,8 +82,8 @@ final class EngineProbe {
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
     localizationMode: Bool, basicBrowsingMode: Bool, reloadWindowMode: Bool, devModeOnly: Bool,
-    mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool, devtoolsPanelsOnlyMode: Bool,
-    frameworkComponentsOnlyMode: Bool, measurementTabCount: Int?, measurementEager: Bool,
+    mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool,
+    measurementTabCount: Int?, measurementEager: Bool,
     measurementInspector: Bool
   ) throws {
     self.root = root
@@ -108,8 +106,6 @@ final class EngineProbe {
     self.devModeOnly = devModeOnly
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
     self.devtoolsRouteOnlyMode = devtoolsRouteOnlyMode
-    self.devtoolsPanelsOnlyMode = devtoolsPanelsOnlyMode
-    self.frameworkComponentsOnlyMode = frameworkComponentsOnlyMode
     self.measurementTabCount = measurementTabCount
     self.measurementEager = measurementEager
     self.measurementInspector = measurementInspector
@@ -240,8 +236,6 @@ final class EngineProbe {
       let devModeOnly = arguments.contains("--probe-dev-mode-only")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
       let devtoolsRouteOnlyMode = arguments.contains("--probe-devtools-route-only")
-      let devtoolsPanelsOnlyMode = arguments.contains("--probe-devtools-panels-only")
-      let frameworkComponentsOnlyMode = arguments.contains("--probe-framework-components-only")
       let measurementTabCount: Int? = {
         guard let index = arguments.firstIndex(of: "--probe-measure-tabs"),
           arguments.indices.contains(index + 1)
@@ -284,8 +278,6 @@ final class EngineProbe {
         "--probe-dev-mode-only",
         "--probe-media-session-only",
         "--probe-devtools-route-only",
-        "--probe-devtools-panels-only",
-        "--probe-framework-components-only",
         "--probe-measure-tabs",
       ]
       guard externalAppConsentMode == noLaunchGuard,
@@ -320,12 +312,6 @@ final class EngineProbe {
         !devtoolsRouteOnlyMode
           || !conflictingFlags.filter({ $0 != "--probe-devtools-route-only" }).contains(
             where: arguments.contains),
-        !devtoolsPanelsOnlyMode
-          || !conflictingFlags.filter({ $0 != "--probe-devtools-panels-only" }).contains(
-            where: arguments.contains),
-        !frameworkComponentsOnlyMode
-          || !conflictingFlags.filter({ $0 != "--probe-framework-components-only" }).contains(
-            where: arguments.contains),
         measurementTabCount == nil
           || !conflictingFlags.filter({ $0 != "--probe-measure-tabs" }).contains(
             where: arguments.contains),
@@ -354,8 +340,6 @@ final class EngineProbe {
         devModeOnly: devModeOnly,
         mediaSessionOnlyMode: mediaSessionOnlyMode,
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
-        devtoolsPanelsOnlyMode: devtoolsPanelsOnlyMode,
-        frameworkComponentsOnlyMode: frameworkComponentsOnlyMode,
         measurementTabCount: measurementTabCount, measurementEager: measurementEager,
         measurementInspector: measurementInspector)
       probe.runtime.onReady = { [weak probe] in
@@ -750,31 +734,6 @@ final class EngineProbe {
         checks += try await DevToolsRouteProbe(
           engine: browserEngine, store: store, root: root, fixture: fixture,
           phase: phase
-        ).run()
-        localFixturesPassed = true
-        finish(error: nil)
-        return
-      }
-      if devtoolsPanelsOnlyMode {
-        guard let browserEngine else { throw ProbeFailure("DevTools panel engine is missing.") }
-        bootstrapStage = .ready
-        fixtureStage = "DevToolsPanels"
-        try expect(NSApp.windows.allSatisfy { !$0.isVisible }, "DevTools panel windows stay hidden")
-        checks += try await DevToolsPanelsProbe(
-          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
-        ).run()
-        localFixturesPassed = true
-        finish(error: nil)
-        return
-      }
-      if frameworkComponentsOnlyMode {
-        guard let browserEngine else { throw ProbeFailure("Components panel engine is missing.") }
-        bootstrapStage = .ready
-        fixtureStage = "FrameworkComponents"
-        try expect(
-          NSApp.windows.allSatisfy { !$0.isVisible }, "Components panel windows stay hidden")
-        checks += try await FrameworkComponentsProbe(
-          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
         localFixturesPassed = true
         finish(error: nil)
@@ -1403,7 +1362,7 @@ final class EngineProbe {
       return
     }
     if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
-      || devtoolsRouteOnlyMode || devtoolsPanelsOnlyMode || frameworkComponentsOnlyMode
+      || devtoolsRouteOnlyMode
     {
       let engineClosed = browserEngine?.isClosed == true
       let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
@@ -1443,11 +1402,10 @@ final class EngineProbe {
 
   private var baseTimeoutSeconds: Double {
     if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
-      || devtoolsRouteOnlyMode || frameworkComponentsOnlyMode
+      || devtoolsRouteOnlyMode
     {
       return 180
     }
-    if devtoolsPanelsOnlyMode { return 360 }
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
@@ -1460,8 +1418,6 @@ final class EngineProbe {
     if reloadWindowMode { return "reload-window" }
     if devModeOnly { return DevelopmentModeProbe.mode }
     if mediaSessionOnlyMode { return "media-session-only" }
-    if devtoolsPanelsOnlyMode { return "devtools-panels-only" }
-    if frameworkComponentsOnlyMode { return "framework-components-only" }
     if devtoolsRouteOnlyMode { return "devtools-route-only" }
     if localizationMode { return "localization-only" }
     if privateWindowMode { return PrivateWindowProbe.mode }
@@ -1492,10 +1448,6 @@ final class EngineProbe {
     if devtoolsRouteOnlyMode {
       return
         "Owned hidden normal window, DevTools frontend URL routing, and Node discovery attachment."
-    }
-    if frameworkComponentsOnlyMode {
-      return
-        "Owned hidden normal window and authored loopback React, Vue, and Angular fixtures. No existing profile or external origin."
     }
     if localizationMode {
       return

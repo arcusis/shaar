@@ -37,6 +37,12 @@ struct DevToolsOpenURLRequest {
 
 extension BrowserEngine {
   @discardableResult
+  func openChromiumDeveloperTools(for target: SiteControlTarget) -> Bool {
+    guard siteControlTarget == target else { return false }
+    return openChromiumDeveloperTools(for: target.tabID)
+  }
+
+  @discardableResult
   func openChromiumDeveloperTools(for tabID: UUID) -> Bool {
     guard !isClosed, liveTabs.contains(tabID),
       runtime.windowID(forTabID: tabID.uuidString) == windowID

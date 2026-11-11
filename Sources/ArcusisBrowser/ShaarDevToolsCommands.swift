@@ -44,21 +44,6 @@ struct ShaarDevToolsCommandMatch: Equatable, Identifiable {
   var id: String { hit.token }
 }
 
-@MainActor
-enum ShaarDevToolsCommandShortcut {
-  @discardableResult
-  static func toggleFloating(
-    shells: some Sequence<ShaarDevToolsModel>, window: NSWindow?
-  ) -> Bool {
-    guard let window else { return false }
-    for shell in shells where shell.isOpen && shell.floatingWindow?.isWindow(window) == true {
-      shell.toggleCommandMenu()
-      return true
-    }
-    return false
-  }
-}
-
 enum ShaarDevToolsCommandIndex {
   static let contentLimit = 6
   static let scanLimit = 2_000

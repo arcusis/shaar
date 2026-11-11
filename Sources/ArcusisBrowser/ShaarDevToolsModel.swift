@@ -355,10 +355,6 @@ final class ShaarDevToolsModel {
   var dock: ShaarDevToolsDock = .right {
     didSet {
       layoutDefaults.set(dock.rawValue, forKey: "shaar.devtools.dock")
-      if oldValue == .floating && dock != .floating {
-        floatingWindow?.dismiss()
-        floatingWindow = nil
-      }
     }
   }
   var bottomHeight: CGFloat = 380 {
@@ -380,7 +376,6 @@ final class ShaarDevToolsModel {
   }
   var commandSelection = 0
   @ObservationIgnored private let layoutDefaults: UserDefaults
-  @ObservationIgnored var floatingWindow: ShaarDevToolsFloatingWindow?
   private(set) var streamAvailable = false
   private var eventBuffer = ShaarDevToolsEventBuffer()
   @ObservationIgnored private var navigationResetPending = false
@@ -575,8 +570,6 @@ final class ShaarDevToolsModel {
   }
 
   func close() {
-    floatingWindow?.dismiss()
-    floatingWindow = nil
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil

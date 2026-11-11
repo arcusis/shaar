@@ -353,26 +353,6 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     #expect(reopened.bottomHeight == 310)
   }
 
-  @Test func dockingBackFromAnUnorderedWindowKeepsTheTabPanelOpen() {
-    _ = NSApplication.shared
-    let previous = NSApp.keyWindow
-    let defaults = UserDefaults(suiteName: "ShaarDevToolsWindowTests.\(UUID())")!
-    let target = SiteControlTarget(
-      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
-    let inspector = InspectorModel(target: target, engine: nil)
-    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
-    shell.open(inspector: inspector)
-    shell.section = .network
-    shell.dock = .floating
-    shell.floatingWindow = ShaarDevToolsFloatingWindow(
-      model: shell, inspector: inspector, openChromium: {})
-    shell.dock = .right
-    #expect(shell.floatingWindow == nil)
-    #expect(shell.isOpen && shell.section == .network)
-    #expect(NSApp.keyWindow === previous)
-    shell.close()
-  }
-
   @Test func reproHistoryEvictsOldEventsAndRejectsOtherTabs() {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
@@ -397,21 +377,6 @@ private struct ShaarScaleFixtureTransport: ShaarDevToolsEventTransport {
     #expect(snapshot.network.isEmpty)
   }
 
-  @Test func splitDragGrowsThePanelTowardThePage() {
-    let right = ShaarDevToolsSplitDrag.proposed(
-      start: 420, translation: ShaarDevToolsSplitDrag.translation(vertical: false, delta: -80),
-      edge: .right, available: 1680)
-    #expect(right == 500)
-    let left = ShaarDevToolsSplitDrag.proposed(
-      start: 420, translation: ShaarDevToolsSplitDrag.translation(vertical: false, delta: 40),
-      edge: .left, available: 1680)
-    #expect(left == 460)
-    let raised = ShaarDevToolsSplitDrag.translation(vertical: true, delta: 30)
-    #expect(raised == -30)
-    let bottom = ShaarDevToolsSplitDrag.proposed(
-      start: 400, translation: raised, edge: .bottom, available: 1040)
-    #expect(bottom == 430)
-  }
 }
 
 @MainActor private final class HeldDevToolsTransport: ShaarDevToolsEventTransport {

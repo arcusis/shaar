@@ -34,6 +34,7 @@ final class PrivatePageSession {
   @ObservationIgnored private(set) var liveTabs: Set<UUID>
   @ObservationIgnored let sleepingTabs = SleepingTabScheduler()
   @ObservationIgnored var mediaAccess: [UUID: MediaAccessState] = [:]
+  @ObservationIgnored var privateDeveloperTools: Set<UUID> = []
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
   @ObservationIgnored var memoryPressureSource: DispatchSourceMemoryPressure?
   @ObservationIgnored private var reconciling = false
@@ -174,6 +175,7 @@ final class PrivatePageSession {
 
   func close(_ id: UUID) {
     guard liveTabs.contains(id) else { return }
+    privateDeveloperTools.remove(id)
     runtime.closePrivateTabID(id.uuidString, windowID: windowID, contextID: contextID) { _ in }
   }
 
@@ -210,6 +212,7 @@ final class PrivatePageSession {
     sleepingTabs.forget(id)
     store?.noteTabAwake(id)
     mediaAccess[id] = nil
+    privateDeveloperTools.remove(id)
     guard liveTabs.remove(id) != nil else { return }
     if let inspector = inspectors.removeValue(forKey: id), inspector.isOpen { inspector.close() }
     pages[id] = nil
@@ -263,7 +266,14 @@ final class PrivatePageSession {
       forPrivateTabID: target.tabID.uuidString,
       windowID: windowID, contextID: contextID
     ) { [weak self] error in
-      if let error { self?.failure = error.localizedDescription }
+      guard let self else { return }
+      if let error {
+        self.failure = error.localizedDescription
+      } else if self.privateDeveloperTools.contains(target.tabID) {
+        self.privateDeveloperTools.remove(target.tabID)
+      } else {
+        self.privateDeveloperTools.insert(target.tabID)
+      }
     }
   }
 

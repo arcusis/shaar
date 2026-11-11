@@ -116,6 +116,35 @@ class EnginePatchTests(unittest.TestCase):
         self.assertIn("not at the pinned revision", result.stderr)
         self.assertFalse(self.output.exists())
 
+    def test_verify_tree_unwinds_overlapping_hunks_in_reverse_order(self):
+        patch = self.root / "ThirdParty/ChromiumEngine/patches/0003-overlap.patch"
+        data = (b"diff --git a/a.txt b/a.txt\n"
+                b"--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-two\n+three\n")
+        patch.write_bytes(data)
+        self.entries.append({"file": str(patch.relative_to(self.root)),
+                             "sha256": hashlib.sha256(data).hexdigest()})
+        self.manifest.write_text(json.dumps({"chromium": {"commit": self.revision},
+                                             "patches": self.entries}))
+        applied = self.run_script("--apply", self.src, "--output", self.output)
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        self.assertNotEqual(subprocess.run(
+            ["git", "-C", str(self.src), "apply", "--check", "--reverse",
+             str(self.root / self.entries[0]["file"])], capture_output=True).returncode, 0)
+        before = self.git("diff").stdout
+        self.output.unlink()
+        verified = self.run_script("--verify-tree", self.src, "--output", self.output)
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        self.assertEqual(self.git("diff").stdout, before)
+        self.assertEqual(len(json.loads(self.output.read_text())["patches"]), 3)
+
+    def test_verify_tree_rejects_upstream_mode_mismatch_after_unwind(self):
+        self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
+        (self.src / "a.txt").chmod(0o755)
+        result = self.run_script("--verify-tree", self.src, "--output", self.output)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("differs from upstream", result.stderr)
+        self.assertFalse(self.output.exists())
+
     def test_archive_receipt_requires_complete_ordered_series(self):
         self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
         archive = self.root / "engine.tar.xz"

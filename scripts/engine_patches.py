@@ -7,10 +7,14 @@
 import argparse
 import hashlib
 import json
+import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 from pathlib import Path
 
 
@@ -46,6 +50,13 @@ def run_git(src, *args):
     if result.returncode:
         raise PatchError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout.strip()
+
+
+def git_bytes(src, *args):
+    result = subprocess.run(["git", "-C", str(src), *args], capture_output=True)
+    if result.returncode:
+        raise PatchError(f"git {' '.join(args)} failed: {result.stderr.decode(errors='replace').strip()}")
+    return result.stdout
 
 
 def checked_source(src, revision):
@@ -91,10 +102,90 @@ def verify_tree(manifest, src, output):
     root, revision, patches = manifest_inputs(manifest)
     output.unlink(missing_ok=True)
     checked_source(src, revision)
+    src = src.resolve()
     resolved = checked_patches(root, patches)
-    for item, patch in resolved:
-        run_git(src, "apply", "--check", "--reverse", str(patch))
-        print(f"verified {item['file']}", file=sys.stderr)
+    touched = set()
+    for _, patch in resolved:
+        records = git_bytes(src, "apply", "--numstat", "-z", str(patch)).split(b"\0")
+        for record in records:
+            if not record:
+                continue
+            fields = record.split(b"\t", 2)
+            if len(fields) != 3:
+                raise PatchError(f"cannot identify files touched by {patch.name}")
+            path = os.fsdecode(fields[2])
+            if (not path or path.startswith("/") or "\\" in path
+                    or any(part in ("", ".", "..", ".git") for part in path.split("/"))):
+                raise PatchError(f"unsafe patch path: {path}")
+            touched.add(path)
+    if not touched:
+        raise PatchError("patch series touches no files")
+    with tempfile.TemporaryDirectory(prefix="shaar-patch-verify-") as temporary:
+        scratch = Path(temporary)
+        run_git(scratch, "init", "-q")
+        original_states = {}
+        for name in sorted(touched):
+            source = src / name
+            for parent in source.parents:
+                if parent == src or parent == src.parent:
+                    break
+                if parent.is_symlink():
+                    raise PatchError(f"source path has symlink parent: {name}")
+            destination = scratch / name
+            if source.is_symlink():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.symlink_to(os.readlink(source))
+                original_states[name] = ("symlink", os.readlink(source))
+            elif source.is_file():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+                original_states[name] = ("file", stat.S_IMODE(source.stat().st_mode),
+                                         hashlib.sha256(destination.read_bytes()).hexdigest())
+            elif source.exists():
+                raise PatchError(f"source path is not a file: {name}")
+            else:
+                original_states[name] = ("missing",)
+        for item, patch in reversed(resolved):
+            run_git(scratch, "apply", "--check", "--reverse", str(patch))
+            run_git(scratch, "apply", "--reverse", str(patch))
+            print(f"reversed {item['file']}", file=sys.stderr)
+        for name in sorted(touched):
+            expected = git_bytes(src, "ls-tree", "-z", revision, "--", name)
+            target = scratch / name
+            if not expected:
+                if target.exists() or target.is_symlink():
+                    raise PatchError(f"unwound tree differs from upstream: {name}")
+            else:
+                if expected.count(b"\0") != 1:
+                    raise PatchError(f"ambiguous upstream path: {name}")
+                metadata = expected.split(b"\t", 1)[0].split()
+                if len(metadata) != 3 or metadata[1] != b"blob":
+                    raise PatchError(f"unsupported upstream path: {name}")
+                upstream = git_bytes(src, "show", f"{revision}:{name}")
+                mode = metadata[0]
+                if mode == b"120000":
+                    if not target.is_symlink() or os.fsencode(os.readlink(target)) != upstream:
+                        raise PatchError(f"unwound tree differs from upstream: {name}")
+                elif mode in (b"100644", b"100755"):
+                    if (not target.is_file() or target.is_symlink()
+                            or target.read_bytes() != upstream
+                            or bool(target.stat().st_mode & stat.S_IXUSR) != (mode == b"100755")):
+                        raise PatchError(f"unwound tree differs from upstream: {name}")
+                else:
+                    raise PatchError(f"unsupported upstream mode: {name}")
+            source = src / name
+            state = original_states[name]
+            if state[0] == "symlink":
+                unchanged = source.is_symlink() and os.readlink(source) == state[1]
+            elif state[0] == "file":
+                unchanged = (source.is_file() and not source.is_symlink()
+                             and stat.S_IMODE(source.stat().st_mode) == state[1]
+                             and hashlib.sha256(source.read_bytes()).hexdigest() == state[2])
+            else:
+                unchanged = not source.exists() and not source.is_symlink()
+            if not unchanged:
+                raise PatchError(f"source changed during verification: {name}")
+    checked_source(src, revision)
     write_receipt(output, revision, patches)
 
 

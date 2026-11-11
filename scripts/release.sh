@@ -159,7 +159,13 @@ sign_like_upstream() {
   local entitlements
   entitlements="$out/entitlements/$(basename "$target").plist"
   codesign -d --entitlements - --xml "$upstream" > "$entitlements"
-  sign --entitlements "$entitlements" "$target"
+  # Helpers such as app_mode_loader carry no entitlements upstream; codesign rejects an
+  # empty entitlements file, so sign those without one.
+  if [[ -s "$entitlements" ]]; then
+    sign --entitlements "$entitlements" "$target"
+  else
+    sign "$target"
+  fi
 }
 
 echo '==> Signing nested code inside out (Developer ID + hardened runtime)'

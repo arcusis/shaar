@@ -84,18 +84,45 @@ def crashpad_dumps_for(profile_root, since):
     return [path for _, path in sorted(candidates, reverse=True)[:4]]
 
 
+def localization_crash_reports_for(pid, since):
+    """Find this probe's .ips report across user and system report directories."""
+    roots = (
+        Path.home() / "Library/Logs/DiagnosticReports",
+        Path("/Library/Logs/DiagnosticReports"),
+    )
+    candidates = set()
+    for root in roots:
+        for directory in (root, root / "Retired"):
+            try:
+                candidates.update(path for path in directory.glob("*.ips"))
+            except OSError:
+                continue
+    matches = []
+    for path in candidates:
+        try:
+            details = path.stat()
+            if details.st_mtime < since or not (0 < details.st_size <= 20_000_000):
+                continue
+            _, body = path.read_text(errors="replace").split("\n", 1)
+            report = json.loads(body)
+        except (OSError, ValueError):
+            continue
+        if isinstance(report, dict) and report.get("pid") == pid:
+            matches.append((details.st_mtime, path))
+    return [path for _, path in sorted(matches, reverse=True)[:4]]
+
+
 def record_failed_probe(case_name, output, completed, pid, started, artifact):
     artifact.mkdir(parents=True, exist_ok=True)
     stderr = redact(completed.stderr)
     reports = []
     if completed.returncode < 0:
         engine_fixture.wait_until(
-            lambda: bool(engine_fixture.crash_reports_for(pid, started)),
+            lambda: bool(localization_crash_reports_for(pid, started)),
             engine_fixture.CRASH_REPORT_SETTLE_SECONDS,
         )
-        reports = engine_fixture.crash_reports_for(pid, started)
-    for index, name in enumerate(reports):
-        source = engine_fixture.CRASH_REPORT_DIRECTORY / name
+        reports = localization_crash_reports_for(pid, started)
+    for index, source in enumerate(reports):
         try:
             shutil.copyfile(source, artifact / f"{case_name}-crash-{index + 1}.ips")
         except OSError:
@@ -115,7 +142,8 @@ def record_failed_probe(case_name, output, completed, pid, started, artifact):
     )
     receipt = {
         "case": case_name, "pid": pid, "exitCode": completed.returncode,
-        "probeReportWritten": output.exists(), "crashReports": reports,
+        "probeReportWritten": output.exists(),
+        "crashReports": [Path(path).name for path in reports],
         "crashpadDumps": crashpad_dumps,
         "stderrTail": stderr[-4000:],
     }

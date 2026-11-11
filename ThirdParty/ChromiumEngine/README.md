@@ -7,9 +7,14 @@ identifiers before signing them. The source archive's native symbols and Chromiu
 behavior still require separate verification before release.
 
 `source-build.json` records the pinned Chromium inputs, Shaar-owned source layer,
-ordered build patches, and their digests. The previous source runner depended on
-a dual-export framework and has been removed. A Shaar-only source build and native
-module checks remain future work; this migration does not build Chromium locally.
+ordered build patches, and their digests. Run
+`bash scripts/engine-apply-patches.sh /path/to/chromium/src` before source builds.
+It requires a clean checkout at the pinned commit, applies every manifest patch
+with strict `git apply`, and writes `build/ShaarEngineSource/applied-patches.json`.
+The engine package script embeds this receipt in the archive. Archive fetch and
+bundle verification reject a missing or incomplete patch series. The receipt
+records the patch inputs and application run; it does not independently attest
+the compiled binary's source provenance.
 
 Chromium 157 DevTools is a separate `devtoolsFrontend157` record. It is not part
 of the Chromium 155 `patches` list, and `0014-shaar-devtools-theme.patch` stays

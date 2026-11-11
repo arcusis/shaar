@@ -48,6 +48,10 @@ class EngineBundleVerifierTests(unittest.TestCase):
         (self.repo / "scripts").mkdir(parents=True)
         source.mkdir(parents=True)
         shutil.copy2(REPO / "scripts/engine_payload.py", self.repo / "scripts/engine_payload.py")
+        shutil.copy2(REPO / "scripts/engine_patches.py", self.repo / "scripts/engine_patches.py")
+        self.patch_entry = {"file": "ThirdParty/ChromiumEngine/patches/0001-test.patch", "sha256": "b" * 64}
+        (source / "source-build.json").write_text(json.dumps({
+            "chromium": {"commit": "a" * 40}, "patches": [self.patch_entry]}))
         (self.app / "Contents/MacOS").mkdir(parents=True)
         self.packaged.mkdir(parents=True)
         self.framework.mkdir(parents=True)
@@ -124,6 +128,10 @@ class EngineBundleVerifierTests(unittest.TestCase):
 
     def _write_archive(self, pin):
         with tarfile.open(self.archive, "w:xz") as tar:
+            receipt = self.root / "applied-patches.json"
+            receipt.write_text(json.dumps({"schemaVersion": 1, "chromiumRevision": "a" * 40,
+                                           "patches": [self.patch_entry]}))
+            tar.add(receipt, arcname="applied-patches.json")
             root_name = "Chromium Framework.framework"
             root_info = tarfile.TarInfo(root_name)
             root_info.type = tarfile.DIRTYPE
@@ -205,6 +213,19 @@ class EngineBundleVerifierTests(unittest.TestCase):
         self.assertNotIn(str(self.root), encoded)
         self.assertNotIn("timestamp", encoded.lower())
         self.assertNotIn("members", encoded)
+
+    def test_incomplete_archive_patch_receipt_is_rejected(self):
+        receipt = self.root / "applied-patches.json"
+        receipt.write_text(json.dumps({"schemaVersion": 1, "chromiumRevision": "a" * 40,
+                                       "patches": []}))
+        with tarfile.open(self.archive, "w:xz") as tar:
+            tar.add(receipt, arcname="applied-patches.json")
+            tar.add(self.framework, arcname="Chromium Framework.framework")
+        pin = json.loads(self.pin_path.read_text())
+        pin["sha256"] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        self.pin_path.write_text(json.dumps(pin, sort_keys=True) + "\n")
+        (self.packaged / "pin.json").write_bytes(self.pin_path.read_bytes())
+        self.assertEqual(self.verify()["reason"], "archive_patch_receipt_invalid")
 
     def test_malformed_pin_packaged_substitution_and_helper_mismatch_fail(self):
         self.pin_path.write_text("{bad\n")

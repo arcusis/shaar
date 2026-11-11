@@ -50,6 +50,10 @@ if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   fi
   mv "$archive.partial" "$archive"
 fi
+python3 scripts/engine_patches.py --verify-archive "$archive" || {
+  echo 'Engine archive has an incomplete patch receipt; refusing extraction.' >&2
+  exit 1
+}
 destination="$cache/${checksum:0:16}"
 if [[ -L "$destination" || ( -e "$destination" && ! -d "$destination" ) ]]; then
   echo 'Engine cache destination must be a regular directory.' >&2

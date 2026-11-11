@@ -61,6 +61,11 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
                            content::WebContents* contents,
                            shaar_operation operation,
                            int capability);
+// Strict testing-only click schema and policy. Coordinates are viewport pixels.
+bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y);
+bool ParseNodeProbePort(shaar_bytes args_json, int* port);
+bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
+                       bool never_shown, const GURL& url);
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open);

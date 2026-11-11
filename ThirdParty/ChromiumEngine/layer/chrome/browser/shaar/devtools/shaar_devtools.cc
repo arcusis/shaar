@@ -22,6 +22,7 @@
 #include <map>
 #include <set>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -43,12 +44,20 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "base/values.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/render_widget_host.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "content/public/browser/visibility.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
@@ -64,6 +73,10 @@ constexpr int kInspector = 1;
 constexpr int kDeveloper = 2;
 constexpr int kPanel = 3;
 constexpr base::TimeDelta kProbeCaptureTimeout = base::Seconds(12);
+// Chromium drops mouse down while first-paint commit deferral is set.
+// That deferral lifts only when a main frame runs after 500ms.
+constexpr base::TimeDelta kProbeClickCommitDelay = base::Milliseconds(600);
+constexpr base::TimeDelta kProbeClickLeaseHold = base::Milliseconds(50);
 
 class RuntimeServices final : public DevToolsRuntimeServices {
 public:
@@ -322,6 +335,140 @@ class ProbeCaptureRequest final
   }
 
   ReplyContext reply_;
+  base::WeakPtr<content::WebContents> contents_;
+  base::ScopedClosureRunner capturer_;
+  base::OneShotTimer timer_;
+  bool finished_ = false;
+};
+
+content::RenderWidgetHostImpl* ProbeWidget(content::WebContents* contents) {
+  if (!contents)
+    return nullptr;
+  auto* view = contents->GetRenderWidgetHostView();
+  if (!view || !view->GetRenderWidgetHost())
+    return nullptr;
+  auto* widget =
+      content::RenderWidgetHostImpl::From(view->GetRenderWidgetHost());
+  if (!widget || !widget->input_router())
+    return nullptr;
+  return widget;
+}
+
+bool ProbeClickInsideView(content::WebContents* contents, int x, int y) {
+  if (!contents)
+    return false;
+  auto* view = contents->GetRenderWidgetHostView();
+  if (!view)
+    return false;
+  const gfx::Size size = view->GetViewBounds().size();
+  return x < size.width() && y < size.height();
+}
+
+void DispatchTrustedClick(content::RenderWidgetHost* widget, int x, int y) {
+  const gfx::PointF point(x, y);
+  const base::TimeTicks now = base::TimeTicks::Now();
+  widget->ForwardMouseEvent(blink::WebMouseEvent(
+      blink::WebInputEvent::Type::kMouseMove, point, point,
+      blink::WebPointerProperties::Button::kNoButton, 0,
+      blink::WebInputEvent::kNoModifiers, now));
+  widget->ForwardMouseEvent(blink::WebMouseEvent(
+      blink::WebInputEvent::Type::kMouseDown, point, point,
+      blink::WebPointerProperties::Button::kLeft, 1,
+      blink::WebInputEvent::kLeftButtonDown, now));
+  widget->ForwardMouseEvent(blink::WebMouseEvent(
+      blink::WebInputEvent::Type::kMouseUp, point, point,
+      blink::WebPointerProperties::Button::kLeft, 1,
+      blink::WebInputEvent::kNoModifiers, now));
+}
+
+// A never-shown page does not composite, so paint-holding commit deferral
+// stays set and the renderer drops mouse down. Show the renderer without
+// ordering its window, wait out the deadline, force one frame, then click.
+class ProbeTrustedClick final
+    : public base::RefCountedThreadSafe<ProbeTrustedClick> {
+ public:
+  ProbeTrustedClick(ReplyContext reply, int x, int y)
+      : reply_(reply), x_(x), y_(y) {}
+
+  void Start(content::WebContents* contents) {
+    contents_ = contents->GetWeakPtr();
+    capturer_ = StartHiddenProbeCapture(contents);
+    if (!capturer_ || !Activate()) {
+      Fail();
+      return;
+    }
+    timer_.Start(FROM_HERE, kProbeCaptureTimeout,
+                 base::BindOnce(&ProbeTrustedClick::OnTimeout,
+                                base::WrapRefCounted(this)));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&ProbeTrustedClick::ForceFrame,
+                       base::WrapRefCounted(this)),
+        kProbeClickCommitDelay);
+  }
+
+ private:
+  friend class base::RefCountedThreadSafe<ProbeTrustedClick>;
+  ~ProbeTrustedClick() = default;
+
+  content::RenderWidgetHostImpl* Activate() {
+    auto* contents = contents_.get();
+    auto* widget = ProbeWidget(contents);
+    if (!widget || !ProbeClickInsideView(contents, x_, y_))
+      return nullptr;
+    widget->input_router()->MakeActive();
+    return widget;
+  }
+
+  void ForceFrame() {
+    if (finished_)
+      return;
+    auto* widget = Activate();
+    if (!widget) {
+      Fail();
+      return;
+    }
+    widget->GetSnapshotFromBrowser(
+        base::BindOnce(&ProbeTrustedClick::OnFrame,
+                       base::WrapRefCounted(this)),
+        /*from_surface=*/true);
+  }
+
+  void OnFrame(const gfx::Image&) {
+    if (finished_)
+      return;
+    auto* widget = Activate();
+    if (!widget) {
+      Fail();
+      return;
+    }
+    DispatchTrustedClick(widget, x_, y_);
+    finished_ = true;
+    timer_.Stop();
+    Reply(reply_, SHAAR_OK, R"({"schemaVersion":1,"submitted":true})");
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&ProbeTrustedClick::ReleaseLease,
+                       base::WrapRefCounted(this)),
+        kProbeClickLeaseHold);
+  }
+
+  void OnTimeout() { Fail(); }
+
+  void Fail() {
+    if (finished_)
+      return;
+    finished_ = true;
+    timer_.Stop();
+    capturer_.RunAndReset();
+    Reply(reply_, SHAAR_NOT_READY, {}, "trusted click could not be sent");
+  }
+
+  void ReleaseLease() { capturer_.RunAndReset(); }
+
+  ReplyContext reply_;
+  int x_;
+  int y_;
   base::WeakPtr<content::WebContents> contents_;
   base::ScopedClosureRunner capturer_;
   base::OneShotTimer timer_;
@@ -1112,6 +1259,48 @@ scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
   return IsProtocolPageTargetFor(contents, host.get()) ? host : nullptr;
 }
 
+bool ParseProbeClickArguments(shaar_bytes args_json, int* x, int* y) {
+  if (!x || !y || !args_json.data || args_json.size > 128)
+    return false;
+  auto value = base::JSONReader::Read(
+      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+  if (!value || !value->is_dict() ||
+      !ExactKeys(value->GetDict(), {"schemaVersion", "x", "y"}) ||
+      value->GetDict().FindInt("schemaVersion") != 1)
+    return false;
+  auto point_x = value->GetDict().FindInt("x");
+  auto point_y = value->GetDict().FindInt("y");
+  if (!point_x || !point_y || *point_x < 0 || *point_y < 0 ||
+      *point_x >= 8192 || *point_y >= 8192)
+    return false;
+  *x = *point_x;
+  *y = *point_y;
+  return true;
+}
+
+bool ParseNodeProbePort(shaar_bytes args_json, int* port) {
+  if (!port || !args_json.data || args_json.size > 128)
+    return false;
+  auto value = base::JSONReader::Read(
+      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+  if (!value || !value->is_dict() ||
+      !ExactKeys(value->GetDict(), {"schemaVersion", "nodeInspectPort"}) ||
+      value->GetDict().FindInt("schemaVersion") != 1)
+    return false;
+  auto value_port = value->GetDict().FindInt("nodeInspectPort");
+  if (!value_port || *value_port < 1 || *value_port > 65535)
+    return false;
+  *port = *value_port;
+  return true;
+}
+
+bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
+                       bool never_shown, const GURL& url) {
+  return testing && owned_root && selected && never_shown &&
+         url.SchemeIs("http") &&
+         (url.host() == "127.0.0.1" || url.host() == "localhost");
+}
+
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open) {
@@ -1197,6 +1386,55 @@ shaar_error_code HandleDevToolsOperation(
     return Fail(error, SHAAR_WRONG_PROFILE,
                 "DevTools profile identity does not match the requested scope");
 
+  if (operation == SHAAR_OP_PROBE_NODE_LIVE) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    const bool selected = context->browser_tabs->IsSelectedWebContents(
+        engine, window, tab, contents);
+    if (!ProbeWindowAllowed(testing && std::strcmp(testing, "1") == 0,
+                           shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
+                           shaar::windows_tabs::HasNeverShownPageHost(window, contents),
+                           contents->GetLastCommittedURL()) || !scope.profile ||
+        scope.private_session)
+      return Fail(error, SHAAR_POLICY_BLOCKED, "Node inspector probe is unavailable");
+    int port = 0;
+    if (!ParseNodeProbePort(args_json, &port))
+      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid Node inspector port");
+    Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+    base::ListValue locations;
+    locations.Append("127.0.0.1:" + std::to_string(port));
+    profile->GetPrefs()->SetBoolean(prefs::kDevToolsDiscoverTCPTargetsEnabled,
+                                    true);
+    profile->GetPrefs()->SetList(prefs::kDevToolsTCPDiscoveryConfig,
+                                 std::move(locations));
+    DevToolsWindow::OpenNodeFrontendWindow(
+        profile, DevToolsOpenedByAction::kOpenForNodeFromAnotherTarget, contents);
+    Reply({request_id, reply, reply_context}, SHAAR_OK,
+          R"({"schemaVersion":1,"submitted":true})");
+    return SHAAR_OK;
+  }
+  if (operation == SHAAR_OP_PROBE_TRUSTED_CLICK) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    const bool selected = context->browser_tabs->IsSelectedWebContents(
+        engine, window, tab, contents);
+    if (!ProbeWindowAllowed(testing && std::strcmp(testing, "1") == 0,
+                           shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
+                           shaar::windows_tabs::HasNeverShownPageHost(window, contents),
+                           contents->GetLastCommittedURL()) || !scope.profile ||
+        scope.private_session)
+      return Fail(error, SHAAR_POLICY_BLOCKED, "trusted click probe is unavailable");
+    int x = 0;
+    int y = 0;
+    if (!ParseProbeClickArguments(args_json, &x, &y))
+      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid trusted click point");
+    auto* view = contents->GetRenderWidgetHostView();
+    if (!view || !view->GetRenderWidgetHost() ||
+        x >= view->GetViewBounds().width() || y >= view->GetViewBounds().height())
+      return Fail(error, SHAAR_NOT_READY, "trusted click viewport unavailable");
+    base::MakeRefCounted<ProbeTrustedClick>(
+        ReplyContext{request_id, reply, reply_context}, x, y)
+        ->Start(contents);
+    return SHAAR_OK;
+  }
   if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
       operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");

@@ -84,6 +84,42 @@ shaar_bytes Bytes(const std::string& value) {
   return {value.data(), value.size()};
 }
 
+TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
+  int x = -1;
+  int y = -1;
+  EXPECT_TRUE(ParseProbeClickArguments(
+      Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &x, &y));
+  EXPECT_EQ(20, x);
+  EXPECT_EQ(30, y);
+  for (const std::string invalid : {
+           R"({"schemaVersion":1,"x":-1,"y":2})",
+           R"({"schemaVersion":1,"x":20,"y":8192})",
+           R"({"schemaVersion":1,"x":20.5,"y":2})",
+           R"({"schemaVersion":1,"x":20,"y":2,"method":"open"})",
+           R"({"schemaVersion":2,"x":20,"y":2})"}) {
+    EXPECT_FALSE(ParseProbeClickArguments(Bytes(invalid), &x, &y));
+  }
+  int port = 0;
+  EXPECT_TRUE(ParseNodeProbePort(
+      Bytes(R"({"schemaVersion":1,"nodeInspectPort":9229})"), &port));
+  EXPECT_EQ(9229, port);
+  EXPECT_FALSE(ParseNodeProbePort(
+      Bytes(R"({"schemaVersion":1,"nodeInspectPort":0})"), &port));
+  EXPECT_FALSE(ParseNodeProbePort(
+      Bytes(R"({"schemaVersion":1,"nodeInspectPort":65536})"), &port));
+  EXPECT_FALSE(ParseNodeProbePort(
+      Bytes(R"({"schemaVersion":1,"nodeInspectPort":9229,"url":"remote"})"),
+      &port));
+  const GURL fixture("http://127.0.0.1:8123/cross-site-a");
+  EXPECT_TRUE(ProbeWindowAllowed(true, true, true, true, fixture));
+  EXPECT_FALSE(ProbeWindowAllowed(false, true, true, true, fixture));
+  EXPECT_FALSE(ProbeWindowAllowed(true, false, true, true, fixture));
+  EXPECT_FALSE(ProbeWindowAllowed(true, true, false, true, fixture));
+  EXPECT_FALSE(ProbeWindowAllowed(true, true, true, false, fixture));
+  EXPECT_FALSE(ProbeWindowAllowed(true, true, true, true,
+                                 GURL("https://example.com/")));
+}
+
 class FakeDevToolsRuntime final : public DevToolsRuntimeServices {
  public:
   bool ResolveTarget(shaar_engine*, shaar_scope, shaar_window*, shaar_tab*,
@@ -799,6 +835,8 @@ TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
   shaar_devtools_register(&registry);
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CALL));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_PROBE_CAPTURE_TAB));
+  EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_TRUSTED_CLICK));
+  EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_NODE_LIVE));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_UI_SHOW));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CONTROL_STATUS));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_OPEN));

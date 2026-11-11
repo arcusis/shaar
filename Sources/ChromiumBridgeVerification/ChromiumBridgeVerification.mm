@@ -1398,15 +1398,20 @@ struct QuitProbeSymbols {
   ShaarQuitRelease release;
 };
 
-static BOOL QuitProbeSymbolsAvailable(QuitProbeSymbols *symbols) {
+static void *QuitProbeSymbol(ARCShaarRuntime *runtime, const char *name) {
+  void *library = ShaarProbeField<void *>(runtime, "_shaarLibrary");
+  return library ? dlsym(library, name) : nullptr;
+}
+
+static BOOL QuitProbeSymbolsAvailable(ARCShaarRuntime *runtime, QuitProbeSymbols *symbols) {
   symbols->prepare = reinterpret_cast<ShaarQuitPrepare>(
-      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_prepare"));
+      QuitProbeSymbol(runtime, "shaar_test_quit_dialog_prepare"));
   symbols->cancel = reinterpret_cast<ShaarQuitPrepare>(
-      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_cancel"));
+      QuitProbeSymbol(runtime, "shaar_test_quit_dialog_cancel"));
   symbols->audit = reinterpret_cast<ShaarQuitAudit>(
-      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_audit"));
+      QuitProbeSymbol(runtime, "shaar_test_quit_dialog_audit"));
   symbols->release = reinterpret_cast<ShaarQuitRelease>(
-      dlsym(RTLD_DEFAULT, "shaar_test_quit_dialog_release"));
+      QuitProbeSymbol(runtime, "shaar_test_quit_dialog_release"));
   return symbols->prepare && symbols->cancel && symbols->audit && symbols->release;
 }
 
@@ -1692,7 +1697,7 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
 - (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
   if (!ProbeCaptureAllowed()) return nil;
   QuitProbeSymbols symbols = {};
-  if (QuitProbeSymbolsAvailable(&symbols)) {
+  if (QuitProbeSymbolsAvailable(self, &symbols)) {
     NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
     BOOL current = owner && PrivateQuitHoldOwnerCurrent(self, tabID, owner);
     if (!ARCProbeNativeHoldAuditVisible(current, [owner[@"nativeHold"] boolValue]))
@@ -1750,7 +1755,7 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
           return;
         }
         QuitProbeSymbols symbols = {};
-        if (QuitProbeSymbolsAvailable(&symbols)) {
+        if (QuitProbeSymbolsAvailable(runtime, &symbols)) {
           ProbePrepareNativeHold(runtime, tabID, symbols, completion);
           return;
         }
@@ -1792,7 +1797,7 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
     return;
   }
   QuitProbeSymbols symbols = {};
-  if ([owner[@"nativeHold"] boolValue] && QuitProbeSymbolsAvailable(&symbols)) {
+  if ([owner[@"nativeHold"] boolValue] && QuitProbeSymbolsAvailable(self, &symbols)) {
     ProbeCancelNativeHold(self, tabID, owner, symbols, completion);
     return;
   }

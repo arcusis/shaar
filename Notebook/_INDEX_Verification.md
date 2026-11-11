@@ -1,5 +1,8 @@
 # Verification
 
+- [[Chromium_157_Release_Runbook]]
+- [[Chromium_157_Release_Notes]]
+- [[Chromium_157_Release_QA]]
 - [[Private_Fixture_Readiness]]
 - [[Crash_Sweep_2026-11-12]]
 - [[CI_Pipeline_Design]]

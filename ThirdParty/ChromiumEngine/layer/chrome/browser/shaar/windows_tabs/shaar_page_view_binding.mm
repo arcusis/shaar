@@ -108,6 +108,13 @@ shaar_error_code Result(shaar_error_code status, shaar_error* error) {
 }  // namespace
 
 namespace shaar::windows_tabs {
+bool HasNeverShownPageHost(shaar_window* window,
+                           content::WebContents* contents) {
+  PageViewHost* host = FindHost(window, false);
+  return host && contents && host->NeverShown() &&
+         host->selected_view() == contents->GetNativeView().GetNativeNSView();
+}
+
 void ShowSelectedWebContents(content::WebContents* previous,
                              content::WebContents* selected) {
   if (previous && previous != selected)

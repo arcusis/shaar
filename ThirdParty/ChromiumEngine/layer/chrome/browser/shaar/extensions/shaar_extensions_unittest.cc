@@ -24,6 +24,22 @@ TEST(ShaarExtensionsModuleTest, ComponentExtensionsStayInternal) {
       ManifestLocation::kInternal));
 }
 
+TEST(ShaarExtensionsModuleTest, WebStoreFitAllowsLoopbackOnlyInTesting) {
+  using shaar::extensions_host::WebStoreFitURLAllowed;
+  EXPECT_TRUE(WebStoreFitURLAllowed(
+      GURL("https://chromewebstore.google.com/detail/example"), false));
+  EXPECT_TRUE(WebStoreFitURLAllowed(
+      GURL("http://127.0.0.1:43129/web-store-fit"), true));
+  EXPECT_FALSE(WebStoreFitURLAllowed(
+      GURL("http://127.0.0.1:43129/web-store-fit"), false));
+  EXPECT_FALSE(WebStoreFitURLAllowed(
+      GURL("http://localhost:43129/web-store-fit"), true));
+  EXPECT_FALSE(WebStoreFitURLAllowed(
+      GURL("http://127.0.0.2:43129/web-store-fit"), true));
+  EXPECT_FALSE(WebStoreFitURLAllowed(
+      GURL("http://127.0.0.1:43129/other"), true));
+}
+
 TEST(ShaarExtensionsModuleTest, FrameworkDevToolsHavePinnedIdentities) {
   EXPECT_EQ(shaar::extensions_host::FrameworkDevToolsID("react"),
             "fmkadmapgofadopljbjfkapdkoienihi");

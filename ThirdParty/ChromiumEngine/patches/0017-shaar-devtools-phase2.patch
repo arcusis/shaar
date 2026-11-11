@@ -23,7 +23,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  
  namespace shaar::devtools {
  namespace {
-@@ -44,6 +48,8 @@
+@@ -46,6 +50,8 @@
  constexpr size_t kMaxQueuedBytes = 2 * 1024 * 1024;
  constexpr size_t kMaxRequestIDs = 512;
  constexpr size_t kMaxPendingBodies = 16;
@@ -32,12 +32,10 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  
  struct ReplyTarget {
    shaar_request_id id;
-@@ -267,6 +273,648 @@
-   envelope.Set("data", std::move(projection.data));
-   return base::JSONWriter::Write(base::Value(std::move(envelope)), output) &&
-          output->size() <= kMaxEventBytes;
-+}
-+
+@@ -301,6 +307,648 @@
+          output->size() <= limit;
+ }
+ 
 +bool SameOriginURL(const std::string& value, const std::string& origin) {
 +  GURL url(value);
 +  return url.is_valid() && url.SchemeIsHTTPOrHTTPS() &&
@@ -678,10 +676,12 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +  }
 +  data.Set("truncated", projection->truncated);
 +  return true;
- }
- 
++}
++
  class PanelClient;
-@@ -289,7 +937,8 @@
+ std::map<content::WebContents*, PanelClient*>& Leases() {
+   static base::NoDestructor<std::map<content::WebContents*, PanelClient*>> leases;
+@@ -321,7 +969,8 @@
        : content::WebContentsObserver(contents), engine_(engine), scope_(scope),
          window_(window), tab_(tab), contents_(contents),
          identity_(std::move(identity)), host_(std::move(host)),
@@ -691,7 +691,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  
    bool Attach() {
      attached_ = host_->AttachClient(this);
-@@ -301,9 +950,14 @@
+@@ -333,9 +982,14 @@
          R"({"id":-3,"method":"Network.enable"})",
          R"({"id":-4,"method":"Page.enable"})",
          R"({"id":-5,"method":"Page.setLifecycleEventsEnabled","params":{"enabled":true}})",
@@ -708,8 +708,8 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      return true;
    }
  
-@@ -332,10 +986,13 @@
-     closing_ = true;
+@@ -365,10 +1019,13 @@
+     StopScreencast();
      Leases().erase(contents_);
      auto pending = std::move(pending_bodies_);
 +    auto phase2 = std::move(pending_phase2_);
@@ -722,8 +722,8 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      delete this;
    }
  
-@@ -366,6 +1023,30 @@
-     return SHAAR_OK;
+@@ -437,6 +1094,30 @@
+     return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid screencast command");
    }
  
 +  shaar_error_code Phase2Command(int command_id, const base::DictValue& args,
@@ -753,7 +753,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    void DispatchProtocolMessage(content::DevToolsAgentHost*,
                                 base::span<const uint8_t> message) override {
      if (closing_)
-@@ -381,6 +1062,23 @@
+@@ -452,6 +1133,23 @@
        return;
      const auto& root = parsed->GetDict();
      if (auto id = root.FindInt("id")) {
@@ -774,10 +774,10 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +        }
 +        return;
 +      }
-       auto found = pending_bodies_.find(*id);
-       if (found == pending_bodies_.end())
-         return;
-@@ -410,7 +1108,9 @@
+       if (*id == mask_setup_id_) {
+         mask_setup_id_ = 0;
+         if (!BooleanResult(root)) {
+@@ -519,7 +1217,9 @@
        return;
      }
      Projection projection{};
@@ -788,10 +788,10 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
        return;
      if (projection.id == SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT) {
        const auto* request_id = params->FindString("requestId");
-@@ -438,6 +1138,21 @@
+@@ -679,6 +1379,21 @@
+     }
    }
  
-  private:
 +  struct PendingPhase2 {
 +    ReplyTarget reply;
 +    int command_id;
@@ -810,7 +810,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    void BodyTimedOut(int command_id) {
      auto found = pending_bodies_.find(command_id);
      if (found == pending_bodies_.end())
-@@ -526,6 +1241,7 @@
+@@ -768,6 +1483,7 @@
    DevToolsTargetIdentity identity_;
    scoped_refptr<content::DevToolsAgentHost> host_;
    int lease_id_;
@@ -818,7 +818,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    int next_command_id_ = 1000000;
    bool attached_ = false;
    bool closing_ = false;
-@@ -537,6 +1253,12 @@
+@@ -779,6 +1495,12 @@
    std::set<std::string> known_requests_;
    std::deque<std::string> request_order_;
    std::map<int, ReplyTarget> pending_bodies_;
@@ -828,10 +828,10 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +  std::set<std::string> worker_scopes_;
 +  std::set<std::string> resource_urls_;
 +  std::string frame_id_;
-   base::WeakPtrFactory<PanelClient> weak_factory_{this};
- };
- 
-@@ -556,6 +1278,38 @@
+   std::unique_ptr<ReplyTarget> pending_start_;
+   std::unique_ptr<PendingFrame> pending_frame_;
+   int mask_setup_id_ = 0;
+@@ -807,6 +1529,38 @@
           EncodeProjectedEvent(std::move(projection), lease_id, output);
  }
  
@@ -870,7 +870,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  void ClosePanelLeaseForTab(content::WebContents* contents) {
    auto found = Leases().find(contents);
    if (found != Leases().end())
-@@ -578,7 +1332,7 @@
+@@ -829,7 +1583,7 @@
      shaar_bytes args_json, shaar_request_id request_id, shaar_reply_fn reply,
      void* reply_context, shaar_error* error) {
    if (!context || !context->devtools_runtime || !engine || !contents || !reply ||
@@ -879,9 +879,9 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid panel request");
    auto parsed = base::JSONReader::Read(
        std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
-@@ -638,6 +1392,18 @@
+@@ -906,6 +1660,18 @@
        return Fail(error, SHAAR_NOT_FOUND, "panel lease not found");
-     return lease->GetBody(*id, target, error);
+     return lease->ControlScreencast(*command, session.value_or(0), target, error);
    }
 +  if (operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND) {
 +    if (!HasKeys(args, {"schemaVersion", "leaseID", "commandID", "params"}))

@@ -209,6 +209,13 @@ namespace shaar::extensions_host {
 bool ShouldListLocation(extensions::mojom::ManifestLocation location) {
   return !extensions::Manifest::IsComponentLocation(location);
 }
+
+bool WebStoreFitURLAllowed(const GURL& url, bool testing) {
+  if (url.SchemeIs("https") && url.host() == "chromewebstore.google.com")
+    return true;
+  return testing && url.SchemeIs("http") && url.host() == "127.0.0.1" &&
+         url.path() == "/web-store-fit";
+}
 }  // namespace shaar::extensions_host
 
 bool SharedHomeVersionSatisfied(std::string_view installed,
@@ -327,10 +334,14 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
       return Fail(SHAAR_WRONG_PROFILE, "Web Store tab scope mismatch", error);
     const GURL& committed = contents->GetLastCommittedURL();
     const GURL& visible = contents->GetVisibleURL();
-    if (!committed.SchemeIs("https") ||
-        committed.host() != "chromewebstore.google.com" ||
+    const char* testing_environment = std::getenv("SHAAR_ENGINE_TESTING");
+    const bool testing = testing_environment &&
+                         std::strcmp(testing_environment, "1") == 0;
+    if (!shaar::extensions_host::WebStoreFitURLAllowed(committed, testing) ||
+        !shaar::extensions_host::WebStoreFitURLAllowed(visible, testing) ||
         visible.scheme() != committed.scheme() ||
-        visible.host() != committed.host())
+        visible.host() != committed.host() ||
+        visible.EffectiveIntPort() != committed.EffectiveIntPort())
       return Fail(SHAAR_POLICY_BLOCKED, "Web Store zoom host mismatch", error);
     const double requested = *Number(input, "zoomFactor");
     const double applied = *Number(input, "appliedZoom");

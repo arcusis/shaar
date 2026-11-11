@@ -12,6 +12,20 @@
 
 #include "content/public/browser/web_contents.h"
 
+@interface ShaarPageHostWindow : NSWindow
+@property(nonatomic, readonly) BOOL wasShown;
+@end
+
+@implementation ShaarPageHostWindow {
+  BOOL _wasShown;
+}
+- (BOOL)wasShown { return _wasShown; }
+- (void)orderWindow:(NSWindowOrderingMode)place relativeTo:(NSInteger)otherWin {
+  if (place != NSWindowOut) _wasShown = YES;
+  [super orderWindow:place relativeTo:otherWin];
+}
+@end
+
 namespace shaar::windows_tabs {
 
 namespace {
@@ -42,7 +56,7 @@ void UpdateDockedDevTools(content::WebContents* inspected,
 }
 
 PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
-  window_ = window ?: [[NSWindow alloc] initWithContentRect:frame
+  window_ = window ?: [[ShaarPageHostWindow alloc] initWithContentRect:frame
                                         styleMask:(NSWindowStyleMaskTitled |
                                                    NSWindowStyleMaskClosable |
                                                    NSWindowStyleMaskResizable |
@@ -69,6 +83,11 @@ PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
   deminiaturize_observer_ = [center
       addObserverForName:NSWindowDidDeminiaturizeNotification
                  object:window_ queue:nil usingBlock:refresh];
+}
+
+bool PageViewHost::NeverShown() const {
+  return [window_ isKindOfClass:ShaarPageHostWindow.class] &&
+         ![(ShaarPageHostWindow*)window_ wasShown] && !window_.isVisible;
 }
 
 PageViewHost::~PageViewHost() {

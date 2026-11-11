@@ -27,6 +27,7 @@ class PageViewHost final {
   PageViewHost& operator=(const PageViewHost&) = delete;
 
   NSWindow* window() const { return window_; }
+  bool NeverShown() const;
   NSView* view() const { return view_; }
   NSView* selected_view() const { return selected_view_; }
   bool Attach(NSView* tab_view);

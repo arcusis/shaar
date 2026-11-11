@@ -113,6 +113,7 @@ extension PrivatePageSession {
       isCapturing: { self.mediaAccess[$0]?.isCapturing == true },
       hasInspector: { self.inspectors[$0] != nil },
       hasDeveloperTools: { self.privateDeveloperTools.contains($0) },
+      hasAgentConnection: { _ in false },
       profileIsDownloading: { id in
         guard let profile = store.session.profileID(forTabID: id) else { return false }
         return isProfileDownloading(profile)

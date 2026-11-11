@@ -104,10 +104,10 @@ import Foundation
       let after = context.store.session.spaces.flatMap(\.tabs).map(\.id)
       let stillListed = after.contains(background)
       let stillLive = context.engine.liveTabs.contains(background)
-      let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
       context.engine.wakeIfSleeping(background)
       let awake = await wait { !context.store.sleepingTabIDs.contains(background) }
       let awakeLive = context.engine.liveTabs.contains(background)
+      let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
       let rendererFailures = context.store.rendererFailures.count
       let passed =
         capable && sleeping && stillListed && stillLive && awake && awakeLive

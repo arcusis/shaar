@@ -76,6 +76,47 @@ struct TabSuspensionTests {
     #expect(store.sleepingTabIDs.isEmpty)
   }
 
+  @Test func aDeveloperModelWithoutOpenToolsOrAgentCanSleep() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let inactive = BrowserTab(url: URL(string: "https://inactive.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = [active.id, inactive.id]
+    let target = SiteControlTarget(
+      tabID: inactive.id, profileID: store.session.selectedSpace.profileID, url: inactive.url)
+    let model = engine.developerModel(for: target)
+    #expect(!model.agentBridge.isConnected)
+    #expect(runtime.devToolsView(forTabID: inactive.id.uuidString) == nil)
+
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+
+    #expect(runtime.slept.map(\.0) == [inactive.id.uuidString])
+    #expect(store.sleepingTabIDs == [inactive.id])
+  }
+
+  @Test func aTabWithAnAgentConnectionStaysAwake() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let connected = BrowserTab(url: URL(string: "https://connected.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, connected])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = [active.id, connected.id]
+    let target = SiteControlTarget(
+      tabID: connected.id, profileID: store.session.selectedSpace.profileID, url: connected.url)
+    let model = engine.developerModel(for: target)
+    model.agentBridge.enable()
+    #expect(model.agentBridge.isConnected)
+    #expect(runtime.devToolsView(forTabID: connected.id.uuidString) == nil)
+
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+
+    #expect(runtime.slept.isEmpty)
+    #expect(store.sleepingTabIDs.isEmpty)
+  }
+
   @Test func editedFormsKeepAliveAndDownloadsStayAwake() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let kept = BrowserTab(url: URL(string: "https://kept.example")!, keepAlive: true)
@@ -161,6 +202,36 @@ struct TabSuspensionTests {
     #expect(engine.sleepingTabs.capability == .capable)
     #expect(runtime.slept.map(\.0) == [inactive.id.uuidString])
     #expect(store.sleepingTabIDs == [inactive.id])
+  }
+
+  @Test func newlyExemptTabsStayAwakeWhenHeldProbeResolves() throws {
+    for change in ["playing", "pinned", "devtools"] {
+      let active = BrowserTab(url: URL(string: "https://active.example")!)
+      let inactive = BrowserTab(url: URL(string: "https://inactive.example")!)
+      let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
+      defer { engine.suspensionTask?.cancel() }
+      engine.liveTabs = [active.id, inactive.id]
+      engine.sleepingTabs.capability = .unknown
+      runtime.holdLifecycleProbe = true
+
+      let start = Date(timeIntervalSince1970: 1_800_000_000)
+      engine.suspendInactiveTabs(now: start)
+      engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+      #expect(engine.sleepingTabs.capability == .probing)
+
+      switch change {
+      case "playing":
+        store.media.update(inactive.id, state: MediaSessionState(playbackState: .playing))
+      case "pinned":
+        store.togglePin(inactive.id)
+      default:
+        runtime.devToolsOpenTabIDs.insert(inactive.id.uuidString)
+      }
+      runtime.deliverHeldLifecycleProbe()
+
+      #expect(runtime.slept.isEmpty, "\(change) tab slept after capability probe")
+      #expect(store.sleepingTabIDs.isEmpty)
+    }
   }
 
   @Test func neverSleepHostsStayAwake() throws {
@@ -410,6 +481,7 @@ private final class SuspensionTestRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var wakeAccepted = true
   nonisolated(unsafe) var holdSleepCompletion = false
   nonisolated(unsafe) var devToolsOpenTabIDs: Set<String> = []
+  nonisolated(unsafe) var agentBridgeEnabledTabIDs: Set<String> = []
   nonisolated(unsafe) var heldLifecycleProbe: (@MainActor @Sendable (Bool) -> Void)?
   nonisolated(unsafe) var heldSleep: (@MainActor @Sendable (Bool) -> Void)?
 
@@ -434,6 +506,30 @@ private final class SuspensionTestRuntime: ARCChromiumRuntime {
   override func devToolsView(forTabID tabID: String) -> NSView? {
     let isOpen = devToolsOpenTabIDs.contains(tabID)
     return MainActor.assumeIsolated { isOpen ? NSView() : nil }
+  }
+
+  override func agentBridgeRequest(
+    _ operation: UInt, forTabID tabID: String, profileID: String, windowID: String,
+    completion: @escaping @MainActor ([String: Any]?, Error?) -> Void
+  ) {
+    if operation == UInt(AgentBridgeOperation.enable.rawValue) {
+      agentBridgeEnabledTabIDs.insert(tabID)
+    } else if operation == UInt(AgentBridgeOperation.disable.rawValue) {
+      agentBridgeEnabledTabIDs.remove(tabID)
+    }
+    guard agentBridgeEnabledTabIDs.contains(tabID) else {
+      completion(["schemaVersion": 1, "enabled": false, "connectionCount": 0], nil)
+      return
+    }
+    var response: [String: Any] = [
+      "schemaVersion": 1, "enabled": true, "port": 9222,
+      "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
+      "connectionCount": 1,
+    ]
+    if operation == UInt(AgentBridgeOperation.enable.rawValue) {
+      response["token"] = String(repeating: "a", count: 43)
+    }
+    completion(response, nil)
   }
 
   override func discardTabID(_ tabID: String) {

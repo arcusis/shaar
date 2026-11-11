@@ -17,13 +17,15 @@ public struct SleepingTabFacts: Equatable, Sendable {
   public var formEdited: Bool
   public var hasInspector: Bool
   public var hasDeveloperTools: Bool
+  public var hasAgentConnection: Bool
   public var profileIsDownloading: Bool
   public var lastActive: Date
 
   public init(
     id: UUID, host: String, isPinned: Bool, keepAlive: Bool, isVisible: Bool,
     isPrivateActive: Bool, isPlaying: Bool, isCapturing: Bool, formEdited: Bool,
-    hasInspector: Bool, hasDeveloperTools: Bool, profileIsDownloading: Bool, lastActive: Date
+    hasInspector: Bool, hasDeveloperTools: Bool, hasAgentConnection: Bool = false,
+    profileIsDownloading: Bool, lastActive: Date
   ) {
     self.id = id
     self.host = host
@@ -36,6 +38,7 @@ public struct SleepingTabFacts: Equatable, Sendable {
     self.formEdited = formEdited
     self.hasInspector = hasInspector
     self.hasDeveloperTools = hasDeveloperTools
+    self.hasAgentConnection = hasAgentConnection
     self.profileIsDownloading = profileIsDownloading
     self.lastActive = lastActive
   }
@@ -98,7 +101,11 @@ public struct SleepingTabsPolicy: Equatable, Sendable {
       return true
     }
     if facts.isPlaying || facts.isCapturing || facts.formEdited { return true }
-    if facts.hasInspector || facts.hasDeveloperTools || facts.profileIsDownloading { return true }
+    if facts.hasInspector || facts.hasDeveloperTools || facts.hasAgentConnection
+      || facts.profileIsDownloading
+    {
+      return true
+    }
     return neverSleeps(facts.host)
   }
 

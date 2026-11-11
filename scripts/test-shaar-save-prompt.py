@@ -50,17 +50,20 @@ class Fixture(BaseHTTPRequestHandler):
             body = f"""<!doctype html><meta charset="utf-8"><title>Card</title>
 <form action="/saved" method="post">
 <input name="cc-name" autocomplete="cc-name" value="Parity Probe">
-<input name="cc-number" autocomplete="cc-number" value="4111111111111111">
-<input name="cc-exp" autocomplete="cc-exp" value="12/30">
+<input name="cc-number" type="tel" autocomplete="cc-number" value="4111111111111111">
+<input name="cc-exp-month" autocomplete="cc-exp-month" value="12">
+<input name="cc-exp-year" autocomplete="cc-exp-year" value="2030">
 {BUTTON}Pay</button></form>"""
         elif page == "/address":
             body = f"""<!doctype html><meta charset="utf-8"><title>Address</title>
 <form action="/saved" method="post">
 <input name="name" autocomplete="name" value="Parity Probe">
 <input name="street-address" autocomplete="street-address" value="1 Loopback Road">
-<input name="address-level2" autocomplete="address-level2" value="Local">
-<input name="postal-code" autocomplete="postal-code" value="00000">
-<input name="email" autocomplete="email" value="parity@localhost">
+<input name="address-level2" autocomplete="address-level2" value="Mountain View">
+<input name="address-level1" autocomplete="address-level1" value="CA">
+<input name="postal-code" autocomplete="postal-code" value="94043">
+<input name="country-name" autocomplete="country-name" value="US">
+<input name="email" type="email" autocomplete="email" value="parity@example.com">
 {BUTTON}Save address</button></form>"""
         elif page == "/saved":
             body = "<!doctype html><title>Saved</title><main>submitted</main>"

@@ -6,7 +6,7 @@ Chromium framework remain available at `chrome://credits`.
 
 ## Chromium and bundled dependencies
 
-- **Component:** Chromium 155.0.8059.84 in Chromium Framework.
+- **Component:** Chromium 157.0.8103.51 in Chromium Framework.
 - **Source:** [Shaar engine pin](ThirdParty/ChromiumEngine/pin.json).
 - **License:** Chromium uses BSD-style terms and includes components under
   additional licenses. Preserve the framework's component credits with any

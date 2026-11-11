@@ -7,7 +7,7 @@ remains under its own license.
 
 Chromium engine
   Source: pinned Shaar engine archive described in
-  ThirdParty/ChromiumEngine/pin.json; Chromium version 155.0.8059.84.
+  ThirdParty/ChromiumEngine/pin.json; Chromium version 157.0.8103.51.
   License: BSD-style licenses and other licenses. The complete notices for
   bundled Chromium dependencies are provided by the engine at chrome://credits.
   Keep those notices with any redistribution of the engine.

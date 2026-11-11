@@ -108,7 +108,7 @@ struct DeviceChooserTests {
     let request = try #require(
       self.request(
         store, transport: "usb", id: "unsafe-name",
-        options: [["optionID": "unsafe-option", "name": unsafeName]], canGrant: true))
+        options: [["optionId": "unsafe-option", "name": unsafeName]], canGrant: true))
 
     #expect(request.options.first?.title == "Adapter\u{FFFD}\u{FFFD}txt.exe")
   }
@@ -118,8 +118,8 @@ struct DeviceChooserTests {
     let tab = try #require(store.session.selectedSpace.selectedTab)
 
     for invalidOption: [String: Any] in [
-      ["optionID": "bad option", "name": "Adapter"],
-      ["optionID": String(repeating: "a", count: 65), "name": "Adapter"],
+      ["optionId": "bad option", "name": "Adapter"],
+      ["optionId": String(repeating: "a", count: 65), "name": "Adapter"],
       ["index": 0, "name": "Adapter"],
     ] {
       let payload = event(
@@ -135,7 +135,7 @@ struct DeviceChooserTests {
   @Test func chooserOptionsRequireUniqueOpaqueIdentifiers() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    let valid = ["optionID": "opaque-option-0", "name": "Adapter"]
+    let valid = ["optionId": "opaque-option-0", "name": "Adapter"]
     let parsedRequest = try #require(
       self.request(store, transport: "usb", id: "opaque-session", options: [valid], canGrant: true))
     #expect(parsedRequest.options.first?.optionID == "opaque-option-0")
@@ -155,8 +155,8 @@ struct DeviceChooserTests {
       self.request(
         store, transport: "usb", id: "unnamed-device",
         options: [
-          ["optionID": "unnamed-0", "name": ""],
-          ["optionID": "unnamed-1", "name": "   "],
+          ["optionId": "unnamed-0", "name": ""],
+          ["optionId": "unnamed-1", "name": "   "],
         ], canGrant: true))
 
     #expect(request.options.map(\.title) == [
@@ -201,7 +201,7 @@ struct DeviceChooserTests {
     let request = try #require(
       self.request(
         store, transport: "usb", id: "opaque-selection",
-        options: [["optionID": optionID, "name": "Adapter"]], canGrant: true))
+        options: [["optionId": optionID, "name": "Adapter"]], canGrant: true))
     var decisions: [String?] = []
     store.onDeviceChooserDecision = { _, selected in decisions.append(selected) }
 
@@ -218,7 +218,7 @@ struct DeviceChooserTests {
     let updated = try #require(
       self.request(
         store, kind: "deviceChooserUpdated", transport: "usb", id: "7",
-        options: [["optionID": "usb-option-7", "name": "USB serial adapter"]], canGrant: true))
+        options: [["optionId": "usb-option-7", "name": "USB serial adapter"]], canGrant: true))
     #expect(updated.canGrant)
     #expect(store.updateDeviceChooser(updated))
     guard case .deviceChooser(let shown) = store.sheet else {

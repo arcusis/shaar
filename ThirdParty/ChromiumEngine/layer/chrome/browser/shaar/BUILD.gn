@@ -108,6 +108,10 @@ source_set("engine") {
     "media/shaar_media_permission.cc",
     "media/shaar_media_permission.h",
     # END media
+    # BEGIN permissions
+    "permissions/shaar_permission_prompt.cc",
+    "permissions/shaar_permission_prompt.h",
+    # END permissions
     # BEGIN storage_keychain
     "storage_keychain/shaar_storage_keychain.cc",
     "storage_keychain/shaar_storage_keychain.h",
@@ -167,6 +171,11 @@ source_set("engine") {
     "//services/media_session/public/cpp",
     "//services/media_session/public/mojom",
     # END media
+    # BEGIN permissions
+    "//chrome/browser/custom_handlers",
+    "//components/custom_handlers",
+    "//components/permissions",
+    # END permissions
     "//components/download/content/public",
     "//components/download/public/common:public",
     "//extensions/browser",
@@ -316,6 +325,13 @@ test("shaar_media_unittests") {
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END media
+# BEGIN permissions
+test("shaar_permission_unittests") {
+  sources = [ "permissions/shaar_permission_prompt_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END permissions
+
 # BEGIN quit_probe
 test("shaar_quit_probe_unittests") {
   sources = [ "quit_probe/shaar_quit_probe_unittest.cc" ]
@@ -345,6 +361,7 @@ test("shaar_layer_unittests") {
     "media/shaar_media_unittest.cc",
     "save_prompts/shaar_save_prompts_unittest.cc",
     "navigation/shaar_navigation_unittest.cc",
+    "permissions/shaar_permission_prompt_unittest.cc",
     "private_sessions/shaar_private_sessions_unittest.cc",
     "profiles/shaar_profiles_unittest.cc",
     "quit_probe/shaar_quit_probe_unittest.cc",
@@ -363,13 +380,17 @@ test("shaar_layer_unittests") {
     ":engine",
     "//base",
     "//base/test:test_support",
+    "//chrome/browser/content_settings:content_settings_factory_impl",
+    "//chrome/browser/custom_handlers",
     "//chrome/test/base:testing_browser_process_impl",
     "//chrome/test/base:testing_profile_impl",
     "//components/bookmarks/test",
+    "//components/content_settings/core/browser",
     "//components/download/public/common:test_support",
     "//components/history/core/browser",
     "//components/os_crypt/common:keychain_password_mac",
     "//components/os_crypt/async/browser:keychain_key_provider",
+    "//components/permissions:test_support",
     "//net:extras",
     "//services/network:test_support",
     "//content/test:test_support",

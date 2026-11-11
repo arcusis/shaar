@@ -24,6 +24,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
@@ -35,6 +36,8 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/custom_handlers/protocol_handler.h"
+#include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
@@ -112,6 +115,7 @@ constexpr SettingType kSettingTypes[] = {
     {"notifications", ContentSettingsType::NOTIFICATIONS},
     {"popups", ContentSettingsType::POPUPS},
     {"sound", ContentSettingsType::SOUND},
+    {"midi", ContentSettingsType::MIDI_SYSEX},
 };
 
 std::optional<ContentSettingsType> TypeForName(std::string_view name) {
@@ -270,6 +274,62 @@ shaar_error_code Clear(Profile* profile, const GURL* origin, uint64_t mask,
   return SHAAR_OK;
 }
 
+custom_handlers::ProtocolHandlerRegistry* ProtocolHandlers(Profile* profile) {
+  if (!profile)
+    return nullptr;
+  return ProtocolHandlerRegistryFactory::GetForBrowserContext(profile);
+}
+
+bool HandlerMatchesOrigin(const custom_handlers::ProtocolHandler& handler,
+                          const GURL& origin) {
+  return url::Origin::Create(handler.url())
+      .IsSameOriginWith(url::Origin::Create(origin));
+}
+
+bool OriginHasUserProtocolHandler(Profile* profile, const GURL& origin) {
+  auto* registry = ProtocolHandlers(profile);
+  if (!registry)
+    return false;
+  const auto handlers =
+      registry->GetUserDefinedHandlers(base::Time::Min(), base::Time::Max());
+  for (const auto& handler : handlers) {
+    if (HandlerMatchesOrigin(handler, origin))
+      return true;
+  }
+  return false;
+}
+
+int RemoveUserProtocolHandlers(Profile* profile, const GURL& origin) {
+  auto* registry = ProtocolHandlers(profile);
+  if (!registry)
+    return 0;
+  const auto handlers =
+      registry->GetUserDefinedHandlers(base::Time::Min(), base::Time::Max());
+  int removed = 0;
+  for (const auto& handler : handlers) {
+    if (!HandlerMatchesOrigin(handler, origin))
+      continue;
+    registry->RemoveHandler(handler);
+    ++removed;
+  }
+  return removed;
+}
+
+void AppendProtocolHandlerOrigins(Profile* profile,
+                                  std::vector<std::string>* origins) {
+  auto* registry = ProtocolHandlers(profile);
+  if (!registry || !origins)
+    return;
+  const auto handlers =
+      registry->GetUserDefinedHandlers(base::Time::Min(), base::Time::Max());
+  for (const auto& handler : handlers) {
+    const GURL& url = handler.url();
+    if (!url.SchemeIsHTTPOrHTTPS())
+      continue;
+    origins->push_back(url::Origin::Create(url).Serialize());
+  }
+}
+
 }  // namespace
 
 shaar_error_code HandleSiteDataOperation(
@@ -344,6 +404,11 @@ shaar_error_code HandleSiteDataOperation(
         item.Set("isDefault", value == CONTENT_SETTING_DEFAULT);
         values.Set(std::string(entry.name), std::move(item));
       }
+      Dict handlers;
+      const bool registered = OriginHasUserProtocolHandler(profile, origin);
+      handlers.Set("value", registered ? std::string("allow") : std::string("ask"));
+      handlers.Set("isDefault", !registered);
+      values.Set("protocolHandlers", std::move(handlers));
       Dict payload;
       payload.Set("schemaVersion", 1);
       payload.Set("settings", std::move(values));
@@ -395,10 +460,11 @@ shaar_error_code HandleSiteDataOperation(
           reset_types.push_back(*type);
         }
       }
+      const int removed_handlers = RemoveUserProtocolHandlers(profile, origin);
       for (const auto type : reset_types)
         settings->SetContentSettingDefaultScope(origin, origin, type,
                                                 CONTENT_SETTING_DEFAULT);
-      if (!reset_types.empty()) {
+      if (!reset_types.empty() || removed_handlers > 0) {
         const std::string event = "{\"kind\":\"settingsChanged\",\"schemaVersion\":1}";
         shaar::EmitEvent(engine, SHAAR_EVENT_SITE_DATA,
             {profile_id.data(), profile_id.size()},
@@ -407,7 +473,8 @@ shaar_error_code HandleSiteDataOperation(
       }
       Dict payload;
       payload.Set("schemaVersion", 1);
-      payload.Set("resetCount", static_cast<int>(reset_types.size()));
+      payload.Set("resetCount",
+                  static_cast<int>(reset_types.size()) + removed_handlers);
       return ReturnPayload(reply, reply_context, request_id, std::move(payload));
     }
     if (!OnlyKeys(*args, {"schemaVersion", "origin", "includeCookies", "includeStorage"}))
@@ -454,6 +521,7 @@ shaar_error_code HandleSiteDataOperation(
           origins.push_back(url::Origin::Create(url).Serialize());
       }
     }
+    AppendProtocolHandlerOrigins(profile, &origins);
     std::sort(origins.begin(), origins.end());
     origins.erase(std::unique(origins.begin(), origins.end()), origins.end());
     base::ListValue list;

@@ -34,6 +34,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/shaar/permissions/shaar_permission_prompt.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -928,8 +929,12 @@ shaar_error_code HandleMediaOperation(
         !accepted)
       return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                   "invalid website media decision");
-    const auto allowed = shaar::media::ResolveWebsiteMediaPermission(
+    std::optional<bool> allowed = shaar::media::ResolveWebsiteMediaPermission(
         engine, contents, *permission_id, *accepted);
+    if (!allowed) {
+      allowed = shaar::permissions::ResolveWebsitePermission(
+          engine, contents, *permission_id, *accepted);
+    }
     if (!allowed)
       return Fail(immediate_error, SHAAR_NOT_FOUND,
                   "website media request is unavailable");

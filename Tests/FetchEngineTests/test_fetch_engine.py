@@ -375,6 +375,5 @@ exit 99
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
         self.assertIn("missing the required capture indicator event", result.stderr)
-
 if __name__ == "__main__":
     unittest.main()

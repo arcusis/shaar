@@ -1904,7 +1904,14 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
                 completion:^(NSDictionary *reply, NSError *error) {
     ARCShaarRuntime *runtime = weakRuntime;
     NSDictionary *current = runtime ? ProbePopupOwner(runtime, popupID) : nil;
-    if (error || ![current isEqualToDictionary:owner]) {
+    if (error) {
+      NSData *data = [NSJSONSerialization dataWithJSONObject:@{
+        @"probeError": error.localizedDescription ?: @"Engine popup evaluation failed."
+      } options:NSJSONWritingFragmentsAllowed error:nil];
+      completion(data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil);
+      return;
+    }
+    if (![current isEqualToDictionary:owner]) {
       completion(nil);
       return;
     }

@@ -82,8 +82,7 @@ class TabLifecyclePatchTests(unittest.TestCase):
     def test_patch_is_not_applied_twice(self):
         manifest = json.loads(MANIFEST.read_text())
         listed = [entry["file"] for entry in manifest["patches"]]
-        self.assertNotIn(str(PATCH.relative_to(ROOT)), listed)
-        self.assertNotIn("0062-shaar-tab-lifecycle.patch", "\n".join(listed))
+        self.assertEqual(listed.count(str(PATCH.relative_to(ROOT))), 1)
         self.assertNotIn("0061-shaar-tab-lifecycle.patch", "\n".join(listed))
 
     def test_layer_hashes_match_the_files(self):

@@ -250,6 +250,9 @@ class EngineBundleVerifierTests(unittest.TestCase):
         self.assertEqual(self.verify()["reason"], "bundle_identity_mismatch")
 
     def test_missing_helper_and_escaping_framework_link_fail(self):
+        shutil.rmtree(self.helpers / "Chromium Helper.app")
+        self.assertEqual(self.verify()["reason"], "runtime_bundle_artifact_missing")
+        self.reset()
         shutil.rmtree(self.helpers / "Chromium Helper (GPU).app")
         self.assertEqual(self.verify()["reason"], "helper_set_mismatch")
         self.reset()

@@ -90,7 +90,7 @@ struct BrowserWorkspaceStoreTests {
     #expect(try file.load() == manager.workspace)
   }
 
-  @Test func destinationWaitsForNativeOwnerBeforeBindingTransferredTab() async throws {
+  @Test func sourceWindowLateCloseCannotRemoveTransferredTab() async throws {
     let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let sourceID = manager.workspace.windows[0].id
     let destinationID = try manager.newWindow(from: sourceID)
@@ -124,8 +124,22 @@ struct BrowserWorkspaceStoreTests {
       !runtime.opened.contains {
         $0.tabID == tabID.uuidString && $0.windowID == destinationID.uuidString
       })
+    runtime.retireWindow(sourceID.uuidString)
+    events.windowClosed(sourceID.uuidString, quitting: false)
     try manager.removeWindow(sourceID)
-    runtime.release(tabID)
+    for _ in 0..<20 {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(
+      !runtime.opened.contains {
+        $0.tabID == tabID.uuidString && $0.windowID == destinationID.uuidString
+      })
+    #expect(events.router.tabOwnerWindowID(for: tabID.uuidString) == sourceID.uuidString)
+    #expect(events.router.clients.contains { $0.windowID == destinationID.uuidString })
+
+    runtime.deliverClosed(tabID, from: sourceID.uuidString)
+    #expect(events.router.tabOwnerWindowID(for: tabID.uuidString) == nil)
+    #expect(events.router.clients.contains { $0.windowID == destinationID.uuidString })
     for _ in 0..<100
     where !runtime.opened.contains(where: {
       $0.tabID == tabID.uuidString && $0.windowID == destinationID.uuidString
@@ -137,7 +151,12 @@ struct BrowserWorkspaceStoreTests {
       runtime.opened.contains {
         $0.tabID == tabID.uuidString && $0.windowID == destinationID.uuidString
       })
+    #expect(destinationEngine.notice == nil)
     #expect(destinationEngine.liveTabs.contains(tabID))
+    #expect(runtime.windowID(forTabID: tabID.uuidString) == destinationID.uuidString)
+    runtime.deliverClosed(tabID, from: sourceID.uuidString)
+    #expect(destinationEngine.liveTabs.contains(tabID))
+    #expect(runtime.windowID(forTabID: tabID.uuidString) == destinationID.uuidString)
     #expect(manager.workspace.window(sourceID) == nil)
     #expect(
       manager.workspace.window(destinationID)?.session.spaces.flatMap(\.tabs).contains {
@@ -426,5 +445,11 @@ private final class WindowTransferRuntime: ARCChromiumRuntime, @unchecked Sendab
 
   override func discardTabID(_ tabID: String) { discarded.append(tabID) }
 
-  func release(_ tab: UUID) { owners[tab.uuidString] = nil }
+  func retireWindow(_ windowID: String) {
+    owners = owners.filter { $0.value != windowID }
+  }
+
+  func deliverClosed(_ tab: UUID, from windowID: String) {
+    onTabClosed?(tab.uuidString, windowID)
+  }
 }

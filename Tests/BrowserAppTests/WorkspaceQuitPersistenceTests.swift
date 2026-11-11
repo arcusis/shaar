@@ -36,7 +36,8 @@ struct WorkspaceQuitPersistenceTests {
     fixture.host.perform(.quit)
     let context = try #require(fixture.host.contexts.values.first)
     let tab = try #require(context.store.session.selectedPage?.tab.id)
-    fixture.runtime.onTabClosed?(tab.uuidString)
+    fixture.runtime.tabWindows[tab.uuidString] = nil
+    fixture.runtime.onTabClosed?(tab.uuidString, context.nativeID)
     #expect(context.store.session.page(forTabID: tab) == nil)
     #expect(context.store.session.closedTabs.contains { $0.tab.id == tab })
     fixture.runtime.onWindowClosed?(context.nativeID, false)
@@ -153,9 +154,11 @@ private final class WorkspaceQuitRuntime: ARCShaarRuntime, @unchecked Sendable {
         onQuitCancelled?()
         return
       }
-      for tab in tabWindows.keys {
+      for tab in Array(tabWindows.keys) {
         onTabChanged?(tab, "about:blank", "", false, false, false)
-        onTabClosed?(tab)
+        if let owner = tabWindows.removeValue(forKey: tab) {
+          onTabClosed?(tab, owner)
+        }
       }
       // Quit intent belongs to the app even when an individual native close
       // arrives without the engine's quitting flag.

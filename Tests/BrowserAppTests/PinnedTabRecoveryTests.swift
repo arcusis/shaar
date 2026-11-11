@@ -298,7 +298,7 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime, @unchecked Sendable 
       throw NSError(domain: "org.arcusis.shaar.engine", code: 4)
     }
     if failOpen {
-      if closeDuringOpen { onTabClosed?(tabID) }
+      if closeDuringOpen { onTabClosed?(tabID, windowID) }
       throw CocoaError(.coderInvalidValue)
     }
     owners[tabID] = windowID
@@ -316,6 +316,7 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime, @unchecked Sendable 
   }
 
   override func closeTabID(_ tabID: String) {
+    let windowID = owners[tabID]
     if reportRendererGoneOnClose {
       let profileID = closeProfileID
       // The product reports renderer exit on the main thread before close returns.
@@ -324,7 +325,7 @@ private final class PinRecoveryRuntime: ARCChromiumRuntime, @unchecked Sendable 
       }
     }
     owners[tabID] = nil
-    onTabClosed?(tabID)
+    if let windowID { onTabClosed?(tabID, windowID) }
   }
 
   func destroy(_ id: UUID) { closeTabID(id.uuidString) }

@@ -584,8 +584,12 @@ final class BrowserEngine {
       self.sleepingTabs.apply(
         state: state, audible: audible, capturing: capturing, id: id, store: store)
     }
-    callbacks.onTabClosed = { [weak self] identity in
-      guard let self, let id = UUID(uuidString: identity) else { return }
+    callbacks.onTabClosed = { [weak self] identity, closedWindowID in
+      guard let self, closedWindowID == self.windowID,
+        self.runtime.windowID(forTabID: identity) == nil,
+        self.events.router.tabOwnerWindowID(for: identity) == nil,
+        let id = UUID(uuidString: identity)
+      else { return }
       if self.tabsAwaitingProfileReassignment.remove(id) != nil {
         self.pages[id] = nil
         DispatchQueue.main.async { [weak self] in self?.reconcile() }
@@ -659,7 +663,6 @@ final class BrowserEngine {
           openerID: opener.flatMap(UUID.init(uuidString:)), foreground: foreground) ?? false
       if !accepted {
         self.liveTabs.remove(id)
-        self.events.router.forgetTab(identity, windowID: self.windowID)
         self.runtime.discardTabID(identity)
       }
     }
@@ -699,16 +702,16 @@ final class BrowserEngine {
         guard let self, !self.isClosed,
           self.tabsAwaitingProfileReassignment.contains(id)
         else { return }
-        if self.runtime.windowID(forTabID: id.uuidString) == nil {
+        if self.runtime.windowID(forTabID: id.uuidString) == nil,
+          self.events.router.tabOwnerWindowID(for: id.uuidString) == nil
+        {
           self.tabsAwaitingProfileReassignment.remove(id)
-          self.events.router.forgetTab(id.uuidString, windowID: self.windowID)
           self.reconcile()
           return
         }
         do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
       }
       guard let self, self.tabsAwaitingProfileReassignment.remove(id) != nil else { return }
-      self.events.router.forgetTab(id.uuidString, windowID: self.windowID)
       self.failedTabs.insert(id)
       self.notice = ShellL10n.string(
         "This tab could not be reopened after its profile changed.")
@@ -722,7 +725,9 @@ final class BrowserEngine {
         guard let self, !self.isClosed,
           self.tabsAwaitingWindowTransfer.contains(id)
         else { return }
-        if self.runtime.windowID(forTabID: id.uuidString) == nil {
+        if self.runtime.windowID(forTabID: id.uuidString) == nil,
+          self.events.router.tabOwnerWindowID(for: id.uuidString) == nil
+        {
           self.tabsAwaitingWindowTransfer.remove(id)
           self.openReleasedTransferredTab(id)
           self.reconcile()
@@ -825,7 +830,6 @@ final class BrowserEngine {
     for removed in liveTabs.subtracting(wantedTabs) {
       // Ordinary tab close waits for Chromium's beforeunload decision. This path
       // handles confirmed space removal; profile files are deliberately retained.
-      events.router.forgetTab(removed.uuidString, windowID: windowID)
       sleepingTabs.forget(removed)
       store.noteTabAwake(removed)
       runtime.discardTabID(removed.uuidString)
@@ -859,8 +863,10 @@ final class BrowserEngine {
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !failedTabs.contains(tab.id) {
         guard !tabsAwaitingProfileReassignment.contains(tab.id) else { continue }
-        if let ownerWindowID = runtime.windowID(forTabID: tab.id.uuidString),
-          ownerWindowID != windowID
+        let nativeOwner = runtime.windowID(forTabID: tab.id.uuidString)
+        let routedOwner = events.router.tabOwnerWindowID(for: tab.id.uuidString)
+        if (nativeOwner != nil && nativeOwner != windowID)
+          || (routedOwner != nil && routedOwner != windowID)
         {
           waitForTransferredTabRelease(tab.id)
           continue

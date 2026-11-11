@@ -1011,12 +1011,13 @@ final class BrowserEngine {
         store?.library.refresh(profile, section: .bookmarks)
         store?.library.refresh(profile, section: .history)
         Task { [weak self] in
-          // Download history initializes asynchronously and can return an empty early list.
-          for delay in [300, 700, 2000] {
-            try? await Task.sleep(for: .milliseconds(delay))
-            guard let self, !self.isClosed else { return }
-            self.runtime.refreshDownloads(forProfileID: profile.uuidString)
-          }
+          // Let profile startup settle; the engine owns bounded retries if downloads are not ready.
+          try? await Task.sleep(for: .seconds(2))
+          guard let self, !self.isClosed,
+            self.loadedProfiles.contains(profile),
+            self.store?.session.spaces.contains(where: { $0.profileID == profile }) == true
+          else { return }
+          self.runtime.refreshDownloads(forProfileID: profile.uuidString)
         }
       } catch {
         failedProfiles.insert(profile)

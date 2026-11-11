@@ -46,6 +46,8 @@ bool SharedHomeVersionSatisfied(std::string_view installed,
 namespace shaar::extensions_host {
 // Component extensions remain installed in Chromium but are not user entries.
 bool ShouldListLocation(extensions::mojom::ManifestLocation location);
+// Loopback Web Store fixtures are accepted only by verification engine runs.
+bool WebStoreFitURLAllowed(const GURL& url, bool testing);
 // Canonicalizes and restricts the verification component to the marked root.
 bool ValidProbeExtensionPath(const base::FilePath& data_root,
                              const base::FilePath& requested);

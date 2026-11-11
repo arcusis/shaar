@@ -320,6 +320,10 @@ bool EngineIsShuttingDown(shaar_engine* engine) {
   return g_state.engine == engine && g_state.shutting_down;
 }
 
+bool HasOwnedProbeRoot(const shaar_engine* engine) {
+  return engine && IsMarkedProbeRoot(engine);
+}
+
 }  // namespace shaar::lifecycle
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_test_keep_alive_state(

@@ -26,6 +26,8 @@ shaar_engine* ActiveEngine();
 bool EngineIsRunning(shaar_engine* engine);
 bool EngineIsReady(shaar_engine* engine);
 bool EngineIsShuttingDown(shaar_engine* engine);
+// Uses the same marked disposable data-root check as lifecycle probes.
+bool HasOwnedProbeRoot(const shaar_engine* engine);
 std::unique_ptr<ChromeContentBrowserClient> CreateContentBrowserClient();
 std::vector<std::string> ChromeMainArguments(
     const std::string& executable_path, const std::string& data_root,

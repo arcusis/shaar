@@ -217,6 +217,10 @@ typedef enum {
   SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL = 1090,
   SHAAR_OP_PROBE_NODE_FRONTEND = 1091,
   SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED = 1092,
+  // Testing only: send a native mouse click to a never-shown owned fixture tab.
+  SHAAR_OP_PROBE_TRUSTED_CLICK = 1093,
+  // Testing only: open Node frontend against a local inspector fixture.
+  SHAAR_OP_PROBE_NODE_LIVE = 1094,
   // END devtools operation IDs.
 
   // BEGIN media

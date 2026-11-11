@@ -14,6 +14,9 @@ class WebContents;
 }
 
 namespace shaar::windows_tabs {
+
+// True only for an attached selected tab in an engine host never ordered onscreen.
+bool HasNeverShownPageHost(shaar_window* window, content::WebContents* contents);
 void ReleasePageHost(shaar_window* window);
 void ShowSelectedWebContents(content::WebContents* previous,
                              content::WebContents* selected);

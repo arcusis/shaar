@@ -23,10 +23,30 @@ Durations are planning ranges for an Office Mac with warm dependencies and a rea
 | 5. Notes and credential preflight | Finalize the English `<li>…</li>` notes for Sparkle and GitHub; review the Hebrew copy. On the Office Mac, check the Developer ID identity, `shaar-notary` profile, Sparkle key account `shaar`, and optional passkey provisioning profile without printing private key material. Ensure `.venv` has hash-pinned `scripts/release-requirements.txt`, SwiftPM Sparkle tools are present, `gh` can access `arcusis/shaar`, Pages uses GitHub Actions and `github-pages` permits `v*` tags. | 15–30 min; Apple entitlement approval may take days |
 | 6. Dry run | In a clean release checkout, write the chosen English `<li>` lines to an HTML notes file and run `SHAAR_BUNDLE_SWIFT_JOBS=4 ~/bin/shaar-heavy bash scripts/release.sh --notes <notes.html>`. This builds, signs, verifies, makes the DMG/ZIP and appcast locally; it does not notarize or upload. `--allow-unsigned-update` is diagnostic only and cannot ship. Check hashes, bundle version, signatures, Gatekeeper's expected pre-notary result, and no build-machine paths. | 20–60 min, longer if cold |
 | 7. Tag and notarize | After gates pass, create/push `v0.2.0` at the exact verified production commit. In a **clean checkout of that tag**, run `SHAAR_BUNDLE_SWIFT_JOBS=4 ~/bin/shaar-heavy bash scripts/release.sh --notes <notes.html> --notarize --upload`. It checks tag and live feed, builds again, signs all Chromium helpers/framework, Sparkle and app with Developer ID/hardened runtime/timestamp, notarizes and staples the app and signed DMG, checks Gatekeeper, signs the Sparkle ZIP with EdDSA, validates the appcast, then creates a **draft** GitHub Release with DMG, ZIP, `appcast.xml`. | 30–90 min build/sign plus 10–60+ min Apple service |
-| 8. Review and publish | Inspect the draft assets and release notes. Publishing the draft triggers `.github/workflows/release.yml`: exact tag/commit CI and zero alerts, three asset names, anonymous ZIP/feed download, bundle/version/signature checks, newer-than-live build, Pages URL, then Pages appcast deployment. Confirm the public feed and Sparkle update from v0.1.0. | 15–45 min plus Actions queue |
-| 9. Public site | Update `website/src/content.ts` to the **published** release, verify the changelog/download links and deploy through its normal production workflow. | 10–30 min plus site CI |
+| 8. Engine archive receipt gate | Before publishing the draft, obtain the receipt accompanying the **exact pinned engine archive** used in the signed app. Compare its ordered patch list and patch digests with the active Chromium 157 patch manifest at the tagged production commit. Require every expected patch exactly once, no unexpected patch, matching archive identity and hashes, and a complete successful build receipt. A missing or incomplete receipt blocks publication; the receipt format/path is being added separately. | 10–20 min once the receipt exists |
+| 9. Review and publish | Inspect the draft assets and release notes after the receipt gate. Publishing the draft triggers `.github/workflows/release.yml`: exact tag/commit CI and zero alerts, three asset names, anonymous ZIP/feed download, bundle/version/signature checks, newer-than-live build, Pages URL, then Pages appcast deployment. Confirm the public feed and Sparkle update from v0.1.0. | 15–45 min plus Actions queue |
+| 10. Public site | Update `website/src/content.ts` to the **published** release, verify the changelog/download links and deploy through its normal production workflow. | 10–30 min plus site CI |
 
 `release.sh` removes `build/release` before building; retain authored notes and QA receipts elsewhere. The script rejects an existing release tag and `--upload` without `--notarize` or with an unsigned update. The Release workflow refuses an equal/older build, branch ref, draft release, prerelease, or download that is not public. Do not manually write the Pages appcast.
+
+## Release-note accuracy audit
+
+The published `v0.1.0` tag and current `production` have no Git merge base, so `git log v0.1.0..origin/production` alone is not a chronological release delta. This audit compared that log with production PRs merged after the published v0.1.0 release on 2026-10-31. These are provenance references for the English and Hebrew copy in [[Chromium_157_Release_Notes]], not issue numbers for users.
+
+| Copy claim | Merged source |
+| --- | --- |
+| Chromium 157 engine | #1601, #1605, #1612; production pins shaar.32. |
+| F12 Chromium DevTools, Shaar overlay panels, retired old shell and retained Inspector | #1489, #1493, #1516, #1541, #1543, #1545, #1546, #1548, #1551, #1558, #1568, #1588, #1592, #1595, #1599. |
+| Sleeping tabs and protected active/pinned/playing tabs | #1478, #1550, #1580, #1604. |
+| Drag an ordinary tab between windows | #1586. |
+| HTTPS upgrade, warning and per-profile setting | #1542, #1557, #1570. |
+| Website permission sheet for location, notifications, MIDI and protocol handlers | #1540, #1552, #1566, #1569; native patch 0070 is in the active engine manifest. |
+| Pinned/Favorite icons; pinned tab closes cleanly after renderer exit | #1479, #1547, #1572. |
+| Correct profile during Space switches; Library history; no premature download error | #1585, #1591, #1593, #1475. |
+| Automatic Picture in Picture when leaving video | #1476. |
+| Clearer unsupported unpacked-extension message | #1553. This is a message about engine support, not a claim that unpacked loading works. |
+
+Deliberately excluded from user-facing copy: save prompts (#1549) by release decision; iCloud Keychain passkeys (#1490) pending David's answer and signed-build proof; private Quit improvements because #1480 and #1600 add optional/verification hooks rather than a demonstrated product change; and Web Share, device choosers, screen sharing and print (#1574, #1534, #1544, #1589), whose merged app-side routes lack the corresponding enabled native path in the current pinned engine. Probe-only, CI, security and documentation PRs do not add user-facing release claims.
 
 ## David / account dependencies
 

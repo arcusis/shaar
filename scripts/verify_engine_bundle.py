@@ -46,6 +46,12 @@ HELPERS = {
     "Chromium Helper (Aperitif Renderer).app": ("com.arcusis.shaar.helper.renderer", "Chromium Helper (Aperitif Renderer)"),
     "Chromium Helper (Aperitif Alerts).app": ("com.arcusis.shaar.framework.AlertNotificationService", "Chromium Helper (Aperitif Alerts)"),
 }
+# bundle-app.sh gives only these notification services the product name and app.icns.
+# The normal helper name/icon contract remains strict for every other bundle.
+ALERT_SERVICE_HELPERS = {
+    "Chromium Helper (Alerts).app": "com.arcusis.shaar.framework.AlertNotificationService",
+    "Chromium Helper (Aperitif Alerts).app": "com.arcusis.shaar.framework.AlertNotificationService",
+}
 
 
 class VerifyError(Exception):
@@ -399,12 +405,19 @@ def _bundle_metadata(app: Path) -> tuple[Path, Path, list[tuple[Path, str]]]:
             values = plistlib.loads(helper_info)
         except (plistlib.InvalidFileException, ValueError) as error:
             raise VerifyError("helper_plist_invalid") from error
-        display_name = name.removesuffix(".app").replace("Chromium", "Shaar", 1)
+        alert_identifier = ALERT_SERVICE_HELPERS.get(name)
+        if alert_identifier is not None and identifier != alert_identifier:
+            raise VerifyError("helper_identity_mismatch")
+        alert_service = alert_identifier is not None
+        display_name = "Shaar" if alert_service else name.removesuffix(".app").replace("Chromium", "Shaar", 1)
+        icon_name = "app.icns" if alert_service else "Shaar.icns"
         if (values.get("CFBundleIdentifier"), values.get("CFBundleExecutable"),
                 values.get("CFBundleDisplayName"), values.get("CFBundleIconFile")) != (
-                identifier, executable_name, display_name, "Shaar.icns"):
+                identifier, executable_name, display_name, icon_name):
             raise VerifyError("helper_identity_mismatch")
-        icon = helper / "Contents/Resources/Shaar.icns"
+        if alert_service and values.get("CFBundleName") != display_name:
+            raise VerifyError("helper_identity_mismatch")
+        icon = helper / "Contents/Resources" / icon_name
         if _hash_regular(icon, 2 * 1024 * 1024, owner) != hashlib.sha256(SHAAR_ICON.read_bytes()).hexdigest():
             raise VerifyError("helper_icon_mismatch")
         _check_regular(helper / "Contents/MacOS" / executable_name, 512 * 1024 * 1024, owner)

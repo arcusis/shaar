@@ -82,13 +82,21 @@ class EngineBundleVerifierTests(unittest.TestCase):
         for name, (identifier, executable) in verifier.HELPERS.items():
             helper = self.helpers / name
             (helper / "Contents/MacOS").mkdir(parents=True)
-            (helper / "Contents/Info.plist").write_bytes(plistlib.dumps({
+            alert_service = name in (
+                "Chromium Helper (Alerts).app", "Chromium Helper (Aperitif Alerts).app")
+            icon_name = "app.icns" if alert_service else "Shaar.icns"
+            info = {
                 "CFBundleIdentifier": identifier, "CFBundleExecutable": executable,
-                "CFBundleDisplayName": name.removesuffix(".app").replace("Chromium", "Shaar", 1),
-                "CFBundleIconFile": "Shaar.icns",
-            }))
+                "CFBundleDisplayName": (
+                    "Shaar" if alert_service
+                    else name.removesuffix(".app").replace("Chromium", "Shaar", 1)),
+                "CFBundleIconFile": icon_name,
+            }
+            if alert_service:
+                info["CFBundleName"] = "Shaar"
+            (helper / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
             (helper / "Contents/Resources").mkdir()
-            shutil.copy2(verifier.SHAAR_ICON, helper / "Contents/Resources/Shaar.icns")
+            shutil.copy2(verifier.SHAAR_ICON, helper / "Contents/Resources" / icon_name)
             helper_binary = helper / "Contents/MacOS" / executable
             helper_binary.write_bytes(
                 b"../../../../Chromium Framework"
@@ -156,6 +164,29 @@ class EngineBundleVerifierTests(unittest.TestCase):
         self.temp.cleanup()
         self.setUp()
 
+    def test_packaged_alert_services_require_exact_product_identity(self):
+        self.assertEqual(self.verify()["verification"], "passed")
+        for name in ("Chromium Helper (Alerts).app", "Chromium Helper (Aperitif Alerts).app"):
+            with self.subTest(helper=name):
+                contents = self.helpers / name / "Contents"
+                info_path = contents / "Info.plist"
+                correct = plistlib.loads(info_path.read_bytes())
+                for field, wrong in (
+                    ("CFBundleIdentifier", "com.arcusis.shaar.helper"),
+                    ("CFBundleName", "Shaar Helper"),
+                    ("CFBundleDisplayName", "Shaar Helper"),
+                    ("CFBundleIconFile", "Shaar.icns"),
+                ):
+                    with self.subTest(field=field):
+                        altered = dict(correct, **{field: wrong})
+                        info_path.write_bytes(plistlib.dumps(altered))
+                        self.assertEqual(self.verify()["reason"], "helper_identity_mismatch")
+                        info_path.write_bytes(plistlib.dumps(correct))
+                icon = contents / "Resources/app.icns"
+                icon.write_bytes(b"wrong icon")
+                self.assertEqual(self.verify()["reason"], "helper_icon_mismatch")
+                shutil.copy2(verifier.SHAAR_ICON, icon)
+
     def test_real_parser_payload_and_report_are_deterministic_and_bounded(self):
         first = self.verify()
         second = self.verify()
@@ -219,7 +250,7 @@ class EngineBundleVerifierTests(unittest.TestCase):
         self.assertEqual(self.verify()["reason"], "bundle_identity_mismatch")
 
     def test_missing_helper_and_escaping_framework_link_fail(self):
-        shutil.rmtree(self.helpers / "Chromium Helper.app")
+        shutil.rmtree(self.helpers / "Chromium Helper (GPU).app")
         self.assertEqual(self.verify()["reason"], "helper_set_mismatch")
         self.reset()
         (self.framework / "Resources").unlink()

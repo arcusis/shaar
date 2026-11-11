@@ -495,7 +495,8 @@ document.documentElement.dataset.webgl=gl?'1':'0';
             return page("video", """
 <script>document.documentElement.dataset.clip='1'</script>
 <video id="clip" src="/clip.mp4" playsinline></video>
-<button id="popup" onclick="document.getElementById('clip').play()">Play</button>""")
+<button id="popup" onclick="const video=document.getElementById('clip');document.documentElement.dataset.playClick=String(event.isTrusted);video.play().then(()=>document.documentElement.dataset.playResult='resolved',error=>document.documentElement.dataset.playResult=error.name)">Play</button>
+<script>for(const name of ['pointerdown','mousedown','mouseup','click'])document.addEventListener(name,event=>document.documentElement.dataset['probe'+name]=[event.target.id||event.target.tagName,event.isTrusted,event.clientX,event.clientY].join(','),true)</script>""")
         if path == "/popup":
             return page("popup", f"""
 <a id="blank" target="_blank" href="{destination}">New tab</a>

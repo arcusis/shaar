@@ -1655,24 +1655,11 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
     completion(NO);
     return;
   }
-  NSString *script = [NSString stringWithFormat:
-      @"(()=>{const e=document.getElementById('%@');if(!e)return null;const r=e.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()",
-      elementID];
-  [self evaluateInTabID:tabID script:script completion:^(NSString *result) {
-    NSData *data = [result dataUsingEncoding:NSUTF8StringEncoding];
-    NSDictionary *point = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    NSNumber *x = [point isKindOfClass:NSDictionary.class] ? point[@"x"] : nil;
-    NSNumber *y = [point isKindOfClass:NSDictionary.class] ? point[@"y"] : nil;
-    if (![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class]) {
-      completion(NO);
-      return;
-    }
-    [self shaarDevToolsSubmit:1093 tabID:tabID profileID:profileID windowID:windowID
-                     payload:@{@"schemaVersion": @1, @"x": x, @"y": y}
-                  completion:^(NSDictionary *reply, NSError *error) {
-                    if (error) NSLog(@"Trusted probe click: %@", error.localizedDescription);
-                    completion(!error && [reply[@"submitted"] boolValue]);
-                  }];
+  [self shaarDevToolsSubmit:1093 tabID:tabID profileID:profileID windowID:windowID
+                   payload:@{@"schemaVersion": @1, @"elementID": elementID}
+                completion:^(NSDictionary *reply, NSError *error) {
+    if (error) NSLog(@"Trusted probe click: %@", error.localizedDescription);
+    completion(!error && [reply[@"submitted"] boolValue]);
   }];
 }
 

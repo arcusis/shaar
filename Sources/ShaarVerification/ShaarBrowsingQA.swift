@@ -582,7 +582,7 @@ import Foundation
         playback = await evaluate(
           runtime, tab: videoID,
           script:
-            "(()=>{const v=document.getElementById('clip');if(!v)return {paused:true,width:0,error:1};return {paused:v.paused,width:v.videoWidth,error:v.error?v.error.code:0};})()"
+            "(()=>{const v=document.getElementById('clip'),b=document.getElementById('popup'),r=b?.getBoundingClientRect();if(!v)return {paused:true,width:0,error:1};return {paused:v.paused,width:v.videoWidth,error:v.error?v.error.code:0,click:document.documentElement.dataset.playClick||'none',playResult:document.documentElement.dataset.playResult||'pending',userActive:navigator.userActivation?.isActive||false,hasBeenActive:navigator.userActivation?.hasBeenActive||false,button:r?{x:r.x,y:r.y,width:r.width,height:r.height}:null,hit:r?document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.id||document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.tagName:null,events:Object.fromEntries(['pointerdown','mousedown','mouseup','click'].map(name=>[name,document.documentElement.dataset['probe'+name]||'none']))};})()"
         )
         return playbackSettled(playback)
       }

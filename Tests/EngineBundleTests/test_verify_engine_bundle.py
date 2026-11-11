@@ -40,7 +40,7 @@ class EngineBundleVerifierTests(unittest.TestCase):
         self.repo = self.root / "repo"
         self.app = self.root / "Shaar.app"
         self.framework = self.app / "Contents/Frameworks/Chromium Framework.framework"
-        self.versioned = self.framework / "Versions/155.0.8059.84"
+        self.versioned = self.framework / "Versions/157.0.8103.51"
         self.helpers = self.versioned / "Helpers"
         self.packaged = self.app / "Contents/Resources/ChromiumEngine"
         self.archive = self.root / "engine.tar.xz"
@@ -69,7 +69,7 @@ class EngineBundleVerifierTests(unittest.TestCase):
             "Resources": "Versions/Current/Resources",
         }.items():
             (self.framework / name).symlink_to(target)
-        (self.framework / "Versions/Current").symlink_to("155.0.8059.84")
+        (self.framework / "Versions/Current").symlink_to("157.0.8103.51")
         contents = self.app / "Contents"
         (contents / "Info.plist").write_bytes(plistlib.dumps({
             "CFBundleIdentifier": verifier.APP_ID, "CFBundleExecutable": verifier.APP_EXECUTABLE,
@@ -90,8 +90,8 @@ class EngineBundleVerifierTests(unittest.TestCase):
             self.helper_map[name] = identifier
         pin = {
             "schemaVersion": 1, "sourceKind": "shaar",
-            "releaseTag": "engine-155.0.8059.84-shaar.4",
-            "asset": "ShaarEngine-155.0.8059.84-shaar.4.tar.xz",
+            "releaseTag": "engine-157.0.8103.51-shaar.4",
+            "asset": "ShaarEngine-157.0.8103.51-shaar.4.tar.xz",
             "sha256": "0" * 64,
         }
         self.pin_path = source / "pin.json"
@@ -117,12 +117,12 @@ class EngineBundleVerifierTests(unittest.TestCase):
             tar.addfile(versions_info)
             current = tarfile.TarInfo(root_name + "/Versions/Current")
             current.type = tarfile.SYMTYPE
-            current.linkname = "155.0.8059.84"
+            current.linkname = "157.0.8103.51"
             tar.addfile(current)
             for name in ("Chromium Framework", "Helpers", "Libraries", "Resources"):
                 link = self.framework / name
                 tar.add(link, arcname=root_name + "/" + name, recursive=False)
-            tar.add(self.versioned, arcname=root_name + "/Versions/155.0.8059.84")
+            tar.add(self.versioned, arcname=root_name + "/Versions/157.0.8103.51")
         pin["sha256"] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
 
     def _codesign_result(self, argv):

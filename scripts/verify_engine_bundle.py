@@ -152,7 +152,7 @@ def _load_pin(repo: Path) -> tuple[dict[str, str], bytes]:
     tag = pin["releaseTag"]
     asset = pin["asset"]
     if (not isinstance(tag, str) or not isinstance(asset, str)
-            or not re.fullmatch(r"engine-155\.0\.8059\.84-shaar\.[1-9][0-9]*", tag)
+            or not re.fullmatch(r"engine-157\.0\.8103\.51-shaar\.[1-9][0-9]*", tag)
             or asset != f"ShaarEngine-{tag.removeprefix('engine-')}.tar.xz"):
         raise VerifyError("pin_version_invalid")
     return pin, raw

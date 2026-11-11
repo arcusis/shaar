@@ -64,8 +64,8 @@ PendingMap& Pending() {
 }
 
 uint64_t& NextRequestID() {
-  static base::NoDestructor<uint64_t> next(0);
-  return *next;
+  static uint64_t next = 0;
+  return next;
 }
 
 // EmitEvent can ask the app to decide before the manager stores this prompt.
@@ -83,31 +83,28 @@ class InstallScope {
 
 std::optional<std::string_view> KindFor(
     const ::permissions::PermissionRequest& request) {
-  const std::optional<::permissions::RequestType> type =
-      request.request_type_if_present();
-  if (!type)
-    return std::nullopt;
-  if (*type == ::permissions::RequestType::kCameraStream)
+  const ::permissions::RequestType type = request.request_type();
+  if (type == ::permissions::RequestType::kCameraStream)
     return "camera";
-  if (*type == ::permissions::RequestType::kMicStream)
+  if (type == ::permissions::RequestType::kMicStream)
     return "microphone";
-  if (*type == ::permissions::RequestType::kGeolocation)
+  if (type == ::permissions::RequestType::kGeolocation)
     return "location";
-  if (*type == ::permissions::RequestType::kNotifications)
+  if (type == ::permissions::RequestType::kNotifications)
     return "notifications";
-  if (*type == ::permissions::RequestType::kClipboard)
+  if (type == ::permissions::RequestType::kClipboard)
     return "clipboard";
-  if (*type == ::permissions::RequestType::kMidiSysex)
+  if (type == ::permissions::RequestType::kMidiSysex)
     return "midi";
-  if (*type == ::permissions::RequestType::kMultipleDownloads)
+  if (type == ::permissions::RequestType::kMultipleDownloads)
     return "multipleDownloads";
-  if (*type == ::permissions::RequestType::kWindowManagement)
+  if (type == ::permissions::RequestType::kWindowManagement)
     return "windowManagement";
-  if (*type == ::permissions::RequestType::kLocalFonts)
+  if (type == ::permissions::RequestType::kLocalFonts)
     return "localFonts";
-  if (*type == ::permissions::RequestType::kStorageAccess)
+  if (type == ::permissions::RequestType::kStorageAccess)
     return "storageAccess";
-  if (*type == ::permissions::RequestType::kRegisterProtocolHandler)
+  if (type == ::permissions::RequestType::kRegisterProtocolHandler)
     return "protocolHandler";
   return std::nullopt;
 }
@@ -130,8 +127,7 @@ std::vector<std::string> KindsFor(
   if (!delegate)
     return std::monostate{};
   const auto& requests = delegate->Requests();
-  if (requests.empty() || !requests.front() ||
-      !requests.front()->request_type_if_present())
+  if (requests.empty() || !requests.front())
     return std::monostate{};
   if (requests.front()->GetContentSettingsType() !=
       ContentSettingsType::GEOLOCATION_WITH_OPTIONS)

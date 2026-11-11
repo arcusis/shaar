@@ -70,12 +70,12 @@ class FetchEngineTests(unittest.TestCase):
         write_archive(staged)
         checksum = hashlib.sha256(staged.read_bytes()).hexdigest()
         self.destination = self.cache / checksum[:16]
-        self.archive = self.cache / "ShaarEngine-155.0.8059.84-shaar.4.tar.xz"
+        self.archive = self.cache / "ShaarEngine-157.0.8103.51-shaar.4.tar.xz"
         staged.rename(self.archive)
         self.pin = {
             "schemaVersion": 1,
             "sourceKind": "shaar",
-            "releaseTag": "engine-155.0.8059.84-shaar.4",
+            "releaseTag": "engine-157.0.8103.51-shaar.4",
             "asset": self.archive.name,
             "sha256": checksum,
         }

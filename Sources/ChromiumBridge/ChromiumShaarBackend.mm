@@ -849,7 +849,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (NSString *)primaryWindowID { return _shaarPrimaryWindowID; }
 - (BOOL)isQuitting { return _shaarQuitting; }
-- (NSString *)chromiumVersion { return @"155.0.8059.84"; }
+- (NSString *)chromiumVersion { return @"157.0.8103.51"; }
 - (NSWindow *)window { return [self windowForID:_shaarPrimaryWindowID]; }
 - (NSView *)hostView { return [self hostViewForWindowID:_shaarPrimaryWindowID]; }
 

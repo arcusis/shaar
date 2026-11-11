@@ -11,6 +11,10 @@ ordered build patches, and their digests. Run
 `bash scripts/engine-apply-patches.sh /path/to/chromium/src` before source builds.
 It requires a clean checkout at the pinned commit, applies every manifest patch
 with strict `git apply`, and writes `build/ShaarEngineSource/applied-patches.json`.
+For a recovered, already-patched tree, run
+`python3 scripts/engine_patches.py --verify-tree /path/to/chromium/src` instead.
+This checks every patch with `git apply --check --reverse` in manifest order,
+requires the pinned commit, and writes the same receipt only if all checks pass.
 The engine package script embeds this receipt in the archive. Archive fetch and
 bundle verification reject a missing or incomplete patch series. The receipt
 records the patch inputs and application run; it does not independently attest

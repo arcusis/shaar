@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Apply the pinned Chromium patch series and verify its archive receipt."""
+"""Apply or verify the pinned Chromium patch series and its archive receipt."""
 
 import argparse
 import hashlib
@@ -48,30 +48,54 @@ def run_git(src, *args):
     return result.stdout.strip()
 
 
-def apply(manifest, src, output):
-    root, revision, patches = manifest_inputs(manifest)
-    output.unlink(missing_ok=True)
+def checked_source(src, revision):
     if run_git(src, "rev-parse", "--show-toplevel") != str(src.resolve()):
         raise PatchError("Chromium src must be the Git root")
     if run_git(src, "rev-parse", "HEAD") != revision:
         raise PatchError("Chromium src is not at the pinned revision")
-    if run_git(src, "status", "--porcelain", "--untracked-files=all"):
-        raise PatchError("Chromium src is not clean")
+
+
+def checked_patches(root, patches):
     resolved = []
     for item in patches:
         patch = root / item["file"]
         if not patch.is_file() or patch.is_symlink() or hashlib.sha256(patch.read_bytes()).hexdigest() != item["sha256"]:
             raise PatchError(f"patch missing or digest mismatch: {item['file']}")
         resolved.append((item, patch))
+    return resolved
+
+
+def write_receipt(output, revision, patches):
     output.parent.mkdir(parents=True, exist_ok=True)
-    for item, patch in resolved:
-        run_git(src, "apply", "--check", str(patch))
-        run_git(src, "apply", str(patch))
-        print(f"applied {item['file']}", file=sys.stderr)
     receipt = {"schemaVersion": 1, "chromiumRevision": revision, "patches": patches}
     temporary = output.with_name(output.name + ".partial")
     temporary.write_text(json.dumps(receipt, indent=2) + "\n")
     temporary.replace(output)
+
+
+def apply(manifest, src, output):
+    root, revision, patches = manifest_inputs(manifest)
+    output.unlink(missing_ok=True)
+    checked_source(src, revision)
+    if run_git(src, "status", "--porcelain", "--untracked-files=all"):
+        raise PatchError("Chromium src is not clean")
+    resolved = checked_patches(root, patches)
+    for item, patch in resolved:
+        run_git(src, "apply", "--check", str(patch))
+        run_git(src, "apply", str(patch))
+        print(f"applied {item['file']}", file=sys.stderr)
+    write_receipt(output, revision, patches)
+
+
+def verify_tree(manifest, src, output):
+    root, revision, patches = manifest_inputs(manifest)
+    output.unlink(missing_ok=True)
+    checked_source(src, revision)
+    resolved = checked_patches(root, patches)
+    for item, patch in resolved:
+        run_git(src, "apply", "--check", "--reverse", str(patch))
+        print(f"verified {item['file']}", file=sys.stderr)
+    write_receipt(output, revision, patches)
 
 
 def validate_receipt(raw, manifest):
@@ -104,6 +128,7 @@ def main():
                         "ThirdParty/ChromiumEngine/source-build.json")
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--apply", type=Path, metavar="CHROMIUM_SRC")
+    modes.add_argument("--verify-tree", type=Path, metavar="CHROMIUM_SRC")
     modes.add_argument("--verify-archive", type=Path, metavar="ARCHIVE")
     modes.add_argument("--verify-receipt", type=Path, metavar="RECEIPT")
     parser.add_argument("--output", type=Path, default=Path("build/ShaarEngineSource") / RECEIPT)
@@ -111,6 +136,8 @@ def main():
     try:
         if args.apply:
             apply(args.manifest, args.apply, args.output)
+        elif args.verify_tree:
+            verify_tree(args.manifest, args.verify_tree, args.output)
         elif args.verify_archive:
             verify_archive(args.manifest, args.verify_archive)
         else:

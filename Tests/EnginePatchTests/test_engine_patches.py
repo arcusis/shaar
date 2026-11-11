@@ -87,6 +87,35 @@ class EnginePatchTests(unittest.TestCase):
         self.assertFalse(self.output.exists())
         self.assertEqual((self.src / "a.txt").read_text(), "two\n")
 
+    def test_verify_tree_writes_receipt_without_changing_recovered_tree(self):
+        self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
+        before = self.git("diff").stdout
+        self.output.unlink()
+        result = self.run_script("--verify-tree", self.src, "--output", self.output)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.git("diff").stdout, before)
+        self.assertEqual(json.loads(self.output.read_text()), {"schemaVersion": 1,
+                         "chromiumRevision": self.revision, "patches": self.entries})
+
+    def test_verify_tree_rejects_missing_patch_and_removes_stale_receipt(self):
+        self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
+        (self.src / "b.txt").write_text("first\n")
+        result = self.run_script("--verify-tree", self.src, "--output", self.output)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--check --reverse", result.stderr)
+        self.assertFalse(self.output.exists())
+        self.assertEqual((self.src / "a.txt").read_text(), "two\n")
+
+    def test_verify_tree_rejects_wrong_chromium_revision(self):
+        self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
+        data = json.loads(self.manifest.read_text())
+        data["chromium"]["commit"] = "f" * 40
+        self.manifest.write_text(json.dumps(data))
+        result = self.run_script("--verify-tree", self.src, "--output", self.output)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not at the pinned revision", result.stderr)
+        self.assertFalse(self.output.exists())
+
     def test_archive_receipt_requires_complete_ordered_series(self):
         self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
         archive = self.root / "engine.tar.xz"

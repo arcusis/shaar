@@ -179,6 +179,87 @@ final class BrowserWorkspaceStore {
         tabs: spaces.reduce(0) { $0 + $1.tabs.count }, windows: spaces.count,
         favoritePages: favoritePages)
     }
+    stores[window.id]?.onTransferTabFromAnotherWindow = {
+      [weak self]
+      sessionID, tabID, sourceSpaceID, destinationSpaceID, beforeTabID, pinned,
+      folderID in
+      self?.transferTab(
+        sessionID, tabID: tabID, from: sourceSpaceID, to: destinationSpaceID, in: window.id,
+        before: beforeTabID, pinned: pinned, folderID: folderID) ?? false
+    }
+  }
+
+  private func transferTab(
+    _ sourceDragSessionID: UUID, tabID: UUID, from sourceSpaceID: UUID, to destinationSpaceID: UUID,
+    in destinationWindowID: UUID, before targetTabID: UUID?, pinned: Bool?, folderID: UUID?
+  ) -> Bool {
+    guard let destinationStore = stores[destinationWindowID],
+      let sourceWindow = workspace.windows.first(where: { window in
+        window.id != destinationWindowID
+          && window.session.spaces.contains { space in
+            space.id == sourceSpaceID && space.tabs.contains { $0.id == tabID }
+          }
+      }),
+      let sourceStore = stores[sourceWindow.id],
+      sourceStore.dragSessionID == sourceDragSessionID,
+      let sourceSpace = sourceWindow.session.spaces.first(where: { $0.id == sourceSpaceID }),
+      let targetSpace = destinationStore.session.spaces.first(where: {
+        $0.id == destinationSpaceID
+      })
+    else { return false }
+    guard Self.canTransferTab(sourceStore: sourceStore, destinationStore: destinationStore) else {
+      destinationStore.setSidebarNotice(
+        ShellL10n.string("Tabs cannot move to or from a private window."))
+      return false
+    }
+    guard let sourceTab = sourceSpace.tabs.first(where: { $0.id == tabID }) else { return false }
+    guard !sourceTab.isPinned else {
+      destinationStore.setSidebarNotice(
+        ShellL10n.string("Pinned tabs cannot move between windows."))
+      return false
+    }
+    guard pinned != true else {
+      destinationStore.setSidebarNotice(
+        ShellL10n.string("Tabs cannot be dropped into the pinned section from another window."))
+      return false
+    }
+    guard sourceSpace.profileID == targetSpace.profileID else {
+      destinationStore.setSidebarNotice(
+        ShellL10n.string(
+          "Tabs can move only between spaces sharing a profile.")
+      )
+      return false
+    }
+
+    var sourceSession = sourceWindow.session
+    var destinationSession = destinationStore.session
+    guard
+      sourceSession.transferTab(
+        tabID, from: sourceSpaceID, to: &destinationSession,
+        in: destinationSpaceID, before: targetTabID, pinned: pinned, folderID: folderID)
+    else { return false }
+
+    var updated = workspace
+    do {
+      try updated.updateWindow(sourceWindow.id, session: sourceSession)
+      try updated.updateWindow(destinationWindowID, session: destinationSession)
+      try updated.validate()
+    } catch {
+      return false
+    }
+
+    workspace = updated
+    sourceStore.applyManagedSession(sourceSession, notice: storageNotice)
+    destinationStore.applyManagedSession(destinationSession, notice: storageNotice)
+    destinationStore.setSidebarNotice(nil)
+    scheduleSnapshot(deferred: false)
+    return true
+  }
+
+  static func canTransferTab(sourceStore: BrowserStore, destinationStore: BrowserStore)
+    -> Bool
+  {
+    !sourceStore.isPrivate && !destinationStore.isPrivate
   }
 
   private func changed(_ id: UUID, session: BrowserSession, deferred: Bool)
@@ -212,8 +293,8 @@ final class BrowserWorkspaceStore {
   private func writeSnapshot() -> Bool {
     guard maySave else { return false }
     faviconCache?.retain(workspace.faviconItemIDs)
+    let snapshot = workspace
     do {
-      let snapshot = workspace
       try snapshotScheduler.writeNow { try file?.save(snapshot) }
       storageNotice = nil
       return true

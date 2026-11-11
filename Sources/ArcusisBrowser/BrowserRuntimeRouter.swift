@@ -37,7 +37,7 @@ final class BrowserRuntimeClient {
   var onLibraryChanged: ((String, String) -> Void)?
   var onLibraryError: ((String, String, String) -> Void)?
   var onTabChanged: ((String, String, String, Bool, Bool, Bool) -> Void)?
-  var onTabClosed: ((String) -> Void)?
+  var onTabClosed: ((String, String) -> Void)?
   var onTabActivated: ((String, String) -> Void)?
   var onRendererGone: ((String, String, String, Int32) -> Void)?
   var onDocumentCommitted: ((String, String) -> Void)?
@@ -104,15 +104,18 @@ final class BrowserRuntimeRouter {
     tabOwners[id] = nil
   }
 
+  func tabOwnerWindowID(for id: String) -> String? { tabOwners[id] }
+
   func client(forTab id: String, nativeWindowID: String?) -> BrowserRuntimeClient? {
     guard let owner = tabOwners[id], owner == nativeWindowID else { return nil }
     return subscriptions[owner]?.client
   }
 
-  func tabClosed(_ id: String) {
-    guard let owner = tabOwners.removeValue(forKey: id) else { return }
+  func tabClosed(_ id: String, windowID: String) {
+    guard tabOwners[id] == windowID else { return }
+    tabOwners[id] = nil
     guard !isQuitting else { return }
-    subscriptions[owner]?.client?.onTabClosed?(id)
+    subscriptions[windowID]?.client?.onTabClosed?(id, windowID)
   }
 
   /// A context can only be introduced by a bound tab in the declared window.
@@ -146,7 +149,6 @@ final class BrowserRuntimeRouter {
     guard !retiredWindows.contains(id) else { return false }
     let client = subscriptions.removeValue(forKey: id)?.client
     retiredWindows.insert(id)
-    tabOwners = tabOwners.filter { $0.value != id }
     for context in Context.allCases {
       contexts[context] = contexts[context]?.filter { $0.value != id }
     }

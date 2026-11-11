@@ -47,7 +47,7 @@ final class PrivateWindowProbe {
   private var privateClosedWindows: Set<String> = []
   private var privateWindowCallbackOwners: [String: String] = [:]
   private var previousTabChanged: ((String, String, String, Bool, Bool, Bool) -> Void)?
-  private var previousTabClosed: ((String) -> Void)?
+  private var previousTabClosed: ((String, String) -> Void)?
   private var previousPrivateTabChanged:
     (@MainActor @Sendable (String, String, String, String, String, Bool, Bool, Bool) -> Void)?
   private var previousPrivateTabSelected: (@MainActor @Sendable (String, String, String) -> Void)?
@@ -641,9 +641,9 @@ final class PrivateWindowProbe {
       if self.expectedRegularRouteIDs.contains(tab) { self.regularCallbackContamination = true }
       self.previousTabChanged?(tab, url, title, loading, canGoBack, canGoForward)
     }
-    runtime.onTabClosed = { tab in
+    runtime.onTabClosed = { tab, window in
       if self.expectedRegularRouteIDs.contains(tab) { self.regularCallbackContamination = true }
-      self.previousTabClosed?(tab)
+      self.previousTabClosed?(tab, window)
     }
   }
 

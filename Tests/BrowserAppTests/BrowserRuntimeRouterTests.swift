@@ -29,8 +29,8 @@ struct BrowserRuntimeRouterTests {
     try router.register(first)
     try router.register(second)
     var closed: [String] = []
-    first.onTabClosed = { closed.append("first:\($0)") }
-    second.onTabClosed = { closed.append("second:\($0)") }
+    first.onTabClosed = { id, _ in closed.append("first:\(id)") }
+    second.onTabClosed = { id, _ in closed.append("second:\(id)") }
     #expect(router.bindTab("tab", windowID: "first"))
     #expect(!router.bindTab("tab", windowID: "second"))
     #expect(!router.bindTab("unknown", windowID: "missing"))
@@ -38,9 +38,9 @@ struct BrowserRuntimeRouterTests {
     #expect(router.client(forTab: "tab", nativeWindowID: "first") === first)
     #expect(router.client(forTab: "tab", nativeWindowID: "second") == nil)
     #expect(router.client(forTab: "tab", nativeWindowID: nil) == nil)
-    router.tabClosed("tab")
-    router.tabClosed("tab")
-    router.tabClosed("foreign")
+    router.tabClosed("tab", windowID: "first")
+    router.tabClosed("tab", windowID: "first")
+    router.tabClosed("foreign", windowID: "first")
     #expect(closed == ["first:tab"])
   }
 
@@ -49,14 +49,35 @@ struct BrowserRuntimeRouterTests {
     let client = BrowserRuntimeClient(windowID: "first") { [] }
     try router.register(client)
     var closed: [String] = []
-    client.onTabClosed = { closed.append($0) }
+    client.onTabClosed = { id, _ in closed.append(id) }
     #expect(router.bindTab("user-closed", windowID: "first"))
-    router.tabClosed("user-closed")
+    router.tabClosed("user-closed", windowID: "first")
     #expect(router.bindTab("still-open", windowID: "first"))
     router.prepareForQuit()
-    router.tabClosed("still-open")
+    router.tabClosed("still-open", windowID: "first")
     #expect(closed == ["user-closed"])
     #expect(router.client(forTab: "still-open", nativeWindowID: "first") == nil)
+  }
+
+  @Test func closedWindowTabOwnerRemainsUntilMatchingCloseEvent() throws {
+    let router = BrowserRuntimeRouter()
+    let source = BrowserRuntimeClient(windowID: "source") { [] }
+    let destination = BrowserRuntimeClient(windowID: "destination") { [] }
+    try router.register(source)
+    try router.register(destination)
+    #expect(router.bindTab("tab", windowID: "source"))
+
+    router.windowClosed("source", quitting: false)
+
+    #expect(router.tabOwnerWindowID(for: "tab") == "source")
+    #expect(!router.bindTab("tab", windowID: "destination"))
+    router.tabClosed("tab", windowID: "source")
+    #expect(router.tabOwnerWindowID(for: "tab") == nil)
+    #expect(router.bindTab("tab", windowID: "destination"))
+
+    router.tabClosed("tab", windowID: "source")
+    #expect(router.tabOwnerWindowID(for: "tab") == "destination")
+    #expect(router.client(forTab: "tab", nativeWindowID: "destination") === destination)
   }
 
   @Test func contextIDsCannotBeClaimedOrResolvedByAnotherWindow() throws {

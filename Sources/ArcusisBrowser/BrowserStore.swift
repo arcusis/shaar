@@ -144,6 +144,8 @@ final class BrowserStore {
   /// Maps a window-local pinned tab to the shared pin definition every window restores.
   @ObservationIgnored var sharedPinID: ((UUID) -> UUID?)?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
+  @ObservationIgnored var onTransferTabFromAnotherWindow:
+    ((UUID, UUID, UUID, UUID, UUID?, Bool?, UUID?) -> Bool)?
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
   /// The host's menu commands for the launcher's Actions; nil hides Actions.
   @ObservationIgnored var launcherActions: LauncherActions?
@@ -1278,6 +1280,10 @@ final class BrowserStore {
     return moveTab(id, from: spaceID, to: spaceID, pinned: tab.isPinned)
   }
 
+  func setSidebarNotice(_ notice: String?) {
+    sidebarNotice = notice
+  }
+
   @discardableResult
   func moveSplitMemberToFolder(_ id: UUID, in space: UUID, folderID: UUID) -> Bool {
     guard
@@ -1298,7 +1304,14 @@ final class BrowserStore {
     else { return false }
     switch item {
     case .tab(let sessionID, let source, let tab):
-      guard sessionID == dragSessionID else { return false }
+      if sessionID != dragSessionID {
+        guard
+          onTransferTabFromAnotherWindow?(
+            sessionID, tab, source, space, targetTab, pinned, folderID) == true
+        else { return false }
+        tabDrag = nil
+        return true
+      }
       guard
         moveTab(
           tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)

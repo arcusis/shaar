@@ -40,7 +40,9 @@ final class BrowserRuntimeEvents {
       guard self?.router.isQuitting == false else { return }
       self?.tabClient(id)?.onTabChanged?(id, address, title, loading, back, forward)
     }
-    runtime.onTabClosed = { [weak self] id in self?.router.tabClosed(id) }
+    runtime.onTabClosed = { [weak self] id, windowID in
+      self?.router.tabClosed(id, windowID: windowID)
+    }
     runtime.onTabActivated = { [weak self] id, profile in
       guard self?.router.isQuitting == false else { return }
       self?.tabClient(id)?.onTabActivated?(id, profile)

@@ -679,7 +679,9 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self cancelExtensionInstallRequestsForTabID:tabID];
     for (NSString *requestID in [_shaarPrintRequests allKeysForObject:tabID])
       [self resolvePrintRequestID:requestID accepted:NO];
-    NSString *windowID = _shaarTabWindows[tabID];
+    NSString *mappedWindowID = _shaarTabWindows[tabID];
+    NSString *windowID = String(event->window_id);
+    if (!windowID.length) windowID = mappedWindowID;
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
     [_shaarTabs removeObjectForKey:tabID];
@@ -687,7 +689,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self stopFindingInTabID:tabID];
     [_shaarTabWindows removeObjectForKey:tabID];
     [_shaarTabProfiles removeObjectForKey:tabID];
-    if (self.onTabClosed) self.onTabClosed(tabID);
+    if (self.onTabClosed && windowID.length) self.onTabClosed(tabID, windowID);
     return;
   }
   if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"lifecycle"]) {

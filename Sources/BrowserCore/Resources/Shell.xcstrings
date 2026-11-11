@@ -3185,6 +3185,30 @@
         }
       }
     },
+    "Pinned tabs cannot move between windows.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pinned tabs cannot move between windows." } },
+        "he": { "stringUnit": { "state": "translated", "value": "אי אפשר להעביר לשוניות מוצמדות בין חלונות." } }
+      }
+    },
+    "Tabs cannot move to or from a private window.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Tabs cannot move to or from a private window." } },
+        "he": { "stringUnit": { "state": "translated", "value": "אי אפשר להעביר לשוניות אל חלון פרטי או ממנו." } }
+      }
+    },
+    "Tabs cannot be dropped into the pinned section from another window.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Tabs cannot be dropped into the pinned section from another window." } },
+        "he": { "stringUnit": { "state": "translated", "value": "אי אפשר לשחרר לשוניות בחלק המוצמד מחלון אחר." } }
+      }
+    },
+    "This tab could not be moved to this window.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This tab could not be moved to this window." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להעביר את הלשונית לחלון הזה." } }
+      }
+    },
     "The extension request could not be verified for this page and profile.": {
       "localizations": {
         "en": {

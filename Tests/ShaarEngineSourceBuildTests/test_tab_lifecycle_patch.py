@@ -100,6 +100,21 @@ class TabLifecyclePatchTests(unittest.TestCase):
         self.assertEqual(layer_digest(files), manifest["layer"]["sha256"])
 
     def test_patch_round_trips_onto_the_previous_layer(self):
+        shallow = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--is-shallow-repository"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        origin = subprocess.run(
+            ["git", "-C", str(ROOT), "log", "-1", "--format=%H", "--diff-filter=A",
+             "--", str(PATCH.relative_to(ROOT))],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        head = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        if shallow == "true" and origin == head:
+            self.skipTest("patch origin layer requires full git history")
         expected_files = patch_origin_layer_files()
         with tempfile.TemporaryDirectory() as raw:
             tree = Path(raw)

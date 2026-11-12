@@ -95,6 +95,43 @@ class EngineABIContractTests(unittest.TestCase):
                 {"Framework/Headers/shaar_engine.h", "Framework/Versions/A/Headers/shaar_engine.h"},
                 "Framework/Versions/A/Chromium Framework"))
 
+    def test_source_build_header_is_digest_checked_and_includes_pinned_patch_declarations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            layer = root / "ThirdParty/ChromiumEngine/layer"
+            header_path = layer / CONTRACT.PUBLIC_HEADER
+            header_path.parent.mkdir(parents=True)
+            header_path.write_text('''
+              typedef enum { SHAAR_EVENT_MEDIA = 15 } shaar_event_kind;
+              typedef enum { SHAAR_OP_MEDIA_CONTROL = 1200 } shaar_operation;
+            ''')
+            relative_patch = "ThirdParty/ChromiumEngine/patches/0001-abi.patch"
+            patch_path = root / relative_patch
+            patch_path.parent.mkdir(parents=True)
+            patch = '''--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -2,1 +2,2 @@
+ typedef enum { SHAAR_OP_MEDIA_CONTROL = 1200 } shaar_operation;
++  SHAAR_OP_ADDED_BY_PATCH = 1201,
+'''
+            patch_path.write_text(patch)
+            header_relative = "chrome/browser/shaar/public/shaar_engine.h"
+            manifest = {
+                "chromium": {"version": "157.0.8103.51"},
+                "layer": {"path": "ThirdParty/ChromiumEngine/layer", "files": {
+                    header_relative: hashlib.sha256(header_path.read_bytes()).hexdigest()
+                }},
+                "patches": [{"file": relative_patch,
+                             "sha256": hashlib.sha256(patch.encode()).hexdigest()}],
+            }
+            (root / "ThirdParty/ChromiumEngine/source-build.json").write_text(json.dumps(manifest))
+            events, operations, origin = CONTRACT.source_build_header(root, {
+                "releaseTag": "engine-157.0.8103.51-shaar.32"
+            })
+            self.assertEqual(events, {"SHAAR_EVENT_MEDIA"})
+            self.assertEqual(operations, {"SHAAR_OP_MEDIA_CONTROL", "SHAAR_OP_ADDED_BY_PATCH"})
+            self.assertIn("hash-verified source-build header", origin)
+
 
 if __name__ == "__main__":
     unittest.main()

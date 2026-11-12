@@ -24,6 +24,8 @@ SYMBOL_LITERAL = re.compile(r'"(shaar_[A-Za-z0-9_]+)"')
 LOAD_MACRO = re.compile(r"\bSHAAR_LOAD\s*\(\s*\w+\s*,\s*(\w+)\s*\)")
 ENUM = re.compile(r"typedef\s+enum\s*\{(?P<body>.*?)\}\s*(?P<name>\w+)\s*;", re.S)
 ENUM_VALUE = re.compile(r"\b(SHAAR_(?:EVENT|OP)_[A-Z0-9_]+)\s*=")
+PATCH_ENUM_VALUE = re.compile(r"^\s*(SHAAR_(?:EVENT|OP)_[A-Z0-9_]+)\s*=")
+PUBLIC_HEADER = "chrome/browser/shaar/public/shaar_engine.h"
 
 
 class ContractError(ValueError):
@@ -87,6 +89,68 @@ def parse_header_enums(header: str) -> tuple[set[str], set[str]]:
     return declared["shaar_event_kind"], declared["shaar_operation"]
 
 
+def patch_header_enum_changes(patch: str) -> tuple[set[str], set[str]]:
+    """Return enum additions/removals in this patch's public-header sections."""
+    added: set[str] = set()
+    removed: set[str] = set()
+    selected = False
+    for line in patch.splitlines():
+        if line.startswith("diff --git "):
+            match = re.match(r"diff --git a/(\S+) b/(\S+)", line)
+            selected = bool(match and match.group(2) == PUBLIC_HEADER)
+            continue
+        if line.startswith("--- a/"):
+            selected = line[6:].split("\t", 1)[0] == PUBLIC_HEADER
+            continue
+        if not selected or not line or line.startswith(("+++", "---", "\\")):
+            continue
+        if line[0] not in "+-":
+            continue
+        match = PATCH_ENUM_VALUE.match(line[1:])
+        if match:
+            (added if line[0] == "+" else removed).add(match.group(1))
+    return added, removed
+
+
+def source_build_header(root: Path, pin: dict) -> tuple[set[str], set[str], str]:
+    """Validate and reconstruct the public header from the pinned source-build inputs."""
+    manifest_path = root / "ThirdParty/ChromiumEngine/source-build.json"
+    manifest = json.loads(manifest_path.read_text())
+    expected_version = pin["releaseTag"].removeprefix("engine-").split("-shaar.", 1)[0]
+    if manifest.get("chromium", {}).get("version") != expected_version:
+        raise ContractError("source-build.json Chromium version does not match the pinned engine archive")
+    layer = manifest.get("layer", {})
+    if layer.get("path") != "ThirdParty/ChromiumEngine/layer":
+        raise ContractError("source-build.json does not identify the checked-in engine layer")
+    expected_digest = layer.get("files", {}).get(PUBLIC_HEADER)
+    header_path = root / layer["path"] / PUBLIC_HEADER
+    if not isinstance(expected_digest, str) or not header_path.is_file():
+        raise ContractError("source-build.json does not pin the public Shaar ABI header")
+    actual_digest = hashlib.sha256(header_path.read_bytes()).hexdigest()
+    if actual_digest != expected_digest:
+        raise ContractError("public ABI header does not match its source-build.json digest")
+    events, operations = parse_header_enums(header_path.read_text(errors="replace"))
+    patch_count = 0
+    for entry in manifest.get("patches", []):
+        patch_path = root / entry["file"]
+        if not patch_path.is_file():
+            raise ContractError(f"source-build patch is missing: {entry['file']}")
+        patch_bytes = patch_path.read_bytes()
+        if hashlib.sha256(patch_bytes).hexdigest() != entry.get("sha256"):
+            raise ContractError(f"source-build patch digest mismatch: {entry['file']}")
+        patch_text = patch_bytes.decode("utf-8", errors="replace")
+        if PUBLIC_HEADER not in patch_text:
+            continue
+        added, removed = patch_header_enum_changes(patch_text)
+        if added or removed:
+            patch_count += 1
+            events.update(name for name in added if name.startswith("SHAAR_EVENT_"))
+            operations.update(name for name in added if name.startswith("SHAAR_OP_"))
+            events.difference_update(name for name in removed if name.startswith("SHAAR_EVENT_"))
+            operations.difference_update(name for name in removed if name.startswith("SHAAR_OP_"))
+    return events, operations, f"hash-verified source-build header and {patch_count} ABI patch(es)"
+
+
 def optional_symbols(root: Path) -> dict[str, str]:
     path = root / "ThirdParty/ChromiumEngine/abi-optional-symbols.json"
     if not path.exists():
@@ -111,7 +175,7 @@ def release_version(tag: str) -> tuple[int, ...]:
     return tuple(int(part) for part in match.group(1).split(".")) + (int(match.group(2)),)
 
 
-def check_contract(root: Path, archive: Path, *, nm=exported_symbols) -> tuple[int, int, int]:
+def check_contract(root: Path, archive: Path, *, nm=exported_symbols) -> tuple[int, int, int, str]:
     pin = json.loads((root / "ThirdParty/ChromiumEngine/pin.json").read_text())
     with archive.open("rb") as archive_file:
         digest = hashlib.file_digest(archive_file, "sha256").hexdigest()
@@ -126,8 +190,11 @@ def check_contract(root: Path, archive: Path, *, nm=exported_symbols) -> tuple[i
             if header_file is not None:
                 header_sources.append(header_file.read().decode("utf-8", errors="replace"))
         header = "\n".join(header_sources)
-        if not header:
-            raise ContractError("could not read C/C++ headers from pinned archive")
+        header_origin = "cached pinned archive headers"
+        try:
+            declared_events, declared_operations = parse_header_enums(header)
+        except ContractError:
+            declared_events, declared_operations, header_origin = source_build_header(root, pin)
         # Extract only the framework executable to a temporary file for nm.
         with tempfile.TemporaryDirectory(prefix="shaar-abi-") as directory:
             binary_file = package.extractfile(binary_name)
@@ -146,7 +213,6 @@ def check_contract(root: Path, archive: Path, *, nm=exported_symbols) -> tuple[i
     if missing:
         raise ContractError("bridge symbols missing from pinned archive exports: " + ", ".join(missing))
     events, operations = collect_routes(root)
-    declared_events, declared_operations = parse_header_enums(header)
     absent_events = sorted(events - declared_events)
     absent_operations = sorted(operations - declared_operations)
     if absent_events or absent_operations:
@@ -156,7 +222,7 @@ def check_contract(root: Path, archive: Path, *, nm=exported_symbols) -> tuple[i
         if absent_operations:
             problems.append("operations " + ", ".join(absent_operations))
         raise ContractError("app routes ABI values absent from pinned archive headers: " + "; ".join(problems))
-    return len(collect_bridge_symbols(root)), len(events), len(operations)
+    return len(collect_bridge_symbols(root)), len(events), len(operations), header_origin
 
 
 def main() -> int:
@@ -169,11 +235,12 @@ def main() -> int:
         print(f"cached pinned engine archive is missing: {archive}; refusing network fetch", file=sys.stderr)
         return 1
     try:
-        symbols, events, operations = check_contract(ROOT, archive)
+        symbols, events, operations, header_origin = check_contract(ROOT, archive)
     except (ContractError, OSError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(error, file=sys.stderr)
         return 1
-    print(f"ABI contract passed: {symbols} bridge symbols, {events} event kinds, {operations} operations")
+    print(f"ABI contract passed: {symbols} bridge symbols, {events} event kinds, {operations} operations; "
+          f"declarations from {header_origin}")
     return 0
 
 

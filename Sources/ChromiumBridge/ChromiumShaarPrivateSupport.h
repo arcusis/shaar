@@ -26,5 +26,6 @@ shaar_error ARCPrivateShaarEmptyError(void);
 BOOL ARCPrivateShaarSubmit(ARCShaarRuntime *runtime, shaar_scope scope,
                            shaar_window *window, shaar_tab *tab,
                            shaar_operation operation, NSDictionary *payload,
-                           void (^completion)(NSDictionary *reply));
+                           void (^completion)(NSDictionary *reply),
+                           uint64_t *requestIDOut = nullptr);
 BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session);

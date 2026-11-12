@@ -275,7 +275,7 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
     ARCPrivateShaarSubmit(self, PrivateScope(context), PrivateWindow(window),
         PrivateTab(tab), SHAAR_OP_WINDOW_ACTIVATE_TAB,
         @{@"schemaVersion": @1, @"tabID": tabID},
-        ^(NSDictionary *reply) {});
+        ^(NSDictionary *reply) {}, nullptr);
   });
   if (self.onPrivateTabSelected) self.onPrivateTabSelected(contextID, windowID, tabID);
   return YES;
@@ -313,7 +313,7 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
   NSDictionary *state = ARCPrivateShaarState(self);
   return ARCPrivateShaarSubmit(self, PrivateScope(state[@"contexts"][contextID]),
       PrivateWindow(state[@"windows"][windowID]), PrivateTab(state[@"tabs"][tabID]),
-      operation, payload, ^(NSDictionary *reply) {});
+      operation, payload, ^(NSDictionary *reply) {}, nullptr);
 }
 
 - (BOOL)performPrivatePageZoomAction:(NSString *)action tabID:(NSString *)tabID
@@ -361,7 +361,7 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
         }
         NSString *value = [reply[@"state"] isKindOfClass:NSString.class] ? reply[@"state"] : @"";
         completion(YES, value);
-      });
+      }, nullptr);
   if (!submitted) completion(NO, nil);
 }
 
@@ -423,6 +423,65 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
   return [self privateTabOperation:SHAAR_OP_TAB_GO tabID:tabID windowID:windowID
                         contextID:contextID payload:@{@"schemaVersion": @1,
                                                       @"direction": @"forward"}];
+}
+
+- (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+                contextID:(NSString *)contextID requestID:(NSString *)requestID
+                     text:(NSString *)text forward:(BOOL)forward {
+  NSMutableDictionary *state = ARCPrivateShaarState(self);
+  if (!text.length || text.length > 4096 ||
+      ![[NSUUID alloc] initWithUUIDString:requestID] ||
+      ![self privateTabOwned:tabID windowID:windowID contextID:contextID] ||
+      ![state[@"windows"][windowID][@"selectedTabID"] isEqualToString:tabID])
+    return NO;
+
+  NSMutableDictionary *requests = state[@"findRequests"];
+  NSMutableDictionary *tokens = state[@"findTokens"];
+  NSString *previous = requests[tabID];
+  if (previous) [tokens removeObjectForKey:previous];
+
+  __block NSString *nativeID = nil;
+  uint64_t engineRequestID = 0;
+
+  NSDictionary *context = state[@"contexts"][contextID];
+  NSDictionary *window = state[@"windows"][windowID];
+  NSDictionary *tab = state[@"tabs"][tabID];
+  BOOL accepted = ARCPrivateShaarSubmit(
+      self, PrivateScope(context), PrivateWindow(window), PrivateTab(tab),
+      SHAAR_OP_TAB_FIND,
+      @{ @"schemaVersion": @1, @"query": text, @"forward": @(forward) },
+      ^(NSDictionary *reply) {
+        if (reply[@"error"] && [requests[tabID] isEqualToString:nativeID]) {
+          [requests removeObjectForKey:tabID];
+          [tokens removeObjectForKey:nativeID];
+        }
+      }, &engineRequestID);
+  nativeID = [NSString stringWithFormat:@"%llu", engineRequestID];
+  if (accepted) {
+    NSDictionary *record = @{ @"token": requestID, @"contextID": contextID,
+                               @"windowID": windowID, @"tabID": tabID };
+    tokens[nativeID] = record;
+    requests[tabID] = nativeID;
+  } else {
+    [requests removeObjectForKey:tabID];
+    [tokens removeObjectForKey:nativeID];
+  }
+  return accepted;
+}
+
+- (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+                       contextID:(NSString *)contextID {
+  if (![self privateTabOwned:tabID windowID:windowID contextID:contextID]) return;
+  NSMutableDictionary *state = ARCPrivateShaarState(self);
+  NSMutableDictionary *requests = state[@"findRequests"];
+  NSMutableDictionary *tokens = state[@"findTokens"];
+  NSString *nativeID = requests[tabID];
+  if (!nativeID) return;
+  [requests removeObjectForKey:tabID];
+  [tokens removeObjectForKey:nativeID];
+  [self privateTabOperation:SHAAR_OP_TAB_STOP_FIND tabID:tabID
+                   windowID:windowID contextID:contextID
+                    payload:@{@"schemaVersion": @1, @"selection": @"keep"}];
 }
 
 - (void)closePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
@@ -542,6 +601,9 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
   NSMutableDictionary *state = ARCPrivateShaarState(self);
   NSDictionary *entry = state[@"tabs"][tabID];
   if (!entry) return;
+  NSString *findRequestID = state[@"findRequests"][tabID];
+  [state[@"findRequests"] removeObjectForKey:tabID];
+  if (findRequestID) [state[@"findTokens"] removeObjectForKey:findRequestID];
   NSString *contextID = entry[@"contextID"];
   NSString *windowID = entry[@"windowID"];
   [state[@"windows"][windowID][@"tabs"] removeObject:tabID];
@@ -603,7 +665,34 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
           self, PrivateScope(context), PrivateWindow(window), PrivateTab(tab),
           SHAAR_OP_MEDIA_CAPTURE_REPLY,
           @{@"schemaVersion": @1, @"promptID": promptID,
-            @"decision": @"cancel", @"sourceToken": @""}, nil);
+            @"decision": @"cancel", @"sourceToken": @""}, nil, nullptr);
+    }
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_FIND) {
+    if (![self privateTabOwned:tabID windowID:windowID contextID:contextID] ||
+        ![payload[@"schemaVersion"] isEqual:@1])
+      return;
+    NSString *nativeID = [payload[@"requestID"] isKindOfClass:NSString.class]
+        ? payload[@"requestID"] : nil;
+    NSDictionary *request = state[@"findTokens"][nativeID];
+    if (!request || ![request[@"contextID"] isEqualToString:contextID] ||
+        ![request[@"windowID"] isEqualToString:windowID] ||
+        ![request[@"tabID"] isEqualToString:tabID] ||
+        ![payload[@"matchCount"] isKindOfClass:NSNumber.class] ||
+        ![payload[@"activeMatch"] isKindOfClass:NSNumber.class] ||
+        ![payload[@"final"] isKindOfClass:NSNumber.class])
+      return;
+    NSString *token = request[@"token"];
+    if (self.onPrivateFindResult) {
+      self.onPrivateFindResult(contextID, windowID, tabID, token,
+          [payload[@"matchCount"] intValue], [payload[@"activeMatch"] intValue],
+          [payload[@"final"] boolValue]);
+    }
+    if ([payload[@"final"] boolValue]) {
+      [state[@"findTokens"] removeObjectForKey:nativeID];
+      if ([state[@"findRequests"][tabID] isEqualToString:nativeID])
+        [state[@"findRequests"] removeObjectForKey:tabID];
     }
     return;
   }

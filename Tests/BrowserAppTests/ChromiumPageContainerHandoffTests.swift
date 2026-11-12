@@ -50,6 +50,34 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertTrue(page.window === browser)
   }
 
+  func testPrivateNativeActivationRestoresPageToItsContainer() {
+    let tab = UUID()
+    let page = NSView()
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let root = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    window.contentView = root
+    defer { window.close() }
+    let hosting = NSView(frame: root.bounds)
+    let container = ChromiumPageContainerView(frame: root.bounds)
+    root.addSubview(hosting)
+    hosting.addSubview(container)
+    container.select(page, tabID: tab, liveTabs: [tab])
+
+    // Chromium's activation path can reparent the view to the native host root.
+    root.addSubview(page)
+    XCTAssertTrue(page.superview === root)
+    XCTAssertFalse(window.isVisible)
+
+    XCTAssertTrue(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tab, in: window))
+
+    XCTAssertTrue(page.superview === container)
+    XCTAssertTrue(page.window === window)
+    XCTAssertFalse(window.isVisible)
+  }
+
   func testOutgoingContainerHandsPageBackOnTeardown() {
     let tab = UUID()
     let page = NSView()

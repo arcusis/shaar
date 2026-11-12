@@ -15,12 +15,13 @@ import Testing
   @Test func passedRequiresTheFourWebsitePrompts() {
     let ready = WebsitePermissionProbeVerdict.passed(
       error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
-      unexpectedSurfaces: [], promptedNames: ["media"])
+      unexpectedSurfaces: [], promptedNames: ["media"], openedProtocols: [])
     #expect(!ready)
     let complete = WebsitePermissionProbeVerdict.passed(
       error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
       unexpectedSurfaces: [],
-      promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"])
+      promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
+      openedProtocols: ["web+shaarparity", "mailto"])
     #expect(complete)
   }
 
@@ -45,5 +46,11 @@ import Testing
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol", "clipboard"]
         .filter { $0 != "midi" })
     #expect(!result)
+  @Test func passedRequiresBothRegisteredProtocolRoutes() {
+    #expect(!WebsitePermissionProbeVerdict.passed(
+      error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
+      unexpectedSurfaces: [],
+      promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
+      openedProtocols: ["web+shaarparity"]))
   }
 }

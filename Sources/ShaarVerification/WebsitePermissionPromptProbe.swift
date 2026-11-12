@@ -29,11 +29,11 @@ enum WebsitePermissionProbeVerdict {
 
   static func passed(
     error: String?, mediaPrompted: Bool, mediaTracks: Bool, hidden: Bool,
-    unexpectedSurfaces: [String], promptedNames: [String]
+    unexpectedSurfaces: [String], promptedNames: [String], openedProtocols: Set<String>
   ) -> Bool {
     let appeared = websitePrompts.allSatisfy { promptedNames.contains($0) }
     return error == nil && mediaPrompted && mediaTracks && hidden && unexpectedSurfaces.isEmpty
-      && appeared
+      && appeared && Set(["web+shaarparity", "mailto"]).isSubset(of: openedProtocols)
   }
 }
 
@@ -55,6 +55,7 @@ final class WebsitePermissionPromptProbe {
   private var mediaPrompted = false
   private var mediaTracks = false
   private var unexpectedSurfaces: [String] = []
+  private var openedProtocols: Set<String> = []
   private var checks: [Check] = []
   private var screenshots: [String] = []
   private var previewWindow: NSWindow?
@@ -148,9 +149,44 @@ final class WebsitePermissionPromptProbe {
       for page in FixturePage.checks {
         checks.append(await run(page))
       }
+      await verifyRegisteredHandlerLinks()
       finish(error: nil)
     } catch {
       finish(error: error.localizedDescription)
+    }
+  }
+
+  private func verifyRegisteredHandlerLinks() async {
+    for (scheme, registrationPath, target) in [
+      ("web+shaarparity", "protocol", "web+shaarparity:hello"),
+      ("mailto", "mailto", "mailto:probe@example.invalid"),
+    ] {
+      let source = fixture.appending(path: registrationPath)
+      guard engine?.navigateCurrentPage(to: source) == true,
+        await waitForPage(source, title: registrationPath)
+      else { continue }
+      _ = await evaluate("location.assign('\(target)'); true")
+      let deadline = Date().addingTimeInterval(8)
+      while Date() < deadline {
+        if let external = store.externalAppRequests.first {
+          store.resolveExternalApp(external.id, accepted: false)
+        }
+        guard let url = store.session.selectedPage?.tab.url,
+          let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else {
+          await pause(100)
+          continue
+        }
+        if components.path == "/handled",
+          components.queryItems?.contains(where: {
+            $0.name == "u" && ($0.value ?? "").contains(target)
+          }) == true
+        {
+          openedProtocols.insert(scheme)
+          break
+        }
+        await pause(100)
+      }
     }
   }
 
@@ -192,7 +228,7 @@ final class WebsitePermissionPromptProbe {
       }
       if let result = await evaluate("window.parityResult"), result["outcome"] != nil {
         check.result = result
-        if page.name != "protocol" || check.captured { break }
+        if page.kind != "protocolHandler" || check.captured { break }
       }
       await pause(100)
     }
@@ -353,7 +389,8 @@ final class WebsitePermissionPromptProbe {
     }
     passed = WebsitePermissionProbeVerdict.passed(
       error: error, mediaPrompted: mediaPrompted, mediaTracks: mediaTracks, hidden: hidden,
-      unexpectedSurfaces: unexpectedSurfaces, promptedNames: prompts)
+      unexpectedSurfaces: unexpectedSurfaces, promptedNames: prompts,
+      openedProtocols: openedProtocols)
     let report: [String: Any] = [
       "schemaVersion": 1,
       "probeMode": "website-permission-prompt",
@@ -364,6 +401,7 @@ final class WebsitePermissionPromptProbe {
       "allWindowsHidden": hidden,
       "unexpectedSurfaces": unexpectedSurfaces,
       "prompts": prompts,
+      "openedProtocols": openedProtocols.sorted(),
       "checks": checks.map(\.json),
       "screenshots": screenshots,
       "error": error ?? "",
@@ -405,7 +443,9 @@ final class WebsitePermissionPromptProbe {
         name: "notifications", path: "notifications", kind: "notifications", allow: false, wait: 6),
       FixturePage(name: "midi", path: "midi", kind: "midi", allow: false, wait: 6),
       FixturePage(
-        name: "protocol", path: "protocol", kind: "protocolHandler", allow: false, wait: 4),
+        name: "protocol", path: "protocol", kind: "protocolHandler", allow: true, wait: 4),
+      FixturePage(
+        name: "mailto", path: "mailto", kind: "protocolHandler", allow: true, wait: 4),
     ]
   }
 

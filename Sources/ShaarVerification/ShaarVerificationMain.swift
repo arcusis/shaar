@@ -82,6 +82,8 @@ enum ShaarVerificationMain {
     }
     if CommandLine.arguments.contains("--probe-profile-providers")
       || CommandLine.arguments.contains("--probe-profile-fixture")
+      || CommandLine.arguments.contains("--probe-profile-signin")
+      || CommandLine.arguments.contains("--probe-profile-signout")
     {
       exit(ProfileOnboardingProbe.runStandalone(arguments: CommandLine.arguments))
     }

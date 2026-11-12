@@ -937,16 +937,28 @@ final class NativeHostProbe {
   }
 
   private func settleViewportLayout(_ context: NativeBrowserContext) async throws {
-    for _ in 0..<4 {
+    var frameSampler = StableContainerFrameSampler()
+    // The selected-space transition is a 350 ms spring. Give it time to begin and
+    // finish before accepting two consecutive stable container-frame samples.
+    for sampleIndex in 0..<67 {
       context.window.displayIfNeeded()
       context.contentView.layoutSubtreeIfNeeded()
       context.hosting.layoutSubtreeIfNeeded()
+      if let frame = viewportContainerFrame(context), frameSampler.sample(frame), sampleIndex >= 15 {
+        return
+      }
       await Task.yield()
       try await Task.sleep(for: .milliseconds(30))
     }
-    context.window.displayIfNeeded()
-    context.contentView.layoutSubtreeIfNeeded()
-    context.hosting.layoutSubtreeIfNeeded()
+    throw HostProbeFailure("Native viewport container frame did not settle within 2 seconds.")
+  }
+
+  private func viewportContainerFrame(_ context: NativeBrowserContext) -> CGRect? {
+    guard let tabID = context.store.session.selectedSpace.selectedTabID,
+      let page = primary.runtime.view(forTabID: tabID.uuidString),
+      let container = pageContainer(in: context.hosting, page: page)
+    else { return nil }
+    return container.convert(container.bounds, to: context.hosting)
   }
 
   private func captureNativeHitTesting(_ stage: String, context: NativeBrowserContext) throws {

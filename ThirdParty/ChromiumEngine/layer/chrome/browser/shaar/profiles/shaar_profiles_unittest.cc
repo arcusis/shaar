@@ -79,6 +79,19 @@ TEST(ShaarProfilesTest, UUIDMappingIsCanonicalAndContained) {
       {kTraversal, sizeof(kTraversal) - 1}, &relative));
 }
 
+TEST(ShaarProfilesTest, BorrowedProfileIsClearedBeforeDestruction) {
+  content::BrowserTaskEnvironment task_environment;
+  shaar::profiles::ProfileHandleObserver observer;
+  Profile* borrowed = nullptr;
+  {
+    TestingProfile profile;
+    borrowed = &profile;
+    observer.Observe(&profile, &borrowed);
+    ASSERT_EQ(borrowed, &profile);
+  }
+  EXPECT_EQ(borrowed, nullptr);
+}
+
 TEST(ShaarProfilesTest, RegistersOnlyTheProfileOperationRange) {
   ShaarModuleRegistry registry;
   shaar_profiles_register(&registry);

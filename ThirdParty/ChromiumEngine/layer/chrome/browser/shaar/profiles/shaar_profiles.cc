@@ -24,6 +24,8 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/delete_profile_helper.h"
+#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -52,6 +54,8 @@ struct shaar_profile {
   std::string id;
   std::string directory;
   Profile* native = nullptr;
+  std::unique_ptr<ScopedProfileKeepAlive> keep_alive;
+  shaar::profiles::ProfileHandleObserver native_observer;
   bool ready = false;
   bool deleting = false;
   std::vector<Waiter> waiters;
@@ -209,6 +213,23 @@ void OnProfileReady(shaar_profile* handle,
         profile, g_browser_process->local_state(), handle->engine->locale);
   }
   handle->native = profile;
+  handle->native_observer.Observe(profile, &handle->native);
+  handle->keep_alive = ScopedProfileKeepAlive::TryAcquire(
+      profile, ProfileKeepAliveOrigin::kHeadlessCommand);
+  if (!handle->keep_alive) {
+    handle->native_observer.StopObserving();
+    handle->native = nullptr;
+    Reply(callback, context, request_id, SHAAR_NOT_READY, handle->id);
+    for (const auto& waiter : handle->waiters)
+      Reply(waiter.callback, waiter.context, waiter.request_id,
+            SHAAR_NOT_READY, handle->id);
+    auto found = g_profiles.find({handle->engine, handle->id});
+    if (found != g_profiles.end()) {
+      g_retired_profiles.push_back(std::move(found->second));
+      g_profiles.erase(found);
+    }
+    return;
+  }
   handle->ready = true;
   std::string framework_failure;
   if (!shaar::extensions_host::RegisterBundledFrameworkDevTools(
@@ -337,6 +358,33 @@ shaar_error_code ReserveAndLoad(shaar_engine* engine,
 }  // namespace
 
 namespace shaar::profiles {
+
+ProfileHandleObserver::~ProfileHandleObserver() {
+  StopObserving();
+}
+
+void ProfileHandleObserver::Observe(Profile* profile, Profile** slot) {
+  StopObserving();
+  observed_ = profile;
+  slot_ = slot;
+  if (observed_)
+    observed_->AddObserver(this);
+}
+
+void ProfileHandleObserver::StopObserving() {
+  if (observed_)
+    observed_->RemoveObserver(this);
+  observed_ = nullptr;
+  slot_ = nullptr;
+}
+
+void ProfileHandleObserver::OnProfileWillBeDestroyed(Profile* profile) {
+  if (profile != observed_)
+    return;
+  if (slot_)
+    *slot_ = nullptr;
+  StopObserving();
+}
 
 void ApplyApplicationLocale(Profile* profile,
                             PrefService* local_state,
@@ -546,6 +594,9 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_close(
     shaar::EmitEvent(profile->engine, SHAAR_EVENT_PROFILE,
                      {profile->id.data(), profile->id.size()}, {}, {},
                      {}, {payload.data(), payload.size()});
+    found->second->native_observer.StopObserving();
+    found->second->native = nullptr;
+    found->second->keep_alive.reset();
     g_retired_profiles.push_back(std::move(found->second));
     g_profiles.erase(found);
   }
@@ -672,7 +723,9 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
     return Fail(SHAAR_CONFLICT, "profile still owns browser windows", error);
   const auto keep_alives = manager->GetKeepAlivesByPath(profile->native->GetPath());
   for (const auto& keep_alive : keep_alives) {
-    if (keep_alive.second > 0)
+    const int own_lease =
+        keep_alive.first == ProfileKeepAliveOrigin::kHeadlessCommand ? 1 : 0;
+    if (keep_alive.second > own_lease)
       return Fail(SHAAR_CONFLICT, "profile still has a keep-alive", error);
   }
   ProfileAttributesEntry* attributes =
@@ -686,8 +739,11 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
   shaar::EmitEvent(profile->engine, SHAAR_EVENT_PROFILE,
                    {profile->id.data(), profile->id.size()}, {}, {},
                    {}, {deleting.data(), deleting.size()});
+  // Releasing our lease can unload the profile. Deletion uses only its path.
+  const base::FilePath path = profile->native->GetPath();
+  profile->keep_alive.reset();
   manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
-      profile->native->GetPath(),
+      path,
       base::BindOnce(
           [](shaar_engine* engine, std::string id, Profile* deleted_profile) {
             auto found = g_profiles.find({engine, id});
@@ -703,6 +759,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
               g_profiles.erase(found);
             } else {
               found->second->deleting = false;
+              found->second->ready = found->second->native != nullptr;
             }
           },
           profile->engine, profile->id),

@@ -33,6 +33,8 @@ NSMutableDictionary *ARCPrivateShaarState(ARCShaarRuntime *runtime) {
   state = [@{@"contexts": [NSMutableDictionary dictionary],
              @"windows": [NSMutableDictionary dictionary],
              @"tabs": [NSMutableDictionary dictionary],
+             @"findRequests": [NSMutableDictionary dictionary],
+             @"findTokens": [NSMutableDictionary dictionary],
              @"retired": [NSMutableSet set]} mutableCopy];
   objc_setAssociatedObject(runtime, &kPrivateStateKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   return state;
@@ -52,7 +54,8 @@ shaar_error ARCPrivateShaarEmptyError(void) {
 BOOL ARCPrivateShaarSubmit(ARCShaarRuntime *runtime, shaar_scope scope,
                            shaar_window *window, shaar_tab *tab,
                            shaar_operation operation, NSDictionary *payload,
-                           void (^completion)(NSDictionary *reply)) {
+                           void (^completion)(NSDictionary *reply),
+                           uint64_t *requestIDOut) {
   auto engine = [runtime privateEngineHandle];
   auto submit = reinterpret_cast<decltype(&shaar_submit)>(dlsym(RTLD_DEFAULT, "shaar_submit"));
   if (!engine || !submit || !completion) return NO;
@@ -62,6 +65,7 @@ BOOL ARCPrivateShaarSubmit(ARCShaarRuntime *runtime, shaar_scope scope,
   shaar_error error = ARCPrivateShaarEmptyError();
   const uint64_t requestID = operation == SHAAR_OP_DEVTOOLS_CALL
       ? [runtime nextPrivateDevToolsRequestID] : kPrivateRequestID.fetch_add(1);
+  if (requestIDOut) *requestIDOut = requestID;
   shaar_error_code code = submit(engine, scope, window, tab, operation,
                                  {(const char *)json.bytes, json.length},
                                  requestID, Reply, context, &error);

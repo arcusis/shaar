@@ -271,7 +271,7 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
     [self applyPrivateSettingsForTabID:tabID windowID:windowID
                              contextID:contextID url:url origin:origin index:index + 1
                             generation:generation];
-  });
+  }, nullptr);
   if (!submitted)
     tab[@"navigationStage"] = [NSString
         stringWithFormat:@"site-setting-%lu-rejected", (unsigned long)index];
@@ -301,7 +301,7 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
     if (reply[@"error"] && self.onPrivateNavigationFailed)
       self.onPrivateNavigationFailed(contextID, windowID, tabID,
         @"Private navigation failed.");
-  });
+  }, nullptr);
   if (!submitted) tab[@"navigationStage"] = @"navigation-rejected";
   if (!submitted && self.onPrivateNavigationFailed)
     self.onPrivateNavigationFailed(contextID, windowID, tabID,

@@ -1,0 +1,247 @@
+From: Shaar engineering
+Subject: [PATCH] Forward Chromium tab activation to Shaar
+
+Report TabStripModel selection changes so extension tabs.update activation reaches the app router, but ignore fallback selection caused by removing the active tab.
+
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
+@@ -21,16 +21,20 @@
+ namespace content {
+ class WebContents;
+ }
++struct TabStripSelectionChange;
+ 
+ namespace shaar::windows_tabs {
+ 
+ struct SelectedRegularTab {
++  shaar_engine* engine;
+   shaar_window* window;
+   shaar_tab* tab;
+   std::string profile_id;
+   std::string window_id;
+   std::string tab_id;
+ };
++
++bool ShouldEmitTabActivation(const TabStripSelectionChange& selection);
+ 
+ bool HasHiddenNativeWindow(content::WebContents* contents);
+ void UpdateDockedDevTools(content::WebContents* inspected,
+@@ -65,6 +69,8 @@
+       shaar_engine*, content::WebContents*) const;
+   std::optional<SelectedRegularTab> FindSelectedRegularTab(
+       shaar_engine*, content::WebContents*) const;
++  std::optional<SelectedRegularTab> FindRegularTabForBrowser(
++      Browser*, content::WebContents*) const;
+   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
+                                          shaar_tab*) override;
+   content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
+@@ -15,8 +15,14 @@
+ #include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+ 
+ namespace shaar::windows_tabs {
++
++bool ShouldEmitTabActivation(const TabStripSelectionChange& selection) {
++  return selection.active_tab_changed() && !selection.selected_tabs_were_removed &&
++         selection.new_contents;
++}
+ 
+ namespace {
+ BrowserTabRegistryImpl g_registry;
+@@ -192,8 +198,31 @@
+         continue;
+       for (const auto& [profile_id, browser] : window.browsers_by_profile) {
+         if (browser == tab.browser)
+-          return SelectedRegularTab{tab.window, tab.handle, profile_id,
++          return SelectedRegularTab{engine, tab.window, tab.handle, profile_id,
+                                     window.window_id, tab.id};
++      }
++    }
++  }
++  return std::nullopt;
++}
++
++std::optional<SelectedRegularTab>
++BrowserTabRegistryImpl::FindRegularTabForBrowser(
++    Browser* browser, content::WebContents* contents) const {
++  if (!browser || !contents)
++    return std::nullopt;
++  for (const auto& tab : tabs_) {
++    if (tab.browser != browser || tab.contents != contents)
++      continue;
++    for (const auto& window : windows_) {
++      if (window.engine != tab.engine || window.handle != tab.window ||
++          window.closing || window.active_browser != browser)
++        continue;
++      for (const auto& [profile_id, registered_browser] :
++           window.browsers_by_profile) {
++        if (registered_browser == browser)
++          return SelectedRegularTab{tab.engine, tab.window, tab.handle,
++                                    profile_id, window.window_id, tab.id};
+       }
+     }
+   }
+@@ -216,7 +245,7 @@
+         continue;
+       for (const auto& [profile_id, browser] : window.browsers_by_profile) {
+         if (browser == tab.browser)
+-          return SelectedRegularTab{tab.window, tab.handle, profile_id,
++          return SelectedRegularTab{engine, tab.window, tab.handle, profile_id,
+                                     window.window_id, tab.id};
+       }
+     }
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
+@@ -18,6 +18,7 @@
+ #include "base/functional/bind.h"
+ #include "base/json/json_writer.h"
+ #include "base/location.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/memory/ref_counted_memory.h"
+ #include "base/scoped_observation.h"
+ #include "base/task/sequenced_task_runner.h"
+@@ -40,6 +41,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+ #include "components/sessions/core/session_id.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
+@@ -184,6 +186,45 @@
+ 
+ void FinalizeWindow(shaar_window* window);
+ 
++class TabActivationObserver final : public TabStripModelObserver {
++ public:
++  explicit TabActivationObserver(Browser* browser)
++      : browser_(browser), model_(browser->GetTabStripModel()) {
++    model_->AddObserver(this);
++  }
++
++  ~TabActivationObserver() override { model_->RemoveObserver(this); }
++
++  void OnTabStripModelChanged(
++      TabStripModel*,
++      const TabStripModelChange&,
++      const TabStripSelectionChange& selection) override {
++    if (!shaar::windows_tabs::ShouldEmitTabActivation(selection))
++      return;
++    auto identity = shaar::windows_tabs::Registry().FindRegularTabForBrowser(
++        browser_, selection.new_contents);
++    if (!identity)
++      return;
++
++    base::DictValue payload;
++    payload.Set("kind", "activated");
++    payload.Set("schemaVersion", 1);
++    std::string json;
++    if (!base::JSONWriter::Write(base::Value(std::move(payload)), &json))
++      return;
++    shaar::EmitEvent(identity->engine, SHAAR_EVENT_TAB,
++                     {identity->profile_id.data(), identity->profile_id.size()},
++                     {},
++                     {identity->window_id.data(), identity->window_id.size()},
++                     {identity->tab_id.data(), identity->tab_id.size()},
++                     {json.data(), json.size()});
++  }
++
++ private:
++  raw_ptr<Browser> browser_;
++  raw_ptr<TabStripModel> model_;
++};
++
+ class LifecycleObserver final : public BrowserCollectionObserver {
+  public:
+   void EnsureObserving() {
+@@ -195,8 +236,15 @@
+ 
+   void StopObserving() { observation_.Reset(); }
+ 
++  void ObserveTabStrip(Browser* browser) {
++    if (browser && !tab_observers_.contains(browser))
++      tab_observers_.emplace(browser,
++                             std::make_unique<TabActivationObserver>(browser));
++  }
++
+   void OnBrowserClosed(BrowserWindowInterface* closed) override {
+     auto* browser = static_cast<Browser*>(closed);
++    tab_observers_.erase(browser);
+     auto& registry = shaar::windows_tabs::Registry();
+     for (const auto& [window, handle] : windows)
+       shaar::extensions_host::ClosePopupsForBrowser(handle->engine, browser);
+@@ -214,6 +262,8 @@
+   }
+ 
+  private:
++  std::unordered_map<Browser*, std::unique_ptr<TabActivationObserver>>
++      tab_observers_;
+   base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver>
+       observation_{this};
+ };
+@@ -281,6 +331,7 @@
+   BrowserWindowInterface* created = CreateBrowserWindow(std::move(params));
+   Browser* browser = static_cast<Browser*>(created);
+   if (browser) {
++    Observer().ObserveTabStrip(browser);
+     if (BrowserWindow* native_window = BrowserWindow::FromBrowser(browser))
+       native_window->Hide();
+   }
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers.h"
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+ 
+ #include <string>
+ #include <memory>
+@@ -149,6 +150,39 @@
+   EXPECT_EQ(registry.FindWebContents(engine, window, tab), nullptr);
+   EXPECT_EQ(registry.FindWindowOwner(window), nullptr);
+   EXPECT_EQ(registry.FindTabWindow(tab), nullptr);
++}
++
++TEST(ShaarWindowsTabsHandlersTest,
++     RegistryResolvesExtensionActivatedTabToItsShaarIdentity) {
++  BrowserTabRegistryImpl registry;
++  auto* engine = reinterpret_cast<shaar_engine*>(1);
++  auto* window = reinterpret_cast<shaar_window*>(2);
++  auto* tab = reinterpret_cast<shaar_tab*>(3);
++  auto* browser = reinterpret_cast<Browser*>(4);
++  auto* contents = reinterpret_cast<content::WebContents*>(5);
++  registry.ReserveWindow(engine, window, "window-a");
++  registry.EnsureWindowState(engine, window, browser, "profile-a");
++  registry.BindTab(engine, window, tab, "tab-a", browser, contents);
++
++  auto identity = registry.FindRegularTabForBrowser(browser, contents);
++  ASSERT_TRUE(identity);
++  EXPECT_EQ(identity->engine, engine);
++  EXPECT_EQ(identity->profile_id, "profile-a");
++  EXPECT_EQ(identity->window_id, "window-a");
++  EXPECT_EQ(identity->tab_id, "tab-a");
++  EXPECT_FALSE(registry.FindRegularTabForBrowser(
++      reinterpret_cast<Browser*>(6), contents));
++}
++
++TEST(ShaarWindowsTabsHandlersTest,
++     TabActivationIgnoresFallbackSelectionAfterTabRemoval) {
++  TabStripSelectionChange selection;
++  selection.old_contents = reinterpret_cast<content::WebContents*>(1);
++  selection.new_contents = reinterpret_cast<content::WebContents*>(2);
++  EXPECT_TRUE(ShouldEmitTabActivation(selection));
++
++  selection.selected_tabs_were_removed = true;
++  EXPECT_FALSE(ShouldEmitTabActivation(selection));
+ }
+ 
+ TEST(ShaarWindowsTabsHandlersTest, ReservedWindowBindsBrowserAndClosesCleanly) {

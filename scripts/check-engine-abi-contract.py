@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DLSYM_LITERAL = re.compile(r'\bdlsym\s*\(\s*[^,]+,\s*"(shaar_[A-Za-z0-9_]+)"\s*\)')
-LOAD_MACRO = re.compile(r"\bSHAAR_LOAD\s*\(\s*\w+\s*,\s*(\w+)\s*\)")
+LOAD_MACRO = re.compile(r"(?m)^(?![ \t]*#)[ \t]*.*?\bSHAAR_LOAD\s*\(\s*\w+\s*,\s*(\w+)\s*\)")
 ENUM = re.compile(r"typedef\s+enum\s*\{(?P<body>.*?)\}\s*(?P<name>\w+)\s*;", re.S)
 ENUM_VALUE = re.compile(r"\b(SHAAR_(?:EVENT|OP)_[A-Z0-9_]+)\s*=")
 PATCH_ENUM_VALUE = re.compile(r"^\s*(SHAAR_(?:EVENT|OP)_[A-Z0-9_]+)\s*=")

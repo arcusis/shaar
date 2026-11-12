@@ -28,6 +28,7 @@ class EngineABIContractTests(unittest.TestCase):
             bridge = root / "Sources/ChromiumBridge"
             bridge.mkdir(parents=True)
             (bridge / "Bridge.mm").write_text('''
+              #define SHAAR_LOAD(field, symbol) dlsym(library, "shaar_" #symbol)
               SHAAR_LOAD(run, engine_run);
               dlsym(library, "shaar_optional_call");
               const char *diagnostic = "shaar_not_an_abi_lookup";

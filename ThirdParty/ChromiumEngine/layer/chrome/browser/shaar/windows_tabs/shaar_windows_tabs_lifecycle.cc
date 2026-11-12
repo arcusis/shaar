@@ -470,7 +470,10 @@ Browser* CreateEngineRequestedBrowser(Profile* profile,
 
 void RegisterEngineRequestedWindowHandler() {
   SetEngineRequestedWindowHandler(base::BindRepeating(
-      &CreateEngineRequestedBrowser));
+      [](Profile* profile, BrowserWindowInterface::Type type,
+         bool user_gesture) -> BrowserWindowInterface* {
+        return CreateEngineRequestedBrowser(profile, type, user_gesture);
+      }));
 }
 
 }  // namespace
@@ -497,9 +500,11 @@ bool AdoptPageWebContents(content::WebContents* source,
 
   shaar_window* destination = opener->window;
   Browser* browser = opener->browser;
-  if (disposition == NEW_WINDOW || disposition == NEW_POPUP ||
-      disposition == SINGLETON_TAB) {
-    std::string request_type = disposition == NEW_WINDOW ? "normal" : "popup";
+  if (disposition == WindowOpenDisposition::NEW_WINDOW ||
+      disposition == WindowOpenDisposition::NEW_POPUP ||
+      disposition == WindowOpenDisposition::SINGLETON_TAB) {
+    std::string request_type =
+        disposition == WindowOpenDisposition::NEW_WINDOW ? "normal" : "popup";
     std::string native_id;
     if (!shaar::RequestAppWindow(opener->engine, opener->profile_id,
                                  request_type, user_gesture, &native_id)) {
@@ -556,14 +561,14 @@ bool AdoptPageWebContents(content::WebContents* source,
   if (destination->profile_id.empty())
     destination->profile_id = opener->profile_id;
 
-  base::Value::Dict payload;
+  base::DictValue payload;
   payload.Set("kind", "opened");
   payload.Set("schemaVersion", 1);
   payload.Set("openerTabID", opener->tab_id);
   payload.Set("url", target_url.spec());
   payload.Set("foreground", true);
   std::string json;
-  base::JSONWriter::Write(payload, &json);
+  base::JSONWriter::Write(base::Value(std::move(payload)), &json);
   shaar::EmitEvent(adopted->engine, SHAAR_EVENT_TAB,
                    {adopted->profile_id.data(), adopted->profile_id.size()}, {},
                    {adopted->window_id.data(), adopted->window_id.size()},

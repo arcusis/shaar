@@ -205,7 +205,6 @@ void OnProfileReady(shaar_profile* handle,
     return;
   }
   if (!handle->engine->locale.empty()) {
-    g_browser_process->SetApplicationLocale(handle->engine->locale);
     shaar::profiles::ApplyApplicationLocale(
         profile, g_browser_process->local_state(), handle->engine->locale);
   }

@@ -66,12 +66,11 @@ def archive_members(archive: Path) -> tuple[set[str], str]:
             members = package.getmembers()
     except (OSError, tarfile.TarError) as error:
         raise ContractError(f"cannot read cached pinned engine archive: {error}") from error
-    headers = sorted(member.name for member in members
-                     if Path(member.name).name == "shaar_engine.h")
+    headers = sorted(member.name for member in members if Path(member.name).suffix == ".h")
     binaries = sorted(member.name for member in members
                       if member.isfile() and Path(member.name).name == "Chromium Framework")
     if not headers:
-        raise ContractError("pinned engine archive does not ship shaar_engine.h")
+        raise ContractError("pinned engine archive does not ship C/C++ headers")
     if not binaries:
         raise ContractError("pinned engine archive does not contain Chromium Framework")
     return set(headers), binaries[0]
@@ -84,7 +83,7 @@ def parse_header_enums(header: str) -> tuple[set[str], set[str]]:
         if name in declared:
             declared[name] = set(ENUM_VALUE.findall(match.group("body")))
     if not declared["shaar_event_kind"] or not declared["shaar_operation"]:
-        raise ContractError("shaar_engine.h is missing the event-kind or operation enum")
+        raise ContractError("pinned archive headers are missing the event-kind or operation enum")
     return declared["shaar_event_kind"], declared["shaar_operation"]
 
 
@@ -121,11 +120,14 @@ def check_contract(root: Path, archive: Path, *, nm=exported_symbols) -> tuple[i
     header_names, binary_name = archive_members(archive)
     optional = optional_symbols(root)
     with tarfile.open(archive, "r:xz") as package:
-        header_name = sorted(header_names)[0]
-        header_file = package.extractfile(header_name)
-        if header_file is None:
-            raise ContractError("could not read shaar_engine.h from pinned archive")
-        header = header_file.read().decode("utf-8", errors="replace")
+        header_sources = []
+        for header_name in sorted(header_names):
+            header_file = package.extractfile(header_name)
+            if header_file is not None:
+                header_sources.append(header_file.read().decode("utf-8", errors="replace"))
+        header = "\n".join(header_sources)
+        if not header:
+            raise ContractError("could not read C/C++ headers from pinned archive")
         # Extract only the framework executable to a temporary file for nm.
         with tempfile.TemporaryDirectory(prefix="shaar-abi-") as directory:
             binary_file = package.extractfile(binary_name)

@@ -580,6 +580,10 @@
       "sha256": "73a297422705f199018fe0b055c9e8a4abdeca7bc235dbde0db4ca39fd614b3d"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0082-shaar-tab-activation-events.patch",
+      "sha256": "b8383d2468ea097b0463634399ad315ce98660d7fbc814775849a0a32945a68a"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0086-shaar-http-basic-auth.patch",
       "sha256": "b32c270fd18ee0c90f998c88de326ab28c661d43c973bdb03e0b1357bf373961"
     },

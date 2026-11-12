@@ -5,6 +5,7 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 
 #include <string>
 #include <memory>
@@ -131,6 +132,39 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), nullptr);
   EXPECT_EQ(registry.FindWindowOwner(window), nullptr);
   EXPECT_EQ(registry.FindTabWindow(tab), nullptr);
+}
+
+TEST(ShaarWindowsTabsHandlersTest,
+     RegistryResolvesExtensionActivatedTabToItsShaarIdentity) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* tab = reinterpret_cast<shaar_tab*>(3);
+  auto* browser = reinterpret_cast<Browser*>(4);
+  auto* contents = reinterpret_cast<content::WebContents*>(5);
+  registry.ReserveWindow(engine, window, "window-a");
+  registry.EnsureWindowState(engine, window, browser, "profile-a");
+  registry.BindTab(engine, window, tab, "tab-a", browser, contents);
+
+  auto identity = registry.FindRegularTabForBrowser(browser, contents);
+  ASSERT_TRUE(identity);
+  EXPECT_EQ(identity->engine, engine);
+  EXPECT_EQ(identity->profile_id, "profile-a");
+  EXPECT_EQ(identity->window_id, "window-a");
+  EXPECT_EQ(identity->tab_id, "tab-a");
+  EXPECT_FALSE(registry.FindRegularTabForBrowser(
+      reinterpret_cast<Browser*>(6), contents));
+}
+
+TEST(ShaarWindowsTabsHandlersTest,
+     TabActivationIgnoresFallbackSelectionAfterTabRemoval) {
+  TabStripSelectionChange selection;
+  selection.old_contents = reinterpret_cast<content::WebContents*>(1);
+  selection.new_contents = reinterpret_cast<content::WebContents*>(2);
+  EXPECT_TRUE(ShouldEmitTabActivation(selection));
+
+  selection.selected_tabs_were_removed = true;
+  EXPECT_FALSE(ShouldEmitTabActivation(selection));
 }
 
 TEST(ShaarWindowsTabsHandlersTest, ReservedWindowBindsBrowserAndClosesCleanly) {

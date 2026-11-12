@@ -21,16 +21,20 @@ class Profile;
 namespace content {
 class WebContents;
 }
+struct TabStripSelectionChange;
 
 namespace shaar::windows_tabs {
 
 struct SelectedRegularTab {
+  shaar_engine* engine;
   shaar_window* window;
   shaar_tab* tab;
   std::string profile_id;
   std::string window_id;
   std::string tab_id;
 };
+
+bool ShouldEmitTabActivation(const TabStripSelectionChange& selection);
 
 bool HasHiddenNativeWindow(content::WebContents* contents);
 void UpdateDockedDevTools(content::WebContents* inspected,
@@ -61,6 +65,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
                              content::WebContents*) override;
   std::optional<SelectedRegularTab> FindSelectedRegularTab(
       shaar_engine*, content::WebContents*) const;
+  std::optional<SelectedRegularTab> FindRegularTabForBrowser(
+      Browser*, content::WebContents*) const;
   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
                                          shaar_tab*) override;
   content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,

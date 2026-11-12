@@ -21,8 +21,14 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/desktop_browser_window_capabilities.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 
 namespace shaar::windows_tabs {
+
+bool ShouldEmitTabActivation(const TabStripSelectionChange& selection) {
+  return selection.active_tab_changed() && !selection.selected_tabs_were_removed &&
+         selection.new_contents;
+}
 
 namespace {
 BrowserTabRegistryImpl g_registry;
@@ -271,8 +277,31 @@ BrowserTabRegistryImpl::FindSelectedRegularTab(
         continue;
       for (const auto& [profile_id, browser] : window.browsers_by_profile) {
         if (browser == tab.browser)
-          return SelectedRegularTab{tab.window, tab.handle, profile_id,
+          return SelectedRegularTab{engine, tab.window, tab.handle, profile_id,
                                     window.window_id, tab.id};
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<SelectedRegularTab>
+BrowserTabRegistryImpl::FindRegularTabForBrowser(
+    Browser* browser, content::WebContents* contents) const {
+  if (!browser || !contents)
+    return std::nullopt;
+  for (const auto& tab : tabs_) {
+    if (tab.browser != browser || tab.contents != contents)
+      continue;
+    for (const auto& window : windows_) {
+      if (window.engine != tab.engine || window.handle != tab.window ||
+          window.closing || window.active_browser != browser)
+        continue;
+      for (const auto& [profile_id, registered_browser] :
+           window.browsers_by_profile) {
+        if (registered_browser == browser)
+          return SelectedRegularTab{tab.engine, tab.window, tab.handle,
+                                    profile_id, window.window_id, tab.id};
       }
     }
   }

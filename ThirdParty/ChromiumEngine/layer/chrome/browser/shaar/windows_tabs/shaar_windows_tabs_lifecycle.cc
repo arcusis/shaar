@@ -18,6 +18,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
@@ -42,6 +43,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/image/image.h"
@@ -193,6 +195,45 @@ bool LiveTab(shaar_tab* tab) {
 
 void FinalizeWindow(shaar_window* window);
 
+class TabActivationObserver final : public TabStripModelObserver {
+ public:
+  explicit TabActivationObserver(Browser* browser)
+      : browser_(browser), model_(browser->GetTabStripModel()) {
+    model_->AddObserver(this);
+  }
+
+  ~TabActivationObserver() override { model_->RemoveObserver(this); }
+
+  void OnTabStripModelChanged(
+      TabStripModel*,
+      const TabStripModelChange&,
+      const TabStripSelectionChange& selection) override {
+    if (!shaar::windows_tabs::ShouldEmitTabActivation(selection))
+      return;
+    auto identity = shaar::windows_tabs::Registry().FindRegularTabForBrowser(
+        browser_, selection.new_contents);
+    if (!identity)
+      return;
+
+    base::DictValue payload;
+    payload.Set("kind", "activated");
+    payload.Set("schemaVersion", 1);
+    std::string json;
+    if (!base::JSONWriter::Write(base::Value(std::move(payload)), &json))
+      return;
+    shaar::EmitEvent(identity->engine, SHAAR_EVENT_TAB,
+                     {identity->profile_id.data(), identity->profile_id.size()},
+                     {},
+                     {identity->window_id.data(), identity->window_id.size()},
+                     {identity->tab_id.data(), identity->tab_id.size()},
+                     {json.data(), json.size()});
+  }
+
+ private:
+  raw_ptr<Browser> browser_;
+  raw_ptr<TabStripModel> model_;
+};
+
 class LifecycleObserver final : public BrowserCollectionObserver {
  public:
   void EnsureObserving() {
@@ -204,8 +245,15 @@ class LifecycleObserver final : public BrowserCollectionObserver {
 
   void StopObserving() { observation_.Reset(); }
 
+  void ObserveTabStrip(Browser* browser) {
+    if (browser && !tab_observers_.contains(browser))
+      tab_observers_.emplace(browser,
+                             std::make_unique<TabActivationObserver>(browser));
+  }
+
   void OnBrowserClosed(BrowserWindowInterface* closed) override {
     auto* browser = static_cast<Browser*>(closed);
+    tab_observers_.erase(browser);
     auto& registry = shaar::windows_tabs::Registry();
     for (const auto& [window, handle] : windows)
       shaar::extensions_host::ClosePopupsForBrowser(handle->engine, browser);
@@ -223,6 +271,8 @@ class LifecycleObserver final : public BrowserCollectionObserver {
   }
 
  private:
+  std::unordered_map<Browser*, std::unique_ptr<TabActivationObserver>>
+      tab_observers_;
   base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver>
       observation_{this};
 };
@@ -290,6 +340,7 @@ Browser* CreateHiddenBrowser(Profile* profile) {
   BrowserWindowInterface* created = CreateBrowserWindow(std::move(params));
   Browser* browser = static_cast<Browser*>(created);
   if (browser) {
+    Observer().ObserveTabStrip(browser);
     if (BrowserWindow* native_window = BrowserWindow::FromBrowser(browser))
       native_window->Hide();
     shaar::windows_tabs::Registry().WatchBrowserClose(browser);

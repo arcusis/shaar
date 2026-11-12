@@ -849,6 +849,14 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self adoptOpenedTabFromEvent:event payload:payload profileID:profileID];
     return;
   }
+  if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"activated"]) {
+    if (_shaarTabs[tabID] &&
+        [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
+        [String(event->window_id) isEqualToString:_shaarTabWindows[tabID]] &&
+        self.onTabActivated)
+      self.onTabActivated(tabID, profileID);
+    return;
+  }
   if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"closed"]) {
     for (NSString *requestID in [_shaarMediaRequests allKeysForObject:tabID])
       [self resolveWebsiteMediaRequestID:requestID accepted:NO];

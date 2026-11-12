@@ -180,7 +180,6 @@ final class WorkspaceProbe {
     }
     first.perform(.tab(space: ids.alpha, tab: ids.firstPin))
     var firstDocument = try await document(ids.firstPin)
-    let firstNative = runtime.nativeTabID(forID: ids.firstPin.uuidString)
     if phase == "initial" {
       let address = fixture.appending(path: "workspace-pin-current").absoluteString
       let literal = String(data: try JSONEncoder().encode(address), encoding: .utf8)!
@@ -212,7 +211,6 @@ final class WorkspaceProbe {
     let secondDocument = try await document(ids.secondPin)
     try expect(
       ids.firstPin != ids.secondPin
-        && firstNative != runtime.nativeTabID(forID: ids.secondPin.uuidString)
         && firstDocument["instance"] as? String != secondDocument["instance"] as? String,
       "shared pin definitions materialize as distinct window-owned native documents")
     try expect(
@@ -241,7 +239,8 @@ final class WorkspaceProbe {
     let secondAfterCatalog = try await document(ids.secondPin) as NSDictionary
     try expect(
       firstAfterCatalog == firstDocument as NSDictionary
-        && runtime.nativeTabID(forID: ids.firstPin.uuidString) == firstNative
+        && runtime.windowID(forTabID: ids.firstPin.uuidString) == ids.first.uuidString
+        && runtime.windowID(forTabID: ids.secondPin.uuidString) == ids.second.uuidString
         && secondAfterCatalog == secondDocument as NSDictionary,
       "catalog propagation preserves both existing window-owned native documents")
     first.toggleFolder(first.session.spaces[0].folders[0].id, in: ids.alpha)

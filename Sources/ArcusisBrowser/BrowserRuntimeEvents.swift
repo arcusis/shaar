@@ -11,6 +11,7 @@ final class BrowserRuntimeEvents {
   let router = BrowserRuntimeRouter()
   var onWindowClosed: ((String, Bool) -> Void)?
   var onDeviceChooserResolution: ((String, String, String?) -> Void)?
+  var onTabClosed: ((String, String) -> Void)?
   var onQuitRequested: (() -> Void)?
   var onQuitCancelled: (() -> Void)?
   var onWindowRequest: (@MainActor @Sendable (String, String, Bool) -> String?)? {
@@ -46,6 +47,7 @@ final class BrowserRuntimeEvents {
     }
     runtime.onTabClosed = { [weak self] id, windowID in
       self?.router.tabClosed(id, windowID: windowID)
+      self?.onTabClosed?(id, windowID)
     }
     runtime.onTabActivated = { [weak self] id, profile in
       guard self?.router.isQuitting == false else { return }

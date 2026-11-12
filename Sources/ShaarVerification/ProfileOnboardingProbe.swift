@@ -186,12 +186,20 @@ final class ProfileOnboardingProbe {
       let popupWindow = runtime.window(forID: popupID)
     else { throw Failure("Sign-in popup host missing") }
     try requireFullScreenAuxiliary(popupWindow, label: "sign-in popup")
-    try await wait("\(popupStep) session") {
-      let state = await self.value(
-        child, "({cookie:document.cookie,opener:!!window.opener,ready:document.readyState})")
-      return (state?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true
-        && state?["opener"] as? Bool == true && state?["ready"] as? String == "complete"
+    var popupSession: [String: Any]?
+    for _ in 0..<80 {
+      popupSession = await value(
+        child, "({url:location.href,cookie:document.cookie,opener:!!window.opener,ready:document.readyState})")
+      if (popupSession?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true
+        && popupSession?["opener"] as? Bool == true
+        && popupSession?["ready"] as? String == "complete"
+      { break }
+      try await Task.sleep(for: .milliseconds(100))
     }
+    guard (popupSession?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true,
+      popupSession?["opener"] as? Bool == true,
+      popupSession?["ready"] as? String == "complete"
+    else { throw Failure("Timed out: \(popupStep) session [state=\(String(describing: popupSession))]") }
     if reloadOpener {
       guard runtime.reloadTabID(tab.uuidString, profileID: flow.profileID.uuidString) else {
         throw Failure("\(popupStep) opener reload rejected")

@@ -6,7 +6,7 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, reply) => {
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message.target === "offscreen") return false;
   (async () => {
     if (message.action === "set") {

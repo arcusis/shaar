@@ -165,6 +165,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private var previousWindowsMenu: NSMenu?
   private var previousHelpMenu: NSMenu?
   private var engineRequestedWindows: Set<String> = []
+  private var authoredPopupWindows: Set<String> = []
   /// Set only by the production entry point; probes and tests never check for updates.
   var updater: AppUpdater?
   var onClosed: ((UUID, Bool) -> Void)?
@@ -313,6 +314,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     privateHost.installCallbacks()
     events.onWindowRequest = { [weak self] profile, type, userGesture in
       self?.requestedWindow(profile: profile, type: type, userGesture: userGesture)
+    }
+    events.onTabClosed = { [weak self] _, windowID in
+      self?.closeEmptyAuthoredPopup(windowID: windowID)
     }
     events.onWindowShowRequest = { [weak self] window, active in
       self?.showRequestedWindow(window, active: active)
@@ -861,6 +865,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     events.onWindowRequest = nil
     events.onWindowShowRequest = nil
     events.onDevToolsOpenURLRequest = nil
+    events.onTabClosed = nil
     events.onNewTabWillAdopt = nil
     for context in contexts.values {
       stopObserving(context)
@@ -1175,7 +1180,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   private func requestedWindow(profile: String, type: String, userGesture: Bool) -> String? {
     guard userGesture else { return nil }
-    if let flow = accountSignIns.values.first(where: { $0.profileID.uuidString == profile }) {
+    if let requestedProfileID = UUID(uuidString: profile),
+      let flow = accountSignIns.values.first(where: { $0.profileID == requestedProfileID })
+    {
       return flow.requestedWindow(type: type)
     }
     guard started, !events.runtime.isQuitting, ["normal", "popup", "app"].contains(type),
@@ -1200,6 +1207,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       try attach(id, source: source?.window.frame, reconcile: false)
       let context = contexts[id]!
       engineRequestedWindows.insert(context.nativeID)
+      authoredPopupWindows.insert(context.nativeID)
       DispatchQueue.main.async { [weak self, weak context] in
         guard let self, let context, self.contexts[id] === context, !context.engine.isClosed,
           !self.events.runtime.isQuitting
@@ -1233,6 +1241,15 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     else { return }
     _ = context.store.openDevToolsRequestedTab(
       request.url, sourceTabID: request.tabID, profileID: request.profileID)
+  }
+
+  private func closeEmptyAuthoredPopup(windowID: String) {
+    guard authoredPopupWindows.contains(windowID),
+      let context = contexts.values.first(where: { $0.nativeID == windowID }),
+      context.engine.liveTabs.isEmpty
+    else { return }
+    authoredPopupWindows.remove(windowID)
+    requestCloseWindow(context)
   }
 
   private func showRequestedWindow(_ nativeID: String, active: Bool) {
@@ -1372,6 +1389,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     guard let context = contexts.removeValue(forKey: id) else { return }
     appClosingWindows.remove(id)
     engineRequestedWindows.remove(context.nativeID)
+    authoredPopupWindows.remove(context.nativeID)
     stopObserving(context)
     saveGeometry(context)
     if !quitting {

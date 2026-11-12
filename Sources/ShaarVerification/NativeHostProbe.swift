@@ -232,6 +232,7 @@ final class NativeHostProbe {
     self.host = host
     host.onClosed = { [weak self] id, quitting in self?.closures[id] = quitting }
     try host.restore()
+    checks += try await ProfileDeletionProbe(host: host, fixture: fixture).run()
     checks += try await ProfileOnboardingProbe(
       host: host, root: root, fixture: fixture, phase: phase
     ).run()
@@ -938,19 +939,47 @@ final class NativeHostProbe {
 
   private func settleViewportLayout(_ context: NativeBrowserContext) async throws {
     var frameSampler = StableContainerFrameSampler()
+    var lastRendererSize: [String: Double]?
+    var expectedRendererSize = NSSize.zero
     // The selected-space transition is a 350 ms spring. Give it time to begin and
     // finish before accepting two consecutive stable container-frame samples.
     for sampleIndex in 0..<67 {
       context.window.displayIfNeeded()
       context.contentView.layoutSubtreeIfNeeded()
       context.hosting.layoutSubtreeIfNeeded()
-      if let frame = viewportContainerFrame(context), frameSampler.sample(frame), sampleIndex >= 15 {
-        return
+      if let frame = viewportContainerFrame(context), frameSampler.sample(frame), sampleIndex >= 15,
+        let tabID = context.store.session.selectedSpace.selectedTabID,
+        let page = primary.runtime.view(forTabID: tabID.uuidString)
+      {
+        expectedRendererSize = page.frame.size
+        lastRendererSize = await rendererViewportSize(tabID: tabID)
+        if let size = lastRendererSize,
+          abs((size["width"] ?? 0) - Double(page.frame.width)) <= 1,
+          abs((size["height"] ?? 0) - Double(page.frame.height)) <= 1
+        {
+          return
+        }
       }
       await Task.yield()
       try await Task.sleep(for: .milliseconds(30))
     }
-    throw HostProbeFailure("Native viewport container frame did not settle within 2 seconds.")
+    throw HostProbeFailure(
+      "Native viewport renderer dimensions did not settle with its native frame within 2 seconds "
+        + "(expected \(expectedRendererSize), observed \(String(describing: lastRendererSize))).")
+  }
+
+  private func rendererViewportSize(tabID: UUID) async -> [String: Double]? {
+    await withCheckedContinuation { continuation in
+      primary.runtime.evaluate(
+        inTabID: tabID.uuidString,
+        script: "({width:window.innerWidth,height:window.innerHeight})"
+      ) { json in
+        let value = json?.data(using: .utf8).flatMap {
+          try? JSONSerialization.jsonObject(with: $0) as? [String: Double]
+        }
+        continuation.resume(returning: value)
+      }
+    }
   }
 
   private func viewportContainerFrame(_ context: NativeBrowserContext) -> CGRect? {

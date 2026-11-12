@@ -482,7 +482,9 @@ final class EngineProbe {
       }
       try await Task.sleep(for: .milliseconds(100))
     }
-    let detail = "JavaScript response received: \(receivedJavaScript)."
+    let safeState = try? await evaluate(
+      tab, "({url:location.href,title:document.title,ready:document.readyState})")
+    let detail = "JavaScript response received: \(receivedJavaScript); page=\(String(describing: safeState))."
     throw ProbeFailure("Loopback fixture did not load in \(tab); \(detail)")
   }
 
@@ -896,6 +898,21 @@ final class EngineProbe {
       }
       if ProcessInfo.processInfo.environment["SHAAR_NATIVE_WINDOW_ONLY"] == "1" {
         checks += try await runNativeWindowOnlyProbe()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      if ProcessInfo.processInfo.environment["SHAAR_NATIVE_HOST_ONLY"] == "1" {
+        guard let browserEngine else {
+          throw ProbeFailure("Native-host-only probe engine is missing.")
+        }
+        checks += try await ExtensionProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
+        ).run()
+        fixtureStage = "NativeHost"
+        checks += try await NativeHostProbe(
+          primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
         localFixturesPassed = true
         finish(error: nil)
         return

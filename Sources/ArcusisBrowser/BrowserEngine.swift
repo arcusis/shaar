@@ -403,6 +403,9 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolvePrint(id, windowID: self.windowID, accepted: accepted)
     }
+    store.onJavaScriptDialogDecision = { [weak self] id, accepted, input in
+      self?.events.resolveJavaScriptDialog(id, accepted: accepted, input: input)
+    }
     callbacks.onDesktopCaptureRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard let request = DesktopCaptureRequest(payload: payload),
@@ -442,6 +445,23 @@ final class BrowserEngine {
         self.events.resolvePrint(id, windowID: self.windowID, accepted: false)
         return
       }
+    }
+    callbacks.onJavaScriptDialogRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String,
+        let request = JavaScriptDialogRequest(payload: payload), let store = self.store
+      else {
+        if let id = payload["id"] as? String {
+          self?.runtime.resolveJavaScriptDialogRequestID(id, accepted: false, input: nil)
+        }
+        return
+      }
+      guard store.requestJavaScriptDialog(request) else {
+        self.runtime.resolveJavaScriptDialogRequestID(id, accepted: false, input: nil)
+        return
+      }
+    }
+    callbacks.onJavaScriptDialogDismissed = { [weak store] id in
+      store?.dismissJavaScriptDialog(id)
     }
     callbacks.onWebsiteMediaRequest = { [weak self] payload in
       self?.requestWebsitePermission(payload)

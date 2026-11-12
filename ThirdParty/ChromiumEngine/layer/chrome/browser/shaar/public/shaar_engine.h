@@ -81,8 +81,9 @@ typedef enum {
   SHAAR_EVENT_DEVTOOLS = 14,
   SHAAR_EVENT_MEDIA = 15,
   // BEGIN save_prompts
-  SHAAR_EVENT_SAVE_PROMPT = 16
+  SHAAR_EVENT_SAVE_PROMPT = 16,
   // END save_prompts
+  SHAAR_EVENT_JAVASCRIPT_DIALOG = 17
 } shaar_event_kind;
 typedef struct {
   uint32_t size;
@@ -243,8 +244,9 @@ typedef enum {
   SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400,
   // END storage_keychain
   // BEGIN save_prompts
-  SHAAR_OP_SAVE_PROMPT_DECIDE = 1500
+  SHAAR_OP_SAVE_PROMPT_DECIDE = 1500,
   // END save_prompts
+  SHAAR_OP_JAVASCRIPT_DIALOG_REPLY = 1501
 } shaar_operation;
 
 // Private sessions module IDs.

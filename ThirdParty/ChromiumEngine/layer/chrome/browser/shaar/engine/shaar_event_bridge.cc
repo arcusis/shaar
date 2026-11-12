@@ -26,7 +26,7 @@ shaar_error_code EmitEvent(shaar_engine* engine,
                            shaar_bytes payload_json) {
   if (!engine || !engine->on_event || !pthread_main_np())
     return SHAAR_NOT_READY;
-  if (kind < SHAAR_EVENT_ENGINE || kind > SHAAR_EVENT_SAVE_PROMPT ||
+  if (kind < SHAAR_EVENT_ENGINE || kind > SHAAR_EVENT_JAVASCRIPT_DIALOG ||
       (kind != SHAAR_EVENT_ENGINE && profile_id.size == 0) ||
       (kind == SHAAR_EVENT_PRIVATE_SESSION && session_id.size == 0) ||
       !ValidBytes(profile_id) || !ValidBytes(session_id) ||

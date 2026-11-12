@@ -132,6 +132,8 @@ source_set("engine") {
     # BEGIN save_prompts
     "save_prompts/shaar_save_prompts.cc",
     "save_prompts/shaar_save_prompts.h",
+    "javascript_dialogs/shaar_javascript_dialogs.cc",
+    "javascript_dialogs/shaar_javascript_dialogs.h",
     # END save_prompts
   ]
   cflags_objcc = [ "-fobjc-arc" ]
@@ -369,6 +371,7 @@ test("shaar_layer_unittests") {
     "login/shaar_login_unittest.cc",
     "media/shaar_media_unittest.cc",
     "save_prompts/shaar_save_prompts_unittest.cc",
+    "javascript_dialogs/shaar_javascript_dialogs_unittest.cc",
     "navigation/shaar_navigation_unittest.cc",
     "permissions/shaar_permission_prompt_unittest.cc",
     "private_sessions/shaar_private_sessions_unittest.cc",

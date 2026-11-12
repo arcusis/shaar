@@ -163,6 +163,7 @@ struct BrowserWindow: View {
       case .desktopCapture(let request): DesktopCapturePicker(request: request, store: store)
       case .webShare(let request): WebShareSheet(request: request, store: store)
       case .print(let request): PrintConsentSheet(request: request, store: store)
+      case .javascriptDialog(let request): JavaScriptDialogSheet(request: request, store: store)
       case .externalApp(let request): ExternalAppConsent(store: store, request: request)
       case .deviceChooser(let request): DeviceChooserConsent(store: store, request: request)
       case .httpAuth(let request): HTTPAuthSheet(store: store, request: request)

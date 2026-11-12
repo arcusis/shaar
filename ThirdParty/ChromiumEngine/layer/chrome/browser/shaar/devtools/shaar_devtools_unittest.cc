@@ -914,6 +914,8 @@ TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
             registry.Find(SHAAR_OP_PROBE_POPUP_EVALUATE));
   EXPECT_EQ(&HandleDevToolsOperation,
             registry.Find(SHAAR_OP_PROBE_POPUP_CAPTURE));
+  EXPECT_EQ(&HandleDevToolsOperation,
+            registry.Find(SHAAR_OP_PROBE_POPUP_TRUSTED_CLICK));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_UI_SHOW));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CONTROL_STATUS));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_OPEN));

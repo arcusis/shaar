@@ -251,6 +251,15 @@ Browser* BrowserTabRegistryImpl::FindBrowser(shaar_engine* engine,
   return nullptr;
 }
 
+Browser* BrowserTabRegistryImpl::FindBrowserForProfile(
+    shaar_engine* engine, shaar_window* window, std::string_view profile_id) {
+  WindowState* state = FindWindowState(engine, window);
+  if (!state || profile_id.empty() || state->closing)
+    return nullptr;
+  auto found = state->browsers_by_profile.find(std::string(profile_id));
+  return found == state->browsers_by_profile.end() ? nullptr : found->second;
+}
+
 bool BrowserTabRegistryImpl::IsSelectedWebContents(
     shaar_engine* engine, shaar_window* window, shaar_tab* tab,
     content::WebContents* contents) {
@@ -259,6 +268,28 @@ bool BrowserTabRegistryImpl::IsSelectedWebContents(
   return state && contents && owner && state->active_browser == owner &&
          FindWebContents(engine, window, tab) == contents &&
          owner->tab_strip_model()->GetActiveWebContents() == contents;
+}
+
+std::optional<SelectedRegularTab> BrowserTabRegistryImpl::FindRegularTab(
+    shaar_engine* engine, content::WebContents* contents) const {
+  if (!engine || !contents || EngineQuitRequested(engine))
+    return std::nullopt;
+  for (const auto& tab : tabs_) {
+    if (tab.engine != engine || tab.contents != contents || !tab.browser ||
+        tab.browser->GetProfile()->IsOffTheRecord())
+      continue;
+    for (const auto& window : windows_) {
+      if (window.engine != engine || window.handle != tab.window ||
+          window.closing)
+        continue;
+      for (const auto& [profile_id, browser] : window.browsers_by_profile) {
+        if (browser == tab.browser)
+          return SelectedRegularTab{engine, tab.window, tab.handle, profile_id,
+                                    window.window_id, tab.id};
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 std::optional<SelectedRegularTab>

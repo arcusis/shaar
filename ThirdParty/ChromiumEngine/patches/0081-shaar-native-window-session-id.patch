@@ -1,23 +1,11 @@
 From: Shaar engineering
-Subject: [PATCH] Resolve native window IDs through Chromium session IDs
+Subject: [PATCH] Resolve 157 native window IDs through Chromium session IDs
 
-Map each regular Shaar window/profile pair to its registered Chromium Browser
-and expose the BrowserWindowInterface session ID through the engine ABI.
+Port the per-profile Browser lookup and expose its validated Chromium session ID through the engine ABI.
 
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
-index d59e67b..0d2ac48 100644
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -13,7 +13,7 @@ extern "C" {
- #endif
- 
- #define SHAAR_ENGINE_ABI_MAJOR 1u
--#define SHAAR_ENGINE_ABI_MINOR 12u
-+#define SHAAR_ENGINE_ABI_MINOR 13u
- #define SHAAR_EXPORT __attribute__((visibility("default")))
- 
- typedef struct shaar_engine shaar_engine;
-@@ -468,6 +468,10 @@ SHAAR_EXPORT shaar_error_code shaar_window_open(
+@@ -482,6 +482,10 @@
      shaar_bytes window_id, shaar_window **out, shaar_error *error);
  SHAAR_EXPORT shaar_error_code shaar_window_close(
      shaar_window *, shaar_error *error);
@@ -28,26 +16,24 @@ index d59e67b..0d2ac48 100644
  SHAAR_EXPORT void *shaar_window_host_view(shaar_window *); /* borrowed NSView* */
  SHAAR_EXPORT void *shaar_window_native_window(shaar_window *); /* borrowed NSWindow* */
  SHAAR_EXPORT shaar_error_code shaar_tab_open(
-diff --git a/chrome/browser/shaar/shaar_engine.exports b/chrome/browser/shaar/shaar_engine.exports
-index 5a543d9..f13d72f 100644
 --- a/chrome/browser/shaar/shaar_engine.exports
 +++ b/chrome/browser/shaar/shaar_engine.exports
-@@ -25,6 +25,7 @@ _shaar_private_session_tracker_status
+@@ -25,6 +25,7 @@
  _shaar_private_session_tracker_allowance
  _shaar_window_open
  _shaar_window_close
 +_shaar_window_chrome_id
+ _shaar_tab_find
  _shaar_tab_open
  _shaar_tab_close
- _shaar_window_host_view
-diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
-index 74194a4..3b565c0 100644
 --- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
 +++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
-@@ -158,6 +158,15 @@ Browser* BrowserTabRegistryImpl::FindBrowser(shaar_engine* engine,
+@@ -162,6 +162,15 @@
+     if (entry.engine == engine && entry.handle == window)
+       return entry.browser;
    return nullptr;
- }
- 
++}
++
 +Browser* BrowserTabRegistryImpl::FindBrowserForProfile(
 +    shaar_engine* engine, shaar_window* window, std::string_view profile_id) {
 +  WindowState* state = FindWindowState(engine, window);
@@ -55,16 +41,12 @@ index 74194a4..3b565c0 100644
 +    return nullptr;
 +  auto found = state->browsers_by_profile.find(std::string(profile_id));
 +  return found == state->browsers_by_profile.end() ? nullptr : found->second;
-+}
-+
+ }
+ 
  bool BrowserTabRegistryImpl::IsSelectedWebContents(
-     shaar_engine* engine, shaar_window* window, shaar_tab* tab,
-     content::WebContents* contents) {
-diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
-index 11269ac..c573b8d 100644
 --- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
 +++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
-@@ -57,6 +57,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
+@@ -69,6 +69,8 @@
      std::unordered_set<Browser*> pending_closes;
    };
    Browser* FindBrowser(shaar_engine*, shaar_window*) override;
@@ -72,15 +54,15 @@ index 11269ac..c573b8d 100644
 +                                 std::string_view profile_id);
    bool IsSelectedWebContents(shaar_engine*, shaar_window*, shaar_tab*,
                               content::WebContents*) override;
-   std::optional<SelectedRegularTab> FindRegularTab(
-diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc
-index 689d046..ced0d1e 100644
+   std::optional<SelectedRegularTab> FindSelectedRegularTab(
 --- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc
 +++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc
-@@ -95,6 +95,24 @@ TEST(ShaarWindowsTabsHandlersTest, PinnedTabsMustBeAnOrderedPrefix) {
+@@ -94,6 +94,24 @@
+   EXPECT_FALSE(ValidatePlacement({"a", "b", "c"}, {"a", "b", "c"},
+                                  {"b"}));
    EXPECT_FALSE(ValidatePlacement({"a", "b"}, {"a", "b"}, {"outside"}));
- }
- 
++}
++
 +TEST(ShaarWindowsTabsHandlersTest, WindowRegistryResolvesBrowserByProfile) {
 +  BrowserTabRegistryImpl registry;
 +  auto* engine = reinterpret_cast<shaar_engine*>(1);
@@ -97,27 +79,26 @@ index 689d046..ced0d1e 100644
 +  EXPECT_EQ(registry.FindBrowserForProfile(
 +                reinterpret_cast<shaar_engine*>(5), window, "alpha"),
 +            nullptr);
-+}
-+
+ }
+ 
  TEST(ShaarWindowsTabsHandlersTest, PlaceHandlerRejectsWrongOperationBeforeMutation) {
-   shaar::ModuleCall call = {};
-   call.operation = SHAAR_OP_WINDOW_ACTIVATE_TAB;
-diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
-index a6a3a6f..dfa6b43 100644
 --- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
 +++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
-@@ -40,6 +40,7 @@
- #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
+@@ -44,6 +44,7 @@
  #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 +#include "components/sessions/core/session_id.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/browser/web_contents_observer.h"
  #include "ui/gfx/image/image.h"
-@@ -510,6 +511,43 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_close(
-   return Result(SHAAR_OK, error);
- }
- 
+@@ -716,6 +717,43 @@
+   for (Browser* browser : pending)
+     if (browser && browser->GetWindow())
+       browser->GetWindow()->Close();
++  return Result(SHAAR_OK, error);
++}
++
 +extern "C" SHAAR_EXPORT shaar_error_code shaar_window_chrome_id(
 +    shaar_engine* engine,
 +    shaar_profile* profile_handle,
@@ -152,9 +133,6 @@ index a6a3a6f..dfa6b43 100644
 +  if (!session_id.is_valid())
 +    return Result(SHAAR_NOT_FOUND, error);
 +  *out = session_id.id();
-+  return Result(SHAAR_OK, error);
-+}
-+
- extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
-     shaar_scope scope,
-     shaar_window* window,
+   return Result(SHAAR_OK, error);
+ }
+ 

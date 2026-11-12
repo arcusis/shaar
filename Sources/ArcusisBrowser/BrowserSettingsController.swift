@@ -324,10 +324,15 @@ final class BrowserSettingsState {
     try draft.deleteProfile(id, movingSpacesTo: destinationID)
     try preferences.validateProfileRemoval()
     try await profileBackend.loadProfile(id)
+    let profileDirectory = runtime?.profileDataDirectory(forProfileID: id.uuidString)
+    if runtime != nil && profileDirectory == nil {
+      throw CocoaError(.fileNoSuchFile)
+    }
     draft = workspace.workspace
     try draft.deleteProfile(id, movingSpacesTo: destinationID)
     try workspace.validateWritableSnapshot()
     try await profileBackend.deleteProfile(id)
+    try await ProfileDataDirectoryRemoval.removeIfPresent(at: profileDirectory)
     try workspace.deleteProfile(id, movingSpacesTo: destinationID)
     if selectedProfileID == id {
       _ = selectProfile(destinationID ?? workspace.workspace.catalog.profiles.first?.id)
@@ -336,6 +341,24 @@ final class BrowserSettingsState {
     try workspace.flushSaves()
   }
 
+}
+
+enum ProfileDataDirectoryRemoval {
+  static func removeIfPresent(at directory: URL?, fileManager: FileManager = .default) async throws
+  {
+    guard let directory, fileManager.fileExists(atPath: directory.path) else { return }
+    for attempt in 0..<50 {
+      guard fileManager.fileExists(atPath: directory.path) else { return }
+      do {
+        try fileManager.removeItem(at: directory)
+        return
+      } catch {
+        guard fileManager.fileExists(atPath: directory.path) else { return }
+        guard attempt < 49 else { throw error }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+    }
+  }
 }
 
 enum DownloadDirectoryPolicy {

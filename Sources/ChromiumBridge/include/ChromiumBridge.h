@@ -282,6 +282,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
                         password:(nullable NSString *)password;
 /// Canonical browser-managed download directory for a regular profile.
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
+/// On-disk Chromium profile directory for a loaded regular profile.
+- (nullable NSURL *)profileDataDirectoryForProfileID:(NSString *)profileID;
 - (int)nativeTabIDForID:(NSString *)tabID;
 - (void)quit;
 @end

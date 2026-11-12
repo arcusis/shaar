@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "6f17cdc4886d3bb0db0e4806474a6689c02254be89c241ddefd6a8e836f722de",
+    "sha256": "d69315db57fefa80525ab629f192a5e2de43e835fbeaeda4f81f64490e3d4df6",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "104b9fff4e703f4dc6eeea41ab9e0ad24ae82163d44e15e07256d009e379fb58",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -115,9 +115,9 @@
       "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc": "adbfe44c31b32c0cd8c376f823cb88620c8f28c59cd433fc4f92ee61918bdb8a",
       "chrome/browser/shaar/private_sessions/shaar_private_trackers.cc": "a8f108962983fbacb3c2731828cfe2d797f6f689a8ff9fc24b2c4945be4afa8a",
       "chrome/browser/shaar/private_sessions/shaar_private_trackers.h": "8880671a60291cce6154c461c75ea5c91b392e79fc01f88fb97a8f9e6c978811",
-      "chrome/browser/shaar/profiles/shaar_profiles.cc": "be5d1b6c62e94007fcefc2df702bae23a0dbedf8850086d9a27ec28e54704a9e",
-      "chrome/browser/shaar/profiles/shaar_profiles.h": "07faaec6c1e1b3533ce708778249346c8244c3b30830f2c536da7fd396e909ff",
-      "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc": "453532f008e44491f12215726a393958d1eb52b8ca600f96500c0f42b48c4862",
+      "chrome/browser/shaar/profiles/shaar_profiles.cc": "054a6feea4c1c2872ea78ba64354735058ab826d2baefa3f3804b2116288f43d",
+      "chrome/browser/shaar/profiles/shaar_profiles.h": "fc2300fed284da4823f358896e2bd30312779d1f3ed27b62b7b3b77d6c6c8d3e",
+      "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc": "e164e43b5685e19bd74150b8a7a69405e30c3ba478d290a77070a8821ae6a251",
       "chrome/browser/shaar/public/shaar_engine.h": "f0eb49ca909589da3f22f79c5742c6fde5d19e3188ef3bed909c6c9b960d71a9",
       "chrome/browser/shaar/quit_probe/shaar_quit_probe.h": "d82634ea53ea7a21100b28e8b7a756542f50f0c62f14164fa3430654d324b13b",
       "chrome/browser/shaar/quit_probe/shaar_quit_probe.mm": "9671f0dd818c18b7ddcf79494711ebc8eb4899db5ed82265219574d0e822f511",

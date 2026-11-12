@@ -217,6 +217,7 @@ struct Symbols {
   NSString *_shaarPrimaryWindowID;
   NSMutableDictionary<NSString *, NSValue *> *_shaarProfiles;
   NSMutableDictionary<NSString *, NSMutableArray *> *_shaarProfileWaiters;
+  NSMutableDictionary<NSString *, id> *_shaarProfileDeleteWaiters;
   NSMutableDictionary<NSString *, NSValue *> *_shaarWindows;
   NSMutableDictionary<NSString *, NSValue *> *_shaarTabs;
   NSMutableDictionary<NSString *, NSString *> *_shaarTabWindows;
@@ -486,6 +487,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarPrimaryWindowID = NSUUID.UUID.UUIDString;
   _shaarProfiles = [NSMutableDictionary dictionary];
   _shaarProfileWaiters = [NSMutableDictionary dictionary];
+  _shaarProfileDeleteWaiters = [NSMutableDictionary dictionary];
   _shaarWindows = [NSMutableDictionary dictionary];
   _shaarTabs = [NSMutableDictionary dictionary];
   _shaarTabWindows = [NSMutableDictionary dictionary];
@@ -629,6 +631,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   }
   if (event->session_id.size) {
     [self receivePrivateEvent:event payload:payload];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_PROFILE &&
+      ([kind isEqualToString:@"deleted"] || [kind isEqualToString:@"delete_failed"])) {
+    NSString *profileID = String(event->profile_id).uppercaseString;
+    void (^completion)(NSError *) = _shaarProfileDeleteWaiters[profileID];
+    [_shaarProfileDeleteWaiters removeObjectForKey:profileID];
+    if (completion) {
+      completion([kind isEqualToString:@"deleted"]
+                     ? nil
+                     : ShaarError(@"Chromium could not finish deleting the profile."));
+    }
     return;
   }
   if (event->kind == SHAAR_EVENT_ENGINE && [kind isEqualToString:@"engine.ready"]) {
@@ -1023,7 +1037,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (_shaarUserDataDirectory && changed &&
       !ARCWriteHttpsOnlyPreference(_shaarUserDataDirectory, canonical, enabled)) return NO;
   if ([self loadedProfileValueForID:profileID]) {
-    return [self applyLiveHttpsOnly:enabled profileID:profileID];
+    return !changed || [self applyLiveHttpsOnly:enabled profileID:profileID];
   }
   return YES;
 }
@@ -1940,16 +1954,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (NSURL *)shaarProfileDirectoryForID:(NSString *)profileID {
-  shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
-  if (!profile) return nil;
-  auto getPath = reinterpret_cast<decltype(&shaar_profile_get_path)>(
-      dlsym(_shaarLibrary, "shaar_profile_get_path"));
-  if (!getPath) return nil;
-  shaar_bytes path = {};
-  shaar_error error = EmptyError();
-  if (getPath(profile, &path, &error) != SHAAR_OK) return nil;
-  NSString *value = String(path);
-  return value.length ? [NSURL fileURLWithPath:value isDirectory:YES] : nil;
+  NSString *canonical = ARCCanonicalProfileID(profileID);
+  if (!canonical || !_shaarUserDataDirectory) return nil;
+  NSString *directoryName = [@"Profile " stringByAppendingString:canonical.lowercaseString];
+  return [_shaarUserDataDirectory URLByAppendingPathComponent:directoryName
+                                                 isDirectory:YES];
 }
 
 - (NSView *)shaarExtensionPopupViewForID:(NSString *)popupID

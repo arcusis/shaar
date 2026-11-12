@@ -22,6 +22,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
+#include "base/task/task_traits.h"
+#include "base/threading/platform_thread.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/delete_profile_helper.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
@@ -53,6 +57,7 @@ struct shaar_profile {
   shaar_engine* engine = nullptr;
   std::string id;
   std::string directory;
+  base::FilePath deletion_path;
   Profile* native = nullptr;
   std::unique_ptr<ScopedProfileKeepAlive> keep_alive;
   shaar::profiles::ProfileHandleObserver native_observer;
@@ -72,6 +77,59 @@ thread_local std::string g_path_result;
 thread_local std::string g_state_result;
 
 bool IsRegisteredProfile(const shaar_profile* profile);
+
+void CompleteProfileDeletion(shaar_engine* engine,
+                             const std::string& id,
+                             bool success) {
+  auto found = g_profiles.find({engine, id});
+  if (found == g_profiles.end() || !found->second->deleting)
+    return;
+  const std::string payload = success
+                                  ? "{\"kind\":\"deleted\",\"schemaVersion\":1}"
+                                  : "{\"kind\":\"delete_failed\",\"schemaVersion\":1}";
+  shaar::EmitEvent(engine, SHAAR_EVENT_PROFILE, {id.data(), id.size()}, {}, {}, {},
+                   {payload.data(), payload.size()});
+  if (success) {
+    g_retired_profiles.push_back(std::move(found->second));
+    g_profiles.erase(found);
+  } else {
+    found->second->native_observer.SetWillBeDestroyedCallback({});
+    found->second->deleting = false;
+    found->second->ready = found->second->native != nullptr;
+  }
+}
+
+bool DeleteProfileDirectory(const base::FilePath& path) {
+  LOG(ERROR) << "Profile directory cleanup start path=" << path.AsUTF8Unsafe();
+  for (int attempt = 0; attempt < 50; ++attempt) {
+    if (!base::PathExists(path) || base::DeletePathRecursively(path)) {
+      LOG(ERROR) << "Profile directory cleanup complete path="
+                 << path.AsUTF8Unsafe() << " remains=" << base::PathExists(path);
+      return true;
+    }
+    base::PlatformThread::Sleep(base::Milliseconds(100));
+  }
+  const bool removed = !base::PathExists(path);
+  LOG(ERROR) << "Profile directory cleanup gave up path=" << path.AsUTF8Unsafe()
+             << " removed=" << removed;
+  return removed;
+}
+
+void DeleteProfileDirectoryAfterRelease(shaar_engine* engine,
+                                        const std::string& id) {
+  auto found = g_profiles.find({engine, id});
+  if (found == g_profiles.end() || !found->second->deleting)
+    return;
+  const base::FilePath path = found->second->deletion_path;
+  if (path.empty()) {
+    CompleteProfileDeletion(engine, id, false);
+    return;
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&DeleteProfileDirectory, path),
+      base::BindOnce(&CompleteProfileDeletion, engine, id));
+}
 
 class ProfileServicesImpl final : public shaar::ProfileServices {
  public:
@@ -376,6 +434,12 @@ void ProfileHandleObserver::StopObserving() {
     observed_->RemoveObserver(this);
   observed_ = nullptr;
   slot_ = nullptr;
+  will_be_destroyed_callback_.Reset();
+}
+
+void ProfileHandleObserver::SetWillBeDestroyedCallback(
+    base::OnceClosure callback) {
+  will_be_destroyed_callback_ = std::move(callback);
 }
 
 void ProfileHandleObserver::OnProfileWillBeDestroyed(Profile* profile) {
@@ -383,7 +447,10 @@ void ProfileHandleObserver::OnProfileWillBeDestroyed(Profile* profile) {
     return;
   if (slot_)
     *slot_ = nullptr;
+  base::OnceClosure callback = std::move(will_be_destroyed_callback_);
   StopObserving();
+  if (callback)
+    std::move(callback).Run();
 }
 
 void ApplyApplicationLocale(Profile* profile,
@@ -739,28 +806,24 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
   shaar::EmitEvent(profile->engine, SHAAR_EVENT_PROFILE,
                    {profile->id.data(), profile->id.size()}, {}, {},
                    {}, {deleting.data(), deleting.size()});
+  profile->native_observer.SetWillBeDestroyedCallback(base::BindOnce(
+      [](shaar_engine* engine, std::string id) {
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE,
+        base::BindOnce(&DeleteProfileDirectoryAfterRelease, engine,
+                       std::move(id)));
+      },
+      profile->engine, profile->id));
   // Releasing our lease can unload the profile. Deletion uses only its path.
   const base::FilePath path = profile->native->GetPath();
+  profile->deletion_path = path;
   profile->keep_alive.reset();
   manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
       path,
       base::BindOnce(
           [](shaar_engine* engine, std::string id, Profile* deleted_profile) {
-            auto found = g_profiles.find({engine, id});
-            if (found == g_profiles.end())
-              return;
-            const std::string payload = deleted_profile
-                                            ? "{\"kind\":\"deleted\",\"schemaVersion\":1}"
-                                            : "{\"kind\":\"delete_failed\",\"schemaVersion\":1}";
-            shaar::EmitEvent(engine, SHAAR_EVENT_PROFILE, {id.data(), id.size()},
-                             {}, {}, {}, {payload.data(), payload.size()});
-            if (deleted_profile) {
-              g_retired_profiles.push_back(std::move(found->second));
-              g_profiles.erase(found);
-            } else {
-              found->second->deleting = false;
-              found->second->ready = found->second->native != nullptr;
-            }
+            if (!deleted_profile)
+              CompleteProfileDeletion(engine, id, false);
           },
           profile->engine, profile->id),
       ProfileMetrics::DELETE_PROFILE_SETTINGS);

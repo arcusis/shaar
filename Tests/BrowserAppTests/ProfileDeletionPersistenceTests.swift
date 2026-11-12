@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import ChromiumBridge
 import Foundation
 import XCTest
 
@@ -10,6 +11,42 @@ import XCTest
 
 @MainActor
 final class ProfileDeletionPersistenceTests: XCTestCase {
+  func testProfileDirectoryIsRemovedAfterBackendConfirmsDeletion() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let workspace = try BrowserWorkspaceStore(
+      file: WorkspaceFile(
+        url: root.appending(path: "workspace.json"),
+        legacySessionURL: root.appending(path: "legacy.json")))
+    let profileID = try XCTUnwrap(workspace.workspace.catalog.profiles.first?.id)
+    let destinationID = try XCTUnwrap(
+      workspace.workspace.catalog.profiles.first(where: { $0.id != profileID })?.id)
+    let profileDirectory = root.appending(path: "Profile \(profileID.uuidString)")
+    try FileManager.default.createDirectory(at: profileDirectory, withIntermediateDirectories: true)
+    let runtime = ProfileDirectoryRuntime(directory: profileDirectory)
+    let backend = ProfileSettingsStub()
+    let state = BrowserSettingsState(
+      workspace: workspace, preferences: BrowserPreferencesStore(), runtime: runtime,
+      profileBackend: backend)
+
+    try await state.deleteProfile(profileID, movingSpacesTo: destinationID)
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: profileDirectory.path))
+    XCTAssertFalse(workspace.workspace.catalog.profiles.contains { $0.id == profileID })
+    XCTAssertEqual(backend.calls.map(\.0), ["load", "delete"])
+  }
+
+  func testProfileDirectoryRemovalAcceptsChromiumRemovingItConcurrently() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    try await ProfileDataDirectoryRemoval.removeIfPresent(
+      at: directory, fileManager: ChromiumRemovalRaceFileManager())
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+  }
+
   func testWorkspaceWriteFailureDoesNotStartProfileDeletion() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -42,5 +79,26 @@ final class ProfileDeletionPersistenceTests: XCTestCase {
     try FileManager.default.removeItem(at: file.url)
     try original.write(to: file.url)
     XCTAssertEqual(try file.load(), before)
+  }
+}
+
+@MainActor
+private final class ProfileDirectoryRuntime: ARCShaarRuntime {
+  private let directory: URL
+
+  init(directory: URL) {
+    self.directory = directory
+    super.init()
+  }
+
+  override func profileDataDirectory(forProfileID profileID: String) -> URL? {
+    directory
+  }
+}
+
+private final class ChromiumRemovalRaceFileManager: FileManager {
+  override func removeItem(at URL: URL) throws {
+    try super.removeItem(at: URL)
+    throw CocoaError(.fileNoSuchFile)
   }
 }

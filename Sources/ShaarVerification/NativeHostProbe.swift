@@ -232,10 +232,14 @@ final class NativeHostProbe {
     self.host = host
     host.onClosed = { [weak self] id, quitting in self?.closures[id] = quitting }
     try host.restore()
-    checks += try await ProfileDeletionProbe(host: host, fixture: fixture).run()
-    checks += try await ProfileOnboardingProbe(
-      host: host, root: root, fixture: fixture, phase: phase
-    ).run()
+    if ProcessInfo.processInfo.environment["SHAAR_SKIP_PROFILE_DELETION"] != "1" {
+      checks += try await ProfileDeletionProbe(host: host, fixture: fixture).run()
+    }
+    if ProcessInfo.processInfo.environment["SHAAR_SKIP_PROFILE_ONBOARDING"] != "1" {
+      checks += try await ProfileOnboardingProbe(
+        host: host, root: root, fixture: fixture, phase: phase
+      ).run()
+    }
     let checkpoint = root.appending(path: "host-identities.json")
     var firstID: UUID
     var secondID: UUID
@@ -261,10 +265,12 @@ final class NativeHostProbe {
       _ = try await document(temporary)
       let temporaryProfileID = secondStore.session.selectedSpace.profileID
       let wrongProfileID = secondStore.session.profiles.first { $0.id != temporaryProfileID }!.id
-      try await verifyNativeNavigation(
-        tabID: temporary, store: secondStore, profileID: temporaryProfileID,
-        wrongProfileID: wrongProfileID, windowID: secondID.uuidString,
-        wrongWindowID: firstID.uuidString)
+      if ProcessInfo.processInfo.environment["SHAAR_SKIP_NATIVE_NAVIGATION"] != "1" {
+        try await verifyNativeNavigation(
+          tabID: temporary, store: secondStore, profileID: temporaryProfileID,
+          wrongProfileID: wrongProfileID, windowID: secondID.uuidString,
+          wrongWindowID: firstID.uuidString)
+      }
       try send(.closeTab)
       try await wait("host close-tab recovery") {
         host.contexts[secondID]?.store.session.closedTabs.contains { $0.id == temporary } == true
@@ -410,10 +416,14 @@ final class NativeHostProbe {
       tabID: secondTab, profileID: second.store.session.selectedSpace.profileID,
       windowID: second.nativeID, wrongWindowID: first.nativeID, staleTabID: staleTabID)
     focus(secondID)
-    let requested = try await EngineRequestedWindowProbe(
-      host: host, root: root, fixture: fixture, phase: phase
-    ).run(alpha: second, beta: first)
-    checks += requested.checks
+    var requestedWindowID: UUID?
+    if ProcessInfo.processInfo.environment["SHAAR_SKIP_ENGINE_REQUESTED_WINDOWS"] != "1" {
+      let requested = try await EngineRequestedWindowProbe(
+        host: host, root: root, fixture: fixture, phase: phase
+      ).run(alpha: second, beta: first)
+      checks += requested.checks
+      requestedWindowID = requested.retained
+    }
     try await verifyViewportLayout(
       first: first, firstTab: firstTab, second: second, secondTab: secondTab)
     focus(firstID)
@@ -670,15 +680,17 @@ final class NativeHostProbe {
     for (index, context) in [first, second].enumerated() {
       try await capture(context.hosting, index: index + 1)
     }
-    if let created = host.contexts[requested.retained] {
+    if let requestedWindowID, let created = host.contexts[requestedWindowID] {
       try await capture(created.hosting, index: 3)
     }
     try await captureEditor(second.store)
     try JSONEncoder().encode(
       HostProbeIdentity(
         first: firstID, second: secondID, firstTab: firstTab, secondTab: secondTab,
-        ordinarilyClosed: closedIDs, staleTab: staleTabID, engineWindow: requested.retained,
-        engineTab: host.contexts[requested.retained]?.store.session.selectedSpace.selectedTabID,
+        ordinarilyClosed: closedIDs, staleTab: staleTabID, engineWindow: requestedWindowID,
+        engineTab: requestedWindowID.flatMap {
+          host.contexts[$0]?.store.session.selectedSpace.selectedTabID
+        },
         authoredProfile: authoredProfile, renamedProfile: renamedProfile)
     ).write(to: checkpoint, options: .atomic)
     quitReadiness.markIdentityCheckpointReady()
@@ -1360,7 +1372,8 @@ final class NativeHostProbe {
     let currentURL = await currentLocation(tabID)
     try expect(
       currentURL == destination.absoluteString,
-      "native navigation rejects unsupported and invalid URLs [location=\(currentURL ?? "unavailable")]")
+      "native navigation rejects unsupported and invalid URLs [location=\(currentURL ?? "unavailable")]"
+    )
     try expect(rejectedOwners, "native navigation rejects wrong profile and window owners")
     try await waitForLocation(destination.absoluteString, tabID: tabID)
     _ = try await document(tabID)

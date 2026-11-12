@@ -255,17 +255,40 @@ def strip_comments(text: str) -> str:
 def engine_testing_findings(path: Path, text: str) -> list[str]:
     """Only verification-compiled code may reference the engine test variable."""
     cleaned = strip_comments(text)
-    verification_spans = []
-    guard = re.compile(r"^[ \t]*#[ \t]*if[ \t]+defined\(SHAAR_VERIFICATION\)", re.MULTILINE)
-    for match in guard.finditer(cleaned):
-        end = re.search(r"^[ \t]*#[ \t]*endif\b", cleaned[match.end():], re.MULTILINE)
-        if end:
-            verification_spans.append((match.start(), match.end() + end.end()))
+    verification_lines = set()
+    verification_guard = re.compile(
+        r"^(?:defined\s*\(?\s*SHAAR_VERIFICATION\s*\)?|"
+        r"ifdef\s+SHAAR_VERIFICATION)$"
+    )
+    stack = []
+    verification_only = False
+    for line_number, line in enumerate(cleaned.splitlines(keepends=True), start=1):
+        directive = re.match(r"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b(.*)", line)
+        if directive:
+            command, expression = directive.groups()
+            expression = expression.strip()
+            if command in {"if", "ifdef", "ifndef"}:
+                parent_only = verification_only
+                positive = command == "ifdef" and expression == "SHAAR_VERIFICATION"
+                positive = positive or (command == "if" and bool(verification_guard.fullmatch(expression)))
+                stack.append({"parent": parent_only, "positive": positive})
+                verification_only = parent_only or positive
+            elif command == "elif" and stack:
+                frame = stack[-1]
+                verification_only = frame["parent"] or bool(verification_guard.fullmatch(expression))
+            elif command == "else" and stack:
+                frame = stack[-1]
+                verification_only = frame["parent"]
+            elif command == "endif" and stack:
+                frame = stack.pop()
+                verification_only = frame["parent"]
+        if verification_only:
+            verification_lines.add(line_number)
     found = []
     for match in re.finditer(re.escape(ENGINE_TESTING), cleaned):
-        if any(start <= match.start() < end for start, end in verification_spans):
-            continue
         number = cleaned.count("\n", 0, match.start()) + 1
+        if number in verification_lines:
+            continue
         found.append(f"{path}:{number}: {ENGINE_TESTING}")
     return found
 

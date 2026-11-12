@@ -1,6 +1,7 @@
 # Verification
 
 - [[Private_Fixture_Readiness]]
+- [[Crash_Sweep_2026-11-12]]
 - [[CI_Pipeline_Design]]
 - [[CI_Pipeline]]
 - [[Commit_Gates]]

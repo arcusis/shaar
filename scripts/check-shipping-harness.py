@@ -10,9 +10,9 @@ symbols, harness launch flags, and fixture ids in every other Sources directory
 and, when asked, in the built shipping executable. Dispatch flags that do not
 contain probe or smoke, such as a route smoke, are included. The only launch
 flag exempted on purpose is --render-preview. A hyphenated fixture id with a
-probe, parity, smoke, or harness segment is rejected too. Reads of
-SHAAR_ENGINE_TESTING are rejected outside the engine start that sets the
-variable. There is no hand-maintained list of probe names.
+probe, parity, smoke, or harness segment is rejected too. References to
+SHAAR_ENGINE_TESTING are allowed only inside the SHAAR_VERIFICATION compile
+guard, and its bytes are rejected in a shipping executable.
 """
 
 from __future__ import annotations
@@ -70,9 +70,6 @@ OBJC_STRING_RE = re.compile(r'@"((?:[^"\\\n]|\\.)*)"')
 SWIFT_STRING_RE = re.compile(r'(?<![A-Za-z0-9_\\@])"((?:[^"\\\n]|\\.)*)"')
 ENGINE_TESTING = "SHAAR_ENGINE_TESTING"
 PROBE_OPERATION_RE = re.compile(r"\bSHAAR_OP_PROBE_[A-Z0-9_]+\b")
-ENGINE_TESTING_WRITE = re.compile(
-    r'\b(?:setenv|unsetenv)\s*\(\s*"SHAAR_ENGINE_TESTING"'
-)
 
 
 def shipping_roots(root: Path) -> list[str]:
@@ -255,45 +252,17 @@ def strip_comments(text: str) -> str:
     return "".join(result)
 
 
-def engine_start_span(path: Path, text: str) -> tuple[int, int] | None:
-    if path.as_posix().endswith("Sources/ChromiumBridge/ChromiumShaarBackend.mm"):
-        cleaned = strip_comments(text)
-        signature = re.compile(
-            r"-\s*\(int\)runWithDataDirectory:\s*\(NSURL\s*\*\)directory\s+"
-            r"testing:\s*\(BOOL\)testing\s*\{"
-        )
-        match = signature.search(cleaned)
-        if match:
-            depth = 1
-            for position in range(match.end(), len(cleaned)):
-                if cleaned[position] == "{":
-                    depth += 1
-                elif cleaned[position] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        return match.start(), position + 1
-    return None
-
-
 def engine_testing_findings(path: Path, text: str) -> list[str]:
-    """The engine start may set the variable. Every other read is a harness leak."""
+    """Only verification-compiled code may reference the engine test variable."""
     cleaned = strip_comments(text)
-    allowed = engine_start_span(path, text)
     verification_spans = []
     guard = re.compile(r"^[ \t]*#[ \t]*if[ \t]+defined\(SHAAR_VERIFICATION\)", re.MULTILINE)
     for match in guard.finditer(cleaned):
         end = re.search(r"^[ \t]*#[ \t]*endif\b", cleaned[match.end():], re.MULTILINE)
         if end:
             verification_spans.append((match.start(), match.end() + end.end()))
-    allowed_writes = {
-        match.start() + match.group(0).index(ENGINE_TESTING)
-        for match in ENGINE_TESTING_WRITE.finditer(cleaned)
-        if allowed and allowed[0] <= match.start() < allowed[1]
-    }
     found = []
     for match in re.finditer(re.escape(ENGINE_TESTING), cleaned):
-        if match.start() in allowed_writes:
-            continue
         if any(start <= match.start() < end for start, end in verification_spans):
             continue
         number = cleaned.count("\n", 0, match.start()) + 1
@@ -397,6 +366,8 @@ def binary_findings(path: Path, symbols: set[str], flags: set[str], ids: set[str
             found.append(f"{path}: {text}")
     if TESTING_BYTES.search(data):
         found.append(f"{path}: testing: true")
+    if ENGINE_TESTING.encode("ascii") in data:
+        found.append(f"{path}: {ENGINE_TESTING}")
     for match in re.finditer(br"SHAAR_OP_PROBE_[A-Z0-9_]+", data):
         found.append(f"{path}: {match.group(0).decode('ascii')}")
     # The removed title channel is not a type or a launch flag.

@@ -174,7 +174,7 @@ struct Symbols {
     SHAAR_LOAD(submit, submit);
 #undef SHAAR_LOAD
     return abi_minor && create && run && request_quit && release && profile_open &&
-           window_open && window_close && window_chrome_id && window_host_view && window_host_resize &&
+           window_open && window_close && window_host_view && window_host_resize &&
            window_native_window && tab_open && tab_close && tab_favicon_png && tab_host_view &&
            tab_view_attach && tab_view_detach && tab_view_focus && submit;
   }
@@ -446,8 +446,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   config.on_event = ShaarEventCallback;
   config.event_context = (__bridge void *)self;
   shaar_error error = EmptyError();
-  // The pinned engine adds --use-mock-keychain only inside SHAAR_ENGINE_TESTING.
-  // SHAAR_ENGINE_TESTING also enables fake media, disables renderer backgrounding and timer throttling, and maps trackertest.org to localhost.
+  // The verification target enables the engine's mock keychain and authored fixtures.
+#if defined(SHAAR_VERIFICATION)
   id mockKeychainSetting = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ShaarUseMockKeychain"];
   BOOL requested = ARCInfoBool(mockKeychainSetting) || ARCEnvironmentRequestsMockKeychain();
   BOOL adHoc = NO;
@@ -457,13 +457,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (testing) engineTesting = "1";
   if (mockKeychain) engineTesting = "1";
   setenv("SHAAR_ENGINE_TESTING", engineTesting, 1);
+#endif
   if (_symbols.create(&config, &_shaarEngine, &error) != SHAAR_OK) {
+#if defined(SHAAR_VERIFICATION)
     unsetenv("SHAAR_ENGINE_TESTING");
+#endif
     return 1;
   }
   _shaarTesting = testing;
   const shaar_error_code result = _symbols.run(_shaarEngine, &error);
+#if defined(SHAAR_VERIFICATION)
   unsetenv("SHAAR_ENGINE_TESTING");
+#endif
   // Remaining native handles are being torn down, not closed by the user.
   _shaarQuitting = YES;
   if (self.onQuitRequested) self.onQuitRequested();
@@ -1386,7 +1391,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID {
-  if (!_shaarEngine) return -1;
+  if (!_shaarEngine || !_symbols.window_chrome_id) return -1;
   shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   if (!profile || !window) return -1;

@@ -611,15 +611,13 @@ class MediaTracker final : public content::WebContentsObserver {
 
   void MediaStartedPlaying(const MediaPlayerInfo&,
                            const content::MediaPlayerId&) override {
-    if (!timer_.IsRunning()) {
-      timer_.Start(FROM_HERE, base::Milliseconds(500), this,
-                   &MediaTracker::Refresh);
-    }
+    timer_.Stop();
     Refresh();
   }
 
   void MediaStoppedPlaying(const MediaPlayerInfo&, const content::MediaPlayerId&,
                            MediaStoppedReason) override {
+    timer_.Stop();
     Refresh();
   }
 
@@ -713,6 +711,15 @@ class MediaTracker final : public content::WebContentsObserver {
       timer_.Stop();
     } else {
       element_states[contents_] = std::move(best_state_);
+      // Observer callbacks handle play/pause promptly. Back off while paused,
+      // and schedule the next sample after this one has completed so slow
+      // renderers cannot accumulate UI-thread work.
+      const std::string* playback =
+          element_states[contents_].FindString("playbackState");
+      timer_.Start(FROM_HERE,
+                   playback && *playback == "playing" ? base::Seconds(2)
+                                                       : base::Seconds(10),
+                   this, &MediaTracker::Refresh);
     }
     EmitChangedState();
   }
@@ -753,7 +760,7 @@ class MediaTracker final : public content::WebContentsObserver {
   shaar_engine* engine_;
   content::WebContents* contents_;
   std::string profile_id_, session_id_, window_id_, tab_id_;
-  base::RepeatingTimer timer_;
+  base::OneShotTimer timer_;
   int pending_ = 0;
   double best_score_ = -1;
   base::DictValue best_state_;

@@ -1,5 +1,41 @@
 window.probeState = null;
 window.probeReply = null;
+window.arcusisSourceTab = null;
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  window.arcusisSourceTab = tabs[0] ?? null;
+});
+document.addEventListener("click", (event) => {
+  if (!event.isTrusted || !(event.target instanceof Element)) return;
+  if (!event.target.closest("#engine-window-create") || !window.arcusisWindowRequest
+      || !Number.isInteger(window.arcusisSourceTab?.id)) return;
+  const request = window.arcusisWindowRequest;
+  const source = window.arcusisSourceTab;
+  const destination = new URL(request.url);
+  const sourceURL = new URL(source.url);
+  if (source.windowId !== request.windowID || destination.protocol !== "http:"
+      || destination.hostname !== "127.0.0.1" || destination.port !== String(request.port)
+      || sourceURL.origin !== destination.origin
+      || !destination.pathname.startsWith("/account/host-engine-")) {
+    chrome.storage.local.set({ windowProbeResponse: {
+      token: request.token, reply: { error: "Owned loopback fixture window required" },
+    } });
+    return;
+  }
+  const create = chrome.windows.create(request.moveExisting === true
+    ? { tabId: source.id, type: request.type, focused: false }
+    : { url: destination.href, type: request.type, focused: false });
+  create.then((created) => {
+    const reply = { token: request.token, windowID: created.id,
+      tabID: created.tabs?.[0]?.id ?? null, type: request.type };
+    chrome.storage.local.set({ windowProbe: reply, windowProbeResponse: {
+      token: request.token, reply,
+    } });
+  }, (error) => {
+    chrome.storage.local.set({ windowProbeResponse: {
+      token: request.token, reply: { error: String(error) },
+    } });
+  });
+}, true);
 window.probeCommand = async (message) => {
   if (message.action === "storage-events") return storageRoundtrip();
   if (message.action === "storage-cache-read") return storageCacheRead();

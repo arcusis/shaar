@@ -63,11 +63,13 @@ def exported_symbols(binary: Path) -> set[str]:
 def archive_members(archive: Path) -> tuple[set[str], str]:
     try:
         with tarfile.open(archive, "r:xz") as package:
-            names = {member.name for member in package.getmembers() if member.isfile()}
+            members = package.getmembers()
     except (OSError, tarfile.TarError) as error:
         raise ContractError(f"cannot read cached pinned engine archive: {error}") from error
-    headers = sorted(name for name in names if Path(name).name == "shaar_engine.h")
-    binaries = sorted(name for name in names if Path(name).name == "Chromium Framework")
+    headers = sorted(member.name for member in members
+                     if Path(member.name).name == "shaar_engine.h")
+    binaries = sorted(member.name for member in members
+                      if member.isfile() and Path(member.name).name == "Chromium Framework")
     if not headers:
         raise ContractError("pinned engine archive does not ship shaar_engine.h")
     if not binaries:

@@ -5,6 +5,7 @@
 import hashlib
 import importlib.util
 import json
+import io
 from pathlib import Path
 import sys
 import tarfile
@@ -73,6 +74,26 @@ class EngineABIContractTests(unittest.TestCase):
             }))
             with self.assertRaisesRegex(CONTRACT.ContractError, "does not match"):
                 CONTRACT.check_contract(root, archive, nm=lambda _: set())
+
+    def test_archive_member_discovery_accepts_framework_header_symlinks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "fixture.tar.xz"
+            with tarfile.open(archive_path, "w:xz") as archive:
+                header_data = b"header"
+                header = tarfile.TarInfo("Framework/Versions/A/Headers/shaar_engine.h")
+                header.size = len(header_data)
+                archive.addfile(header, io.BytesIO(header_data))
+                link = tarfile.TarInfo("Framework/Headers/shaar_engine.h")
+                link.type = tarfile.SYMTYPE
+                link.linkname = "../Versions/A/Headers/shaar_engine.h"
+                archive.addfile(link)
+                binary_data = b"framework"
+                binary = tarfile.TarInfo("Framework/Versions/A/Chromium Framework")
+                binary.size = len(binary_data)
+                archive.addfile(binary, io.BytesIO(binary_data))
+            self.assertEqual(CONTRACT.archive_members(archive_path), (
+                {"Framework/Headers/shaar_engine.h", "Framework/Versions/A/Headers/shaar_engine.h"},
+                "Framework/Versions/A/Chromium Framework"))
 
 
 if __name__ == "__main__":

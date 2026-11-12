@@ -100,6 +100,17 @@ typedef struct {
 } shaar_event;
 typedef void (*shaar_event_fn)(void *context, const shaar_event *event);
 
+/* Synchronously asks the native app to create a managed window. The callback
+ * is only used for Chromium requests carrying a user gesture. */
+typedef shaar_error_code (*shaar_window_request_fn)(
+    void *context,
+    shaar_bytes profile_id,
+    shaar_bytes request_type,
+    int user_gesture,
+    char *window_id_buffer,
+    size_t buffer_capacity,
+    size_t *window_id_size);
+
 typedef struct {
   uint32_t size;
   uint32_t requested_major;
@@ -108,6 +119,9 @@ typedef struct {
   shaar_bytes locale;
   shaar_event_fn on_event; /* the only event sink */
   void *event_context;
+  /* ABI minor 13: optional embedder callback for user-initiated windows. */
+  shaar_window_request_fn on_window_request;
+  void *window_request_context;
 } shaar_config;
 
 /* Exactly one pointer is set for a scoped operation. */
@@ -483,6 +497,10 @@ SHAAR_EXPORT void *shaar_window_native_window(shaar_window *); /* borrowed NSWin
 SHAAR_EXPORT shaar_error_code shaar_tab_open(
     shaar_scope, shaar_window *, shaar_bytes tab_id, shaar_bytes url,
     int foreground, shaar_tab **out, shaar_error *error);
+/* Resolve a tab identity previously emitted by a Shaar tab-opened event. */
+SHAAR_EXPORT shaar_error_code shaar_tab_find(
+    shaar_engine *, shaar_bytes window_id, shaar_bytes tab_id,
+    shaar_tab **out, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
 /* Opens Chromium's native print panel for the selected, live tab. */

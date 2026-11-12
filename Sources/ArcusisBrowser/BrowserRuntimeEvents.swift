@@ -13,7 +13,7 @@ final class BrowserRuntimeEvents {
   var onDeviceChooserResolution: ((String, String, String?) -> Void)?
   var onQuitRequested: (() -> Void)?
   var onQuitCancelled: (() -> Void)?
-  var onWindowRequest: (@MainActor @Sendable (String, String) -> String?)? {
+  var onWindowRequest: (@MainActor @Sendable (String, String, Bool) -> String?)? {
     didSet { runtime.onWindowRequest = onWindowRequest }
   }
   var onWindowShowRequest: (@MainActor @Sendable (String, Bool) -> Void)? {

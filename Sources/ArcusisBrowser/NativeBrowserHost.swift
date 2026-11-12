@@ -311,8 +311,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       })
     self.privateHost = privateHost
     privateHost.installCallbacks()
-    events.onWindowRequest = { [weak self] profile, type in
-      self?.requestedWindow(profile: profile, type: type)
+    events.onWindowRequest = { [weak self] profile, type, userGesture in
+      self?.requestedWindow(profile: profile, type: type, userGesture: userGesture)
     }
     events.onWindowShowRequest = { [weak self] window, active in
       self?.showRequestedWindow(window, active: active)
@@ -1173,7 +1173,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if reconcile { engine.reconcile() }
   }
 
-  private func requestedWindow(profile: String, type: String) -> String? {
+  private func requestedWindow(profile: String, type: String, userGesture: Bool) -> String? {
+    guard userGesture else { return nil }
     if let flow = accountSignIns.values.first(where: { $0.profileID.uuidString == profile }) {
       return flow.requestedWindow(type: type)
     }

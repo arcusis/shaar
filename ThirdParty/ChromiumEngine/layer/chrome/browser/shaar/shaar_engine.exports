@@ -26,6 +26,7 @@ _shaar_private_session_tracker_status
 _shaar_private_session_tracker_allowance
 _shaar_window_open
 _shaar_window_close
+_shaar_tab_find
 _shaar_tab_open
 _shaar_tab_close
 _shaar_tab_print

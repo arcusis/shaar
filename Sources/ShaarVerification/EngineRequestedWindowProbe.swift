@@ -23,7 +23,6 @@ final class EngineRequestedWindowProbe {
   private var popupCarrier: NSWindow?
   private var declineNextRequest = false
   private var declinedRequestSeen = false
-  private var closedWindows: [String] = []
 
   init(host: NativeBrowserHost, root: URL, fixture: URL, phase: String) {
     self.host = host
@@ -36,25 +35,22 @@ final class EngineRequestedWindowProbe {
     -> (checks: [String], retained: UUID)
   {
     let request = host.events.onWindowRequest
-    let closed = host.events.onWindowClosed
-    host.events.onWindowClosed = { [weak self] id, quitting in
-      self?.closedWindows.append(id)
-      closed?(id, quitting)
-    }
-    host.events.onWindowRequest = { [weak self] profile, type in
+    host.events.onWindowRequest = { [weak self] profile, type, userGesture in
       if self?.declineNextRequest == true {
         self?.declineNextRequest = false
         self?.declinedRequestSeen = true
-        self?.observations.append(["declinedType": type])
+        self?.observations.append(["declinedType": type, "userGesture": userGesture])
         return nil
       }
-      let result = request?(profile, type)
-      self?.observations.append(["requestedType": type, "managedWindow": result ?? "rejected"])
+      let result = request?(profile, type, userGesture)
+      self?.observations.append([
+        "requestedType": type, "userGesture": userGesture,
+        "managedWindow": result ?? "rejected",
+      ])
       return result
     }
     defer {
       host.events.onWindowRequest = request
-      host.events.onWindowClosed = closed
     }
     do {
       let retained = try await exercise(alpha: alpha, beta: beta)
@@ -76,9 +72,9 @@ final class EngineRequestedWindowProbe {
     let before = Set(host.contexts.keys)
     let snapshot = host.workspace.workspace
     try expect(
-      runtime.onWindowRequest?(UUID().uuidString, "normal") == nil
+      runtime.onWindowRequest?(UUID().uuidString, "normal", true) == nil
         && runtime.onWindowRequest?(
-          alpha.store.session.selectedSpace.profileID.uuidString, "devtools")
+          alpha.store.session.selectedSpace.profileID.uuidString, "devtools", true)
           == nil
         && host.workspace.workspace == snapshot,
       "managed window requests reject unknown profiles and unsupported types without model changes")
@@ -96,6 +92,13 @@ final class EngineRequestedWindowProbe {
     try expect(
       reply?.contains("true") == true, "authored popup request is accepted with a user gesture")
     let page = try await createdWindow(excluding: before, url: url)
+    try expect(
+      observations.contains {
+        $0["requestedType"] as? String == "popup"
+          && $0["userGesture"] as? Bool == true
+          && $0["managedWindow"] as? String != "rejected"
+      },
+      "authored popup request reaches the app with its user gesture")
     let pageTab = page.store.session.selectedSpace.selectedTabID!
     let pageDocument = try await document(pageTab)
     try expect(
@@ -149,6 +152,13 @@ final class EngineRequestedWindowProbe {
         from: alpha, tab: alphaTab, url: extensionURL, type: type, token: token)
       let report = try await workerReport(token, tab: alphaTab)
       observations.append(report)
+      try expect(
+        observations.contains {
+          $0["requestedType"] as? String == type
+            && $0["userGesture"] as? Bool == true
+            && $0["managedWindow"] as? String != "rejected"
+        },
+        "chrome.windows.create \(type) reaches the app with its user gesture")
       let created = try await createdWindow(excluding: prior, url: extensionURL)
       let tab = created.store.session.selectedSpace.selectedTabID!
       let value = try await document(tab)
@@ -241,16 +251,15 @@ final class EngineRequestedWindowProbe {
         && alpha.store.session.selectedSpace.tabs.map(\.id) == sourceOrderBeforeSibling,
       "probe removes only its authored sibling and keeps original selection")
     let beforeDecline = host.workspace.workspace
-    let closedBeforeDecline = closedWindows.count
+    let contextsBeforeDecline = Set(host.contexts.keys)
     declineNextRequest = true
     try await dispatchWindowRequest(
       from: alpha, tab: alphaTab, url: fixture.appending(path: "host-engine-declined-\(phase)"),
       type: "normal", token: UUID().uuidString)
-    try await wait("declined browser request closure") {
-      self.declinedRequestSeen && self.closedWindows.count > closedBeforeDecline
-    }
+    try await wait("declined browser request") { self.declinedRequestSeen }
     try expect(
-      host.workspace.workspace == beforeDecline,
+      host.workspace.workspace == beforeDecline
+        && Set(host.contexts.keys) == contextsBeforeDecline,
       "declined engine window closes without persisting a model or falling back to a visible stock window"
     )
     alpha.engine.extensionPanel = nil

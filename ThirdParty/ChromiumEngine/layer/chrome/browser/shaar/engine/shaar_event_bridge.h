@@ -8,12 +8,15 @@
 #include <stdint.h>
 
 #include <string>
+#include <string_view>
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 struct shaar_engine {
   shaar_event_fn on_event = nullptr;
   void* event_context = nullptr;
+  shaar_window_request_fn on_window_request = nullptr;
+  void* window_request_context = nullptr;
   std::string data_root;
   std::string locale;
   uint64_t next_sequence = 0;
@@ -38,6 +41,11 @@ shaar_error_code EmitEvent(shaar_engine* engine,
                            shaar_bytes window_id,
                            shaar_bytes tab_id,
                            shaar_bytes payload_json);
+bool RequestAppWindow(shaar_engine* engine,
+                      std::string_view profile_id,
+                      std::string_view request_type,
+                      bool user_gesture,
+                      std::string* window_id);
 
 }  // namespace shaar
 

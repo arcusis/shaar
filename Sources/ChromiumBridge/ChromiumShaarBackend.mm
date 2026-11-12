@@ -64,6 +64,29 @@ NSString *String(shaar_bytes bytes) {
                                encoding:NSUTF8StringEncoding] ?: @"";
 }
 
+shaar_error_code ShaarWindowRequestCallback(
+    void *context,
+    shaar_bytes profile_id,
+    shaar_bytes request_type,
+    int user_gesture,
+    char *window_id_buffer,
+    size_t buffer_capacity,
+    size_t *window_id_size) {
+  if (window_id_size) *window_id_size = 0;
+  if (!NSThread.isMainThread || !context || !window_id_buffer ||
+      !buffer_capacity || !window_id_size || user_gesture != 1)
+    return SHAAR_INVALID_ARGUMENT;
+  ARCShaarRuntime *runtime = (__bridge ARCShaarRuntime *)context;
+  if (!runtime.onWindowRequest) return SHAAR_CANCELLED;
+  NSString *windowID = runtime.onWindowRequest(
+      String(profile_id), String(request_type), YES);
+  NSData *bytes = [windowID dataUsingEncoding:NSUTF8StringEncoding];
+  if (!bytes.length || bytes.length > buffer_capacity) return SHAAR_CANCELLED;
+  std::memcpy(window_id_buffer, bytes.bytes, bytes.length);
+  *window_id_size = bytes.length;
+  return SHAAR_OK;
+}
+
 shaar_error EmptyError() {
   shaar_error error = {};
   error.size = sizeof(error);
@@ -530,12 +553,13 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   shaar_config config = {};
   config.size = sizeof(config);
   config.requested_major = SHAAR_ENGINE_ABI_MAJOR;
-  // Minor 7 remains the launch baseline; website media consent is gated below.
-  config.requested_minor = 7;
+  config.requested_minor = SHAAR_ENGINE_ABI_MINOR;
   config.data_root = Bytes(path);
   config.locale = Bytes(self.languageIdentifier ?: @"en");
   config.on_event = ShaarEventCallback;
   config.event_context = (__bridge void *)self;
+  config.on_window_request = ShaarWindowRequestCallback;
+  config.window_request_context = (__bridge void *)self;
   shaar_error error = EmptyError();
   // Verification builds alone enable the engine's mock keychain and test fixtures.
 #if defined(SHAAR_VERIFICATION)

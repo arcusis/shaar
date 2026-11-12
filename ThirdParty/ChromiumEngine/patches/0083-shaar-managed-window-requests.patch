@@ -1,0 +1,130 @@
+From: Shaar Chromium 157 layer port
+Subject: [PATCH] route authored windows through the Shaar embedder
+
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -17,6 +17,7 @@
+ #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
+ #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+ #include "chrome/browser/devtools/devtools_window.h"
++#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ #include "chrome/browser/file_select_helper.h"
+ #include "chrome/browser/headless/headless_mode_util.h"
+ #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+@@ -666,6 +667,10 @@
+     const blink::mojom::WindowFeatures& window_features,
+     bool user_gesture,
+     bool* was_blocked) {
++  if (shaar::windows_tabs::AdoptPageWebContents(
++          source, &new_contents, target_url, disposition, user_gesture)) {
++    return nullptr;
++  }
+   FullscreenController* fullscreen_controller =
+       exclusive_access_manager_->fullscreen_controller();
+ #if BUILDFLAG(IS_MAC)
+diff --git a/chrome/browser/extensions/api/tabs/windows_api.cc b/chrome/browser/extensions/api/tabs/windows_api.cc
+--- a/chrome/browser/extensions/api/tabs/windows_api.cc
++++ b/chrome/browser/extensions/api/tabs/windows_api.cc
+@@ -13,6 +13,7 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "base/command_line.h"
+ #include "base/memory/raw_ref.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/types/expected.h"
+@@ -652,6 +653,8 @@
+   }
+   BrowserWindowCreateParams create_params(window_type, *window_profile,
+                                           user_gesture());
++  create_params.engine_requested =
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder");
+ 
+   bool initialized_type = false;
+ #if !BUILDFLAG(IS_ANDROID)
+diff --git a/chrome/browser/ui/browser_window/public/create_browser_window.h b/chrome/browser/ui/browser_window/public/create_browser_window.h
+--- a/chrome/browser/ui/browser_window/public/create_browser_window.h
++++ b/chrome/browser/ui/browser_window/public/create_browser_window.h
+@@ -86,6 +86,10 @@
+ 
+   // Whether the browser was created by a user gesture.
+   bool from_user_gesture = false;
++
++  // Route a gesture initiated request through the embedder's native window
++  // owner instead of creating a standalone Chromium window.
++  bool engine_requested = false;
+ 
+   // The profile to be associated with the browser window.
+   raw_ref<Profile> profile;
+@@ -246,6 +250,13 @@
+ BrowserWindowInterface* CreateBrowserWindow(
+     BrowserWindowCreateParams create_params);
+ 
++using EngineRequestedWindowHandler =
++    base::RepeatingCallback<BrowserWindowInterface*(
++        Profile*, BrowserWindowInterface::Type, bool)>;
++
++// Registers the embedder callback used only by explicitly marked requests.
++void SetEngineRequestedWindowHandler(EngineRequestedWindowHandler handler);
++
+ // The asynchronous version of `CreateBrowserWindow`. The given `callback` will
+ // always be invoked asynchronously with the newly created
+ // `BrowserWindowInterface`.
+diff --git a/chrome/browser/ui/browser_window/internal/create_browser_window_non_android.cc b/chrome/browser/ui/browser_window/internal/create_browser_window_non_android.cc
+--- a/chrome/browser/ui/browser_window/internal/create_browser_window_non_android.cc
++++ b/chrome/browser/ui/browser_window/internal/create_browser_window_non_android.cc
+@@ -5,6 +5,7 @@
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+ #include "base/location.h"
++#include "base/no_destructor.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/devtools/devtools_window.h"
+@@ -14,6 +15,15 @@
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+ 
++namespace {
++
++EngineRequestedWindowHandler& GetEngineRequestedWindowHandler() {
++  static base::NoDestructor<EngineRequestedWindowHandler> handler;
++  return *handler;
++}
++
++}  // namespace
++
+ #if BUILDFLAG(IS_CHROMEOS)
+ #include "components/session_manager/core/session_manager.h"
+ #include "components/user_manager/user_manager.h"
+@@ -21,6 +31,7 @@
+ 
+ BrowserWindowCreateParams BrowserWindowCreateParams::Clone() const {
+   BrowserWindowCreateParams clone(type, *profile, from_user_gesture);
++  clone.engine_requested = engine_requested;
+   clone.initial_bounds = initial_bounds;
+   clone.is_trusted_source = is_trusted_source;
+   clone.app_name = app_name;
+@@ -139,10 +150,21 @@
+ 
+ BrowserWindowInterface* CreateBrowserWindow(
+     BrowserWindowCreateParams create_params) {
++  if (create_params.engine_requested) {
++    auto& handler = GetEngineRequestedWindowHandler();
++    if (!create_params.from_user_gesture || handler.is_null())
++      return nullptr;
++    return handler.Run(&*create_params.profile, create_params.type,
++                       create_params.from_user_gesture);
++  }
+   CHECK_EQ(BrowserWindowInterface::CreationStatus::kOk,
+            GetBrowserWindowCreationStatusForProfile(*create_params.profile));
+ 
+   return Browser::Create(std::move(create_params));
++}
++
++void SetEngineRequestedWindowHandler(EngineRequestedWindowHandler handler) {
++  GetEngineRequestedWindowHandler() = std::move(handler);
+ }
+ 
+ std::unique_ptr<BrowserWindowInterface>

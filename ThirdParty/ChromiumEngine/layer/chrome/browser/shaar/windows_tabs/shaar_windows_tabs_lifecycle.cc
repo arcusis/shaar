@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/uuid.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
@@ -39,6 +40,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
@@ -330,9 +332,12 @@ bool ValidURL(shaar_bytes bytes) {
                             std::string_view::npos);
 }
 
+void RegisterEngineRequestedWindowHandler();
+
 Browser* CreateHiddenBrowser(Profile* profile) {
   if (!profile)
     return nullptr;
+  RegisterEngineRequestedWindowHandler();
   Observer().EnsureObserving();
   BrowserWindowCreateParams params(profile, false);
   params.omit_from_session_restore = true;
@@ -419,7 +424,155 @@ Browser* BrowserForScope(shaar_engine* engine,
   return browser;
 }
 
+shaar_window* WindowForNativeID(shaar_engine* engine, std::string_view id) {
+  for (const auto& [window, handle] : windows) {
+    if (handle->engine == engine && handle->id == id && LiveWindow(window))
+      return window;
+  }
+  return nullptr;
+}
+
+Browser* CreateEngineRequestedBrowser(Profile* profile,
+                                      BrowserWindowInterface::Type type,
+                                      bool user_gesture) {
+  auto* services = shaar::EngineContext().profile_services;
+  if (!profile || !services || !user_gesture)
+    return nullptr;
+
+  for (const auto& [source, handle] : tab_handles) {
+    if (!LiveTab(source) || !source->profile ||
+        services->ResolveProfile(source->engine, source->profile) != profile)
+      continue;
+    std::string request_type = "normal";
+    if (type == BrowserWindowInterface::TYPE_POPUP ||
+        type == BrowserWindowInterface::TYPE_APP_POPUP)
+      request_type = "popup";
+    else if (type == BrowserWindowInterface::TYPE_APP)
+      request_type = "app";
+    const std::string_view profile_id =
+        services->ProfileID(source->engine, source->profile);
+    std::string native_id;
+    if (!shaar::RequestAppWindow(source->engine, profile_id, request_type,
+                                 user_gesture, &native_id))
+      return nullptr;
+    shaar_window* window = WindowForNativeID(source->engine, native_id);
+    if (!window)
+      return nullptr;
+    shaar_scope scope = {sizeof(shaar_scope), source->profile, nullptr};
+    Profile* native_profile = services->ResolveProfile(source->engine,
+                                                        source->profile);
+    return native_profile
+               ? BrowserForScope(source->engine, window, scope, native_profile)
+               : nullptr;
+  }
+  return nullptr;
+}
+
+void RegisterEngineRequestedWindowHandler() {
+  SetEngineRequestedWindowHandler(base::BindRepeating(
+      &CreateEngineRequestedBrowser));
+}
+
 }  // namespace
+
+namespace shaar::windows_tabs {
+
+bool AdoptPageWebContents(content::WebContents* source,
+                          std::unique_ptr<content::WebContents>* contents,
+                          const GURL& target_url,
+                          WindowOpenDisposition disposition,
+                          bool user_gesture) {
+  if (!source || !contents || !*contents)
+    return false;
+  shaar_tab* opener = nullptr;
+  for (const auto& [candidate, handle] : tab_handles) {
+    if (LiveTab(candidate) && candidate->web_contents() == source &&
+        candidate->window && candidate->window->kind == SHAAR_WINDOW_REGULAR) {
+      opener = candidate;
+      break;
+    }
+  }
+  if (!opener)
+    return false;
+
+  shaar_window* destination = opener->window;
+  Browser* browser = opener->browser;
+  if (disposition == NEW_WINDOW || disposition == NEW_POPUP ||
+      disposition == SINGLETON_TAB) {
+    std::string request_type = disposition == NEW_WINDOW ? "normal" : "popup";
+    std::string native_id;
+    if (!shaar::RequestAppWindow(opener->engine, opener->profile_id,
+                                 request_type, user_gesture, &native_id)) {
+      contents->reset();
+      return true;
+    }
+    destination = WindowForNativeID(opener->engine, native_id);
+    if (!destination) {
+      contents->reset();
+      return true;
+    }
+    shaar_scope scope = {sizeof(shaar_scope), opener->profile, nullptr};
+    Profile* profile = shaar::EngineContext().profile_services->ResolveProfile(
+        opener->engine, opener->profile);
+    browser = profile
+                  ? BrowserForScope(opener->engine, destination, scope, profile)
+                  : nullptr;
+  }
+  if (!destination || !browser || !browser->GetTabStripModel()) {
+    contents->reset();
+    return true;
+  }
+
+  const std::string tab_id = base::Uuid::GenerateRandomV4().AsLowercaseString();
+  content::WebContents* raw_contents = contents->get();
+  browser->GetTabStripModel()->AppendWebContents(std::move(*contents), true);
+  auto handle = std::make_unique<shaar_tab>(raw_contents, ++next_tab_serial);
+  handle->engine = opener->engine;
+  handle->window = destination;
+  handle->browser = browser;
+  handle->profile = opener->profile;
+  handle->private_session = nullptr;
+  handle->profile_id = opener->profile_id;
+  handle->window_id = destination->id;
+  handle->tab_id = tab_id;
+  handle->navigation = std::make_unique<shaar::navigation::NavigationObserver>(
+      handle->engine, raw_contents, handle->profile_id, "", handle->window_id,
+      handle->tab_id);
+  handle->media = shaar::media::CreateMediaTracker(
+      handle->engine, raw_contents, handle->profile_id, "", handle->window_id,
+      handle->tab_id);
+  if (auto* driver = favicon::ContentFaviconDriver::FromWebContents(raw_contents))
+    handle->favicon_observation.Observe(driver);
+  shaar_tab* adopted = handle.get();
+  if (!Registry().ReserveTab(adopted->engine, destination, adopted, tab_id)) {
+    const int index = browser->GetTabStripModel()->GetIndexOfWebContents(raw_contents);
+    if (index >= 0)
+      browser->GetTabStripModel()->CloseWebContentsAt(index, 0);
+    return true;
+  }
+  Registry().BindTab(adopted->engine, destination, adopted, tab_id, browser,
+                     raw_contents);
+  tab_handles.emplace(adopted, std::move(handle));
+  if (destination->profile_id.empty())
+    destination->profile_id = opener->profile_id;
+
+  base::Value::Dict payload;
+  payload.Set("kind", "opened");
+  payload.Set("schemaVersion", 1);
+  payload.Set("openerTabID", opener->tab_id);
+  payload.Set("url", target_url.spec());
+  payload.Set("foreground", true);
+  std::string json;
+  base::JSONWriter::Write(payload, &json);
+  shaar::EmitEvent(adopted->engine, SHAAR_EVENT_TAB,
+                   {adopted->profile_id.data(), adopted->profile_id.size()}, {},
+                   {adopted->window_id.data(), adopted->window_id.size()},
+                   {adopted->tab_id.data(), adopted->tab_id.size()},
+                   {json.data(), json.size()});
+  return true;
+}
+
+}  // namespace shaar::windows_tabs
 
 namespace shaar::windows_tabs {
 void StopObservingLifecycle() {
@@ -573,6 +726,28 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_close(
     if (browser && browser->GetWindow())
       browser->GetWindow()->Close();
   return Result(SHAAR_OK, error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_find(
+    shaar_engine* engine,
+    shaar_bytes window_id,
+    shaar_bytes tab_id,
+    shaar_tab** out,
+    shaar_error* error) {
+  if (out)
+    *out = nullptr;
+  if (!pthread_main_np() || !engine || !out || !ValidID(window_id) ||
+      !ValidID(tab_id))
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  for (const auto& [tab, handle] : tab_handles) {
+    if (!LiveTab(tab) || tab->engine != engine ||
+        tab->window_id != std::string_view(window_id.data, window_id.size) ||
+        tab->tab_id != std::string_view(tab_id.data, tab_id.size))
+      continue;
+    *out = tab;
+    return Result(SHAAR_OK, error);
+  }
+  return Result(SHAAR_NOT_FOUND, error);
 }
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(

@@ -1,10 +1,10 @@
 # Chromium 157 app release preparation
 
-Prepared 2026-11-11 from the published **v0.1.0** app release (2026-10-31), current `production`, [[Releasing]], `scripts/release.sh`, `scripts/release_feed.py`, `scripts/check-release-ci.py`, and `.github/workflows/release.yml`. Production at `c49b4910` pins `engine-157.0.8103.51-shaar.32`; that engine asset is **not** an app release. This document is a plan; it does not authorize a tag, release, notarization submission, or appcast change. See [[Chromium_157_Release_Notes]] and [[Chromium_157_Release_QA]].
+Prepared 2026-11-11 from the published **v0.1.0** app release (2026-10-31), `production`, [[Releasing]], `scripts/release.sh`, `scripts/release_feed.py`, `scripts/check-release-ci.py`, and `.github/workflows/release.yml`. The 0.2.0 release target is `engine-157.0.8103.51-shaar.35` in PR #1615 at `40e55674`; as of this update, that PR has not merged into `production`. The engine asset is **not** an app release. This document is a plan; it does not authorize a tag, release, notarization submission, or appcast change. See [[Chromium_157_Release_Notes]] and [[Chromium_157_Release_QA]].
 
 ## Release gates and proposed version
 
-- Chromium 157 is merged and pinned to shaar.32 at the recorded production head. Confirm the final pin still contains the native patches for DevTools, tab discard, website prompts, HTTPS-only and private Quit, and that the separate startup-crash correction passes on the final shipping bundle. A merged app wrapper or passing focused test alone is insufficient.
+- Chromium 157 is merged; the 0.2.0 candidate targets shaar.35, pending PR #1615 and its production CI. Confirm the final production pin is shaar.35 and contains the native patches for DevTools, tab discard, website prompts, HTTPS-only and private Quit. Shaar.35 restores capture patch 0050 and adds native window-ID lookup patch 0081; its targeted media/capture and window-ID fixtures passed, but the startup mitigation and all user-facing claims still require final shipping-bundle QA. A merged app wrapper or passing focused test alone is insufficient.
 - The next app version is **0.2.0, build 2**, following v0.1.0/build 1. Draft PR #1614 sets `SHAAR_BUNDLE_VERSION` and `SHAAR_BUILD_VERSION` in `scripts/release-config.sh`; `v<version>`, DMG/ZIP names, bundle Info.plist and appcast derive from them. The version bump remains preparation until merged. Do not change the Chromium engine tag as an app version.
 - Save prompts and iCloud Keychain passkeys are **out of scope for 0.2.0** and must not appear in English, Hebrew or Sparkle notes. David confirmed there is no Apple provisioning profile for passkeys in this release. Do not include a passkey provisioning profile or passkey entitlements in the signed candidate.
 - Complete [[Chromium_157_Release_QA]] against the exact shipping candidate. Any startup crash, unsigned nested binary, failed Gatekeeper check, missing required website prompt, or failed required CI blocks release.
@@ -33,9 +33,9 @@ Durations are planning ranges for an Office Mac with warm dependencies and a rea
 
 The published `v0.1.0` tag and current `production` have no Git merge base, so `git log v0.1.0..origin/production` alone is not a chronological release delta. This audit compared that log with production PRs merged after the published v0.1.0 release on 2026-10-31. These are provenance references for the English and Hebrew copy in [[Chromium_157_Release_Notes]], not issue numbers for users.
 
-| Copy claim | Merged source |
+| Copy claim | Source and release gate |
 | --- | --- |
-| Chromium 157 engine | #1601, #1605, #1612; production pins shaar.32. |
+| Chromium 157 engine | #1601, #1605, #1612; PR #1615 targets shaar.35 and must merge before the production release candidate is frozen. |
 | F12 Chromium DevTools, Shaar overlay panels, retired old shell and retained Inspector | #1489, #1493, #1516, #1541, #1543, #1545, #1546, #1548, #1551, #1558, #1568, #1588, #1592, #1595, #1599. |
 | Sleeping tabs and protected active/pinned/playing tabs | #1478, #1550, #1580, #1604. |
 | Drag an ordinary tab between windows | #1586. |
@@ -46,7 +46,7 @@ The published `v0.1.0` tag and current `production` have no Git merge base, so `
 | Automatic Picture in Picture when leaving video | #1476. |
 | Clearer unsupported unpacked-extension message | #1553. This is a message about engine support, not a claim that unpacked loading works. |
 
-Deliberately excluded from user-facing copy: save prompts (#1549) by release decision; iCloud Keychain passkeys (#1490) by David's decision because there is no Apple provisioning profile for 0.2.0; private Quit improvements because #1480 and #1600 add optional/verification hooks rather than a demonstrated product change; and Web Share, device choosers, screen sharing and print (#1574, #1534, #1544, #1589), whose merged app-side routes lack the corresponding enabled native path in the current pinned engine. Probe-only, CI, security and documentation PRs do not add user-facing release claims.
+Deliberately excluded from user-facing copy: save prompts (#1549) by release decision; iCloud Keychain passkeys (#1490) by David's decision because there is no Apple provisioning profile for 0.2.0; private Quit improvements because #1480 and #1600 add optional/verification hooks rather than a demonstrated product change; and Web Share, device choosers, screen sharing and print (#1574, #1534, #1544, #1589), which still lack feature-specific proof on the final signed shipping bundle. Shaar.35's restored capture patch 0050 and passing media/capture fixture do not alone establish the user-facing screen-sharing flow; its native window-ID fixture does not establish a new release-note feature. Probe-only, CI, security and documentation PRs do not add user-facing release claims.
 
 ## David / account dependencies
 

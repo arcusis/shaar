@@ -1,6 +1,6 @@
 # Draft release notes — Shaar 0.2.0 / Chromium 157
 
-For app version 0.2.0 after v0.1.0. Final wording must match the signed, QA-approved build. English `<li>` lines are the input to `scripts/release.sh --notes`; the Hebrew version is for the user-facing announcement/changelog.
+For app version 0.2.0 after v0.1.0, targeting the Chromium 157 shaar.35 engine pin in PR #1615. That pin must reach production and pass final signed shipping-bundle QA before this copy is published. The shaar.35 capture and native window-ID fixture results do not add a user-facing claim below. English `<li>` lines are the input to `scripts/release.sh --notes`; the Hebrew version is for the user-facing announcement/changelog.
 
 ## English
 

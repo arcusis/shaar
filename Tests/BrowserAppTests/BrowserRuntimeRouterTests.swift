@@ -59,6 +59,21 @@ struct BrowserRuntimeRouterTests {
     #expect(router.client(forTab: "still-open", nativeWindowID: "first") == nil)
   }
 
+  @Test func windowTeardownClearsTabOwnershipWithoutArchivingSavedTabs() throws {
+    let router = BrowserRuntimeRouter()
+    let client = BrowserRuntimeClient(windowID: "first") { [] }
+    try router.register(client)
+    var closed: [String] = []
+    client.onTabClosed = { id, _ in closed.append(id) }
+    #expect(router.bindTab("saved", windowID: "first"))
+
+    router.windowWillClose("first")
+    router.tabClosed("saved", windowID: "first")
+
+    #expect(closed.isEmpty)
+    #expect(router.tabOwnerWindowID(for: "saved") == nil)
+  }
+
   @Test func closedWindowTabOwnerRemainsUntilMatchingCloseEvent() throws {
     let router = BrowserRuntimeRouter()
     let source = BrowserRuntimeClient(windowID: "source") { [] }

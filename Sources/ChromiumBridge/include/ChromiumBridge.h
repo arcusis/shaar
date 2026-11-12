@@ -110,6 +110,7 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onQuitCancelled)(void);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onQuitRequested)(void);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosed)(NSString *windowID, BOOL quitting);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosing)(NSString *windowID);
 /// Synchronous: return a newly created window before Chromium attaches its browser.
 @property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowShowRequest)(NSString *windowID, BOOL active);

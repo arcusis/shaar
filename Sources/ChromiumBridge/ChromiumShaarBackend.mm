@@ -900,6 +900,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     _hostCloseObservers[windowID] = [NSNotificationCenter.defaultCenter
         addObserverForName:NSWindowWillCloseNotification object:nativeWindow
                      queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *notification) {
+      if (weakSelf.onWindowClosing) weakSelf.onWindowClosing(windowID);
       [weakSelf finishWindowID:windowID];
     }];
   }
@@ -909,6 +910,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (BOOL)closeWindowID:(NSString *)windowID {
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   if (!window) return NO;
+  if (self.onWindowClosing) self.onWindowClosing(windowID);
   shaar_error error = EmptyError();
   if (_symbols.window_close(window, &error) != SHAAR_OK) return NO;
   return YES;

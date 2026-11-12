@@ -84,7 +84,7 @@ class LocalizationCrashEvidenceTests(unittest.TestCase):
             with (
                 patch.object(FIXTURE.engine_fixture, "CRASH_REPORT_DIRECTORY", root),
                 patch.object(
-                    FIXTURE.engine_fixture, "crash_reports_for", return_value=[crash_name]
+                    FIXTURE, "localization_crash_reports_for", return_value=[root / crash_name]
                 ),
                 patch.object(FIXTURE.engine_fixture, "wait_until", return_value=0),
             ):

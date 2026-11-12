@@ -179,7 +179,7 @@ struct Symbols {
     SHAAR_LOAD(submit, submit);
 #undef SHAAR_LOAD
     return abi_minor && create && run && request_quit && release && profile_open &&
-           window_open && window_close && window_chrome_id && window_host_view && window_host_resize &&
+           window_open && window_close && window_host_view && window_host_resize &&
            window_native_window && tab_open && tab_close && tab_favicon_png && tab_host_view &&
            tab_view_attach && tab_view_detach && tab_view_focus && submit;
   }

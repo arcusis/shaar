@@ -1665,7 +1665,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID {
-  if (!_shaarEngine) return -1;
+  if (!_shaarEngine || !_symbols.window_chrome_id) return -1;
   shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   if (!profile || !window) return -1;

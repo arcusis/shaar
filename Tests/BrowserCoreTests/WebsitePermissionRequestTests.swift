@@ -70,18 +70,23 @@ import Testing
   #expect(request("http://[::2]:8080") == nil)
 }
 
-@Test func websitePermissionRequestsAcceptEveryForwardedKindAndOnlyMediaAndLocationAreOneTime() {
+@Test func websitePermissionRequestsAcceptEveryForwardedKindAndOnlyMediaAreOneTime() {
   let request = WebsitePermissionRequest(
     id: "p2", profileID: UUID(), tabID: UUID(), pageURL: URL(string: "https://maps.example")!,
     requestingOrigin: URL(string: "https://maps.example")!,
-    kinds: [.notifications, .location, .clipboard])
-  #expect(request?.kinds == [.location, .notifications, .clipboard])
+    kinds: [.notifications, .location, .midi, .clipboard])
+  #expect(request?.kinds == [.location, .notifications, .clipboard, .midi])
   #expect(WebsitePermissionKind(rawValue: "location") == .location)
   #expect(WebsitePermissionKind(rawValue: "protocolHandler") == .protocolHandler)
+  #expect(WebsitePermissionKind(rawValue: "midi") == .midi)
+  #expect(WebsitePermissionPersistence.forGrant(isPrivate: false, kinds: [.location]) == .profile)
+  #expect(
+    WebsitePermissionPersistence.forGrant(isPrivate: false, kinds: [.notifications, .midi])
+      == .profile)
   #expect(!WebsitePermissionKind.protocolHandler.supportsOneTimeGrant)
   #expect(
     WebsitePermissionKind.allCases.filter(\.supportsOneTimeGrant) == [
-      .camera, .microphone, .location,
+      .camera, .microphone,
     ])
 }
 

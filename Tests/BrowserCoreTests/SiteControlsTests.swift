@@ -55,15 +55,19 @@ import Testing
     "camera": ["value": "ask", "isDefault": true],
     "microphone": ["value": "block", "isDefault": false],
     "popups": ["value": "allow", "isDefault": false],
+    "midi": ["value": "allow", "isDefault": false],
     "sound": ["value": "unexpected"],
     "javascript": ["value": "allow"],
     "location": "allow",
   ])
-  #expect(parsed == [.camera: .ask, .microphone: .block, .popups: .allow])
+  #expect(parsed == [.camera: .ask, .microphone: .block, .midi: .allow, .popups: .allow])
 }
 
 @Test func automaticPictureInPictureHasNoEngineSiteSetting() {
   #expect(SitePermission.autoPictureInPicture.engineSettingName == nil)
   let engineNames = SitePermission.allCases.compactMap(\.engineSettingName)
-  #expect(engineNames == ["microphone", "camera", "location", "notifications", "popups", "sound"])
+  #expect(
+    engineNames == [
+      "microphone", "camera", "location", "notifications", "midi", "popups", "sound",
+    ])
 }

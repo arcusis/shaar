@@ -197,6 +197,10 @@ def main():
             new_crashes = sorted(crash_names() - before)
             prompted = set(payload.get("prompts") or [])
             required = {"geolocation", "notifications", "midi", "protocol"}
+            remembered = set(payload.get("rememberedPermissions") or [])
+            required_remembered = {"geolocation", "notifications", "midi"}
+            missing_prompts = required - prompted
+            missing_remembered = required_remembered - remembered
             summary = {
                 "exitCode": process.returncode,
                 "passed": payload.get("passed"),
@@ -204,7 +208,12 @@ def main():
                 "mediaTracks": payload.get("mediaTracks"),
                 "allWindowsHidden": payload.get("allWindowsHidden"),
                 "prompts": sorted(prompted),
-                "missingPrompts": sorted(required - prompted),
+                "missingPrompts": sorted(missing_prompts),
+                "rememberedPermissions": sorted(remembered),
+                "missingRememberedPermissions": sorted(missing_remembered),
+                "verdictFailed": (
+                    payload.get("passed") is not True or missing_prompts != set()
+                    or missing_remembered != set()),
                 "newCrashes": new_crashes,
                 "error": payload.get("error", ""),
             }
@@ -214,18 +223,15 @@ def main():
                 and payload.get("mediaPrompted") and payload.get("mediaTracks")
                 and payload.get("allWindowsHidden")
                 and not payload.get("unexpectedSurfaces")
-                and not payload.get("error"))
+                and not payload.get("error") and payload.get("passed") is True
+                and not missing_prompts and not missing_remembered)
             opened_protocols = set(payload.get("openedProtocols") or [])
             expected_protocols = {"web+shaarparity", "mailto"}
             if not completed:
                 raise SystemExit(1)
             if dishonest_protocol(payload.get("checks") or []):
                 raise SystemExit(1)
-            if (
-                not payload.get("passed")
-                or required - prompted
-                or expected_protocols - opened_protocols
-            ):
+            if expected_protocols - opened_protocols:
                 raise SystemExit(2)
         server.shutdown()
 

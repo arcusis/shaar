@@ -13,7 +13,7 @@ public enum WebsitePermissionKind: String, Sendable, CaseIterable {
   /// Chromium can grant these for the current visit only; the rest are remembered when allowed.
   public var supportsOneTimeGrant: Bool {
     switch self {
-    case .camera, .microphone, .location: true
+    case .camera, .microphone: true
     default: false
     }
   }
@@ -23,7 +23,7 @@ public enum WebsitePermissionPersistence: Equatable, Sendable {
   case thisVisit
   case profile
 
-  /// Private profiles never keep a grant. Camera, microphone, and location stay on this visit.
+  /// Private profiles never keep a grant. Camera and microphone stay on this visit.
   public static func forGrant(isPrivate: Bool, kinds: [WebsitePermissionKind]) -> Self {
     if isPrivate { return .thisVisit }
     if kinds.isEmpty { return .thisVisit }

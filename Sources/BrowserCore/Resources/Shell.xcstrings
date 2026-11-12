@@ -281,6 +281,7 @@
     "Allow or block camera access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block camera access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למצלמה באתר הזה"}}}},
     "Allow or block location access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block location access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למיקום באתר הזה"}}}},
     "Allow or block notifications for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block notifications for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של התראות מהאתר הזה"}}}},
+    "Allow or block MIDI device access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block MIDI device access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה להתקני MIDI באתר הזה"}}}},
     "Allow or block pop-ups and redirects for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block pop-ups and redirects for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של חלונות קופצים והפניות באתר הזה"}}}},
     "Allow or mute sound for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or mute sound for this site"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה או השתקה של צליל באתר הזה"}}}},
     "Allow or block automatic picture-in-picture for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block automatic picture-in-picture for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של תמונה בתוך תמונה אוטומטית באתר הזה"}}}},
@@ -2050,6 +2051,7 @@
         }
       }
     },
+    "MIDI devices": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"MIDI devices"}},"he":{"stringUnit":{"state":"translated","value":"התקני MIDI"}}}},
     "Open Bookmark": {
       "localizations": {
         "en": {

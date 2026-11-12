@@ -403,6 +403,7 @@ extension SitePermission {
     case .camera: ShellL10n.string("Allow or block camera access for this site")
     case .location: ShellL10n.string("Allow or block location access for this site")
     case .notifications: ShellL10n.string("Allow or block notifications for this site")
+    case .midi: ShellL10n.string("Allow or block MIDI device access for this site")
     case .popups: ShellL10n.string("Allow or block pop-ups and redirects for this site")
     case .sound: ShellL10n.string("Allow or mute sound for this site")
     case .autoPictureInPicture:
@@ -416,6 +417,7 @@ extension SitePermission {
     case .camera: ShellL10n.string("Camera")
     case .location: ShellL10n.string("Location")
     case .notifications: ShellL10n.string("Notifications")
+    case .midi: ShellL10n.string("MIDI devices")
     case .popups: ShellL10n.string("Pop-ups and Redirects")
     case .sound: ShellL10n.string("Sound")
     case .autoPictureInPicture: ShellL10n.string("Automatic Picture-in-Picture")
@@ -428,6 +430,7 @@ extension SitePermission {
     case .camera: WebsitePermissionKind.camera.symbol
     case .location: WebsitePermissionKind.location.symbol
     case .notifications: WebsitePermissionKind.notifications.symbol
+    case .midi: WebsitePermissionKind.midi.symbol
     case .popups: "rectangle.on.rectangle"
     case .sound: "speaker.wave.2"
     case .autoPictureInPicture: "pip"

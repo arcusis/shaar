@@ -19,6 +19,18 @@
 namespace shaar::permissions {
 namespace {
 
+TEST(ShaarPermissionPromptTest, MapsLocationNotificationAndMidiRequests) {
+  EXPECT_EQ(PermissionKindForRequestType(
+                ::permissions::RequestType::kGeolocation),
+            "location");
+  EXPECT_EQ(PermissionKindForRequestType(
+                ::permissions::RequestType::kNotifications),
+            "notifications");
+  EXPECT_EQ(PermissionKindForRequestType(
+                ::permissions::RequestType::kMidiSysex),
+            "midi");
+}
+
 FrameSnapshot BoundFrame() {
   return FrameSnapshot{"0123456789ABCDEF0123456789ABCDEF", true, true, 42};
 }

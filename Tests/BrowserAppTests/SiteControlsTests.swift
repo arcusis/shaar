@@ -44,7 +44,7 @@ private final class FakeSiteBackend: SiteControlBackend {
   var securityValue = SiteSecurity.secure
   var values: [SitePermission: SitePermissionValue] = [
     .microphone: .ask, .camera: .block, .location: .ask, .notifications: .ask,
-    .popups: .block, .sound: .allow, .autoPictureInPicture: .allow,
+    .midi: .ask, .popups: .block, .sound: .allow, .autoPictureInPicture: .allow,
   ]
   var failsReads = false
   var failsWrites = false
@@ -119,6 +119,16 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.isAllowed(.sound) && !model.isAllowed(.camera))
   await model.setPermission(.camera, allowed: true)
   #expect(model.isAllowed(.camera) && backend.values[.camera] == .allow && model.failure == nil)
+  await model.setPermission(.midi, allowed: true)
+  #expect(model.isAllowed(.midi) && backend.values[.midi] == .allow && model.failure == nil)
+}
+
+@MainActor @Test func midiSiteControlHasLocalizedLabelAndExplainsItsScope() {
+  #expect(SitePermission.midi.title == ShellL10n.string("MIDI devices"))
+  #expect(
+    SitePermission.midi.help
+      == ShellL10n.string("Allow or block MIDI device access for this site"))
+  #expect(SitePermission.midi.symbol == WebsitePermissionKind.midi.symbol)
 }
 
 @MainActor @Test func notificationPermissionCanBeRevokedFromSiteControls() async {

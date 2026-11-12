@@ -6,7 +6,7 @@ import Foundation
 
 /// Per-site permissions the site control center shows, in display order.
 public enum SitePermission: String, CaseIterable, Sendable {
-  case microphone, camera, location, notifications, popups, sound, autoPictureInPicture
+  case microphone, camera, location, notifications, midi, popups, sound, autoPictureInPicture
 
   /// Chromium's content-setting name, or nil when the pinned engine has no per-site setting.
   public var engineSettingName: String? {

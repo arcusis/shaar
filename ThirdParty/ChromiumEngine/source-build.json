@@ -547,6 +547,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0078-shaar-trusted-click-layout.patch",
       "sha256": "93d724a6e39e9f41637808a86efc403db304fb141524856646cf83fa05f24f86"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0081-shaar-native-window-session-id.patch",
+      "sha256": "73a297422705f199018fe0b055c9e8a4abdeca7bc235dbde0db4ca39fd614b3d"
     }
   ],
   "devtoolsFrontend157": {
@@ -612,7 +616,8 @@
     "_shaar_window_host_resize",
     "_shaar_window_host_view",
     "_shaar_window_native_window",
-    "_shaar_window_open"
+    "_shaar_window_open",
+    "_shaar_window_chrome_id"
   ],
   "moduleBlocks": {
     "lifecycle": {

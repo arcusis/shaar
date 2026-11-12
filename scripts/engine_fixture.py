@@ -30,7 +30,8 @@ import uuid
 import zlib
 from urllib.parse import parse_qs, urlparse
 
-VERIFICATION_APP = Path('build/Shaar Verification.app')
+VERIFICATION_APP = Path(os.environ.get(
+    'SHAAR_VERIFICATION_APP', 'build/Shaar Verification.app'))
 RELEASE_FEED = Path(__file__).resolve().with_name('release_feed.py')
 
 

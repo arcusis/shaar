@@ -156,7 +156,7 @@ final class WorkspaceProbe {
     _ = try await document(selected)
     let background = selected == ids.firstOrdinary ? ids.betaTab : ids.firstOrdinary
     try expect(
-      runtime.nativeTabID(forID: background.uuidString) == -1,
+      !hasNativePage(background),
       "saved background ordinary tabs stay deferred until selection")
     first.perform(.tab(space: ids.alpha, tab: ids.firstOrdinary))
     _ = try await document(ids.firstOrdinary)
@@ -166,16 +166,16 @@ final class WorkspaceProbe {
       betaDocument["cookie"] as? String == "account=beta",
       "restored managed beta page uses its dedicated account")
     try expect(
-      runtime.nativeTabID(forID: ids.firstPin.uuidString) == -1,
+      !hasNativePage(ids.firstPin),
       "an unselected managed pin remains a row without starting a native page")
     if phase == "initial" {
       _ = try await document(ids.closed)
       try expect(
-        runtime.nativeTabID(forID: ids.secondPin.uuidString) == -1,
+        !hasNativePage(ids.secondPin),
         "new-window shared pin does not duplicate the first window's live page")
     } else {
       try expect(
-        runtime.nativeTabID(forID: ids.closed.uuidString) == -1,
+        !hasNativePage(ids.closed),
         "archived second-window page is not reopened during native restoration")
     }
     first.perform(.tab(space: ids.alpha, tab: ids.firstPin))
@@ -209,10 +209,19 @@ final class WorkspaceProbe {
       "first-window navigation cannot change the shared original pin or another window's page")
     second.perform(.tab(space: ids.alpha, tab: ids.secondPin))
     let secondDocument = try await document(ids.secondPin)
+    let firstOwner = runtime.windowID(forTabID: ids.firstPin.uuidString)
+    let secondOwner = runtime.windowID(forTabID: ids.secondPin.uuidString)
+    let distinctWindowTabs = ids.firstPin != ids.secondPin
+      && firstOwner == ids.first.uuidString && secondOwner == ids.second.uuidString
+      && firstOwner != secondOwner
+    let distinctDocuments = firstDocument["instance"] as? String
+      != secondDocument["instance"] as? String
     try expect(
-      ids.firstPin != ids.secondPin
-        && firstDocument["instance"] as? String != secondDocument["instance"] as? String,
-      "shared pin definitions materialize as distinct window-owned native documents")
+      distinctWindowTabs && distinctDocuments,
+      "shared pin definitions materialize as distinct window-owned native documents "
+        + "[distinctModelTabs=\(ids.firstPin != ids.secondPin), "
+        + "firstOwner=\(firstOwner ?? "none"), secondOwner=\(secondOwner ?? "none"), "
+        + "distinctDocuments=\(distinctDocuments)]")
     try expect(
       secondDocument["cookie"] as? String == "account=alpha",
       "separate pin instances explicitly share the profile account")
@@ -287,6 +296,11 @@ final class WorkspaceProbe {
     runtime.evaluate(
       inTabID: tab.uuidString, script: "(()=>{location.href=\(literal);return {};})()"
     ) { _ in }
+  }
+
+  private func hasNativePage(_ tab: UUID) -> Bool {
+    runtime.windowID(forTabID: tab.uuidString) != nil
+      || runtime.view(forTabID: tab.uuidString) != nil
   }
 
   private func captureWindows() async throws {

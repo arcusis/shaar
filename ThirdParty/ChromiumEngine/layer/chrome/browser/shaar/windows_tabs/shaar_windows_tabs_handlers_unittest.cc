@@ -96,6 +96,24 @@ TEST(ShaarWindowsTabsHandlersTest, PinnedTabsMustBeAnOrderedPrefix) {
   EXPECT_FALSE(ValidatePlacement({"a", "b"}, {"a", "b"}, {"outside"}));
 }
 
+TEST(ShaarWindowsTabsHandlersTest, WindowRegistryResolvesBrowserByProfile) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* alpha = reinterpret_cast<Browser*>(3);
+  auto* beta = reinterpret_cast<Browser*>(4);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "native-window"));
+  ASSERT_NE(registry.EnsureWindowState(engine, window, alpha, "alpha"), nullptr);
+  ASSERT_NE(registry.EnsureWindowState(engine, window, beta, "beta"), nullptr);
+
+  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "alpha"), alpha);
+  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "beta"), beta);
+  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "missing"), nullptr);
+  EXPECT_EQ(registry.FindBrowserForProfile(
+                reinterpret_cast<shaar_engine*>(5), window, "alpha"),
+            nullptr);
+}
+
 TEST(ShaarWindowsTabsHandlersTest, PlaceHandlerRejectsWrongOperationBeforeMutation) {
   shaar::ModuleCall call = {};
   call.operation = SHAAR_OP_WINDOW_ACTIVATE_TAB;

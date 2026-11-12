@@ -11,11 +11,14 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
@@ -111,7 +114,75 @@ bool IsCurrentRequest(const PendingPermission& pending) {
          frame->GetLastCommittedOrigin().GetURL() == pending.origin;
 }
 
+class CaptureObserver final : public MediaStreamCaptureIndicator::Observer {
+ public:
+  explicit CaptureObserver(shaar_engine* engine)
+      : engine_(engine),
+        indicator_(MediaCaptureDevicesDispatcher::GetInstance()
+                       ->GetMediaStreamCaptureIndicator()) {
+    indicator_->AddObserver(this);
+  }
+
+  ~CaptureObserver() override { indicator_->RemoveObserver(this); }
+
+  void OnIsCapturingVideoChanged(content::WebContents* contents, bool) override {
+    Publish(contents);
+  }
+  void OnIsCapturingAudioChanged(content::WebContents* contents, bool) override {
+    Publish(contents);
+  }
+  void OnIsCapturingTabChanged(content::WebContents* contents, bool) override {
+    Publish(contents);
+  }
+  void OnIsCapturingWindowChanged(content::WebContents* contents, bool) override {
+    Publish(contents);
+  }
+  void OnIsCapturingDisplayChanged(content::WebContents* contents, bool) override {
+    Publish(contents);
+  }
+
+ private:
+  void Publish(content::WebContents* contents) {
+    if (!lifecycle::EngineIsReady(engine_))
+      return;
+    auto identity = windows_tabs::Registry().FindRegularTab(engine_, contents);
+    if (!identity)
+      return;
+    base::DictValue payload;
+    payload.Set("schemaVersion", 1);
+    payload.Set("kind", "capture_changed");
+    payload.Set("camera", indicator_->IsCapturingVideo(contents));
+    payload.Set("microphone", indicator_->IsCapturingAudio(contents));
+    payload.Set("screen", indicator_->IsCapturingTab(contents) ||
+                              indicator_->IsCapturingWindow(contents) ||
+                              indicator_->IsCapturingDisplay(contents));
+    std::string json;
+    if (!base::JSONWriter::Write(payload, &json))
+      return;
+    shaar::EmitEvent(
+        engine_, SHAAR_EVENT_MEDIA,
+        {identity->profile_id.data(), identity->profile_id.size()}, {},
+        {identity->window_id.data(), identity->window_id.size()},
+        {identity->tab_id.data(), identity->tab_id.size()},
+        {json.data(), json.size()});
+  }
+
+  shaar_engine* engine_;
+  scoped_refptr<MediaStreamCaptureIndicator> indicator_;
+};
+
+std::unique_ptr<CaptureObserver> g_capture_observer;
+
 }  // namespace
+
+void StartCaptureObserving(shaar_engine* engine) {
+  if (engine && !g_capture_observer)
+    g_capture_observer = std::make_unique<CaptureObserver>(engine);
+}
+
+void StopCaptureObserving() {
+  g_capture_observer.reset();
+}
 
 void RequestWebsiteMediaPermission(
     content::WebContents* contents, const content::MediaStreamRequest& request,

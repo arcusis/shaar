@@ -238,6 +238,8 @@ typedef enum {
   // Testing only: inspect a popup owned by the selected fixture tab.
   SHAAR_OP_PROBE_POPUP_EVALUATE = 1095,
   SHAAR_OP_PROBE_POPUP_CAPTURE = 1096,
+  // Testing only: send a trusted click to a never-shown owned extension popup.
+  SHAAR_OP_PROBE_POPUP_TRUSTED_CLICK = 1097,
   // END devtools operation IDs.
 
   // BEGIN media
@@ -482,6 +484,10 @@ SHAAR_EXPORT shaar_error_code shaar_window_open(
     shaar_bytes window_id, shaar_window **out, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_window_close(
     shaar_window *, shaar_error *error);
+/* Returns the real Chromium session ID for a regular profile window. */
+SHAAR_EXPORT shaar_error_code shaar_window_chrome_id(
+    shaar_engine *, shaar_profile *, shaar_window *, int32_t *out,
+    shaar_error *error);
 SHAAR_EXPORT void *shaar_window_host_view(shaar_window *); /* borrowed NSView* */
 SHAAR_EXPORT void *shaar_window_native_window(shaar_window *); /* borrowed NSWindow* */
 SHAAR_EXPORT shaar_error_code shaar_tab_open(

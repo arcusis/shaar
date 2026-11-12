@@ -73,6 +73,7 @@ class PipelineGateTests(unittest.TestCase):
     def test_abi_contract_is_selected_for_engine_and_bridge_changes_including_drafts(self):
         self.assertTrue(PLAN.needs_abi_contract(["ThirdParty/ChromiumEngine/pin.json"]))
         self.assertTrue(PLAN.needs_abi_contract(["Sources/ChromiumBridge/ChromiumShaarBackend.mm"]))
+        self.assertTrue(PLAN.needs_abi_contract(["scripts/check-engine-abi-contract.py"]))
         self.assertFalse(PLAN.needs_abi_contract(["Sources/ArcusisBrowser/BrowserWindow.swift"]))
         self.assertTrue(PLAN.needs_abi_contract(None))
         self.assertFalse(PLAN.select_stages(["Sources/ChromiumBridge/ChromiumShaarBackend.mm"],

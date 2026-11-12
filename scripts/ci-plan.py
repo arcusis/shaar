@@ -66,9 +66,19 @@ def needs_shipping_probe_guard(paths: list[str] | None) -> bool:
 
 
 def needs_abi_contract(paths: list[str] | None) -> bool:
-    """Run the pinned engine contract for every bridge or engine source change."""
+    """Run the pinned engine contract for ABI inputs and changes to the guard itself."""
+    guard_paths = {
+        ".github/actions/ci-setup/action.yml",
+        ".github/workflows/source-checks.yml",
+        "Tests/CIPipelineTests/test_ci_pipeline.py",
+        "Tests/EngineMigrationTests/test_abi_contract.py",
+        "scripts/check-engine-abi-contract.py",
+        "scripts/ci-plan.py",
+        "scripts/ci-stage.py",
+    }
     return paths is None or any(
         path.startswith(("ThirdParty/ChromiumEngine/", "Sources/ChromiumBridge/"))
+        or path in guard_paths
         for path in paths
     )
 

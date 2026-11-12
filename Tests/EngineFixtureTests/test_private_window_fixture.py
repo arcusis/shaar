@@ -88,7 +88,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
     def test_valid_report_binds_phase_checks_digest_and_cleanup(self):
         for phase in ('initial', 'restart'):
             self.write_phase(phase)
-            fixture.validate_private_window_report(self.root, phase, self.report(phase), 0)
+            fixture.validate_private_window_report(self.root, phase, self.report(phase))
         children = [dict(phase=phase, pid=100 + index, childExited=True,
                          processGroupAbsent=True)
                     for index, phase in enumerate(('initial', 'restart'))]
@@ -113,7 +113,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         report['passed'] = False
         report['error'] = 'store selects live normal Alpha WebContents before private fixture'
         with self.assertRaisesRegex(RuntimeError, 'store selects live normal Alpha WebContents'):
-            fixture.validate_private_window_report(self.root, 'initial', report, 1)
+            fixture.validate_private_window_report(self.root, 'initial', report)
 
     def test_failed_private_report_names_its_error(self):
         evidence = self.evidence('initial')
@@ -124,7 +124,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         report['passed'] = False
         report['error'] = 'Shaar native selection audit failed'
         with self.assertRaisesRegex(RuntimeError, 'Shaar native selection audit failed'):
-            fixture.validate_private_window_report(self.root, 'initial', report, 1)
+            fixture.validate_private_window_report(self.root, 'initial', report)
 
     def test_crashed_probe_keeps_main_and_private_failure_receipts(self):
         (self.root / 'initial.log').write_text('length_error was thrown in -fno-exceptions mode')
@@ -226,17 +226,24 @@ class PrivateWindowFixtureTests(unittest.TestCase):
             with self.subTest(mutation=mutate), self.assertRaises(RuntimeError):
                 self.write_phase('initial', evidence)
                 fixture.validate_private_window_report(
-                    self.root, 'initial', self.report('initial'), 0)
+                    self.root, 'initial', self.report('initial'))
 
-    def test_phase_mismatch_unknown_check_and_zero_child_exit_rejected(self):
+    def test_phase_mismatch_and_unknown_check_rejected(self):
         evidence = self.evidence('restart')
         evidence['checks']['unreviewed'] = True
         self.write_phase('initial', evidence)
         with self.assertRaises(RuntimeError):
-            fixture.validate_private_window_report(self.root, 'initial', self.report('initial'), 0)
+            fixture.validate_private_window_report(self.root, 'initial', self.report('initial'))
         self.write_phase('initial')
-        with self.assertRaises(RuntimeError):
-            fixture.validate_private_window_report(self.root, 'initial', self.report('initial'), 1)
+        report = self.report('initial')
+        report['exitCode'] = 1
+        (self.root / 'initial.json').write_text(json.dumps(report))
+        fixture.validate_private_window_report(self.root, 'initial', report)
+        summary = fixture.record_private_window_summary(
+            self.root, listener_closed=True, child_receipts=[], proof_directory=self.root / 'proof')
+        self.assertTrue(summary['phases'][0]['passed'])
+        self.assertFalse(summary['phases'][0]['overallFixturePassed'])
+        self.assertFalse(summary['passed'])
 
     def test_second_private_tab_is_the_only_issue_417_expected_failure(self):
         evidence = self.evidence('initial')
@@ -245,7 +252,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
             'productSecondPrivateTabRenders':
                 'Issue #417: second private tab may display a black page.'}
         self.write_phase('initial', evidence)
-        fixture.validate_private_window_report(self.root, 'initial', self.report('initial'), 0)
+        fixture.validate_private_window_report(self.root, 'initial', self.report('initial'))
 
         for name in ('productFirstPrivateTabRenders', 'productThirdPrivateTabRenders'):
             evidence = self.evidence('initial')
@@ -255,7 +262,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
             self.write_phase('initial', evidence)
             with self.subTest(name=name), self.assertRaises(RuntimeError):
                 fixture.validate_private_window_report(
-                    self.root, 'initial', self.report('initial'), 0)
+                    self.root, 'initial', self.report('initial'))
 
     def test_issue_417_expected_failure_cannot_be_declared_if_second_tab_passes(self):
         evidence = self.evidence('initial')
@@ -264,7 +271,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
                 'Issue #417: second private tab may display a black page.'}
         self.write_phase('initial', evidence)
         with self.assertRaises(RuntimeError):
-            fixture.validate_private_window_report(self.root, 'initial', self.report('initial'), 0)
+            fixture.validate_private_window_report(self.root, 'initial', self.report('initial'))
 
 
 if __name__ == '__main__':

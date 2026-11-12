@@ -80,11 +80,23 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   void GetTabsForBrowser(
       shaar_engine*, shaar_window*, Browser*,
       std::unordered_map<std::string, content::WebContents*>*) const;
-  void BindWindow(shaar_engine*, shaar_window*, Browser*);
+  // False when `browser` is null or was already retired while closing.
+  bool BindWindow(shaar_engine*, shaar_window*, Browser*);
   bool ReserveWindow(shaar_engine*, shaar_window*, std::string id);
   bool ReserveTab(shaar_engine*, shaar_window*, shaar_tab*, std::string id);
   void UnbindTab(shaar_engine*, shaar_window*, shaar_tab*);
   void UnbindBrowser(shaar_engine*, shaar_window*, Browser*);
+  // Drops every window's reference. Pointer identity only: safe after free.
+  void RetireClosingBrowser(Browser*);
+  bool BrowserHasBoundTabs(Browser*) const;
+  bool IsClosingBrowser(Browser*) const;
+  // Retires a still-live cached Browser once unload has started. The first
+  // call must happen while the object is alive; later calls only compare.
+  bool ReleaseIfClosing(Browser*);
+  // Called only for a freshly allocated live Browser. Allocators may reuse
+  // the address of a Browser that was retired during close.
+  void MarkBrowserCreated(Browser*);
+  void WatchBrowserClose(Browser*);
   bool BeginWindowClose(shaar_engine*, shaar_window*);
   void BeginEngineQuit(shaar_engine*);
   void CancelEngineQuit(shaar_engine*);
@@ -112,6 +124,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   std::vector<WindowState> windows_;
   std::vector<TabEntry> tabs_;
   std::unordered_set<shaar_engine*> quitting_engines_;
+  // Addresses stay retired so a freed Browser cannot be stored again.
+  std::unordered_set<Browser*> retired_browsers_;
 };
 
 BrowserTabRegistryImpl& Registry();

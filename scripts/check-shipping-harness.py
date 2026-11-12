@@ -279,6 +279,12 @@ def engine_testing_findings(path: Path, text: str) -> list[str]:
     """The engine start may set the variable. Every other read is a harness leak."""
     cleaned = strip_comments(text)
     allowed = engine_start_span(path, text)
+    verification_spans = []
+    guard = re.compile(r"^[ \t]*#[ \t]*if[ \t]+defined\(SHAAR_VERIFICATION\)", re.MULTILINE)
+    for match in guard.finditer(cleaned):
+        end = re.search(r"^[ \t]*#[ \t]*endif\b", cleaned[match.end():], re.MULTILINE)
+        if end:
+            verification_spans.append((match.start(), match.end() + end.end()))
     allowed_writes = {
         match.start() + match.group(0).index(ENGINE_TESTING)
         for match in ENGINE_TESTING_WRITE.finditer(cleaned)
@@ -287,6 +293,8 @@ def engine_testing_findings(path: Path, text: str) -> list[str]:
     found = []
     for match in re.finditer(re.escape(ENGINE_TESTING), cleaned):
         if match.start() in allowed_writes:
+            continue
+        if any(start <= match.start() < end for start, end in verification_spans):
             continue
         number = cleaned.count("\n", 0, match.start()) + 1
         found.append(f"{path}:{number}: {ENGINE_TESTING}")

@@ -219,6 +219,7 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSMutableArray *> *_shaarProfileWaiters;
   NSMutableDictionary<NSString *, id> *_shaarProfileDeleteWaiters;
   NSMutableDictionary<NSString *, NSValue *> *_shaarWindows;
+  NSMutableSet<NSString *> *_shaarRetiredWindowIDs;
   NSMutableDictionary<NSString *, NSValue *> *_shaarTabs;
   NSMutableDictionary<NSString *, NSString *> *_shaarTabWindows;
   NSMutableDictionary<NSString *, NSString *> *_shaarTabProfiles;
@@ -490,6 +491,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarProfileWaiters = [NSMutableDictionary dictionary];
   _shaarProfileDeleteWaiters = [NSMutableDictionary dictionary];
   _shaarWindows = [NSMutableDictionary dictionary];
+  _shaarRetiredWindowIDs = [NSMutableSet set];
   _shaarTabs = [NSMutableDictionary dictionary];
   _shaarTabWindows = [NSMutableDictionary dictionary];
   _shaarTabProfiles = [NSMutableDictionary dictionary];
@@ -1131,7 +1133,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (NSView *)hostView { return [self hostViewForWindowID:_shaarPrimaryWindowID]; }
 
 - (BOOL)createWindowID:(NSString *)windowID error:(NSError **)error {
-  if ([self privateIdentityOccupied:windowID]) {
+  if ([_shaarRetiredWindowIDs containsObject:windowID] ||
+      [self privateIdentityOccupied:windowID]) {
     if (error) *error = ShaarError(@"Invalid or reused native window identity.");
     return NO;
   }
@@ -1182,6 +1185,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (void)finishWindowID:(NSString *)windowID {
   if (!_shaarWindows[windowID]) return;
+  [_shaarRetiredWindowIDs addObject:windowID];
   id observer = _hostResizeObservers[windowID];
   if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
   id closeObserver = _hostCloseObservers[windowID];

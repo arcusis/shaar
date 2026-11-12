@@ -11,6 +11,13 @@ let bundleFrameworksLinkerSettings: [LinkerSetting] = [
   .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
 ]
 
+let verificationBuild =
+  ProcessInfo.processInfo.environment["SHAAR_PACKAGE_VERIFICATION_BUILD"] == "1"
+var chromiumBridgeCxxSettings: [CXXSetting] = [.unsafeFlags(["-fobjc-arc"])]
+if verificationBuild {
+  chromiumBridgeCxxSettings.append(.define("SHAAR_VERIFICATION"))
+}
+
 let package = Package(
   name: "ArcusisBrowser",
   defaultLocalization: "en",
@@ -35,7 +42,7 @@ let package = Package(
     .target(
       name: "ChromiumBridge",
       publicHeadersPath: "include",
-      cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
+      cxxSettings: chromiumBridgeCxxSettings,
       linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Security")]
     ),
     // BEGIN Shaar navigation C ABI shim.

@@ -177,6 +177,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID, NSString *windowID);
+/// A browser window is about to close and its remaining tab closures are teardown.
+@property(copy, nullable) void (^onWindowClosing)(NSString *windowID, BOOL closing);
 /// Chromium discarded, froze, or woke a tab. `state` is active, frozen, or discarded.
 @property(copy, nullable) void (^onTabLifecycle)(NSString *tabID, NSString *state, BOOL audible, BOOL capturing);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onTabActivated)(NSString *tabID, NSString *profileID);

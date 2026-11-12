@@ -78,6 +78,7 @@ final class BrowserRuntimeRouter {
   private var subscriptions: [String: Subscription] = [:]
   private var retiredWindows: Set<String> = []
   private var tabOwners: [String: String] = [:]
+  private var closingWindows: Set<String> = []
   private var contexts: [Context: [String: String]] = [:]
   private(set) var isQuitting = false
 
@@ -121,8 +122,16 @@ final class BrowserRuntimeRouter {
   func tabClosed(_ id: String, windowID: String) {
     guard tabOwners[id] == windowID else { return }
     tabOwners[id] = nil
-    guard !isQuitting else { return }
+    guard !isQuitting, !closingWindows.contains(windowID) else { return }
     subscriptions[windowID]?.client?.onTabClosed?(id, windowID)
+  }
+
+  func setWindowClosing(_ closing: Bool, id: String) {
+    if closing {
+      closingWindows.insert(id)
+    } else {
+      closingWindows.remove(id)
+    }
   }
 
   /// A context can only be introduced by a bound tab in the declared window.

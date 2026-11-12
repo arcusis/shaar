@@ -34,6 +34,9 @@ final class BrowserRuntimeEvents {
     runtime.onWindowClosed = { [weak self] id, quitting in
       self?.windowClosed(id, quitting: quitting)
     }
+    runtime.onWindowClosing = { [weak self] id, closing in
+      self?.router.setWindowClosing(closing, id: id)
+    }
     runtime.onNotice = { [weak self] message in
       for client in self?.router.clients ?? [] { client.onNotice?(message) }
     }

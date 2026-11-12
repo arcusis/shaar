@@ -22,13 +22,13 @@ Run from a clean checkout of the final `production` commit after all release evi
 
    Review the signed local app, DMG, ZIP and generated `appcast.xml`; do not upload in this step.
 
-5. **Notarize and upload with the `shaar-notary` keychain profile:**
+5. **Notarize with the `shaar-notary` keychain profile:**
 
    ```sh
-   NOTARY_PROFILE=shaar-notary SHAAR_BUNDLE_SWIFT_JOBS=4 ~/bin/shaar-heavy bash scripts/release.sh --notes <notes.html> --notarize --upload
+   NOTARY_PROFILE=shaar-notary SHAAR_BUNDLE_SWIFT_JOBS=4 ~/bin/shaar-heavy bash scripts/release.sh --notes <notes.html> --notarize
    ```
 
-   `release.sh --upload` requires the `v0.2.0` tag to exist. Complete notarization, tagging and upload in the dependency order enforced by the script; do not bypass this precondition.
+   This signs and notarizes the local candidate and creates the appcast. The tagged upload must be run after step 6: `release.sh --upload` requires a clean checkout of the `v0.2.0` tag, and rebuilds/notarizes that tagged source before creating a draft release.
 
 6. **Tag:** create and push `v0.2.0` at the exact verified production commit:
 
@@ -37,7 +37,13 @@ Run from a clean checkout of the final `production` commit after all release evi
    git push origin v0.2.0
    ```
 
-7. **Appcast:** allow the release workflow to publish the generated `appcast.xml` after the GitHub release is published. Confirm the public appcast and Sparkle update from v0.1.0; do not hand-edit the feed.
+7. **Upload and appcast:** from a clean checkout of the new tag, run the tagged upload:
+
+   ```sh
+   NOTARY_PROFILE=shaar-notary SHAAR_BUNDLE_SWIFT_JOBS=4 ~/bin/shaar-heavy bash scripts/release.sh --notes <notes.html> --notarize --upload
+   ```
+
+   Review and publish the resulting draft only after all gates pass. The release workflow publishes the generated `appcast.xml`; confirm the public feed and Sparkle update from v0.1.0. Do not hand-edit the feed.
 8. **Website merge:** after the GitHub release is public, merge the draft `website-0.2.0` PR. Verify the published version, English notes, DMG and ZIP links, and deployed site.
 9. **Engine pre-release cleanup:** remove engine pre-releases `.28`, `.30`, `.31`, `.33` first; then remove `.32`, `.34` and `.35` only after no branch, pin or release candidate references each one. Keep shaar.36 while it is the release pin.
 

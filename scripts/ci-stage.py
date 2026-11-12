@@ -295,7 +295,7 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("unit", "coverage-base", "coverage-compare", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "localization-captures", "shipping", "sanitize", "dead-code"))
+    parser.add_argument("stage", choices=("unit", "coverage-base", "coverage-compare", "abi-contract", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "localization-captures", "shipping", "sanitize", "dead-code"))
     parser.add_argument("--shard", choices=engine_shards(10), default="baseline-1")
     parser.add_argument("--visual-shard", choices=("all", *VISUAL_SHARDS), default="all")
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
@@ -314,6 +314,8 @@ def main() -> int:
             if not test_commands(checks):
                 checks.run("sidebar-dnd-restart", [sys.executable, "scripts/sidebar-dnd-probe.py",
                            "--skip-build", "--enable-code-coverage"])
+        elif options.stage == "abi-contract":
+            checks.run("engine-abi-contract", [sys.executable, "scripts/check-engine-abi-contract.py"])
         elif options.stage == "coverage-base":
             build_base_coverage(checks)
         elif options.stage == "coverage-compare":

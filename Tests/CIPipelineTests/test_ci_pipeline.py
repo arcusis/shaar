@@ -70,6 +70,20 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn("shipping-probe-guard: failure",
                       GATE.gate_errors(needs, False, False, shipping_guard=True))
 
+    def test_abi_contract_is_selected_for_engine_and_bridge_changes_including_drafts(self):
+        self.assertTrue(PLAN.needs_abi_contract(["ThirdParty/ChromiumEngine/pin.json"]))
+        self.assertTrue(PLAN.needs_abi_contract(["Sources/ChromiumBridge/ChromiumShaarBackend.mm"]))
+        self.assertFalse(PLAN.needs_abi_contract(["Sources/ArcusisBrowser/BrowserWindow.swift"]))
+        self.assertTrue(PLAN.needs_abi_contract(None))
+        self.assertFalse(PLAN.select_stages(["Sources/ChromiumBridge/ChromiumShaarBackend.mm"],
+                                            "pull_request", draft=True)[0])
+        self.assertTrue(PLAN.needs_abi_contract(["Sources/ChromiumBridge/ChromiumShaarBackend.mm"]))
+        workflow = (ROOT / ".github" / "workflows" / "source-checks.yml").read_text()
+        self.assertIn("abi_contract: ${{ steps.plan.outputs.abi_contract }}", workflow)
+        self.assertIn("scripts/ci-stage.py abi-contract", workflow)
+        setup = (ROOT / ".github" / "actions" / "ci-setup" / "action.yml").read_text()
+        self.assertIn("inputs.mode == 'fast'", setup)
+
     def test_codeql_permissions_are_read_only_by_default_and_scoped_to_analysis(self):
         workflow = (ROOT / ".github" / "workflows" / "ci-codeql.yml").read_text()
         defaults = workflow.split("jobs:", 1)[0]

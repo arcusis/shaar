@@ -176,7 +176,8 @@ final class ProfileOnboardingProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     guard popupTab != nil && flow.windowIDs.count == 2 else {
-      let popupState = await value(tab, "({opened:!!window.fixturePopup,opener:!!window.fixturePopup?.opener})")
+      let popupState = await value(
+        tab, "({opened:!!window.fixturePopup,opener:!!window.fixturePopup?.opener})")
       throw Failure(
         "Timed out: \(popupStep) adoption [popupTab=\(popupTab?.uuidString ?? "none"), "
           + "windows=\(flow.windowIDs.sorted()), page=\(String(describing: popupState))]")
@@ -189,17 +190,23 @@ final class ProfileOnboardingProbe {
     var popupSession: [String: Any]?
     for _ in 0..<80 {
       popupSession = await value(
-        child, "({url:location.href,cookie:document.cookie,opener:!!window.opener,ready:document.readyState})")
+        child,
+        "({url:location.href,cookie:document.cookie,opener:!!window.opener,ready:document.readyState})"
+      )
       if (popupSession?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true
         && popupSession?["opener"] as? Bool == true
         && popupSession?["ready"] as? String == "complete"
-      { break }
+      {
+        break
+      }
       try await Task.sleep(for: .milliseconds(100))
     }
     guard (popupSession?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true,
       popupSession?["opener"] as? Bool == true,
       popupSession?["ready"] as? String == "complete"
-    else { throw Failure("Timed out: \(popupStep) session [state=\(String(describing: popupSession))]") }
+    else {
+      throw Failure("Timed out: \(popupStep) session [state=\(String(describing: popupSession))]")
+    }
     if reloadOpener {
       guard runtime.reloadTabID(tab.uuidString, profileID: flow.profileID.uuidString) else {
         throw Failure("\(popupStep) opener reload rejected")

@@ -100,19 +100,13 @@ void CompleteProfileDeletion(shaar_engine* engine,
 }
 
 bool DeleteProfileDirectory(const base::FilePath& path) {
-  LOG(ERROR) << "Profile directory cleanup start path=" << path.AsUTF8Unsafe();
   for (int attempt = 0; attempt < 50; ++attempt) {
     if (!base::PathExists(path) || base::DeletePathRecursively(path)) {
-      LOG(ERROR) << "Profile directory cleanup complete path="
-                 << path.AsUTF8Unsafe() << " remains=" << base::PathExists(path);
       return true;
     }
     base::PlatformThread::Sleep(base::Milliseconds(100));
   }
-  const bool removed = !base::PathExists(path);
-  LOG(ERROR) << "Profile directory cleanup gave up path=" << path.AsUTF8Unsafe()
-             << " removed=" << removed;
-  return removed;
+  return !base::PathExists(path);
 }
 
 void DeleteProfileDirectoryAfterRelease(shaar_engine* engine,

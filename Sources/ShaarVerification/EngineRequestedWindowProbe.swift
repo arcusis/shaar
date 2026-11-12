@@ -131,7 +131,8 @@ final class EngineRequestedWindowProbe {
     let postMessageResult = await value(
       pageTab,
       script:
-        "(()=>{window.opener.postMessage(\(messageToken),location.origin);return {sent:true,openerClosed:window.opener.closed};})()")
+        "(()=>{window.opener.postMessage(\(messageToken),location.origin);return {sent:true,openerClosed:window.opener.closed};})()"
+    )
     var received = false
     for _ in 0..<80 {
       if let response = await value(betaTab, script: "({token:window.arcusisPopupReply})"),
@@ -144,10 +145,13 @@ final class EngineRequestedWindowProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     if !received {
-      let parent = await value(betaTab, script: "({reply:window.arcusisPopupReply,message:window.arcusisPopupMessage})")
-      let child = await value(pageTab, script: "({opener:!!window.opener,url:location.href,origin:location.origin})")
+      let parent = await value(
+        betaTab, script: "({reply:window.arcusisPopupReply,message:window.arcusisPopupMessage})")
+      let child = await value(
+        pageTab, script: "({opener:!!window.opener,url:location.href,origin:location.origin})")
       throw WindowProbeFailure(
-        "Managed page popup did not preserve opener postMessage [parent=\(String(describing: parent)), child=\(String(describing: child)), send=\(String(describing: postMessageResult))].")
+        "Managed page popup did not preserve opener postMessage [parent=\(String(describing: parent)), child=\(String(describing: child)), send=\(String(describing: postMessageResult))]."
+      )
     }
     checks.append("managed page popup preserves opener postMessage for an authored login callback")
     _ = await value(pageTab, script: "(()=>{window.close();return {};})()")
@@ -370,7 +374,8 @@ final class EngineRequestedWindowProbe {
       let json: String? = await withCheckedContinuation { continuation in
         runtime.evaluateProbePopupID(
           popup.id,
-          script: "(()=>{const t=window.arcusisSourceTab;return {ready:Number.isInteger(t&&t.id),tabID:t&&t.id,windowID:t&&t.windowId,url:t&&t.url};})()"
+          script:
+            "(()=>{const t=window.arcusisSourceTab;return {ready:Number.isInteger(t&&t.id),tabID:t&&t.id,windowID:t&&t.windowId,url:t&&t.url};})()"
         ) { continuation.resume(returning: $0) }
       }
       popupState = json
@@ -384,7 +389,8 @@ final class EngineRequestedWindowProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     guard sourceReady else {
-      throw WindowProbeFailure("Window worker source tab was not ready: \(String(describing: popupState)).")
+      throw WindowProbeFailure(
+        "Window worker source tab was not ready: \(String(describing: popupState)).")
     }
     let request: [String: Any] = [
       "action": "create-window-probe",
@@ -398,7 +404,8 @@ final class EngineRequestedWindowProbe {
     let encoded = try literal(json)
     let armed: String? = await withCheckedContinuation { continuation in
       runtime.evaluateProbePopupID(
-        popup.id, script: "(()=>{window.arcusisWindowRequest=JSON.parse(\(encoded));return true;})()"
+        popup.id,
+        script: "(()=>{window.arcusisWindowRequest=JSON.parse(\(encoded));return true;})()"
       ) { continuation.resume(returning: $0) }
     }
     try expect(armed?.contains("true") == true, "MV3 window request fixture is armed")
@@ -434,7 +441,8 @@ final class EngineRequestedWindowProbe {
       script:
         "({response:document.documentElement.dataset.arcusisWindowResponse,report:document.documentElement.dataset.arcusisWindowProbe})"
     )
-    throw WindowProbeFailure("Window worker report did not arrive: \(String(describing: response)).")
+    throw WindowProbeFailure(
+      "Window worker report did not arrive: \(String(describing: response)).")
   }
 
   static func matchesWorkerReport(_ report: [String: Any], token: String) -> Bool {

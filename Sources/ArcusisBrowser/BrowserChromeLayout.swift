@@ -100,7 +100,8 @@ struct StableContainerFrameSampler {
       return false
     }
 
-    let stable = abs(frame.minX - previousFrame.minX) <= tolerance
+    let stable =
+      abs(frame.minX - previousFrame.minX) <= tolerance
       && abs(frame.minY - previousFrame.minY) <= tolerance
       && abs(frame.width - previousFrame.width) <= tolerance
       && abs(frame.height - previousFrame.height) <= tolerance

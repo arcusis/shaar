@@ -484,7 +484,8 @@ final class EngineProbe {
     }
     let safeState = try? await evaluate(
       tab, "({url:location.href,title:document.title,ready:document.readyState})")
-    let detail = "JavaScript response received: \(receivedJavaScript); page=\(String(describing: safeState))."
+    let detail =
+      "JavaScript response received: \(receivedJavaScript); page=\(String(describing: safeState))."
     throw ProbeFailure("Loopback fixture did not load in \(tab); \(detail)")
   }
 

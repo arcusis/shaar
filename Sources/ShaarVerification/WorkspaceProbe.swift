@@ -211,10 +211,12 @@ final class WorkspaceProbe {
     let secondDocument = try await document(ids.secondPin)
     let firstOwner = runtime.windowID(forTabID: ids.firstPin.uuidString)
     let secondOwner = runtime.windowID(forTabID: ids.secondPin.uuidString)
-    let distinctWindowTabs = ids.firstPin != ids.secondPin
+    let distinctWindowTabs =
+      ids.firstPin != ids.secondPin
       && firstOwner == ids.first.uuidString && secondOwner == ids.second.uuidString
       && firstOwner != secondOwner
-    let distinctDocuments = firstDocument["instance"] as? String
+    let distinctDocuments =
+      firstDocument["instance"] as? String
       != secondDocument["instance"] as? String
     try expect(
       distinctWindowTabs && distinctDocuments,

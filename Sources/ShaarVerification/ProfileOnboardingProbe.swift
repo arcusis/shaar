@@ -146,20 +146,20 @@ final class ProfileOnboardingProbe {
     let prepared = await value(
       tab,
       """
-        (()=>{
-          document.cookie='shaarOnboarding=\(token);path=/';
-          window.fixtureOpenerDocumentID='\(token)';
-          window.fixtureReply=null;
-          window.addEventListener('message',e=>{
-            if(e.origin===location.origin&&e.data?.type==='shaar-onboarding-callback')
-              window.fixtureReply={origin:e.origin,type:e.data.type,token:e.data.token};
-          });
-          let button=document.getElementById('popup');
-          if(!button){button=document.createElement('button');button.id='popup';document.body.append(button);}
-          button.onclick=()=>{window.fixturePopup=window.open(\(address),'_blank','popup,width=520,height=680');};
-          return {ready:true};
-        })()
-        """
+      (()=>{
+        document.cookie='shaarOnboarding=\(token);path=/';
+        window.fixtureOpenerDocumentID='\(token)';
+        window.fixtureReply=null;
+        window.addEventListener('message',e=>{
+          if(e.origin===location.origin&&e.data?.type==='shaar-onboarding-callback')
+            window.fixtureReply={origin:e.origin,type:e.data.type,token:e.data.token};
+        });
+        let button=document.getElementById('popup');
+        if(!button){button=document.createElement('button');button.id='popup';document.body.append(button);}
+        button.onclick=()=>{window.fixturePopup=window.open(\(address),'_blank','popup,width=520,height=680');};
+        return {ready:true};
+      })()
+      """
     )
     guard prepared?["ready"] as? Bool == true else {
       throw Failure("Draft popup control setup rejected")

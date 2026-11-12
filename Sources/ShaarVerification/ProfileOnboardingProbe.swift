@@ -143,7 +143,9 @@ final class ProfileOnboardingProbe {
     let origin = Self.origin(of: fixture)
     guard !origin.isEmpty else { throw Failure("Popup fixture has no origin") }
     let address = String(data: try JSONEncoder().encode(fixture.absoluteString), encoding: .utf8)!
-    let prepared = await value(
+    // Install the opener listener in the same renderer task as window.open. A separate evaluate
+    // could fail to install it while the later user-gesture evaluation still opened the popup.
+    let armed = await value(
       tab,
       """
       (()=>{
@@ -151,31 +153,34 @@ final class ProfileOnboardingProbe {
         window.fixtureOpenerDocumentID='\(token)';
         window.fixtureReply=null;
         window.addEventListener('message',e=>{
+          // A restored renderer can expose a new WindowProxy wrapper for the same opener.
+          // Correlate this response by origin and its one-use token instead of source identity.
           if(e.origin===location.origin&&e.data?.type==='shaar-onboarding-callback')
             window.fixtureReply={origin:e.origin,type:e.data.type,token:e.data.token};
         });
-        let button=document.getElementById('popup');
-        if(!button){button=document.createElement('button');button.id='popup';document.body.append(button);}
+        const button=document.createElement('button');button.id='popup';button.textContent='Open sign-in popup';
         button.onclick=()=>{window.fixturePopup=window.open(\(address),'_blank','popup,width=520,height=680');};
-        return {ready:true};
+        document.body.append(button);return {ready:button.isConnected};
       })()
-      """
-    )
-    guard prepared?["ready"] as? Bool == true else {
-      throw Failure("Draft popup control setup rejected")
-    }
+      """)
+    guard armed?["ready"] as? Bool == true else { throw Failure("Draft popup click was not armed") }
     let clicked: Bool = await withCheckedContinuation { continuation in
       runtime.clickProbeElement(inTabID: tab.uuidString, elementID: "popup") {
         continuation.resume(returning: $0)
       }
     }
     guard clicked else { throw Failure("Draft popup trusted click rejected") }
-    let popupOpened = await value(tab, "({opened:!!window.fixturePopup})")
-    guard popupOpened?["opened"] as? Bool == true else {
-      throw Failure("Draft popup blocked the authored trusted click")
-    }
     let popupStep = "\(phase) \(flow.provider.title) popup"
-    try await wait("\(popupStep) adoption") { popupTab != nil && flow.windowIDs.count == 2 }
+    for _ in 0..<100 {
+      if popupTab != nil && flow.windowIDs.count == 2 { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    guard popupTab != nil && flow.windowIDs.count == 2 else {
+      let popupState = await value(tab, "({opened:!!window.fixturePopup,opener:!!window.fixturePopup?.opener})")
+      throw Failure(
+        "Timed out: \(popupStep) adoption [popupTab=\(popupTab?.uuidString ?? "none"), "
+          + "windows=\(flow.windowIDs.sorted()), page=\(String(describing: popupState))]")
+    }
     guard let child = popupTab else { throw Failure("Popup tab missing") }
     guard let popupID = flow.windowIDs.first(where: { $0 != flow.engine.windowID }),
       let popupWindow = runtime.window(forID: popupID)

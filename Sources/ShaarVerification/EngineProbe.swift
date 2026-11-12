@@ -894,6 +894,12 @@ final class EngineProbe {
         try expect(
           store.session == before, "private fixture leaves normal model and selection unchanged")
       }
+      if ProcessInfo.processInfo.environment["SHAAR_NATIVE_WINDOW_ONLY"] == "1" {
+        checks += try await runNativeWindowOnlyProbe()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       fixtureStage = "normal-switches"
       guard
         let alphaSpace = store.session.spaces.first(where: {
@@ -1153,6 +1159,35 @@ final class EngineProbe {
       try await Task.sleep(for: .seconds(2))
       finish(error: nil)
     } catch { finish(error: error) }
+  }
+
+  private func runNativeWindowOnlyProbe() async throws -> [String] {
+    guard store.session.spaces.count >= 3 else {
+      throw ProbeFailure("Native-window probe requires three restored profile Spaces.")
+    }
+    let primaryWindowID = runtime.primaryWindowID
+    let secondaryWindowID = UUID().uuidString
+    let secondaryTabID = UUID().uuidString
+    try runtime.createWindowID(secondaryWindowID)
+    defer { _ = runtime.closeWindowID(secondaryWindowID) }
+    try runtime.openTabID(
+      secondaryTabID, profileID: profileA, windowID: secondaryWindowID,
+      url: fixture.absoluteString)
+    fixtureStage = "NativeWindow"
+    var primaryChromeID: Int32 = -1
+    var secondaryChromeID: Int32 = -1
+    for _ in 0..<100 {
+      primaryChromeID = runtime.chromeWindowID(
+        forProfileID: profileA, windowID: primaryWindowID)
+      secondaryChromeID = runtime.chromeWindowID(
+        forProfileID: profileA, windowID: secondaryWindowID)
+      if primaryChromeID >= 0 && secondaryChromeID >= 0 { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    try expect(
+      primaryChromeID >= 0 && secondaryChromeID >= 0 && primaryChromeID != secondaryChromeID,
+      "same-profile native windows have distinct real Chromium window IDs")
+    return checks
   }
 
   /// Opens the shipping inspector and arms a read counter before the idle window.

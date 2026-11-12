@@ -127,6 +127,8 @@ static BOOL ShaarDeviceChooserID(NSString *value) {
 }
 
 struct Symbols {
+  using WindowChromeIDFunction = shaar_error_code (*)(
+      shaar_engine *, shaar_profile *, shaar_window *, int32_t *, shaar_error *);
   decltype(&shaar_abi_minor) abi_minor = nullptr;
   decltype(&shaar_engine_create) create = nullptr;
   decltype(&shaar_engine_run) run = nullptr;
@@ -135,6 +137,7 @@ struct Symbols {
   decltype(&shaar_profile_open) profile_open = nullptr;
   decltype(&shaar_window_open) window_open = nullptr;
   decltype(&shaar_window_close) window_close = nullptr;
+  WindowChromeIDFunction window_chrome_id = nullptr;
   decltype(&shaar_window_host_view) window_host_view = nullptr;
   decltype(&shaar_window_host_resize) window_host_resize = nullptr;
   decltype(&shaar_window_native_window) window_native_window = nullptr;
@@ -160,6 +163,8 @@ struct Symbols {
     SHAAR_LOAD(profile_open, profile_open);
     SHAAR_LOAD(window_open, window_open);
     SHAAR_LOAD(window_close, window_close);
+    window_chrome_id = reinterpret_cast<WindowChromeIDFunction>(
+        dlsym(library, "shaar_window_chrome_id"));
     SHAAR_LOAD(window_host_view, window_host_view);
     SHAAR_LOAD(window_host_resize, window_host_resize);
     SHAAR_LOAD(window_native_window, window_native_window);
@@ -174,7 +179,7 @@ struct Symbols {
     SHAAR_LOAD(submit, submit);
 #undef SHAAR_LOAD
     return abi_minor && create && run && request_quit && release && profile_open &&
-           window_open && window_close && window_host_view && window_host_resize &&
+           window_open && window_close && window_chrome_id && window_host_view && window_host_resize &&
            window_native_window && tab_open && tab_close && tab_favicon_png && tab_host_view &&
            tab_view_attach && tab_view_detach && tab_view_focus && submit;
   }
@@ -194,6 +199,7 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarTabWindows;
   NSMutableDictionary<NSString *, NSString *> *_shaarTabProfiles;
   NSMutableDictionary<NSString *, NSString *> *_shaarSelectedTabs;
+  NSMutableSet<NSString *> *_shaarClearedActiveTabs;
   NSMutableDictionary<NSString *, id> *_hostResizeObservers;
   NSMutableDictionary<NSString *, id> *_hostCloseObservers;
   NSMutableDictionary<NSString *, NSValue *> *_hostSizes;
@@ -462,6 +468,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarTabWindows = [NSMutableDictionary dictionary];
   _shaarTabProfiles = [NSMutableDictionary dictionary];
   _shaarSelectedTabs = [NSMutableDictionary dictionary];
+  _shaarClearedActiveTabs = [NSMutableSet set];
   _hostResizeObservers = [NSMutableDictionary dictionary];
   _hostCloseObservers = [NSMutableDictionary dictionary];
   _hostSizes = [NSMutableDictionary dictionary];
@@ -866,6 +873,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
     [_shaarTabs removeObjectForKey:tabID];
+    [_shaarClearedActiveTabs removeObject:tabID];
     [self forgetShaarMediaForTabID:tabID];
     [self stopFindingInTabID:tabID];
     [_shaarTabWindows removeObjectForKey:tabID];
@@ -1133,6 +1141,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   }
   for (NSString *tabID in [_shaarTabWindows.allKeys copy]) {
     if (![_shaarTabWindows[tabID] isEqualToString:windowID]) continue;
+    [_shaarClearedActiveTabs removeObject:tabID];
     [_shaarTabs removeObjectForKey:tabID];
     [_shaarTabWindows removeObjectForKey:tabID];
     [_shaarTabProfiles removeObjectForKey:tabID];
@@ -1267,6 +1276,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (![_shaarSelectedTabs[windowID] isEqualToString:tabID])
     [self closeExtensionPopupForWindowID:windowID];
   _shaarSelectedTabs[windowID] = tabID;
+  [_shaarClearedActiveTabs removeObject:tabID];
   // Native notifications must unwind before reentering TabStripModel. Host
   // actions can activate immediately, without waiting behind Chromium's pump.
   __weak ARCShaarRuntime *weakSelf = self;
@@ -1321,6 +1331,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (window && tab) {
     shaar_error error = EmptyError();
     _symbols.tab_view_detach(_shaarEngine, window, tab, &error);
+    [_shaarClearedActiveTabs addObject:tabID];
   }
   [_shaarSelectedTabs removeObjectForKey:windowID];
 }
@@ -1572,6 +1583,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID
                 mode:(ARCPageReloadMode)mode {
   if (![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      [_shaarClearedActiveTabs containsObject:tabID] ||
       mode == ARCPageReloadModeNewRenderer) return NO;
   return [self submitTabID:tabID operation:SHAAR_OP_TAB_RELOAD
                   payload:@{@"schemaVersion": @1,
@@ -1596,7 +1608,15 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID {
-  return -1;  // Native Chromium window IDs are not part of the Shaar ABI.
+  if (!_shaarEngine) return -1;
+  shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  if (!profile || !window) return -1;
+  int32_t chromeID = -1;
+  shaar_error error = EmptyError();
+  const shaar_error_code status = _symbols.window_chrome_id(
+      _shaarEngine, profile, window, &chromeID, &error);
+  return status == SHAAR_OK ? chromeID : -1;
 }
 
 - (int)nativeTabIDForID:(NSString *)tabID {

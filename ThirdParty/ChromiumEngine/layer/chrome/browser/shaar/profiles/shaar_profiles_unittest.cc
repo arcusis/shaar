@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/functional/bind.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/language/core/browser/pref_names.h"
@@ -18,6 +19,26 @@
 namespace {
 
 void NoopReply(void*, const shaar_result*) {}
+
+void MarkNotified(bool* notified) {
+  *notified = true;
+}
+
+TEST(ShaarProfilesTest, ProfileHandleDestructionCallbackRunsAfterHandleIsCleared) {
+  content::BrowserTaskEnvironment task_environment;
+  auto profile = std::make_unique<TestingProfile>();
+  Profile* borrowed = profile.get();
+  bool notified = false;
+  shaar::profiles::ProfileHandleObserver observer;
+  observer.Observe(profile.get(), &borrowed);
+  observer.SetWillBeDestroyedCallback(
+      base::BindOnce(&MarkNotified, &notified));
+
+  profile.reset();
+
+  EXPECT_EQ(borrowed, nullptr);
+  EXPECT_TRUE(notified);
+}
 
 TEST(ShaarProfilesTest, LoadedProfileFollowsApplicationLanguage) {
   content::BrowserTaskEnvironment task_environment;

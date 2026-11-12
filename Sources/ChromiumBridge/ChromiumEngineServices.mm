@@ -116,6 +116,10 @@ static void RefreshDownloads(ARCShaarRuntime *runtime, NSString *profileID) {
   return ShaarDownloadDirectories(self)[profileID];
 }
 
+- (NSURL *)profileDataDirectoryForProfileID:(NSString *)profileID {
+  return [self shaarProfileDirectoryForID:profileID];
+}
+
 - (void)configureDownloadDirectory:(NSURL *)directory profileID:(NSString *)profileID
                         completion:(void (^)(NSURL *, NSError *))completion {
   if (![self shaarHasProfileID:profileID] || (directory && !directory.isFileURL)) {

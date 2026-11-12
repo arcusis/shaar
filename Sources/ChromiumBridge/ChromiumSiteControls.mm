@@ -135,13 +135,16 @@ static NSMutableDictionary<NSString *, NSNumber *> *ShaarManagedCookiePolicyCach
 }
 
 - (void)deleteEngineProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
-  if (!ARCIsCanonicalID(profileID) || ![self shaarDeleteProfileID:profileID]) {
+  if (!ARCIsCanonicalID(profileID)) {
+    completion(ARCBridgeError(@"Close private windows before deleting this profile."));
+    return;
+  }
+  if (![self shaarDeleteProfileID:profileID completion:completion]) {
     completion(ARCBridgeError(@"Close private windows before deleting this profile."));
     return;
   }
   [ShaarCookiePolicyCache(self) removeObjectForKey:profileID];
   [ShaarManagedCookiePolicyCache(self) removeObjectForKey:profileID];
-  completion(nil);
 }
 
 - (NSDictionary<NSString *, id> *)securityInfoForTabID:(NSString *)tabID profileID:(NSString *)profileID {

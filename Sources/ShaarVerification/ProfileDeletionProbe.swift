@@ -81,7 +81,8 @@ final class ProfileDeletionProbe {
       throw ProfileDeletionFailure(
         "Profile deletion did not isolate profile directories "
           + "(deletedExists=\(FileManager.default.fileExists(atPath: deletedDirectory.path)), "
-          + "survivorExists=\(FileManager.default.fileExists(atPath: survivorDirectory.path))).")
+          + "survivorExists=\(FileManager.default.fileExists(atPath: survivorDirectory.path)), "
+          + "deletedPath=\(deletedDirectory.path), survivorPath=\(survivorDirectory.path)).")
     }
 
     // Recreate the deleted identity to prove its cookie store was removed, then clean it again.

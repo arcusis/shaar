@@ -1,0 +1,443 @@
+diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
+index 458e66fd..4cffdeda 100644
+--- a/chrome/browser/shaar/BUILD.gn
++++ b/chrome/browser/shaar/BUILD.gn
+@@ -89,6 +89,8 @@ source_set("engine") {
+     "find/shaar_find.cc",
+     "find/shaar_find.h",
+     "find/shaar_find_lifecycle_adapter.cc",
++    "find/shaar_page_zoom.cc",
++    "find/shaar_page_zoom.h",
+     # END find
+     # BEGIN devtools
+     "devtools/shaar_devtools.cc",
+@@ -162,6 +164,7 @@ source_set("engine") {
+     # END site_data
+     # BEGIN find
+     "//components/find_in_page",
++    "//components/zoom",
+     # END find
+     # BEGIN storage_keychain
+     "//components/os_crypt/common:keychain_password_mac",
+@@ -309,7 +312,7 @@ test("shaar_extensions_unittests") {
+ # END extensions
+ # BEGIN find
+ test("shaar_find_unittests") {
+-  sources = [ "find/shaar_find_unittest.cc" ]
++  sources = [ "find/shaar_find_unittest.cc", "find/shaar_page_zoom_unittest.cc" ]
+   deps = [ ":engine", "//testing/gtest" ]
+ }
+ # END find
+@@ -356,6 +359,7 @@ test("shaar_layer_unittests") {
+     "downloads/shaar_downloads_unittest.cc",
+     "extensions/shaar_extensions_unittest.cc",
+     "find/shaar_find_unittest.cc",
++    "find/shaar_page_zoom_unittest.cc",
+     "history/shaar_history_unittest.cc",
+     "lifecycle/shaar_module_registry_unittest.cc",
+     "media/shaar_media_unittest.cc",
+
+diff --git a/chrome/browser/shaar/engine/shaar_event_bridge.cc b/chrome/browser/shaar/engine/shaar_event_bridge.cc
+index 7def5aed..14f53be7 100644
+--- a/chrome/browser/shaar/engine/shaar_event_bridge.cc
++++ b/chrome/browser/shaar/engine/shaar_event_bridge.cc
+@@ -26,7 +26,7 @@ shaar_error_code EmitEvent(shaar_engine* engine,
+                            shaar_bytes payload_json) {
+   if (!engine || !engine->on_event || !pthread_main_np())
+     return SHAAR_NOT_READY;
+-  if (kind < SHAAR_EVENT_ENGINE || kind > SHAAR_EVENT_SAVE_PROMPT ||
++  if (kind < SHAAR_EVENT_ENGINE || kind > SHAAR_EVENT_ZOOM ||
+       (kind != SHAAR_EVENT_ENGINE && profile_id.size == 0) ||
+       (kind == SHAAR_EVENT_PRIVATE_SESSION && session_id.size == 0) ||
+       !ValidBytes(profile_id) || !ValidBytes(session_id) ||
+
+diff --git a/chrome/browser/shaar/find/shaar_find.h b/chrome/browser/shaar/find/shaar_find.h
+index ca4bc6b7..8dcbd943 100644
+--- a/chrome/browser/shaar/find/shaar_find.h
++++ b/chrome/browser/shaar/find/shaar_find.h
+@@ -15,4 +15,10 @@ shaar_error_code HandleFindOperation(
+ 
+ extern "C" void shaar_find_register(ShaarModuleRegistry* registry);
+ 
++// Applies a preset page zoom step or restores the default level.
++shaar_error_code HandlePageZoomOperation(
++    shaar::ShaarEngineContext*, shaar_engine*, shaar_scope, shaar_window*,
++    shaar_tab*, shaar_operation, shaar_bytes, shaar_request_id,
++    shaar_reply_fn, void*, shaar_error*);
++
+ #endif  // CHROME_BROWSER_SHAAR_FIND_SHAAR_FIND_H_
+
+diff --git a/chrome/browser/shaar/find/shaar_find_lifecycle_adapter.cc b/chrome/browser/shaar/find/shaar_find_lifecycle_adapter.cc
+index 951d817a..1d262ad5 100644
+--- a/chrome/browser/shaar/find/shaar_find_lifecycle_adapter.cc
++++ b/chrome/browser/shaar/find/shaar_find_lifecycle_adapter.cc
+@@ -9,4 +9,6 @@ extern "C" void shaar_find_register(ShaarModuleRegistry* registry) {
+     return;
+   registry->Register(SHAAR_OP_TAB_FIND, SHAAR_OP_TAB_STOP_FIND,
+                      &HandleFindOperation);
++  registry->Register(SHAAR_OP_TAB_ZOOM, SHAAR_OP_TAB_ZOOM,
++                     &HandlePageZoomOperation);
+ }
+
+diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+index d59e67b2..28491fb2 100644
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -81,9 +81,12 @@ typedef enum {
+   SHAAR_EVENT_DEVTOOLS = 14,
+   SHAAR_EVENT_MEDIA = 15,
+   // BEGIN save_prompts
+-  SHAAR_EVENT_SAVE_PROMPT = 16
++  SHAAR_EVENT_SAVE_PROMPT = 16,
+   // END save_prompts
++  SHAAR_EVENT_JAVASCRIPT_DIALOG = 17,
++  // BEGIN page_zoom
++  SHAAR_EVENT_ZOOM = 18
++  // END page_zoom
+ } shaar_event_kind;
+ typedef struct {
+   uint32_t size;
+@@ -189,6 +192,7 @@ typedef enum {
+   // BEGIN find
+   SHAAR_OP_TAB_FIND = 900,
+   SHAAR_OP_TAB_STOP_FIND = 901,
++  SHAAR_OP_TAB_ZOOM = 902,
+   // END find
+ 
+   // BEGIN devtools operation IDs.
+
+diff --git a/chrome/browser/shaar/find/shaar_page_zoom.cc b/chrome/browser/shaar/find/shaar_page_zoom.cc
+new file mode 100644
+index 00000000..32037b72
+--- /dev/null
++++ b/chrome/browser/shaar/find/shaar_page_zoom.cc
+@@ -0,0 +1,255 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#include "chrome/browser/shaar/find/shaar_page_zoom.h"
++#include "chrome/browser/shaar/find/shaar_find.h"
++
++#include <algorithm>
++#include <cmath>
++#include <iterator>
++#include <string>
++#include <string_view>
++
++#include "base/functional/bind.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/location.h"
++#include "base/memory/raw_ptr.h"
++#include "base/task/sequenced_task_runner.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/zoom/page_zoom.h"
++#include "components/zoom/zoom_controller.h"
++#include "components/zoom/zoom_observer.h"
++#include "content/public/browser/host_zoom_map.h"
++#include "content/public/browser/web_contents.h"
++#include "third_party/blink/public/common/page/page_zoom.h"
++
++namespace {
++
++constexpr char kZoomObserverKey[] = "shaar.page.zoom.observer";
++
++void ReplyZoom(shaar_reply_fn reply, void *context, shaar_request_id id,
++               shaar_error_code code, double level) {
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(
++                     [](shaar_reply_fn callback, void *callback_context,
++                        shaar_request_id request, shaar_error_code status,
++                        double zoom_level) {
++                       base::Value::Dict payload;
++                       payload.Set("kind", "pageZoom");
++                       payload.Set("schemaVersion", 1);
++                       payload.Set("zoomLevel", zoom_level);
++                       payload.Set("zoomFactor",
++                                   blink::ZoomLevelToZoomFactor(zoom_level));
++                       std::string json;
++                       base::JSONWriter::Write(payload, &json);
++                       shaar_result result = {};
++                       result.size = sizeof(result);
++                       result.request_id = request;
++                       result.error.size = sizeof(result.error);
++                       result.error.code = status;
++                       result.payload_json = {json.data(), json.size()};
++                       callback(callback_context, &result);
++                     },
++                     reply, context, id, code, level));
++}
++
++bool ParseZoomAction(shaar_bytes bytes, std::string *action,
++                     double *zoom_level) {
++  if (!action || !zoom_level || !bytes.data || bytes.size == 0 ||
++      bytes.size > 256)
++    return false;
++  auto value = base::JSONReader::Read(std::string_view(bytes.data, bytes.size),
++                                      base::JSON_PARSE_RFC);
++  if (!value || !value->is_dict())
++    return false;
++  const auto &dict = value->GetDict();
++  const std::string *requested = dict.FindString("action");
++  if (dict.FindInt("schemaVersion") != 1 || !requested ||
++      (*requested != "get" && *requested != "set" && *requested != "in" &&
++       *requested != "out" && *requested != "reset"))
++    return false;
++  if (*requested == "set") {
++    const base::Value *raw_level = dict.Find("zoomLevel");
++    if (dict.size() != 3 || !raw_level ||
++        (!raw_level->is_int() && !raw_level->is_double()))
++      return false;
++    *zoom_level =
++        raw_level->is_int() ? raw_level->GetInt() : raw_level->GetDouble();
++    if (!std::isfinite(*zoom_level))
++      return false;
++    const double factor = blink::ZoomLevelToZoomFactor(*zoom_level);
++    if (factor < blink::kMinimumBrowserZoomFactor ||
++        factor > blink::kMaximumBrowserZoomFactor)
++      return false;
++  } else if (dict.size() != 2) {
++    return false;
++  }
++  *action = *requested;
++  return true;
++}
++
++void EmitZoom(shaar_engine *engine, std::string_view profile,
++              std::string_view session, std::string_view window,
++              std::string_view tab, double level) {
++  base::Value::Dict payload;
++  payload.Set("kind", "changed");
++  payload.Set("schemaVersion", 1);
++  payload.Set("zoomLevel", level);
++  payload.Set("zoomFactor", blink::ZoomLevelToZoomFactor(level));
++  std::string json;
++  if (!base::JSONWriter::Write(payload, &json))
++    return;
++  shaar::EmitEvent(engine, SHAAR_EVENT_ZOOM, {profile.data(), profile.size()},
++                   {session.data(), session.size()},
++                   {window.data(), window.size()}, {tab.data(), tab.size()},
++                   {json.data(), json.size()});
++}
++
++class PageZoomObserver final : public base::SupportsUserData::Data,
++                               public zoom::ZoomObserver {
++public:
++  PageZoomObserver(shaar_engine *engine, zoom::ZoomController *controller,
++                   std::string profile, std::string session, std::string window,
++                   std::string tab)
++      : engine_(engine), controller_(controller), profile_(std::move(profile)),
++        session_(std::move(session)), window_(std::move(window)),
++        tab_(std::move(tab)) {
++    controller_->AddObserver(this);
++  }
++  ~PageZoomObserver() override {
++    if (controller_)
++      controller_->RemoveObserver(this);
++  }
++  void OnZoomChanged(
++      const zoom::ZoomController::ZoomChangedEventData &change) override {
++    if (shaar::EngineIsLive(engine_))
++      EmitZoom(engine_, profile_, session_, window_, tab_,
++               change.new_zoom_level);
++  }
++  void OnZoomControllerDestroyed(zoom::ZoomController *controller) override {
++    if (controller_ == controller)
++      controller_ = nullptr;
++  }
++
++private:
++  raw_ptr<shaar_engine> engine_;
++  raw_ptr<zoom::ZoomController> controller_;
++  std::string profile_;
++  std::string session_;
++  std::string window_;
++  std::string tab_;
++};
++
++} // namespace
++
++double shaar::page_zoom::NextPresetZoomLevel(double current_level,
++                                             int direction) {
++  if (direction != -1 && direction != 1)
++    return current_level;
++  const auto levels = zoom::PageZoom::PresetZoomLevels(current_level);
++  if (levels.empty())
++    return current_level;
++  auto current = std::min_element(
++      levels.begin(), levels.end(), [current_level](double a, double b) {
++        return std::abs(a - current_level) < std::abs(b - current_level);
++      });
++  auto index = std::distance(levels.begin(), current);
++  index = std::clamp(index + direction, decltype(index)(0),
++                     decltype(index)(levels.size() - 1));
++  return levels[index];
++}
++
++shaar_error_code HandlePageZoomOperation(
++    shaar::ShaarEngineContext *context, shaar_engine *engine, shaar_scope scope,
++    shaar_window *window, shaar_tab *tab, shaar_operation operation,
++    shaar_bytes args_json, shaar_request_id request_id, shaar_reply_fn reply,
++    void *reply_context, shaar_error *) {
++  if (!context || !context->browser_tabs || !engine || !window || !tab ||
++      operation != SHAAR_OP_TAB_ZOOM || !request_id || !reply)
++    return SHAAR_INVALID_ARGUMENT;
++  std::string action;
++  double requested_level = 0;
++  if (!ParseZoomAction(args_json, &action, &requested_level))
++    return SHAAR_INVALID_ARGUMENT;
++  content::WebContents *contents =
++      context->browser_tabs->FindWebContents(engine, window, tab);
++  Browser *browser = context->browser_tabs->FindBrowser(engine, window);
++  if (!contents || !browser)
++    return SHAAR_NOT_FOUND;
++  if (browser->tab_strip_model()->GetActiveWebContents() != contents)
++    return SHAAR_CONFLICT;
++
++  std::string_view profile_id;
++  std::string_view session_id;
++  if (scope.profile && !scope.private_session) {
++    Profile *profile =
++        context->profile_services
++            ? context->profile_services->ResolveProfile(engine, scope.profile)
++            : nullptr;
++    profile_id =
++        context->profile_services
++            ? context->profile_services->ProfileID(engine, scope.profile)
++            : std::string_view();
++    if (!profile || profile_id.empty())
++      return SHAAR_NOT_FOUND;
++    if (contents->GetBrowserContext() != profile)
++      return SHAAR_WRONG_PROFILE;
++  } else if (scope.private_session && !scope.profile) {
++    Profile *parent = nullptr, *otr = nullptr;
++    if (!context->private_sessions ||
++        !context->private_sessions->Resolve(engine, scope.private_session,
++                                            &parent, &otr, &profile_id,
++                                            &session_id))
++      return SHAAR_WRONG_SESSION;
++    if (!otr || contents->GetBrowserContext() != otr)
++      return SHAAR_WRONG_SESSION;
++  } else {
++    return SHAAR_INVALID_ARGUMENT;
++  }
++
++  zoom::ZoomController *controller =
++      zoom::ZoomController::FromWebContents(contents);
++  if (!controller)
++    controller = zoom::ZoomController::CreateForWebContents(contents);
++  if (!controller)
++    return SHAAR_NOT_READY;
++  if (!contents->GetUserData(
++          reinterpret_cast<const void *>(kZoomObserverKey))) {
++    contents->SetUserData(
++        reinterpret_cast<const void *>(kZoomObserverKey),
++        std::make_unique<PageZoomObserver>(
++            engine, controller, std::string(profile_id),
++            std::string(session_id),
++            std::string(context->browser_tabs->WindowID(engine, window)),
++            std::string(context->browser_tabs->TabID(engine, window, tab))));
++  }
++  const double current = controller->GetZoomLevel();
++  double next = current;
++  if (action == "get") {
++    ReplyZoom(reply, reply_context, request_id, SHAAR_OK, current);
++    return SHAAR_OK;
++  } else if (action == "set") {
++    next = requested_level;
++    controller->SetZoomMode(zoom::ZoomController::ZOOM_MODE_DEFAULT);
++    if (!controller->SetZoomLevel(next))
++      return SHAAR_CHROMIUM_ERROR;
++  } else if (action == "reset") {
++    controller->SetZoomMode(zoom::ZoomController::ZOOM_MODE_DEFAULT);
++    next = controller->GetDefaultZoomLevel();
++    if (!controller->SetZoomLevel(next))
++      return SHAAR_CHROMIUM_ERROR;
++  } else {
++    next =
++        shaar::page_zoom::NextPresetZoomLevel(current, action == "in" ? 1 : -1);
++    controller->SetZoomMode(zoom::ZoomController::ZOOM_MODE_DEFAULT);
++    if (!controller->SetZoomLevel(next))
++      return SHAAR_CHROMIUM_ERROR;
++  }
++  ReplyZoom(reply, reply_context, request_id, SHAAR_OK, next);
++  return SHAAR_OK;
++}
+
+diff --git a/chrome/browser/shaar/find/shaar_page_zoom.h b/chrome/browser/shaar/find/shaar_page_zoom.h
+new file mode 100644
+index 00000000..d6ebae3b
+--- /dev/null
++++ b/chrome/browser/shaar/find/shaar_page_zoom.h
+@@ -0,0 +1,14 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#ifndef CHROME_BROWSER_SHAAR_FIND_SHAAR_PAGE_ZOOM_H_
++#define CHROME_BROWSER_SHAAR_FIND_SHAAR_PAGE_ZOOM_H_
++
++namespace shaar::page_zoom {
++
++double NextPresetZoomLevel(double current_level, int direction);
++
++} // namespace shaar::page_zoom
++
++#endif // CHROME_BROWSER_SHAAR_FIND_SHAAR_PAGE_ZOOM_H_
+
+diff --git a/chrome/browser/shaar/find/shaar_page_zoom_unittest.cc b/chrome/browser/shaar/find/shaar_page_zoom_unittest.cc
+new file mode 100644
+index 00000000..f6b330dd
+--- /dev/null
++++ b/chrome/browser/shaar/find/shaar_page_zoom_unittest.cc
+@@ -0,0 +1,46 @@
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++#include "chrome/browser/shaar/find/shaar_find.h"
++#include "chrome/browser/shaar/find/shaar_page_zoom.h"
++
++#include "components/zoom/page_zoom.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace {
++
++void IgnoreReply(void *, const shaar_result *) {}
++
++TEST(ShaarPageZoomTest, RejectsUnknownZoomAction) {
++  shaar::ShaarEngineContext context;
++  shaar_engine *engine = reinterpret_cast<shaar_engine *>(0x1);
++  shaar_window *window = reinterpret_cast<shaar_window *>(0x2);
++  shaar_tab *tab = reinterpret_cast<shaar_tab *>(0x3);
++  constexpr char kInvalid[] = "{\"schemaVersion\":1,\"action\":\"page\"}";
++  EXPECT_EQ(HandlePageZoomOperation(&context, engine, {}, window, tab,
++                                    SHAAR_OP_TAB_ZOOM,
++                                    {kInvalid, sizeof(kInvalid) - 1}, 1,
++                                    &IgnoreReply, nullptr, nullptr),
++            SHAAR_INVALID_ARGUMENT);
++}
++
++TEST(ShaarPageZoomTest, RegistersDedicatedTabZoomOperation) {
++  ShaarModuleRegistry registry;
++  shaar_find_register(&registry);
++  EXPECT_NE(registry.Find(SHAAR_OP_TAB_ZOOM), nullptr);
++  EXPECT_EQ(registry.Find(SHAAR_OP_TAB_ZOOM + 1), nullptr);
++}
++
++TEST(ShaarPageZoomTest, StepsThroughChromiumPresetZoomLevels) {
++  const auto levels = zoom::PageZoom::PresetZoomLevels(0.0);
++  ASSERT_GT(levels.size(), 2u);
++  EXPECT_GT(shaar::page_zoom::NextPresetZoomLevel(0.0, 1), 0.0);
++  EXPECT_LT(shaar::page_zoom::NextPresetZoomLevel(0.0, -1), 0.0);
++  EXPECT_DOUBLE_EQ(shaar::page_zoom::NextPresetZoomLevel(levels.front(), -1),
++                   levels.front());
++  EXPECT_DOUBLE_EQ(shaar::page_zoom::NextPresetZoomLevel(levels.back(), 1),
++                   levels.back());
++}
++
++} // namespace

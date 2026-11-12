@@ -172,6 +172,17 @@ final class BrowserEngine {
       url: url.absoluteString)
   }
 
+  @discardableResult
+  func performPageZoomAction(_ action: String, tabID: UUID) -> Bool {
+    guard !isClosed, let store, let page = store.session.selectedPage,
+      page.tab.id == tabID,
+      runtime.windowID(forTabID: page.tab.id.uuidString) == windowID,
+      let profileID = store.session.profileID(forTabID: page.tab.id)
+    else { return false }
+    return runtime.performPageZoomAction(
+      action, tabID: page.tab.id.uuidString, profileID: profileID.uuidString)
+  }
+
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
     presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false,

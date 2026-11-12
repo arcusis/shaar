@@ -2471,6 +2471,24 @@
         }
       }
     },
+    "Actual Size": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Actual Size" } },
+        "he": { "stringUnit": { "state": "translated", "value": "גודל בפועל" } }
+      }
+    },
+    "Zoom In": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Zoom In" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הגדלה" } }
+      }
+    },
+    "Zoom Out": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Zoom Out" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הקטנה" } }
+      }
+    },
     "Reload": {
       "localizations": {
         "en": {

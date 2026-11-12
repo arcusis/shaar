@@ -1502,6 +1502,16 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   return accepted;
 }
 
+- (BOOL)performPageZoomAction:(NSString *)action tabID:(NSString *)tabID
+                     profileID:(NSString *)profileID {
+  NSString *windowID = _shaarTabWindows[tabID];
+  if (![@[@"get", @"in", @"out", @"reset"] containsObject:action] ||
+      ![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      ![_shaarSelectedTabs[windowID] isEqualToString:tabID]) return NO;
+  return [self submitTabID:tabID operation:SHAAR_OP_TAB_ZOOM
+                   payload:@{@"schemaVersion": @1, @"action": action}];
+}
+
 - (void)stopFindingInTabID:(NSString *)tabID {
   NSString *nativeID = _shaarFindRequests[tabID];
   if (!nativeID) return;

@@ -143,6 +143,13 @@ import Testing
   #expect(item(.fullScreen)?.keyEquivalent == "f")
   #expect(item(.fullScreen)?.keyEquivalentModifierMask == [.command, .control])
   #expect(item(.hardReload)?.menu?.title == "View")
+  #expect(item(.zoomIn)?.menu?.title == "View")
+  #expect(item(.zoomIn)?.keyEquivalent == "=")
+  #expect(item(.zoomIn)?.keyEquivalentModifierMask == .command)
+  #expect(item(.zoomOut)?.keyEquivalent == "-")
+  #expect(item(.zoomOut)?.keyEquivalentModifierMask == .command)
+  #expect(item(.actualSize)?.keyEquivalent == "0")
+  #expect(item(.actualSize)?.keyEquivalentModifierMask == .command)
   #expect(item(.hardReload)?.keyEquivalent == "r")
   #expect(item(.hardReload)?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item(.developerTools)?.menu?.title == "View")
@@ -187,6 +194,23 @@ import Testing
   #expect(item(.help)?.menu?.title == "Help")
   #expect(item(.checkForUpdates)?.menu?.title == "Shaar")
   #expect(item(.checkForUpdates)?.title == "Check for Updates…")
+}
+
+@Test func pageZoomMenuRoutesOnlyTheFocusedTabToTheFakeEngine() {
+  let tabID = UUID()
+  var received: [(String, UUID)] = []
+  let fakeEngine: (String, UUID) -> Bool = { action, tab in
+    received.append((action, tab))
+    return true
+  }
+
+  #expect(PageZoomMenuRouter.route(.zoomIn, focusedTabID: tabID, perform: fakeEngine))
+  #expect(PageZoomMenuRouter.route(.zoomOut, focusedTabID: tabID, perform: fakeEngine))
+  #expect(PageZoomMenuRouter.route(.actualSize, focusedTabID: tabID, perform: fakeEngine))
+  #expect(!PageZoomMenuRouter.route(.zoomIn, focusedTabID: nil, perform: fakeEngine))
+  #expect(!PageZoomMenuRouter.route(.reload, focusedTabID: tabID, perform: fakeEngine))
+  #expect(received.map(\.0) == ["in", "out", "reset"])
+  #expect(received.map(\.1) == [tabID, tabID, tabID])
 }
 
 @Test @MainActor func sharePageMenuUsesOnlyASelectedWebPage() {

@@ -57,13 +57,29 @@ enum BrowserMenuCommand: String, CaseIterable {
   case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history,
     clearHistory, downloads
   case back, forward, find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload,
-    hardReload,
-    developerTools, chromiumDeveloperTools
+    hardReload, developerTools, chromiumDeveloperTools, zoomIn, zoomOut, actualSize
   case nextWindow, previousWindow
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, fullScreen, settings, quit,
     createFolder
   case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
+}
+
+enum PageZoomMenuRouter {
+  static func route(
+    _ command: BrowserMenuCommand, focusedTabID: UUID?,
+    perform: (String, UUID) -> Bool
+  ) -> Bool {
+    guard let focusedTabID else { return false }
+    let action: String
+    switch command {
+    case .zoomIn: action = "in"
+    case .zoomOut: action = "out"
+    case .actualSize: action = "reset"
+    default: return false
+    }
+    return perform(action, focusedTabID)
+  }
 }
 
 /// AppKit otherwise falls back from unbound Command-N to the private-window menu item.
@@ -462,6 +478,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
     case .reload, .hardReload:
       return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
+    case .zoomIn, .zoomOut, .actualSize:
+      return store.session.selectedPage != nil
     case .developerTools, .chromiumDeveloperTools:
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
     case .inspector:
@@ -712,6 +730,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
+    case .zoomIn, .zoomOut, .actualSize:
+      _ = PageZoomMenuRouter.route(command, focusedTabID: store.session.selectedPage?.tab.id) {
+        action, tabID in context.engine.performPageZoomAction(action, tabID: tabID)
+      }
     case .developerTools: context.engine.toggleChromiumDeveloperTools()
     case .chromiumDeveloperTools: context.engine.toggleChromiumDeveloperTools()
     case .inspector: context.engine.toggleInspector()
@@ -1463,6 +1485,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.sidebar, "Toggle sidebar", to: view)
     add(.reload, "Reload", to: view)
     add(.hardReload, "Hard Reload", to: view)
+    add(.zoomIn, "Zoom In", to: view)
+    add(.zoomOut, "Zoom Out", to: view)
+    add(.actualSize, "Actual Size", to: view)
     add(.developerTools, "Developer Tools", to: view)
     add(.inspector, "Inspect Element", to: view)
     add(.inspectorSource, "Open source", to: view)

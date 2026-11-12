@@ -183,6 +183,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID { return NO; }
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID
               mode:(ARCPageReloadMode)mode { return NO; }
+- (BOOL)performPageZoomAction:(NSString *)action tabID:(NSString *)tabID
+                     profileID:(NSString *)profileID { return NO; }
 
 - (BOOL)openPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
                contextID:(NSString *)contextID url:(NSString *)url error:(NSError **)error {

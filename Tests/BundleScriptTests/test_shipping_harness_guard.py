@@ -214,9 +214,11 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         self.plant(
             "Sources/ChromiumBridge/ChromiumShaarBackend.mm",
             "- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {\n"
+            "#if defined(SHAAR_VERIFICATION)\n"
             "  // The pinned engine reads SHAAR_ENGINE_TESTING.\n"
             "  setenv(\"SHAAR_ENGINE_TESTING\", engineTesting, 1);\n"
             "  unsetenv(\"SHAAR_ENGINE_TESTING\");\n"
+            "#endif\n"
             "}\n",
         )
         self.assertEqual(GUARD.findings(self.root), [])
@@ -227,6 +229,18 @@ class ShippingHarnessGuardTests(unittest.TestCase):
             "- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {\n"
             "  const char *testing = getenv(\"SHAAR_ENGINE_TESTING\");\n"
             "}\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_engine_testing_shipping_else_branch_fails(self):
+        self.plant(
+            "Sources/ChromiumBridge/ChromiumShaarBackend.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            '  setenv("SHAAR_ENGINE_TESTING", "1", 1);\n'
+            "#else\n"
+            '  getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
         )
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
@@ -297,9 +311,11 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         )
         self.assertEqual(GUARD.engine_testing_findings(source, source.read_text()), [])
 
-    def test_engine_testing_string_in_the_binary_is_allowed(self):
+    def test_engine_testing_string_in_the_binary_fails(self):
         self.binary.write_bytes(b"prefix SHAAR_ENGINE_TESTING suffix")
-        self.assertEqual(GUARD.findings(self.root, self.binary), [])
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
     def test_forged_chooser_channel_fails_in_shipping_source(self):
         self.plant(
             "Sources/ArcusisBrowser/Planted.swift",

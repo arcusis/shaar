@@ -439,8 +439,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   config.on_event = ShaarEventCallback;
   config.event_context = (__bridge void *)self;
   shaar_error error = EmptyError();
-  // The pinned engine adds --use-mock-keychain only inside SHAAR_ENGINE_TESTING.
-  // SHAAR_ENGINE_TESTING also enables fake media, disables renderer backgrounding and timer throttling, and maps trackertest.org to localhost.
+  // Verification builds alone enable the engine's mock keychain and test fixtures.
+#if defined(SHAAR_VERIFICATION)
   id mockKeychainSetting = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ShaarUseMockKeychain"];
   BOOL requested = ARCInfoBool(mockKeychainSetting) || ARCEnvironmentRequestsMockKeychain();
   BOOL adHoc = NO;
@@ -450,13 +450,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (testing) engineTesting = "1";
   if (mockKeychain) engineTesting = "1";
   setenv("SHAAR_ENGINE_TESTING", engineTesting, 1);
+#endif
   if (_symbols.create(&config, &_shaarEngine, &error) != SHAAR_OK) {
+#if defined(SHAAR_VERIFICATION)
     unsetenv("SHAAR_ENGINE_TESTING");
+#endif
     return 1;
   }
   _shaarTesting = testing;
   const shaar_error_code result = _symbols.run(_shaarEngine, &error);
+#if defined(SHAAR_VERIFICATION)
   unsetenv("SHAAR_ENGINE_TESTING");
+#endif
   // Remaining native handles are being torn down, not closed by the user.
   _shaarQuitting = YES;
   if (self.onQuitRequested) self.onQuitRequested();

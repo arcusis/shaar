@@ -264,40 +264,41 @@ def strip_comments(text: str) -> str:
     return "".join(result)
 
 
-def engine_start_span(path: Path, text: str) -> tuple[int, int] | None:
-    if path.as_posix().endswith("Sources/ChromiumBridge/ChromiumShaarBackend.mm"):
-        cleaned = strip_comments(text)
-        signature = re.compile(
-            r"-\s*\(int\)runWithDataDirectory:\s*\(NSURL\s*\*\)directory\s+"
-            r"testing:\s*\(BOOL\)testing\s*\{"
-        )
-        match = signature.search(cleaned)
-        if match:
-            depth = 1
-            for position in range(match.end(), len(cleaned)):
-                if cleaned[position] == "{":
-                    depth += 1
-                elif cleaned[position] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        return match.start(), position + 1
-    return None
-
-
 def engine_testing_findings(path: Path, text: str) -> list[str]:
-    """The engine start may set the variable. Every other read is a harness leak."""
+    """Only lines compiled solely for verification may reference the engine test variable."""
     cleaned = strip_comments(text)
-    allowed = engine_start_span(path, text)
-    allowed_writes = {
-        match.start() + match.group(0).index(ENGINE_TESTING)
-        for match in ENGINE_TESTING_WRITE.finditer(cleaned)
-        if allowed and allowed[0] <= match.start() < allowed[1]
-    }
+    verification_lines = set()
+    verification_guard = re.compile(
+        r"^(?:defined\s*\(?\s*SHAAR_VERIFICATION\s*\)?|ifdef\s+SHAAR_VERIFICATION)$"
+    )
+    stack = []
+    verification_only = False
+    for line_number, line in enumerate(cleaned.splitlines(keepends=True), start=1):
+        directive = re.match(r"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b(.*)", line)
+        if directive:
+            command, expression = directive.groups()
+            expression = expression.strip()
+            if command in {"if", "ifdef", "ifndef"}:
+                parent_only = verification_only
+                positive = command == "ifdef" and expression == "SHAAR_VERIFICATION"
+                positive = positive or (command == "if" and bool(verification_guard.fullmatch(expression)))
+                stack.append({"parent": parent_only})
+                verification_only = parent_only or positive
+            elif command == "elif" and stack:
+                frame = stack[-1]
+                verification_only = frame["parent"] or bool(verification_guard.fullmatch(expression))
+            elif command == "else" and stack:
+                verification_only = stack[-1]["parent"]
+            elif command == "endif" and stack:
+                frame = stack.pop()
+                verification_only = frame["parent"]
+        if verification_only:
+            verification_lines.add(line_number)
     found = []
     for match in re.finditer(re.escape(ENGINE_TESTING), cleaned):
-        if match.start() in allowed_writes:
-            continue
         number = cleaned.count("\n", 0, match.start()) + 1
+        if number in verification_lines:
+            continue
         found.append(f"{path}:{number}: {ENGINE_TESTING}")
     return found
 
@@ -398,6 +399,8 @@ def binary_findings(path: Path, symbols: set[str], flags: set[str], ids: set[str
             found.append(f"{path}: {text}")
     if TESTING_BYTES.search(data):
         found.append(f"{path}: testing: true")
+    if ENGINE_TESTING.encode("ascii") in data:
+        found.append(f"{path}: {ENGINE_TESTING}")
     for match in re.finditer(br"SHAAR_OP_PROBE_[A-Z0-9_]+", data):
         found.append(f"{path}: {match.group(0).decode('ascii')}")
     # The removed title channel is not a type or a launch flag.

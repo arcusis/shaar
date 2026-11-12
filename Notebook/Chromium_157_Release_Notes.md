@@ -1,6 +1,6 @@
 # Draft release notes — Shaar 0.2.0 / Chromium 157
 
-For app version 0.2.0 after v0.1.0, targeting the Chromium 157 shaar.35 engine pin in PR #1615. That pin must reach production and pass final signed shipping-bundle QA before this copy is published. The shaar.35 capture and native window-ID fixture results do not add a user-facing claim below. English `<li>` lines are the input to `scripts/release.sh --notes`; the Hebrew version is for the user-facing announcement/changelog.
+For app version 0.2.0 after v0.1.0, targeting Chromium 157 shaar.36, which adds patch 0082 for extension tab activation on top of shaar.35 (patch 0081, window IDs) in PR #1615. The pin must reach production and pass final signed shipping-bundle QA before this copy is published. English `<li>` lines are the input to `scripts/release.sh --notes`; the Hebrew version is for the user-facing announcement/changelog. Passkeys remain excluded.
 
 ## English
 
@@ -15,6 +15,7 @@ For app version 0.2.0 after v0.1.0, targeting the Chromium 157 shaar.35 engine p
 - Switching Spaces while a page loads keeps its tab in the right profile. Library history loads more reliably, and startup no longer shows a premature download error.
 - Picture in Picture starts more reliably when you switch away from a playing video.
 - Extension Settings explains when loading an unpacked extension needs a newer Shaar engine.
+- Saved-space tabs now stay in their Space when a window closes.
 
 ### Sparkle HTML input
 
@@ -32,6 +33,7 @@ Copy the following lines into the release notes HTML file after release approval
 <li>Switching Spaces while a page loads keeps its tab in the right profile. Library history loads more reliably, and startup no longer shows a premature download error.</li>
 <li>Picture in Picture starts more reliably when you switch away from a playing video.</li>
 <li>Extension Settings explains when loading an unpacked extension needs a newer Shaar engine.</li>
+<li>Saved-space tabs now stay in their Space when a window closes.</li>
 ```
 
 ## עברית
@@ -47,3 +49,4 @@ Copy the following lines into the release notes HTML file after release approval
 - מעבר בין מרחבים בזמן שדף נטען משאיר את הלשונית בפרופיל הנכון. היסטוריית הספרייה נטענת באופן אמין יותר, ובהפעלה כבר לא מופיעה הודעת שגיאה מוקדמת על הורדות.
 - תמונה בתוך תמונה נפתחת בצורה אמינה יותר כשעוברים מדף שמנגן וידאו.
 - הגדרות התוספים מסבירות מתי טעינת תוסף לא ארוז דורשת מנוע Shaar חדש יותר.
+- לשוניות של מרחבים שמורים נשארות במרחב שלהן כשסוגרים חלון.

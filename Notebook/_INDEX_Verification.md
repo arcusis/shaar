@@ -1,6 +1,7 @@
 # Verification
 
 - [[Chromium_157_Release_Runbook]]
+- [[Chromium_157_Release_Publish_Checklist]]
 - [[Chromium_157_Release_Notes]]
 - [[Chromium_157_Release_QA]]
 - [[Private_Fixture_Readiness]]

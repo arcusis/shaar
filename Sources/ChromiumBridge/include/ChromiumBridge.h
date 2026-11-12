@@ -139,6 +139,9 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 /// deviceChooserRequested, deviceChooserUpdated, and deviceChooserDismissed.
 /// The payload is the engine permission event plus profileID, tabID, and windowID.
 @property(copy, nullable) void (^onDeviceChooserEvent)(NSDictionary<NSString *, id> *event);
+/// HTTP Basic authentication challenge routed to the tab's owning window.
+@property(copy, nullable) void (^onHTTPAuthRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onHTTPAuthDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (^onAgentBridgeStatus)(NSString *tabID, NSString *profileID,
                                                       NSDictionary<NSString *, id> *status);
@@ -259,6 +262,9 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 /// `index` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
 - (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(nullable NSNumber *)index;
+- (void)resolveHTTPAuthRequestID:(NSString *)requestID tabID:(NSString *)tabID
+                        username:(nullable NSString *)username
+                        password:(nullable NSString *)password;
 /// Canonical browser-managed download directory for a regular profile.
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
 - (int)nativeTabIDForID:(NSString *)tabID;

@@ -456,9 +456,25 @@ final class BrowserEngine {
     store.onDeviceChooserDecision = { [weak self] request, index in
       self?.settleDeviceChooser(request, optionIndex: index)
     }
+    store.onHTTPAuthDecision = { [weak self] request, username, password in
+      self?.events.resolveHTTPAuth(request, username: username, password: password)
+    }
     callbacks.onDeviceChooserEvent = { [weak self] payload in
       self?.receiveDeviceChooser(payload)
     }
+    callbacks.onHTTPAuthRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let request = HTTPAuthRequest(payload: payload),
+        let store = self.store, store.requestHTTPAuth(request)
+      else {
+        if let tabID = payload["tabID"] as? String {
+          self.events.rejectHTTPAuth(id, tabID: tabID,
+                                     windowID: payload["windowID"] as? String ?? "")
+        }
+        return
+      }
+    }
+    callbacks.onHTTPAuthDismissed = { [weak store] id in store?.dismissHTTPAuth(id) }
     callbacks.onExternalAppRequest = { [weak self] payload in self?.requestExternalApp(payload) }
     callbacks.onExternalAppDismissed = { [weak self] id in
       self?.store?.resolveExternalApp(id, accepted: false)
@@ -579,6 +595,7 @@ final class BrowserEngine {
         self.events.router.tabOwnerWindowID(for: identity) == nil,
         let id = UUID(uuidString: identity)
       else { return }
+      self.store?.dismissHTTPAuth(forTabID: id)
       if self.tabsAwaitingProfileReassignment.remove(id) != nil {
         self.pages[id] = nil
         DispatchQueue.main.async { [weak self] in self?.reconcile() }

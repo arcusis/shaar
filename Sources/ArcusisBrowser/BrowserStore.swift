@@ -160,6 +160,7 @@ final class BrowserStore {
   @ObservationIgnored var onPrintDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onDeviceChooserDecision: ((DeviceChooserRequest, Int?) -> Void)?
+  @ObservationIgnored var onHTTPAuthDecision: ((HTTPAuthRequest, String?, String?) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
@@ -1295,6 +1296,48 @@ final class BrowserStore {
     enqueueConsent(.deviceChooser(request))
   }
 
+  @discardableResult
+  func requestHTTPAuth(_ request: HTTPAuthRequest) -> Bool {
+    enqueueConsent(.httpAuth(request))
+  }
+
+  func resolveHTTPAuth(_ request: HTTPAuthRequest, username: String?, password: String?) {
+    let sheetID = request.sheetID
+    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    let presented = sheet?.id == sheetID && presentedConsentID == sheetID
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID { presentedConsentID = nil }
+    if presented { sheet = nil }
+    let accepted = presented && request.matches(session) && username != nil && password != nil
+    onHTTPAuthDecision?(request, accepted ? username : nil, accepted ? password : nil)
+    presentNextConsent()
+  }
+
+  func dismissHTTPAuth(_ id: String) {
+    let sheetID = "http-auth-\(id)"
+    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID {
+      presentedConsentID = nil
+      if sheet?.id == sheetID { sheet = nil }
+    }
+    presentNextConsent()
+  }
+
+  func dismissHTTPAuth(forTabID tabID: UUID) {
+    let ids = consentRequests.compactMap { request -> String? in
+      guard case .httpAuth(let auth) = request, auth.tabID == tabID else { return nil }
+      return auth.sheetID
+    }
+    guard !ids.isEmpty else { return }
+    consentRequests.removeAll { ids.contains($0.id) }
+    if let presentedConsentID, ids.contains(presentedConsentID) {
+      self.presentedConsentID = nil
+      if sheet?.id == presentedConsentID { sheet = nil }
+    }
+    presentNextConsent()
+  }
+
   func resolveDeviceChooser(_ id: String, optionIndex: Int?) {
     let sheetID = "chooser-\(id)"
     guard let request = consentRequests.first(where: { $0.id == sheetID }),
@@ -1376,6 +1419,7 @@ final class BrowserStore {
     case .print(let request): onPrintDecision?(request.id, false)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .deviceChooser(let request): onDeviceChooserDecision?(request, nil)
+    case .httpAuth(let request): onHTTPAuthDecision?(request, nil, nil)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }
   }

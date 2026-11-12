@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 8a2d11e5..00000000 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -145,6 +145,7 @@
+ #include "chrome/browser/chrome_content_browser_client_parts.h"
+ #include "chrome/browser/content_settings/cookie_settings_factory.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/shaar/login/shaar_login.h"
+ #include "chrome/browser/contextual_tasks/contextual_tasks_ui_service.h"
+ #include "chrome/browser/contextual_tasks/contextual_tasks_ui_service_factory.h"
+ #include "chrome/browser/contextual_tasks/contextual_tasks_url_loader_factory_interceptor.h"
+@@ -7441,6 +7442,14 @@ ChromeContentBrowserClient::CreateLoginDelegate(
+   }
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+
++  // Shaar owns the native HTTP Basic credentials sheet. The request callback
++  // remains owned by the delegate until the app replies or the delegate ends.
++  if (!do_not_prompt_for_login && !auth_info.is_proxy &&
++      auth_info.scheme == "basic") {
++    return shaar::login::CreateLoginDelegate(
++        auth_info, web_contents, std::move(auth_required_callback));
++  }
++
+   if (!http_auth_coordinator_) {
+     http_auth_coordinator_ = CreateHttpAuthCoordinator();
+   }

@@ -24,6 +24,8 @@ final class BrowserRuntimeClient {
   var onExternalAppRequest: (([String: Any]) -> Void)?
   var onExternalAppDismissed: ((String) -> Void)?
   var onDeviceChooserEvent: (([String: Any]) -> Void)?
+  var onHTTPAuthRequest: (([String: Any]) -> Void)?
+  var onHTTPAuthDismissed: ((String) -> Void)?
   var onMediaAccess: ((String, [String: NSNumber]) -> Void)?
   var onAgentBridgeStatus: ((String, String, [String: Any]) -> Void)?
   var onDevToolsPanelEvent: ((String, String, Data, UInt64) -> Void)?
@@ -62,7 +64,8 @@ enum BrowserRoutingError: Error, LocalizedError {
 @MainActor
 final class BrowserRuntimeRouter {
   enum Context: CaseIterable {
-    case popup, installation, media, desktopCapture, webShare, print, externalApp, deviceChooser
+    case popup, installation, media, desktopCapture, webShare, print, externalApp, deviceChooser,
+      httpAuth
   }
 
   private struct Subscription {

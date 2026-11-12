@@ -1039,13 +1039,22 @@ final class PrivateProductHostProbe {
         "Private native viewport ownership audit failed before renderer capture: \(rendererViewportAudit)."
       )
     }
-    let (rendererData, captureOutcome): (Data?, String?) = await withCheckedContinuation {
-      continuation in
-      runtime.capturePrivateProbeTabID(tabID, windowID: owner.windowID, contextID: owner.contextID)
-      {
-        data, outcome in
-        continuation.resume(returning: (data, outcome))
+    var (rendererData, captureOutcome): (Data?, String?) = await captureOwnedRenderer(
+      owner, tabID: tabID)
+    if rendererData == nil {
+      // A native capture can time out while the selected WebContents is still
+      // settling after its ownership audit. Reconfirm readiness before one
+      // bounded retry; the phase still requires a real renderer PNG below.
+      try await waitForCaptureReadiness(owner, tabID: tabID)
+      guard let retryAudit = runtime.privateProbeAudit(forContextID: owner.contextID),
+        retryAudit["allWindowsNativeWindowsAlive"] as? Bool == true,
+        retryAudit["allWindowsDisplayOwnedWebContents"] as? Bool == true,
+        retryAudit["visibleNativeViewportCount"] as? Int == 1
+      else {
+        throw PrivateWindowFailure(
+          "Private native viewport ownership changed before renderer capture retry.")
       }
+      (rendererData, captureOutcome) = await captureOwnedRenderer(owner, tabID: tabID)
     }
     rendererCaptureOutcome = captureOutcome ?? "captured"
     guard let rendererData, rendererData.count > 4096,
@@ -1060,6 +1069,18 @@ final class PrivateProductHostProbe {
     let hostDigest = sha256(data)
     let rendererDigest = sha256(rendererData)
     return (hostDigest: hostDigest, rendererDigest: rendererDigest)
+  }
+
+  private func captureOwnedRenderer(
+    _ owner: PrivateBrowserHost.Owner, tabID: String
+  ) async -> (Data?, String?) {
+    await withCheckedContinuation { continuation in
+      runtime.capturePrivateProbeTabID(
+        tabID, windowID: owner.windowID, contextID: owner.contextID
+      ) { data, outcome in
+        continuation.resume(returning: (data, outcome))
+      }
+    }
   }
 
   private func privateTabRenders(

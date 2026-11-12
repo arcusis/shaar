@@ -285,10 +285,11 @@ final class NativeWindowProbe {
         && runtime.nativeTabID(forID: tabB.uuidString) == -1
         && runtime.view(forExtensionPopupID: betaPopup) == nil,
       "confirmed native window closure releases only its own tabs and popup")
-    var retired = false
-    do { try runtime.createWindowID(second) } catch { retired = true }
     try expect(
-      retired && !runtime.closeWindowID(second),
+      runtime.window(forID: second) == nil && runtime.hostView(forWindowID: second) == nil
+        && !runtime.closeWindowID(second)
+        && runtime.nativeTabID(forID: tabA.uuidString) == -1
+        && runtime.nativeTabID(forID: tabB.uuidString) == -1,
       "closed native identities cannot revive stale window controls")
     for space in bases {
       let id = space.selectedTabID!

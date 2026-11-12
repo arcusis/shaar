@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SYMBOL_LITERAL = re.compile(r'"(shaar_[A-Za-z0-9_]+)"')
+DLSYM_LITERAL = re.compile(r'\bdlsym\s*\(\s*[^,]+,\s*"(shaar_[A-Za-z0-9_]+)"\s*\)')
 LOAD_MACRO = re.compile(r"\bSHAAR_LOAD\s*\(\s*\w+\s*,\s*(\w+)\s*\)")
 ENUM = re.compile(r"typedef\s+enum\s*\{(?P<body>.*?)\}\s*(?P<name>\w+)\s*;", re.S)
 ENUM_VALUE = re.compile(r"\b(SHAAR_(?:EVENT|OP)_[A-Z0-9_]+)\s*=")
@@ -41,7 +41,9 @@ def collect_bridge_symbols(root: Path) -> set[str]:
     symbols: set[str] = set()
     for path in bridge_files(root):
         source = path.read_text(errors="replace")
-        symbols.update(SYMBOL_LITERAL.findall(source))
+        # Only string arguments passed to dlsym are ABI lookups. Other bridge
+        # strings can mention a symbol name in diagnostics or documentation.
+        symbols.update(DLSYM_LITERAL.findall(source))
         symbols.update("shaar_" + suffix for suffix in LOAD_MACRO.findall(source))
     return symbols
 
@@ -179,20 +181,13 @@ def check_contract(root: Path, archive: Path, *, nm=exported_symbols) -> tuple[i
         digest = hashlib.file_digest(archive_file, "sha256").hexdigest()
     if digest != pin.get("sha256") or archive.name != pin.get("asset"):
         raise ContractError("cached engine archive does not match ThirdParty/ChromiumEngine/pin.json")
-    header_names, binary_name = archive_members(archive)
+    _, binary_name = archive_members(archive)
     optional = optional_symbols(root)
+    # The pinned framework archive is headerless. The app compiles against the
+    # checked-in engine layer header; source_build_header verifies its digest
+    # and source-build provenance before reading event/op declarations.
+    declared_events, declared_operations, header_origin = source_build_header(root, pin)
     with tarfile.open(archive, "r:xz") as package:
-        header_sources = []
-        for header_name in sorted(header_names):
-            header_file = package.extractfile(header_name)
-            if header_file is not None:
-                header_sources.append(header_file.read().decode("utf-8", errors="replace"))
-        header = "\n".join(header_sources)
-        header_origin = "cached pinned archive headers"
-        try:
-            declared_events, declared_operations = parse_header_enums(header)
-        except ContractError:
-            declared_events, declared_operations, header_origin = source_build_header(root, pin)
         # Extract only the framework executable to a temporary file for nm.
         with tempfile.TemporaryDirectory(prefix="shaar-abi-") as directory:
             binary_file = package.extractfile(binary_name)

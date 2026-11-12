@@ -30,6 +30,7 @@ class EngineABIContractTests(unittest.TestCase):
             (bridge / "Bridge.mm").write_text('''
               SHAAR_LOAD(run, engine_run);
               dlsym(library, "shaar_optional_call");
+              const char *diagnostic = "shaar_not_an_abi_lookup";
               if (event->kind == SHAAR_EVENT_MEDIA) submit(SHAAR_OP_MEDIA_CONTROL);
             ''')
             self.assertEqual(CONTRACT.collect_bridge_symbols(root),

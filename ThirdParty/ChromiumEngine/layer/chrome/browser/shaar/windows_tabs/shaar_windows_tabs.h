@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_H_
 
 #include <optional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -13,6 +14,7 @@
 #include <vector>
 
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "ui/base/window_open_disposition.h"
 
 class TabStripModel;
 class Browser;
@@ -24,6 +26,12 @@ class WebContents;
 struct TabStripSelectionChange;
 
 namespace shaar::windows_tabs {
+
+bool AdoptPageWebContents(content::WebContents* source,
+                          std::unique_ptr<content::WebContents>* contents,
+                          const GURL& target_url,
+                          WindowOpenDisposition disposition,
+                          bool user_gesture);
 
 struct SelectedRegularTab {
   shaar_engine* engine;

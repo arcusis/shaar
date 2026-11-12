@@ -111,7 +111,7 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onQuitRequested)(void);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosed)(NSString *windowID, BOOL quitting);
 /// Synchronous: return a newly created window before Chromium attaches its browser.
-@property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type);
+@property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type, BOOL userGesture);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowShowRequest)(NSString *windowID, BOOL active);
 /// DevTools external navigation; the app validates source ownership before opening a tab.
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDevToolsOpenURLRequest)(NSDictionary<NSString *, id> *request);

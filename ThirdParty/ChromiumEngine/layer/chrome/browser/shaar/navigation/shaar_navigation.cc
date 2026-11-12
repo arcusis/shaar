@@ -33,8 +33,7 @@ constexpr size_t kMaximumURLBytes = 2 * 1024 * 1024;
 constexpr size_t kMaximumArgumentsBytes = 4 * 1024 * 1024;
 
 bool IsAllowedScheme(const std::string& scheme) {
-  return scheme == "http" || scheme == "https" || scheme == "file" ||
-         scheme == "about";
+  return scheme == "http" || scheme == "https" || scheme == "about";
 }
 
 bool HasOneScope(const shaar_scope& scope) {

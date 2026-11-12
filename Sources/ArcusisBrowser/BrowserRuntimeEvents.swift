@@ -12,7 +12,7 @@ final class BrowserRuntimeEvents {
   var onWindowClosed: ((String, Bool) -> Void)?
   var onQuitRequested: (() -> Void)?
   var onQuitCancelled: (() -> Void)?
-  var onWindowRequest: (@MainActor @Sendable (String, String) -> String?)? {
+  var onWindowRequest: (@MainActor @Sendable (String, String, Bool) -> String?)? {
     didSet { runtime.onWindowRequest = onWindowRequest }
   }
   var onWindowShowRequest: (@MainActor @Sendable (String, Bool) -> Void)? {

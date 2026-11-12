@@ -95,6 +95,11 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_create(
     return SHAAR_FAIL(SHAAR_IO_ERROR, "engine allocation failed", error);
   engine->on_event = config->on_event;
   engine->event_context = config->event_context;
+  if (config->size >= offsetof(shaar_config, window_request_context) +
+                          sizeof(config->window_request_context)) {
+    engine->on_window_request = config->on_window_request;
+    engine->window_request_context = config->window_request_context;
+  }
   engine->data_root.assign(config->data_root.data, config->data_root.size);
   engine->locale.assign(config->locale.data ? config->locale.data : "",
                         config->locale.size);

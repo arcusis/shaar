@@ -94,6 +94,8 @@ TEST(ShaarNavigationHandlerTest,
             SHAAR_INVALID_ARGUMENT);
   EXPECT_EQ(ValidateURL("data:text/html,blocked", &canonical),
             SHAAR_POLICY_BLOCKED);
+  EXPECT_EQ(ValidateURL("file:///etc/passwd", &canonical),
+            SHAAR_POLICY_BLOCKED);
   EXPECT_EQ(ValidateURL("https://example.test/", &canonical), SHAAR_OK);
   EXPECT_EQ(canonical, "https://example.test/");
 }

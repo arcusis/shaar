@@ -1310,12 +1310,17 @@ final class NativeHostProbe {
     let rejectedURLs = [
       "javascript:location.href='about:blank'", "file:///etc/passwd", "mailto:test@example.invalid",
       "chrome://version", "about:blank#other", "https://", "http://127.0.0.1:99999/", "",
-    ].allSatisfy {
-      !runtime.navigateTabID(
-        tabIdentity, profileID: profileIdentity, windowID: windowID, url: $0)
+    ]
+    for url in rejectedURLs {
+      _ = runtime.navigateTabID(
+        tabIdentity, profileID: profileIdentity, windowID: windowID, url: url)
     }
+    try await Task.sleep(for: .milliseconds(300))
+    let currentURL = await currentLocation(tabID)
+    try expect(
+      currentURL == destination.absoluteString,
+      "native navigation rejects unsupported and invalid URLs [location=\(currentURL ?? "unavailable")]")
     try expect(rejectedOwners, "native navigation rejects wrong profile and window owners")
-    try expect(rejectedURLs, "native navigation rejects unsupported and invalid URLs")
     try await waitForLocation(destination.absoluteString, tabID: tabID)
     _ = try await document(tabID)
 
@@ -1353,6 +1358,18 @@ final class NativeHostProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw HostProbeFailure("Native navigation did not commit the expected fixture URL.")
+  }
+
+  private func currentLocation(_ tabID: UUID) async -> String? {
+    let json: String? = await withCheckedContinuation { continuation in
+      primary.runtime.evaluate(inTabID: tabID.uuidString, script: "({href:location.href})") {
+        continuation.resume(returning: $0)
+      }
+    }
+    guard let data = json?.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return nil }
+    return value["href"] as? String
   }
 
   private func verifyNativeFavicon(

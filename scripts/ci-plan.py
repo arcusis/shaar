@@ -65,6 +65,24 @@ def needs_shipping_probe_guard(paths: list[str] | None) -> bool:
     )
 
 
+def needs_abi_contract(paths: list[str] | None) -> bool:
+    """Run the pinned engine contract for ABI inputs and changes to the guard itself."""
+    guard_paths = {
+        ".github/actions/ci-setup/action.yml",
+        ".github/workflows/source-checks.yml",
+        "Tests/CIPipelineTests/test_ci_pipeline.py",
+        "Tests/EngineMigrationTests/test_abi_contract.py",
+        "scripts/check-engine-abi-contract.py",
+        "scripts/ci-plan.py",
+        "scripts/ci-stage.py",
+    }
+    return paths is None or any(
+        path.startswith(("ThirdParty/ChromiumEngine/", "Sources/ChromiumBridge/"))
+        or path in guard_paths
+        for path in paths
+    )
+
+
 def iteration_count(event: dict, name: str) -> int:
     if name == "schedule":
         return 3
@@ -108,10 +126,12 @@ def main() -> None:
     draft = name == "pull_request" and event.get("pull_request", {}).get("draft") is True
     full, website, swift = select_stages(paths, name, uses_fast_lane(name))
     shipping_guard = name == "pull_request" and not draft and needs_shipping_probe_guard(paths)
+    abi_contract = name in {"pull_request", "merge_group", "push"} and needs_abi_contract(paths)
     queue_pr = merge_group_pr_number(event, name)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\nqueue_pr={queue_pr}\n")
         output.write(f"shipping_guard={str(shipping_guard).lower()}\n")
+        output.write(f"abi_contract={str(abi_contract).lower()}\n")
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write(f"### CI selection\n\nFull native pipeline: **{full}**. Draft pull request: **{draft}**. "
                      f"Immutable baseline: `{base}`. "

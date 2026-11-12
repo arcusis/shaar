@@ -71,7 +71,7 @@ runs:
           ~/.cache/org.swift.swiftpm
         key: swift-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
     - name: Cache pinned engine archive independently
-      if: inputs.mode == 'verification' || inputs.mode == 'shipping'
+      if: inputs.mode == 'fast' || inputs.mode == 'verification' || inputs.mode == 'shipping'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: build/EngineCache/*.tar.xz

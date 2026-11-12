@@ -43,6 +43,7 @@ jobs:
       website: ${{ steps.plan.outputs.website }}
       swift: ${{ steps.plan.outputs.swift }}
       shipping_guard: ${{ steps.plan.outputs.shipping_guard }}
+      abi_contract: ${{ steps.plan.outputs.abi_contract }}
       base: ${{ steps.plan.outputs.base }}
       iterations: ${{ steps.plan.outputs.iterations }}
       queue_pr: ${{ steps.plan.outputs.queue_pr }}
@@ -110,7 +111,7 @@ jobs:
   fast:
     name: Fast gates
     needs: plan
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.plan.outputs.abi_contract == 'true' && 'macos-26' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -121,6 +122,9 @@ jobs:
         with:
           mode: fast
           tools: 'true'
+      - name: Check bridge ABI against the cached pinned engine archive
+        if: needs.plan.outputs.abi_contract == 'true'
+        run: .venv/bin/python scripts/ci-stage.py abi-contract
       - name: Platform-independent format, lint, license, Notebook, pins and secret checks
         if: needs.plan.outputs.full == 'true'
         env:

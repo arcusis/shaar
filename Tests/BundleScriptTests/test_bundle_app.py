@@ -560,8 +560,13 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(
             "swift build --manifest-cache none --scratch-path build/swiftpm/verification -c release "
-            "--product ShaarVerification -Xswiftc -enable-testing -Xcc -DSHAAR_VERIFICATION=1",
+            "--product ShaarVerification -Xswiftc -enable-testing",
             self._log(),
+        )
+        self.assertNotIn("-Xcc", self._log())
+        self.assertIn(
+            "SHAAR_PACKAGE_VERIFICATION_BUILD=1 swift_build --product",
+            SCRIPT.read_text(),
         )
         self.assertNotIn("build/swiftpm/default", self._log())
         self.assertIn("Built build/Shaar Verification.app", result.stdout)

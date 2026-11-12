@@ -210,6 +210,15 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
 
+    def test_engine_testing_read_is_allowed_in_verification_compile_guard(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            'const char *testing = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        self.assertEqual(GUARD.findings(self.root), [])
+
     def test_engine_testing_start_write_is_allowed(self):
         self.plant(
             "Sources/ChromiumBridge/ChromiumShaarBackend.mm",

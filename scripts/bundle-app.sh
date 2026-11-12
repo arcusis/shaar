@@ -165,7 +165,7 @@ mkdir -p "$scratch_path"
 if $with_verification; then
   # ShaarVerification imports the app module with @testable. Its own scratch path keeps
   # testing-enabled objects out of the shipping build, which never passes -enable-testing.
-  swift_build --product "$executable" -Xswiftc -enable-testing
+  swift_build --product "$executable" -Xswiftc -enable-testing -Xcc -DSHAAR_VERIFICATION=1
 else
   swift_build --product "$executable"
 fi

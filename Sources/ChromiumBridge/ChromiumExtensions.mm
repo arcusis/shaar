@@ -47,8 +47,11 @@ static NSString *ARCJSONLiteral(id value) {
   _popupObservers = [NSMutableDictionary dictionary];
   _actionTitles = [NSMutableDictionary dictionary];
   _actionLoading = [NSMutableSet set];
-  BOOL testing =
+  BOOL testing = NO;
+#if defined(SHAAR_VERIFICATION)
+  testing =
       [NSProcessInfo.processInfo.environment[@"SHAAR_ENGINE_TESTING"] isEqualToString:@"1"];
+#endif
   _webStoreFit = [[ARCWebStoreFit alloc] initWithTesting:testing];
   return self;
 }

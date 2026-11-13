@@ -33,4 +33,9 @@ struct SymbolCatalogTests {
         $0.name == "Devices" && $0.symbols.contains("terminal")
       })
   }
+
+  @Test func symbolAccessibilityLabelsUseReadableWords() {
+    #expect(SymbolCatalog.accessibilityLabel(for: "star.fill") == "Star Fill")
+    #expect(SymbolCatalog.accessibilityLabel(for: "arrow.up.right") == "Arrow Up Right")
+  }
 }

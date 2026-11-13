@@ -150,6 +150,7 @@ source_set("engine") {
   frameworks = [ "AppKit.framework" ]
   deps = [
     "//base",
+    "//third_party/icu:icuuc",
     "//chrome/browser:chrome_browser_main",
     "//chrome/browser:browser",
     # BEGIN tab_lifecycle

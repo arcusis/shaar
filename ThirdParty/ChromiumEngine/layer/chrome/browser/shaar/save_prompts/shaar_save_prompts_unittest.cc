@@ -59,6 +59,14 @@ TEST(ShaarSavePromptTest, DetailDropsControlsAndKeepsUtf8Boundaries) {
             "linebreak");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("para\xE2\x80\xA9" "graph"),
             "paragraph");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("user\xE2\x80\xAE" "admin"),
+            "useradmin");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("user\xE2\x80\x8B" "name"),
+            "username");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("user\xE2\x81\xA6" "name"),
+            "username");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xEF\xBB\xBF" "user"),
+            "user");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(Repeat('a', 121)).size(), 120u);
   const std::string bounded =
       Repeat('a', 119) + "\xC3\xA9";

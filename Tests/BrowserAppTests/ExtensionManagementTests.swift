@@ -197,7 +197,30 @@ struct ExtensionManagementTests {
       at: folder.appending(path: "icons/private.png"), withDestinationURL: externalIcon)
     try Data(#"{"icons":{"32":"icons/private.png"}}"#.utf8)
       .write(to: folder.appending(path: "manifest.json"))
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
+  }
 
+  @Test @MainActor func iconLoaderRejectsOversizedInstalledIcon() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let folder = root.appending(path: "\(validID)/2.1_0")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let bitmap = try #require(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: 1536, pixelsHigh: 1536, bitsPerSample: 8,
+        samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+        bytesPerRow: 0, bitsPerPixel: 0))
+    let pixels = try #require(bitmap.bitmapData)
+    var state: UInt32 = 1
+    for index in 0..<(1536 * 1536 * 4) {
+      state = state &* 1_664_525 &+ 1_013_904_223
+      pixels[index] = index % 4 == 3 ? 255 : UInt8(truncatingIfNeeded: state >> 24)
+    }
+    let iconData = try #require(bitmap.representation(using: .png, properties: [:]))
+    #expect(iconData.count > 4 * 1_048_576)
+    try iconData.write(to: folder.appending(path: "icon.png"))
+    try Data(#"{"icons":{"1536":"icon.png"}}"#.utf8)
+      .write(to: folder.appending(path: "manifest.json"))
     #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
   }
 
@@ -212,12 +235,10 @@ struct ExtensionManagementTests {
     try png(size: 16).write(to: externalFolder.appending(path: "icon.png"))
     try Data(#"{"icons":{"16":"icon.png"}}"#.utf8)
       .write(to: externalFolder.appending(path: "manifest.json"))
-
     let extensionLink = extensions.appending(path: validID, directoryHint: .isDirectory)
     try FileManager.default.createSymbolicLink(
       at: extensionLink, withDestinationURL: externalFolder.deletingLastPathComponent())
     #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: extensions) == nil)
-
     try FileManager.default.removeItem(at: extensionLink)
     let versionLink = extensionLink.appending(path: "2.1_0", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: extensionLink, withIntermediateDirectories: true)

@@ -334,7 +334,8 @@ public struct ShaarSiteDataAdapter: Sendable {
     let data = try JSONSerialization.data(withJSONObject: arguments, options: [.sortedKeys])
     let response = try await transport.submit(operation: operation, arguments: data)
     guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
-      object["schemaVersion"] as? Int == 1
+      let schemaVersion = object["schemaVersion"] as? NSNumber,
+      !isJSONBoolean(schemaVersion), Int(exactly: schemaVersion.doubleValue) == 1
     else { throw ShaarSiteDataError.malformedResponse }
     return object
   }

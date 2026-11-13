@@ -46,6 +46,12 @@ import Testing
   }
 }
 
+@Test func webShareRequestRejectsAnEmptyExplicitOriginPort() {
+  for origin in ["https://example.com:", "http://localhost:"] {
+    #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
+  }
+}
+
 @Test func webShareRequestRequiresRealBooleanActivationAndContent() {
   var payload = sharePayload()
   payload["userActivated"] = 1

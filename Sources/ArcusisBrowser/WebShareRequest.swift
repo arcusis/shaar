@@ -80,6 +80,7 @@ struct WebShareRequest: Identifiable, Equatable {
 
   private static func secureOrigin(_ origin: URL) -> Bool {
     guard NavigationInput.isWebURL(origin),
+      !hasEmptyExplicitPort(origin),
       origin.path.isEmpty || origin.path == "/",
       origin.query == nil,
       origin.fragment == nil,
@@ -94,6 +95,14 @@ struct WebShareRequest: Identifiable, Equatable {
       || host.hasSuffix(".localhost") || host.hasSuffix(".localhost.")
       || host == "::1" || host == "[::1]"
       || Self.isIPv4Loopback(host)
+  }
+
+  private static func hasEmptyExplicitPort(_ origin: URL) -> Bool {
+    let absolute = origin.absoluteString
+    guard let schemeEnd = absolute.range(of: "://")?.upperBound else { return false }
+    let authorityEnd = absolute[schemeEnd...].firstIndex(where: { "/?#".contains($0) })
+      ?? absolute.endIndex
+    return absolute[schemeEnd..<authorityEnd].hasSuffix(":")
   }
 
   private static func isIPv4Loopback(_ host: String) -> Bool {

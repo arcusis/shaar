@@ -84,6 +84,11 @@ import Testing
   #expect(BrowserLocalization.string("Nativ", table: "Shell", language: .hebrew) == "נתיב")
 }
 
+@Test func pasteAndGoMenuTitleHasHebrewLocalization() {
+  #expect(BrowserLocalization.string("Paste and Go", table: "Shell", language: .english) == "Paste and Go")
+  #expect(BrowserLocalization.string("Paste and Go", table: "Shell", language: .hebrew) == "הדבקה ומעבר")
+}
+
 @Test func languageResolverHonorsOverridesAliasesAndUnsupportedPreferences() {
   #expect(
     BrowserLanguage.resolve(selection: .systemDefault, preferredLanguages: ["he-IL", "en-US"])

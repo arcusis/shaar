@@ -27,3 +27,21 @@ import Testing
   #expect(!route("javascript:alert(1)"))
   #expect(routed?.host() == "www.google.com")
 }
+
+@Test @MainActor func pasteAndGoOpensAnEmptySelectedSpaceWithoutNativeNavigation() throws {
+  let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoEmptySpaceTests"))
+  let store = BrowserStore()
+  let destination = URL(string: "https://empty-tab.example/path")!
+  #expect(store.session.selectedPage == nil)
+  #expect(pasteboard.setString(destination.absoluteString, forType: .string))
+  var nativeNavigationRequested = false
+
+  #expect(
+    PasteAndGoCommand.route(in: pasteboard, store: store, searchEngine: .google) { _ in
+      nativeNavigationRequested = true
+      return true
+    })
+
+  #expect(!nativeNavigationRequested)
+  #expect(store.session.selectedPage?.tab.url == destination)
+}

@@ -525,7 +525,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bookmarkPage: return store.canBookmarkCurrentPage
     case .sharePage: return Self.shareURL(for: store) != nil
     case .pasteAndGo:
-      return store.session.selectedPage != nil && Self.pasteAndGoDestination(for: store) != nil
+      return Self.pasteAndGoDestination(for: store) != nil
     case .addFavorite:
       return afterLauncher ? store.currentPageAllowsFavorite : store.canFavoriteCurrentPage
     default: return true
@@ -768,7 +768,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       }
     case .pasteAndGo:
       _ = PasteAndGoCommand.route(
-        in: .general,
+        in: .general, store: store,
         searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID),
         navigate: context.engine.navigateCurrentPage(to:))
     case .find: store.showPageFind()

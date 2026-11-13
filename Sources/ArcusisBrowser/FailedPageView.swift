@@ -12,6 +12,7 @@ struct FailedPageView: View {
     VStack(spacing: 18) {
       Image(systemName: "arrow.clockwise.circle")
         .font(.system(size: 38, weight: .light)).foregroundStyle(.secondary)
+        .accessibilityHidden(true)
       Text(PanelsL10n.string("This page stopped working"))
         .font(.system(size: 24, weight: .medium, design: .rounded))
       Text(failure.pageURL.host() ?? PanelsL10n.string("This page"))

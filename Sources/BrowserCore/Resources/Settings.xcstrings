@@ -686,6 +686,16 @@
         }
       }
     },
+    "Loading sign-in…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההתחברות נטענת…"
+          }
+        }
+      }
+    },
     "Finishing sign-in…": {
       "localizations": {
         "he": {

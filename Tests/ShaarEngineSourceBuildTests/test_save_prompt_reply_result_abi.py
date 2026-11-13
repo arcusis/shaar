@@ -30,6 +30,7 @@ class SavePromptReplyResultABITests(unittest.TestCase):
         self.assertIn("result.request_id = request.request_id", deliver[:callback])
         self.assertIn("result.error.code = code", deliver[:callback])
         self.assertIn("result.payload_json", deliver[:callback])
+        self.assertIn("request.callback(request.context, &result)", deliver)
 
 
 if __name__ == "__main__":

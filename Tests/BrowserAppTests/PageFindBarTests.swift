@@ -65,4 +65,25 @@ struct PageFindBarTests {
     #expect(store.pageFind?.query == "current query")
     #expect(requests == 1)
   }
+
+  @Test func closingStaleBarPreservesReplacementFindSession() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://example.com/page")!))
+    let tabID = try #require(store.session.selectedSpace.selectedTabID)
+    store.showPageFind()
+    let staleState = try #require(store.pageFind)
+
+    store.nativeTabChanged(
+      tabID, url: URL(string: "https://example.com/page?revision=2")!, title: "Updated")
+    store.showPageFind()
+    let replacement = try #require(store.pageFind)
+    #expect(replacement.id != staleState.id)
+    var stoppedTabs: [UUID] = []
+    store.onStopFinding = { stoppedTabs.append($0) }
+
+    PageFindBar(store: store, state: staleState).close()
+
+    #expect(store.pageFind?.id == replacement.id)
+    #expect(stoppedTabs.isEmpty)
+  }
 }

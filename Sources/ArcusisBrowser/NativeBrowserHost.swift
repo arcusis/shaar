@@ -1313,6 +1313,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.search, CommandPanel.searchPrompt, to: file)
     add(.sharePage, "Share Page…", to: file)
     add(.downloads, "Downloads", to: file)
+    add(.closeTab, "Close tab", to: file)
     add(.closeWindow, "Close window", to: file)
     let edit = section("Edit")
     for (title, action) in [
@@ -1350,7 +1351,6 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     spaces.addItem(copyURL)
     let tabs = section("Tabs")
     add(.splitView, "Split View", to: tabs)
-    add(.closeTab, "Close tab", to: tabs)
     add(.addFavorite, "Add to Favorites", to: tabs)
     add(.createFolder, "New Folder", to: tabs)
     add(.reopenClosed, "Reopen last closed tab", to: tabs)

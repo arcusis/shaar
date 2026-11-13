@@ -85,7 +85,15 @@ struct PrintRequest: Identifiable, Equatable {
   private static func boundedTitle(_ value: Any?) -> String? {
     guard let value else { return "" }
     guard let title = value as? String, title.utf8.count <= 2048 else { return nil }
-    return title
+    let scalars = title.unicodeScalars.map { scalar -> Unicode.Scalar in
+      switch scalar.properties.generalCategory {
+      case .control, .format, .lineSeparator, .paragraphSeparator: return " "
+      default: return scalar
+      }
+    }
+    let sanitized = String(String.UnicodeScalarView(scalars))
+      .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    return String(sanitized.prefix(256))
   }
 
   private static func hasSupportedSchemaVersion(_ value: Any?) -> Bool {

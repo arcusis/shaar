@@ -1069,6 +1069,15 @@ class SwiftReportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "native JUnit"):
                 SWIFT_REPORTS.write_reports(log, directory)
 
+    def test_empty_native_swift_testing_report_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(self.transcript() + "Test run with 1 test passed\n")
+            (directory / "swift-swift-testing.xml").write_text('<testsuite tests="0"/>')
+            with self.assertRaisesRegex(ValueError, "contains no test cases"):
+                SWIFT_REPORTS.write_reports(log, directory)
+
 
 class ProbeSoakTests(unittest.TestCase):
     def test_shards_cover_every_original_iteration_once_without_retry(self):

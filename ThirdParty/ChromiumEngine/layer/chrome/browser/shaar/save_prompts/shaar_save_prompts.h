@@ -17,6 +17,8 @@ class WebContents;
 
 namespace shaar::save_prompts {
 
+void DismissSavePromptsForDestroyedContents(content::WebContents* contents);
+
 // Decision values shared with the embedder patch. 3 is only a new password.
 constexpr int kDecisionSave = 1;
 constexpr int kDecisionDismiss = 2;

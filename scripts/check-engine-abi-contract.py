@@ -132,7 +132,13 @@ def source_build_header(root: Path, pin: dict) -> tuple[set[str], set[str], str]
     events, operations = parse_header_enums(header_path.read_text(errors="replace"))
     patch_count = 0
     for entry in manifest.get("patches", []):
-        patch_path = root / entry["file"]
+        if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
+            raise ContractError("source-build patch entry must name a relative file")
+        relative_patch = Path(entry["file"])
+        if (relative_patch.is_absolute() or ".." in relative_patch.parts
+                or not (root / relative_patch).resolve().is_relative_to(root.resolve())):
+            raise ContractError(f"source-build patch path escapes the repository: {entry['file']!r}")
+        patch_path = root / relative_patch
         if not patch_path.is_file():
             raise ContractError(f"source-build patch is missing: {entry['file']}")
         patch_bytes = patch_path.read_bytes()

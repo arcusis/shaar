@@ -21,3 +21,22 @@ test("layout defers the client script", () => {
   assert.ok(script);
   assert.equal(script.hasAttribute("defer"), true);
 });
+
+test("layout preloads only font files available to the build", () => {
+  const page: SitePage = {
+    path: "/",
+    title: "Shaar",
+    heading: "Shaar",
+    description: "A browser.",
+    body: "",
+  };
+  const document = parseHTML(Layout(page, "", [])).document;
+  assert.equal(document.querySelectorAll('link[rel="preload"][as="font"]').length, 0);
+
+  const withOneFont = parseHTML(Layout(page, "", ["satoshi.woff2"])).document;
+  assert.equal(
+    withOneFont.querySelector('link[rel="preload"][as="font"]')?.getAttribute("href"),
+    "/assets/fonts/satoshi.woff2",
+  );
+  assert.equal(withOneFont.querySelectorAll('link[rel="preload"][as="font"]').length, 1);
+});

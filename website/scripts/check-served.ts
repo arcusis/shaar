@@ -29,6 +29,11 @@ assert.equal(new URL(redirect.headers.get("location") ?? "", origin).pathname, "
 const missing = await fetch(`${origin}/this-page-does-not-exist/`);
 assert.equal(missing.status, 404);
 assert.match(await missing.text(), /Page not found/);
+for (const path of ["/404", "/404/", "/404.html"]) {
+  const explicitNotFound = await fetch(`${origin}${path}`, { redirect: "manual" });
+  assert.equal(explicitNotFound.status, 404, path);
+  assert.match(await explicitNotFound.text(), /Page not found/, path);
+}
 const appcast = await fetch(`${origin}/appcast.xml`);
 assert.equal(appcast.status, 404, "The website must not serve a replacement appcast.");
 for (const path of [

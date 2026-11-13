@@ -119,6 +119,7 @@ struct CommandPanel: View {
       Image(systemName: "magnifyingglass")
         .font(.system(size: 19, weight: .light))
         .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
       TextField(Self.searchPrompt, text: $store.commandQuery)
         .textFieldStyle(.plain)
         .font(.system(size: 20))

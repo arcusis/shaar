@@ -30,6 +30,7 @@ import Testing
 
 @Test @MainActor func pasteAndGoOpensAnEmptySelectedSpaceWithoutNativeNavigation() throws {
   let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoEmptySpaceTests"))
+  pasteboard.clearContents()
   let store = BrowserStore()
   let destination = URL(string: "https://empty-tab.example/path")!
   #expect(store.session.selectedPage == nil)
@@ -43,5 +44,23 @@ import Testing
     })
 
   #expect(!nativeNavigationRequested)
+  #expect(store.session.selectedPage?.tab.url == destination)
+}
+
+@Test @MainActor func pasteAndGoOpensAnEmptyPrivateSpace() throws {
+  let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoPrivateEmptySpaceTests"))
+  pasteboard.clearContents()
+  let destination = URL(string: "https://private-empty-tab.example/path")!
+  #expect(pasteboard.setString(destination.absoluteString, forType: .string))
+  let session = try BrowserSession.privateWindow(sourceProfileID: UUID(), firstTabID: UUID())
+  let store = BrowserStore(privateSession: session)
+  store.session.closeTab(session.selectedSpace.tabs[0].id)
+
+  #expect(store.session.selectedPage == nil)
+  #expect(
+    PrivateBrowserHost.windowCanPerform(
+      .pasteAndGo, store: store, pasteboard: pasteboard, searchEngine: .google))
+  #expect(
+    PasteAndGoCommand.route(in: pasteboard, store: store, searchEngine: .google) { _ in false })
   #expect(store.session.selectedPage?.tab.url == destination)
 }

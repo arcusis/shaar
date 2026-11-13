@@ -7,6 +7,7 @@ import importlib.util
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -29,6 +30,24 @@ class BrowsingQAReportTests(unittest.TestCase):
             self.assertEqual(PROBE.Fixture.next_slow_reload_request(), 2)
         finally:
             PROBE.Fixture.slow_reload_requests = original
+    }
+
+    def test_receipt_and_markdown_paths_must_not_collide_or_follow_symlinks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shared = root / "report.json"
+            shared.write_text("preserve this", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "receipt and markdown output paths must differ"):
+                PROBE.write_receipt(shared, shared, root / "app", [])
+            self.assertEqual(shared.read_text(encoding="utf-8"), "preserve this")
+
+            target = root / "outside.json"
+            target.write_text("preserve target", encoding="utf-8")
+            receipt = root / "receipt.json"
+            receipt.symlink_to(target)
+            with self.assertRaisesRegex(ValueError, "output path must not be a symlink"):
+                PROBE.write_receipt(receipt, root / "table.md", root / "app", [])
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve target")
 
     def test_fifty_tabs_always_run(self):
         allowed, reason = PROBE.allow_overload(50, None, None, None)

@@ -693,6 +693,13 @@ def run_suite(
 
 
 def write_receipt(path: Path, markdown_path: Path, executable: Path, results: list[dict]) -> None:
+    if path.resolve() == markdown_path.resolve():
+        raise ValueError("Browsing QA receipt and markdown output paths must differ")
+    for output in (path, markdown_path):
+        if output.is_symlink():
+            raise ValueError(f"Browsing QA output path must not be a symlink: {output}")
+        if output.exists() and not output.is_file():
+            raise ValueError(f"Browsing QA output path is not a regular file: {output}")
     receipt = {
         "verificationExecutable": str(executable),
         "clipBytes": len(Fixture.clip),

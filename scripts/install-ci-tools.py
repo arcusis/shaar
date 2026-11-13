@@ -7,6 +7,7 @@
 
 import argparse
 import hashlib
+import http.client
 import io
 import json
 import platform
@@ -85,11 +86,25 @@ def download(url: str, sleep=time.sleep) -> bytes:
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
             with urllib.request.urlopen(url, timeout=60) as response:
-                return response.read(MAX_ARCHIVE_BYTES)
+                raw_length = getattr(response, "headers", {}).get("Content-Length")
+                expected_length = int(raw_length) if raw_length is not None else None
+                if expected_length is not None and expected_length > MAX_ARCHIVE_BYTES:
+                    raise ValueError(f"Archive exceeds maximum size of {MAX_ARCHIVE_BYTES} bytes")
+                payload = response.read(MAX_ARCHIVE_BYTES + 1)
+                if len(payload) > MAX_ARCHIVE_BYTES:
+                    raise ValueError(f"Archive exceeds maximum size of {MAX_ARCHIVE_BYTES} bytes")
+                if expected_length is not None and len(payload) != expected_length:
+                    raise urllib.error.URLError(
+                        f"Incomplete download: expected {expected_length} bytes, received {len(payload)}"
+                    )
+                return payload
         except urllib.error.HTTPError as error:
             if error.code not in RETRYABLE_STATUS or attempt == DOWNLOAD_ATTEMPTS:
                 raise
-        except (urllib.error.URLError, TimeoutError):
+        except http.client.IncompleteRead:
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
             if attempt == DOWNLOAD_ATTEMPTS:
                 raise
         sleep(2 ** attempt)

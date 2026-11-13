@@ -760,6 +760,44 @@ class SupplyChainTests(unittest.TestCase):
             with self.assertRaises(INSTALL.urllib.error.HTTPError):
                 INSTALL.download("https://example.invalid/tool", lambda seconds: None)
 
+    def test_installer_retries_short_archive_responses(self):
+        class Response(io.BytesIO):
+            def __init__(self, payload, expected_length):
+                super().__init__(payload)
+                self.headers = {"Content-Length": str(expected_length)}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                self.close()
+
+        class TruncatedResponse(Response):
+            def read(self, *_):
+                raise INSTALL.http.client.IncompleteRead(b"short", 12)
+
+        class ResetResponse(Response):
+            def read(self, *_):
+                raise ConnectionResetError("connection reset while reading archive")
+
+        sleeps = []
+        responses = [Response(b"short", 12), Response(b"complete", 8)]
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"complete")
+        self.assertEqual(sleeps, [2])
+        responses = [TruncatedResponse(b"", 0), Response(b"complete", 8)]
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"complete")
+        self.assertEqual(sleeps, [2, 2])
+        responses = [ResetResponse(b"", 0), Response(b"complete", 8)]
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"complete")
+        self.assertEqual(sleeps, [2, 2, 2])
+        oversized = Response(b"", INSTALL.MAX_ARCHIVE_BYTES + 1)
+        with patch.object(INSTALL.urllib.request, "urlopen", return_value=oversized):
+            with self.assertRaisesRegex(ValueError, "maximum size"):
+                INSTALL.download("https://example.invalid/tool", sleeps.append)
+
     def archive(self, symbolic=False):
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode="w:gz") as archive:

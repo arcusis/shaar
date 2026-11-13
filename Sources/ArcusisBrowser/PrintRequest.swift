@@ -82,6 +82,12 @@ struct PrintRequest: Identifiable, Equatable {
     return ["http", "https"].contains(origin.scheme?.lowercased() ?? "")
   }
 
+  private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x061C || value == 0x200E || value == 0x200F
+      || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
+  }
+
   private static func boundedTitle(_ value: Any?) -> String? {
     guard let value else { return "" }
     guard let title = value as? String, title.utf8.count <= 2048 else { return nil }
@@ -108,6 +114,5 @@ struct PrintRequest: Identifiable, Equatable {
     let value = scalar.value
     return value == 0x061C || value == 0x200E || value == 0x200F
       || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
-  }
   }
 }

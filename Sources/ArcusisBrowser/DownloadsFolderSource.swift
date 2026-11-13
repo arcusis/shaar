@@ -68,11 +68,12 @@ struct DownloadsFolderFile: Equatable {
   let added: Date
 
   init?(url: URL) {
-    guard !Self.partialExtensions.contains(url.pathExtension.lowercased()),
-      let values = try? url.resourceValues(forKeys: Set(Self.resourceKeys)),
+    let resolvedURL = url.resolvingSymlinksInPath().standardizedFileURL
+    guard !Self.partialExtensions.contains(resolvedURL.pathExtension.lowercased()),
+      let values = try? resolvedURL.resourceValues(forKeys: Set(Self.resourceKeys)),
       values.isRegularFile == true, values.isHidden != true
     else { return nil }
-    self.url = url.standardizedFileURL.resolvingSymlinksInPath()
+    self.url = resolvedURL
     id = Self.stableID(path: self.url.path)
     size = Double(values.fileSize ?? 0)
     added = values.addedToDirectoryDate ?? values.contentModificationDate ?? .distantPast

@@ -625,12 +625,18 @@ final class PrivateProductHostProbe {
   private func historyExcludesProductVisit() async -> Bool {
     await withCheckedContinuation { continuation in
       runtime.history(forProfileID: sourceA, limit: 500) { rows, error in
-        let hasProductVisit =
-          rows?.contains {
-            ($0["u"] as? String)?.contains("private-product-\(self.runID.lowercased())") == true
-          } == true
-        continuation.resume(returning: error == nil && rows?.isEmpty == false && !hasProductVisit)
+        continuation.resume(
+          returning: Self.historyExcludesProductVisit(rows: rows, error: error, runID: self.runID))
       }
+    }
+  }
+
+  static func historyExcludesProductVisit(
+    rows: [[AnyHashable: Any]]?, error: Error?, runID: String
+  ) -> Bool {
+    guard error == nil, let rows else { return false }
+    return !rows.contains {
+      ($0["u"] as? String)?.contains("private-product-\(runID.lowercased())") == true
     }
   }
 

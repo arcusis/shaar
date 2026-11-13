@@ -35,7 +35,7 @@ class PrivateSearchEvidenceTests(unittest.TestCase):
 
 class PageFocusEventProbeTests(unittest.TestCase):
     def test_authored_account_fixture_counts_window_focus_and_blur(self):
-        source = (Path(__file__).resolve().parents[2] / 'Scripts/engine_fixture.py').read_text()
+        source = (Path(__file__).resolve().parents[2] / 'scripts/engine_fixture.py').read_text()
         self.assertIn("window.__shaarPageFocusEvents={focus:0,blur:0}", source)
         self.assertIn("window.addEventListener('focus'", source)
         self.assertIn("window.addEventListener('blur'", source)

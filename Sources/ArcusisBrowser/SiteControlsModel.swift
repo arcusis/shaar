@@ -135,7 +135,8 @@ final class SiteControlsModel: Identifiable {
     let changeRevision = permissionChangeRevision
     do {
       let values = try await backend.permissionValues(for: target)
-      guard loadRevision == permissionLoadRevision, changeRevision == permissionChangeRevision
+      guard !Task.isCancelled, loadRevision == permissionLoadRevision,
+        changeRevision == permissionChangeRevision
       else {
         return
       }
@@ -146,7 +147,8 @@ final class SiteControlsModel: Identifiable {
       permissionValues = refreshed
       failure = nil
     } catch {
-      guard loadRevision == permissionLoadRevision, changeRevision == permissionChangeRevision
+      guard !Task.isCancelled, loadRevision == permissionLoadRevision,
+        changeRevision == permissionChangeRevision
       else {
         return
       }

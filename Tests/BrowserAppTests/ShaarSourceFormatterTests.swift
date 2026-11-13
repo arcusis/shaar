@@ -32,3 +32,14 @@ import Testing
   let source = String(repeating: "x", count: ShaarSourceFormatter.maximumBytes + 1)
   #expect(ShaarSourceFormatter.format(source, kind: .style) == source)
 }
+
+@Test func sourceFormatterBoundsIndentationForDeeplyNestedInput() {
+  let source = String(repeating: "{", count: 10_000)
+  let formatted = ShaarSourceFormatter.format(source, kind: .script)
+  let maximumIndentation = formatted.components(separatedBy: "\n").map {
+    $0.prefix(while: { $0 == " " }).count
+  }.max() ?? 0
+
+  #expect(maximumIndentation <= 64)
+  #expect(formatted.utf8.count < 1_000_000)
+}

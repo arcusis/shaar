@@ -134,6 +134,8 @@ private final class PendingInspectorAuditRuntime: ARCChromiumRuntime {
     #expect(audit.busy)
     #expect(audit.operationID == currentOperation)
     audit.cancel()
+    #expect(!audit.busy)
+    #expect(audit.operationID == nil)
   }
 
   @Test func backendFailuresUseLocalizedAuditRecoveryCopy() {

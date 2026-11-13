@@ -80,9 +80,9 @@ final class InspectorAuditModel {
     let selectionID = scope == .selected ? inspector.selection?.id : nil
     let requestedScope = scope
     let requestID = UUID()
-    operationID = requestID
     busy = true
     failure = nil
+    self.operationID = requestID
     operation = Task { [weak self] in
       await self?.perform(
         requestedScope, generation: generation, selectionID: selectionID, requestID: requestID)
@@ -90,7 +90,7 @@ final class InspectorAuditModel {
   }
 
   func cancel() {
-    operationID = UUID()
+    operationID = nil
     operation?.cancel()
     operation = nil
     operationID = nil
@@ -123,11 +123,14 @@ final class InspectorAuditModel {
     let expression = """
       (()=>{try{const node=document.querySelector(\(selector));return node?globalThis.__shaarInspectorV2?.select(node)===true:false;}catch{return false;}})()
       """
+    let selectedReport = report?.scope == Scope.selected.rawValue
     operation?.cancel()
+    operation = nil
+    operationID = nil
+    busy = false
     selectionTask?.cancel()
     let requestID = UUID()
     selectionRequestID = requestID
-    let selectedReport = report?.scope == Scope.selected.rawValue
     selectionTask = Task { [weak self, weak inspector] in
       await self?.selectTarget(
         expression, generation: generation, selectedReport: selectedReport, inspector: inspector,
@@ -135,16 +138,10 @@ final class InspectorAuditModel {
     }
   }
 
-  func finishOperation(_ operationID: UUID) {
-    guard self.operationID == operationID else { return }
-    busy = false
-    operation = nil
-    self.operationID = nil
-  }
-
   private func perform(
     _ scope: Scope, generation: Int, selectionID: Int?, requestID: UUID
   ) async {
+    guard operationID == requestID else { return }
     defer { finishOperation(requestID) }
     guard let inspector else { return }
     do {
@@ -163,9 +160,17 @@ final class InspectorAuditModel {
     } catch is CancellationError {
       return
     } catch {
-      guard !Task.isCancelled, inspector.documentGeneration == generation else { return }
+      guard operationID == requestID, !Task.isCancelled,
+        inspector.documentGeneration == generation else { return }
       failure = Self.failureMessage(for: error)
     }
+  }
+
+  func finishOperation(_ operationID: UUID) {
+    guard self.operationID == operationID else { return }
+    busy = false
+    operation = nil
+    self.operationID = nil
   }
 
   static func failureMessage(for error: Error) -> String {

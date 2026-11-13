@@ -1471,6 +1471,22 @@
         }
       }
     },
+    "The profile could not be created. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The profile could not be created. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב." } }
+      }
+    },
+    "The profile could not be created. %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
     "Sign in with a personal Google account or a Google Workspace account. If your company signs in through its own identity provider, that page opens in the same window and returns to Google.": {
       "localizations": {
         "he": {

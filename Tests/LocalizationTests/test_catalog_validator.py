@@ -470,6 +470,13 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], translation)
                 self.assertIn(f'InspectorL10n.string("{key}")', source)
+    def test_native_menu_title_is_present_in_settings_fallback_catalog(self):
+        shell = json.loads((ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(encoding="utf-8"))
+        settings = json.loads((ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(encoding="utf-8"))
+        self.assertEqual(
+            settings["strings"]["Show All History"]["localizations"]["he"]["stringUnit"]["value"],
+            shell["strings"]["Show All History"]["localizations"]["he"]["stringUnit"]["value"],
+        )
 
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"

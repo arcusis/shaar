@@ -126,11 +126,7 @@ final class DownloadsModel {
       notices[profileID] = PanelsL10n.string("Download controls are unavailable.")
       return false
     }
-    onCommand(action, id, profileID) { [weak self] error in
-      guard let self else { return }
-      self.notices[profileID] =
-        error == nil ? nil : PanelsL10n.string("Could not complete this download action. Try again.")
-    }
+    onCommand(action, id, profileID) { [weak self] error in self?.notices[profileID] = error }
     return true
   }
 

@@ -75,7 +75,7 @@ struct DownloadsTests {
     model.onCommand = { _, _, _, completion in finish = completion }
     #expect(model.perform(.pause, id: id, profileID: a, selectedProfileID: a))
     finish?("Could not pause")
-    #expect(model.notices[a] == PanelsL10n.string("Could not complete this download action. Try again."))
+    #expect(model.notices[a] == "Could not pause")
     #expect(model.notices[b] == nil)
   }
 

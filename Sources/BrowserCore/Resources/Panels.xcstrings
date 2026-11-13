@@ -528,12 +528,6 @@
         }
       }
     },
-    "Could not complete this download action. Try again.": {
-      "localizations": {
-        "en": {"stringUnit": {"state": "translated", "value": "Could not complete this download action. Try again."}},
-        "he": {"stringUnit": {"state": "translated", "value": "לא ניתן לבצע את הפעולה על ההורדה. כדאי לנסות שוב."}}
-      }
-    },
     "Download notice: %@": {
       "localizations": {
         "he": {

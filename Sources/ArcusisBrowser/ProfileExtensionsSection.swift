@@ -207,7 +207,9 @@ struct ExtensionManagerList: View {
               actions: ExtensionRowActions(
                 run: { run(item.id) },
                 setPinned: { model.setPinned(item.id, pinned: $0) },
-                setEnabled: { model.setEnabled(item.id, enabled: $0) },
+                setEnabled: { enabled in
+                  MainActor.assumeIsolated { model.setEnabled(item.id, enabled: enabled) }
+                },
                 showDetails: { showDetails(item.id) }))
           }
         }

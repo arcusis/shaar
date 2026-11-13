@@ -7,6 +7,10 @@ import BrowserCore
 import SwiftUI
 
 enum BrowserSettingsAccessibility {
+  static func profileSelectionTraits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
+
   static func openSpaceLabel(
     name: String, language: BrowserLanguage = .currentLaunchLanguage
   ) -> String {
@@ -620,6 +624,9 @@ struct BrowserSettingsView: View {
             )
             .contentShape(Rectangle())
           }.buttonStyle(.plain)
+            .accessibilityAddTraits(
+              BrowserSettingsAccessibility.profileSelectionTraits(
+                isSelected: selectedProfileID == profile.id))
         }
         Spacer()
       }

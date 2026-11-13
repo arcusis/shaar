@@ -15,6 +15,13 @@ import Testing
         == "לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב.")
   }
 
+  @Test func profileSelectionAccessibilityTraitTracksSelection() {
+    #expect(
+      BrowserSettingsAccessibility.profileSelectionTraits(isSelected: true).contains(.isSelected))
+    #expect(
+      !BrowserSettingsAccessibility.profileSelectionTraits(isSelected: false).contains(.isSelected))
+  }
+
   @Test func creatingProfileSelectsSettingsOnlyAndPreservesEveryBrowserSelection() throws {
     let session = BrowserSession.fresh()
     let workspace = try BrowserWorkspaceStore(initialSession: session)

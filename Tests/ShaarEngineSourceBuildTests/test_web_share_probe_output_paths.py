@@ -57,6 +57,13 @@ class WebShareProbeOutputPathTests(unittest.TestCase):
         self.assertEqual(result.returncode, 124)
         self.assertEqual(result.stderr, "picker stalled")
 
+    def test_probe_start_error_becomes_a_failed_receipt_result(self):
+        with mock.patch.object(PROBE.subprocess, "run", side_effect=OSError("cannot launch")):
+            result = PROBE.run_probe(["probe"], {}, timeout=1)
+
+        self.assertEqual(result.returncode, 126)
+        self.assertEqual(result.stderr, "cannot launch")
+
 
 if __name__ == "__main__":
     unittest.main()

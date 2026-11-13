@@ -85,6 +85,8 @@ def run_probe(command, environment, timeout):
 
         return subprocess.CompletedProcess(
             command, 124, text_output(error.stdout), text_output(error.stderr))
+    except OSError as error:
+        return subprocess.CompletedProcess(command, 126, "", str(error))
 
 
 def main():

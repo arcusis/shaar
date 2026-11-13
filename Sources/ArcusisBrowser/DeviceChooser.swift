@@ -244,7 +244,7 @@ struct DeviceChooserConsent: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(Self.optionAccessibilityTraits(
-          isSelected: selection.selectedIndex(for: presented.options) == option.index))
+          isSelected: selection.selectedIndex(for: presented.options, revision: presented.revision) == option.index))
       }
     }
   }

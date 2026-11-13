@@ -798,19 +798,19 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "בית אחד של קוד סימון"
+                  "value": "בייט אחד של קוד סימון"
                 }
               },
               "two": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "שני בתים של קוד סימון"
+                  "value": "שני בייטים של קוד סימון"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d בתים של קוד סימון"
+                  "value": "%d בייטים של קוד סימון"
                 }
               }
             }

@@ -102,6 +102,22 @@ class ReleaseScriptOptionTests(unittest.TestCase):
         self.assertIn("grep -Eq 'flags=0x[0-9a-f]+\\([^)]*runtime'", source)
         self.assertIn("((unsigned == 0)) ||", source)
 
+    def test_nested_helpers_keep_only_their_upstream_entitlements(self):
+        source = SCRIPT.read_text()
+        helper_signing = source[
+            source.index("sign_like_upstream() {") :
+            source.index("echo '==> Signing nested code inside out")
+        ]
+
+        self.assertIn(
+            'codesign -d --entitlements - --xml "$upstream" > "$entitlements"',
+            helper_signing,
+        )
+        self.assertIn('sign --entitlements "$entitlements" "$target"', helper_signing)
+        self.assertIn('if [[ -s "$entitlements" ]]', helper_signing)
+        self.assertIn('sign "$target"', helper_signing)
+        self.assertNotIn("app_entitlements", helper_signing)
+
     def test_missing_signing_identity_stops_before_build(self):
         result = self._run("--notes", str(self.notes))
 

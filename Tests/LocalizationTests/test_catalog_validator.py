@@ -179,6 +179,12 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertNotEqual(
                     strings[key]["localizations"]["he"]["stringUnit"]["value"], key)
+    def test_inspector_disclosure_chevrons_follow_reading_direction(self):
+        for name in ("InspectorActionsView.swift", "InspectorPanel.swift", "InspectorPanelComponents.swift"):
+            with self.subTest(name=name):
+                source = (ROOT / "Sources/ArcusisBrowser" / name).read_text(encoding="utf-8")
+                self.assertIn("chevron.forward", source)
+                self.assertNotIn('"chevron.right"', source)
 
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:

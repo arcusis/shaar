@@ -82,6 +82,16 @@ import Testing
     await waiter.value
   }
 
+  @Test func stoppedPageToolsDoNotPublishStorageCancellationAsFailure() async {
+    let (inspector, _, tools) = makeModels()
+    tools.stop()
+    await tools.writeStorage(key: "theme", value: "dark")
+
+    #expect(!tools.active)
+    #expect(tools.failure == nil)
+    inspector.close()
+  }
+
   @Test func technologiesAndStorageValidateBoundedUntrustedData() throws {
     let (inspector, _, tools) = makeModels()
     defer {

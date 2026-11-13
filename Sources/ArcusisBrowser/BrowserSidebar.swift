@@ -208,6 +208,7 @@ struct BrowserSidebar: View {
 
   private func tabList(_ space: BrowserSpace) -> some View {
     let tabIndex = SidebarTabIndex(tabs: space.tabs)
+    let folderSiblingIndex = SidebarFolderSiblingIndex(folders: space.folders)
     return ScrollViewReader { tabScroll in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
@@ -240,7 +241,7 @@ struct BrowserSidebar: View {
               if folderDraft?.editingFolderID == folder.id {
                 folderDraftRow(depth: depth)
               } else {
-                folderRow(folder, depth: depth)
+                folderRow(folder, depth: depth, siblingIndex: folderSiblingIndex)
               }
               if let folderDraft, folderDraft.editingFolderID == nil,
                 folderDraft.parentID == folder.id
@@ -329,7 +330,7 @@ struct BrowserSidebar: View {
               if folderDraft?.editingFolderID == folder.id {
                 folderDraftRow(depth: depth)
               } else {
-                folderRow(folder, depth: depth)
+                folderRow(folder, depth: depth, siblingIndex: folderSiblingIndex)
               }
               if let folderDraft, folderDraft.editingFolderID == nil,
                 folderDraft.parentID == folder.id
@@ -1066,13 +1067,15 @@ struct BrowserSidebar: View {
     space.folderPath(to: id).reversed().map(\.name).joined(separator: " / ")
   }
 
-  private func folderRow(_ folder: BrowserFolder, depth: Int) -> some View {
+  private func folderRow(
+    _ folder: BrowserFolder, depth: Int, siblingIndex: SidebarFolderSiblingIndex
+  ) -> some View {
     let space = store.session.selectedSpace
     let active =
       space.folderPath(to: store.session.selectedPage?.tab.folderID).contains {
         $0.id == folder.id
       }
-    let siblings = SidebarFolderReorder.siblings(of: folder, in: space)
+    let siblings = siblingIndex.siblings(of: folder)
     return Button {
       store.toggleFolder(folder.id, in: space.id)
     } label: {

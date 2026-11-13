@@ -4,12 +4,17 @@
 
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct ExternalAppConsentTests {
+  @Test func externalAppConsentTitleIsVoiceOverHeading() {
+    #expect(ExternalAppConsent.headingTraits == .isHeader)
+  }
+
   private func store() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com/path?secret=hidden")!))

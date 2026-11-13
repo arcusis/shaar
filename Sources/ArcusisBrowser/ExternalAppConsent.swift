@@ -7,6 +7,7 @@ import BrowserCore
 import SwiftUI
 
 struct ExternalAppConsent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let store: BrowserStore
   let request: ExternalAppRequest
   @Environment(\.dismiss) private var dismiss
@@ -16,6 +17,7 @@ struct ExternalAppConsent: View {
       VStack(alignment: .leading, spacing: 20) {
         Label(PanelsL10n.string("Open in another app?"), systemImage: "app")
           .font(.title2.weight(.semibold))
+          .accessibilityAddTraits(Self.headingTraits)
         Text(request.applicationName ?? PanelsL10n.string("No app available"))
           .font(.headline).fixedSize(horizontal: false, vertical: true)
         LabeledContent(PanelsL10n.string("Website")) {

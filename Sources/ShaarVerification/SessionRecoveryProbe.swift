@@ -50,6 +50,9 @@ final class SessionRecoveryProbe {
   }
 
   static func open(root: URL, fixture: URL, phase: String) throws -> SessionRecoveryProbe {
+    guard phase == "initial" || phase == "restart" else {
+      throw SessionRecoveryFailure("Session-recovery phase must be initial or restart.")
+    }
     let file = WorkspaceFile(
       url: root.appending(path: workspaceName),
       legacySessionURL: root.appending(path: "session-recovery-unused-legacy.json"))

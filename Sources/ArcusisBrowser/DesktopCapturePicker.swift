@@ -43,6 +43,11 @@ struct DesktopCaptureSource: Identifiable, Equatable {
   }
 }
 
+struct DesktopCaptureSettingsButton {
+  let title: String
+  let action: () -> Void
+}
+
 @MainActor
 struct DesktopCapturePicker: View {
   let request: DesktopCaptureRequest
@@ -51,6 +56,7 @@ struct DesktopCapturePicker: View {
   private let requestScreenRecordingAccess: () -> Bool
   private let shareableContent: () async throws -> SCShareableContent
   private let screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])?
+  private let openSettings: (URL) -> Void
   @State private var sources: [DesktopCaptureSource] = []
   @State private var loading = true
   @State private var error: String?
@@ -65,7 +71,8 @@ struct DesktopCapturePicker: View {
     shareableContent: @escaping () async throws -> SCShareableContent = {
       try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     },
-    screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])? = nil
+    screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])? = nil,
+    openSettings: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
   ) {
     self.request = request
     self.store = store
@@ -73,6 +80,16 @@ struct DesktopCapturePicker: View {
     self.requestScreenRecordingAccess = requestScreenRecordingAccess
     self.shareableContent = shareableContent
     self.screenSourcesProvider = screenSourcesProvider
+    self.openSettings = openSettings
+  }
+
+  func settingsButton(for needsAccess: Bool) -> DesktopCaptureSettingsButton? {
+    guard needsAccess,
+      let url = MacPermission.screenRecording.settingsURL
+    else { return nil }
+    return DesktopCaptureSettingsButton(
+      title: PanelsL10n.string("Open Settings"),
+      action: { openSettings(url) })
   }
 
   var pickerContent: DesktopCapturePickerContent {
@@ -90,11 +107,7 @@ struct DesktopCapturePicker: View {
       note: displayedNote,
       onRetry: { await reloadSources() },
       needsScreenRecordingAccess: needsScreenRecordingAccess,
-      onOpenSettings: {
-        if let url = MacPermission.screenRecording.settingsURL {
-          NSWorkspace.shared.open(url)
-        }
-      },
+      settingsButton: settingsButton(for: needsScreenRecordingAccess),
       onSelect: { store.resolveDesktopCapture(request.id, sourceID: $0) },
       onCancel: { store.resolveDesktopCapture(request.id, sourceID: nil) }
     )
@@ -188,7 +201,7 @@ struct DesktopCapturePickerContent: View {
   var note: String? = nil
   var onRetry: () async -> Void = {}
   var needsScreenRecordingAccess = false
-  var onOpenSettings: () -> Void = {}
+  var settingsButton: DesktopCaptureSettingsButton? = nil
   let onSelect: (String) -> Void
   let onCancel: () -> Void
 
@@ -209,8 +222,8 @@ struct DesktopCapturePickerContent: View {
         }
         .accessibilityIdentifier("desktop-capture-retry")
       }
-      if needsScreenRecordingAccess {
-        Button(PanelsL10n.string("Open Settings"), action: onOpenSettings)
+      if needsScreenRecordingAccess, let settingsButton {
+        Button(settingsButton.title, action: settingsButton.action)
       }
       if loading {
         ProgressView(PanelsL10n.string("Looking for screens, windows, and tabs…"))

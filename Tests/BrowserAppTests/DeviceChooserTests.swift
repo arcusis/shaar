@@ -51,6 +51,21 @@ struct DeviceChooserTests {
         payload: extra) == nil)
   }
 
+  @Test func chooserRejectsFractionalAndOutOfRangeOptionIndexes() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+
+    for invalidIndex: Any in [0.5, 64] {
+      let payload = event(
+        transport: "usb", id: "invalid-index", page: tab.url,
+        options: [["index": invalidIndex, "name": "Adapter"]], canGrant: true)
+      #expect(
+        DeviceChooserIntake.request(
+          tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+          payload: payload) == nil)
+    }
+  }
+
   @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

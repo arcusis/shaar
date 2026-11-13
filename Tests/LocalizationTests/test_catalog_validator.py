@@ -134,6 +134,7 @@ class CatalogValidatorTests(unittest.TestCase):
                 translation = data[key]["localizations"]["he"]["stringUnit"]["value"]
                 self.assertNotEqual(translation, key)
         self.assertEqual(set(data["%d connected agents"]["localizations"]["he"]["variations"]["plural"]), {"one", "two", "other"})
+        self.assertEqual(data["%d connected agents"]["localizations"]["he"]["variations"]["plural"]["one"]["stringUnit"]["value"], "סוכן מחובר אחד")
 
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"

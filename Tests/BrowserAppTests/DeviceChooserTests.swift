@@ -44,7 +44,7 @@ struct DeviceChooserTests {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
     var payload = event(transport: "usb", id: "embedded", page: tab.url)
-    payload["origin"] = "https://device-frame.example:8443/chooser"
+    payload["origin"] = "https://device-frame.example:8443"
 
     let request = try #require(
       DeviceChooserIntake.request(
@@ -54,12 +54,32 @@ struct DeviceChooserTests {
     #expect(request.pageURL.host() == "devices.example")
     #expect(request.displayOrigin == "https://device-frame.example:8443")
 
-    payload["origin"] = "http://device-frame.example:8443/chooser"
+    payload["origin"] = "http://device-frame.example:8443"
     let insecureOrigin = try #require(
       DeviceChooserIntake.request(
         tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
         payload: payload))
     #expect(insecureOrigin.displayOrigin == "http://device-frame.example:8443")
+  }
+
+  @Test func chooserOriginRejectsURLsThatAreNotOrigins() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+
+    for invalidOrigin in [
+      "https://user:password@device-frame.example/",
+      "https://device-frame.example/chooser",
+      "https://device-frame.example/?device=one",
+      "https://device-frame.example/#device",
+    ] {
+      var payload = event(transport: "usb", id: "invalid-origin", page: tab.url)
+      payload["origin"] = invalidOrigin
+      #expect(
+        DeviceChooserIntake.request(
+          tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+          payload: payload) == nil,
+        "Accepted non-origin URL: \(invalidOrigin)")
+    }
   }
 
   @Test func chooserOriginFormattingOmitsDefaultPortsAndBracketsIPv6() throws {
@@ -228,7 +248,7 @@ struct DeviceChooserTests {
     let tab = try #require(store.session.selectedSpace.selectedTab)
     var payload = event(
       kind: "deviceChooserUpdated", transport: "usb", id: "identity", page: tab.url)
-    payload["origin"] = "https://other-frame.example/"
+    payload["origin"] = "https://other-frame.example"
     let wrongOrigin = try #require(
       DeviceChooserIntake.request(
         tabID: tab.id, profileID: store.session.profileID(forTabID: tab.id), pageURL: tab.url,
@@ -291,7 +311,8 @@ struct DeviceChooserTests {
   ) -> [String: Any] {
     [
       "schemaVersion": 1, "kind": kind, "id": id, "transport": transport,
-      "pageURL": page.absoluteString, "origin": page.absoluteString, "options": options,
+      "pageURL": page.absoluteString,
+      "origin": "\(page.scheme ?? "https")://\(page.host() ?? "")", "options": options,
       "canGrant": canGrant, "profileID": "profile", "tabID": "tab", "windowID": "window",
     ]
   }

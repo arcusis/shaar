@@ -136,6 +136,9 @@ enum DeviceChooserIntake {
       let originText = payload["origin"] as? String,
       let origin = URL(string: originText),
       (origin.scheme == "http" || origin.scheme == "https"), origin.host() != nil,
+      origin.user == nil, origin.password == nil,
+      (origin.path().isEmpty || origin.path() == "/"),
+      origin.query() == nil, origin.fragment() == nil,
       let rawOptions = payload["options"] as? [[String: Any]], rawOptions.count <= 64,
       let canGrant = payload["canGrant"] as? Bool
     else { return nil }

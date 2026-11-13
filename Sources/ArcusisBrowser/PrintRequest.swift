@@ -107,7 +107,18 @@ struct PrintRequest: Identifiable, Equatable {
     }
     let sanitized = String(String.UnicodeScalarView(scalars))
       .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    guard sanitized.unicodeScalars.contains(where: Self.isVisibleTitleScalar) else { return "" }
     return String(sanitized.prefix(256))
+  }
+
+  private static func isVisibleTitleScalar(_ scalar: Unicode.Scalar) -> Bool {
+    guard !isPreservedFormat(scalar), !CharacterSet.whitespacesAndNewlines.contains(scalar) else {
+      return false
+    }
+    switch scalar.properties.generalCategory {
+    case .nonspacingMark, .spacingMark, .enclosingMark: return false
+    default: return true
+    }
   }
 
   private static func hasSupportedSchemaVersion(_ value: Any?) -> Bool {

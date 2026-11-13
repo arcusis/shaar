@@ -551,9 +551,14 @@ final class ShaarFirstTabProbe {
 
   static func matchesRequestedURL(_ actual: URL?, requested: URL) -> Bool {
     guard let actual, actual.scheme == requested.scheme, actual.host == requested.host,
+      effectivePort(actual) == effectivePort(requested),
       actual.query == requested.query, actual.fragment == requested.fragment
     else { return false }
     return actual.path == requested.path || (actual.path == "/" && requested.path.isEmpty)
+  }
+
+  private static func effectivePort(_ url: URL) -> Int? {
+    url.port ?? (url.scheme == "https" ? 443 : url.scheme == "http" ? 80 : nil)
   }
 
   private func finish(tabID: String? = nil, nativeView: NSView? = nil, error: String? = nil) {

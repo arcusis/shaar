@@ -76,4 +76,14 @@ import Testing
         URL(string: "https://example.com/other")!, requested: requested))
     #expect(!ShaarFirstTabProbe.matchesRequestedURL(nil, requested: requested))
   }
+
+  @Test func requestedURLMustMatchTheEffectiveOriginPort() {
+    let requested = URL(string: "https://example.com")!
+    #expect(
+      ShaarFirstTabProbe.matchesRequestedURL(
+        URL(string: "https://example.com:443/")!, requested: requested))
+    #expect(
+      !ShaarFirstTabProbe.matchesRequestedURL(
+        URL(string: "https://example.com:8443/")!, requested: requested))
+  }
 }

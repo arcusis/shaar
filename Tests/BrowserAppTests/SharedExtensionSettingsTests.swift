@@ -55,8 +55,67 @@ private actor SettingsExtensionsTransport: ShaarExtensionsTransport {
   }
 }
 
+private actor DelayedSettingsExtensionsTransport: ShaarExtensionsTransport {
+  private var firstListStarted = false
+  private var firstListWaiter: CheckedContinuation<Void, Never>?
+  private var firstListReply: CheckedContinuation<Data, Never>?
+  private var listCount = 0
+
+  func submitExtensions(
+    profileID: UUID, operation: ShaarExtensionsOperation, arguments: Data
+  ) async throws -> Data {
+    guard operation == .list else { return Data(#"{"schemaVersion":1,"updated":true}"#.utf8) }
+    listCount += 1
+    if listCount == 1 {
+      firstListStarted = true
+      firstListWaiter?.resume()
+      firstListWaiter = nil
+      return await withCheckedContinuation { firstListReply = $0 }
+    }
+    return Self.list(enabled: false)
+  }
+
+  func waitForFirstList() async {
+    guard !firstListStarted else { return }
+    await withCheckedContinuation { firstListWaiter = $0 }
+  }
+
+  func releaseFirstList() {
+    firstListReply?.resume(returning: Self.list(enabled: true))
+    firstListReply = nil
+  }
+
+  private static func list(enabled: Bool) -> Data {
+    Data(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.2","enabled":\#(enabled),"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#.utf8)
+  }
+}
+
 @Suite("Shared extension Settings")
 struct SharedExtensionSettingsTests {
+  @Test @MainActor func olderExtensionReloadCannotReplaceNewerState() async throws {
+    let profileID = UUID()
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+    ).write(to: file)
+    let transport = DelayedSettingsExtensionsTransport()
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter, profiles: { [profileID: "Work"] })
+
+    let olderReload = Task { await model.reload() }
+    await transport.waitForFirstList()
+    await model.reload()
+    #expect(model.rows.first?.profiles[profileID]?.enabled == false)
+
+    await transport.releaseFirstList()
+    await olderReload.value
+    #expect(model.rows.first?.profiles[profileID]?.enabled == false)
+  }
+
   @Test @MainActor func failedToggleShowsLocalizedActionableError() async throws {
     let profileID = UUID()
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")

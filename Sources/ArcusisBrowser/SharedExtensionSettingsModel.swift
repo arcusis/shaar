@@ -29,6 +29,7 @@ final class SharedExtensionSettingsModel {
   private let profileNames: @MainActor () -> [UUID: String]
   private var pending: [String: Set<UUID>] = [:]
   private var failed: [String: Set<UUID>] = [:]
+  private var reloadID = UUID()
   private(set) var rows: [SharedExtensionSettingsRow] = []
   private(set) var error: String?
 
@@ -53,18 +54,24 @@ final class SharedExtensionSettingsModel {
   }
 
   func reload() async {
+    let request = UUID()
+    reloadID = request
     let names = profileNames()
     let ids = await home.extensionIDs
+    guard reloadID == request, !Task.isCancelled else { return }
     error = nil
     var installed: [UUID: [String: ShaarExtensionSummary]] = [:]
     for profileID in names.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
       do {
         let list = try await adapter.list(profileID: profileID)
+        guard reloadID == request, !Task.isCancelled else { return }
         installed[profileID] = Dictionary(uniqueKeysWithValues: list.map { ($0.id, $0) })
       } catch {
+        guard reloadID == request, !Task.isCancelled else { return }
         self.error = SettingsL10n.string("Could not load extensions. Try again.")
       }
     }
+    guard reloadID == request, !Task.isCancelled else { return }
     rows = Self.sortedRows(
       ids.map { id in
         let known = installed.values.compactMap { $0[id] }.first

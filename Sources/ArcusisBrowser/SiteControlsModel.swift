@@ -169,8 +169,11 @@ final class SiteControlsModel: Identifiable {
     do {
       try await backend.setPermission(permission, allowed: allowed, for: target)
       failure = nil
+    } catch is CancellationError {
+      permissionValues[permission] = previous
     } catch {
       permissionValues[permission] = previous
+      guard !Task.isCancelled else { return }
       failure = ShellL10n.string("Could not update this permission. Try again.")
     }
   }

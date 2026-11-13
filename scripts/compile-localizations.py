@@ -320,6 +320,9 @@ def validate_source_references(root, catalogs, include_app=False):
                 "InspectorToolsL10n": "InspectorTools"}
     call = re.compile(r"\b(" + "|".join(map(re.escape, wrappers)) + r")\.(?:string|text|format|plural)\s*\(")
     direct_text = re.compile(r'\bText\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)')
+    direct_accessibility_text = re.compile(
+        r'\.(help|accessibilityLabel|accessibilityHint)\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)'
+    )
     source_root = root / "Sources" if include_app else root / "Sources/BrowserCore"
     for path in sorted(source_root.rglob("*.swift")):
         source = path.read_text(encoding="utf-8")
@@ -329,6 +332,14 @@ def validate_source_references(root, catalogs, include_app=False):
                 line = source.count("\n", 0, match.start()) + 1
                 raise ValueError(
                     f"unlocalized Text for catalog key {key!r} ({path.relative_to(root)}:{line})"
+                )
+        for match in direct_accessibility_text.finditer(source):
+            modifier, literal = match.groups()
+            key = decode_swift_literal(literal)
+            if key in translated_text_keys:
+                line = source.count("\n", 0, match.start()) + 1
+                raise ValueError(
+                    f"unlocalized {modifier} for catalog key {key!r} ({path.relative_to(root)}:{line})"
                 )
         for match in call.finditer(source):
             wrapper = match.group(1)

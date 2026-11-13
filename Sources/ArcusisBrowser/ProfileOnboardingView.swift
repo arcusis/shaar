@@ -6,6 +6,16 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
+enum ProfileOnboardingAccessibility {
+  static func signInProgressLabel(
+    provider: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Finish signing in to %@ in the sign-in window.", table: "Settings", language: language,
+      arguments: [.string(provider)])
+  }
+}
+
 /// One choice per step, followed by an optional account and a summary.
 struct ProfileOnboardingView: View {
   let model: ProfileOnboardingModel
@@ -121,9 +131,9 @@ private struct AccountConnectStep: View {
       } else if let provider = model.connecting {
         HStack(spacing: 10) {
           ProgressView().controlSize(.small)
+            .accessibilityLabel(ProfileOnboardingAccessibility.signInProgressLabel(provider: provider.title))
           Text(
-            SettingsL10n.format(
-              "Finish signing in to %@ in the sign-in window.", .string(provider.title))
+            ProfileOnboardingAccessibility.signInProgressLabel(provider: provider.title)
           )
           .foregroundStyle(.secondary)
         }

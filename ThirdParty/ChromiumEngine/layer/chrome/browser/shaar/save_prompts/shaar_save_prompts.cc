@@ -268,7 +268,7 @@ bool ProfileOwnsContents(shaar::ShaarEngineContext* context,
                          shaar_scope scope,
                          content::WebContents* contents) {
   if (!context->profile_services)
-    return true;
+    return false;
   Profile* profile =
       context->profile_services->ResolveProfile(engine, scope.profile);
   return profile && !profile->IsOffTheRecord() &&
@@ -424,6 +424,9 @@ shaar_error_code CompleteDecision(shaar::ShaarEngineContext* context,
       !request_id)
     return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                 "save prompt tab is missing");
+  if (!context->profile_services)
+    return Fail(immediate_error, SHAAR_NOT_READY,
+                "save prompt profile ownership is unavailable");
   content::WebContents* contents =
       context->browser_tabs->FindWebContents(engine, window, tab);
   if (!contents)

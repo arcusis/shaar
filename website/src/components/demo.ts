@@ -74,7 +74,7 @@ function tabList(space: DemoSpace, spaceIndex: number): string {
   return `<div class="demo-space" data-space="${spaceIndex}"${spaceIndex === 0 ? "" : " hidden"}>
     <p class="demo-space-name"><span class="demo-space-dot"></span>${escapeHtml(space.name)}<em>${escapeHtml(space.profile)} profile</em></p>
     <ul class="demo-tabs">${tabs}</ul>
-    <button type="button" class="demo-new-tab" data-launcher>${icon.plus}<span>New tab</span></button>
+    <button type="button" class="demo-new-tab" data-launcher aria-haspopup="dialog">${icon.plus}<span>New tab</span></button>
   </div>`;
 }
 
@@ -123,8 +123,8 @@ export function ShaarDemo(): string {
       <div class="demo-main">
         <div class="demo-toolbar">
           <span class="demo-icon" aria-hidden="true">${icon.back}</span><span class="demo-icon" aria-hidden="true">${icon.forward}</span><span class="demo-icon" aria-hidden="true">${icon.reload}</span>
-          <button type="button" class="demo-address" data-launcher aria-label="Open ${commandInterfaceName}">${icon.lock}<span data-host>arcusis.com</span></button>
-          <button type="button" class="demo-icon demo-controls-button" data-controls aria-label="Site controls" aria-expanded="false">${icon.sliders}</button>
+          <button type="button" class="demo-address" data-launcher aria-label="Open ${commandInterfaceName}" aria-haspopup="dialog">${icon.lock}<span data-host>arcusis.com</span></button>
+          <button type="button" class="demo-icon demo-controls-button" data-controls aria-label="Site controls" aria-expanded="false" aria-haspopup="dialog">${icon.sliders}</button>
         </div>
         <div class="demo-page">${pages()}</div>
         ${launcher()}${siteControls()}

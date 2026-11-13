@@ -75,7 +75,7 @@ struct SplitGroupView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    let shown = liveWeights ?? weights
+    let shown = Self.displayedWeights(liveWeights, matching: weights)
     GeometryReader { geometry in
       let total = axis == .columns ? geometry.size.width : geometry.size.height
       let available = max(0, total - Self.dividerThickness * CGFloat(shown.count - 1))
@@ -174,6 +174,11 @@ struct SplitGroupView: View {
   }
 
   private static let keyboardStep: CGFloat = 32
+
+  static func displayedWeights(_ liveWeights: [Double]?, matching weights: [Double]) -> [Double] {
+    guard let liveWeights, liveWeights.count == weights.count else { return weights }
+    return liveWeights
+  }
 
   private func adjustDivider(_ index: Int, by delta: CGFloat, available: CGFloat) {
     let next = Self.resized(weights, at: index, by: delta, available: available)

@@ -60,5 +60,6 @@ Current before/after measurements, extraction counts, annotation audit and the r
 Hook configuration values preserve path whitespace; only Git's output line terminator is removed when reading `core.hooksPath`. The CodeQL extraction checker reports malformed JSON through its intended error path and exit status.
 Malformed UTF-8 ownership markers make a logged probe root untrusted, so evidence collection reports the normal foreign-root validation error rather than a decoding traceback.
 The shipping-resource source guard matches raw-string delimiters so an embedded quote cannot hide code that follows a raw literal.
+Python test module import failures are represented as JUnit errors so the requested report is still emitted for a failing test job.
 
 Related: [[CI_Pipeline_Design]], [[Verification_Harness]], [[Test_Coverage]], [[Releasing]], [[Notebook_Maintenance]], [[CI_Run_Time]], [[Commit_Gates]].

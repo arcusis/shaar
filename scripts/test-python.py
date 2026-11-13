@@ -30,6 +30,11 @@ def junit_output_path(value: str) -> Path:
     if path.parent.exists() and not path.parent.is_dir():
         raise argparse.ArgumentTypeError(f"parent is not a directory: {path.parent}")
     return path
+def load_error_test(test_file: Path, error: Exception) -> unittest.FunctionTestCase:
+    def fail():
+        raise RuntimeError(f"Could not load Python test module {test_file}: {error}") from error
+
+    return unittest.FunctionTestCase(fail, description=f"load {test_file}")
 
 
 class ReportResult(unittest.TextTestResult):
@@ -132,14 +137,18 @@ def main() -> int:
         for test_file in test_files:
             module_spec = importlib.util.spec_from_file_location(test_file.stem, test_file)
             if module_spec is None or module_spec.loader is None:
-                print(f"Could not load Python test module: {test_file}", file=sys.stderr)
-                return 1
+                error = ImportError(f"No import loader available for {test_file}")
+                print(f"Could not load Python test module: {test_file}: {error}", file=sys.stderr)
+                suite.addTest(load_error_test(test_file, error))
+                continue
             module = importlib.util.module_from_spec(module_spec)
             sys.modules[module_spec.name] = module
             try:
                 module_spec.loader.exec_module(module)
             except Exception as error:
+                print(f"Could not load Python test module: {test_file}: {error}", file=sys.stderr)
                 suite.addTest(ImportFailureTest(test_file, error))
+                sys.modules.pop(module_spec.name, None)
                 continue
             suite.addTests(loader.loadTestsFromModule(module))
 

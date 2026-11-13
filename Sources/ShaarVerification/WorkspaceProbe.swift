@@ -22,7 +22,7 @@ enum WorkspaceProbeEvidence {
   }
 }
 
-private struct WorkspaceProbeIdentity: Codable {
+struct WorkspaceProbeIdentity: Codable, Equatable {
   let first: UUID
   let second: UUID
   let alpha: UUID

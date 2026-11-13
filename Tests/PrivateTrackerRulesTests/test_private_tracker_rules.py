@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import tempfile
 import unittest
 
 
@@ -16,6 +17,19 @@ SPEC.loader.exec_module(RULES)
 
 
 class PrivateTrackerRulesTests(unittest.TestCase):
+    def test_output_writer_rejects_symlink_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "outside.json"
+            target.write_text("preserve this", encoding="utf-8")
+            output = root / "rules.json"
+            output.symlink_to(target)
+
+            with self.assertRaisesRegex(ValueError, "tracker rules output must not be a symlink"):
+                RULES.write_rules(output, {"domains": ["example.test"]})
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
     def test_only_complete_domain_rules_are_used(self):
         text = "\n".join((
             "! comment", "||analytics.example^", "||tracker.example^$third-party",

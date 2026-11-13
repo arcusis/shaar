@@ -98,6 +98,15 @@ def fetch_source(revision: str, name: str) -> bytes:
     return raw
 
 
+def write_rules(output: Path, rules: dict) -> None:
+    if output.is_symlink():
+        raise ValueError(f"tracker rules output must not be a symlink: {output}")
+    if output.exists() and not output.is_file():
+        raise ValueError(f"tracker rules output is not a regular file: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(rules, indent=2) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--revision", required=True, help="full EasyPrivacy Git commit SHA")
@@ -107,8 +116,7 @@ def main() -> None:
         parser.error("revision must be a full lowercase Git commit SHA")
     rules = build_rules(arguments.revision, {
         name: fetch_source(arguments.revision, name) for name in SOURCE_FILES})
-    arguments.output.parent.mkdir(parents=True, exist_ok=True)
-    arguments.output.write_text(json.dumps(rules, indent=2) + "\n", encoding="utf-8")
+    write_rules(arguments.output, rules)
     print(f"{len(rules['domains'])} tracker domains; {rules['revision']}")
 
 

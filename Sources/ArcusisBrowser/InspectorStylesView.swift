@@ -230,6 +230,7 @@ struct InspectorStylesView: View {
             showNewRule = false
             newSelector = ""
           }
+          .keyboardShortcut(.cancelAction)
           Spacer()
           Button(InspectorL10n.string("Apply"), action: commitNewRule)
             .disabled(trimmed(newSelector).isEmpty || model.busy)
@@ -343,6 +344,7 @@ struct InspectorStylesView: View {
           .font(.system(size: 11, design: .monospaced))
         Spacer()
         Button(InspectorL10n.string("Cancel"), role: .cancel) { clearDraft() }
+          .keyboardShortcut(.cancelAction)
         Button(InspectorL10n.string("Apply")) { commitDraft(rule, declaration) }
           .disabled(trimmed(draftName).isEmpty || model.busy)
       }.controlSize(.small).font(.system(size: 11))
@@ -366,6 +368,7 @@ struct InspectorStylesView: View {
         .onSubmit { commitAddedProperty(rule) }
         HStack {
           Button(InspectorL10n.string("Cancel"), role: .cancel) { clearAddedProperty() }
+            .keyboardShortcut(.cancelAction)
           Spacer()
           Button(InspectorL10n.string("Apply")) { commitAddedProperty(rule) }
             .disabled(trimmed(addedName).isEmpty || trimmed(addedValue).isEmpty || model.busy)

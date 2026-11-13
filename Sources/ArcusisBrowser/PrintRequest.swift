@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import CoreFoundation
 import Foundation
 
 struct PrintRequest: Identifiable, Equatable {
@@ -15,7 +16,7 @@ struct PrintRequest: Identifiable, Equatable {
   let title: String
 
   init?(payload: [String: Any]) {
-    guard payload["schemaVersion"] as? Int == 1,
+    guard Self.hasSupportedSchemaVersion(payload["schemaVersion"]),
       let id = payload["id"] as? String,
       UUID(uuidString: id) != nil,
       let profileID = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
@@ -85,5 +86,13 @@ struct PrintRequest: Identifiable, Equatable {
     guard let value else { return "" }
     guard let title = value as? String, title.utf8.count <= 2048 else { return nil }
     return title
+  }
+
+  private static func hasSupportedSchemaVersion(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) == CFNumberGetTypeID(),
+      !CFNumberIsFloatType(number), number.intValue == 1
+    else { return false }
+    return true
   }
 }

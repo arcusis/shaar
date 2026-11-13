@@ -778,6 +778,16 @@
         }
       }
     },
+    "Loading library": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הספרייה בטעינה"
+          }
+        }
+      }
+    },
     "Location": {
       "localizations": {
         "he": {

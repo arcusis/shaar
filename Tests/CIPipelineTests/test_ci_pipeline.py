@@ -1215,6 +1215,13 @@ class EngineTransferTests(unittest.TestCase):
         self.assertIn("continue-on-error: true", lookup)
         self.assertIn("timeout-minutes: 2", lookup)
 
+    def test_merge_group_bundle_download_is_bounded_and_fail_open(self):
+        workflow = (ROOT / ".github/workflows/ci-engine-bundle.yml").read_text()
+        download = workflow.split("      - name: Download the verified bundle artifact", 1)[1]
+        download = download.split("      - name: Build or reuse bundle", 1)[0]
+        self.assertIn("continue-on-error: true", download)
+        self.assertIn("timeout-minutes: 5", download)
+
     def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil

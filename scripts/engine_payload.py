@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import hashlib
 import json
 import lzma
@@ -272,6 +273,7 @@ def _archive_inventory(archive: BinaryIO) -> tuple[dict[str, dict], str]:
 
 def _validate_inventory(entries: dict[str, dict]) -> None:
     kinds = {path: entry["kind"] for path, entry in entries.items()}
+    links = {}
     for path, kind in list(kinds.items()):
         parts = path.split("/")
         for end in range(1, len(parts)):
@@ -282,6 +284,28 @@ def _validate_inventory(entries: dict[str, dict]) -> None:
             kinds.setdefault(parent, "directory")
         if kind == "symlink":
             _safe_link(path, entries[path]["link"])
+            links[path] = entries[path]["link"]
+    for start in links:
+        pending = deque(start.split("/"))
+        resolved = []
+        expanded = set()
+        while pending:
+            component = pending.popleft()
+            if component in ("", "."):
+                continue
+            if component == "..":
+                if resolved:
+                    resolved.pop()
+                continue
+            resolved.append(component)
+            prefix = "/".join(resolved)
+            if prefix in links:
+                if prefix in expanded:
+                    raise PayloadError("inventory contains symlink cycle")
+                expanded.add(prefix)
+                target = links[prefix]
+                resolved.pop()
+                pending.extendleft(reversed(target.split("/")))
     for path, kind in kinds.items():
         if path not in entries:
             entries[path] = {"kind": kind}

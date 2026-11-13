@@ -21,9 +21,12 @@ PRIVATE_NAMES = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", ".dev.vars"}
 def has_symlink_cycle(name: str, targets: dict[str, str]) -> bool:
     pending = deque(name.split("/"))
     resolved = []
-    expanded = set()
+    active = set()
     while pending:
         component = pending.popleft()
+        if isinstance(component, tuple):
+            active.remove(component[1])
+            continue
         if component in ("", "."):
             continue
         if component == "..":
@@ -33,11 +36,12 @@ def has_symlink_cycle(name: str, targets: dict[str, str]) -> bool:
         resolved.append(component)
         prefix = "/".join(resolved)
         if prefix in targets:
-            if prefix in expanded:
+            if prefix in active:
                 return True
-            expanded.add(prefix)
+            active.add(prefix)
             target = targets[prefix]
-            resolved.pop()
+            resolved = []
+            pending.appendleft(("leave", prefix))
             pending.extendleft(reversed(target.split("/")))
     return False
 

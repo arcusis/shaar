@@ -99,6 +99,14 @@ class HookTests(unittest.TestCase):
         self.assertEqual(len(errors), 2)
         self.assertTrue(all("symlink cycle" in error for error in errors))
 
+    def test_repeated_noncyclic_symlink_expansion_is_allowed(self):
+        (self.root / "target").mkdir()
+        (self.root / "target" / "b").write_text("regular target")
+        (self.root / "b").symlink_to("target")
+        (self.root / "alias").symlink_to("b/b")
+        git_content.git(self.root, "add", "target", "b", "alias")
+        self.assertEqual(sensitive_files.policy_errors(self.root), [])
+
     def test_snapshot_preserves_staged_bytes_index_and_worktree(self):
         path = self.stage("nested/source.txt", b"staged bytes")
         path.write_bytes(b"unstaged bytes")

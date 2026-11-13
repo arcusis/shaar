@@ -2,6 +2,8 @@
 
 Scope: Chromium's built-in Developer Tools frontend, Shaar's Inspector and developer diagnostics, in-process DevTools Protocol access, and Ardia's optional remote-control token. This extends the ABI and migration plan in [[Engine_Shaar_Layer_Design]]; it does not add another ABI, object model, callback channel, or ownership rule. The pinned Ardia sources and Chromium 155 tree were inspected read-only under `/Users/david/orca/workspaces/shaar/engine-333-364/build/EngineSource`.
 
+The source-build overlay staging tool refuses a symlinked `panels/shaar` destination before writing overlay files.
+
 ## Current Shaar use
 
 The Swift app imports `ChromiumBridge`, not `ac_engine.h` or `ArdiaCore.h`. There is **no `ac_*` DevTools export resolved by Shaar**. The application currently reaches Ardia through the Objective-C adapter's `ArdiaCoreTab` methods. `ac_devtools_call.mm` is an Ardia implementation file, not a C ABI function used directly by Swift.

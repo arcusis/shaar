@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import ChromiumBridge
 import Testing
 
@@ -60,6 +61,28 @@ import Testing
   #expect(!ARCReservedBrowserShortcut("g", [.command, .option]))
   #expect(!ARCReservedBrowserShortcut("g", [.command, .control]))
   #expect(!ARCReservedBrowserShortcut("g", []))
+}
+
+@Test @MainActor func commandNumberRoutesToTheMatchingTabAndNineSelectsTheLast() throws {
+  let store = BrowserStore()
+  for index in 1...10 {
+    store.perform(.open(URL(string: "https://tab\(index).example")!))
+  }
+  let tabs = store.session.selectedSpace.tabs
+  #expect(tabs.count == 10)
+
+  func event(_ number: String) -> NSEvent {
+    NSEvent.keyEvent(
+      with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+      windowNumber: 0, context: nil, characters: number, charactersIgnoringModifiers: number,
+      isARepeat: false, keyCode: 0)!
+  }
+
+  #expect(TabNumberShortcutRouting.route(event("2"), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[1].id)
+  #expect(TabNumberShortcutRouting.route(event("9"), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs.last?.id)
+  #expect(!TabNumberShortcutRouting.route(event("0"), store: store))
 }
 
 @Test func downloadsShortcutDoesNotReserveOtherCommandJVariants() {

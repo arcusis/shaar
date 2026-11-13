@@ -931,6 +931,16 @@ final class BrowserStore {
     return true
   }
 
+  @discardableResult
+  func selectTabByShortcutIndex(_ index: Int) -> Bool {
+    let tabs = session.selectedSpace.tabs
+    guard tabs.indices.contains(index) else { return false }
+    closeLibraryDrawer()
+    session.selectTab(tabs[index].id, in: session.selectedSpaceID)
+    save()
+    return true
+  }
+
   func nativeTabOpened(_ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool)
     -> Bool
   {

@@ -252,3 +252,17 @@ enum ShortcutPageRouting {
     return false
   }
 }
+
+@MainActor
+enum TabNumberShortcutRouting {
+  static func route(_ event: NSEvent, store: BrowserStore) -> Bool {
+    guard event.type == .keyDown,
+      event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command,
+      let character = event.charactersIgnoringModifiers,
+      let number = Int(character), (1...9).contains(number)
+    else { return false }
+    let tabs = store.session.selectedSpace.tabs
+    let index = number == 9 ? tabs.count - 1 : number - 1
+    return store.selectTabByShortcutIndex(index)
+  }
+}

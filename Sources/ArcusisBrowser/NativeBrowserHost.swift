@@ -1413,6 +1413,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     NSApp.mainMenu = main
     shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       guard let self, let menu = self.menu, NSApp.mainMenu === menu else { return event }
+      if let store = self.privateHost?.activeOwner?.store ?? self.activeContext?.store,
+        TabNumberShortcutRouting.route(event, store: store)
+      {
+        return nil
+      }
       if self.performDeveloperToolsKey(event) {
         return nil
       }

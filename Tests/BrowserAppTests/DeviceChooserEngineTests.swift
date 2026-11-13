@@ -33,7 +33,7 @@ struct DeviceChooserEngineTests {
     #expect(!requested.canGrant)
 
     payload["kind"] = "deviceChooserUpdated"
-    payload["options"] = [["index": 2, "name": "USB adapter"]]
+    payload["options"] = [["optionId": "adapter-2", "name": "USB adapter"]]
     payload["canGrant"] = true
     runtime.onDeviceChooserEvent?(payload)
     guard case .deviceChooser(let updated) = store.sheet else {

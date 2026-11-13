@@ -191,7 +191,7 @@ final class DeviceChooserProbe {
           finish(error: "Could not render the \(transport) chooser: \(error)")
           return
         }
-        context.store.resolveDeviceChooser(engineSheet.id, optionIndex: nil)
+        context.store.resolveDeviceChooser(engineSheet.id, optionID: nil)
         context.store.sheetDidDismiss()
         settled = await waitForSettlement(transport)
         guard settled?.isChooserDismissal(for: transport) == true else {
@@ -243,12 +243,15 @@ final class DeviceChooserProbe {
       id: "preview", tabID: tab.id, profileID: profile, pageURL: tab.url, origin: tab.url,
       transport: .usb,
       options: [
-        DeviceChooserOption(index: 0, title: "USB serial adapter", detail: "Example vendor"),
-        DeviceChooserOption(index: 1, title: "Keyboard", detail: "Example vendor"),
+        DeviceChooserOption(
+          optionID: "preview-0", title: "USB serial adapter", detail: "Example vendor"),
+        DeviceChooserOption(
+          optionID: "preview-1", title: "Keyboard", detail: "Example vendor"),
       ],
       bluetoothUnavailable: false, canGrant: true)
     do {
-      try render(preview, store: context.store, name: "usb-populated.png", selection: 0)
+      try render(
+        preview, store: context.store, name: "usb-populated.png", selection: "preview-0")
       screenshots.append("usb-populated.png")
     } catch {
       finish(error: "Could not render the populated chooser: \(error)")
@@ -350,7 +353,7 @@ final class DeviceChooserProbe {
   }
 
   private func render(
-    _ request: DeviceChooserRequest, store: BrowserStore, name: String, selection: Int? = nil
+    _ request: DeviceChooserRequest, store: BrowserStore, name: String, selection: String? = nil
   ) throws {
     let size = NSSize(width: 440, height: 460)
     let host = NSHostingView(

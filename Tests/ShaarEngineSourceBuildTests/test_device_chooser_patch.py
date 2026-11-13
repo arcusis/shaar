@@ -30,9 +30,12 @@ class DeviceChooserPatchTests(unittest.TestCase):
         self.assertIn("shaar_device_chooser_register", source)
         self.assertIn("base::UnguessableToken::Create().ToString()", source)
         self.assertNotIn("NextID()", source)
-        self.assertIn('option.Set("index", static_cast<int>(index))', source)
+        self.assertIn('option.Set("optionId", option_id)', source)
+        self.assertIn("shown_options_.clear()", source)
+        self.assertIn("shown_options_.find(option_id)", source)
+        self.assertNotIn('option.Set("index"', source)
         self.assertIn(
-            "std::min(session->controller()->NumOptions(), kMaximumOptions)", source)
+            "shown->second >= std::min(controller_->NumOptions(), kMaximumOptions)", source)
         self.assertNotIn("optionID", source)
 
     def test_patch_digest_is_pinned_in_source_build(self):

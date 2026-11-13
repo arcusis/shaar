@@ -161,7 +161,7 @@ final class BrowserStore {
   @ObservationIgnored var onWebShareDecision: ((String, WebShareOutcome) -> Void)?
   @ObservationIgnored var onPrintDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
-  @ObservationIgnored var onDeviceChooserDecision: ((DeviceChooserRequest, Int?) -> Void)?
+  @ObservationIgnored var onDeviceChooserDecision: ((DeviceChooserRequest, String?) -> Void)?
   @ObservationIgnored var onHTTPAuthDecision: ((HTTPAuthRequest, String?, String?) -> Void)?
   /// The Chromium save offer currently shown for this window. Only one is offered at a time.
   private(set) var savePrompt: SavePromptRequest?
@@ -1394,7 +1394,8 @@ final class BrowserStore {
     presentNextConsent()
   }
 
-  func resolveDeviceChooser(_ id: String, optionIndex: Int?) {
+  func resolveDeviceChooser(_ id: String, optionID: String?) {
+
     let sheetID = "chooser-\(id)"
     guard let request = consentRequests.first(where: { $0.id == sheetID }),
       case .deviceChooser(let chooser) = request
@@ -1404,7 +1405,7 @@ final class BrowserStore {
     if presentedConsentID == sheetID { presentedConsentID = nil }
     if presented { sheet = nil }
     onDeviceChooserDecision?(
-      chooser, grantedDeviceIndex(chooser, optionIndex: optionIndex, presented: presented))
+      chooser, grantedDeviceOptionID(chooser, optionID: optionID, presented: presented))
     presentNextConsent()
   }
 
@@ -1430,14 +1431,14 @@ final class BrowserStore {
     presentNextConsent()
   }
 
-  private func grantedDeviceIndex(
-    _ chooser: DeviceChooserRequest, optionIndex: Int?, presented: Bool
-  ) -> Int? {
+  private func grantedDeviceOptionID(
+    _ chooser: DeviceChooserRequest, optionID: String?, presented: Bool
+  ) -> String? {
     guard presented, chooser.matches(session), rendererFailures[chooser.tabID] == nil,
-      chooser.canGrant, let optionIndex
+      chooser.canGrant, let optionID
     else { return nil }
-    guard chooser.options.contains(where: { $0.index == optionIndex }) else { return nil }
-    return optionIndex
+    guard chooser.options.contains(where: { $0.optionID == optionID }) else { return nil }
+    return optionID
   }
 
   @discardableResult

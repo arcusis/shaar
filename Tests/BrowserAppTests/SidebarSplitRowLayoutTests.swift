@@ -9,6 +9,12 @@ import Testing
 
 @Suite @MainActor
 struct SidebarSplitRowLayoutTests {
+  @Test func splitSegmentsActivateWithReturnAndSpace() {
+    #expect(SidebarSplitRow.isActivationKey(.return))
+    #expect(SidebarSplitRow.isActivationKey(.space))
+    #expect(!SidebarSplitRow.isActivationKey(.leftArrow))
+  }
+
   @Test func titlesRequireActualPaneWidthAfterHandleAndSpacing() {
     #expect(
       !SidebarSplitRow.showsTitles(

@@ -24,6 +24,12 @@ import Vision
     #expect(!SidebarTabTitle.showsFullTitle("Shaar DevToo…"))
   }
 
+  @Test func tabAccessibilityLabelIncludesSleepingState() {
+    #expect(SidebarTabTitle.accessibilityLabel(title: "News", isSleeping: false) == "News")
+    #expect(
+      SidebarTabTitle.accessibilityLabel(title: "News", isSleeping: true) == "News, Sleeping")
+  }
+
   @Test func restingRowShowsTheFullDevToolsTitle() throws {
     let hosted = try host(title: pageTitle, closeIsVisible: false)
     defer { hosted.window.close() }

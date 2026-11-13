@@ -22,6 +22,12 @@ enum SidebarTabTitle {
   static func showsFullTitle(_ painted: String) -> Bool {
     painted.range(of: #"Shaar DevTools\b"#, options: [.regularExpression, .caseInsensitive]) != nil
   }
+
+  static func accessibilityLabel(title: String, isSleeping: Bool) -> String {
+    guard isSleeping else { return title }
+    return ShellL10n.format(
+      "%@, %@", arguments: [.string(title), .string(ShellL10n.string("Sleeping"))])
+  }
 }
 
 struct SidebarTabRow: View {
@@ -84,7 +90,7 @@ struct SidebarTabRow: View {
     .buttonStyle(.plain)
     .frame(maxWidth: .infinity, alignment: .leading)
     .focused($focusedControl, equals: .select)
-    .accessibilityLabel(title)
+    .accessibilityLabel(SidebarTabTitle.accessibilityLabel(title: title, isSleeping: isSleeping))
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .accessibilityAction(named: ShellL10n.text("Close tab"), onClose)
     .accessibilityIdentifier("sidebar-tab-select-\(tabID.uuidString)")

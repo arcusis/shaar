@@ -11,6 +11,7 @@ import { HomePage } from "../src/components/home";
 import { DocumentPage } from "../src/components/layout";
 import { screens, siteOrigin } from "../src/content";
 import { notFoundPage, Pages } from "../src/pages";
+import { sitemapXML } from "../src/sitemap";
 import { fontFaceCSS, prepareFonts } from "./fonts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -100,8 +101,5 @@ await writeAsset(
 `,
 );
 await writeAsset("robots.txt", `User-agent: *\nAllow: /\nSitemap: ${siteOrigin}/sitemap.xml\n`);
-await writeAsset(
-  "sitemap.xml",
-  `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${["/", ...pages.map((page) => page.path)].map((path) => `<url><loc>${siteOrigin}${path}</loc></url>`).join("")}</urlset>`,
-);
+await writeAsset("sitemap.xml", sitemapXML(pages));
 console.log(`Built ${pages.length + 2} pages into website/dist/ (including 404).`);

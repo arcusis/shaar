@@ -20,8 +20,12 @@ enum DesktopCaptureCatalog {
   static func allowedSources(
     _ sources: [DesktopCaptureSource], for request: DesktopCaptureRequest
   ) -> [DesktopCaptureSource] {
-    sources.filter {
-      DesktopCaptureSource.kind(forToken: $0.id) == $0.kind && request.allows($0.kind)
+    var seen: Set<String> = []
+    return sources.filter {
+      guard DesktopCaptureSource.kind(forToken: $0.id) == $0.kind, request.allows($0.kind) else {
+        return false
+      }
+      return seen.insert($0.id).inserted
     }
   }
 

@@ -24,7 +24,6 @@ struct LibraryDownloadsView: View {
   @State private var thumbnails = LibraryThumbnailLoader()
   @FocusState private var searchIsFocused: Bool
   @FocusState private var focusedActionsID: String?
-
   static func actionsAreVisible(isHovered: Bool, isFocused: Bool) -> Bool {
     isHovered || isFocused
   }
@@ -237,8 +236,8 @@ struct LibraryDownloadsView: View {
       .menuStyle(.borderlessButton).fixedSize()
       .focused($focusedActionsID, equals: item.id)
       .opacity(
-        Self.actionsAreVisible(
-          isHovered: hoveredID == item.id, isFocused: focusedActionsID == item.id) ? 1 : 0)
+        Self.actionsAreVisible(itemID: item.id, hoveredID: hoveredID, focusedID: focusedActionsID)
+          ? 1 : 0)
       .accessibilityLabel(PanelsL10n.format("Actions for %@", .string(item.filename)))
     }
     .padding(8).contentShape(Rectangle())
@@ -258,6 +257,10 @@ struct LibraryDownloadsView: View {
     .onChange(of: downloads?.records[profileID]?[item.id]) { _, _ in
       thumbnails.remove(item, profileID: profileID)
     }
+  }
+
+  static func actionsAreVisible(itemID: String, hoveredID: String?, focusedID: String?) -> Bool {
+    hoveredID == itemID || focusedID == itemID
   }
 
   private func open(_ item: BrowserDownload, inFinder: Bool) {

@@ -19,6 +19,15 @@ struct LibraryDownloadTests {
     #expect(!LibraryDownloadsView.actionsAreVisible(isHovered: false, isFocused: false))
   }
 
+  @Test func rowActionsAreVisibleForKeyboardFocus() {
+    #expect(
+      LibraryDownloadsView.actionsAreVisible(
+        itemID: "focused-download", hoveredID: nil, focusedID: "focused-download"))
+    #expect(
+      !LibraryDownloadsView.actionsAreVisible(
+        itemID: "other-download", hoveredID: nil, focusedID: "focused-download"))
+  }
+
   @Test func downloadLibrarySortBenchmark() {
     let profile = UUID()
     let model = DownloadsModel()

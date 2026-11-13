@@ -158,7 +158,12 @@ final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDel
     _ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?
   ) {
     outcome.chooseService(available: service != nil)
-    service?.delegate = self
+  }
+
+  func sharingServicePicker(
+    _ sharingServicePicker: NSSharingServicePicker, delegateFor service: NSSharingService
+  ) -> NSSharingServiceDelegate? {
+    self
   }
 
   func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) {

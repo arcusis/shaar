@@ -5,6 +5,33 @@
 import Foundation
 
 extension DeveloperPageModel {
+  static func redactedConsoleMessage(_ raw: String) -> String {
+    let patterns: [(String, String)] = [
+      (
+        #"(?i)\b(?:authorization|proxy-authorization)\s*:\s*(?:bearer|basic)\s+\S+"#,
+        "[redacted authorization]"
+      ),
+      (#"(?i)\b(?:cookie|set-cookie)\s*:\s*[^\r\n]+"#, "[redacted cookie]"),
+      (
+        #"(?i)([\"']?(?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|credential|authorization|proxy-authorization|cookie|set-cookie|session[_-]?id)[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^,\s;&]+)"#,
+        "$1[redacted]"
+      ),
+      (
+        #"([?&](?:access_token|refresh_token|id_token|token|api_key|client_secret|password|secret)=)[^&#\s]+"#,
+        "$1[redacted]"
+      ),
+      (
+        #"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"#,
+        "[redacted token]"
+      ),
+    ]
+    return patterns.reduce(raw) { value, pattern in
+      guard let regex = try? NSRegularExpression(pattern: pattern.0) else { return value }
+      return regex.stringByReplacingMatches(
+        in: value, range: NSRange(value.startIndex..., in: value), withTemplate: pattern.1)
+    }
+  }
+
   static func redactedReportPageURL(_ raw: String) -> String {
     guard var components = URLComponents(string: raw) else { return "Unavailable" }
     components.user = nil
@@ -54,7 +81,8 @@ extension DeveloperPageModel {
         let time = row["time"] as? Double ?? 0
         return [
           "level": String((row["level"] as? String ?? "log").prefix(32)),
-          "message": String((row["message"] as? String ?? "").prefix(4096)),
+          "message": String(
+            Self.redactedConsoleMessage(row["message"] as? String ?? "").prefix(4096)),
           "time": time.isFinite ? time : 0,
         ]
       }

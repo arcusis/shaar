@@ -4,6 +4,7 @@
 
 import Foundation
 import Testing
+
 @testable import ArcusisBrowser
 
 @Suite @MainActor
@@ -18,5 +19,22 @@ struct DeveloperBugReportModelTests {
     #expect(!value.contains("fixture-password"))
     #expect(!value.contains("fixture-token"))
     #expect(!value.contains("fixture-fragment"))
+  }
+
+  @Test func consoleMessagesRedactCommonCredentialForms() {
+    let raw = """
+      request failed Authorization: Bearer fixture-bearer {"access_token":"fixture-json-token"} https://example.test/callback?token=fixture-query eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signatureValue123
+      Cookie: session=fixture-cookie
+      """
+
+    let value = DeveloperPageModel.redactedConsoleMessage(raw)
+
+    #expect(value.contains("request failed"))
+    for secret in [
+      "fixture-bearer", "fixture-json-token", "fixture-query", "fixture-cookie",
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signatureValue123",
+    ] {
+      #expect(!value.contains(secret), "\(secret)")
+    }
   }
 }

@@ -26,6 +26,8 @@ References: [Git hooks](https://git-scm.com/docs/githooks), [worktree configurat
 
 `hook_support.py` installs private-Git-directory launchers from `.githooks/run.sh`, saving the prior hook path in worktree configuration. Every existing executable hook receives a forwarding launcher, preserving `commit-msg` and other guards as well as pre-commit/pre-push. The runner chains prior hooks before new checks and replays push input. Temporary snapshots reference existing Git objects; their metadata updates do not run global reference hooks. Known input/configuration failures produce concise errors.
 
+The license-header gate reads `git ls-files -z` as bytes and uses filesystem surrogate escapes, so unusual tracked filenames do not crash path discovery.
+
 Prior hook paths use Git's path expansion, including `~/…`, rather than treating configuration values as literal repository-relative strings. A temporary-repository regression covers this without changing the home directory or identity.
 
 Thirteen focused tests passed, including a real redacted Gitleaks finding from staged content after the working copy was sanitized, with inline allow comments ignored. The complete ten-gate entrypoint passed 203 Python tests on the production baseline. The installer was executed in this worktree; identity/signing configuration remained byte-for-byte unchanged, and Orca still resolved the checkout. Real installed commit/push execution and hosted CI provide the remaining integration evidence.

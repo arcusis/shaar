@@ -3,10 +3,12 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -66,6 +68,13 @@ class LicenseHeaderTests(unittest.TestCase):
         valid = {name: "\n".join(check_license_headers.expected_notice(Path(name))) + "\n" for name in files}
         self.assertEqual(self._missing(valid), [])
         self.assertEqual(self._missing({name: "no header\n" for name in files}), [Path(name) for name in files])
+
+    def test_tracked_file_names_use_filesystem_surrogate_escapes(self):
+        raw_name = b"source-\xff.py"
+        completed = type("Completed", (), {"stdout": raw_name + b"\0"})()
+        with patch.object(check_license_headers.subprocess, "run", return_value=completed):
+            paths = check_license_headers.tracked_files(self.root)
+        self.assertEqual(paths, [Path(os.fsdecode(raw_name))])
 
 
 if __name__ == "__main__":

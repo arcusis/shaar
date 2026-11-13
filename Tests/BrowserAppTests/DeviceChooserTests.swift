@@ -101,6 +101,18 @@ struct DeviceChooserTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func anUpdatedOptionListInvalidatesThePreviousSelection() {
+    let previous = [DeviceChooserOption(index: 0, title: "Adapter A", detail: "")]
+    let updated = [DeviceChooserOption(index: 0, title: "Adapter B", detail: "")]
+    var selection = DeviceChooserSelection(options: previous)
+    selection.select(0, from: previous)
+
+    #expect(selection.selectedIndex(for: previous) == 0)
+    #expect(selection.selectedIndex(for: updated) == nil)
+    selection.select(0, from: updated)
+    #expect(selection.selectedIndex(for: updated) == 0)
+  }
+
   private func store() throws -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(try #require(URL(string: "https://devices.example/chooser"))))

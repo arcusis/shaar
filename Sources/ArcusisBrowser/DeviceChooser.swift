@@ -63,6 +63,28 @@ struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
   }
 }
 
+struct DeviceChooserSelection {
+  private(set) var options: [DeviceChooserOption]
+  private(set) var index: Int?
+
+  init(options: [DeviceChooserOption], selectedIndex: Int? = nil) {
+    self.options = options
+    self.index = options.contains { $0.index == selectedIndex } ? selectedIndex : nil
+  }
+
+  mutating func select(_ index: Int, from options: [DeviceChooserOption]) {
+    self.options = options
+    self.index = options.contains { $0.index == index } ? index : nil
+  }
+
+  func selectedIndex(for options: [DeviceChooserOption]) -> Int? {
+    guard options == self.options, let index,
+      options.contains(where: { $0.index == index })
+    else { return nil }
+    return index
+  }
+}
+
 enum DeviceChooserIntake {
   private static let payloadKeys: Set<String> = [
     "schemaVersion", "kind", "id", "transport", "pageURL", "origin", "options", "canGrant",
@@ -124,12 +146,13 @@ struct DeviceChooserConsent: View {
   let store: BrowserStore
   let request: DeviceChooserRequest
   @Environment(\.dismiss) private var dismiss
-  @State private var selection: Int?
+  @State private var selection: DeviceChooserSelection
 
   init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: Int? = nil) {
     self.store = store
     self.request = request
-    _selection = State(initialValue: initialSelection)
+    _selection = State(initialValue: DeviceChooserSelection(
+      options: request.options, selectedIndex: initialSelection))
   }
 
   private var liveRequest: DeviceChooserRequest {
@@ -152,7 +175,9 @@ struct DeviceChooserConsent: View {
         Button(PanelsL10n.string("Not now"), role: .cancel) { resolve(index: nil) }
           .keyboardShortcut(.cancelAction)
         Spacer()
-        Button(PanelsL10n.string("Connect")) { resolve(index: selection) }
+        Button(PanelsL10n.string("Connect")) {
+          resolve(index: selection.selectedIndex(for: presented.options))
+        }
           .disabled(!canConnect(presented))
       }
     }
@@ -163,8 +188,8 @@ struct DeviceChooserConsent: View {
   }
 
   private func canConnect(_ presented: DeviceChooserRequest) -> Bool {
-    guard presented.canGrant, presented.matches(store.session), let selection else { return false }
-    return presented.options.contains { $0.index == selection }
+    guard presented.canGrant, presented.matches(store.session) else { return false }
+    return selection.selectedIndex(for: presented.options) != nil
   }
 
   @ViewBuilder private func status(_ presented: DeviceChooserRequest) -> some View {
@@ -180,16 +205,16 @@ struct DeviceChooserConsent: View {
     } else {
       ForEach(presented.options) { option in
         Button {
-          selection = option.index
+          selection.select(option.index, from: presented.options)
         } label: {
-          optionLabel(option)
+          optionLabel(option, options: presented.options)
         }
         .buttonStyle(.plain)
       }
     }
   }
 
-  private func optionLabel(_ option: DeviceChooserOption) -> some View {
+  private func optionLabel(_ option: DeviceChooserOption, options: [DeviceChooserOption]) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(option.title)
       if !option.detail.isEmpty {
@@ -198,7 +223,9 @@ struct DeviceChooserConsent: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(8)
-    .background(selection == option.index ? Color.accentColor.opacity(0.15) : Color.clear)
+    .background(
+      selection.selectedIndex(for: options) == option.index
+        ? Color.accentColor.opacity(0.15) : Color.clear)
     .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 

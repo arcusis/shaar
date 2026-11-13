@@ -66,6 +66,24 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
 
 @Suite @MainActor
 struct PrivateBrowserHostLifecycleTests {
+  @Test func fullScreenMenuCommandRoutesToActivePrivateWindow() throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    let sourceProfileID = UUID().uuidString
+    var activeWindow: NSWindow?
+    var toggledWindow: NSWindow?
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false, keyWindow: { activeWindow },
+      toggleFullScreen: { toggledWindow = $0 }, sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+    try host.openWindow()
+    activeWindow = try #require(host.ownedWindows.first?.window)
+
+    host.perform(.fullScreen)
+
+    #expect(toggledWindow === activeWindow)
+    host.detach()
+  }
+
   @Test func completingContextCreationAfterDetachDoesNotCreateAWindow() throws {
     let runtime = PrivateHostLifecycleRuntime()
     runtime.holdsContextCreation = true

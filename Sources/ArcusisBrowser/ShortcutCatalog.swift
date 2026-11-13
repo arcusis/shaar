@@ -287,6 +287,10 @@ enum NextTabShortcutRouting {
       offset = 1
     } else if event.keyCode == 123 && modifiers == [.command, .option] {
       offset = -1
+    } else if event.keyCode == 30 && modifiers == [.command, .shift] {
+      offset = 1
+    } else if event.keyCode == 33 && modifiers == [.command, .shift] {
+      offset = -1
     } else { return false }
     return store.selectAdjacentTab(by: offset)
   }

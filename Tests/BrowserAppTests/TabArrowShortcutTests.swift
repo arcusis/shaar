@@ -49,6 +49,55 @@ import Testing
   #expect(store.session.selectedSpace.selectedTabID == selected)
 }
 
+@Test @MainActor func shiftCommandBracketShortcutsCycleTabsInBothDirections() {
+  let store = BrowserStore()
+  for index in 1...3 {
+    store.perform(.open(URL(string: "https://tab-bracket\(index).example")!))
+  }
+  let tabs = store.session.selectedSpace.tabs
+  store.selectTabByShortcutIndex(0)
+
+  #expect(
+    NextTabShortcutRouting.route(
+      event(keyCode: 30, modifiers: [.command, .shift]), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[1].id)
+  #expect(
+    NextTabShortcutRouting.route(
+      event(keyCode: 33, modifiers: [.command, .shift]), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[0].id)
+
+  #expect(
+    NextTabShortcutRouting.route(
+      event(keyCode: 33, modifiers: [.command, .shift]), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[2].id)
+  #expect(
+    NextTabShortcutRouting.route(
+      event(keyCode: 30, modifiers: [.command, .shift]), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[0].id)
+}
+
+@Test @MainActor func shiftCommandBracketShortcutsRejectOtherModifiersAndKeyUp() {
+  let store = BrowserStore()
+  store.perform(.open(URL(string: "https://bracket-one.example")!))
+  store.perform(.open(URL(string: "https://bracket-two.example")!))
+  let selected = store.session.selectedSpace.selectedTabID
+
+  for keyCode: UInt16 in [30, 33] {
+    for modifiers in [
+      NSEvent.ModifierFlags(), .command, [.command, .shift, .option],
+      [.command, .shift, .control],
+    ] {
+      #expect(
+        !NextTabShortcutRouting.route(
+          event(keyCode: keyCode, modifiers: modifiers), store: store))
+    }
+    #expect(
+      !NextTabShortcutRouting.route(
+        event(keyCode: keyCode, modifiers: [.command, .shift], type: .keyUp), store: store))
+  }
+  #expect(store.session.selectedSpace.selectedTabID == selected)
+}
+
 private func event(
   keyCode: UInt16, modifiers: NSEvent.ModifierFlags = [.command, .option],
   type: NSEvent.EventType = .keyDown

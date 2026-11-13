@@ -4,12 +4,17 @@
 
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct WebsitePermissionConsentTests {
+  @Test func permissionConsentTitleIsVoiceOverHeading() {
+    #expect(WebsitePermissionConsent.headingTraits == .isHeader)
+  }
+
   private func store() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://meet.google.com/example")!))

@@ -6,6 +6,7 @@ import BrowserCore
 import SwiftUI
 
 struct WebsitePermissionConsent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let store: BrowserStore
   let request: WebsitePermissionRequest
   @Environment(\.dismiss) private var dismiss
@@ -17,6 +18,7 @@ struct WebsitePermissionConsent: View {
         systemImage: request.kinds.first?.symbol ?? "hand.raised"
       )
       .font(.title2.weight(.semibold))
+      .accessibilityAddTraits(Self.headingTraits)
       Text(request.requestingOrigin.absoluteString).font(.headline).textSelection(.enabled)
         .environment(\.layoutDirection, .leftToRight)
       Text(PanelsL10n.format("This site wants to %@.", .string(purposes)))

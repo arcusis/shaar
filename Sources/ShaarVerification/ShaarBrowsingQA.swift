@@ -951,11 +951,12 @@ import Foundation
   }
 
   static func playbackStarted(_ value: String?) -> Bool {
-    guard let value else { return false }
-    let playing = value.contains("\"paused\":false")
-    let silentError = value.contains("\"error\":0")
-    let hasPicture = !value.contains("\"width\":0")
-    return playing && silentError && hasPicture
+    guard let evidence = playbackEvidence(value),
+      let paused = evidence["paused"] as? Bool,
+      let width = evidence["width"] as? Int,
+      let error = evidence["error"] as? Int
+    else { return false }
+    return !paused && width > 0 && error == 0
   }
 
   private static func evaluate(
@@ -1124,9 +1125,17 @@ import Foundation
   }
 
   static func playbackSettled(_ value: String?) -> Bool {
-    guard let value else { return false }
-    if value.contains("\"error\":") && !value.contains("\"error\":0") { return true }
-    return value.contains("\"paused\":false") && !value.contains("\"width\":0")
+    guard let evidence = playbackEvidence(value) else { return false }
+    if let error = evidence["error"] as? Int, error != 0 { return true }
+    guard let paused = evidence["paused"] as? Bool,
+      let width = evidence["width"] as? Int
+    else { return false }
+    return !paused && width > 0
+  }
+
+  private static func playbackEvidence(_ value: String?) -> [String: Any]? {
+    guard let value, let data = value.data(using: .utf8) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
   }
 
   private static func row(

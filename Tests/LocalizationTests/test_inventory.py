@@ -50,8 +50,12 @@ class InventoryTests(unittest.TestCase):
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8")
-        self.enterContext(patch.object(CHECK, "ROOT", self.root))
-        self.enterContext(patch.object(CHECK, "load_validator", return_value=VALIDATOR))
+        root_patch = patch.object(CHECK, "ROOT", self.root)
+        validator_patch = patch.object(CHECK, "load_validator", return_value=VALIDATOR)
+        self.addCleanup(root_patch.stop)
+        self.addCleanup(validator_patch.stop)
+        root_patch.start()
+        validator_patch.start()
 
     def write_catalog(self, strings):
         self.catalog.write_text(json.dumps({"sourceLanguage": "en", "strings": strings},

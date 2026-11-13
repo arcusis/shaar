@@ -101,7 +101,8 @@ private struct FirefoxProfileImporter: BrowserProfileImporter {
 }
 
 private func rejectPrivateProfile(_ url: URL) throws {
-  let names = url.standardizedFileURL.pathComponents.suffix(3).map { $0.lowercased() }
+  let resolved = url.resolvingSymlinksInPath().standardizedFileURL
+  let names = resolved.pathComponents.suffix(3).map { $0.lowercased() }
   let markers = ["incognito", "inprivate", "guest profile", "guest", "private browsing"]
   if names.contains(where: { name in
     markers.contains { marker in

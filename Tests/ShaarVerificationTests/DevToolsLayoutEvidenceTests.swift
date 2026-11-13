@@ -18,4 +18,30 @@ import Testing
         initial, NSRect(x: 0, y: 0, width: 431, height: 660)))
     #expect(!DevToolsProbe.rememberedDockFrameMatches(initial, nil))
   }
+
+  @Test func dockAuditRequiresOpenGeometryAndARealResize() {
+    let state: [AnyHashable: Any] = [
+      "open": true, "pageWidth": 700.0, "containerWidth": 1000.0, "pageHeight": 600.0,
+      "sameWindow": true, "sameContainer": true, "frontendHitNearTabStrip": true,
+      "pageAboveFrontend": true, "frontendCoversContainer": true, "geometryReady": true,
+      "gap": 0.0, "frontendWidth": 1000.0, "frontendHeight": 600.0,
+    ]
+    #expect(DevToolsDockEvidence.matches(state, open: true))
+    #expect(!DevToolsDockEvidence.matches(state, open: false))
+    #expect(!DevToolsDockEvidence.matches(state, open: true, previousWidth: 995))
+    #expect(DevToolsDockEvidence.matches(state, open: true, previousWidth: 980))
+    var broken = state
+    broken["sameWindow"] = false
+    #expect(!DevToolsDockEvidence.matches(broken, open: true))
+  }
+
+  @Test func closedDockRequiresThePageToFillItsContainer() {
+    let state: [AnyHashable: Any] = [
+      "open": false, "pageWidth": 1000.5, "containerWidth": 1000.0, "pageHeight": 600.0,
+    ]
+    #expect(DevToolsDockEvidence.matches(state, open: false))
+    var undersized = state
+    undersized["pageWidth"] = 998.9
+    #expect(!DevToolsDockEvidence.matches(undersized, open: false))
+  }
 }

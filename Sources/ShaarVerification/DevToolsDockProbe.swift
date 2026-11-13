@@ -141,9 +141,6 @@ struct DevToolsDockProbe {
     guard DevToolsDockEvidence.allWindowsAreHidden(state) else {
       throw InspectorFailure("DevTools exposed a native window.")
     }
-    guard DevToolsDockEvidence.allWindowsAreHidden(state) else {
-      throw InspectorFailure("DevTools exposed a native window.")
-    }
     return DevToolsDockEvidence.matches(state, open: open, previousWidth: previousWidth)
   }
 

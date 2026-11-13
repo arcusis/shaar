@@ -166,7 +166,13 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
         errors.push(`${relative(root, file)}: missing/nonlocal CSS asset ${match[1]}`);
     }
     for (const value of cssImportURLs(css)) {
-      const url = new URL(value, siteOrigin);
+      let url: URL;
+      try {
+        url = new URL(value, siteOrigin);
+      } catch {
+        errors.push(`${relative(root, file)}: missing/nonlocal CSS asset ${value}`);
+        continue;
+      }
       if (url.origin !== siteOrigin || !localTarget(root, url))
         errors.push(`${relative(root, file)}: missing/nonlocal CSS asset ${value}`);
     }

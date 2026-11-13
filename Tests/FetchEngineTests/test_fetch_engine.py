@@ -195,6 +195,30 @@ class FetchEngineTests(unittest.TestCase):
         self.assertIn("Engine framework missing", result.stderr)
         self.assertEqual(list(self.cache.glob("stage.*")), [])
 
+    def test_symlinked_engine_cache_root_is_rejected_before_extraction(self):
+        shutil.rmtree(self.destination)
+        external = self.root / "external-cache"
+        self.cache.rename(external)
+        self.cache.symlink_to(external, target_is_directory=True)
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Engine cache path is not a regular directory", result.stderr)
+        self.assertFalse((external / self.destination.name).exists())
+
+    def test_symlinked_build_root_is_rejected_before_extraction(self):
+        shutil.rmtree(self.destination)
+        external = self.root / "external-build"
+        (self.root / "build").rename(external)
+        (self.root / "build").symlink_to(external, target_is_directory=True)
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Engine build path is not a regular directory", result.stderr)
+        self.assertFalse((external / "EngineCache" / self.destination.name).exists())
+
 
 if __name__ == "__main__":
     unittest.main()

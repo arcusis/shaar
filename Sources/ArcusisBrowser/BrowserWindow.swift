@@ -90,6 +90,10 @@ struct BrowserWindow: View {
     .overlay { commandPanelLayer }
     .overlay { TabSwitcherPanel(store: store) }
     .background { WindowFullScreenObserver(isFullScreen: $isFullScreen) }
+    .background {
+      PrintDocumentTitleWindowBridge(pageTitle: store.session.selectedPage?.tab.title)
+        .frame(width: 0, height: 0)
+    }
     .environment(\.browserWindowIsFullScreen, isFullScreen)
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }

@@ -178,3 +178,17 @@ test("link checker rejects empty alternative text on image map links", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker validates social preview image targets", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<meta property="og:image" content="/social.png"><meta name="twitter:image" content="/missing.png"><h1>Home</h1>',
+    );
+    writeFileSync(join(root, "social.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing.png"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

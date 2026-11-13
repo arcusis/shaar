@@ -69,7 +69,7 @@ struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
       return port
     }
     let authority = port.map { "\(formattedHost):\($0)" } ?? formattedHost
-    return "\(origin.scheme ?? "https")://\(authority)"
+    return "\((origin.scheme ?? "https").lowercased())://\(authority)"
   }
 
   func matches(_ session: BrowserSession) -> Bool {

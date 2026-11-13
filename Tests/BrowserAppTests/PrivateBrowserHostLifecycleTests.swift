@@ -91,6 +91,27 @@ struct PrivateBrowserHostLifecycleTests {
     #expect(runtime.releasedContexts == [contextID])
   }
 
+  @Test func failedContextReleaseAfterDetachIsRetriedImmediately() throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.holdsContextCreation = true
+    runtime.failedContextReleases = 1
+    let sourceProfileID = UUID().uuidString
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+    try host.openWindow()
+    let contextID = try #require(runtime.createdContexts.first)
+    let completion = try #require(runtime.contextCompletion)
+
+    host.detach()
+    completion(true, nil)
+
+    #expect(host.windowCount == 0)
+    #expect(runtime.windows.isEmpty)
+    #expect(runtime.releasedContexts == [contextID, contextID])
+  }
+
   @Test func failedQueuedWindowCreationDoesNotReleaseContextNeededByNextRequest() throws {
     let runtime = PrivateHostLifecycleRuntime()
     runtime.holdsContextCreation = true

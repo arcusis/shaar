@@ -205,7 +205,9 @@ final class PrivateBrowserHost {
     runtime.createPrivateContextID(contextID, sourceProfileID: source) {
       [weak self, runtime] success, _ in
       guard let self else {
-        if success { _ = runtime.releasePrivateContextID(contextID) }
+        if success, !runtime.releasePrivateContextID(contextID) {
+          _ = runtime.releasePrivateContextID(contextID)
+        }
         return
       }
       if self.isDetached {
@@ -214,7 +216,10 @@ final class PrivateBrowserHost {
           self.contextsBySource.removeValue(forKey: source)
         }
         self.windowsByContext.removeValue(forKey: contextID)
-        if success { self.releaseContext(contextID) }
+        if success {
+          self.releaseContext(contextID)
+          self.retryPendingContextReleases()
+        }
         return
       }
       guard success, !self.runtime.isQuitting, self.contextsBySource[source] == contextID,

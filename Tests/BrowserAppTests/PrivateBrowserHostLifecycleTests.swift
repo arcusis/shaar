@@ -17,8 +17,8 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var releasedContexts: [String] = []
   var holdsContextCreation = false
   var contextCompletion: (@MainActor @Sendable (Bool, Error?) -> Void)?
-  var failedWindowCreations = 0
-  var failedContextReleases = 0
+  nonisolated(unsafe) var failedWindowCreations = 0
+  nonisolated(unsafe) var failedContextReleases = 0
 
   override func createPrivateContextID(
     _ contextID: String, sourceProfileID: String,

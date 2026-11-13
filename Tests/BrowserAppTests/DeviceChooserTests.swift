@@ -73,6 +73,17 @@ struct DeviceChooserTests {
         payload: extra) == nil)
   }
 
+  @Test func deviceNamesCannotInjectLineBreaksOrBidirectionalOverrides() throws {
+    let store = try store()
+    let unsafeName = "Adapter\n\u{202E}txt.exe"
+    let request = try #require(
+      self.request(
+        store, transport: "usb", id: "unsafe-name",
+        options: [["index": 0, "name": unsafeName]], canGrant: true))
+
+    #expect(request.options.first?.title == "Adapter\u{FFFD}\u{FFFD}txt.exe")
+  }
+
   @Test func chooserRejectsFractionalAndOutOfRangeOptionIndexes() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

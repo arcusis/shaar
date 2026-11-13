@@ -133,7 +133,7 @@ enum DeviceChooserIntake {
         let index = integer(raw["index"]), (0..<64).contains(index), seen.insert(index).inserted,
         let name = raw["name"] as? String, name.utf8.count <= 256
       else { return nil }
-      options.append(DeviceChooserOption(index: index, title: name, detail: ""))
+      options.append(DeviceChooserOption(index: index, title: displayName(name), detail: ""))
     }
     guard canGrant == !options.isEmpty else { return nil }
     return DeviceChooserRequest(
@@ -147,6 +147,19 @@ enum DeviceChooserIntake {
       return nil
     }
     return Int(exactly: number.doubleValue)
+  }
+
+  private static func displayName(_ value: String) -> String {
+    var scalars = String.UnicodeScalarView()
+    for scalar in value.unicodeScalars {
+      switch scalar.properties.generalCategory {
+      case .control, .format, .lineSeparator, .paragraphSeparator:
+        scalars.append("\u{FFFD}")
+      default:
+        scalars.append(scalar)
+      }
+    }
+    return String(scalars)
   }
 }
 

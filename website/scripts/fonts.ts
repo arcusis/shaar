@@ -35,7 +35,7 @@ function isSiteFontManifest(value: unknown): value is SiteFont[] {
     (face) =>
       face !== null &&
       typeof face === "object" &&
-      face.family in families &&
+      Object.hasOwn(families, face.family) &&
       face.file === `${families[face.family]}.woff2` &&
       typeof face.weight === "string" &&
       /^\d{3} \d{3}$/.test(face.weight),

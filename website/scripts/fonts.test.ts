@@ -194,6 +194,21 @@ test("a cached non-WOFF2 file falls back instead of being copied", async () => {
   }
 });
 
+test("cached font manifest rejects inherited family names", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  mkdirSync(cache);
+  const family = "toString";
+  const file = `${String({}.toString)}.woff2`;
+  writeFileSync(join(cache, "fonts.json"), JSON.stringify([{ family, file, weight: "300 900" }]));
+  writeFileSync(join(cache, file), "fixture font");
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("valid WOFF2 assets are cached and copied", async () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
   const cache = join(root, "cache");

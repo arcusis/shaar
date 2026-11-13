@@ -106,6 +106,59 @@ struct SidebarTabIndexTests {
     }
   }
 
+  @Test func dropSlotLookupAvoidsPerTargetSiblingMaterialization() {
+    let tabs = (0..<1_000).map { offset in
+      tab(offset + 1, pinned: true, folderID: uuid(10_000 + offset / 50))
+    }
+    let targets = stride(from: 0, to: tabs.count, by: 2).map { tabs[$0] }
+    let index = SidebarTabIndex(tabs: tabs)
+    let iterations = 3
+
+    let beforeStart = ContinuousClock.now
+    var beforeSlots: [SidebarTabIndex.DropSlot?] = []
+    for _ in 0..<iterations {
+      for target in targets {
+        beforeSlots.append(
+          legacyDropSlot(tabs: tabs, targetID: target.id, sourceID: tabs.last!.id, after: true))
+      }
+    }
+    let before = beforeStart.duration(to: .now)
+
+    let afterStart = ContinuousClock.now
+    var afterSlots: [SidebarTabIndex.DropSlot?] = []
+    for _ in 0..<iterations {
+      for target in targets {
+        afterSlots.append(
+          index.dropSlot(targetID: target.id, sourceID: tabs.last!.id, after: true))
+      }
+    }
+    let after = afterStart.duration(to: .now)
+
+    #expect(beforeSlots == afterSlots)
+    #expect(seconds(after) < seconds(before) * 0.5)
+    print("sidebarDropSlotFocusedBenchmark: before=\(before), after=\(after)")
+  }
+
+  private func legacyDropSlot(
+    tabs: [BrowserTab], targetID: UUID, sourceID: UUID, after: Bool
+  ) -> SidebarTabIndex.DropSlot? {
+    guard targetID != sourceID, let target = tabs.first(where: { $0.id == targetID }) else {
+      return nil
+    }
+    guard after else { return .before(targetID) }
+    let siblings = tabs.filter {
+      $0.id != sourceID && $0.isPinned == target.isPinned && $0.folderID == target.folderID
+    }
+    guard let position = siblings.firstIndex(where: { $0.id == targetID }) else { return nil }
+    let next = siblings.index(after: position)
+    return next < siblings.endIndex ? .before(siblings[next].id) : .end
+  }
+
+  private func seconds(_ duration: Duration) -> Double {
+    let components = duration.components
+    return Double(components.seconds) + Double(components.attoseconds) / 1e18
+  }
+
   private func tab(_ number: Int, pinned: Bool = false, folderID: UUID? = nil) -> BrowserTab {
     BrowserTab(
       id: uuid(number), url: URL(string: "https://example.com/\(number)")!, isPinned: pinned,

@@ -133,6 +133,24 @@ test("link checker reports images that target a missing map", () => {
   }
 });
 
+test("link checker validates inline SVG image files and use fragments", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><svg><image href="/missing.png"/><use href="/symbols.svg#missing"/></svg>',
+    );
+    writeFileSync(join(root, "symbols.svg"), '<svg><symbol id="present"/></svg>');
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: missing target /missing.png",
+      "index.html: missing fragment /symbols.svg#missing",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
 test("link checker validates quoted CSS imports outside comments", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

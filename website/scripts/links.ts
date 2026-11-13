@@ -165,7 +165,7 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
           errors.push(`${path}: missing target ${value}`);
           continue;
         }
-        if (url.hash && target.endsWith(".html")) {
+        if (url.hash && (target.endsWith(".html") || target.endsWith(".svg"))) {
           const targetDocument =
             target === file ? document : parseHTML(readFileSync(target, "utf8")).document;
           if (!targetDocument.getElementById(decodeURIComponent(url.hash.slice(1))))

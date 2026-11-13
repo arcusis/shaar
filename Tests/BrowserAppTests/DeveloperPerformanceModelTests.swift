@@ -37,4 +37,17 @@ struct DeveloperPerformanceModelTests {
     #expect(!model.performanceEnabled)
     #expect(model.performanceSnapshot == previous)
   }
+
+  @Test func enabledRefreshRequiresAnOwnedDeveloperSession() async throws {
+    let model = DeveloperPageModel(
+      target: SiteControlTarget(
+        tabID: UUID(), profileID: UUID(), url: try #require(URL(string: "https://example.test"))),
+      engine: nil)
+    model.performanceEnabled = true
+
+    await #expect(throws: DeveloperModeFailure.self) {
+      try await model.refreshPerformance()
+    }
+    #expect(model.performanceSnapshot == nil)
+  }
 }

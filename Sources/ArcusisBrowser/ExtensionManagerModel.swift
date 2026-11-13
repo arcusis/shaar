@@ -37,6 +37,7 @@ final class ExtensionManagerModel {
   private var developerModeRequestID = UUID()
   private var extensionAccessRequestID = UUID()
   private var statusRequestID = UUID()
+  private var iconVersions: [String: String] = [:]
 
   static func shared(
     runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID
@@ -331,9 +332,24 @@ final class ExtensionManagerModel {
     guard let directory = runtime.extensionsDirectory(forProfileID: profileID.uuidString) else {
       return
     }
-    for item in extensions where icons[item.id] == nil {
+    let updated = Self.updatedIconCache(
+      extensions: extensions, icons: icons, versions: iconVersions, directory: directory)
+    icons = updated.icons
+    iconVersions = updated.versions
+  }
+
+  static func updatedIconCache(
+    extensions: [ManagedExtension], icons: [String: NSImage], versions: [String: String],
+    directory: URL
+  ) -> (icons: [String: NSImage], versions: [String: String]) {
+    let currentIDs = Set(extensions.map(\.id))
+    var icons = icons.filter { currentIDs.contains($0.key) }
+    var versions = versions.filter { currentIDs.contains($0.key) }
+    for item in extensions where versions[item.id] != item.version || icons[item.id] == nil {
       icons[item.id] = ExtensionIconLoader.icon(
         for: item.id, version: item.version, in: directory)
+      versions[item.id] = item.version
     }
+    return (icons, versions)
   }
 }

@@ -33,10 +33,10 @@ index 97789b2..3b1f8a7 100644
      "profiles/shaar_profiles_unittest.cc",
 diff --git a/chrome/browser/shaar/chooser/shaar_device_chooser.cc b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
 new file mode 100644
-index 0000000..cabc5de
+index 0000000..35761d7
 --- /dev/null
 +++ b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
-@@ -0,0 +1,467 @@
+@@ -0,0 +1,492 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -65,7 +65,9 @@ index 0000000..cabc5de
 +#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
 +#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 +#include "components/permissions/chooser_controller.h"
++#include "content/public/browser/navigation_handle.h"
 +#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents_observer.h"
 +#include "content/public/browser/web_contents.h"
 +#include "url/gurl.h"
 +
@@ -171,7 +173,10 @@ index 0000000..cabc5de
 +  return std::move(parsed->GetDict());
 +}
 +
-+class DeviceChooserSession : public permissions::ChooserController::View {
++void DismissById(std::string id);
++
++class DeviceChooserSession : public permissions::ChooserController::View,
++                             public content::WebContentsObserver {
 + public:
 +  DeviceChooserSession(
 +      std::string id, shaar_engine* engine, content::WebContents* contents,
@@ -179,7 +184,8 @@ index 0000000..cabc5de
 +      std::string window_id, std::string tab_id, GURL page_url, GURL origin,
 +      content::GlobalRenderFrameHostId frame_id, std::string transport,
 +      std::unique_ptr<permissions::ChooserController> controller)
-+      : id_(std::move(id)),
++      : content::WebContentsObserver(contents),
++        id_(std::move(id)),
 +        engine_(engine),
 +        contents_(contents),
 +        window_(window),
@@ -258,7 +264,25 @@ index 0000000..cabc5de
 +  void OnAdapterAuthorizationChanged(bool) override { PublishUpdate(); }
 +  void OnRefreshStateChanged(bool) override { PublishUpdate(); }
 +
++  void DidFinishNavigation(content::NavigationHandle* navigation) override {
++    if (navigation->IsInMainFrame() && navigation->HasCommitted())
++      ScheduleDismiss();
++  }
++
++  void WebContentsDestroyed() override {
++    contents_ = nullptr;
++    ScheduleDismiss();
++  }
++
 + private:
++  void ScheduleDismiss() {
++    if (dismiss_scheduled_)
++      return;
++    dismiss_scheduled_ = true;
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&DismissById, id_));
++  }
++
 +  void PublishUpdate() {
 +    if (announced_ && !finishing_)
 +      Publish("deviceChooserUpdated");
@@ -319,6 +343,7 @@ index 0000000..cabc5de
 +  bool selecting_ = false;
 +  bool finishing_ = false;
 +  bool cancel_on_finish_ = false;
++  bool dismiss_scheduled_ = false;
 +};
 +
 +using SessionMap = std::map<std::string, std::unique_ptr<DeviceChooserSession>>;

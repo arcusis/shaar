@@ -34,6 +34,9 @@ class DeviceChooserPatchTests(unittest.TestCase):
         self.assertIn("shown_options_.clear()", source)
         self.assertIn("shown_options_.find(option_id)", source)
         self.assertNotIn('option.Set("index"', source)
+        self.assertIn("public content::WebContentsObserver", source)
+        self.assertIn("void WebContentsDestroyed() override", source)
+        self.assertIn("void DidFinishNavigation(content::NavigationHandle* navigation)", source)
         self.assertIn(
             "shown->second >= std::min(controller_->NumOptions(), kMaximumOptions)", source)
         self.assertNotIn("optionID", source)

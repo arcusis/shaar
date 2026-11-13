@@ -57,6 +57,7 @@ final class InspectorAuditModel {
   private(set) var failure: String?
   private(set) var busy = false
   @ObservationIgnored private var operation: Task<Void, Never>?
+  @ObservationIgnored private(set) var operationID: UUID?
 
   init(inspector: InspectorModel?) { self.inspector = inspector }
 
@@ -78,14 +79,19 @@ final class InspectorAuditModel {
     let requestedScope = scope
     busy = true
     failure = nil
+    let operationID = UUID()
+    self.operationID = operationID
     operation = Task { [weak self] in
-      await self?.perform(requestedScope, generation: generation, selectionID: selectionID)
+      await self?.perform(
+        requestedScope, generation: generation, selectionID: selectionID,
+        operationID: operationID)
     }
   }
 
   func cancel() {
     operation?.cancel()
     operation = nil
+    operationID = nil
     busy = false
     report = nil
     failure = nil
@@ -120,11 +126,17 @@ final class InspectorAuditModel {
     }
   }
 
-  private func perform(_ scope: Scope, generation: Int, selectionID: Int?) async {
-    defer {
-      busy = false
-      operation = nil
-    }
+  func finishOperation(_ operationID: UUID) {
+    guard self.operationID == operationID else { return }
+    busy = false
+    operation = nil
+    self.operationID = nil
+  }
+
+  private func perform(
+    _ scope: Scope, generation: Int, selectionID: Int?, operationID: UUID
+  ) async {
+    defer { finishOperation(operationID) }
     guard let inspector else { return }
     do {
       let source = try Self.resourceText("axe.min", extension: "js")

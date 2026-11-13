@@ -263,6 +263,10 @@ final class WindowClientProbe {
         continuation.resume(returning: $0)
       }
     }
+    return try Self.parseEvaluationJSON(json)
+  }
+
+  static func parseEvaluationJSON(_ json: String?) throws -> Any {
     guard let data = json?.data(using: .utf8) else {
       throw WindowClientFailure("Fixture evaluation failed.")
     }
@@ -307,7 +311,7 @@ final class WindowClientProbe {
   }
 }
 
-private struct WindowClientFailure: LocalizedError {
+struct WindowClientFailure: LocalizedError {
   let message: String
   init(_ message: String) { self.message = message }
   var errorDescription: String? { message }

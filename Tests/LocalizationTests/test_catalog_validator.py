@@ -46,6 +46,17 @@ class CatalogValidatorTests(unittest.TestCase):
             "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים שמשמשים לכניסה באמצעות מפתח גישה.",
         )
 
+    def test_connected_agents_two_plural_uses_hebrew_dual_form(self):
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        two = catalog["strings"]["%d connected agents"]["localizations"]["he"][
+            "variations"
+        ]["plural"]["two"]["stringUnit"]["value"]
+        self.assertEqual(two, "שני סוכנים מחוברים")
+
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Fixture.xcstrings"

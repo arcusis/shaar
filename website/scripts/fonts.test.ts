@@ -50,3 +50,19 @@ test("cached font manifest rejects unexpected font paths", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("cached font manifest rejects inherited family names", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  mkdirSync(cache);
+  writeFileSync(join(cache, "[object Object].woff2"), "not a site font");
+  writeFileSync(
+    join(cache, "fonts.json"),
+    JSON.stringify([{ family: "__proto__", file: "[object Object].woff2", weight: "300 900" }]),
+  );
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

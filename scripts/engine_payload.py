@@ -780,6 +780,11 @@ def compare_payload(archive: Path, framework: Path, pin: dict,
         if (not isinstance(expected_hash, str) or len(expected_hash) != 64
                 or any(character not in "0123456789abcdefABCDEF" for character in expected_hash)):
             raise PayloadError("pin has invalid archive SHA-256")
+        if identity_map is not None and (
+                not isinstance(identity_map, dict)
+                or any(not isinstance(path, str) or not isinstance(identifier, str)
+                       for path, identifier in identity_map.items())):
+            raise PayloadError("identity map is malformed")
         with _open_archive(archive) as source:
             initial_stat = _archive_stat(source)
             archive_size, archive_hash = _hash_file(source)

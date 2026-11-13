@@ -49,6 +49,20 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_evidence_directory_argument_requires_an_existing_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self.assertEqual(EVIDENCE.existing_directory(str(directory)), directory)
+            missing = directory / "missing"
+            regular_file = directory / "file"
+            regular_file.write_text("not a directory")
+            for path in (missing, regular_file):
+                with self.subTest(path=path), self.assertRaisesRegex(
+                    EVIDENCE.argparse.ArgumentTypeError,
+                    "does not exist or is not a directory",
+                ):
+                    EVIDENCE.existing_directory(str(path))
+
     def test_hosted_visual_shards_run_each_existing_filter_once(self):
         selected = [name for shard in STAGES.VISUAL_SHARDS.values() for name in shard]
         self.assertEqual(sorted(selected), sorted(STAGES.VISUAL_FILTERS))

@@ -12,6 +12,13 @@ import tempfile
 from pathlib import Path
 
 
+def existing_directory(value: str) -> Path:
+    path = Path(value)
+    if not path.is_dir():
+        raise argparse.ArgumentTypeError(f"directory does not exist or is not a directory: {path}")
+    return path
+
+
 def owned_probe_root(path: Path) -> bool:
     try:
         allowed_parents = {Path(tempfile.gettempdir()).resolve(), Path("/tmp").resolve()}
@@ -48,7 +55,7 @@ def collect(log: Path, destination: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--directory", type=Path, required=True)
+    parser.add_argument("--directory", type=existing_directory, required=True)
     options = parser.parse_args()
     for log in sorted(options.directory.glob("*.log")):
         collect(log, options.directory / "probes")

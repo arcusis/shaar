@@ -280,7 +280,7 @@ final class InspectorPageToolsModel {
       try receive(snapshot, generation: generation)
     } catch {
       if active, generation == inspector.documentGeneration, !(error is CancellationError) {
-        failure = error.localizedDescription
+        failure = InspectorToolsL10n.backendError(error.localizedDescription)
         signalUpdate()
       }
     }
@@ -412,7 +412,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = error.localizedDescription
+      failure = InspectorToolsL10n.backendError(error.localizedDescription)
     }
   }
 
@@ -447,7 +447,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = error.localizedDescription
+      failure = InspectorToolsL10n.backendError(error.localizedDescription)
     }
   }
 
@@ -463,7 +463,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = error.localizedDescription
+      failure = InspectorToolsL10n.backendError(error.localizedDescription)
     }
   }
 

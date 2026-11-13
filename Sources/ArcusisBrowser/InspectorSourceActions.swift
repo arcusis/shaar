@@ -130,7 +130,7 @@ final class InspectorSourceActions {
         location = nil
       }
     } catch {
-      if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
+      if operation == revision { failure = Self.failureMessage(for: error) }
     }
   }
 
@@ -161,8 +161,15 @@ final class InspectorSourceActions {
       try InspectorAICopyModel.write(markdown, png: nil, to: pasteboard)
       inspector.presentation.copied("agent context")
     } catch {
-      if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
+      if operation == revision { failure = Self.failureMessage(for: error) }
     }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return InspectorL10n.display(error.localizedDescription)
+    }
+    return InspectorL10n.string("Could not get the source details. Try again.")
   }
 
   private func safeLocator(_ inspector: InspectorModel) async throws -> String {

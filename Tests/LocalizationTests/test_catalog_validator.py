@@ -368,6 +368,13 @@ class CatalogValidatorTests(unittest.TestCase):
         source = (ROOT / "Sources/ArcusisBrowser/DeveloperPageModel.swift").read_text(encoding="utf-8")
         self.assertIn("Self.failureMessage(for: error)", source)
 
+    def test_inspector_source_action_failures_use_hebrew_recovery_copy(self):
+        key = "Could not get the source details. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Inspector.xcstrings").read_text(encoding="utf-8"))["strings"]
+        self.assertEqual(catalog[key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן לקבל את פרטי המקור. כדאי לנסות שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorSourceActions.swift").read_text(encoding="utf-8")
+        self.assertEqual(source.count("Self.failureMessage(for: error)"), 2)
+
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

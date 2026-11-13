@@ -40,6 +40,17 @@ struct InspectorSourceActionsTests {
     #expect(inspector.sourceActions.location == nil)
   }
 
+  @Test @MainActor func backendFailuresUseLocalizedSourceRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorSourceActions.failureMessage(for: error)
+        == InspectorL10n.string("Could not get the source details. Try again."))
+    let known = InspectorFailure("This source is no longer available.")
+    #expect(
+      InspectorSourceActions.failureMessage(for: known)
+        == InspectorL10n.display(known.localizedDescription))
+  }
+
   @Test func parsesSourceLocationsAndBuildsEditorURLs() throws {
     let location = try #require(InspectorSourceLocation.parse(" /workspace/App.swift:18:4 "))
     #expect(location.path == "/workspace/App.swift")

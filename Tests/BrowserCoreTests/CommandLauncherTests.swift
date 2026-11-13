@@ -88,6 +88,15 @@ import Testing
   #expect(CommandLauncher.mostVisited(in: fixture.session, history: history).isEmpty)
 }
 
+@Test func mostVisitedSkipsOpenPageWithTerminalDotHost() throws {
+  var fixture = try LauncherFixture()
+  let opened = fixture.session.open(URL(string: "https://example.com./docs")!)
+  #expect(opened != nil)
+  let history = [try entry("https://example.com/docs", visits: 12, profile: fixture.profileID)]
+
+  #expect(CommandLauncher.mostVisited(in: fixture.session, history: history).isEmpty)
+}
+
 @Test func emptySpaceStillSuggestsFavoritesClosedTabsAndHistory() throws {
   var fixture = try LauncherFixture()
   for id in [fixture.openTabID, fixture.pinnedTabID, fixture.closedTabID] {

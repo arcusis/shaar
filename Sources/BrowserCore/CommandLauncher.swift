@@ -339,7 +339,11 @@ public enum CommandLauncher {
   /// Compares pages so "https://site.example" and "https://site.example/" are one page.
   static func pageKey(_ address: String) -> String {
     var components = URLComponents(string: address)
-    if let host = components?.host { components?.host = host.lowercased() }
+    if let host = components?.host {
+      let normalizedHost = host.lowercased()
+      components?.host = normalizedHost.hasSuffix(".")
+        ? String(normalizedHost.dropLast()) : normalizedHost
+    }
     components?.fragment = nil
     let normalized = components?.string ?? address
     guard normalized.hasSuffix("/"), URL(string: normalized)?.path() == "/" else {

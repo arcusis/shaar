@@ -53,6 +53,25 @@ struct BrowserWorkspaceStoreTests {
     #expect(!destination.sleepingTabIDs.contains(tabID))
   }
 
+  @Test func transferOfPendingSplitTargetDismissesItsCommand() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let target = try #require(source.session.selectedSpace.selectedTabID)
+    source.openSplitPane(beside: target, edge: .right)
+    #expect(source.commandIsOpen)
+    #expect(source.pendingSplitPlacement?.target == target)
+
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID,
+      tabID: target)
+    #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
+    #expect(!source.commandIsOpen)
+    #expect(source.pendingSplitPlacement == nil)
+  }
+
   @Test func pinnedAndPrivateWindowTransfersAreRefusedWithNotices() throws {
     let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let sourceID = manager.workspace.windows[0].id

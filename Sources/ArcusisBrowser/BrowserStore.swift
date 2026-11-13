@@ -1731,6 +1731,9 @@ final class BrowserStore {
     let pageIDs = Set(
       session.spaces.flatMap(\.tabs).map(\.id) + session.favoritePages.map(\.tab.id))
     sleepingTabIDs.formIntersection(pageIDs)
+    if let target = pendingSplitPlacement?.target, !pageIDs.contains(target) {
+      dismissCommand()
+    }
     rendererFailures = rendererFailures.filter { $0.value.belongs(to: session) }
     if !canUseLibraryDrawer {
       closeLibraryDrawer()

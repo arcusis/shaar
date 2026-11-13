@@ -941,6 +941,16 @@ final class BrowserStore {
     return true
   }
 
+  @discardableResult
+  func selectAdjacentTab(by offset: Int) -> Bool {
+    let tabs = session.selectedSpace.tabs
+    guard tabs.count > 1, let selectedID = session.selectedSpace.selectedTabID,
+      let index = tabs.firstIndex(where: { $0.id == selectedID })
+    else { return false }
+    let next = (index + offset % tabs.count + tabs.count) % tabs.count
+    return selectTabByShortcutIndex(next)
+  }
+
   func nativeTabOpened(_ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool)
     -> Bool
   {

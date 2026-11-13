@@ -85,6 +85,25 @@ import Testing
   #expect(!TabNumberShortcutRouting.route(event("0"), store: store))
 }
 
+@Test @MainActor func controlTabCyclesToTheNextTabAndWraps() throws {
+  let store = BrowserStore()
+  for index in 1...3 {
+    store.perform(.open(URL(string: "https://cycle\(index).example")!))
+  }
+  let tabs = store.session.selectedSpace.tabs
+  store.selectTabByShortcutIndex(0)
+
+  let event = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 0,
+    windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+    isARepeat: false, keyCode: 48)!
+  #expect(NextTabShortcutRouting.route(event, store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[1].id)
+  store.selectTabByShortcutIndex(2)
+  #expect(NextTabShortcutRouting.route(event, store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[0].id)
+}
+
 @Test func downloadsShortcutDoesNotReserveOtherCommandJVariants() {
   #expect(ARCReservedBrowserShortcut("J", [.command, .shift]))
   #expect(!ARCReservedBrowserShortcut("j", .command))

@@ -590,6 +590,10 @@
       "sha256": "4751e70a813ec7c62e5d2524589c01b7ebe45133cb95b73ff65493d3683327ef"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0120-shaar-print-view-manager.patch",
+      "sha256": "884854809f39e8dc21001062817895c1d3f1d9223b62d6a12d94b397b4db3c54"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0121-shaar-print-menu-native-panel.patch",
       "sha256": "939dcacf56a62df2ce20c3a827db1f7c6ef10c73a8d73c738ae66fd05b723854"
     },

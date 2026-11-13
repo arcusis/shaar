@@ -27,3 +27,16 @@ test("every generated page has a language, title, description, canonical URL, an
     assert.equal(document.querySelectorAll("main").length, 1);
   }
 });
+
+test("legal text scroll regions can receive keyboard focus", () => {
+  const legalPages = Pages("License", "Notice", "Third-party notices").filter(
+    (page) => page.path === "/license/" || page.path === "/notice/",
+  );
+
+  for (const page of legalPages) {
+    const document = parseHTML(DocumentPage(page)).document;
+    const regions = document.querySelectorAll("pre.license-text");
+    assert.ok(regions.length > 0, page.path);
+    for (const region of regions) assert.equal(region.getAttribute("tabindex"), "0", page.path);
+  }
+});

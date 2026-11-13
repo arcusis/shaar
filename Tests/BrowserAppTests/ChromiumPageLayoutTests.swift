@@ -64,6 +64,27 @@ final class ChromiumPageLayoutTests: XCTestCase {
     XCTAssertTrue(page.superview === container)
   }
 
+  func testPrivatePageSelectionKeepsLiveTabViewsInTheirContainer() {
+    let container = ChromiumPageContainerView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+    let firstID = UUID()
+    let secondID = UUID()
+    let first = NSView(frame: .zero)
+    let second = NSView(frame: .zero)
+    let liveTabs: Set<UUID> = [firstID, secondID]
+
+    XCTAssertTrue(PrivateBrowserPage.selectPage(first, tabID: firstID, liveTabs: liveTabs, in: container))
+    XCTAssertTrue(PrivateBrowserPage.selectPage(second, tabID: secondID, liveTabs: liveTabs, in: container))
+    XCTAssertTrue(first.superview === container)
+    XCTAssertTrue(first.isHidden)
+    XCTAssertTrue(second.superview === container)
+    XCTAssertFalse(second.isHidden)
+
+    XCTAssertTrue(PrivateBrowserPage.selectPage(first, tabID: firstID, liveTabs: liveTabs, in: container))
+    XCTAssertTrue(first.superview === container)
+    XCTAssertFalse(first.isHidden)
+    XCTAssertTrue(second.isHidden)
+  }
+
   func testDismantlingPreviousContainerKeepsTransferredPageAttached() {
     let first = ChromiumPageContainerView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
     let second = ChromiumPageContainerView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))

@@ -1877,11 +1877,16 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (!_shaarWebShareAvailable || event->session_id.size) return;
   NSString *windowID = String(event->window_id);
   NSString *requestID = payload[@"id"];
-  if (![requestID isKindOfClass:NSString.class] ||
-      requestID.length > 64 || ![[NSUUID alloc] initWithUUIDString:requestID] ||
-      _shaarShareRequests[requestID] || !_shaarTabs[tabID] ||
+  if (![requestID isKindOfClass:NSString.class] || requestID.length > 64 ||
+      ![[NSUUID alloc] initWithUUIDString:requestID] ||
+      _shaarShareRequests[requestID]) return;
+  if (!_shaarTabs[tabID] ||
       ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
-      ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+      ![windowID isEqualToString:_shaarTabWindows[tabID]]) {
+    if (_shaarShareReply && requestID.UTF8String)
+      _shaarShareReply(requestID.UTF8String, 0);
+    return;
+  }
   _shaarShareRequests[requestID] = tabID;
   id activationValue = payload[@"userActivated"];
   BOOL userActivated = [activationValue isKindOfClass:NSNumber.class] &&

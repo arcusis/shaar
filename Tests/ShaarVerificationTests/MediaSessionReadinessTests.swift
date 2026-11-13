@@ -140,6 +140,11 @@ import Testing
   #expect(received["id"] as? String == id)
   #expect(supported["replyOutcome"] as? Int == -1)
 
+  let foreignWindow = ARCProbeWebShareEventDispatch(payload, 15, false, true)
+  #expect((foreignWindow["received"] as? [String: Any])?.isEmpty == true)
+  #expect(foreignWindow["replyID"] as? String == id)
+  #expect(foreignWindow["replyOutcome"] as? Int == 0)
+
   var inactivePayload = payload
   inactivePayload["userActivated"] = false
   let inactive = ARCProbeWebShareEventDispatch(inactivePayload, 15, true, true)

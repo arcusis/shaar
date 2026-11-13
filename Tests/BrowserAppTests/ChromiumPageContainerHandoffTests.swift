@@ -116,6 +116,34 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertTrue(firstPage.isHidden)
   }
 
+  func testPrivatePageSelectionRetainsOtherTabsAndHandsOffOnTeardown() {
+    let firstID = UUID()
+    let secondID = UUID()
+    let firstPage = NSView()
+    let secondPage = NSView()
+    let outgoing = ChromiumPageContainerView()
+    let incoming = ChromiumPageContainerView()
+
+    XCTAssertTrue(
+      ChromiumPageContainerView.selectPrivatePage(
+        firstPage, tabID: firstID, liveTabs: [firstID, secondID], in: outgoing))
+    XCTAssertTrue(
+      ChromiumPageContainerView.selectPrivatePage(
+        secondPage, tabID: secondID, liveTabs: [firstID, secondID], in: outgoing))
+    XCTAssertTrue(firstPage.isHidden)
+    XCTAssertTrue(firstPage.superview === outgoing)
+    XCTAssertFalse(secondPage.isHidden)
+
+    XCTAssertTrue(
+      ChromiumPageContainerView.selectPrivatePage(
+        firstPage, tabID: firstID, liveTabs: [firstID, secondID], in: incoming))
+    outgoing.dismantle()
+
+    XCTAssertTrue(firstPage.superview === incoming)
+    XCTAssertTrue(incoming.pageView === firstPage)
+    XCTAssertNil(secondPage.superview)
+  }
+
   func testContainerLayoutKeepsNativeDockClickAreaUncovered() {
     let tab = UUID()
     let frame = NSRect(x: 0, y: 0, width: 1000, height: 700)

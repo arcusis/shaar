@@ -50,6 +50,14 @@ final class ChromiumPageContainerView: NSView {
   private var shownTabID: UUID?
   private var selectionOrder: UInt64 = 0
 
+  /// Routes private pages through the same tab-aware ownership path as regular pages.
+  @discardableResult
+  static func selectPrivatePage(
+    _ page: NSView?, tabID: UUID, liveTabs: Set<UUID>, in container: ChromiumPageContainerView
+  ) -> Bool {
+    container.select(page, tabID: tabID, liveTabs: liveTabs)
+  }
+
   @discardableResult
   func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
     Self.live.add(self)

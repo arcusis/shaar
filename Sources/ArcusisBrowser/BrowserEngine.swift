@@ -921,7 +921,10 @@ final class BrowserEngine {
         else { return nil }
         return page.tab
       }
-      let ordered = tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned } + favoriteTabs
+      let tabOrder = tabs.reduce(into: (pinned: [BrowserTab](), unpinned: [BrowserTab]())) {
+        if $1.isPinned { $0.pinned.append($1) } else { $0.unpinned.append($1) }
+      }
+      let ordered = tabOrder.pinned + tabOrder.unpinned + favoriteTabs
       let positions = ordered.map { NativeTabPlacement(id: $0.id, pinned: $0.isPinned) }
       if lastTabOrders[profile] != positions,
         runtime.placeTabIDs(

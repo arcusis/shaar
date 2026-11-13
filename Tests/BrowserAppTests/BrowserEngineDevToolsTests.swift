@@ -16,6 +16,39 @@ struct BrowserEngineDevToolsTests {
       BrowserEngine.extensionInstallRefreshDelaysMilliseconds == [250, 750, 1_500, 3_000, 4_500])
   }
 
+  @Test func reconcileTabOrderingBenchmark() {
+    let tabs = (0..<5_000).map { index in
+      BrowserTab(url: URL(string: "https://example.test/\(index)")!, isPinned: index < 2_500)
+    }
+    let favorites = (0..<100).map { index in
+      BrowserTab(url: URL(string: "https://favorite.test/\(index)")!)
+    }
+
+    let beforeStart = ContinuousClock.now
+    var beforeCount = 0
+    var beforeOrder: [BrowserTab] = []
+    for _ in 0..<100 {
+      beforeOrder = tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned } + favorites
+      beforeCount += beforeOrder.count
+    }
+    let before = beforeStart.duration(to: .now)
+
+    let afterStart = ContinuousClock.now
+    var afterCount = 0
+    var afterOrder: [BrowserTab] = []
+    for _ in 0..<100 {
+      let partition = tabs.reduce(into: (pinned: [BrowserTab](), unpinned: [BrowserTab]())) {
+        if $1.isPinned { $0.pinned.append($1) } else { $0.unpinned.append($1) }
+      }
+      afterOrder = partition.pinned + partition.unpinned + favorites
+      afterCount += afterOrder.count
+    }
+    let after = afterStart.duration(to: .now)
+    print("reconcileTabOrderingBenchmark: before=\(before), after=\(after)")
+    #expect(beforeCount == afterCount)
+    #expect(beforeOrder == afterOrder)
+  }
+
   @Test func developerToolsOpenOnlyForTheCurrentLiveOwnedPage() throws {
     let store = BrowserStore()
     store.perform(.open(try #require(URL(string: "https://inspect.example/page"))))

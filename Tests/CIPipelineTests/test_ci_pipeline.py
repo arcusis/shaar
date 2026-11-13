@@ -738,6 +738,10 @@ class SupplyChainTests(unittest.TestCase):
         self.assertIn("ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}", setup)
         self.assertIn("scripts/install-ci-tools.py --cache-directory build/ci-tool-archives", setup)
 
+    def test_swiftpm_cache_key_tracks_build_plugin_sources(self):
+        setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
+        self.assertIn("hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Plugins/**')", setup)
+
     def test_installer_retries_transient_download_failures_only(self):
         def http_error(code):
             return INSTALL.urllib.error.HTTPError("https://example.invalid/tool", code, "error", {}, None)

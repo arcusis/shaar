@@ -29,6 +29,8 @@ Shipping starts after fast/dependency review success, parallel with unit tests a
 
 SBOM inventory generation refuses a symlinked app root so file records cannot be collected from a directory outside the candidate bundle path.
 
+Shipping-probe guard selection includes `.inc` source changes, matching the scanner's supported source suffixes.
+
 Python/Actions CodeQL remains in Source checks and `CI required`. Swift runs independently in `swift-security.yml` on every PR/push/merge group, with the production compiler/extraction strategy restored after the slower full-source trial. Its PR result does not delay `CI required`. Production pushes and nightly require `Swift security required`; release validation requires both successful production workflows on the exact tag commit and zero open code-scanning alerts. See [[CI_Parallel_Verification]]. Swift retains its 60-minute job budget. Python/Actions have 20-minute budgets. Dependency review checks PR, merge-group and manual-validation diffs at high severity. Scorecard is a separate production-push/weekly assessment with SARIF artifacts; it does not publish a badge or change repository settings. Nightly/manual validation also runs Address and Thread Sanitizer tests in distinct scratch directories and Periphery. Sanitizer findings fail. Periphery execution errors fail; existing unused-declaration findings are a report, with public API, Objective-C/runtime, SwiftUI preview and Codable retention options.
 
 ## Selection, caches and required check

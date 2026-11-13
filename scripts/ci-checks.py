@@ -7,6 +7,7 @@
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -36,7 +37,8 @@ def pin_errors(root: Path) -> list[str]:
 
 
 def tracked_shell_files() -> list[str]:
-    files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
+    files = [os.fsdecode(path) for path in subprocess.check_output(
+        ["git", "ls-files", "-z"], cwd=ROOT).split(b"\0") if path]
     return [name for name in files if name.endswith(".sh") and not name.startswith("ThirdParty/")]
 
 

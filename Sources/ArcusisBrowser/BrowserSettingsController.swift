@@ -40,8 +40,9 @@ final class BrowserSettingsState {
     sharedExtensions: SharedExtensionSettingsModel? = nil,
     downloadDirectorySettingsEnabled: Bool = false,
     applyDownloadDirectory: ProfileDownloadDirectoryApplier? = nil,
-    removeProfileDirectory: @escaping ProfileDirectoryRemovalOperation =
-      ProfileDataDirectoryRemoval.removeIfPresent
+    removeProfileDirectory: @escaping ProfileDirectoryRemovalOperation = { directory in
+      try await ProfileDataDirectoryRemoval.removeIfPresent(at: directory)
+    }
   ) {
     self.workspace = workspace
     self.preferences = preferences
@@ -356,17 +357,24 @@ final class BrowserSettingsState {
 }
 
 enum ProfileDataDirectoryRemoval {
-  static func removeIfPresent(at directory: URL?) async throws {
+  static func removeIfPresent(
+    at directory: URL?,
+    fileExists: @escaping @Sendable (URL) -> Bool = {
+      FileManager.default.fileExists(atPath: $0.path)
+    },
+    removeItem: @escaping @Sendable (URL) throws -> Void = {
+      try FileManager.default.removeItem(at: $0)
+    }
+  ) async throws {
     guard let directory else { return }
     try await Task.detached(priority: .utility) {
       for attempt in 0..<50 {
         do {
-          let fileManager = FileManager.default
-          guard fileManager.fileExists(atPath: directory.path) else { return }
-          try fileManager.removeItem(at: directory)
+          guard fileExists(directory) else { return }
+          try removeItem(directory)
           return
         } catch {
-          guard FileManager.default.fileExists(atPath: directory.path) else { return }
+          guard fileExists(directory) else { return }
           guard attempt < 49 else { throw error }
           try await Task.sleep(for: .milliseconds(100))
         }

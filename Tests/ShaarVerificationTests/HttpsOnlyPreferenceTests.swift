@@ -94,6 +94,48 @@ import Testing
     #expect(ARCReadHttpsOnlyPreference(root, profile) == nil)
   }
 
+  @Test func failedLiveApplyRetriesDiskWhenChoiceRevertsToCachedValue() {
+    let profileID = "test-profile"
+    let cache = NSMutableDictionary()
+    let dirtyProfiles = NSMutableSet()
+    cache[profileID] = NSNumber(value: false)
+    var diskValue = false
+    var applyCalls = 0
+
+    let applied = ARCCommitHttpsOnlyModeChange(
+      cache, dirtyProfiles, profileID, true, true,
+      { value in
+        diskValue = value
+        return true
+      },
+      { _ in
+        applyCalls += 1
+        return false
+      })
+
+    #expect(!applied)
+    #expect(diskValue)
+    #expect((cache[profileID] as? NSNumber)?.boolValue == false)
+    #expect(dirtyProfiles.contains(profileID))
+
+    let reverted = ARCCommitHttpsOnlyModeChange(
+      cache, dirtyProfiles, profileID, false, true,
+      { value in
+        diskValue = value
+        return true
+      },
+      { _ in
+        applyCalls += 1
+        return true
+      })
+
+    #expect(reverted)
+    #expect(!diskValue)
+    #expect((cache[profileID] as? NSNumber)?.boolValue == false)
+    #expect(!dirtyProfiles.contains(profileID))
+    #expect(applyCalls == 1)
+  }
+
   @Test func disablesTheHttpsFirstDialogWithoutDroppingOtherState() throws {
     let root = try directory()
     defer { try? FileManager.default.removeItem(at: root) }

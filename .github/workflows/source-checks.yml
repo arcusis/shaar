@@ -439,22 +439,24 @@ jobs:
           cp "$evidence/first-tab.stderr.log" "$reports/" 2>/dev/null || true
           cp "$evidence/first-tab.stdout.log" "$reports/" 2>/dev/null || true
           {
-            sw_vers
-            xcodebuild -version
-            swift --version
-            echo '--- ci-test-pin.json ---'
-            cat ThirdParty/ChromiumEngine/ci-test-pin.json
-            echo '--- production pin.json ---'
-            cat ThirdParty/ChromiumEngine/pin.json
-            echo '--- cached test engine archive digests ---'
+            sw_vers || true
+            xcodebuild -version || true
+            swift --version || true
+            echo '--- ci-test-pin.json ---' || true
+            cat ThirdParty/ChromiumEngine/ci-test-pin.json || true
+            echo '--- production pin.json ---' || true
+            cat ThirdParty/ChromiumEngine/pin.json || true
+            echo '--- cached test engine archive digests ---' || true
             if [ -d build/ShaarEngineTestCache ]; then
-              find build/ShaarEngineTestCache -type f -name '*.tar.xz' -exec shasum -a 256 {} \;
+              find build/ShaarEngineTestCache -type f -name '*.tar.xz' \
+                -exec shasum -a 256 {} \; || true
             fi
-            echo '--- cached production engine archive digests ---'
+            echo '--- cached production engine archive digests ---' || true
             if [ -d build/EngineCache ]; then
-              find build/EngineCache -type f -name '*.tar.xz' -exec shasum -a 256 {} \;
+              find build/EngineCache -type f -name '*.tar.xz' \
+                -exec shasum -a 256 {} \; || true
             else
-              echo 'No production pinned archive is fetched by this first-tab job.'
+              echo 'No production pinned archive is fetched by this first-tab job.' || true
             fi
           } > "$reports/runner-environment.txt" 2>&1
           report_dir="$HOME/Library/Logs/DiagnosticReports"

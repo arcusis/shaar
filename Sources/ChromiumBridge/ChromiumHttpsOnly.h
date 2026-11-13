@@ -26,7 +26,19 @@ FOUNDATION_EXPORT NSNumber * _Nullable ARCReadHttpsOnlyPreference(
 /// boolean is left unchanged in that case. A profile with no choice yet is
 /// seeded on. Returns the applied boolean, or nil when the id or file is unusable.
 FOUNDATION_EXPORT NSNumber * _Nullable ARCSeedHttpsOnlyPreference(
-  NSURL *userDataDirectory, NSString *profileID, NSNumber * _Nullable chosen);
+    NSURL *userDataDirectory, NSString *profileID, NSNumber * _Nullable chosen);
+
+/// Commits the cached HTTPS-only choice only after required persistence and live apply succeed.
+/// If persistence succeeds but live apply fails, records the disk value as dirty so a retry of
+/// the cached value rewrites Preferences.
+FOUNDATION_EXPORT BOOL ARCCommitHttpsOnlyModeChange(
+    NSMutableDictionary<NSString *, NSNumber *> *cache,
+    NSMutableSet<NSString *> *dirtyProfiles,
+    NSString *profileID,
+    BOOL enabled,
+    BOOL hasLoadedProfile,
+    BOOL (^writePreference)(BOOL),
+    BOOL (^applyLive)(BOOL));
 
 NS_ASSUME_NONNULL_END
 

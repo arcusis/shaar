@@ -19,14 +19,12 @@ class HttpsOnlyCacheCommitTests(unittest.TestCase):
         end = source.index("- (NSArray<NSString *> *)profileDirectoryEntries", start)
         method = source[start:end]
 
-        cache_update = method.index("_shaarHttpsOnly[canonical] = @(enabled);")
-        disk_write = method.index("ARCWriteHttpsOnlyPreference(")
-        live_apply = method.index("[self applyLiveHttpsOnly:")
-
-        self.assertLess(disk_write, cache_update)
-        self.assertLess(live_apply, cache_update)
-        self.assertIn("!ARCWriteHttpsOnlyPreference", method)
-        self.assertIn("if (changed && ![self applyLiveHttpsOnly", method)
+        self.assertIn("ARCCommitHttpsOnlyModeChange(", method)
+        helper = (ROOT / "Sources/ChromiumBridge/ChromiumHttpsOnly.mm").read_text()
+        dirty_mark = helper.index("[dirtyProfiles addObject:profileID];")
+        retry_write = helper.index(
+            "BOOL needsWrite = changed || [dirtyProfiles containsObject:profileID];")
+        self.assertLess(retry_write, dirty_mark)
 
 
 if __name__ == "__main__":

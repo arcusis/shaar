@@ -253,6 +253,7 @@ struct Symbols {
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
+  NSMutableSet<NSString *> *_shaarHttpsOnlyDirtyProfiles;
   NSMutableDictionary<NSString *, NSArray<NSString *> *> *_shaarProfileFilesBeforeOpen;
 }
 - (void)receiveEvent:(const shaar_event *)event;
@@ -501,6 +502,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarFindRequests = [NSMutableDictionary dictionary];
   _shaarMediaRequests = [NSMutableDictionary dictionary];
   _shaarHttpsOnly = [NSMutableDictionary dictionary];
+  _shaarHttpsOnlyDirtyProfiles = [NSMutableSet set];
   _shaarCaptureRequests = [NSMutableDictionary dictionary];
   _shaarInstallRequests = [NSMutableDictionary dictionary];
   _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
@@ -1033,15 +1035,16 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (BOOL)setHttpsOnlyModeEnabled:(BOOL)enabled forProfileID:(NSString *)profileID {
   NSString *canonical = ARCCanonicalProfileID(profileID);
   if (!canonical) return NO;
-  NSNumber *previous = _shaarHttpsOnly[canonical];
-  BOOL changed = !previous || previous.boolValue != enabled;
-  if (_shaarUserDataDirectory && changed &&
-      !ARCWriteHttpsOnlyPreference(_shaarUserDataDirectory, canonical, enabled)) return NO;
-  if ([self loadedProfileValueForID:profileID]) {
-    if (changed && ![self applyLiveHttpsOnly:enabled profileID:profileID]) return NO;
-  }
-  _shaarHttpsOnly[canonical] = @(enabled);
-  return YES;
+  BOOL loaded = [self loadedProfileValueForID:profileID] != nil;
+  return ARCCommitHttpsOnlyModeChange(
+      _shaarHttpsOnly, _shaarHttpsOnlyDirtyProfiles, canonical, enabled, loaded,
+      ^BOOL(BOOL value) {
+        return !_shaarUserDataDirectory ||
+            ARCWriteHttpsOnlyPreference(_shaarUserDataDirectory, canonical, value);
+      },
+      ^BOOL(BOOL value) {
+        return [self applyLiveHttpsOnly:value profileID:profileID];
+      });
 }
 
 - (NSArray<NSString *> *)profileDirectoryEntriesBeforeOpenForProfileID:(NSString *)profileID {

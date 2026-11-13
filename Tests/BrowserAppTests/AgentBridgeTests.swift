@@ -84,6 +84,30 @@ final class AgentBridgeTests: XCTestCase {
     XCTAssertFalse(model.hasOneTimeToken)
   }
 
+  func testClosingBridgeCancelsItsClipboardCleanup() async throws {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    let bridge = AgentBridgeModel(target: target) { operation, _, reply in
+      guard operation == .enable else { return }
+      reply(
+        [
+          "schemaVersion": 1, "enabled": true, "port": 9222,
+          "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
+          "connectionCount": 0, "token": String(repeating: "a", count: 43),
+        ], nil)
+    }
+    bridge.enable()
+    XCTAssertTrue(bridge.hasOneTimeToken)
+    let pasteboard = NSPasteboard(name: NSPasteboard.Name("AgentBridgeTests-\(UUID())"))
+    bridge.copySetup(for: .claude, pasteboard: pasteboard, clearAfter: .milliseconds(20))
+    let copiedCommand = try XCTUnwrap(pasteboard.string(forType: .string))
+
+    bridge.close()
+    try await Task.sleep(for: .milliseconds(60))
+
+    XCTAssertEqual(pasteboard.string(forType: .string), copiedCommand)
+  }
+
   func testNavigationDuringEnableRevokesLateGrant() {
     let first = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/a")!)

@@ -130,6 +130,7 @@ final class AgentBridgeModel {
   @ObservationIgnored private let request: Request
   @ObservationIgnored private var revision = 0
   @ObservationIgnored private var closed = false
+  @ObservationIgnored private var clipboardCleanupTask: Task<Void, Never>?
 
   var isConnected: Bool { status.connectionCount > 0 }
   var needsBanner: Bool { isConnected || revocationUnconfirmed }
@@ -254,6 +255,8 @@ final class AgentBridgeModel {
 
   func close() {
     guard !closed else { return }
+    clipboardCleanupTask?.cancel()
+    clipboardCleanupTask = nil
     let old = target
     let wasEnabled = status.enabled || revocationUnconfirmed
     clear()
@@ -270,18 +273,24 @@ final class AgentBridgeModel {
     return command
   }
 
-  func copySetup(for client: Client) {
+  func copySetup(
+    for client: Client, pasteboard: NSPasteboard = .general,
+    clearAfter: Duration = .seconds(120)
+  ) {
     guard let command = setupCommand(for: client) else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(command, forType: .string)
-    let changeCount = NSPasteboard.general.changeCount
+    clipboardCleanupTask?.cancel()
+    pasteboard.clearContents()
+    pasteboard.setString(command, forType: .string)
+    let changeCount = pasteboard.changeCount
     oneTimeToken = nil
     canCopySetup = false
-    Task { @MainActor in
-      try? await Task.sleep(for: .seconds(120))
-      if NSPasteboard.general.changeCount == changeCount {
-        NSPasteboard.general.clearContents()
-      }
+    clipboardCleanupTask = Task { @MainActor [weak self, weak pasteboard] in
+      do { try await Task.sleep(for: clearAfter) } catch { return }
+      guard let self, !self.closed, let pasteboard,
+        pasteboard.changeCount == changeCount
+      else { return }
+      pasteboard.clearContents()
+      self.clipboardCleanupTask = nil
     }
   }
 

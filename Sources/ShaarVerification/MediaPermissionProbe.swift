@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 import SwiftUI
 
@@ -70,7 +71,7 @@ final class MediaPermissionProbe {
         store.sheetDidDismiss()
       }
       result = await state(tabA) ?? [:]
-      if result["allowed"] as? Bool == true { break }
+      if Self.isAllowedResponse(result) { break }
       if result["error"] != nil { throw MediaProbeFailure("Fake media was denied: \(result)") }
       try await Task.sleep(for: .milliseconds(100))
     }
@@ -78,7 +79,7 @@ final class MediaPermissionProbe {
       kinds == Set([.camera, .microphone]), "camera and microphone both pass through native consent"
     )
     try expect(
-      result["audio"] as? Int == 1 && result["video"] as? Int == 1,
+      Self.hasExpectedTrackCounts(result),
       "allowing this visit creates fake audio and video tracks")
     try await waitForCapture(tabA, active: true)
     try expect(
@@ -169,6 +170,28 @@ final class MediaPermissionProbe {
 
   private func state(_ tab: UUID) async -> [String: Any]? {
     await evaluate(tab, "window.arcusisMediaResult")
+  }
+
+  static func isAllowedResponse(_ result: [String: Any]) -> Bool {
+    guard let value = result["allowed"] as? NSNumber,
+      CFGetTypeID(value) == CFBooleanGetTypeID()
+    else { return false }
+    return value.boolValue
+  }
+
+  static func hasExpectedTrackCounts(_ result: [String: Any]) -> Bool {
+    exactInteger(result["audio"]) == 1 && exactInteger(result["video"]) == 1
+  }
+
+  private static func exactInteger(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return nil }
+    let encoding = String(cString: number.objCType)
+    if encoding == "f" || encoding == "d" {
+      return Int(exactly: number.doubleValue)
+    }
+    return Int(number.stringValue)
   }
 
   private func waitForRequest(_ tab: UUID) async throws -> WebsitePermissionRequest {

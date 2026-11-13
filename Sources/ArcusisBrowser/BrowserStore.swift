@@ -1728,6 +1728,11 @@ final class BrowserStore {
   }
 
   private func reconcileTransientState() {
+    let liveTabIDs = Set(
+      session.spaces.flatMap(\.tabs).map(\.id) + session.favoritePages.map { $0.tab.id })
+    sleepingTabIDs.formIntersection(liveTabIDs)
+    requestedTabCloses.formIntersection(liveTabIDs)
+    if let tabDrag, !liveTabIDs.contains(tabDrag.tabID) { self.tabDrag = nil }
     rendererFailures = rendererFailures.filter { $0.value.belongs(to: session) }
     if !canUseLibraryDrawer {
       closeLibraryDrawer()

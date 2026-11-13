@@ -15,6 +15,19 @@ import Testing
   }
 
   init() { _ = NSApplication.shared }
+
+  @Test func collapsedInspectorSectionsPointTowardTheLogicalCenterInBothDirections() {
+    #expect(
+      InspectorSection<EmptyView>.disclosureSymbol(isCollapsed: true, rightToLeft: false)
+        == "chevron.right")
+    #expect(
+      InspectorSection<EmptyView>.disclosureSymbol(isCollapsed: true, rightToLeft: true)
+        == "chevron.left")
+    #expect(
+      InspectorSection<EmptyView>.disclosureSymbol(isCollapsed: false, rightToLeft: true)
+        == "chevron.down")
+  }
+
   private var target: SiteControlTarget {
     .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/inspect")!)
   }

@@ -21,6 +21,7 @@ import Testing
     let policy = SleepingTabsPolicy(neverSleepHosts: ["example.com", "https://bank.test/home"])
     #expect(policy.neverSleeps("example.com"))
     #expect(policy.neverSleeps("mail.example.com"))
+    #expect(policy.neverSleeps("mail.example.com."))
     #expect(policy.neverSleeps("www.example.com"))
     #expect(policy.neverSleeps("www.bank.test"))
     #expect(!policy.neverSleeps("notexample.com"))

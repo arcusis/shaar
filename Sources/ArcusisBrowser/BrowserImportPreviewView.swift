@@ -31,6 +31,7 @@ enum BrowserImportPreviewCounts {
 }
 
 struct BrowserImportPreviewView: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let items: [BrowserImportItem]
   let source: BrowserImportSource
   let profileName: String
@@ -59,6 +60,7 @@ struct BrowserImportPreviewView: View {
 
     VStack(alignment: .leading, spacing: 14) {
       Text(PanelsL10n.string("Import from another browser")).font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.headingTraits)
       if let error {
         Text(error).foregroundStyle(.secondary)
       } else {

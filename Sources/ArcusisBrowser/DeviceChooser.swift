@@ -176,6 +176,10 @@ struct DeviceChooserConsent: View {
   @Environment(\.dismiss) private var dismiss
   @State private var selection: DeviceChooserSelection
 
+  static func optionAccessibilityTraits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? [.isSelected] : []
+  }
+
   init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: Int? = nil) {
     self.store = store
     self.request = request
@@ -239,6 +243,8 @@ struct DeviceChooserConsent: View {
           optionLabel(option, options: presented.options)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(Self.optionAccessibilityTraits(
+          isSelected: selection.selectedIndex(for: presented.options) == option.index))
       }
     }
   }

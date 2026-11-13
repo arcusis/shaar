@@ -7,6 +7,7 @@ import Foundation
 public enum NavigationInput {
   public static func isWebURL(_ url: URL) -> Bool {
     ["http", "https"].contains(url.scheme?.lowercased() ?? "") && !(url.host() ?? "").isEmpty
+      && url.user == nil && url.password == nil
       && (url.port.map { (1...65535).contains($0) } ?? true)
   }
 

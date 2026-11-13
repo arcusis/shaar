@@ -45,11 +45,29 @@ struct PrintRequest: Identifiable, Equatable {
   var sheetID: String { "print-\(id)" }
 
   var hostLabel: String {
-    guard let rawHost = requestingOrigin.host() ?? pageURL.host() else {
+    guard let rawHost = Self.serializedHost(requestingOrigin) ?? pageURL.host() else {
       return pageURL.absoluteString
     }
     let host = rawHost.contains(":") && !rawHost.hasPrefix("[") ? "[\(rawHost)]" : rawHost
     return requestingOrigin.port.map { "\(host):\($0)" } ?? host
+  }
+
+  private static func serializedHost(_ origin: URL) -> String? {
+    let absoluteString = origin.absoluteString
+    guard let authorityStart = absoluteString.range(of: "://")?.upperBound else { return nil }
+    let authority = absoluteString[authorityStart...].prefix { $0 != "/" }
+    guard !authority.isEmpty else { return nil }
+
+    let host: Substring
+    if authority.first == "[" {
+      guard let closingBracket = authority.firstIndex(of: "]") else { return nil }
+      host = authority[...closingBracket]
+    } else if let colon = authority.lastIndex(of: ":") {
+      host = authority[..<colon]
+    } else {
+      host = authority
+    }
+    return host.isEmpty ? nil : String(host)
   }
 
   func matches(

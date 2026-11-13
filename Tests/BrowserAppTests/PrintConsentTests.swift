@@ -60,6 +60,24 @@ struct PrintConsentTests {
     _ = PrintConsentContent(request: print, onCancel: {}, onPrint: {}).body
   }
 
+  @Test func printConsentHostUsesCanonicalIDNRepresentation() throws {
+    let store = openedStore()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let payload: [String: Any] = [
+      "schemaVersion": 1,
+      "id": UUID().uuidString,
+      "profileID": store.session.selectedSpace.profileID.uuidString,
+      "tabID": tab.id.uuidString,
+      "pageURL": "https://xn--bcher-kva.example/article",
+      "origin": "https://bücher.example",
+      "frameID": frameID,
+      "title": "Article title",
+    ]
+
+    let print = try #require(PrintRequest(payload: payload))
+    #expect(print.hostLabel == "xn--bcher-kva.example")
+  }
+
   @Test func printConsentOriginKeepsNonDefaultPort() throws {
     let store = openedStore()
     let tab = try #require(store.session.selectedSpace.selectedTab)

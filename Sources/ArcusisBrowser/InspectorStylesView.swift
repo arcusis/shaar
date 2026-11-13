@@ -23,6 +23,10 @@ struct InspectorStylesView: View {
   @State private var newSelector = ""
   @State private var showComputed: Bool
 
+  static func declarationToggleAccessibilityLabel(for declaration: InspectorDeclaration) -> String {
+    declaration.name
+  }
+
   init(inspector: InspectorModel, model: InspectorStylesModel) {
     self.inspector = inspector
     self.model = model
@@ -277,9 +281,7 @@ struct InspectorStylesView: View {
         )
       )
       .toggleStyle(.checkbox).labelsHidden().disabled(model.busy)
-      .accessibilityLabel(
-        InspectorL10n.string(declaration.disabled ? "Turn property on" : "Turn property off")
-      )
+      .accessibilityLabel(Self.declarationToggleAccessibilityLabel(for: declaration))
       if declaration.disabled {
         declarationLabel(declaration)
       } else {

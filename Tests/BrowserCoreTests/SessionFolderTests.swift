@@ -36,6 +36,19 @@ import Testing
     folders: [root], tabs: [BrowserTab(url: tab.url, isPinned: true, folderID: child.id)]))
 }
 
+@Test func sessionValidationSkipsFolderTraversalWhenNoFoldersExist() {
+  let space = BrowserSession.fresh().selectedSpace
+  var traversals = 0
+
+  let matches = SessionFolderValidation.folderItemsMatch(space, makeItems: {
+    traversals += 1
+    return []
+  })
+
+  #expect(matches)
+  #expect(traversals == 0)
+}
+
 private let legacySession = Data(
   """
   {"version":1,"profiles":[{"id":"AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA","name":"Company"}],

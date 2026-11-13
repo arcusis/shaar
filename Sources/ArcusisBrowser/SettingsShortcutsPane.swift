@@ -27,6 +27,7 @@ struct SettingsShortcutsPane: View {
           prompt: Text(SettingsL10n.string("Search shortcuts"))
         )
         .labelsHidden()
+        .accessibilityLabel(SettingsL10n.string("Search shortcuts"))
       }
       ForEach(menus, id: \.self) { menu in
         Section(SettingsL10n.string(menu)) {

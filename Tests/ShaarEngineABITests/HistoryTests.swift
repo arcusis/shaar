@@ -140,6 +140,19 @@ struct ShaarHistoryAdapterTests {
     }
   }
 
+  @Test func insertRejectsNegativeVisitTimestampsBeforeSubmit() async throws {
+    let fake = FakeHistoryEngine(reply: #"{"schemaVersion":1}"#)
+    let adapter = ShaarHistoryAdapter(engine: fake)
+    await #expect(
+      throws: ShaarHistoryAdapterError.invalidResponse("invalid import batch")
+    ) {
+      try await adapter.insert(
+        profileID: UUID(), source: "firefox",
+        pages: [.init(url: "https://example.test/", visits: [-1])])
+    }
+    #expect(await fake.calls.isEmpty)
+  }
+
   @Test func eventRouterRequiresKnownRegularProfileAndValidHistoryEnvelope() {
     let profile = UUID()
     let id = Data(profile.uuidString.utf8)

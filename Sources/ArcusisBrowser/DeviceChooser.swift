@@ -126,7 +126,7 @@ enum DeviceChooserIntake {
       let eventPage = URL(string: pageText), eventPage == pageURL,
       let originText = payload["origin"] as? String,
       let origin = URL(string: originText),
-      (origin.scheme == "http" || origin.scheme == "https"), origin.host() != nil,
+      origin.scheme == "http" || origin.scheme == "https", origin.host() != nil,
       let rawOptions = payload["options"] as? [[String: Any]], rawOptions.count <= 64,
       let canGrant = payload["canGrant"] as? Bool
     else { return nil }
@@ -138,7 +138,8 @@ enum DeviceChooserIntake {
         let name = raw["name"] as? String, name.utf8.count <= 256
       else { return nil }
       let sanitizedName = displayName(name)
-      let title = sanitizedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      let title =
+        sanitizedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         ? PanelsL10n.string("Unknown device") : sanitizedName
       options.append(DeviceChooserOption(index: index, title: title, detail: ""))
     }
@@ -183,8 +184,9 @@ struct DeviceChooserConsent: View {
   init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: Int? = nil) {
     self.store = store
     self.request = request
-    _selection = State(initialValue: DeviceChooserSelection(
-      options: request.options, revision: request.revision, selectedIndex: initialSelection))
+    _selection = State(
+      initialValue: DeviceChooserSelection(
+        options: request.options, revision: request.revision, selectedIndex: initialSelection))
   }
 
   private var liveRequest: DeviceChooserRequest {
@@ -208,10 +210,11 @@ struct DeviceChooserConsent: View {
           .keyboardShortcut(.cancelAction)
         Spacer()
         Button(PanelsL10n.string("Connect")) {
-          resolve(index: selection.selectedIndex(
-            for: presented.options, revision: presented.revision))
+          resolve(
+            index: selection.selectedIndex(
+              for: presented.options, revision: presented.revision))
         }
-          .disabled(!canConnect(presented))
+        .disabled(!canConnect(presented))
       }
     }
     .padding(28)
@@ -243,13 +246,17 @@ struct DeviceChooserConsent: View {
           optionLabel(option, options: presented.options)
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(Self.optionAccessibilityTraits(
-          isSelected: selection.selectedIndex(for: presented.options, revision: presented.revision) == option.index))
+        .accessibilityAddTraits(
+          Self.optionAccessibilityTraits(
+            isSelected: selection.selectedIndex(
+              for: presented.options, revision: presented.revision) == option.index))
       }
     }
   }
 
-  private func optionLabel(_ option: DeviceChooserOption, options: [DeviceChooserOption]) -> some View {
+  private func optionLabel(_ option: DeviceChooserOption, options: [DeviceChooserOption])
+    -> some View
+  {
     VStack(alignment: .leading, spacing: 2) {
       Text(option.title)
       if !option.detail.isEmpty {
@@ -260,7 +267,8 @@ struct DeviceChooserConsent: View {
     .padding(8)
     .background(
       selection.selectedIndex(for: options, revision: liveRequest.revision) == option.index
-        ? Color.accentColor.opacity(0.15) : Color.clear)
+        ? Color.accentColor.opacity(0.15) : Color.clear
+    )
     .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 

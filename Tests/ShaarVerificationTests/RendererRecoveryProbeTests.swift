@@ -13,11 +13,15 @@ struct RendererRecoveryProbeTests {
     let identity = RendererRecoveryIdentity(
       spaceID: UUID(), tabID: UUID(), profileID: UUID(), lastDocument: "document-instance")
     #expect(identity.hasUsableDocumentIdentity)
-    #expect(!RendererRecoveryIdentity(
-      spaceID: identity.spaceID, tabID: identity.tabID, profileID: identity.profileID,
-      lastDocument: "").hasUsableDocumentIdentity)
-    #expect(!RendererRecoveryIdentity(
-      spaceID: identity.spaceID, tabID: identity.tabID, profileID: identity.profileID,
-      lastDocument: " \n\t ").hasUsableDocumentIdentity)
+    #expect(
+      !RendererRecoveryIdentity(
+        spaceID: identity.spaceID, tabID: identity.tabID, profileID: identity.profileID,
+        lastDocument: ""
+      ).hasUsableDocumentIdentity)
+    #expect(
+      !RendererRecoveryIdentity(
+        spaceID: identity.spaceID, tabID: identity.tabID, profileID: identity.profileID,
+        lastDocument: " \n\t "
+      ).hasUsableDocumentIdentity)
   }
 }

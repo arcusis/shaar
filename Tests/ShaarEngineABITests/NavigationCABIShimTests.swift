@@ -7,7 +7,7 @@ import ShaarEngineC
 import Testing
 
 @Test func navigationCShimRejectsMissingRequiredPointers() {
-  let invalidArgument = UInt32(SHAAR_INVALID_ARGUMENT.rawValue)
+  let invalidArgument = UInt32(shaar_error_code(rawValue: 1).rawValue)
   let noSymbol = shaar_navigation_submit_invoke(
     nil, nil, nil, nil, nil, 0, shaar_bytes(data: nil, size: 0), 1, nil, nil, nil)
   #expect(noSymbol == invalidArgument)

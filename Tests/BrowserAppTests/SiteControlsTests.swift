@@ -256,9 +256,10 @@ private func target(_ address: String) -> SiteControlTarget {
   backend.failsWrites = true
   #expect(!(await model.perform(.clearCookiesAndReload)))
   #expect(
-    model.failure == ShellL10n.format(
-      "Could not complete the %@ action. Try again.",
-      arguments: [.string(SiteAction.clearCookiesAndReload.title)]) && model.runningAction == nil)
+    model.failure
+      == ShellL10n.format(
+        "Could not complete the %@ action. Try again.",
+        arguments: [.string(SiteAction.clearCookiesAndReload.title)]) && model.runningAction == nil)
 }
 
 @MainActor @Test func certificateFailureUsesLocalizedRecoveryCopy() async {

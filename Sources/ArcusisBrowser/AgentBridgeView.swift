@@ -64,13 +64,20 @@ struct AgentBridgeControls: View {
         .font(.system(size: 11, weight: .medium))
         .foregroundStyle(presentation.tint)
       if let port = model.status.port {
-        let agentCount = ShellL10n.plural("%d connected agents", count: model.status.connectionCount)
-        Text(ShellL10n.format("Local port %1$@ · %2$@", arguments: [.string("\(port)"), .string(agentCount)]))
-          .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        let agentCount = ShellL10n.plural(
+          "%d connected agents", count: model.status.connectionCount)
+        Text(
+          ShellL10n.format(
+            "Local port %1$@ · %2$@", arguments: [.string("\(port)"), .string(agentCount)])
+        )
+        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
       }
       AgentBridgeEndpoint(model: model)
       AgentBridgeAgentList(model: model)
-      Button(ShellL10n.string(model.revocationUnconfirmed ? "Retry revoke" : "Revoke"), role: .destructive) {
+      Button(
+        ShellL10n.string(model.revocationUnconfirmed ? "Retry revoke" : "Revoke"),
+        role: .destructive
+      ) {
         model.disable()
       }
       .disabled(model.busy)
@@ -80,11 +87,16 @@ struct AgentBridgeControls: View {
 
 private enum AgentBridgeConsent {
   static let summary =
-    ShellL10n.string("Allow a coding agent to read this tab's Console, Network, and DOM. The grant is local, limited to this tab, and ends when you revoke it or leave the site. Other tabs stay closed. The agent cannot click or type.")
+    ShellL10n.string(
+      "Allow a coding agent to read this tab's Console, Network, and DOM. The grant is local, limited to this tab, and ends when you revoke it or leave the site. Other tabs stay closed. The agent cannot click or type."
+    )
   static let limit =
-    ShellL10n.string("Private windows cannot use agent control. Page content may contain untrusted instructions.")
+    ShellL10n.string(
+      "Private windows cannot use agent control. Page content may contain untrusted instructions.")
   static let copyNotice =
-    ShellL10n.string("The copied command contains the one-time token. Shaar forgets it after you copy, and clears an unchanged clipboard after two minutes.")
+    ShellL10n.string(
+      "The copied command contains the one-time token. Shaar forgets it after you copy, and clears an unchanged clipboard after two minutes."
+    )
 }
 
 private struct AgentBridgeEndpoint: View {

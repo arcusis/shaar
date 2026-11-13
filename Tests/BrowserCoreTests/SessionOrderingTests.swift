@@ -67,7 +67,8 @@ private func orderedSession() throws -> BrowserSession {
   let beforeStart = ContinuousClock.now
   var beforeItems: [PinnedSidebarItem] = []
   for _ in 0..<40 {
-    beforeItems = space.pinnedItems(includingCollapsed: true)
+    beforeItems =
+      space.pinnedItems(includingCollapsed: true)
       + space.items(isPinned: false, includingCollapsed: true)
   }
   let before = beforeStart.duration(to: .now)

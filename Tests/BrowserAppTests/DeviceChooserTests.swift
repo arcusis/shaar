@@ -121,9 +121,10 @@ struct DeviceChooserTests {
           ["index": 1, "name": "   "],
         ], canGrant: true))
 
-    #expect(request.options.map(\.title) == [
-      PanelsL10n.string("Unknown device"), PanelsL10n.string("Unknown device"),
-    ])
+    #expect(
+      request.options.map(\.title) == [
+        PanelsL10n.string("Unknown device"), PanelsL10n.string("Unknown device"),
+      ])
   }
 
   @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
@@ -225,7 +226,8 @@ struct DeviceChooserTests {
 
   @Test func selectedDeviceOptionHasASelectedAccessibilityTrait() {
     #expect(DeviceChooserConsent.optionAccessibilityTraits(isSelected: true).contains(.isSelected))
-    #expect(!DeviceChooserConsent.optionAccessibilityTraits(isSelected: false).contains(.isSelected))
+    #expect(
+      !DeviceChooserConsent.optionAccessibilityTraits(isSelected: false).contains(.isSelected))
   }
 
   private func store() throws -> BrowserStore {

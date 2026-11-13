@@ -136,8 +136,9 @@ struct ProfilePrivacyTests {
     await model.setCookiesBlocked(false)
     #expect(model.cookiesBlocked == true)
     #expect(
-      model.failure == SettingsL10n.string(
-        "Could not update the third-party cookie setting. Try again."))
+      model.failure
+        == SettingsL10n.string(
+          "Could not update the third-party cookie setting. Try again."))
   }
 
   @Test func ignoredCookiePolicyWriteReportsFailureAfterReadback() async {

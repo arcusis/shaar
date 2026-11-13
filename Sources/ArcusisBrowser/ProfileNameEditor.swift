@@ -39,7 +39,8 @@ struct ProfileNameEditor: View {
         Button(SettingsL10n.string("Cancel"), role: .cancel, action: onCancel)
           .keyboardShortcut(.cancelAction)
         Button(SettingsL10n.string(initialName.isEmpty ? "Create" : "Save")) {
-          errorMessage = onSave(Self.trimmedName(name))
+          errorMessage =
+            onSave(Self.trimmedName(name))
             ? nil : SettingsL10n.string("Profile could not be saved.")
         }
         .keyboardShortcut(.defaultAction)

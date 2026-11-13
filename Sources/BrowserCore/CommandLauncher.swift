@@ -342,13 +342,15 @@ public enum CommandLauncher {
     if let scheme = components?.scheme?.lowercased() {
       components?.scheme = scheme
       if (scheme == "https" && components?.port == 443)
-        || (scheme == "http" && components?.port == 80) {
+        || (scheme == "http" && components?.port == 80)
+      {
         components?.port = nil
       }
     }
     if let host = components?.host {
       let normalizedHost = host.lowercased()
-      components?.host = normalizedHost.hasSuffix(".")
+      components?.host =
+        normalizedHost.hasSuffix(".")
         ? String(normalizedHost.dropLast()) : normalizedHost
     }
     components?.fragment = nil

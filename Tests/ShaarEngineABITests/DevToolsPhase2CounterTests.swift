@@ -7,7 +7,7 @@ import Testing
 
 @testable import ShaarEngineABI
 
-@Test func DOMCounterReplyRejectsBooleanCounts() {
+@Test func domCounterReplyRejectsBooleanCounts() {
   for key in ["documents", "nodes", "jsEventListeners"] {
     let withBoolean =
       "{\"schemaVersion\":1,\"commandID\":14,\"items\":[],\"\(key)\":true,\"truncated\":false}"

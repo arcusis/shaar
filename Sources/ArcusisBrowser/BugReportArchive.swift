@@ -91,11 +91,13 @@ enum BugReportArchive {
   }
 
   private static func redactURLs(in value: String) -> String {
-    guard let regex = try? NSRegularExpression(
-      pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
+    guard
+      let regex = try? NSRegularExpression(
+        pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
     else { return value }
     var result = value
-    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed()
+    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
+      .reversed()
     {
       guard let range = Range(match.range, in: result) else { continue }
       result.replaceSubrange(range, with: redactedURL(String(result[range])).url)

@@ -141,7 +141,8 @@ extension BrowserSpace {
   /// Hidden folder contents retain their logical/native order and live documents.
   public var orderedTabs: [BrowserTab] {
     let index = FolderItemsIndex(tabs: tabs, folders: folders)
-    return (index.items(isPinned: true, includingCollapsed: true)
+    return
+      (index.items(isPinned: true, includingCollapsed: true)
       + index.items(isPinned: false, includingCollapsed: true)).compactMap {
         if case .tab(let tab, _) = $0 { return tab }
         return nil

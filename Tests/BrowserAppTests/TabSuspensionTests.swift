@@ -51,12 +51,13 @@ struct TabSuspensionTests {
     defer { engine.suspensionTask?.cancel() }
     let profileID = store.session.selectedSpace.profileID
     for index in 0..<1_000 {
-      engine.downloads.changed([
-        "id": UUID().uuidString, "filename": "file-\(index)", "path": "",
-        "url": "https://download.example/file", "state": DownloadState.downloading.rawValue,
-        "paused": false, "dangerous": false, "offTheRecord": false,
-        "received": 0.0, "total": -1.0, "startTime": Double(index),
-      ], profileID: profileID)
+      engine.downloads.changed(
+        [
+          "id": UUID().uuidString, "filename": "file-\(index)", "path": "",
+          "url": "https://download.example/file", "state": DownloadState.downloading.rawValue,
+          "paused": false, "dangerous": false, "offTheRecord": false,
+          "received": 0.0, "total": -1.0, "startTime": Double(index),
+        ], profileID: profileID)
     }
 
     let start = ContinuousClock.now

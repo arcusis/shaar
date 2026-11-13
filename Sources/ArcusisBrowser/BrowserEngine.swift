@@ -482,12 +482,12 @@ final class BrowserEngine {
     }
     store.onInstallDecision = { [weak self] id, accepted in
       guard let self else { return }
-        self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
-        if accepted {
-          Task { [weak self] in
-            for delay in Self.extensionInstallRefreshDelaysMilliseconds {
-              do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
-              guard let self else { return }
+      self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
+      if accepted {
+        Task { [weak self] in
+          for delay in Self.extensionInstallRefreshDelaysMilliseconds {
+            do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
+            guard let self else { return }
             self.refreshExtensions()
             ExtensionManagerModel.refreshInstalled()
           }

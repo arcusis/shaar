@@ -16,7 +16,8 @@ enum BrowserMenuCommand: String, CaseIterable {
     developerTools, chromiumDeveloperTools
   case nextWindow, previousWindow
   case splitView
-  case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, fullScreen, settings, quit, createFolder
+  case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, fullScreen, settings, quit,
+    createFolder
   case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
 }
 
@@ -617,7 +618,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
     case .newPrivateWindow, .newMiniWindow, .nextWindow, .previousWindow, .settings,
-      .quit, .checkForUpdates: break
+      .quit, .checkForUpdates:
+      break
     case .fullScreen: context.window.toggleFullScreen(nil)
     }
   }

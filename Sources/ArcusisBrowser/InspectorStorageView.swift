@@ -173,8 +173,9 @@ struct InspectorStorageView: View {
 
   private func refresh() {
     Task {
-      do { try await model.loadStorage() }
-      catch { self.error = InspectorToolsL10n.backendError(error.localizedDescription) }
+      do { try await model.loadStorage() } catch {
+        self.error = InspectorToolsL10n.backendError(error.localizedDescription)
+      }
     }
   }
 

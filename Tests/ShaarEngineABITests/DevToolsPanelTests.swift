@@ -78,7 +78,8 @@ struct DevToolsPanelTests {
   }
 
   @Test func panelNumericFieldsRejectBooleansAndFractions() {
-    let dropped = #"{"schemaVersion":1,"kind":"panelEvent","eventID":11,"leaseID":42,"data":{"count":2}}"#
+    let dropped =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":11,"leaseID":42,"data":{"count":2}}"#
     let rootValues = ["schemaVersion": 1, "eventID": 11, "leaseID": 42]
     for (field, value) in rootValues {
       for replacement in ["true", "\(value).5"] {
@@ -92,9 +93,12 @@ struct DevToolsPanelTests {
         of: #""count":2"#, with: "\"count\":\(replacement)")
       #expect(decodePanel(payload) == nil)
     }
-    let response = #"{"schemaVersion":1,"kind":"panelEvent","eventID":5,"leaseID":42,"data":{"requestID":"r1","status":200,"truncated":false}}"#
+    let response =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":5,"leaseID":42,"data":{"requestID":"r1","status":200,"truncated":false}}"#
     #expect(decodePanel(response) != nil)
-    #expect(decodePanel(response.replacingOccurrences(of: #""status":200"#, with: #""status":true"#)) == nil)
+    #expect(
+      decodePanel(response.replacingOccurrences(of: #""status":200"#, with: #""status":true"#))
+        == nil)
   }
 
   @Test func networkHeadersAreAcceptedOnRequestAndResponseEvents() {

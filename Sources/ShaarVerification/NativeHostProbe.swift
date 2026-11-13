@@ -1041,9 +1041,10 @@ final class NativeHostProbe {
       let json: String? = await withCheckedContinuation { continuation in
         primary.runtime.evaluate(
           inTabID: tabID.uuidString,
-          script: "({count:window.__arcusisResizeEvents||0})") {
-            continuation.resume(returning: $0)
-          }
+          script: "({count:window.__arcusisResizeEvents||0})"
+        ) {
+          continuation.resume(returning: $0)
+        }
       }
       if let data = json?.data(using: .utf8),
         let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

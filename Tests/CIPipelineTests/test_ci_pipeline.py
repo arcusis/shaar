@@ -634,6 +634,7 @@ class SupplyChainTests(unittest.TestCase):
 
     def test_ci_setup_pins_and_caches_managed_python_and_tool_archives(self):
         setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
+        self.assertIn("version: '0.13.8'", setup)
         self.assertIn("python-version: '3.13'", setup)
         self.assertIn("cache-python: true", setup)
         self.assertIn("python3 scripts/install-ci-python.py 3.13", setup)

@@ -8,6 +8,8 @@ import ScreenCaptureKit
 import SwiftUI
 
 struct DesktopCaptureSource: Identifiable, Equatable {
+  private static let maximumDisplayNameLength = 120
+
   enum Kind: Equatable { case display, window, tab }
   let id: String
   let name: String
@@ -40,6 +42,12 @@ struct DesktopCaptureSource: Identifiable, Equatable {
     case .window: "macwindow"
     case .tab: "rectangle.on.rectangle"
     }
+  }
+
+  private var displayName: String {
+    let singleLine = name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    guard singleLine.count > Self.maximumDisplayNameLength else { return singleLine }
+    return String(singleLine.prefix(Self.maximumDisplayNameLength - 1)) + "…"
   }
 }
 
@@ -257,12 +265,12 @@ extension DesktopCaptureSource {
   var label: String {
     switch kind {
     case .display:
-      return PanelsL10n.format("Screen: %@", .string(name))
+      return PanelsL10n.format("Screen: %@", .string(displayName))
     case .window:
-      return PanelsL10n.format("Window: %@", .string(name))
+      return PanelsL10n.format("Window: %@", .string(displayName))
     case .tab:
       if isRequestingTab { return PanelsL10n.string("This Tab") }
-      return PanelsL10n.format("Tab: %@", .string(name))
+      return PanelsL10n.format("Tab: %@", .string(displayName))
     }
   }
 }

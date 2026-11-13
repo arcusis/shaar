@@ -151,4 +151,15 @@ struct DesktopCapturePickerTests {
     #expect(enumerationCount == 0)
     #expect(decision == tabToken)
   }
+
+  @Test func sourceLabelsCollapseWhitespaceAndBoundLongPageTitles() {
+    let source = DesktopCaptureSource(
+      id: "window:4:0", name: "  Video call\n\(String(repeating: "é", count: 200))  ",
+      kind: .window)
+
+    #expect(!source.label.contains("\n"))
+    let localizedPrefix = PanelsL10n.format("Window: %@", .string(""))
+    #expect(source.label.count == localizedPrefix.count + 120)
+    #expect(source.label.hasSuffix("…"))
+  }
 }

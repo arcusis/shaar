@@ -70,3 +70,20 @@ test("link checker validates every responsive image source", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker validates audio and video source URLs", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><video src="/missing-video.mp4"><source src="/missing-source.webm"></video><audio src="/missing-audio.mp3"></audio>',
+    );
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: missing target /missing-video.mp4",
+      "index.html: missing target /missing-source.webm",
+      "index.html: missing target /missing-audio.mp3",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

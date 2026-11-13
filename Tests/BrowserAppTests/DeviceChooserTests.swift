@@ -22,6 +22,8 @@ struct DeviceChooserTests {
     #expect(DeviceChooserIntake.isChooserID("2"))
     #expect(!DeviceChooserIntake.isChooserID(""))
     #expect(!DeviceChooserIntake.isChooserID("quote\"id"))
+    #expect(DeviceChooserIntake.isChooserID(String(repeating: "a", count: 64)))
+    #expect(!DeviceChooserIntake.isChooserID(String(repeating: "a", count: 65)))
     #expect(
       DeviceChooserIntake.request(
         tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,

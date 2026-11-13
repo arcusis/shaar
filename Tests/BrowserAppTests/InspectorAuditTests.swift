@@ -10,6 +10,25 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorAuditTests {
+  @Test func staleAuditCompletionCannotClearNewerOperation() throws {
+    let inspector = makeInspector(tab: .accessibility)
+    defer { inspector.close() }
+    let audit = inspector.details.audit
+
+    audit.run()
+    let staleOperation = try #require(audit.operationID)
+    audit.cancel()
+    audit.run()
+    let currentOperation = try #require(audit.operationID)
+    #expect(currentOperation != staleOperation)
+
+    audit.finishOperation(staleOperation)
+
+    #expect(audit.busy)
+    #expect(audit.operationID == currentOperation)
+    audit.cancel()
+  }
+
   @Test func boundedAuditReportsRejectStaleDocuments() throws {
     let inspector = makeInspector(tab: .accessibility)
     defer { inspector.close() }

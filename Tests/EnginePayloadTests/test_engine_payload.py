@@ -557,6 +557,15 @@ class EnginePayloadTests(unittest.TestCase):
                 self.assertEqual(report["reason"], reason)
                 self.assertNotIn(str(self.root), json.dumps(report))
 
+    def test_invalid_identity_map_type_fails_closed(self):
+        self.fixture()
+        pin = {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()}
+        report = payload.compare_payload(
+            self.archive, self.framework, pin, identity_map="Chromium Framework")
+        self.assertFalse(report["archive_metadata_verified"])
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(report["reason"], "identity map is malformed")
+
     def test_archive_pin_mismatch_and_truncated_archive_fail(self):
         self.fixture()
         report = payload.compare_payload(self.archive, self.framework, {"sha256": "0" * 64})

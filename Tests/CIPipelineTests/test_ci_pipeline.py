@@ -102,6 +102,17 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn("esbuild@0.28.2:", lockfile)
         self.assertNotIn("esbuild@0.27.7", lockfile)
 
+    def test_inspector_job_caches_playwright_browser_for_locked_version(self):
+        workflow = (ROOT / ".github" / "workflows" / "source-checks.yml").read_text()
+        inspector = workflow.split("  inspector-contracts:\n", 1)[1].split("  website:\n", 1)[0]
+
+        self.assertIn("Cache Playwright Chromium shell", inspector)
+        self.assertIn("path: build/PlaywrightBrowsers", inspector)
+        self.assertIn(
+            "key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Tests/InspectorContractTests/pnpm-lock.yaml') }}",
+            inspector)
+        self.assertIn("playwright install chromium --with-deps --only-shell", inspector)
+
     def test_release_gate_requires_both_exact_production_workflows_and_zero_alerts(self):
         revision = "a" * 40
         valid = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",

@@ -479,7 +479,6 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     windows.forEach(orderFront)
     if let keyWindow, windows.contains(where: { $0 === keyWindow }) { makeKey(keyWindow) }
   }
-  }
 
   /// Development bundles carry no update feed, so their updater never exists.
   private var canCheckForUpdates: Bool { updater?.canCheckForUpdates == true }

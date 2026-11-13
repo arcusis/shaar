@@ -8,12 +8,14 @@
  #include "base/functional/bind.h"
  #include "base/no_destructor.h"
  #include "base/observer_list.h"
-@@ -187,6 +188,11 @@
+@@ -187,6 +188,13 @@
  
  bool PrintViewManager::PrintPreviewNow(content::RenderFrameHost* rfh,
                                         bool has_selection) {
-+  if (!has_selection &&
-+      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    if (has_selection) {
++      return PrintNowImpl(rfh, /*print_selection_only=*/true);
++    }
 +    return BasicPrint(rfh);
 +  }
 +
@@ -38,7 +40,7 @@
  #include "base/notreached.h"
  #include "base/run_loop.h"
  #include "base/test/bind.h"
-@@ -379,6 +381,35 @@
+@@ -379,6 +381,65 @@
  };
  #endif  // BUILDFLAG(IS_WIN)
  
@@ -65,6 +67,36 @@
 +
 +  EXPECT_TRUE(print_view_manager->PrintPreviewNow(
 +      main_frame, /*has_selection=*/false));
++  EXPECT_TRUE(observer.print_requested);
++  EXPECT_FALSE(print_view_manager->print_preview_rfh());
++
++  print_view_manager->RemoveTestObserver(observer);
++}
++
++TEST_F(PrintViewManagerTest,
++       ShaarEmbedderMenuPrintSelectionUsesNativePath) {
++  class PrintNowObserver final : public PrintViewManagerBase::TestObserver {
++   public:
++    void OnPrintNow(const content::RenderFrameHost* rfh) override {
++      print_requested = true;
++    }
++    bool print_requested = false;
++  } observer;
++
++  base::test::ScopedCommandLine command_line;
++  command_line.GetProcessCommandLine()->AppendSwitch("shaar-embedder");
++  content::RenderFrameHost* main_frame = web_contents()->GetPrimaryMainFrame();
++  content::RenderFrameHostTester::For(main_frame)
++      ->InitializeRenderFrameIfNeeded();
++
++  PrintViewManager::CreateForWebContents(web_contents());
++  PrintViewManager* print_view_manager =
++      PrintViewManager::FromWebContents(web_contents());
++  ASSERT_TRUE(print_view_manager);
++  print_view_manager->AddTestObserver(observer);
++
++  EXPECT_TRUE(print_view_manager->PrintPreviewNow(
++      main_frame, /*has_selection=*/true));
 +  EXPECT_TRUE(observer.print_requested);
 +  EXPECT_FALSE(print_view_manager->print_preview_rfh());
 +

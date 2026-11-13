@@ -562,7 +562,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0121-shaar-print-menu-native-panel.patch",
-      "sha256": "3a5c38489f522bad17decd6007bf33291f81b79198d164a25b5468eccc89d876"
+      "sha256": "2526f2715ca84e124849770b20fc1122e967387b7371d095b6a191af88656ec5"
     }
   ],
   "devtoolsFrontend157": {

@@ -20,8 +20,11 @@ class PrintMenuNativePanelPatchTests(unittest.TestCase):
         patch = PATCH.read_text()
         self.assertIn("PrintPreviewNow", patch)
         self.assertIn('HasSwitch("shaar-embedder")', patch)
+        self.assertIn("if (has_selection)", patch)
+        self.assertIn("PrintNowImpl(rfh, /*print_selection_only=*/true)", patch)
         self.assertIn("return BasicPrint(rfh);", patch)
         self.assertIn("ShaarEmbedderMenuPrintUsesNativePath", patch)
+        self.assertIn("ShaarEmbedderMenuPrintSelectionUsesNativePath", patch)
         self.assertIn("EXPECT_TRUE(observer.print_requested);", patch)
 
     def test_patch_is_pinned_once_in_application_order(self):

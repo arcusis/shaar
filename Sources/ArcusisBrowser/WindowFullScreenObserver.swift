@@ -51,7 +51,7 @@ struct WindowFullScreenObserver: NSViewRepresentable {
       {
         observers.append(
           center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-            self?.report()
+            MainActor.assumeIsolated { self?.report() }
           })
       }
       report()

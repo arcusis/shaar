@@ -23,7 +23,7 @@ struct DesktopCaptureConsentTests {
     throws -> DesktopCaptureRequest
   {
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    return try #require(
+    let capture = try #require(
       DesktopCaptureRequest(payload: [
         "id": id,
         "profileID": store.session.selectedSpace.profileID.uuidString,
@@ -32,6 +32,9 @@ struct DesktopCaptureConsentTests {
         "origin": "https://meet.google.com",
         "frameID": frameID,
       ]))
+    store.rememberPermissionFrame(
+      tab.id, frameID: capture.frameID, origin: capture.requestingOrigin)
+    return capture
   }
 
   @Test func parsesSecureDesktopCaptureRequestAndBuildsConsentIdentity() throws {
@@ -351,6 +354,7 @@ struct DesktopCaptureConsentTests {
     #expect(store.sheet == nil)
 
     payload["tabID"] = capture.tabID.uuidString
+    payload["frameID"] = capture.frameID
     payload["sourceTypes"] = ["printer"]
     #expect(DesktopCaptureRequest(payload: payload) == nil)
     payload["sourceTypes"] = ["tab"]
@@ -363,6 +367,24 @@ struct DesktopCaptureConsentTests {
     store.resolveDesktopCapture(tabsOnly.id, sourceID: "tab:\(capture.tabID.uuidString):0")
     #expect(decision == "tab:\(capture.tabID.uuidString):0")
     #expect(store.sheet == nil)
+  }
+
+  @Test func rejectsCaptureRequestsFromAStaleFrameBeforePresentingConsent() throws {
+    let staleFrameStore = store()
+    let staleFrameRequest = try request(staleFrameStore)
+    staleFrameStore.rememberPermissionFrame(
+      staleFrameRequest.tabID, frameID: "fedcba9876543210fedcba9876543210",
+      origin: staleFrameRequest.requestingOrigin)
+    #expect(!staleFrameStore.requestDesktopCapture(staleFrameRequest))
+    #expect(staleFrameStore.sheet == nil)
+
+    let staleOriginStore = store()
+    let staleOriginRequest = try request(staleOriginStore)
+    staleOriginStore.rememberPermissionFrame(
+      staleOriginRequest.tabID, frameID: staleOriginRequest.frameID,
+      origin: URL(string: "https://other.example")!)
+    #expect(!staleOriginStore.requestDesktopCapture(staleOriginRequest))
+    #expect(staleOriginStore.sheet == nil)
   }
 
   @Test func rejectsMalformedOrUnlistedCaptureTokens() throws {

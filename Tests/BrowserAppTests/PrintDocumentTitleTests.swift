@@ -38,6 +38,11 @@ struct PrintDocumentTitleTests {
     #expect(PrintDocumentTitle.make(pageTitle: persian, productName: "Shaar") == persian)
   }
 
+  @Test func preservesEmojiJoinersInDefaultPDFName() {
+    let family = "👩‍👩‍👧‍👦"
+    #expect(PrintDocumentTitle.make(pageTitle: family, productName: "Shaar") == family)
+  }
+
   @Test func capsPageTitleLength() {
     let result = PrintDocumentTitle.make(
       pageTitle: String(repeating: "a", count: 200), productName: "Shaar")

@@ -1,116 +1,104 @@
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
-@@ -25,11 +25,13 @@
- 
- #include "third_party/blink/renderer/core/dom/scripted_animation_controller.h"
- 
-+#include "base/task/single_thread_task_runner.h"
- #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink.h"
- #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
- #include "third_party/blink/renderer/core/dom/document.h"
- #include "third_party/blink/renderer/core/dom/events/event.h"
- #include "third_party/blink/renderer/core/event_interface_names.h"
-+#include "third_party/blink/renderer/core/event_type_names.h"
- #include "third_party/blink/renderer/core/frame/local_dom_window.h"
- #include "third_party/blink/renderer/core/frame/local_frame_view.h"
- #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
-@@ -38,6 +41,7 @@
- #include "third_party/blink/renderer/core/page/page_animator.h"
- #include "third_party/blink/renderer/core/probe/core_probes.h"
- #include "third_party/blink/renderer/platform/wtf/functional.h"
-+#include "third_party/blink/renderer/platform/scheduler/public/task_type.h"
- #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
- 
- namespace blink {
-@@ -225,6 +229,28 @@
-   EnqueueEvent(event);
+@@ -237,6 +237,18 @@
+   ScheduleAnimationIfNeeded();
  }
  
 +void ScriptedAnimationController::EnqueueHiddenResizeEvent(Event* event) {
 +  if (!InsertToPerFrameEventsMap(event))
 +    return;
 +  EnqueueEvent(event);
-+  if (hidden_resize_dispatch_task_pending_)
-+    return;
-+  hidden_resize_dispatch_task_pending_ = true;
-+  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
-+      FROM_HERE,
-+      BindOnce(&ScriptedAnimationController::DispatchHiddenResizeEvents,
-+               WrapPersistent(this)));
 +}
 +
 +void ScriptedAnimationController::DispatchHiddenResizeEvents() {
-+  hidden_resize_dispatch_task_pending_ = false;
-+  if (!GetExecutionContext())
-+    return;
 +  DispatchEvents(base::BindRepeating([](Event* event) {
-+    return event->type() == event_type_names::kResize;
++    return event->type() == AtomicString("resize");
 +  }));
 +}
 +
- void ScriptedAnimationController::EnqueueMediaQueryChangeListeners(
-     HeapVector<Member<MediaQueryListListener>>& listeners) {
-   for (const auto& listener : listeners) {
+ void ScriptedAnimationController::ScheduleAnimationIfNeeded(
+     cc::BeginMainFrameReason reason) {
+   if (!GetExecutionContext() || GetExecutionContext()->IsContextPaused())
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
-@@ -83,6 +83,7 @@
-   // Animation frame events are used for resize events, scroll events, etc.
-   void EnqueueEvent(Event*);
-   void EnqueuePerFrameEvent(Event*);
+@@ -95,6 +95,8 @@
+   void ContextDestroyed() final {}
+ 
+   void DispatchMediaQueryListEventsAndCallbacks();
 +  void EnqueueHiddenResizeEvent(Event*);
- 
-   // Animation frame tasks are used for Fullscreen.
-   void EnqueueTask(base::OnceClosure);
-@@ -120,6 +121,9 @@
-   ALWAYS_INLINE bool InsertToPerFrameEventsMap(const Event* event);
-   ALWAYS_INLINE void EraseFromPerFrameEventsMap(const Event* event);
- 
 +  void DispatchHiddenResizeEvents();
-+  bool hidden_resize_dispatch_task_pending_ = false;
-+
-   FrameRequestCallbackCollection callback_collection_;
-   Vector<base::OnceClosure> task_queue_;
-   Vector<ExecuteVfcCallback> vfc_execution_queue_;
+ 
+   LocalDOMWindow* GetWindow() const;
+   void ScheduleAnimationIfNeeded(
 diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
 --- a/third_party/blink/renderer/core/dom/document.cc
 +++ b/third_party/blink/renderer/core/dom/document.cc
-@@ -6742,7 +6742,10 @@
+@@ -6742,7 +6742,24 @@
  void Document::EnqueueResizeEvent() {
    Event* event = Event::Create(event_type_names::kResize);
    event->SetTarget(domWindow());
 -  scripted_animation_controller_->EnqueuePerFrameEvent(event);
-+  if (hidden())
-+    scripted_animation_controller_->EnqueueHiddenResizeEvent(event);
-+  else
++  if (!hidden()) {
 +    scripted_animation_controller_->EnqueuePerFrameEvent(event);
++    return;
++  }
++  scripted_animation_controller_->EnqueueHiddenResizeEvent(event);
++  if (hidden_resize_event_task_pending_)
++    return;
++  hidden_resize_event_task_pending_ = true;
++  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
++      FROM_HERE,
++      BindOnce(&Document::DispatchHiddenResizeEventTask, WrapPersistent(this)));
++}
++
++void Document::DispatchHiddenResizeEventTask() {
++  hidden_resize_event_task_pending_ = false;
++  if (!GetExecutionContext())
++    return;
++  scripted_animation_controller_->DispatchHiddenResizeEvents();
  }
  
  void Document::EnqueueMediaQueryChangeListeners(
+diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/renderer/core/dom/document.h
+--- a/third_party/blink/renderer/core/dom/document.h
++++ b/third_party/blink/renderer/core/dom/document.h
+@@ -1647,6 +1647,7 @@
+ 
+   void EnqueueMoveEvent();
+   void EnqueueResizeEvent();
++  void DispatchHiddenResizeEventTask();
+   void EnqueueScrollEventForNode(Node*);
+   void EnqueueScrollEndEventForNode(Node*);
+   void EnqueueDisplayLockActivationTask(base::OnceClosure);
+@@ -3143,6 +3144,7 @@
+   unsigned write_recursion_depth_ = 0;
+ 
+   Member<ScriptedAnimationController> scripted_animation_controller_;
++  bool hidden_resize_event_task_pending_ = false;
+   void ElementDataCacheClearTimerFired(TimerBase*);
+   HeapTaskRunnerTimer<Document> element_data_cache_clear_timer_;
+ 
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
-@@ -16,6 +16,8 @@
- #include "third_party/blink/renderer/core/dom/events/event_target.h"
- #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
- #include "third_party/blink/renderer/core/dom/frame_request_callback_collection.h"
-+#include "third_party/blink/renderer/core/event_type_names.h"
+@@ -20,1 +20,2 @@
 +#include "third_party/blink/renderer/core/frame/local_dom_window.h"
- #include "third_party/blink/renderer/core/execution_context/execution_context.h"
  #include "third_party/blink/renderer/core/frame/local_frame.h"
- #include "third_party/blink/renderer/core/loader/document_loader.h"
-@@ -160,6 +161,22 @@
- 
- // Tasks should be run after events are dispatched, even if they were enqueued
- // first.
+@@ -177,6 +178,22 @@
+   EXPECT_EQ(2u, observer.Order().size());
+   EXPECT_EQ(2, observer.Order()[0]);
+   EXPECT_EQ(1, observer.Order()[1]);
++}
++
 +TEST_F(ScriptedAnimationControllerTest,
 +       HiddenDocumentResizeEventDispatchesWithoutAnimationFrame) {
 +  GetPage().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
 +                               /*is_initial_state=*/false);
 +  TaskOrderObserver observer;
 +  GetDocument().domWindow()->addEventListener(
-+      event_type_names::kResize,
++      AtomicString("resize"),
 +      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(1)));
 +
 +  GetDocument().EnqueueResizeEvent();
@@ -118,8 +106,6 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
 +
 +  task_environment_.RunUntilIdle();
 +  EXPECT_THAT(observer.Order(), testing::ElementsAre(1));
-+}
-+
- TEST_F(ScriptedAnimationControllerTest, EnqueueTaskAndEvent) {
-   TaskOrderObserver observer;
+ }
  
+ namespace {

@@ -9,7 +9,7 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-deploy.yml'
-      - 'Branding/**'
+      - 'Branding/shaar-logo.svg'
       - '.github/assets/**'
       - 'LICENSE'
       - 'NOTICE'

@@ -100,7 +100,9 @@ final class BrowserLibraryModel {
     guard pendingRefresh[key] == nil else { return }
     pendingRefresh[key] = Task { [weak self] in
       do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
-      self?.refresh(profile, section: section)
+      guard !Task.isCancelled, let self else { return }
+      self.pendingRefresh[key] = nil
+      self.refresh(profile, section: section)
     }
   }
 

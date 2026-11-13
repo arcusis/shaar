@@ -127,6 +127,24 @@ struct BrowserLibraryTests {
     #expect(model.notice(UUID(), section: .bookmarks) == nil)
   }
 
+  @Test(.timeLimit(.minutes(1)))
+  func invalidationCanScheduleAnotherRefreshAfterDebounceCompletes() async throws {
+    let model = BrowserLibraryModel()
+    let profile = UUID()
+    let (reads, continuation) = AsyncStream<Int>.makeStream()
+    defer { continuation.finish() }
+    var events = reads.makeAsyncIterator()
+    model.onLoad = { _, _, done in
+      continuation.yield(1)
+      done(.success(tree(title: "Loaded")))
+    }
+
+    model.invalidate(profile, section: .bookmarks)
+    try #require(await events.next() == 1)
+    model.invalidate(profile, section: .bookmarks)
+    try #require(await events.next() == 1)
+  }
+
   @Test func historyLoadMoreUsesLargerBoundAndNeverDuplicatesRows() throws {
     let model = BrowserLibraryModel()
     let profile = UUID()

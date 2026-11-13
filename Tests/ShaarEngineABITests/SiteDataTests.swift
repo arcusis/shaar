@@ -139,4 +139,13 @@ struct SiteDataTests {
       }
     }
   }
+
+  @Test func resetRejectsBooleanCount() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await fake.setResponse(#"{"schemaVersion":1,"resetCount":true}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      _ = try await adapter.reset(origin: "https://example.com")
+    }
+  }
 }

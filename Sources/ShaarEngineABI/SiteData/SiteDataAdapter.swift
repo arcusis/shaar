@@ -195,6 +195,7 @@ public struct ShaarSiteDataAdapter: Sendable {
   public func reset(origin: String) async throws -> Int {
     let root = try await submit(.settingsReset, ["origin": try Self.canonicalOrigin(origin)])
     guard Set(root.keys) == ["schemaVersion", "resetCount"],
+      !isJSONBoolean(root["resetCount"]),
       let count = root["resetCount"] as? Int, count >= 0
     else { throw ShaarSiteDataError.malformedResponse }
     return count

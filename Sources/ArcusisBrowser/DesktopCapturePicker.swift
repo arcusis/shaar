@@ -64,6 +64,16 @@ struct DesktopCaptureSettingsButton {
 }
 
 @MainActor
+private final class DesktopCaptureSourceLoadCoordinator {
+  private(set) var generation = 0
+
+  func beginLoad() -> Int {
+    generation += 1
+    return generation
+  }
+}
+
+@MainActor
 struct DesktopCapturePicker: View {
   let request: DesktopCaptureRequest
   let store: BrowserStore
@@ -78,6 +88,7 @@ struct DesktopCapturePicker: View {
   @State private var note: String?
   @State private var needsScreenRecordingAccess = false
   @State private var settingsAction: DesktopCaptureSettingsAction?
+  @State private var sourceLoadCoordinator = DesktopCaptureSourceLoadCoordinator()
 
   init(
     request: DesktopCaptureRequest,
@@ -140,6 +151,7 @@ struct DesktopCapturePicker: View {
 
   func loadSources() async {
     guard !Task.isCancelled else { return }
+    let loadGeneration = sourceLoadCoordinator.beginLoad()
     let tabs = DesktopCaptureCatalog.tabSources(
       session: store.session, profileID: request.profileID, requestingTabID: request.tabID
     )
@@ -156,13 +168,19 @@ struct DesktopCapturePicker: View {
         } else {
           screens = try await screenSources(from: shareableContent())
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+          sourceLoadCoordinator.generation == loadGeneration
+        else { return }
       } catch {
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+          sourceLoadCoordinator.generation == loadGeneration
+        else { return }
         screenEnumerationFailed = true
       }
     }
-    guard !Task.isCancelled else { return }
+    guard !Task.isCancelled,
+      sourceLoadCoordinator.generation == loadGeneration
+    else { return }
     let listing = DesktopCaptureCatalog.listing(
       tabs: DesktopCaptureCatalog.allowedSources(tabs, for: request),
       screens: DesktopCaptureCatalog.allowedSources(screens, for: request),

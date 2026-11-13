@@ -164,6 +164,20 @@ class FetchEngineTests(unittest.TestCase):
                 self.assertEqual(sentinel.read_text(), "preserve this cache")
                 self.assertEqual(list(external.iterdir()), [sentinel])
 
+    def test_symlinked_archive_cache_is_rejected_without_reading_target(self):
+        external = self.root / "outside-engine.archive"
+        shutil.copy2(self.archive, external)
+        expected = external.read_bytes()
+        self.archive.unlink()
+        self.archive.symlink_to(external)
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing symlinked engine archive cache", result.stderr)
+        self.assertEqual(external.read_bytes(), expected)
+        self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
+
     def test_changed_missing_and_extra_cached_members_fail_before_path_return(self):
         cases = (
             ("changed", lambda: (self.framework / "Resources/helper.dat").write_bytes(b"changed")),

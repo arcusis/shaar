@@ -80,7 +80,8 @@ struct DeviceChooserEngineTests {
   ) -> [String: Any] {
     [
       "schemaVersion": 1, "kind": kind, "id": id, "transport": "usb",
-      "pageURL": url.absoluteString, "origin": url.absoluteString, "options": [],
+      "pageURL": url.absoluteString,
+      "origin": "\(url.scheme ?? "https")://\(url.host() ?? "")", "options": [],
       "canGrant": false, "profileID": profileID.uuidString,
       "tabID": tabID.uuidString, "windowID": "chooser-window",
     ]

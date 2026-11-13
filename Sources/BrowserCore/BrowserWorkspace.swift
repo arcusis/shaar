@@ -515,18 +515,19 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     var references: [WorkspacePinReference] = []
     let spaces = session.spaces.map { source in
       var space = source
+      var bindings: [UUID: UUID] = [:]
       space.selectedTabID = nil
       space.selectedFavoriteID = nil
       space.folders = source.folders.map(Self.sharedFolder)
       space.tabs = source.tabs.filter(\.isPinned).map { tab in
         let pinID = oldBindings[tab.id] ?? Self.allocate(&allocated)
+        bindings[tab.id] = pinID
         references.append(WorkspacePinReference(tabID: tab.id, pinID: pinID))
         let definition = oldDefinitions[pinID]
         return BrowserTab(
           id: pinID, url: definition?.url ?? tab.url, title: definition?.title ?? tab.title,
           isPinned: true, folderID: tab.folderID, keepAlive: tab.keepAlive)
       }
-      let bindings = Dictionary(uniqueKeysWithValues: references.map { ($0.tabID, $0.pinID) })
       space.splits = source.splits.compactMap { split in
         split.root.mappingPanes(bindings).map { BrowserSplit(id: split.id, root: $0) }
       }

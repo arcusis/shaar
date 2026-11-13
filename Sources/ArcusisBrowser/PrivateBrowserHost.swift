@@ -22,6 +22,7 @@ final class PrivateBrowserHost {
 
   private let runtime: ARCChromiumRuntime
   private let keyWindow: () -> NSWindow?
+  private let toggleFullScreen: (NSWindow) -> Void
   private let sourceProfileID: () -> String?
   private let presentsWindows: Bool
   private let preferences: BrowserPreferencesStore
@@ -37,6 +38,7 @@ final class PrivateBrowserHost {
   init(
     runtime: ARCChromiumRuntime, presentsWindows: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
+    toggleFullScreen: @escaping (NSWindow) -> Void = { $0.toggleFullScreen(nil) },
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
     profileIsDownloading: @escaping (UUID) -> Bool = { _ in false },
     sourceProfileID: @escaping () -> String?
@@ -44,6 +46,7 @@ final class PrivateBrowserHost {
     self.runtime = runtime
     self.presentsWindows = presentsWindows
     self.keyWindow = keyWindow
+    self.toggleFullScreen = toggleFullScreen
     self.preferences = preferences
     self.profileIsDownloading = profileIsDownloading
     self.sourceProfileID = sourceProfileID
@@ -340,6 +343,7 @@ final class PrivateBrowserHost {
       if let url = URL(string: "https://github.com/arcusis/shaar") { store.perform(.open(url)) }
     case .minimizeWindow: owner.window.performMiniaturize(nil)
     case .zoomWindow: owner.window.zoom(nil)
+    case .fullScreen: toggleFullScreen(owner.window)
     case .bringAllToFront:
       for item in owners.values { item.window.orderFront(nil) }
       owner.window.makeKeyAndOrderFront(nil)

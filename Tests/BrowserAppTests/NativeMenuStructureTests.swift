@@ -98,6 +98,10 @@ import Testing
   #expect(item(.sharePage)?.menu?.title == "File")
   #expect(item(.find)?.menu?.title == "Edit")
   #expect(item(.reload)?.menu?.title == "View")
+  #expect(item(.fullScreen)?.menu?.title == "View")
+  #expect(item(.fullScreen)?.title == "Enter Full Screen")
+  #expect(item(.fullScreen)?.keyEquivalent == "f")
+  #expect(item(.fullScreen)?.keyEquivalentModifierMask == [.command, .control])
   #expect(item(.hardReload)?.menu?.title == "View")
   #expect(item(.hardReload)?.keyEquivalent == "r")
   #expect(item(.hardReload)?.keyEquivalentModifierMask == [.command, .shift])
@@ -135,6 +139,11 @@ import Testing
   let url = URL(string: "https://share.example/page")!
   store.perform(.open(url))
   #expect(NativeBrowserHost.shareURL(for: store) == url)
+}
+
+@Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {
+  #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: false) == "Enter Full Screen")
+  #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: true) == "Exit Full Screen")
 }
 
 @Test @MainActor func nativeMenuRetainsKeyEquivalentsAndEditResponderChain() {

@@ -16,7 +16,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     developerTools, chromiumDeveloperTools
   case nextWindow, previousWindow
   case splitView
-  case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
+  case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, fullScreen, settings, quit, createFolder
   case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
 }
 
@@ -621,6 +621,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       context.window.makeKeyAndOrderFront(nil)
     case .newWindow, .newPrivateWindow, .newMiniWindow, .nextWindow, .previousWindow, .settings,
       .quit, .checkForUpdates: break
+    case .fullScreen: context.window.toggleFullScreen(nil)
     }
   }
 
@@ -1227,7 +1228,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         activeBrowserStore.map(Self.closeTabTitle(for:))
         ?? ShellL10n.string("Close window")
     }
+    if command == .fullScreen,
+      let window = privateHost?.activeOwner?.window ?? activeContext?.window
+    {
+      item.title = ShellL10n.string(
+        Self.fullScreenTitle(isFullScreen: window.styleMask.contains(.fullScreen)))
+    }
     return canPerform(command)
+  }
+
+  static func fullScreenTitle(isFullScreen: Bool) -> String {
+    isFullScreen ? "Exit Full Screen" : "Enter Full Screen"
   }
 
   static func makeMenu(target: AnyObject) -> NSMenu {
@@ -1324,6 +1335,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.inspectorSource, "Open source", to: view)
     add(.inspectorAgentCopy, "Copy for agent", to: view)
     add(.inspectorCopy, "Copy for AI", to: view)
+    add(.fullScreen, "Enter Full Screen", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)
     add(.editSpace, "Edit current space…", to: spaces)

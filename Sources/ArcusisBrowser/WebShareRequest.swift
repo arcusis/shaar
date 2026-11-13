@@ -79,7 +79,7 @@ struct WebShareRequest: Identifiable, Equatable {
   }
 
   private static func secureOrigin(_ origin: URL) -> Bool {
-    guard origin.host() != nil,
+    guard NavigationInput.isWebURL(origin),
       origin.path.isEmpty || origin.path == "/",
       origin.query == nil,
       origin.fragment == nil,

@@ -11,6 +11,10 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorPageToolsTests {
+  @Test func activeToolTitleIsAHeading() {
+    #expect(InspectorPageToolsView.titleAccessibilityTraits.contains(.isHeader))
+  }
+
   @Test func storageEditorAccessibilityLabelsAreLocalized() {
     #expect(
       BrowserLocalization.string("Key", table: "InspectorTools", language: .english) == "Key")

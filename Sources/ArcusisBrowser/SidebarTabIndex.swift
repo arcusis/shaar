@@ -51,10 +51,26 @@ struct SidebarTabIndex {
   private let tabsByID: [UUID: BrowserTab]
   private let idsByGroup: [Group: [UUID]]
   private let positionsByTabID: [UUID: GroupPosition]
+  private let firstSplitByMemberID: [UUID: BrowserSplit]
+  private let firstSplitByLeaderID: [UUID: BrowserSplit]
 
-  init(tabs: [BrowserTab]) {
+  init(tabs: [BrowserTab], splits: [BrowserSplit] = []) {
     self.tabs = tabs
     var tabsByID: [UUID: BrowserTab] = [:]
+    for tab in tabs where tabsByID[tab.id] == nil { tabsByID[tab.id] = tab }
+
+    var firstSplitByMemberID: [UUID: BrowserSplit] = [:]
+    var firstSplitByLeaderID: [UUID: BrowserSplit] = [:]
+    for split in splits {
+      if let leaderID = split.tabIDs.first, firstSplitByLeaderID[leaderID] == nil {
+        firstSplitByLeaderID[leaderID] = split
+      }
+      for id in split.tabIDs where firstSplitByMemberID[id] == nil {
+        firstSplitByMemberID[id] = split
+      }
+    }
+    self.firstSplitByMemberID = firstSplitByMemberID
+    self.firstSplitByLeaderID = firstSplitByLeaderID
     var endsByGroup: [Group: Ends] = [:]
     var idsByGroup: [Group: [UUID]] = [:]
     var positionsByTabID: [UUID: GroupPosition] = [:]
@@ -90,6 +106,19 @@ struct SidebarTabIndex {
 
   func boundary(for tabID: UUID) -> SidebarTabMoveBoundary {
     boundariesByTabID[tabID] ?? SidebarTabMoveBoundary(isFirst: true, isLast: true)
+  }
+
+  func tab(for tabID: UUID) -> BrowserTab? {
+    tabsByID[tabID]
+  }
+
+  func split(ledBy tabID: UUID) -> BrowserSplit? {
+    firstSplitByLeaderID[tabID]
+  }
+
+  func isSplitRowLeader(_ tabID: UUID) -> Bool {
+    guard let split = firstSplitByMemberID[tabID] else { return true }
+    return split.tabIDs.first == tabID
   }
 
   func dropSlot(targetID: UUID, sourceID: UUID, after: Bool) -> DropSlot? {

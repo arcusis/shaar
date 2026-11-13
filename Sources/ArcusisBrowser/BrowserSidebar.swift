@@ -238,7 +238,7 @@ struct BrowserSidebar: View {
   }
 
   private func tabList(_ space: BrowserSpace) -> some View {
-    let tabIndex = SidebarTabIndex(tabs: space.tabs)
+    let tabIndex = SidebarTabIndex(tabs: space.tabs, splits: space.splits)
     let folderRowIndex = SidebarFolderRowIndex(
       space: space, activeFolderID: store.session.selectedPage?.tab.folderID)
     let folderSiblingIndex = SidebarFolderSiblingIndex(folders: space.folders)
@@ -285,7 +285,7 @@ struct BrowserSidebar: View {
                 folderDraftRow(depth: depth + 1)
               }
             case .tab(let tab, let depth):
-              if isSplitRowLeader(tab, in: space) {
+              if tabIndex.isSplitRowLeader(tab.id) {
                 tabRow(tab, index: tabIndex)
                   .padding(.leading, indentation(depth))
                   .id(tab.id)
@@ -361,36 +361,10 @@ struct BrowserSidebar: View {
             {
               folderDraftRow(depth: 0)
             }
-            ForEach(itemSections.unpinned) { item in
-              switch item {
-              case .folder(let folder, let depth):
-                if folderDraft?.editingFolderID == folder.id {
-                  folderDraftRow(depth: depth)
-                } else {
-                  folderRow(
-                    folder, depth: depth, index: folderRowIndex, siblingIndex: folderSiblingIndex)
-                }
-                if let folderDraft, folderDraft.editingFolderID == nil,
-                  folderDraft.parentID == folder.id
-                {
-                  folderDraftRow(depth: depth + 1)
-                }
-              case .tab(let tab, _):
-                if isSplitRowLeader(tab, in: space) {
-                  tabRow(tab, index: tabIndex).id(tab.id)
-                    .background {
-                      if tab.id == activeSidebarPageID {
-                        GeometryReader { geometry in
-                          Color.clear.preference(
-                            key: SidebarOrdinaryRevealFramesPreferenceKey.self,
-                            value: SidebarRevealFrames(
-                              selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
-                              selectedID: tab.id))
-                        }
-                      }
-                    }
-                }
-              }
+            ForEach(space.items(isPinned: false)) { item in
+              unpinnedItemRow(
+                item, tabIndex: tabIndex, folderRowIndex: folderRowIndex,
+                folderSiblingIndex: folderSiblingIndex)
             }
             sectionDropTarget(pinned: false, isFooter: true)
           }
@@ -429,6 +403,44 @@ struct BrowserSidebar: View {
       .onAppear { scheduleSelectedPageReveal(tabScroll, selectionKey: activeSidebarSelectionKey) }
       .onChange(of: activeSidebarSelectionKey) { _, selectionKey in
         scheduleSelectedPageReveal(tabScroll, selectionKey: selectionKey)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func unpinnedItemRow(
+    _ item: PinnedSidebarItem, tabIndex: SidebarTabIndex,
+    folderRowIndex: SidebarFolderRowIndex, folderSiblingIndex: SidebarFolderSiblingIndex
+  ) -> some View {
+    switch item {
+    case .folder(let folder, let depth):
+      VStack(alignment: .leading, spacing: 0) {
+        if folderDraft?.editingFolderID == folder.id {
+          folderDraftRow(depth: depth)
+        } else {
+          folderRow(
+            folder, depth: depth, index: folderRowIndex, siblingIndex: folderSiblingIndex)
+        }
+        if let folderDraft, folderDraft.editingFolderID == nil,
+          folderDraft.parentID == folder.id
+        {
+          folderDraftRow(depth: depth + 1)
+        }
+      }
+    case .tab(let tab, _):
+      if tabIndex.isSplitRowLeader(tab.id) {
+        tabRow(tab, index: tabIndex).id(tab.id)
+          .background {
+            if tab.id == activeSidebarPageID {
+              GeometryReader { geometry in
+                Color.clear.preference(
+                  key: SidebarOrdinaryRevealFramesPreferenceKey.self,
+                  value: SidebarRevealFrames(
+                    selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
+                    selectedID: tab.id))
+              }
+            }
+          }
       }
     }
   }
@@ -784,11 +796,13 @@ struct BrowserSidebar: View {
   }
 
   @ViewBuilder
-  private func tabRowContent(_ tab: BrowserTab, in space: BrowserSpace) -> some View {
-    if let split = space.splits.first(where: { $0.tabIDs.first == tab.id }) {
+  private func tabRowContent(
+    _ tab: BrowserTab, in space: BrowserSpace, index: SidebarTabIndex
+  ) -> some View {
+    if let split = index.split(ledBy: tab.id) {
       SidebarSplitRow(
         segments: split.tabIDs.compactMap { id in
-          space.tabs.first { $0.id == id }.map {
+          index.tab(for: id).map {
             SidebarSplitRow.Segment(
               id: $0.id, title: $0.title,
               favicon: store.favicon(for: $0, profileID: space.profileID))
@@ -813,12 +827,12 @@ struct BrowserSidebar: View {
                   Button(folderLabel(folder.id, in: space)) {
                     _ = store.moveSplitMemberToFolder(id, in: space.id, folderID: folder.id)
                   }
-                  .disabled(space.tabs.first { $0.id == id }?.folderID == folder.id)
+                  .disabled(index.tab(for: id)?.folderID == folder.id)
                 }
                 if space.folders.isEmpty { ShellL10n.text("Create a folder first") }
               }
               Button(ShellL10n.string("Separate from Split")) { store.unsplitTab(id) }
-              if let member = space.tabs.first(where: { $0.id == id }) {
+              if let member = index.tab(for: id) {
                 Button(
                   ShellL10n.string(
                     member.keepAlive ? "Stop keeping tab alive" : "Keep tab alive")
@@ -884,15 +898,10 @@ struct BrowserSidebar: View {
     }
   }
 
-  private func isSplitRowLeader(_ tab: BrowserTab, in space: BrowserSpace) -> Bool {
-    guard let split = space.splits.first(where: { $0.tabIDs.contains(tab.id) }) else { return true }
-    return split.tabIDs.first == tab.id
-  }
-
   private func tabRow(_ tab: BrowserTab, index: SidebarTabIndex) -> some View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
-    return tabRowContent(tab, in: space)
+    return tabRowContent(tab, in: space, index: index)
       .dropDestination(for: SidebarTransfer.self) { items, point in
         guard items.count == 1, let item = items.first else { return false }
         let sourceID: UUID

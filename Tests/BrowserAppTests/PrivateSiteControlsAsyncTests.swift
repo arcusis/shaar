@@ -104,6 +104,25 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
   #expect(model.failure == nil)
 }
 
+@MainActor @Test func cancelledPrivateCookieWriteDoesNotPublishLateReadback() async throws {
+  let runtime = PrivateCookieAsyncRuntime()
+  let model = try privateCookieModel(runtime)
+  await model.load()
+  runtime.delayNextWrite = true
+  let write = Task { await model.setAllowed(true) }
+  for _ in 0..<100 where runtime.finishWrite == nil { await Task.yield() }
+  #expect(runtime.finishWrite != nil)
+
+  write.cancel()
+  runtime.finishWrite?()
+  await write.value
+
+  #expect(runtime.actualAllowed)
+  #expect(model.allowed == false)
+  #expect(model.failure == nil)
+  #expect(!model.saving)
+}
+
 @MainActor @Test func olderPrivateCookieReadCannotReplaceNewerRefresh() async throws {
   let runtime = PrivateCookieAsyncRuntime()
   let model = try privateCookieModel(runtime)

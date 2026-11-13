@@ -83,15 +83,20 @@ final class PrivateSiteControlsModel: Identifiable {
     do {
       try await runtime.setPrivateCookiesAllowed(
         value, tabID: tabID, windowID: windowID, contextID: contextID, origin: origin)
+      guard !Task.isCancelled else { return }
       let applied = try await runtime.privateCookies(
         forTabID: tabID, windowID: windowID, contextID: contextID, origin: origin
       ).boolValue
+      guard !Task.isCancelled else { return }
       allowed = applied
       failure =
         applied == value
         ? nil
         : ARCBridgeLocalizedString("The private cookie setting was not applied.")
-    } catch { failure = Self.updateFailure() }
+    } catch {
+      guard !Task.isCancelled else { return }
+      failure = Self.updateFailure()
+    }
   }
 }
 

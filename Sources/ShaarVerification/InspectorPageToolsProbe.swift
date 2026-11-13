@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import CoreFoundation
 import ChromiumBridgeVerification
 import Foundation
 import SwiftUI
@@ -400,7 +401,13 @@ import SwiftUI
       throw DeveloperModeFailure("Bug report metadata is incomplete.")
     }
     for key in ["width", "height", "devicePixelRatio"] {
-      guard let value = viewport[key] as? Double, value.isFinite, value > 0 else {
+      guard let number = viewport[key] as? NSNumber,
+        CFGetTypeID(number) != CFBooleanGetTypeID()
+      else {
+        throw DeveloperModeFailure("Bug report viewport is invalid.")
+      }
+      let value = number.doubleValue
+      guard value.isFinite, value > 0 else {
         throw DeveloperModeFailure("Bug report viewport is invalid.")
       }
     }

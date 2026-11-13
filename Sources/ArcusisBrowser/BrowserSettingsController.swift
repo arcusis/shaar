@@ -240,6 +240,9 @@ final class BrowserSettingsState {
     }
     do {
       let acknowledged = try await applyDownloadDirectoryToEngine(profileID, directory)
+      guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+        return false
+      }
       if directory != nil && acknowledged == nil {
         downloadDirectoryErrors[profileID] = SettingsL10n.string(
           "The download folder could not be changed. Try again.")

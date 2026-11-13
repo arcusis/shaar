@@ -93,6 +93,31 @@ struct DownloadDirectoryTests {
         == SettingsL10n.string("The download folder could not be changed. Try again."))
   }
 
+  @Test func deletedProfileDoesNotReceiveLateDirectoryAcknowledgement() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let profile = try #require(workspace.workspace.catalog.profiles.first?.id)
+    let destination = try #require(workspace.workspace.catalog.profiles.last?.id)
+    let preferences = BrowserPreferencesStore()
+    var acknowledgement: CheckedContinuation<URL?, Never>?
+    let state = BrowserSettingsState(
+      workspace: workspace, preferences: preferences, downloadDirectorySettingsEnabled: true,
+      applyDownloadDirectory: { _, _ in
+        await withCheckedContinuation { acknowledgement = $0 }
+      })
+
+    let update = Task { await state.applyDownloadDirectory(root, for: profile) }
+    for _ in 0..<100 where acknowledgement == nil { await Task.yield() }
+    try #require(acknowledgement != nil)
+    try workspace.deleteProfile(profile, movingSpacesTo: destination)
+    acknowledgement?.resume(returning: root)
+
+    #expect(await !update.value)
+    #expect(preferences.downloadDirectory(for: profile) == nil)
+  }
+
   @Test func resetUsesEngineAcknowledgementAndClearsSavedOverride() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

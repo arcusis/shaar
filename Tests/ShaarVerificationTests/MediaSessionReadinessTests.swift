@@ -135,22 +135,27 @@ import Testing
     "userActivated": true,
     "title": "Share",
   ]
-  let supported = ARCProbeWebShareEventDispatch(payload, 15, true)
+  let supported = ARCProbeWebShareEventDispatch(payload, 15, true, true)
   let received = try #require(supported["received"] as? [String: Any])
   #expect(received["id"] as? String == id)
   #expect(supported["replyOutcome"] as? Int == -1)
 
   var inactivePayload = payload
   inactivePayload["userActivated"] = false
-  let inactive = ARCProbeWebShareEventDispatch(inactivePayload, 15, true)
+  let inactive = ARCProbeWebShareEventDispatch(inactivePayload, 15, true, true)
   #expect((inactive["received"] as? [String: Any])?.isEmpty == true)
   #expect(inactive["replyID"] as? String == id)
   #expect(inactive["replyOutcome"] as? Int == 0)
 
-  let oldABI = ARCProbeWebShareEventDispatch(payload, 14, true)
+  let oldABI = ARCProbeWebShareEventDispatch(payload, 14, true, true)
   #expect((oldABI["received"] as? [String: Any])?.isEmpty == true)
   #expect(oldABI["replyID"] as? String == "")
   #expect(oldABI["replyOutcome"] as? Int == -1)
+
+  let missingReply = ARCProbeWebShareEventDispatch(payload, 15, true, false)
+  #expect((missingReply["received"] as? [String: Any])?.isEmpty == true)
+  #expect(missingReply["replyID"] as? String == "")
+  #expect(missingReply["replyOutcome"] as? Int == -1)
 }
 
 @Test func printRequestsRequireABI16AndOwnedLiveTabOnTheObjectiveCReceivePath() throws {

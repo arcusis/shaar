@@ -699,7 +699,6 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertEqual(catalog[key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן להשלים את שינוי הסגנון. כדאי לנסות שוב.")
         source = (ROOT / "Sources/ArcusisBrowser/InspectorStylesModel.swift").read_text(encoding="utf-8")
         self.assertEqual(source.count("Self.failureMessage(for: error)"), 7)
-
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

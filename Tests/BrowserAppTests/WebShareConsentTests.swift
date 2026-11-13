@@ -285,6 +285,20 @@ struct WebShareConsentTests {
     #expect(!store.canPresentWebShare(share))
   }
 
+  @Test func rejectedQueueOverflowDoesNotInvalidatePresentedShare() throws {
+    let store = openedStore()
+    var first: WebShareRequest?
+    for index in 0..<10 {
+      let share = try request(store, id: "00000000-0000-0000-0000-00000000000\(index)")
+      if index == 0 { first = share }
+      #expect(store.requestWebShare(share))
+    }
+    let overflow = try request(store)
+    #expect(!store.requestWebShare(overflow))
+    #expect(try #require(first).sheetID == store.sheet?.id)
+    #expect(store.canPresentWebShare(try #require(first)))
+  }
+
   @Test func stalePageAndRendererFailureCancelTheShare() throws {
     let store = openedStore()
     let stale = try request(store)

@@ -415,7 +415,6 @@ final class BrowserEngine {
         request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
       guard store.requestWebShare(request)
       else {
-        store.forgetPermissionFrame(request.tabID, matching: request.frameID)
         self.events.resolveWebShare(id, windowID: self.windowID, outcome: .cancelled)
         return
       }

@@ -86,7 +86,7 @@ struct DeviceChooserTests {
 
   @Test func deviceNamesPreserveJoinersUsedByEmojiAndShaping() throws {
     let store = try store()
-    let name = "👩‍💻 فارسی"
+    let name = "👩‍💻 فارسی\u{200C}زبان"
     let request = try #require(
       self.request(
         store, transport: "usb", id: "joined-name",

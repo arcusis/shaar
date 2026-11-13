@@ -12,6 +12,13 @@ private func panelInteger(_ value: Any?) -> Int? {
   return Int(exactly: number.doubleValue)
 }
 
+private func panelBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
 private func panelNumber(_ value: Any?) -> Double? {
   guard let number = value as? NSNumber,
     CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite
@@ -103,7 +110,7 @@ public struct ShaarDevToolsResponseBody: Equatable, Sendable {
       panelInteger(object["schemaVersion"]) == 1,
       let body = object["body"] as? String,
       body.utf8.count <= 1_048_576,
-      let encoded = object["base64Encoded"] as? Bool
+      let encoded = panelBoolean(object["base64Encoded"])
     else { return nil }
     return Self(body: body, base64Encoded: encoded)
   }

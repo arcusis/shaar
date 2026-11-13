@@ -64,6 +64,23 @@ class CatalogValidatorTests(unittest.TestCase):
             'engine.reportNotice(ShellL10n.string("Could not complete the site action. Try again."))',
             source,
         )
+    def test_enter_full_screen_native_menu_has_hebrew_copy(self):
+        key = "Enter Full Screen"
+        for table in ("Shell", "Settings"):
+            with self.subTest(table=table):
+                catalog = json.loads(
+                    (ROOT / f"Sources/BrowserCore/Resources/{table}.xcstrings").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertEqual(
+                    catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+                    "כניסה למסך מלא",
+                )
+        source = (ROOT / "Sources/ArcusisBrowser/NativeBrowserHost.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('add(.fullScreen, "Enter Full Screen", to: view)', source)
 
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:

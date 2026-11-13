@@ -33,10 +33,10 @@ index 97789b2..3b1f8a7 100644
      "profiles/shaar_profiles_unittest.cc",
 diff --git a/chrome/browser/shaar/chooser/shaar_device_chooser.cc b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
 new file mode 100644
-index 0000000..35761d7
+index 0000000..e5604ab
 --- /dev/null
 +++ b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
-@@ -0,0 +1,492 @@
+@@ -0,0 +1,497 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -265,8 +265,13 @@ index 0000000..35761d7
 +  void OnRefreshStateChanged(bool) override { PublishUpdate(); }
 +
 +  void DidFinishNavigation(content::NavigationHandle* navigation) override {
-+    if (navigation->IsInMainFrame() && navigation->HasCommitted())
++    if (!navigation->HasCommitted())
++      return;
++    content::RenderFrameHost* frame = navigation->GetRenderFrameHost();
++    if (navigation->IsInMainFrame() ||
++        (frame && frame->GetGlobalId() == frame_id_)) {
 +      ScheduleDismiss();
++    }
 +  }
 +
 +  void WebContentsDestroyed() override {

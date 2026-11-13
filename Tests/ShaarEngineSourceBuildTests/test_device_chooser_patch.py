@@ -37,6 +37,7 @@ class DeviceChooserPatchTests(unittest.TestCase):
         self.assertIn("public content::WebContentsObserver", source)
         self.assertIn("void WebContentsDestroyed() override", source)
         self.assertIn("void DidFinishNavigation(content::NavigationHandle* navigation)", source)
+        self.assertIn("frame->GetGlobalId() == frame_id_", source)
         self.assertIn(
             "shown->second >= std::min(controller_->NumOptions(), kMaximumOptions)", source)
         self.assertIn('index_only.Set("index", 0)', source)

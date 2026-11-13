@@ -7,6 +7,12 @@
         "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להחיל את הגדרות הפיתוח. כדאי לנסות שוב." } }
       }
     },
+    "The page-tools request could not be completed. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The page-tools request could not be completed. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להשלים את הבקשה מכלי הדף. כדאי לנסות שוב." } }
+      }
+    },
     "Tech stack": {
       "localizations": {
         "en": {

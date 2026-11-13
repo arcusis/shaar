@@ -111,7 +111,8 @@ enum ExtensionPageOrigin {
     guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
       let scheme = components.scheme?.lowercased(),
       scheme == "http" || scheme == "https",
-      let host = components.host?.lowercased(), !host.isEmpty
+      let host = components.host?.lowercased(), !host.isEmpty,
+      components.port.map({ (0...65535).contains($0) }) ?? true
     else { return nil }
     let bareHost =
       host.hasPrefix("[") && host.hasSuffix("]")

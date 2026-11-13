@@ -264,6 +264,24 @@ import Testing
   #expect(title == "Ab\0Cd")
 }
 
+@Test func repeatedHistoryVisitGroupingFocusedBenchmark() throws {
+  let profile = try profileDirectory(name: "HistoryGroupingBenchmark")
+  try createDatabase(
+    sqlFixture: "ChromiumHistory.sql", at: profile.appending(path: "History"),
+    extraSQL: """
+      WITH RECURSIVE sequence(value) AS (
+        SELECT 4 UNION ALL SELECT value + 1 FROM sequence WHERE value < 30003
+      )
+      INSERT INTO visits SELECT value, 1, 13344473602000000 + value, 0 FROM sequence;
+      """)
+
+  let start = ContinuousClock.now
+  let batch = try BrowserImport.readProfile(at: profile, source: .chrome)
+  print("repeatedHistoryVisitGroupingFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(batch.history.count == 1)
+  #expect(batch.history[0].visitTimes.count == 30_002)
+}
+
 @Test func sqliteSnapshotRejectsMissingSourcesAndInvalidQueries() throws {
   let absent = FileManager.default.temporaryDirectory.appending(path: "missing-\(UUID()).sqlite")
   #expect(throws: BrowserImport.ImportError.self) {

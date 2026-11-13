@@ -108,6 +108,14 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   #expect(args["schemaVersion"] as? Int == 1)
 }
 
+@Test func downloadControlRejectsEmptyIDBeforeSubmitting() async throws {
+  let fake = FakeDownloadsTransport(replies: [401: Data("{}".utf8)])
+  await #expect(throws: ShaarDownloadsError.invalidControl) {
+    try await ShaarDownloadsAdapter(transport: fake).control(.pause, id: "")
+  }
+  #expect(await fake.recordedCalls().isEmpty)
+}
+
 @Test func directoryUsesTheAcknowledgedEnginePath() async throws {
   let fake = FakeDownloadsTransport(replies: [
     402: Data(#"{"schemaVersion":1,"directory":"/Users/test/Downloads"}"#.utf8)

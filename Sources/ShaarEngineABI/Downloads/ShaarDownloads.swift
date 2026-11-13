@@ -101,6 +101,7 @@ public enum ShaarDownloadAction: String, Codable, Sendable {
 
 public enum ShaarDownloadsError: Error, Equatable, Sendable {
   case malformedResponse
+  case invalidControl
   case unsafeTarget
   case engine(ShaarStatusCode, message: String)
 }
@@ -185,6 +186,7 @@ public struct ShaarDownloadsAdapter: Sendable {
   }
 
   public func control(_ action: ShaarDownloadAction, id: String) async throws {
+    guard !id.isEmpty else { throw ShaarDownloadsError.invalidControl }
     let args = try Self.json(["schemaVersion": 1, "downloadId": id, "action": action.rawValue])
     let response = try await transport.submit(operation: Self.controlOperation, arguments: args)
     guard response.isEmpty || response == Data("{}".utf8) else {

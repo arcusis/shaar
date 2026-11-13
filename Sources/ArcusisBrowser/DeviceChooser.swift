@@ -162,6 +162,10 @@ enum DeviceChooserIntake {
   private static func displayName(_ value: String) -> String {
     var scalars = String.UnicodeScalarView()
     for scalar in value.unicodeScalars {
+      if scalar.value == 0x200C || scalar.value == 0x200D {
+        scalars.append(scalar)
+        continue
+      }
       switch scalar.properties.generalCategory {
       case .control, .format, .lineSeparator, .paragraphSeparator:
         scalars.append("\u{FFFD}")

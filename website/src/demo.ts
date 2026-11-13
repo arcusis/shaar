@@ -155,6 +155,12 @@ export function initializeDemo(): void {
       closeOverlays();
     }
   });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !popover.hidden) {
+      closeOverlays();
+      controlsButton.focus();
+    }
+  });
   results.addEventListener("click", (event) => {
     if (event.target instanceof Element) choose(event.target.closest<HTMLElement>("li"));
   });

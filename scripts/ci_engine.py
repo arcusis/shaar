@@ -146,9 +146,11 @@ def archive_bundle(root: Path, directory: Path) -> None:
 def validate_bundle_archive(root: Path, directory: Path) -> Path:
     metadata_path = directory / "bundle.json"
     try:
-        metadata = json.loads(metadata_path.read_text())
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise ValueError(f"Verification bundle metadata is missing or invalid: {metadata_path}: {error}") from error
+        raise ValueError(
+            f"Verification bundle metadata is missing or invalid: {metadata_path}: {error}"
+        ) from error
     if not isinstance(metadata, dict):
         raise ValueError(f"Verification bundle metadata must be a JSON object: {metadata_path}")
     if any(metadata.get(key) != value for key, value in context(root).items()):

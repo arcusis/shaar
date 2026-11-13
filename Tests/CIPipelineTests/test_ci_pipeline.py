@@ -1645,7 +1645,6 @@ class EngineTransferTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "destination is not a directory"):
                 restore_bundle(root, evidence)
 
-
     def test_bundle_archiver_rejects_symlinked_output_paths_without_touching_targets(self):
         from ci_engine import BUNDLE_NAME, archive_bundle
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
@@ -1669,6 +1668,25 @@ class EngineTransferTests(unittest.TestCase):
                         archive_bundle(root, directory)
                     self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
                     output.unlink()
+
+    def test_bundle_restore_reports_invalid_metadata_as_value_error(self):
+        from ci_engine import validate_bundle_archive
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            directory = root / "evidence"
+            directory.mkdir()
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            metadata = directory / "bundle.json"
+            with patch.dict(os.environ, {
+                "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+            }):
+                for raw in ("{", "[]"):
+                    with self.subTest(raw=raw):
+                        metadata.write_text(raw)
+                        with self.assertRaisesRegex(ValueError, "(?i)verification bundle metadata"):
+                            validate_bundle_archive(root, directory)
 
     def test_merge_group_bundle_selection_rejects_fork_pull_request_runs(self):
         from ci_engine import matching_pr_bundle_run_id

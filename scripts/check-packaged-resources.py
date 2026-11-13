@@ -33,10 +33,27 @@ def code_portion(line: str) -> str:
     literal_start = 0
     literal = []
     interpolated = False
+    interpolation_depth = 0
+    pending_interpolation = False
+    interpolation_start = 0
+    interpolation_ranges = []
     for index, character in enumerate(line):
         if quoted:
             literal.append(character)
-            if escaped:
+            code.append(character)
+            if interpolation_depth:
+                if character == "(":
+                    interpolation_depth += 1
+                elif character == ")":
+                    interpolation_depth -= 1
+                    if interpolation_depth == 0:
+                        interpolation_ranges.append((interpolation_start, len(code) - 1))
+            elif pending_interpolation and character == "(":
+                interpolation_depth = 1
+                interpolation_start = len(code)
+                pending_interpolation = False
+                escaped = False
+            elif escaped:
                 if character == "(":
                     interpolated = True
                 escaped = False
@@ -47,12 +64,21 @@ def code_portion(line: str) -> str:
                     cursor += 1
                 if cursor < len(line) and line[cursor] == "(":
                     interpolated = True
+                    pending_interpolation = True
             elif character == '"':
                 quoted = False
                 if not interpolated:
                     code[literal_start:] = [" "] * len(literal)
-                else:
-                    code[literal_start:] = literal
+                elif interpolation_ranges:
+                    keep = {
+                        offset
+                        for start, end in interpolation_ranges
+                        for offset in range(start, end)
+                    }
+                    code[literal_start:] = [
+                        value if offset in keep else " "
+                        for offset, value in enumerate(code[literal_start:], start=literal_start)
+                    ]
         elif character == '"':
             quoted = True
             literal_start = len(code)

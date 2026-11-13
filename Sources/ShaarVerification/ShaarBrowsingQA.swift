@@ -27,7 +27,7 @@ import Foundation
   }
 
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?, scenario: String) -> Int32 {
-    guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else {
+    guard let pageURL, isLoopbackFixtureURL(pageURL) else {
       write(["passed": false, "error": "Loopback http base URL is required."], to: outputURL)
       return 2
     }
@@ -977,6 +977,14 @@ import Foundation
 
   static func reloadHistoryPreserved(backPath: String?, forwardPath: String?) -> Bool {
     backPath == "/nav/1" && forwardPath == "/slow-reload"
+  }
+
+  static func isLoopbackFixtureURL(_ value: URL?) -> Bool {
+    guard let value, value.scheme == "http", value.host == "127.0.0.1", value.port != nil,
+      let components = URLComponents(url: value, resolvingAgainstBaseURL: false),
+      components.user == nil, components.password == nil
+    else { return false }
+    return true
   }
 
   static func playbackStarted(_ value: String?) -> Bool {

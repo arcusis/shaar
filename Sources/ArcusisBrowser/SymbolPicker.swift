@@ -34,7 +34,9 @@ struct SymbolPicker: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 6) {
-        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+        Image(systemName: "magnifyingglass")
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
         TextField(SettingsL10n.string("Search icons"), text: $query)
           .textFieldStyle(.plain)
           .accessibilityLabel(SettingsL10n.string("Search icons"))

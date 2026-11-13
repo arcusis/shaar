@@ -29,6 +29,7 @@ class SavePromptDismissalEnvelopeTests(unittest.TestCase):
         self.assertIn("pending.profile_id", dismiss)
         self.assertIn("pending.window_id", dismiss)
         self.assertIn("pending.tab_id", dismiss)
+        self.assertEqual(dismiss.count("payload.Set("), 3)
 
 
 if __name__ == "__main__":

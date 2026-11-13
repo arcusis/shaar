@@ -54,6 +54,14 @@ struct DevToolsDOMTests {
     }
   }
 
+  @Test func nodeRejectsMalformedExplicitAttributes() {
+    let fields: [String: Any] = [
+      "nodeId": 4, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+      "attributes": true,
+    ]
+    #expect(ShaarDOMNode.decode(fields, parentID: 2, relation: .child) == nil)
+  }
+
   @Test func documentAcceptsBoundedLongInlineStyle() throws {
     func document(_ style: String) -> [String: Any] {
       [

@@ -36,6 +36,16 @@ final class NativeBrowserMenu: NSMenu {
 }
 
 @MainActor
+enum PreviousTabShortcutRouting {
+  static func route(_ event: NSEvent, store: BrowserStore) -> Bool {
+    guard event.type == .keyDown, event.keyCode == 48,
+      event.modifierFlags.intersection([.command, .option, .control, .shift]) == [.control, .shift]
+    else { return false }
+    return store.selectAdjacentTab(by: -1)
+  }
+}
+
+@MainActor
 final class NativeBrowserContext {
   let id: UUID
   let nativeID: String
@@ -1519,6 +1529,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     NSApp.mainMenu = main
     shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       guard let self, let menu = self.menu, NSApp.mainMenu === menu else { return event }
+      if let store = self.privateHost?.activeOwner?.store ?? self.activeContext?.store,
+        PreviousTabShortcutRouting.route(event, store: store)
+      {
+        return nil
+      }
       if let store = self.privateHost?.activeOwner?.store ?? self.activeContext?.store,
         NextTabShortcutRouting.route(event, store: store)
       {

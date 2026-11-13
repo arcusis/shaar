@@ -140,7 +140,7 @@ struct BrowserRuntimeRouterTests {
     #expect(router.clients(forProfile: "foreign").isEmpty)
     memberships.remove("beta")
     #expect(router.clients(forProfile: "beta").isEmpty)
-    weak var weakFirst = first
+    weak let weakFirst = first
     first = nil
     #expect(weakFirst == nil)
     #expect(router.clients(forProfile: "shared").map(\.windowID) == ["second"])

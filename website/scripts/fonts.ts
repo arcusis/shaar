@@ -52,7 +52,14 @@ export async function prepareFonts(
   const manifestPath = resolve(cacheDirectory, "fonts.json");
   let faces: SiteFont[] = [];
   if (existsSync(manifestPath)) {
-    faces = JSON.parse(await readFile(manifestPath, "utf8")) as SiteFont[];
+    try {
+      faces = JSON.parse(await readFile(manifestPath, "utf8")) as SiteFont[];
+    } catch (error) {
+      console.warn(
+        `Cached fonts unavailable, the site falls back to system fonts: ${String(error)}`,
+      );
+      return [];
+    }
   } else {
     try {
       let css = "";
@@ -75,12 +82,17 @@ export async function prepareFonts(
       return [];
     }
   }
-  await mkdir(outputDirectory, { recursive: true });
-  for (const face of faces) {
-    await writeFile(
-      resolve(outputDirectory, face.file),
-      await readFile(resolve(cacheDirectory, face.file)),
-    );
+  try {
+    await mkdir(outputDirectory, { recursive: true });
+    for (const face of faces) {
+      await writeFile(
+        resolve(outputDirectory, face.file),
+        await readFile(resolve(cacheDirectory, face.file)),
+      );
+    }
+  } catch (error) {
+    console.warn(`Cached fonts unavailable, the site falls back to system fonts: ${String(error)}`);
+    return [];
   }
   return faces;
 }

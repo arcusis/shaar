@@ -921,10 +921,12 @@ final class PrivateWindowProbe {
     return false
   }
 
-  private static func historyPaths(_ rows: [[AnyHashable: Any]]?) -> [String] {
+  static func historyPaths(_ rows: [[AnyHashable: Any]]?) -> [String] {
     rows?.compactMap { row in
-      guard let value = row["u"] as? String else { return nil }
-      return URL(string: value)?.path
+      guard let value = row["u"] as? String,
+        let url = URL(string: value), url.scheme != nil, url.host != nil
+      else { return nil }
+      return url.path
     } ?? []
   }
 

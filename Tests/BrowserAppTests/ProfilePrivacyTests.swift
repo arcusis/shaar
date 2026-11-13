@@ -392,7 +392,7 @@ private final class HttpsOnlyLoadSpy: ARCShaarRuntime {
 
 @MainActor
 private final class PendingProfileLoadRuntime: ARCChromiumRuntime {
-  var completion: ((Error?) -> Void)?
+  nonisolated(unsafe) var completion: ((Error?) -> Void)?
   override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {
     self.completion = completion
   }

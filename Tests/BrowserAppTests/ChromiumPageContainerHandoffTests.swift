@@ -50,6 +50,32 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertTrue(page.window === browser)
   }
 
+  func testRestoreDoesNotMovePageIntoSameTabIDInAnotherWindow() {
+    let tab = UUID()
+    let page = NSView()
+    let targetWindow = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    let otherWindow = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    targetWindow.isReleasedWhenClosed = false
+    otherWindow.isReleasedWhenClosed = false
+    targetWindow.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    otherWindow.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    defer {
+      targetWindow.close()
+      otherWindow.close()
+    }
+    let foreignContainer = ChromiumPageContainerView()
+    otherWindow.contentView?.addSubview(foreignContainer)
+    _ = foreignContainer.select(page, tabID: tab, liveTabs: [tab])
+
+    XCTAssertFalse(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tab, in: targetWindow))
+    XCTAssertTrue(page.superview === foreignContainer)
+    XCTAssertTrue(page.window === otherWindow)
+  }
+
   func testOutgoingContainerHandsPageBackOnTeardown() {
     let tab = UUID()
     let page = NSView()

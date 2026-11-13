@@ -125,19 +125,17 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     let incoming = ChromiumPageContainerView()
 
     XCTAssertTrue(
-      ChromiumPageContainerView.selectPrivatePage(
-        firstPage, tabID: firstID, liveTabs: [firstID, secondID], in: outgoing))
+      outgoing.select(firstPage, tabID: firstID, liveTabs: [firstID, secondID]))
     XCTAssertTrue(
-      ChromiumPageContainerView.selectPrivatePage(
-        secondPage, tabID: secondID, liveTabs: [firstID, secondID], in: outgoing))
+      outgoing.select(secondPage, tabID: secondID, liveTabs: [firstID, secondID]))
     XCTAssertTrue(firstPage.isHidden)
     XCTAssertTrue(firstPage.superview === outgoing)
     XCTAssertFalse(secondPage.isHidden)
 
     XCTAssertTrue(
-      ChromiumPageContainerView.selectPrivatePage(
-        firstPage, tabID: firstID, liveTabs: [firstID, secondID], in: incoming))
-    outgoing.dismantle()
+      incoming.select(firstPage, tabID: firstID, liveTabs: [firstID, secondID]))
+    outgoing.select(firstPage, tabID: firstID, liveTabs: [firstID, secondID])
+    ChromiumPageContainerView.dismantlePrivatePage(outgoing)
 
     XCTAssertTrue(firstPage.superview === incoming)
     XCTAssertTrue(incoming.pageView === firstPage)

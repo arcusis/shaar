@@ -34,6 +34,10 @@ final class DownloadsModel {
     }
   }
 
+  func hasActiveDownload(in profileID: UUID) -> Bool {
+    (records[profileID] ?? [:]).values.contains { $0.state == .downloading }
+  }
+
   func libraryItems(in profileID: UUID) -> [BrowserDownload] {
     let browserItems = (records[profileID] ?? [:]).values.filter { item in
       item.state != .finished || Self.isRegularFile(item.fileURL)

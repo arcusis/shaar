@@ -205,3 +205,33 @@ test("unparseable font CSS falls back without caching an empty manifest", async 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("incomplete font CSS falls back without caching a partial manifest", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  const originalFetch = globalThis.fetch;
+  const font = readFileSync(
+    new URL(
+      "../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2",
+      import.meta.url,
+    ),
+  );
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("api.fontshare.com")) {
+      if (url.includes("clash-display"))
+        return new Response(
+          "@font-face{font-family:'Clash Display';src:url('https://fonts.test/clash.woff2');font-weight:300 900;font-style:normal;}",
+        );
+      return new Response("<!doctype html><title>Unavailable</title>");
+    }
+    return new Response(new Uint8Array(font));
+  };
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});

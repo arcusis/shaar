@@ -106,6 +106,9 @@ export async function prepareFonts(
       }
       const parsed = parseFaces(css);
       if (parsed.length === 0) throw new Error("Fontshare CSS had no supported WOFF2 faces");
+      const parsedFamilies = new Set(parsed.map((face) => face.family));
+      if (Object.keys(families).some((family) => !parsedFamilies.has(family)))
+        throw new Error("Fontshare CSS did not include all site font families");
       await mkdir(cacheDirectory, { recursive: true });
       for (const face of parsed) {
         const font = await fetchFontAsset(face.url);

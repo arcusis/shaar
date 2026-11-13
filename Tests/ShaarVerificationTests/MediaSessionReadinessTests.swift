@@ -118,10 +118,15 @@ import Testing
   ]
   let owned = ARCProbeDesktopCaptureEventDispatch(payload, true)
   let foreign = ARCProbeDesktopCaptureEventDispatch(payload, false)
-  #expect(owned["id"] as? String == id)
-  #expect(owned["kind"] as? String == "desktopCaptureRequested")
-  #expect(owned["tabID"] as? String != nil)
-  #expect(foreign.isEmpty)
+  let ownedRequest = try #require(owned["request"] as? [String: Any])
+  #expect(ownedRequest["id"] as? String == id)
+  #expect(ownedRequest["kind"] as? String == "desktopCaptureRequested")
+  #expect(ownedRequest["tabID"] as? String != nil)
+  #expect(owned["resolutionCount"] as? Int == 0)
+  #expect((foreign["request"] as? [String: Any])?.isEmpty == true)
+  #expect(foreign["resolutionCount"] as? Int == 1)
+  #expect(foreign["resolvedPromptID"] as? String == id)
+  #expect(foreign["resolvedSourceID"] is NSNull)
 }
 
 @Test func webShareRequiresABIAndUserActivationOnTheObjectiveCReceivePath() throws {

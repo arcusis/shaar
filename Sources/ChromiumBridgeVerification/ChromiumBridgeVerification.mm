@@ -19,6 +19,24 @@
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 
+@interface ARCShaarRuntime (DesktopCaptureProbeResolution)
+- (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID;
+@end
+
+@interface ARCDesktopCaptureProbeRuntime : ARCShaarRuntime
+@property(nonatomic, copy) NSString *resolvedCapturePromptID;
+@property(nonatomic, copy) NSString *resolvedCaptureSourceID;
+@property(nonatomic) NSUInteger captureResolutionCount;
+@end
+
+@implementation ARCDesktopCaptureProbeRuntime
+- (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {
+  self.captureResolutionCount += 1;
+  self.resolvedCapturePromptID = requestID;
+  self.resolvedCaptureSourceID = sourceID;
+}
+@end
+
 @interface ARCShaarRuntime (MediaEventProbe)
 - (void)receiveEvent:(const shaar_event *)event;
 @end
@@ -149,6 +167,8 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
                  [@{tabID: profileID} mutableCopy]);
   object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
                  [@{tabID: windowID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarCaptureRequests"),
+                 [NSMutableDictionary dictionary]);
   object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarShareRequests"),
                  [NSMutableDictionary dictionary]);
   NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
@@ -165,7 +185,7 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
 }
 
 NSDictionary *ARCProbeDesktopCaptureEventDispatch(NSDictionary *payload, BOOL validOwner) {
-  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  ARCDesktopCaptureProbeRuntime *runtime = [ARCDesktopCaptureProbeRuntime new];
   __block NSDictionary *received = nil;
   runtime.onDesktopCaptureRequest = ^(NSDictionary *request) { received = request; };
   NSString *tabID = NSUUID.UUID.UUIDString;
@@ -194,7 +214,12 @@ NSDictionary *ARCProbeDesktopCaptureEventDispatch(NSDictionary *payload, BOOL va
   event.tab_id = {tabID.UTF8String, tabID.length};
   event.payload_json = {(const char *)data.bytes, data.length};
   [runtime receiveEvent:&event];
-  return received ?: @{};
+  return @{
+    @"request": received ?: @{},
+    @"resolvedPromptID": runtime.resolvedCapturePromptID ?: @"",
+    @"resolvedSourceID": runtime.resolvedCaptureSourceID ?: [NSNull null],
+    @"resolutionCount": @(runtime.captureResolutionCount),
+  };
 }
 
 NSDictionary *ARCProbeWebShareEventDispatch(NSDictionary *payload, uint32_t abiMinor,

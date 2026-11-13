@@ -73,10 +73,19 @@ public enum BrowserImport {
 
   public static func historyRows(for items: [BrowserImportItem]) -> [[String: Any]] {
     items.compactMap { item in
-      guard item.kind == .history, !item.visitTimes.isEmpty,
-        let latest = item.visitTimes.max()
-      else { return nil }
-      let visits = item.visitTimes.map { $0.timeIntervalSince1970 * 1_000 }
+      guard item.kind == .history, !item.visitTimes.isEmpty else { return nil }
+      var visits: [Double] = []
+      visits.reserveCapacity(item.visitTimes.count)
+      var latest: Date?
+      for visit in item.visitTimes {
+        visits.append(visit.timeIntervalSince1970 * 1_000)
+        if let current = latest {
+          if current < visit { latest = visit }
+        } else {
+          latest = visit
+        }
+      }
+      guard let latest else { return nil }
       return [
         "u": item.address, "t": item.title, "n": visits.count,
         "l": latest.timeIntervalSince1970 * 1_000,

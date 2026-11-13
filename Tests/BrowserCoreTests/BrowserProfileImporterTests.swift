@@ -53,6 +53,53 @@ import Testing
   }
 }
 
+@Test func historyImportRowAllocationBenchmark() {
+  let items = (0..<2_500).map { itemIndex in
+    BrowserImportItem(
+      kind: .history, source: .chrome, title: "History \(itemIndex)",
+      address: "https://example.com/\(itemIndex)",
+      visitTimes: (0..<200).reversed().map {
+        Date(timeIntervalSince1970: Double(itemIndex + $0))
+      })
+  }
+  let expected = legacyHistoryRows(items)
+  let actual = BrowserImport.historyRows(for: items)
+  #expect(actual.count == expected.count && actual.count == 2_500)
+  for (actualRow, expectedRow) in zip(actual, expected) {
+    #expect(actualRow["v"] as? [Double] == expectedRow["v"] as? [Double])
+    #expect(actualRow["l"] as? Double == expectedRow["l"] as? Double)
+  }
+
+  var beforeSamples: [Duration] = []
+  var afterSamples: [Duration] = []
+  for _ in 0..<5 {
+    let beforeStart = ContinuousClock.now
+    for _ in 0..<3 { _ = legacyHistoryRows(items) }
+    beforeSamples.append(beforeStart.duration(to: .now))
+    let afterStart = ContinuousClock.now
+    for _ in 0..<3 { _ = BrowserImport.historyRows(for: items) }
+    afterSamples.append(afterStart.duration(to: .now))
+  }
+  let before = beforeSamples.sorted()[beforeSamples.count / 2]
+  let after = afterSamples.sorted()[afterSamples.count / 2]
+  print("historyImportRowAllocationBenchmark: before=\(before), after=\(after)")
+  #expect(after < before * 0.9)
+}
+
+private func legacyHistoryRows(_ items: [BrowserImportItem]) -> [[String: Any]] {
+  items.compactMap { item in
+    guard item.kind == .history, !item.visitTimes.isEmpty,
+      let latest = item.visitTimes.max()
+    else { return nil }
+    let visits = item.visitTimes.map { $0.timeIntervalSince1970 * 1_000 }
+    return [
+      "u": item.address, "t": item.title, "n": visits.count,
+      "l": latest.timeIntervalSince1970 * 1_000,
+      "v": visits, "s": item.source.rawValue,
+    ]
+  }
+}
+
 @Test func historyImportPreviewUsesHostForMissingTitles() throws {
   let profile = try profileDirectory(name: "ChromeUntitledHistory")
   try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))

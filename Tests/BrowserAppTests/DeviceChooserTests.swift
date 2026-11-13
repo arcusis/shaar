@@ -179,11 +179,19 @@ struct DeviceChooserTests {
     let tab = try #require(store.session.selectedSpace.selectedTab)
     var payload = event(transport: "usb", id: "floating-version", page: tab.url)
     payload["schemaVersion"] = NSNumber(value: 1.0)
-
     #expect(
       DeviceChooserIntake.request(
         tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
         payload: payload) == nil)
+  }
+
+  @Test func deviceNamesWithoutAVisibleBaseUseTheFallbackLabel() throws {
+    let store = try store()
+    let request = try #require(
+      self.request(
+        store, transport: "usb", id: "invisible-name",
+        options: [["index": 0, "name": "\u{FE0F}"]], canGrant: true))
+    #expect(request.options.first?.title == PanelsL10n.string("Unknown device"))
   }
 
   @Test func sheetCancelRejectsWithoutADeviceIndex() throws {

@@ -34,18 +34,20 @@ def index_text(path: Path) -> str:
     return "\n".join(lines)
 
 
-def linked_notes(indexes: list[Path]) -> set[Path]:
+def linked_notes(indexes: list[Path], notebook: Path) -> set[Path]:
     linked = set()
     for index in indexes:
         for match in WIKI_LINK.finditer(index_text(index)):
             target = match[1].split("|", 1)[0].split("#", 1)[0].strip()
             if not target:
                 continue
+            base = index.parent
             if target.startswith("Notebook/"):
+                base = notebook
                 target = target.removeprefix("Notebook/")
             if not target.endswith(".md"):
                 target += ".md"
-            linked.add((index.parent / target).resolve())
+            linked.add((base / target).resolve())
     return linked
 
 
@@ -60,7 +62,7 @@ def check_notebook(notebook: Path) -> int:
     if not indexes:
         print(f"No _INDEX_*.md files found in {notebook}", file=sys.stderr)
         return 1
-    linked = linked_notes(indexes)
+    linked = linked_notes(indexes, notebook)
     existing = {path.resolve() for path in notes}
     orphans = [path for path in notes if path not in indexes and path.resolve() not in linked]
     broken = sorted(linked - existing)

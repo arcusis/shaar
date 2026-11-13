@@ -106,6 +106,14 @@ class NotebookLinksTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("Notebook root must not be a symlink", result.stderr)
 
+    def test_notebook_prefix_in_nested_index_resolves_from_notebook_root(self):
+        result = self.run_check({
+            "_INDEX_Main.md": "[[nested/_INDEX_Nested]]",
+            "nested/_INDEX_Nested.md": "[[Notebook/Target]]",
+            "Target.md": "# Root target",
+        })
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

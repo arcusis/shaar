@@ -114,6 +114,14 @@ struct DeviceChooserTests {
 
     #expect(mixedCaseOrigin.displayOrigin == "https://device-frame.example:8443")
 
+    let mixedCaseSchemeOrigin = DeviceChooserRequest(
+      id: "mixed-case-scheme-origin", tabID: tab.id,
+      profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+      origin: try #require(URL(string: "HTTPS://device-frame.example:8443")), transport: .usb,
+      options: [], bluetoothUnavailable: false, canGrant: false)
+
+    #expect(mixedCaseSchemeOrigin.displayOrigin == "https://device-frame.example:8443")
+
     let httpOrigin = DeviceChooserRequest(
       id: "http-origin", tabID: tab.id, profileID: store.session.selectedSpace.profileID,
       pageURL: tab.url, origin: try #require(URL(string: "http://devices.example:80")),

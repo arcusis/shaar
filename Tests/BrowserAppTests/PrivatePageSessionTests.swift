@@ -10,6 +10,38 @@ import Testing
 
 @Suite @MainActor
 struct PrivatePageSessionTests {
+  @Test func printRequestMustMatchItsCallbackTab() throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try BrowserSession.privateWindow(
+        sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PrivatePrintRequestRuntime()
+    let page = PrivatePageSession(
+      runtime: runtime, contextID: UUID().uuidString,
+      windowID: UUID().uuidString, firstTabID: tabID, store: store)
+    defer { page.stopSleepingTabWatch() }
+    page.tabChanged(
+      tabID, url: "https://private.example/", title: "Private page",
+      loading: false, back: false, forward: false)
+    let requestID = UUID().uuidString
+    let payload: [String: Any] = [
+      "schemaVersion": 1,
+      "id": requestID,
+      "profileID": store.session.selectedSpace.profileID.uuidString,
+      "tabID": tabID.uuidString,
+      "pageURL": "https://private.example/",
+      "origin": "https://private.example",
+      "frameID": "0123456789abcdef0123456789abcdef",
+      "title": "Private page",
+    ]
+
+    page.receivePrintRequest(payload, tabID: UUID().uuidString)
+
+    #expect(runtime.printDecisions.map(\.0) == [requestID])
+    #expect(runtime.printDecisions.map(\.1) == [false])
+    #expect(store.sheet == nil)
+  }
+
   @Test func liveTabOwnershipRequiresThePrivateProfileAndAnOpenSession() throws {
     let tabID = UUID()
     let store = BrowserStore(
@@ -45,5 +77,14 @@ struct PrivatePageSessionTests {
       tabID, url: "https://recovered.example/", title: "Recovered",
       loading: true, back: false, forward: false)
     #expect(page.failure == nil)
+  }
+}
+
+@MainActor
+private final class PrivatePrintRequestRuntime: ARCChromiumRuntime {
+  var printDecisions: [(String, Bool)] = []
+
+  override func resolvePrintRequestID(_ requestID: String, accepted: Bool) {
+    printDecisions.append((requestID, accepted))
   }
 }

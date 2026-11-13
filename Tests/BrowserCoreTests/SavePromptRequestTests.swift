@@ -50,6 +50,8 @@ private func payload(
 
 @Test func savePromptRejectsSecretsAndUnknownFields() {
   #expect(SavePromptRequest(payload: payload(extra: ["password": "parity-secret"])) == nil)
+  #expect(SavePromptRequest(payload: payload(extra: ["schemaVersion": true])) == nil)
+  #expect(SavePromptRequest(payload: payload(extra: ["schemaVersion": 1.0])) == nil)
   #expect(SavePromptRequest(payload: payload(extra: ["pan": "4111111111111111"])) == nil)
   #expect(SavePromptRequest(payload: payload(extra: ["number": "4111111111111111"])) == nil)
   #expect(SavePromptRequest(payload: payload(detail: "line\nbreak")) == nil)

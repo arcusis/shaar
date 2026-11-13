@@ -56,10 +56,18 @@ def check_notebook(notebook: Path) -> int:
         print(f"No _INDEX_*.md files found in {notebook}", file=sys.stderr)
         return 1
     linked = linked_notes(indexes)
+    existing = {path.resolve() for path in notes}
     orphans = [path for path in notes if path not in indexes and path.resolve() not in linked]
+    broken = sorted(linked - existing)
     for path in orphans:
         print(f"Note not linked from any index: {path.relative_to(notebook)}", file=sys.stderr)
-    if orphans:
+    for path in broken:
+        try:
+            target = path.relative_to(notebook.resolve())
+        except ValueError:
+            target = path
+        print(f"Broken Notebook index link: {target}", file=sys.stderr)
+    if orphans or broken:
         return 1
     print(f"Notebook links OK: {len(notes) - len(indexes)} notes, {len(indexes)} indexes")
     return 0

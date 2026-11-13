@@ -721,11 +721,13 @@ final class NativeHostProbe {
         "first-normal-before-chrome", context: first, tabID: firstTab)
       samples.append(firstNormalBeforeChrome)
       first.store.sidebarIsVisible = false
+      await waitForResizeEvent(tabID: firstTab, after: firstNormalBeforeChrome.resizeEventCount)
       try await settleViewportLayout(first)
       let sidebarHidden = try await viewportSample(
         "sidebar-hidden", context: first, tabID: firstTab)
       samples.append(sidebarHidden)
       first.store.sidebarIsVisible = true
+      await waitForResizeEvent(tabID: firstTab, after: sidebarHidden.resizeEventCount)
       try await settleViewportLayout(first)
       let sidebarShown = try await viewportSample(
         "sidebar-shown", context: first, tabID: firstTab)
@@ -740,6 +742,10 @@ final class NativeHostProbe {
           && sidebarShown.containerWithinVisibleHosting
           && sidebarHidden.containerFitsExpectedPageWidth
           && sidebarShown.containerFitsExpectedPageWidth
+          && NativeHostViewportValidation.deliveredResizeEvent(
+            from: firstNormalBeforeChrome.resizeEventCount, to: sidebarHidden.resizeEventCount)
+          && NativeHostViewportValidation.deliveredResizeEvent(
+            from: sidebarHidden.resizeEventCount, to: sidebarShown.resizeEventCount)
           && viewportSizeMatches(secondAfterSidebar, secondOriginal),
         "Sidebar visibility changes first-window viewport while preserving second window.",
         checks: &viewportChecks)
@@ -748,10 +754,12 @@ final class NativeHostProbe {
       first.store.showPageFind()
       first.store.updatePageFindQuery("OrbitFindMarker")
       try await wait("viewport probe Find result") { first.store.pageFind?.canMove == true }
+      await waitForResizeEvent(tabID: firstTab, after: sidebarShown.resizeEventCount)
       try await settleViewportLayout(first)
       let findOpen = try await viewportSample("find-open", context: first, tabID: firstTab)
       samples.append(findOpen)
       first.store.dismissPageFind()
+      await waitForResizeEvent(tabID: firstTab, after: findOpen.resizeEventCount)
       try await settleViewportLayout(first)
       let findClosed = try await viewportSample("find-closed", context: first, tabID: firstTab)
       let secondAfterFind = try await viewportSample(
@@ -765,6 +773,10 @@ final class NativeHostProbe {
           && findClosed.containerWithinVisibleHosting
           && findOpen.containerFitsExpectedPageWidth
           && findClosed.containerFitsExpectedPageWidth
+          && NativeHostViewportValidation.deliveredResizeEvent(
+            from: sidebarShown.resizeEventCount, to: findOpen.resizeEventCount)
+          && NativeHostViewportValidation.deliveredResizeEvent(
+            from: findOpen.resizeEventCount, to: findClosed.resizeEventCount)
           && viewportSizeMatches(secondAfterFind, secondOriginal),
         "Find visibility changes first-window viewport while preserving second window.",
         checks: &viewportChecks)

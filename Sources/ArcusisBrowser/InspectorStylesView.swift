@@ -226,7 +226,7 @@ struct InspectorStylesView: View {
           .environment(\.layoutDirection, .leftToRight)
           .onSubmit(commitNewRule)
         HStack {
-          Button(InspectorL10n.string("Cancel")) {
+          Button(InspectorL10n.string("Cancel"), role: .cancel) {
             showNewRule = false
             newSelector = ""
           }
@@ -342,7 +342,7 @@ struct InspectorStylesView: View {
         Toggle("!important", isOn: $draftImportant).toggleStyle(.checkbox)
           .font(.system(size: 11, design: .monospaced))
         Spacer()
-        Button(InspectorL10n.string("Cancel")) { clearDraft() }
+        Button(InspectorL10n.string("Cancel"), role: .cancel) { clearDraft() }
         Button(InspectorL10n.string("Apply")) { commitDraft(rule, declaration) }
           .disabled(trimmed(draftName).isEmpty || model.busy)
       }.controlSize(.small).font(.system(size: 11))
@@ -365,7 +365,7 @@ struct InspectorStylesView: View {
         .textFieldStyle(.roundedBorder)
         .onSubmit { commitAddedProperty(rule) }
         HStack {
-          Button(InspectorL10n.string("Cancel")) { clearAddedProperty() }
+          Button(InspectorL10n.string("Cancel"), role: .cancel) { clearAddedProperty() }
           Spacer()
           Button(InspectorL10n.string("Apply")) { commitAddedProperty(rule) }
             .disabled(trimmed(addedName).isEmpty || trimmed(addedValue).isEmpty || model.busy)

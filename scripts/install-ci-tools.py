@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import platform
+import stat
 import tarfile
 import time
 import urllib.error
@@ -27,7 +28,9 @@ def binary_from_archive(payload: bytes, name: str, digest: str) -> bytes:
     if zipfile.is_zipfile(io.BytesIO(payload)):
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
             members = [item for item in archive.infolist() if Path(item.filename).name == name]
-            if len(members) != 1 or members[0].is_dir() or members[0].file_size > 100_000_000:
+            if (len(members) != 1 or members[0].is_dir()
+                    or stat.S_ISLNK(members[0].external_attr >> 16)
+                    or members[0].file_size > 100_000_000):
                 raise ValueError(f"Invalid binary member for {name}")
             return archive.read(members[0])
     with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:

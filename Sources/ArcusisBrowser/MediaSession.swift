@@ -107,7 +107,8 @@ struct MediaSessionState: Equatable, Sendable {
 
   private static func artworkURL(_ value: Any?) -> URL? {
     guard let text = value as? String, let url = URL(string: text),
-      ["http", "https"].contains(url.scheme?.lowercased())
+      ["http", "https"].contains(url.scheme?.lowercased()),
+      let host = url.host(), !host.isEmpty, url.user == nil, url.password == nil
     else { return nil }
     return url
   }

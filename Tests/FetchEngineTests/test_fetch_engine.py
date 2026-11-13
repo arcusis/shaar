@@ -217,6 +217,29 @@ done
         self.assertEqual(sentinel.read_text(), "preserve")
         self.assertFalse(self.tool_log.exists())
 
+    def test_failed_or_mismatched_download_removes_partial_archive(self):
+        partial = Path(str(self.archive) + ".partial")
+        for case, status in (("curl failure", 22), ("checksum mismatch", 0)):
+            with self.subTest(case=case):
+                self.archive.unlink(missing_ok=True)
+                partial.unlink(missing_ok=True)
+                body = f'''while (($#)); do
+  if [[ "$1" == --output ]]; then
+    shift
+    printf 'wrong archive bytes' > "$1"
+    exit {status}
+  fi
+  shift
+done
+exit 99
+'''
+                self._tool("curl", body)
+
+                result = self._run()
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(partial.exists())
+
     def test_failed_framework_extraction_removes_staging_directory(self):
         shutil.rmtree(self.destination)
         with tarfile.open(self.archive, "w:xz", format=tarfile.PAX_FORMAT) as archive:

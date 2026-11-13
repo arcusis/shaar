@@ -34,10 +34,20 @@ fi
 verify() { [[ $(shasum -a 256 "$1" | cut -d ' ' -f 1) == "$checksum" ]]; }
 if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   echo "Fetching pinned Shaar engine $tag..." >&2
-  curl --fail --location --connect-timeout 30 --max-time 900 --retry 3 --retry-max-time 180 \
+  if curl --fail --location --connect-timeout 30 --max-time 900 --retry 3 --retry-max-time 180 \
     "https://github.com/arcusis/shaar/releases/download/$tag/$asset" \
-    --output "$archive.partial" >&2
-  verify "$archive.partial" || { echo 'Engine checksum mismatch; refusing extraction.' >&2; exit 1; }
+    --output "$archive.partial" >&2; then
+    :
+  else
+    status=$?
+    rm -f "$archive.partial"
+    exit "$status"
+  fi
+  if ! verify "$archive.partial"; then
+    rm -f "$archive.partial"
+    echo 'Engine checksum mismatch; refusing extraction.' >&2
+    exit 1
+  fi
   mv "$archive.partial" "$archive"
 fi
 destination="$cache/${checksum:0:16}"

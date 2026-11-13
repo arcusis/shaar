@@ -28,6 +28,7 @@ struct PageFindBar: View {
         .foregroundStyle(state.matchCount == 0 && !state.searching ? .primary : .secondary)
         .lineLimit(1)
         .accessibilityLabel(state.status)
+        .accessibilityAddTraits(.updatesFrequently)
       Button {
         if isCurrent { store.movePageFind(forward: false) }
       } label: {

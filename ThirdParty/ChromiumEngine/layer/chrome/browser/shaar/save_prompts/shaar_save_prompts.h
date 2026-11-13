@@ -28,6 +28,8 @@ constexpr int kDecisionNever = 3;
 // Chromium calls this instead of opening a toolbar bubble. The callback runs
 // once, including when the offer is declined immediately. True means the offer
 // was delivered and the callback will run later.
+void SupersedeSavePrompts(content::WebContents* contents);
+
 bool OfferSavePrompt(content::WebContents* contents,
                      const char* prompt,
                      const char* detail,

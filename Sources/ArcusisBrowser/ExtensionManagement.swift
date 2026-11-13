@@ -292,7 +292,7 @@ extension ARCChromiumRuntime {
   /// Runs one extension-management operation; the bridge builds the script from fixed templates.
   func manageExtensions(
     _ operation: ExtensionManagementOperation, profileID: UUID,
-    completion: @escaping (String?) -> Void
+    completion: @escaping @Sendable (String?) -> Void
   ) {
     manageExtensions(
       forProfileID: profileID.uuidString, operation: operation.bridgeOperation,

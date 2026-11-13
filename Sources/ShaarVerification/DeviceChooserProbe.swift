@@ -12,6 +12,12 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum DeviceChooserProbePolicy {
+  static func missingChooserError(transport: String) -> String? {
+    transport == "usb" ? "The WebUSB request settled without a native device chooser." : nil
+  }
+}
+
 /// Hidden proof that Web Serial, Web Bluetooth, Web USB, and Web HID call the real navigator
 /// APIs and return without freezing the main thread. A sheet appears only when the engine
 /// sends a device-chooser permission event. Serial, Bluetooth, and USB reject with
@@ -161,6 +167,12 @@ final class DeviceChooserProbe {
       }
       guard stall < 1.5 else {
         finish(error: "\(transport) stalled the main thread for \(stall) seconds.")
+        return
+      }
+      if engineSheet == nil, let error = DeviceChooserProbePolicy.missingChooserError(
+        transport: transport)
+      {
+        finish(error: error)
         return
       }
       let unavailable: Bool

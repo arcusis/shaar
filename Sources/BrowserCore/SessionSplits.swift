@@ -21,10 +21,13 @@ extension BrowserSession {
           $0.id == folderID && (pinned == nil || pinned == $0.isPinned)
         })
     else { return false }
+    guard let firstTabID = split.tabIDs.first,
+      let firstTab = source.tabs.first(where: { $0.id == firstTabID })
+    else { return false }
     let destinationPinned =
       folderID.flatMap { folder in
         destination.folders.first { $0.id == folder }?.isPinned
-      } ?? pinned ?? source.tabs.first { $0.id == split.tabIDs[0] }!.isPinned
+      } ?? pinned ?? firstTab.isPinned
     if let targetID {
       guard
         destination.tabs.contains(where: {
@@ -71,7 +74,7 @@ extension BrowserSession {
   ) -> Bool {
     guard tabID != target, let index = spaces.firstIndex(where: { $0.id == spaceID }),
       spaces[index].tabs.contains(where: { $0.id == tabID }),
-      spaces[index].tabs.contains(where: { $0.id == target })
+      let targetTab = spaces[index].tabs.first(where: { $0.id == target })
     else { return false }
     var splits = spaces[index].splits
     if let existing = splits.firstIndex(where: { $0.tabIDs.contains(tabID) }),
@@ -90,7 +93,6 @@ extension BrowserSession {
     }
     spaces[index].splits = splits
     spaces[index].reconcileSplits()
-    let targetTab = spaces[index].tabs.first { $0.id == target }!
     if let joined = spaces[index].splits.first(where: { $0.tabIDs.contains(target) }) {
       for position in spaces[index].tabs.indices
       where joined.tabIDs.contains(spaces[index].tabs[position].id) {

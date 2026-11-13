@@ -19,12 +19,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def extracted_paths(document: dict, root: Path) -> set[str]:
     paths = set()
-    rows = document["#select"]["tuples"]
+    selection = document.get("#select") if isinstance(document, dict) else None
+    rows = selection.get("tuples") if isinstance(selection, dict) else None
     if not isinstance(rows, list):
         raise ValueError("Extracted-file report has no tuples")
-    for row in rows:
+    for index, row in enumerate(rows):
+        if not isinstance(row, list) or not row or not isinstance(row[0], dict):
+            raise ValueError(f"Extracted-file tuple {index} is malformed")
         entity = row[0]
-        label = entity["label"]
+        label = entity.get("label")
+        if not isinstance(label, str):
+            raise ValueError(f"Extracted-file tuple {index} has no string label")
         location = entity.get("url", {})
         candidates = [label, location.get("uri", "") if isinstance(location, dict) else location]
         for candidate in candidates:
@@ -54,7 +59,12 @@ def main() -> int:
     options = parser.parse_args()
     expected = swift_source_files(ROOT, options.scope, tracked=False,
                                   include_build_inputs=options.scope == "full")
-    missing = missing_sources(json.loads(options.report.read_text()), expected, ROOT)
+    try:
+        document = json.loads(options.report.read_text(encoding="utf-8"))
+        missing = missing_sources(document, expected, ROOT)
+    except (OSError, UnicodeError, ValueError) as error:
+        print(f"Invalid CodeQL extraction report: {error}", file=sys.stderr)
+        return 2
     result = {"scope": options.scope, "expected": len(expected), "missing": missing, "revision": os.environ.get("GITHUB_SHA", "local")}
     options.report.with_name("coverage.json").write_text(json.dumps(result, indent=2) + "\n")
     message = f"Swift CodeQL ({options.scope}): {len(expected) - len(missing)}/{len(expected)} tracked source files extracted"

@@ -979,6 +979,11 @@ class EngineTransferTests(unittest.TestCase):
 
 
 class SwiftExtractionTests(unittest.TestCase):
+    def test_malformed_extraction_tuple_fails_with_a_value_error(self):
+        report = {"#select": {"tuples": [[]]}}
+        with self.assertRaisesRegex(ValueError, "tuple 0 is malformed"):
+            EXTRACTION.extracted_paths(report, Path("/checkout"))
+
     def test_missing_source_fails_even_when_other_modules_have_more_files(self):
         root = Path("/checkout")
         report = {"#select": {"tuples": [[{"label": "/checkout/Sources/Core/One.swift"}, "extracted"],

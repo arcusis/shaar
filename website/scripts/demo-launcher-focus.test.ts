@@ -8,6 +8,15 @@ import { parseHTML } from "linkedom";
 import { ShaarDemo } from "../src/components/demo";
 import { initializeDemo } from "../src/demo";
 
+test("address launcher keeps its visible host as its accessible name", () => {
+  const dom = parseHTML(ShaarDemo());
+  const trigger = dom.document.querySelector<HTMLButtonElement>(".demo-address");
+
+  assert.ok(trigger);
+  assert.equal(trigger.getAttribute("aria-label"), null);
+  assert.equal(trigger.querySelector("[data-host]")?.textContent, "arcusis.com");
+});
+
 test("Escape from the search launcher restores focus to its trigger", () => {
   const dom = parseHTML(ShaarDemo());
   Object.assign(globalThis, {

@@ -19,6 +19,7 @@ class FallbackPageVisibilityTests(unittest.TestCase):
         source = (ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm").read_text()
         self.assertIn("FallbackSelectionTracksOwningWindowVisibility", source)
         self.assertIn("FallbackSelectionDeliversOnlyRealVisibilityChanges", source)
+        self.assertIn("HostTracksWindowOcclusionWithoutOrderingIt", source)
         self.assertIn("document.addEventListener('visibilitychange'", source)
         self.assertIn("window.visibilityChangeCount", source)
         for state in ("HIDDEN", "VISIBLE", "OCCLUDED"):

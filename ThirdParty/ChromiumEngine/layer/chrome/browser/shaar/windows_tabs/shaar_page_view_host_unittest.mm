@@ -103,16 +103,22 @@ TEST_F(ShaarTabVisibilityTest, HostTracksWindowOcclusionWithoutOrderingIt) {
   PageViewHost host(NSMakeRect(0, 0, 800, 600), window);
   host.SetSelectedWebContents(web_contents());
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "window.visibilityChangeCount = 0;"
+      "document.addEventListener('visibilitychange', () => ++window.visibilityChangeCount);"));
   window.probeVisible = YES;
   window.probeOcclusion = NSWindowOcclusionStateVisible;
   host.RefreshVisibility();
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.visibilityChangeCount").ExtractInt(), 1);
   window.probeOcclusion = 0;
   host.RefreshVisibility();
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::OCCLUDED);
   window.probeMiniaturized = YES;
   host.RefreshVisibility();
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.visibilityChangeCount").ExtractInt(), 2);
 }
 
 TEST(ShaarPageViewHostTest, DockedFrontendResizesAndClosesWithoutClosingHost) {

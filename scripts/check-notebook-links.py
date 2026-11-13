@@ -82,6 +82,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--notebook", type=Path, default=DEFAULT_NOTEBOOK)
     args = parser.parse_args()
+    if args.notebook.is_symlink():
+        print(f"Notebook root must not be a symlink: {args.notebook}", file=sys.stderr)
+        return 1
     try:
         return check_notebook(args.notebook.resolve())
     except (OSError, UnicodeError) as error:

@@ -90,6 +90,22 @@ class NotebookLinksTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("Notebook contains symlink: Linked.md", result.stderr)
 
+    def test_symlinked_notebook_root_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "Notebook"
+            notebook.mkdir()
+            (notebook / "_INDEX_Main.md").write_text("[[Note]]", encoding="utf-8")
+            (notebook / "Note.md").write_text("# Note", encoding="utf-8")
+            linked = root / "linked-notebook"
+            linked.symlink_to(notebook, target_is_directory=True)
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--notebook", str(linked)],
+                cwd=directory, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Notebook root must not be a symlink", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

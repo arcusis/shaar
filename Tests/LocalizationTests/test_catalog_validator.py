@@ -239,6 +239,13 @@ class CatalogValidatorTests(unittest.TestCase):
         catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(encoding="utf-8"))
         self.assertEqual(catalog["strings"]["Folder name"]["localizations"]["he"]["stringUnit"]["value"], "שם התיקייה")
 
+    def test_recent_history_plural_describes_pages_opened_recently(self):
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(encoding="utf-8"))
+        forms = catalog["strings"]["%d recent pages"]["localizations"]["he"]["variations"]["plural"]
+        self.assertEqual(forms["one"]["stringUnit"]["value"], "דף אחד שנפתח לאחרונה")
+        self.assertEqual(forms["two"]["stringUnit"]["value"], "שני דפים שנפתחו לאחרונה")
+        self.assertEqual(forms["other"]["stringUnit"]["value"], "%d דפים שנפתחו לאחרונה")
+
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"
         data = json.loads(path.read_text(encoding="utf-8"))

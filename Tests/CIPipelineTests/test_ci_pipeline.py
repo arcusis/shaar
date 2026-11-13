@@ -806,6 +806,11 @@ class SupplyChainTests(unittest.TestCase):
         self.assertIn("python3 scripts/install-ci-python.py 3.13", setup)
         self.assertIn("ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}", setup)
         self.assertIn("scripts/install-ci-tools.py --cache-directory build/ci-tool-archives", setup)
+        archive_cache = setup.split("- name: Cache checksum-pinned fast-check archives", 1)[1].split(
+            "- name:", 1
+        )[0]
+        self.assertIn("restore-keys: |", archive_cache)
+        self.assertIn("ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}-", archive_cache)
 
     def test_engine_download_has_connection_and_retry_timeouts(self):
         fetch = (ROOT / "scripts/fetch-engine.sh").read_text()

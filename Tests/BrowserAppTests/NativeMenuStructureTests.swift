@@ -119,6 +119,9 @@ import Testing
   #expect(item(.history)?.menu?.title == "History")
   #expect(item(.history)?.title == "Show All History")
   #expect(item(.history)?.representedObject as? String == BrowserMenuCommand.history.rawValue)
+  #expect(item(.back)?.menu?.title == "History")
+  #expect(item(.back)?.keyEquivalent == "[")
+  #expect(item(.back)?.keyEquivalentModifierMask == .command)
   #expect(item(.recentlyClosed)?.menu?.title == "History")
   #expect(item(.downloads)?.menu?.title == "File")
   #expect(item(.extensions)?.menu?.title == "Extensions")
@@ -144,6 +147,17 @@ import Testing
 @Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: false) == "Enter Full Screen")
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: true) == "Exit Full Screen")
+}
+
+@Test @MainActor func backMenuCommandRoutesOnlyWhenTheSelectedPageCanGoBack() {
+  let tabID = UUID()
+  var routedTab: String?
+  #expect(
+    NativeBrowserHost.routeBack(tabID: tabID, canGoBack: true) { routedTab = $0 })
+  #expect(routedTab == tabID.uuidString)
+  #expect(!NativeBrowserHost.routeBack(tabID: tabID, canGoBack: false) { routedTab = $0 })
+  #expect(!NativeBrowserHost.routeBack(tabID: nil, canGoBack: true) { routedTab = $0 })
+  #expect(routedTab == tabID.uuidString)
 }
 
 @Test @MainActor func nativeMenuRetainsKeyEquivalentsAndEditResponderChain() {

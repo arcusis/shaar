@@ -12,7 +12,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
-  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
+  case back, find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
     developerTools, chromiumDeveloperTools
   case nextWindow, previousWindow
   case splitView
@@ -179,6 +179,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   static func copyURLMenuAvailable(in store: BrowserStore?, menusEnabled: Bool) -> Bool {
     menusEnabled && store?.session.selectedPage != nil
+  }
+
+  static func routeBack(tabID: UUID?, canGoBack: Bool, goBack: (String) -> Void) -> Bool {
+    guard canGoBack, let tabID else { return false }
+    goBack(tabID.uuidString)
+    return true
   }
 
   static func settingsSpaceSelectionShouldPresentWindow(in presentation: Presentation) -> Bool {
@@ -380,6 +386,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let store = context.store
     guard store.sheet == nil, context.window.attachedSheet == nil else { return false }
     switch command {
+    case .back:
+      guard let id = store.session.selectedPage?.tab.id else { return false }
+      return context.engine.pages[id]?.canGoBack == true
     case .closeTab:
       return !store.commandIsOpen || store.session.selectedPage == nil
     case .find: return store.canFindCurrentPage
@@ -569,6 +578,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       } else {
         requestCloseWindow(context)
       }
+    case .back:
+      let id = store.session.selectedPage?.tab.id
+      _ = Self.routeBack(
+        tabID: id, canGoBack: id.flatMap { context.engine.pages[$0]?.canGoBack } == true
+      ) { context.engine.runtime.goBack(inTabID: $0) }
     case .addFavorite: _ = store.addCurrentPageAsFavorite()
     case .closeWindow: requestCloseWindow(context)
     case .reopenClosed: store.reopenLastClosedTab()
@@ -1355,6 +1369,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.createFolder, "New Folder", to: tabs)
     add(.reopenClosed, "Reopen last closed tab", to: tabs)
     let history = section("History")
+    add(.back, "Back", to: history)
     add(.recentlyClosed, "Recently closed…", to: history)
     add(.history, "Show All History", to: history)
     let bookmarks = section("Bookmarks")

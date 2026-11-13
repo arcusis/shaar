@@ -618,6 +618,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0146-shaar-hidden-trusted-scroll.patch",
       "sha256": "e70b7542bb0c220c773f1af92d7a8a4be0066f24ffdacbf0d57e0c03efc89c37"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0125-shaar-device-chooser.patch",
+      "sha256": "33557b1746abbcf5fb60c9b0d8c5fa2b87de835b7208b7fc71a0294c76f051f0"
     }
   ],
   "devtoolsFrontend157": {

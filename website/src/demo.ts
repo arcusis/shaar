@@ -100,6 +100,7 @@ export function initializeDemo(): void {
   const openLauncher = (trigger: HTMLElement) => {
     launcherTrigger = trigger;
     popover.hidden = true;
+    controlsButton.setAttribute("aria-expanded", "false");
     launcher.hidden = false;
     input.setAttribute("aria-expanded", "true");
     input.value = "";

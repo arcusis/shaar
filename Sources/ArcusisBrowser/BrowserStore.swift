@@ -1015,6 +1015,13 @@ final class BrowserStore {
     return true
   }
 
+  func canPresentWebShare(_ request: WebShareRequest) -> Bool {
+    sheet?.id == request.sheetID
+      && presentedConsentID == request.sheetID
+      && webShareRequestIsCurrent(request)
+      && rendererFailures[request.tabID] == nil
+  }
+
   @discardableResult
   func requestPrint(_ request: PrintRequest) -> Bool {
     guard printRequestIsCurrent(request) else { return false }

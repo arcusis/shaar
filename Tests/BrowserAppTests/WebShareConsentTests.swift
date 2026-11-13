@@ -268,6 +268,19 @@ struct WebShareConsentTests {
     #expect(outcome == .cancelled)
   }
 
+  @Test func pickerPresentationRequiresTheCurrentPresentedFrame() throws {
+    let store = openedStore()
+    let share = try request(store)
+    #expect(store.requestWebShare(share))
+    #expect(store.canPresentWebShare(share))
+
+    store.rememberPermissionFrame(
+      share.tabID, frameID: "fedcba9876543210fedcba9876543210",
+      origin: URL(string: "https://other.example")!)
+
+    #expect(!store.canPresentWebShare(share))
+  }
+
   @Test func stalePageAndRendererFailureCancelTheShare() throws {
     let store = openedStore()
     let stale = try request(store)

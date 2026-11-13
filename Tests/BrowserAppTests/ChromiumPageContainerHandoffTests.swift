@@ -201,6 +201,10 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertTrue(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tabID, in: window))
     XCTAssertTrue(page.superview === container)
     XCTAssertTrue(container.pageView === page)
+
+    XCTAssertFalse(container.select(nil, tabID: tabID, liveTabs: []))
+    XCTAssertFalse(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tabID, in: window))
+    XCTAssertNil(page.superview)
   }
 
   func testContainerLayoutKeepsNativeDockClickAreaUncovered() {

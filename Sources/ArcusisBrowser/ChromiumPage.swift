@@ -40,7 +40,8 @@ final class ChromiumPageContainerView: NSView {
         .filter({ $0.shownTabID == tabID && $0.window === window })
         .max(by: { $0.selectionOrder < $1.selectionOrder })
     else { return false }
-    _ = target.attach(page)
+    _ = target.select(
+      page, tabID: tabID, liveTabs: Set(target.retainedPages.keys).union([tabID]))
     page.isHidden = false
     return page.superview === target && page.window === window
   }

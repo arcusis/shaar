@@ -142,6 +142,31 @@ import Testing
     }
   }
 
+  @Test func recorderRejectsInvalidSpaceWarmupBreakdowns() {
+    var recorder = SwitchProbeMetricsRecorder()
+    #expect(throws: SwitchProbeMetricsError.self) {
+      try recorder.recordSpaceWarmup(
+        iteration: 1, latencySeconds: 0.01, storeUpdateSeconds: .nan,
+        residentMemoryBytes: nil)
+    }
+    #expect(throws: SwitchProbeMetricsError.self) {
+      try recorder.recordSpaceWarmup(
+        iteration: 1, latencySeconds: 0.01, engineSelectionSeconds: -0.001,
+        residentMemoryBytes: nil)
+    }
+    #expect(throws: SwitchProbeMetricsError.self) {
+      try recorder.recordSpaceWarmup(
+        iteration: 1, latencySeconds: 0.01, firstPaintSeconds: .infinity,
+        residentMemoryBytes: nil)
+    }
+    #expect(throws: SwitchProbeMetricsError.self) {
+      try recorder.recordSpaceWarmup(
+        iteration: 1, latencySeconds: 0.01, firstPaintSeconds: Double.greatestFiniteMagnitude,
+        residentMemoryBytes: nil)
+    }
+    #expect(recorder.spaceWarmupSamples.isEmpty)
+  }
+
   @Test func budgetRequiresCompleteSamplesAndRejectsSlowP95() throws {
     var recorder = SwitchProbeMetricsRecorder()
     try recordSpaceWarmups(&recorder, latencies: [0.3, 0.9])

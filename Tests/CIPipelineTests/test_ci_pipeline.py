@@ -49,6 +49,19 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_ci_gate_validates_needs_json_and_stage_results(self):
+        for raw, message in (
+            ("{", "CI_NEEDS is not valid JSON"),
+            ("[]", "CI_NEEDS must be a JSON object"),
+            ('{"engine": []}', "CI_NEEDS entry 'engine' must contain a string result"),
+            ('{"engine": {}}', "CI_NEEDS entry 'engine' must contain a string result"),
+            ('{"engine": {"result": 1}}', "CI_NEEDS entry 'engine' must contain a string result"),
+        ):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError, message):
+                GATE.parse_needs(raw)
+        self.assertEqual(GATE.parse_needs('{"engine": {"result": "success"}}'),
+                         {"engine": {"result": "success"}})
+
     def test_ci_evidence_collection_runs_after_failure_but_not_cancellation(self):
         action = (ROOT / ".github/actions/ci-evidence/action.yml").read_text()
         collector = action.split("    - name: Collect scoped native probe reports\n", 1)[1]

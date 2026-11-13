@@ -68,6 +68,28 @@ struct BrowserWorkspaceStoreTests {
         sourceStore: privateStore, destinationStore: destination))
   }
 
+  @Test func crossWindowDropIntoPinnedFolderIsRefused() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let sourceSpaceID = source.session.selectedSpaceID
+    let tabID = try #require(source.session.selectedSpace.tabs.first(where: { !$0.isPinned })?.id)
+    let folderID = try #require(
+      destination.createFolder(
+        name: "Pinned destination", in: destination.session.selectedSpaceID, section: .pinned))
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: sourceSpaceID, tabID: tabID)
+
+    #expect(
+      !destination.acceptSidebarDrop(
+        transfer, into: destination.session.selectedSpaceID, folderID: folderID))
+    #expect(source.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
+    #expect(!destination.session.spaces.flatMap(\.tabs).contains { $0.id == tabID })
+    #expect(destination.sidebarNotice != nil)
+  }
+
   @Test func sourceWindowCanCloseImmediatelyAfterTransfer() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

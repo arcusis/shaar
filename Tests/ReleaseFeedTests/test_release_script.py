@@ -85,6 +85,23 @@ class ReleaseScriptOptionTests(unittest.TestCase):
         self.assertIn(guard, source)
         self.assertLess(source.index(guard), source.index('sign() {'))
 
+    def test_every_release_signing_path_enables_and_verifies_hardened_runtime(self):
+        source = SCRIPT.read_text()
+
+        self.assertIn(
+            'sign() { codesign --force --options runtime --timestamp '
+            '--sign "$sign_identity" "$@"; }',
+            source,
+        )
+        self.assertIn(
+            "echo '==> Signing nested code inside out (Developer ID + hardened runtime)'", source
+        )
+        self.assertIn(
+            'echo "==> Asserting team $team_id and hardened runtime on all bundled code"', source
+        )
+        self.assertIn("grep -Eq 'flags=0x[0-9a-f]+\\([^)]*runtime'", source)
+        self.assertIn("((unsigned == 0)) ||", source)
+
     def test_missing_signing_identity_stops_before_build(self):
         result = self._run("--notes", str(self.notes))
 

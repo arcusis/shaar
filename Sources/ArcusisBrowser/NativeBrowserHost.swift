@@ -1310,7 +1310,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.reopenClosed, "Reopen last closed tab", to: tabs)
     let history = section("History")
     add(.recentlyClosed, "Recently closed…", to: history)
-    add(.history, "History…", to: history)
+    add(.history, "Show All History", to: history)
     let bookmarks = section("Bookmarks")
     add(.bookmarkPage, "Bookmark this page", to: bookmarks)
     add(.bookmarks, "Bookmarks…", to: bookmarks)

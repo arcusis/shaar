@@ -43,6 +43,11 @@ class PackagedResourceSourceTests(unittest.TestCase):
         self.assertEqual(len(bare), 1)
         self.assertIn("PackagedResourceBundle.resolve", direct[0])
 
+    def test_url_string_does_not_hide_module_reference_after_comment_marker(self):
+        source = 'let url = URL(string: "https://example.invalid")!; _ = Bundle.module'
+        violations = check.violations_in_source(source, "Sources/BrowserCore/Example.swift")
+        self.assertEqual(len(violations), 1)
+
     def test_shipping_scan_skips_verification_sources(self):
         roots = set(check.SHIPPING_SOURCE_ROOTS)
         self.assertNotIn("Sources/ShaarVerification", roots)

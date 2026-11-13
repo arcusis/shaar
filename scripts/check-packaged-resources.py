@@ -27,7 +27,21 @@ FALLBACK_CLOSURE = re.compile(r"\{\s*\.module\s*\}")
 
 
 def code_portion(line: str) -> str:
-    return line.split("//", 1)[0]
+    quoted = False
+    escaped = False
+    for index, character in enumerate(line):
+        if quoted:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                quoted = False
+        elif character == '"':
+            quoted = True
+        elif line.startswith("//", index):
+            return line[:index]
+    return line
 
 
 def violations_in_source(text: str, path: str) -> list[str]:

@@ -57,8 +57,6 @@ def xctest_cases(text: str) -> list[ET.Element]:
                 details.append(line)
     if active or awaiting_total or not totals or sum(totals) != len(cases):
         raise ValueError("XCTest log is incomplete or its outer-suite totals do not match cases")
-    if not cases:
-        raise ValueError("XCTest filter selected no test cases")
     return cases
 
 

@@ -57,8 +57,9 @@ struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
   var sheetID: String { "chooser-\(id)" }
 
   var displayOrigin: String {
-    guard let host = origin.host() else { return pageURL.host() ?? pageURL.absoluteString }
-    return origin.port.map { "\(host):\($0)" } ?? host
+    guard let host = origin.host() else { return pageURL.absoluteString }
+    let authority = origin.port.map { "\(host):\($0)" } ?? host
+    return "\(origin.scheme ?? "https")://\(authority)"
   }
 
   func matches(_ session: BrowserSession) -> Bool {

@@ -49,6 +49,18 @@ import Testing
   #expect(!first.isVisible && !second.isVisible && !third.isVisible)
 }
 
+@Test @MainActor func reopenClosedShortcutPrefersATabThenFallsBackToAWindow() {
+  #expect(
+    NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: true, hasClosedWindow: true)
+      == .reopenClosed)
+  #expect(
+    NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: true)
+      == .reopenClosedWindow)
+  #expect(
+    NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: false)
+      == nil)
+}
+
 @Test @MainActor func reopenClosedWindowCommandRoutesAndPreservesSnapshotOnAttachFailure() throws {
   let runtime = ARCChromiumRuntime()
   let workspace = try BrowserWorkspaceStore()
@@ -71,8 +83,9 @@ import Testing
   let windowIDs = workspace.workspace.windows.map(\.id)
 
   #expect(throws: (any Error).self) { try host.restore() }
+  #expect(host.canPerform(.reopenClosed))
   #expect(host.canPerform(.reopenClosedWindow))
-  host.perform(.reopenClosedWindow)
+  host.perform(.reopenClosed)
 
   #expect(host.lastError != nil)
   #expect(host.lastClosedWindowSnapshot == snapshot)
@@ -175,6 +188,9 @@ import Testing
   #expect(item("New Private Window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("New tab")?.keyEquivalent == "t")
   #expect(item(CommandPanel.searchPrompt)?.keyEquivalent == "l")
+  #expect(item("Reopen last closed tab")?.keyEquivalent == "t")
+  #expect(item("Reopen last closed tab")?.keyEquivalentModifierMask == [.command, .shift])
+  #expect(item("Reopen Last Closed Window")?.keyEquivalent.isEmpty == true)
   #expect(item("Close tab")?.keyEquivalentModifierMask == .command)
   #expect(item("Close window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("Find in Page…")?.keyEquivalent == "f")

@@ -938,7 +938,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         pin = json.loads(args.pin.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
         report = {"schema": 1, "archive_metadata_verified": False, "payload_match": False,
                   "source_provenance_unverified": True, "signature_verification_not_performed": True,
                   "archive_sha256": None, "members": [], "reason": "pin file unavailable or malformed"}

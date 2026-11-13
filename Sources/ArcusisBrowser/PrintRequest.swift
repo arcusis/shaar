@@ -93,7 +93,7 @@ struct PrintRequest: Identifiable, Equatable {
     guard let title = value as? String, title.utf8.count <= 2048 else { return nil }
     let scalars = title.unicodeScalars.map { scalar -> Unicode.Scalar in
       switch scalar.properties.generalCategory {
-      case .control, .format, .lineSeparator, .paragraphSeparator: return " "
+      case .control, .lineSeparator, .paragraphSeparator: return " "
       default: return Self.isBidirectionalControl(scalar) ? " " : scalar
       }
     }

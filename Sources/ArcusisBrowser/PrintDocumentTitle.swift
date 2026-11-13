@@ -20,7 +20,20 @@ enum PrintDocumentTitle {
     }
     let title = String(String.UnicodeScalarView(scalars))
       .split(whereSeparator: \.isWhitespace).joined(separator: " ")
-    return title.isEmpty ? productName : String(title.prefix(120))
+    guard !title.isEmpty, let boundedTitle = boundedFilenameTitle(title) else {
+      return productName
+    }
+    return boundedTitle
+  }
+
+  private static func boundedFilenameTitle(_ title: String) -> String? {
+    var result = ""
+    for character in title.prefix(120) {
+      let cluster = String(character)
+      guard result.utf8.count + cluster.utf8.count <= 180 else { break }
+      result.append(contentsOf: cluster)
+    }
+    return result.isEmpty ? nil : result
   }
 
   private static func isJoiner(_ scalar: Unicode.Scalar) -> Bool {

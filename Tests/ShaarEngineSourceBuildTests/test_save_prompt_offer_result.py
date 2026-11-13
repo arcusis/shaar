@@ -22,13 +22,17 @@ class SavePromptOfferResultTests(unittest.TestCase):
         end = source.index("shaar_error_code CompleteDecision(", start)
         offer = source[start:end]
 
-        result = offer.index(
-            "return emitted == SHAAR_OK && Pending().find(id) != Pending().end();"
+        result_line = next(
+            line.strip()
+            for line in offer.splitlines()
+            if line.lstrip().startswith("return emitted ==")
+        )
+        self.assertEqual(
+            result_line,
+            "return emitted == SHAAR_OK && Pending().find(id) != Pending().end();",
         )
         event = offer.index("const shaar_error_code emitted = shaar::EmitEvent(")
-        self.assertLess(event, result)
-        self.assertIn("emitted == SHAAR_OK", offer[result:])
-        self.assertIn("Pending().find(id) != Pending().end()", offer[result:])
+        self.assertLess(event, offer.index(result_line))
 
 
 if __name__ == "__main__":

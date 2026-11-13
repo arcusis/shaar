@@ -16,7 +16,7 @@ extension DeveloperPageModel {
 
   @discardableResult
   func createBugReport() async -> URL? {
-    guard !creatingBugReport else { return nil }
+    guard !closed, !creatingBugReport else { return nil }
     creatingBugReport = true
     reportFailure = nil
     reportURL = nil

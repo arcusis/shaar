@@ -8,6 +8,19 @@ import Testing
 
 @Suite @MainActor
 struct DeveloperBugReportModelTests {
+  @Test func closedModelDoesNotStartBugReport() async throws {
+    let model = DeveloperPageModel(
+      target: SiteControlTarget(
+        tabID: UUID(), profileID: UUID(),
+        url: try #require(URL(string: "https://example.test"))),
+      engine: nil)
+    model.close()
+
+    #expect(await model.createBugReport() == nil)
+    #expect(!model.creatingBugReport)
+    #expect(model.reportFailure == nil)
+  }
+
   @Test func reportPageURLRemovesCredentialsQueryAndFragment() {
     let raw =
       "https://report-user:fixture-password@report.localhost/page?token=fixture-token#fixture-fragment"

@@ -215,6 +215,23 @@ struct ShaarNavigationAdapterTests {
     }
   }
 
+  @Test func snapshotIntegerFieldsRejectBooleansAndFractions() {
+    let base = #"{"kind":"navigation","schemaVersion":1,"phase":"committed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
+    let failures = #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
+    let invalid = [
+      base.replacingOccurrences(of: #""schemaVersion":1"#, with: #""schemaVersion":true"#),
+      base.replacingOccurrences(of: #""generation":4"#, with: #""generation":true"#),
+      base.replacingOccurrences(of: #""generation":4"#, with: #""generation":4.5"#),
+      failures.replacingOccurrences(of: #""netError":-105"#, with: #""netError":true"#),
+      failures.replacingOccurrences(of: #""netError":-105"#, with: #""netError":-105.5"#),
+    ]
+    for payload in invalid {
+      #expect(throws: ShaarEngineError.self) {
+        try ShaarNavigationSnapshot.decode(Data(payload.utf8))
+      }
+    }
+  }
+
   @Test func shippingChoiceUsesShaar() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)
     #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) != nil)

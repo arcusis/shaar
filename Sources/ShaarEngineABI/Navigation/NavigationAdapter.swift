@@ -2,7 +2,22 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
+
+private func navigationInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
+
+private func navigationGeneration(_ value: Any?) -> UInt64? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return UInt64(exactly: number.doubleValue)
+}
 import ShaarEngineABIC
 
 public enum ShaarNavigationOperation: UInt32, Sendable {
@@ -310,10 +325,10 @@ public struct ShaarNavigationSnapshot: Equatable, Sendable {
     let allowed = required.union(["failure"])
     guard Set(object.keys).isSubset(of: allowed), required.isSubset(of: Set(object.keys)),
       object["kind"] as? String == "navigation",
-      object["schemaVersion"] as? Int == 1,
+      navigationInteger(object["schemaVersion"]) == 1,
       let phaseName = object["phase"] as? String, let phase = Phase(rawValue: phaseName),
       let navigationID = object["navigationID"] as? String, !navigationID.isEmpty,
-      let generation = object["generation"] as? UInt64, generation > 0,
+      let generation = navigationGeneration(object["generation"]), generation > 0,
       let loading = object["loading"] as? Bool,
       let canGoBack = object["canGoBack"] as? Bool,
       let canGoForward = object["canGoForward"] as? Bool,
@@ -326,7 +341,7 @@ public struct ShaarNavigationSnapshot: Equatable, Sendable {
     if let failure = object["failure"] {
       guard let details = failure as? [String: Any],
         Set(details.keys) == ["netError", "isMainFrame", "descriptionCode"],
-        let netError = details["netError"] as? Int,
+        let netError = navigationInteger(details["netError"]),
         let isMainFrame = details["isMainFrame"] as? Bool,
         let descriptionCode = details["descriptionCode"] as? String
       else { throw ShaarEngineError.invalidEvent("invalid navigation failure") }

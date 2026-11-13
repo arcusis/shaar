@@ -177,6 +177,26 @@ class CatalogValidatorTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('PanelsL10n.string("Could not run the extension. Try again.")', source)
+    def test_inspector_bug_report_failure_uses_hebrew_recovery_copy(self):
+        key = "Could not create the bug report. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן ליצור את דוח התקלה. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/DeveloperBugReportModel.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'InspectorToolsL10n.string("Could not create the bug report. Try again.")', source
+        )
+        self.assertNotIn("reportFailure = error.localizedDescription", source)
+
+
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Fixture.xcstrings"

@@ -237,6 +237,31 @@ TEST(ShaarPageViewHostTest, FocusUsesTheAttachedViewsKeyWindow) {
   [target close];
 }
 
+TEST_F(ShaarTabVisibilityTest, FocusForwardsToSelectedWebContents) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* tab = web_contents()->GetNativeView().GetNativeNSView();
+  ASSERT_TRUE(host.Attach(tab));
+  host.SetSelectedWebContents(web_contents());
+  ShaarFocusProbeWindow* target = [[ShaarFocusProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  target.releasedWhenClosed = NO;
+  target.contentView = tab;
+  web_contents()->WasShown();
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "window.pageFocusCount = 0;"
+      "window.addEventListener('focus', () => ++window.pageFocusCount);"));
+
+  ASSERT_TRUE(host.Focus(tab));
+  EXPECT_EQ(target.acceptedResponder, tab);
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.pageFocusCount").ExtractInt(), 1);
+  host.Detach(tab);
+  [target close];
+}
+
 TEST(ShaarPageViewHostTest, ReattachesSelectionAfterItsPreviousPresenterDetaches) {
   PageViewHost host(NSMakeRect(0, 0, 800, 600));
   NSView* tab = [[NSView alloc] initWithFrame:NSZeroRect];

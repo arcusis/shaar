@@ -283,7 +283,11 @@ bool PageViewHost::Focus(NSView* tab_view) {
   NSWindow* target = tab_view.window;
   if (!tab_view || selected_view_ != tab_view || !target.isKeyWindow)
     return false;
-  return [target makeFirstResponder:tab_view];
+  if (![target makeFirstResponder:tab_view])
+    return false;
+  if (content::WebContents* contents = selected_contents_.get())
+    contents->Focus();
+  return true;
 }
 
 }  // namespace shaar::windows_tabs

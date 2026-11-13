@@ -260,7 +260,7 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(backend.values[.camera] == .allow)
 }
 
-@MainActor @Test func cancelledPermissionWriteDoesNotPublishItsLateFailure() async {
+@MainActor @Test func cancelledPermissionWriteRestoresPriorChoiceWithoutPublishingLateFailure() async {
   let backend = FakeSiteBackend()
   let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
   await model.load()
@@ -275,7 +275,7 @@ private func target(_ address: String) -> SiteControlTarget {
   backend.finishFirstWrite?.resume()
   await write.value
 
-  #expect(model.permissionValues[.camera] != .allow)
+  #expect(model.permissionValues[.camera] == .block)
   #expect(model.failure == nil)
   #expect(model.savingPermissions.isEmpty)
 }

@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import signal
 import stat
 import subprocess
 import tempfile
@@ -101,19 +102,29 @@ def read_probe_file(path):
 
 def run_probe(command, environment, timeout):
     try:
-        return subprocess.run(
-            command, env=environment, capture_output=True, text=True,
-            timeout=timeout, check=False)
-    except subprocess.TimeoutExpired as error:
-        def text_output(value):
-            if isinstance(value, bytes):
-                return value.decode("utf-8", errors="replace")
-            return value or ""
-
-        return subprocess.CompletedProcess(
-            command, 124, text_output(error.stdout), text_output(error.stderr))
+        process = subprocess.Popen(
+            command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, start_new_session=True)
     except OSError as error:
         return subprocess.CompletedProcess(command, 126, "", str(error))
+
+    def text_output(value):
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return value or ""
+
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        stdout, stderr = process.communicate()
+        return subprocess.CompletedProcess(
+            command, 124, text_output(stdout), text_output(stderr))
+    return subprocess.CompletedProcess(
+        command, process.returncode, text_output(stdout), text_output(stderr))
 
 
 def read_evidence(path):

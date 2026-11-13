@@ -34,6 +34,25 @@ interface Bird {
   phase: number;
 }
 
+interface ScenePointer {
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+}
+
+export function resetPointerOnLeave(
+  pointer: ScenePointer,
+  reducedMotion: boolean,
+  wake: () => void,
+): void {
+  pointer.x = -9999;
+  pointer.y = -9999;
+  pointer.targetX = 0;
+  pointer.targetY = 0;
+  if (reducedMotion) wake();
+}
+
 const bladeShades = ["#4f8a2c", "#5c9733", "#6aa53b", "#3f7726", "#7cb247", "#8fbf55"];
 const flowerShades = ["#f7d54a", "#f6f2e4", "#ea8fb4", "#b39be2", "#f2a65a"];
 
@@ -527,12 +546,9 @@ export function startScene(
     pointer.targetY = (event.clientY / window.innerHeight - 0.5) * -1;
     if (reducedMotion) wake();
   });
-  frameElement.addEventListener("pointerleave", () => {
-    pointer.x = -9999;
-    pointer.y = -9999;
-    pointer.targetX = 0;
-    pointer.targetY = 0;
-  });
+  frameElement.addEventListener("pointerleave", () =>
+    resetPointerOnLeave(pointer, reducedMotion, wake),
+  );
   new IntersectionObserver(([entry]) => {
     visible = entry.isIntersecting && document.visibilityState === "visible";
     wake();

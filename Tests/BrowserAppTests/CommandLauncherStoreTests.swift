@@ -8,6 +8,15 @@ import Testing
 @testable import ArcusisBrowser
 @testable import BrowserCore
 
+@MainActor
+private final class LauncherCommandState {
+  var available: [LauncherCommand]
+
+  init(_ available: [LauncherCommand]) {
+    self.available = available
+  }
+}
+
 @Suite @MainActor
 struct CommandLauncherStoreTests {
   @Test func addressEditorSelectsCurrentURLForEditing() throws {
@@ -93,16 +102,16 @@ struct CommandLauncherStoreTests {
     let reopen = LauncherCommand(
       id: BrowserMenuCommand.reopenClosed.rawValue, title: "Reopen last closed tab",
       detail: "Tabs", symbol: "arrow.uturn.backward")
-    var available = [closeTab]
-    store.launcherActions = LauncherActions(available: { available }, run: { _ in })
+    let commandState = LauncherCommandState([closeTab])
+    store.launcherActions = LauncherActions(available: { commandState.available }, run: { _ in })
     store.showCommand()
     store.commandFilter = .actions
     #expect(store.results.map(\.title) == ["Close tab"])
 
-    available = [closeTab.retitled("Close window"), reopen]
+    commandState.available = [closeTab.retitled("Close window"), reopen]
     #expect(store.results.map(\.title) == ["Close window", "Reopen last closed tab"])
 
-    available = []
+    commandState.available = []
     #expect(store.results.isEmpty)
   }
 

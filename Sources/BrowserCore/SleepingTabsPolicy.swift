@@ -82,6 +82,9 @@ public struct SleepingTabsPolicy: Equatable, Sendable {
     if host.hasPrefix("www.") {
       host.removeFirst(4)
     }
+    if host.hasSuffix(".") {
+      host.removeLast()
+    }
     return host
   }
 

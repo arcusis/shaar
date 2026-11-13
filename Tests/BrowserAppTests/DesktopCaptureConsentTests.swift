@@ -327,8 +327,11 @@ struct DesktopCaptureConsentTests {
     let regular = store()
     let regularTab = try #require(regular.session.selectedSpace.selectedTab)
     let privateTab = UUID()
-    let privateSession = try BrowserSession.privateWindow(
+    var privateSession = try BrowserSession.privateWindow(
       sourceProfileID: regular.session.selectedSpace.profileID, firstTabID: privateTab)
+    let updatedPrivateTab = privateSession.updateTab(
+      privateTab, url: URL(string: "https://private.example")!, title: "Private page")
+    #expect(updatedPrivateTab)
     let listed = DesktopCaptureCatalog.tabSources(
       session: privateSession, profileID: privateSession.selectedSpace.profileID,
       requestingTabID: privateTab)
@@ -369,6 +372,26 @@ struct DesktopCaptureConsentTests {
     let empty = DesktopCaptureCatalog.listing(tabs: [], screens: [], screenAccessFailed: true)
     #expect(empty.error == DesktopCaptureCatalog.screenAccessNote)
     #expect(empty.sources.isEmpty)
+  }
+
+  @Test func tabSourcesExcludeBrowserInternalPages() throws {
+    var session = store().session
+    let profileID = session.selectedSpace.profileID
+    let requestingTabID = try #require(session.selectedSpace.selectedTab?.id)
+    #expect(session.insertNativeTab(
+      BrowserTab(url: URL(string: "about:blank")!), profileID: profileID,
+      openerID: requestingTabID, foreground: false) != nil)
+    #expect(session.insertNativeTab(
+      BrowserTab(url: URL(string: "devtools://devtools/bundled/js_app.html")!),
+      profileID: profileID, openerID: requestingTabID, foreground: false) != nil)
+
+    let sources = DesktopCaptureCatalog.tabSources(
+      session: session,
+      profileID: profileID,
+      requestingTabID: requestingTabID
+    )
+
+    #expect(sources.map(\.id) == ["tab:\(requestingTabID.uuidString):0"])
   }
 
   @Test func tabSourceFallsBackToPageHostWhenSavedTitleIsBlank() throws {

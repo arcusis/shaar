@@ -29,7 +29,8 @@ enum DesktopCaptureCatalog {
     var others: [DesktopCaptureSource] = []
     var seen: Set<UUID> = []
     for space in session.spaces where space.profileID == profileID {
-      for tab in space.tabs where seen.insert(tab.id).inserted {
+      for tab in space.tabs
+      where NavigationInput.isWebURL(tab.url) && seen.insert(tab.id).inserted {
         let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = title.isEmpty ? tab.url.host() ?? tab.url.absoluteString : title
         let source = DesktopCaptureSource(

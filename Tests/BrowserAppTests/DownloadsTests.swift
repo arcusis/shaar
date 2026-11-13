@@ -141,7 +141,7 @@ extension DownloadsTests {
     defer { try? FileManager.default.removeItem(at: root) }
     let file = root.appending(path: "file.txt")
     try Data("contents".utf8).write(to: file)
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in root })
     let profile = UUID()
     var finished = record(state: "finished")
     finished["path"] = file.path
@@ -155,6 +155,22 @@ extension DownloadsTests {
     try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
     #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
     try FileManager.default.removeItem(at: file)
+    #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
+  }
+
+  @Test func dragRejectsEngineRecordsOutsideTheProfileDownloadsDirectory() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let downloads = root.appending(path: "Downloads", directoryHint: .isDirectory)
+    let outside = root.appending(path: "private.txt")
+    try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+    try Data("private".utf8).write(to: outside)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let model = DownloadsModel(profileDirectory: { _ in downloads })
+    let profile = UUID()
+    var finished = record(state: "finished")
+    finished["path"] = outside.path
+    model.changed(finished, profileID: profile)
+
     #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
   }
 

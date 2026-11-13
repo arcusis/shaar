@@ -35,13 +35,14 @@ struct LibraryDownloadTests {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     let profile = UUID()
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in root })
     var rows: [[String: Any]] = []
     for index in 0..<100 {
       let url = root.appending(path: "media-\(index).png")
       try Data([0x89, 0x50, 0x4e, 0x47]).write(to: url)
-      rows.append(record(
-        UUID().uuidString.lowercased(), filename: url.lastPathComponent, path: url.path))
+      rows.append(
+        record(
+          UUID().uuidString.lowercased(), filename: url.lastPathComponent, path: url.path))
     }
     model.restore(rows, profileID: profile)
     let items = model.items(in: profile)
@@ -54,10 +55,11 @@ struct LibraryDownloadTests {
         items, search: "", mediaOnly: true, profileID: profile, currentProfileID: profile,
         downloads: model)
       beforeItems = visible
-      beforeCount += visible.compactMap {
-        LibraryDownloadQuery.mediaFile(
-          for: $0, profileID: profile, currentProfileID: profile, downloads: model)
-      }.count
+      beforeCount +=
+        visible.compactMap {
+          LibraryDownloadQuery.mediaFile(
+            for: $0, profileID: profile, currentProfileID: profile, downloads: model)
+        }.count
     }
     let before = beforeStart.duration(to: .now)
 
@@ -79,9 +81,10 @@ struct LibraryDownloadTests {
   @Test func downloadDateGroupsBenchmark() {
     let profile = UUID()
     let model = DownloadsModel()
-    model.restore((0..<5_000).map { index in
-      record(UUID().uuidString.lowercased(), filename: "download-\(index)")
-    }, profileID: profile)
+    model.restore(
+      (0..<5_000).map { index in
+        record(UUID().uuidString.lowercased(), filename: "download-\(index)")
+      }, profileID: profile)
 
     let items = model.items(in: profile)
     let start = ContinuousClock.now
@@ -131,7 +134,7 @@ struct LibraryDownloadTests {
     let file = root.appending(path: "report.pdf")
     try Data("%PDF-1.4".utf8).write(to: file)
     let profile = UUID()
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in root })
     let id = UUID().uuidString.lowercased()
     model.restore([record(id, filename: "report.pdf", path: file.path)], profileID: profile)
     let item = try #require(model.libraryItems(in: profile).first)
@@ -205,7 +208,7 @@ struct LibraryDownloadTests {
 
     let profile = UUID()
     let otherProfile = UUID()
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in root })
     let imageID = UUID().uuidString.lowercased()
     let videoID = UUID().uuidString.lowercased()
     let pdfID = UUID().uuidString.lowercased()
@@ -380,7 +383,7 @@ struct LibraryDownloadTests {
     let session = try BrowserSession(
       profiles: [profile], spaces: [space], selectedSpaceID: space.id)
     let store = BrowserStore(sessionFile: nil, session: session)
-    let downloads = DownloadsModel()
+    let downloads = DownloadsModel(profileDirectory: { _ in root })
     downloads.restore(
       [record(filename: "authored-image.png", path: imageURL.path)], profileID: profile.id)
     let item = try #require(downloads.items(in: profile.id).first)
@@ -459,7 +462,7 @@ struct LibraryDownloadTests {
     try makePNGFixture().write(to: imageURL)
     try makePDFFixture().write(to: pdfURL)
 
-    let downloads = DownloadsModel()
+    let downloads = DownloadsModel(profileDirectory: { _ in root })
     let imageID = UUID().uuidString.lowercased()
     let pdfID = UUID().uuidString.lowercased()
     downloads.restore(

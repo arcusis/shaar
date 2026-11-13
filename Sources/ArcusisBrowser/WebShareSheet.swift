@@ -94,8 +94,9 @@ final class WebShareAnchor {
   let presentationGate = WebSharePresentationGate()
 
   func cancel() {
-    picker?.outcome.finish(false)
+    picker?.close()
     picker = nil
+    presentationGate.finish()
   }
 }
 
@@ -134,6 +135,7 @@ final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDel
 {
   let picker: NSSharingServicePicker
   let outcome = WebShareOutcomeGate()
+  private(set) var isClosed = false
 
   init(items: [Any]) {
     picker = NSSharingServicePicker(items: items)
@@ -143,6 +145,13 @@ final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDel
   func show(from view: NSView) {
     picker.delegate = self
     picker.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
+  }
+
+  func close() {
+    guard !isClosed else { return }
+    isClosed = true
+    picker.close()
+    outcome.finish(false)
   }
 
   func sharingServicePicker(

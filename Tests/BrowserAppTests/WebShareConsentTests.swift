@@ -205,11 +205,14 @@ struct WebShareConsentTests {
     var outcomes: [Bool] = []
     picker.outcome.onFinish = { outcomes.append($0) }
     anchor.picker = picker
+    #expect(anchor.presentationGate.begin())
 
     anchor.cancel()
 
     #expect(outcomes == [false])
     #expect(anchor.picker == nil)
+    #expect(picker.isClosed)
+    #expect(!anchor.presentationGate.isActive)
   }
 
   @Test func sharingOutcomeWaitsForServiceCompletionAndFinishesOnce() {

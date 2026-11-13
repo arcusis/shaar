@@ -106,6 +106,7 @@ struct ExtensionToolbar: View {
 
 /// Manage installed extensions in place: run, turn on or off, pin, inspect, and remove.
 struct ExtensionManagerPanel: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let engine: BrowserEngine
   let store: BrowserStore
   @State private var detailID: String?
@@ -132,6 +133,7 @@ struct ExtensionManagerPanel: View {
     VStack(alignment: .leading, spacing: 0) {
       VStack(alignment: .leading, spacing: 2) {
         Text(PanelsL10n.string("Extensions")).font(.headline)
+          .accessibilityAddTraits(Self.headingTraits)
         Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
           .font(.caption).foregroundStyle(.secondary)
       }

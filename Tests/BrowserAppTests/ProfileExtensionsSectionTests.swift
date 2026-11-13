@@ -25,6 +25,10 @@ final class ProfileExtensionsSectionTests: XCTestCase {
       "תוספים עבור \u{2068}Work\u{2069}")
   }
 
+  func testExtensionManagerTitleIsVoiceOverHeading() {
+    XCTAssertEqual(ExtensionManagerPanel.headingTraits, .isHeader)
+  }
+
   func testProfileNamesFollowShaarsSelectedLanguageOrder() {
     let english = UUID()
     let hebrew = UUID()

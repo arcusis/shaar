@@ -1106,7 +1106,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     return components.url
   }
 
-  private static func object(from json: String?) -> [String: Any]? {
+  static func object(from json: String?) -> [String: Any]? {
     guard let data = json?.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
   }

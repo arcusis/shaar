@@ -23,7 +23,7 @@ mkdir -p "$cache"
 verify() { [[ $(shasum -a 256 "$1" | cut -d ' ' -f 1) == "$checksum" ]]; }
 if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   echo "Fetching pinned Shaar engine $tag..." >&2
-  curl --fail --location --retry 3 \
+  curl --fail --location --connect-timeout 30 --max-time 900 --retry 3 --retry-max-time 180 \
     "https://github.com/arcusis/shaar/releases/download/$tag/$asset" \
     --output "$archive.partial" >&2
   verify "$archive.partial" || { echo 'Engine checksum mismatch; refusing extraction.' >&2; exit 1; }

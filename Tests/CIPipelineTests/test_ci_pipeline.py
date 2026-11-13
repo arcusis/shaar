@@ -756,6 +756,24 @@ class SupplyChainTests(unittest.TestCase):
                 )
             self.assertFalse(target.exists())
 
+    def test_sbom_rejects_symlinked_output_paths_without_touching_targets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "shipping"
+            output.mkdir()
+            for name in ("Shaar-unsigned-candidate.zip", "sbom.spdx.json", "symlinks.json", "candidate.sha256"):
+                with self.subTest(name=name):
+                    target = root / f"outside-{name}"
+                    target.write_text("preserve this", encoding="utf-8")
+                    path = output / name
+                    path.symlink_to(target)
+
+                    with self.assertRaisesRegex(ValueError, "SBOM output path must not be a symlink"):
+                        SBOM.validate_output_paths(output)
+
+                    self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+                    path.unlink()
+
     def test_spdx_inventory_rejects_symlinked_app_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -50,26 +50,15 @@ private enum FolderWalk {
   case tabs(UUID, Int)
 }
 
-extension BrowserSpace {
-  /// Iterative traversal keeps malformed or deeply nested data from recursing indefinitely.
-  public func pinnedItems(includingCollapsed: Bool = false) -> [PinnedSidebarItem] {
-    items(isPinned: true, includingCollapsed: includingCollapsed)
-  }
+private struct FolderItemsSection {
+  var folders: [BrowserFolder] = []
+  var rootTabs: [BrowserTab] = []
+  var children: [UUID: [BrowserFolder]] = [:]
+  var members: [UUID: [BrowserTab]] = [:]
 
-  public func items(isPinned: Bool, includingCollapsed: Bool = false) -> [PinnedSidebarItem] {
-    var result = tabs.filter { $0.isPinned == isPinned && $0.folderID == nil }.map {
-      PinnedSidebarItem.tab($0, depth: 0)
-    }
-    var children: [UUID: [BrowserFolder]] = [:]
-    var members: [UUID: [BrowserTab]] = [:]
-    let sectionFolders = folders.filter { $0.isPinned == isPinned }
-    for folder in sectionFolders {
-      if let parent = folder.parentID { children[parent, default: []].append(folder) }
-    }
-    for tab in tabs where tab.isPinned == isPinned {
-      if let folder = tab.folderID { members[folder, default: []].append(tab) }
-    }
-    var stack: [FolderWalk] = sectionFolders.filter { $0.parentID == nil }.reversed().map {
+  func items(includingCollapsed: Bool) -> [PinnedSidebarItem] {
+    var result = rootTabs.map { PinnedSidebarItem.tab($0, depth: 0) }
+    var stack: [FolderWalk] = folders.filter { $0.parentID == nil }.reversed().map {
       .folder($0, 0)
     }
     var visited: Set<UUID> = []
@@ -90,11 +79,64 @@ extension BrowserSpace {
     }
     return result
   }
+}
+
+private struct FolderItemsIndex {
+  private var pinned = FolderItemsSection()
+  private var unpinned = FolderItemsSection()
+
+  init(tabs: [BrowserTab], folders: [BrowserFolder], onlyPinned: Bool? = nil) {
+    for folder in folders where onlyPinned == nil || folder.isPinned == onlyPinned {
+      if folder.isPinned {
+        pinned.folders.append(folder)
+        if let parent = folder.parentID { pinned.children[parent, default: []].append(folder) }
+      } else {
+        unpinned.folders.append(folder)
+        if let parent = folder.parentID { unpinned.children[parent, default: []].append(folder) }
+      }
+    }
+    for tab in tabs where onlyPinned == nil || tab.isPinned == onlyPinned {
+      if tab.isPinned {
+        if let folder = tab.folderID {
+          pinned.members[folder, default: []].append(tab)
+        } else {
+          pinned.rootTabs.append(tab)
+        }
+      } else {
+        if let folder = tab.folderID {
+          unpinned.members[folder, default: []].append(tab)
+        } else {
+          unpinned.rootTabs.append(tab)
+        }
+      }
+    }
+  }
+
+  func items(isPinned: Bool, includingCollapsed: Bool) -> [PinnedSidebarItem] {
+    if isPinned {
+      pinned.items(includingCollapsed: includingCollapsed)
+    } else {
+      unpinned.items(includingCollapsed: includingCollapsed)
+    }
+  }
+}
+
+extension BrowserSpace {
+  /// Iterative traversal keeps malformed or deeply nested data from recursing indefinitely.
+  public func pinnedItems(includingCollapsed: Bool = false) -> [PinnedSidebarItem] {
+    items(isPinned: true, includingCollapsed: includingCollapsed)
+  }
+
+  public func items(isPinned: Bool, includingCollapsed: Bool = false) -> [PinnedSidebarItem] {
+    FolderItemsIndex(tabs: tabs, folders: folders, onlyPinned: isPinned).items(
+      isPinned: isPinned, includingCollapsed: includingCollapsed)
+  }
 
   /// Hidden folder contents retain their logical/native order and live documents.
   public var orderedTabs: [BrowserTab] {
-    (items(isPinned: true, includingCollapsed: true)
-      + items(isPinned: false, includingCollapsed: true)).compactMap {
+    let index = FolderItemsIndex(tabs: tabs, folders: folders)
+    return (index.items(isPinned: true, includingCollapsed: true)
+      + index.items(isPinned: false, includingCollapsed: true)).compactMap {
         if case .tab(let tab, _) = $0 { return tab }
         return nil
       }
@@ -127,11 +169,12 @@ extension BrowserSpace {
   }
 
   mutating func normalizeFolders() {
-    let pinned = items(isPinned: true, includingCollapsed: true).compactMap {
+    let index = FolderItemsIndex(tabs: tabs, folders: folders)
+    let pinned = index.items(isPinned: true, includingCollapsed: true).compactMap {
       if case .folder(let folder, _) = $0 { return folder }
       return nil
     }
-    let today = items(isPinned: false, includingCollapsed: true).compactMap {
+    let today = index.items(isPinned: false, includingCollapsed: true).compactMap {
       if case .folder(let folder, _) = $0 { return folder }
       return nil
     }

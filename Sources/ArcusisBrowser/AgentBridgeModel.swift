@@ -129,6 +129,7 @@ final class AgentBridgeModel {
   @ObservationIgnored private var committedOrigin: String?
   @ObservationIgnored private let request: Request
   @ObservationIgnored private var revision = 0
+  @ObservationIgnored private var statusRequestID: UUID?
   @ObservationIgnored private var closed = false
   @ObservationIgnored private var clipboardCleanupTask: Task<Void, Never>?
 
@@ -153,9 +154,12 @@ final class AgentBridgeModel {
   func refresh() {
     guard !closed else { return }
     let current = revision
+    let requestID = UUID()
+    statusRequestID = requestID
     let currentTarget = target
     request(.status, currentTarget) { [weak self] result, error in
-      guard let self, self.revision == current else { return }
+      guard let self, self.revision == current, self.statusRequestID == requestID else { return }
+      self.statusRequestID = nil
       if let error {
         self.failure = error.localizedDescription
         return

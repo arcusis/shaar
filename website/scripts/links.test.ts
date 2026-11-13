@@ -103,6 +103,22 @@ test("link checker verifies image map associations", () => {
   }
 });
 
+test("link checker reports images that target a missing map", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img src="/map.png" alt="Map" usemap="#missing-map">',
+    );
+    writeFileSync(join(root, "map.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: image references missing map #missing-map",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("link checker catches missing poster when video source exists", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

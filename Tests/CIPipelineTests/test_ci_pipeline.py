@@ -71,6 +71,26 @@ class PipelineGateTests(unittest.TestCase):
                 ):
                     EVIDENCE.existing_directory(str(path))
 
+    def test_ci_stage_exceptions_are_recorded_as_junit_failures(self):
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            summary = root / "summary.md"
+            with (patch("ci_support.ROOT", root),
+                  patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}),
+                  patch("sys.stderr", new=io.StringIO())):
+                checks = Commands("stage-error")
+                STAGES.record_stage_error(checks, RuntimeError("bundle metadata is invalid"))
+                self.assertEqual(checks.finish(), 1)
+            report = ET.parse(root / "build/ci/stage-error/commands.xml").getroot()
+            self.assertEqual(report.attrib["tests"], "1")
+            self.assertEqual(report.attrib["failures"], "1")
+            self.assertEqual(report.find("testcase").attrib["name"], "stage-error")
+            self.assertEqual((root / "build/ci/stage-error/error.txt").read_text(),
+                             "bundle metadata is invalid\n")
+            self.assertEqual((root / "build/ci/stage-error/stage-error.log").read_text(),
+                             "bundle metadata is invalid\n")
+
     def test_hosted_visual_shards_run_each_existing_filter_once(self):
         selected = [name for shard in STAGES.VISUAL_SHARDS.values() for name in shard]
         self.assertEqual(sorted(selected), sorted(STAGES.VISUAL_FILTERS))

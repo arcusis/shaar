@@ -12,7 +12,7 @@ import re
 import xml.etree.ElementTree as ET
 
 
-CASE_EVENT = re.compile(r"^Test Case '(.+)' (started|passed|failed|skipped)(?: \(([0-9.]+) seconds\))?\.$")
+CASE_EVENT = re.compile(r"^Test Case '(.+)' (started|passed|failed|skipped)(?: \(([^()]*) seconds\))?\.$")
 SUITE_END = re.compile(r"^Test Suite '(?:All tests|Selected tests)' (?:passed|failed) at ")
 TOTAL = re.compile(r"^\s*Executed ([0-9]+) tests?\b")
 
@@ -42,8 +42,12 @@ def xctest_cases(text: str) -> list[ET.Element]:
                 if label not in active or seconds is None:
                     raise ValueError(f"Unpaired or untimed XCTest end: {label}")
                 case, details = active.pop(label)
-                if not math.isfinite(float(seconds)):
-                    raise ValueError(f"Invalid XCTest duration: {seconds}")
+                try:
+                    duration = float(seconds)
+                except ValueError as error:
+                    raise ValueError(f"Invalid XCTest duration for {label}: {seconds!r}") from error
+                if not math.isfinite(duration) or duration < 0:
+                    raise ValueError(f"Invalid XCTest duration for {label}: {seconds!r}")
                 case.set("time", seconds)
                 if state in ("failed", "skipped"):
                     tag = "failure" if state == "failed" else "skipped"

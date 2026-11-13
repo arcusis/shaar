@@ -150,6 +150,25 @@ final class SplitLayoutTests: XCTestCase {
     try session.validate()
   }
 
+  func testSplitWeightNormalizationPreservesPositiveWeightsAcrossUnderflow() throws {
+    var (session, ids) = try session(tabs: 2)
+    let space = session.selectedSpaceID
+    XCTAssertTrue(session.splitTabs(ids[0], ids[1], in: space))
+    let splitID = try XCTUnwrap(session.selectedSpace.splits.first?.id)
+
+    session.setSplitWeights(
+      [Double.leastNonzeroMagnitude, Double.greatestFiniteMagnitude], at: [], splitID: splitID,
+      in: space)
+
+    guard case .group(_, _, let weights) = try XCTUnwrap(session.selectedSpace.splits.first).root
+    else { return XCTFail("Split group was lost") }
+    XCTAssertGreaterThan(weights[0], 0)
+    XCTAssertGreaterThan(weights[1], 0)
+    XCTAssertGreaterThan(weights[1], 0.99)
+    XCTAssertEqual(weights.reduce(0, +), 1, accuracy: 0.001)
+    try session.validate()
+  }
+
   func testLegacyTwoTabSplitDecodes() throws {
     let first = UUID()
     let second = UUID()

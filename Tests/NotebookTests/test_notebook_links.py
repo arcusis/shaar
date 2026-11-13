@@ -52,6 +52,11 @@ class NotebookLinksTests(unittest.TestCase):
         for name in ("One", "Two", "Three", "Four"):
             self.assertIn(f"Note not linked from any index: {name}.md", result.stderr)
 
+    def test_escaped_wiki_markup_does_not_satisfy_index_membership(self):
+        result = self.run_check({"_INDEX_Main.md": r"\[[One]]", "One.md": "# One"})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Note not linked from any index: One.md", result.stderr)
+
     def test_wrong_case_or_missing_target_does_not_count(self):
         result = self.run_check({"_INDEX_Main.md": "[[note]]\n[[Missing]]", "Note.md": ""})
         self.assertEqual(result.returncode, 1)

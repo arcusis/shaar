@@ -380,3 +380,16 @@ test("link checker ignores CSS URLs inside comments", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker validates caption track URLs", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><video><track kind="captions" src="/missing-captions.vtt"></video>',
+    );
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing-captions.vtt"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

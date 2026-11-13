@@ -118,7 +118,7 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
     }
     if (document.querySelectorAll("h1").length !== 1) errors.push(`${path}: expected one h1`);
     for (const element of document.querySelectorAll(
-      'a[href], area[href], link[href], form[action], [formaction], img[src], input[type="image"][src], script[src], embed[src], object[data], iframe[src], img[srcset], source[srcset], video[poster], video[src], audio[src], source[src], meta[property="og:image"], meta[name="twitter:image"], svg [href], svg [xlink\\:href]',
+      'a[href], area[href], link[href], form[action], [formaction], img[src], input[type="image"][src], script[src], track[src], embed[src], object[data], iframe[src], img[srcset], source[srcset], video[poster], video[src], audio[src], source[src], meta[property="og:image"], meta[name="twitter:image"], svg [href], svg [xlink\\:href]',
     )) {
       const references = [
         ...(element.hasAttribute("srcset")

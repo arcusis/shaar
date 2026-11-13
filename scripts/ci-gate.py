@@ -15,6 +15,20 @@ def advisory_stages(raw: str | None) -> set[str]:
     return {name.strip() for name in (raw or "").split(",") if name.strip()}
 
 
+def parse_needs(raw: str) -> dict:
+    """Parse the GitHub needs context and reject malformed stage results clearly."""
+    try:
+        needs = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"CI_NEEDS is not valid JSON: {error.msg}") from error
+    if not isinstance(needs, dict):
+        raise ValueError("CI_NEEDS must be a JSON object mapping stages to results")
+    for name, item in needs.items():
+        if not isinstance(item, dict) or not isinstance(item.get("result"), str):
+            raise ValueError(f"CI_NEEDS entry {name!r} must contain a string result")
+    return needs
+
+
 def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
                 browsing: bool = False, shipping_guard: bool = False,
                 advisory: set[str] | None = None) -> list[str]:
@@ -48,7 +62,7 @@ def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
 
 
 def main() -> int:
-    needs = json.loads(os.environ["CI_NEEDS"])
+    needs = parse_needs(os.environ["CI_NEEDS"])
     errors = gate_errors(needs, os.environ["CI_FULL"] == "true", os.environ["CI_NIGHTLY"] == "true",
                          os.environ.get("CI_WEBSITE") == "true",
                          os.environ.get("CI_BROWSING") == "true",

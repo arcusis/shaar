@@ -68,7 +68,9 @@ function add(count) {
 }
 add(40);
 window.__frames = 0;
+window.__scrollEvents = 0;
 root.addEventListener("scroll", function () {
+  window.__scrollEvents += 1;
   if (root.scrollTop + root.clientHeight >= root.scrollHeight - 80) add(400);
 });
 requestAnimationFrame(function tick() {

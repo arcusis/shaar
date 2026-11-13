@@ -105,6 +105,17 @@ struct LibraryPanel: View {
     _section = State(initialValue: section)
   }
 
+  static func importFailure(
+    _ error: Error, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    if let error = error as? BrowserImport.ImportError {
+      return error.description(language: language)
+    }
+    return BrowserLocalization.string(
+      "Could not open this browser export. Check that it is supported and try again.",
+      table: "Panels", language: language)
+  }
+
   private var key: LibraryKey { LibraryKey(profileID: profileID, section: section) }
   private var ownsContext: Bool { store.session.selectedSpace.profileID == profileID }
   private var busy: Bool { store.library.mutating.contains(key) }
@@ -233,7 +244,10 @@ struct LibraryPanel: View {
           showingImportPreview = true
         } catch {
           guard let message = LibraryImportErrorPresentation.message(for: error) else { return }
-          importError = message
+          let cocoaError = error as NSError
+          importError =
+            error is BrowserImport.ImportError || cocoaError.domain == NSCocoaErrorDomain
+            ? Self.importFailure(error) : message
           showingImportPreview = true
         }
       }

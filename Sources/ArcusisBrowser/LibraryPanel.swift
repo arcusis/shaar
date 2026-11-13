@@ -43,6 +43,17 @@ enum LibraryPanelAccessibility {
   }
 }
 
+struct LibraryPanelFilteredRows<Element> {
+  private let values: [Element]
+
+  init(makeValues: () -> [Element]) {
+    values = makeValues()
+  }
+
+  var rows: [Element] { values }
+  var isEmpty: Bool { values.isEmpty }
+}
+
 enum LibraryHistoryAccessibility {
   static func removeLabel(
     title: String, address: String, language: BrowserLanguage = .currentLaunchLanguage
@@ -143,7 +154,7 @@ struct LibraryPanel: View {
             if section == .bookmarks {
               ForEach(filteredBookmarks.rows) { bookmarkRow($0) }
             } else {
-              ForEach(filteredHistory) { historyRow($0) }
+              ForEach(filteredHistory.rows) { historyRow($0) }
             }
           }
           if section == .bookmarks ? filteredBookmarks.isEmpty : filteredHistory.isEmpty {

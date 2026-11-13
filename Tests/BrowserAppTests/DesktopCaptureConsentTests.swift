@@ -357,6 +357,22 @@ struct DesktopCaptureConsentTests {
     #expect(browser.sheet == nil)
   }
 
+  @Test func forgettingPermissionFrameImmediatelyCancelsPresentedCaptureRequest() throws {
+    let browser = store()
+    let capture = try request(browser)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: capture.frameID, origin: capture.requestingOrigin)
+    var decisions: [String?] = []
+    browser.onDesktopCaptureDecision = { _, sourceID in decisions.append(sourceID) }
+
+    #expect(browser.requestDesktopCapture(capture))
+    browser.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    browser.forgetPermissionFrame(capture.tabID, matching: capture.frameID)
+
+    #expect(decisions == [nil])
+    #expect(browser.sheet == nil)
+  }
+
   @Test func aPageTitleCannotOpenTheCaptureSheet() throws {
     let store = store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

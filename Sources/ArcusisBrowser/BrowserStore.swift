@@ -1242,13 +1242,14 @@ final class BrowserStore {
 
   private func cancelDesktopCapturesInvalidatedByFrame(for tabID: UUID) {
     let staleIDs = consentRequests.compactMap { request -> String? in
-      guard case .desktopCapture(let capture) = request,
-        capture.tabID == tabID,
-        let frameID = permissionFrames[tabID],
-        let origin = permissionFrameOrigins[tabID],
-        !capture.matches(
-          session, frameID: frameID, origin: origin)
-      else { return nil }
+      guard case .desktopCapture(let capture) = request, capture.tabID == tabID else { return nil }
+      let matchesCurrentFrame: Bool
+      if let frameID = permissionFrames[tabID], let origin = permissionFrameOrigins[tabID] {
+        matchesCurrentFrame = capture.matches(session, frameID: frameID, origin: origin)
+      } else {
+        matchesCurrentFrame = false
+      }
+      guard !matchesCurrentFrame else { return nil }
       return capture.id
     }
     for id in staleIDs {

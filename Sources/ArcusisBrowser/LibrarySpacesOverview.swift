@@ -119,7 +119,7 @@ private struct LibrarySpaceCardView: View {
           .font(.system(size: 22, weight: .light)).foregroundStyle(.secondary)
         Text(PanelsL10n.string("No tabs or folders")).font(.callout).foregroundStyle(.secondary)
         Text(PanelsL10n.string("This Space is ready when you are."))
-          .font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center)
+          .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .accessibilityElement(children: .combine)

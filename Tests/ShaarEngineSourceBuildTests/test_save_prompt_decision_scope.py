@@ -29,6 +29,16 @@ class SavePromptDecisionScopeTests(unittest.TestCase):
         self.assertIn("if (!IsCurrent(found->second))", decision)
         self.assertIn("Finish(request_id, kDecisionDismiss)", decision)
 
+        missing = decision.index("found == Pending().end()")
+        not_found = decision.index("*error = SHAAR_NOT_FOUND", missing)
+        wrong_target_return = decision.index("return 0;", not_found)
+        stale_check = decision.index("if (!IsCurrent(found->second))", wrong_target_return)
+        stale_dismiss = decision.index("Finish(request_id, kDecisionDismiss)", stale_check)
+        self.assertLess(missing, not_found)
+        self.assertLess(not_found, wrong_target_return)
+        self.assertLess(wrong_target_return, stale_check)
+        self.assertLess(stale_check, stale_dismiss)
+
     def test_current_selection_must_match_tab_window_profile_and_page(self):
         start = self.source.index("bool IsCurrent(")
         end = self.source.index("int TakeDecision(", start)

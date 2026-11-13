@@ -71,7 +71,7 @@ public enum ShaarHistoryEventRouter {
       let profileString = String(data: event.profileID, encoding: .utf8),
       let profileID = UUID(uuidString: profileString), knownProfiles.contains(profileID),
       let object = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
-      object["schemaVersion"] as? Int == 1,
+      historyInteger(object["schemaVersion"]) == 1,
       let kind = object["kind"] as? String,
       ["changed", "visit", "modified", "deleted"].contains(kind)
     else { return nil }

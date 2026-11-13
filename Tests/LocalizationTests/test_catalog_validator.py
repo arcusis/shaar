@@ -451,6 +451,28 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unlocalized Text.*Translated footer"):
                 VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
+    def test_rejects_direct_swiftui_control_titles_with_hebrew_catalog_translations(self):
+        controls = ("Button", "Label", "Menu", "Picker", "SecureField", "TextField", "Toggle")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Sources/ArcusisBrowser/ExampleView.swift"
+            source.parent.mkdir(parents=True)
+            catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
+            catalog_path.parent.mkdir(parents=True)
+            keys = {f"Translated {control}": {
+                "localizations": {"he": unit(f"{control} מתורגם")}
+            } for control in controls}
+            catalog_path.write_text(json.dumps({"strings": keys}), encoding="utf-8")
+
+            for control in controls:
+                key = f"Translated {control}"
+                source.write_text(f'{control}("{key}")\n', encoding="utf-8")
+                with self.subTest(control=control):
+                    with self.assertRaisesRegex(
+                        ValueError, f"unlocalized {control} title.*{key}"
+                    ):
+                        VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+
     def test_rejects_direct_accessibility_strings_when_hebrew_translation_exists(self):
         examples = (
             ('.help("Translated tooltip")', "help", "Translated tooltip"),

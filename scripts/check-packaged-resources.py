@@ -27,21 +27,43 @@ FALLBACK_CLOSURE = re.compile(r"\{\s*\.module\s*\}")
 
 
 def code_portion(line: str) -> str:
+    code = []
     quoted = False
     escaped = False
+    literal_start = 0
+    literal = []
+    interpolated = False
     for index, character in enumerate(line):
         if quoted:
+            literal.append(character)
             if escaped:
+                if character == "(":
+                    interpolated = True
                 escaped = False
             elif character == "\\":
                 escaped = True
+                cursor = index + 1
+                while cursor < len(line) and line[cursor] == "#":
+                    cursor += 1
+                if cursor < len(line) and line[cursor] == "(":
+                    interpolated = True
             elif character == '"':
                 quoted = False
+                if not interpolated:
+                    code[literal_start:] = [" "] * len(literal)
+                else:
+                    code[literal_start:] = literal
         elif character == '"':
             quoted = True
+            literal_start = len(code)
+            literal = [character]
+            interpolated = False
+            code.append(character)
         elif line.startswith("//", index):
-            return line[:index]
-    return line
+            break
+        else:
+            code.append(character)
+    return "".join(code)
 
 
 def violations_in_source(text: str, path: str) -> list[str]:
@@ -57,7 +79,6 @@ def violations_in_source(text: str, path: str) -> list[str]:
                 "development fallback passed to PackagedResourceBundle.resolve"
             )
     return errors
-
 
 def fallback_only(line: str, lines: list[str], index: int) -> bool:
     window = "\n".join(code_portion(candidate) for candidate in lines[max(0, index - 5) : index + 1])

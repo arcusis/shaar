@@ -48,6 +48,18 @@ class PackagedResourceSourceTests(unittest.TestCase):
         violations = check.violations_in_source(source, "Sources/BrowserCore/Example.swift")
         self.assertEqual(len(violations), 1)
 
+    def test_module_reference_inside_string_literal_is_ignored(self):
+        source = 'let message = "Bundle.module is only available in development"'
+        self.assertEqual(check.violations_in_source(source, "Sources/BrowserCore/Example.swift"), [])
+
+    def test_module_reference_in_string_interpolation_is_still_checked(self):
+        source = 'let message = "Bundle: \\(Bundle.module)"'
+        self.assertEqual(len(check.violations_in_source(source, "Sources/BrowserCore/Example.swift")), 1)
+
+    def test_module_reference_in_raw_string_interpolation_is_still_checked(self):
+        source = 'let message = #"Bundle: \\#(Bundle.module)"#'
+        self.assertEqual(len(check.violations_in_source(source, "Sources/BrowserCore/Example.swift")), 1)
+
     def test_shipping_scan_skips_verification_sources(self):
         roots = set(check.SHIPPING_SOURCE_ROOTS)
         self.assertNotIn("Sources/ShaarVerification", roots)

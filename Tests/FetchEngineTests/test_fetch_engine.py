@@ -143,6 +143,30 @@ class FetchEngineTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
 
+    def test_symlinked_partial_archive_is_rejected_before_curl_can_overwrite_target(self):
+        self.archive.write_bytes(b"corrupt cached archive")
+        sentinel = self.root / "outside.txt"
+        sentinel.write_text("preserve")
+        Path(str(self.archive) + ".partial").symlink_to(sentinel)
+        self._tool("curl", '''
+printf 'curl\\n' >> "$FETCH_TEST_TOOL_LOG"
+while (($#)); do
+  if [[ "$1" == --output ]]; then
+    shift
+    printf 'overwritten' > "$1"
+    break
+  fi
+  shift
+done
+''')
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Engine archive cache paths must not be symlinks", result.stderr)
+        self.assertEqual(sentinel.read_text(), "preserve")
+        self.assertFalse(self.tool_log.exists())
+
     def test_failed_framework_extraction_removes_staging_directory(self):
         shutil.rmtree(self.destination)
         with tarfile.open(self.archive, "w:xz", format=tarfile.PAX_FORMAT) as archive:

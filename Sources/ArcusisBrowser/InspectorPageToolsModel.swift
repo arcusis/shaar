@@ -98,6 +98,8 @@ final class InspectorPageToolsModel {
   @ObservationIgnored private var pollTask: Task<Void, Never>?
   @ObservationIgnored private var updateWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
+  var pendingUpdateWaiterCount: Int { updateWaiters.count }
+
   init(inspector: InspectorModel, developer: DeveloperPageModel) {
     self.inspector = inspector
     self.developer = developer
@@ -131,13 +133,22 @@ final class InspectorPageToolsModel {
   /// Suspends until page-tools state changes after the supplied revision.
   func waitForUpdate(after revision: Int) async {
     guard updateRevision == revision else { return }
-    await withCheckedContinuation { continuation in
-      guard updateRevision == revision else {
-        continuation.resume()
-        return
+    let id = UUID()
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        guard updateRevision == revision, !Task.isCancelled else {
+          continuation.resume()
+          return
+        }
+        updateWaiters[id] = continuation
       }
-      updateWaiters[UUID()] = continuation
+    } onCancel: {
+      Task { @MainActor [weak self] in self?.cancelUpdateWaiter(id) }
     }
+  }
+
+  private func cancelUpdateWaiter(_ id: UUID) {
+    updateWaiters.removeValue(forKey: id)?.resume()
   }
 
   private func signalUpdate() {

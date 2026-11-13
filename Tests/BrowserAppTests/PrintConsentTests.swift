@@ -106,6 +106,9 @@ struct PrintConsentTests {
       "title": print.title,
     ]
     #expect(PrintRequest(payload: valid) != nil)
+    var withoutTitle = valid
+    withoutTitle.removeValue(forKey: "title")
+    #expect(try #require(PrintRequest(payload: withoutTitle)).title.isEmpty)
 
     for unsupportedVersion: Any in [2, "1", true, NSNumber(value: 1.0), NSNull()] {
       var unsupported = valid

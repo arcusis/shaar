@@ -41,7 +41,11 @@ final class DownloadsFolderSource {
       (try? FileManager.default.contentsOfDirectory(
         at: directory, includingPropertiesForKeys: DownloadsFolderFile.resourceKeys,
         options: [.skipsHiddenFiles])) ?? []
-    files = urls.compactMap(DownloadsFolderFile.init(url:))
+    let root = directory.resolvingSymlinksInPath().standardizedFileURL
+    let rootPath = root.path == "/" ? "/" : root.path + "/"
+    files = urls.compactMap(DownloadsFolderFile.init(url:)).filter {
+      $0.url.path.hasPrefix(rootPath)
+    }
     filesByID = Dictionary(files.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
   }
 

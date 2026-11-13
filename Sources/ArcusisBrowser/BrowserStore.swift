@@ -165,6 +165,7 @@ final class BrowserStore {
   @ObservationIgnored var onHTTPAuthDecision: ((HTTPAuthRequest, String?, String?) -> Void)?
   /// The Chromium save offer currently shown for this window. Only one is offered at a time.
   private(set) var savePrompt: SavePromptRequest?
+  @ObservationIgnored private var savePromptPageURL: URL?
   @ObservationIgnored private var dismissingSavePrompt = false
   @ObservationIgnored var onSavePromptDecision: ((String, SavePromptRequest.Decision) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
@@ -1427,12 +1428,16 @@ final class BrowserStore {
   @discardableResult
   func requestSavePrompt(_ request: SavePromptRequest) -> Bool {
     guard !isPrivate else { return false }
-    if savePrompt?.id == request.id { return true }
+    if savePrompt?.id == request.id { return savePrompt == request }
     guard savePrompt == nil, request.matches(session, inPrivateWindow: isPrivate) else {
       return false
     }
+    guard let pageURL = session.selectedPage?.tab.url,
+      let cleanedPageURL = cleanedSavePromptPageURL(pageURL)
+    else { return false }
     dismissCommand()
     dismissPageFind()
+    savePromptPageURL = cleanedPageURL
     savePrompt = request
     return true
   }
@@ -1440,6 +1445,7 @@ final class BrowserStore {
   func resolveSavePrompt(_ id: String, decision: SavePromptRequest.Decision) {
     guard let request = savePrompt, request.id == id else { return }
     savePrompt = nil
+    savePromptPageURL = nil
     let matches = request.matches(session, inPrivateWindow: isPrivate)
     onSavePromptDecision?(id, request.decision(decision, matchesSession: matches))
   }
@@ -1456,18 +1462,31 @@ final class BrowserStore {
   }
 
   private func dismissSavePromptIfPageChanged(_ tabID: UUID) {
-    guard !dismissingSavePrompt, let prompt = savePrompt, prompt.tabID == tabID,
-      !prompt.matches(session, inPrivateWindow: isPrivate)
-    else { return }
+    guard !dismissingSavePrompt, let prompt = savePrompt, prompt.tabID == tabID else { return }
+    let currentPageURL = session.page(forTabID: tabID)?.tab.url
+    let currentPageMatches = currentPageURL.flatMap(cleanedSavePromptPageURL) == savePromptPageURL
+    guard !prompt.matches(session, inPrivateWindow: isPrivate) || !currentPageMatches else { return }
     dismissingSavePrompt = true
     resolveSavePrompt(prompt.id, decision: .dismiss)
     dismissingSavePrompt = false
+  }
+
+  private func cleanedSavePromptPageURL(_ url: URL) -> URL? {
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+      return nil
+    }
+    components.user = nil
+    components.password = nil
+    components.query = nil
+    components.fragment = nil
+    return components.url
   }
 
   /// Clears a prompt Chromium already finished. Does not send another decision.
   func dismissSavePrompt(_ id: String) {
     guard savePrompt?.id == id else { return }
     savePrompt = nil
+    savePromptPageURL = nil
   }
 
   private func enqueueConsent(_ request: BrowserSheet) -> Bool {

@@ -151,6 +151,11 @@ struct DeviceChooserTests {
     #expect(selection.selectedIndex(for: updated) == 0)
   }
 
+  @Test func selectedDeviceOptionHasASelectedAccessibilityTrait() {
+    #expect(DeviceChooserConsent.optionAccessibilityTraits(isSelected: true).contains(.isSelected))
+    #expect(!DeviceChooserConsent.optionAccessibilityTraits(isSelected: false).contains(.isSelected))
+  }
+
   private func store() throws -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(try #require(URL(string: "https://devices.example/chooser"))))

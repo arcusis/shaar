@@ -9,6 +9,7 @@ import argparse
 import json
 from fractions import Fraction
 from pathlib import Path
+import sys
 
 
 MODULES = ("BrowserCore", "ArcusisBrowser", "ChromiumBridge", "Shaar", "ShaarVerification")
@@ -37,6 +38,13 @@ UNIT_COVERAGE_EXCLUDES = {
 # 41492941258 dropped ArcusisBrowser by 3 of 36,330 lines with no source change). Tolerate drops
 # up to 0.025 percentage points; anything larger is a real regression.
 NOISE = Fraction(1, 4000)
+
+
+def load_report(path: Path, label: str) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"Cannot read {label} coverage report {path}: {error}") from error
 
 
 def module_coverage(report: dict) -> dict[str, tuple[int, int]]:
@@ -86,8 +94,12 @@ def main() -> int:
     parser.add_argument("--base", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     options = parser.parse_args()
-    base = module_coverage(json.loads(options.base.read_text()))
-    candidate = module_coverage(json.loads(options.candidate.read_text()))
+    try:
+        base = module_coverage(load_report(options.base, "base"))
+        candidate = module_coverage(load_report(options.candidate, "candidate"))
+    except ValueError as error:
+        print(f"Coverage report error: {error}", file=sys.stderr)
+        return 2
     for module, (covered, count) in candidate.items():
         print(f"{module}: {covered}/{count} lines ({100 * covered / count if count else 0:.3f}%)")
     errors = regressions(base, candidate)

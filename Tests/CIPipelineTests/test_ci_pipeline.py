@@ -402,6 +402,16 @@ class PipelineGateTests(unittest.TestCase):
 
 
 class CoverageGateTests(unittest.TestCase):
+    def test_coverage_report_reader_identifies_missing_and_malformed_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaisesRegex(ValueError, "base coverage report"):
+                COVERAGE.load_report(root / "missing.json", "base")
+            malformed = root / "malformed.json"
+            malformed.write_text("{")
+            with self.assertRaisesRegex(ValueError, "candidate coverage report"):
+                COVERAGE.load_report(malformed, "candidate")
+
     def test_parallel_coverage_reports_require_matching_toolchain_and_revision(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

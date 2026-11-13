@@ -40,7 +40,14 @@ struct DeviceChooserTests {
         payload: payload))
 
     #expect(request.pageURL.host() == "devices.example")
-    #expect(request.displayOrigin == "device-frame.example:8443")
+    #expect(request.displayOrigin == "https://device-frame.example:8443")
+
+    payload["origin"] = "http://device-frame.example:8443/chooser"
+    let insecureOrigin = try #require(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: payload))
+    #expect(insecureOrigin.displayOrigin == "http://device-frame.example:8443")
   }
 
   @Test func emptyChooserEventsCannotBeGranted() throws {

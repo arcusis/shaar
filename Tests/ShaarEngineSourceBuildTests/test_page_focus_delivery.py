@@ -32,8 +32,16 @@ class PageFocusDeliveryTests(unittest.TestCase):
     def test_repeated_native_focus_does_not_duplicate_page_focus(self):
         source = (ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm").read_text()
         self.assertIn("RepeatedNativeFocusKeepsPageFocusEventIdempotent", source)
-        self.assertEqual(source.count("ASSERT_TRUE(host.Focus(tab));"), 3)
-        self.assertIn('"window.pageFocusCount").ExtractInt(), 1', source)
+        repeated_focus = source.split(
+            "RepeatedNativeFocusKeepsPageFocusEventIdempotent", 1)[1].split("\n}", 1)[0]
+        self.assertEqual(repeated_focus.count("ASSERT_TRUE(host.Focus(tab));"), 2)
+        self.assertIn('"window.pageFocusCount").ExtractInt(), 1', repeated_focus)
+
+    def test_unselected_native_view_does_not_focus_the_selected_page(self):
+        source = (ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm").read_text()
+        self.assertIn("UnselectedNativeViewDoesNotFocusSelectedWebContents", source)
+        self.assertIn("EXPECT_FALSE(host.Focus(unselected));", source)
+        self.assertIn('"window.pageFocusCount").ExtractInt(), 0', source)
 
 
 if __name__ == "__main__":

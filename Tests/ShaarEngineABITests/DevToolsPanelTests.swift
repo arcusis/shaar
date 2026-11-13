@@ -473,4 +473,26 @@ struct DevToolsPanelTests {
         event(injected, scope: privateScope), scope: privateScope,
         windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
   }
+
+  @Test func phase2EventIntegerFieldsRejectBooleansAndFractions() {
+    let valid =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":12,"leaseID":42,"data":{"isLocalStorage":true,"key":"k","value":"v","truncated":false}}"#
+    for payload in [
+      valid.replacingOccurrences(of: #""schemaVersion":1"#, with: #""schemaVersion":true"#),
+      valid.replacingOccurrences(of: #""schemaVersion":1"#, with: #""schemaVersion":1.5"#),
+      valid.replacingOccurrences(of: #""eventID":12"#, with: #""eventID":12.5"#),
+      valid.replacingOccurrences(of: #""leaseID":42"#, with: #""leaseID":42.5"#),
+    ] {
+      #expect(
+        ShaarDevToolsPhase2EventRouter.decode(
+          event(payload, scope: privateScope), scope: privateScope,
+          windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+    }
+    let booleanLease = valid.replacingOccurrences(
+      of: #""leaseID":42"#, with: #""leaseID":true"#)
+    #expect(
+      ShaarDevToolsPhase2EventRouter.decode(
+        event(booleanLease, scope: privateScope), scope: privateScope,
+        windowID: "window-a", tabID: "tab-a", leaseID: 1) == nil)
+  }
 }

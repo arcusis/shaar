@@ -551,7 +551,7 @@ final class DevToolsRouteProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw Failure(
-      "Timed out: \(message); dock=\(dockAudit(store.session.selectedPage?.tab.id.uuidString ?? ""))"
+      "Timed out: \(message); dock=\(String(describing: dockAudit(store.session.selectedPage?.tab.id.uuidString ?? "")))"
     )
   }
 

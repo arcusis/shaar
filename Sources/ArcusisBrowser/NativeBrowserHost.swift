@@ -51,7 +51,7 @@ private final class DownloadDirectoryContinuation: @unchecked Sendable {
 }
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage, print,
+  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage, print,
     closeWindow,
     addFavorite
   case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history,

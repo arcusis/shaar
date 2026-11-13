@@ -34,9 +34,16 @@ import Testing
         _ = try InspectorPageToolsProbe.reportMetadata(file)
       }
     }
-    for width in [0, -1] {
+    let invalidViewports: [[String: Any]] = [
+      ["width": 0, "height": 844, "devicePixelRatio": 3],
+      ["width": -1, "height": 844, "devicePixelRatio": 3],
+      ["width": true, "height": 844, "devicePixelRatio": 3],
+      ["width": 390, "height": false, "devicePixelRatio": 3],
+      ["width": 390, "height": 844, "devicePixelRatio": true],
+    ]
+    for viewport in invalidViewports {
       var invalid = valid
-      invalid["viewport"] = ["width": width, "height": 844, "devicePixelRatio": 3]
+      invalid["viewport"] = viewport
       let file = try await archive(invalid)
       #expect(throws: DeveloperModeFailure.self) {
         _ = try InspectorPageToolsProbe.reportMetadata(file)

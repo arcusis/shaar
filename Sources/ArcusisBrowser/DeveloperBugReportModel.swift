@@ -17,7 +17,7 @@ extension DeveloperPageModel {
         "$1[redacted]"
       ),
       (
-        #"([?&](?:access_token|refresh_token|id_token|token|api_key|client_secret|password|secret)=)[^&#\s]+"#,
+        #"(?i)([?&](?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|api[_-]?key|client[_-]?secret|password|secret|credential|session[_-]?id|signature)=)[^&#\s]+"#,
         "$1[redacted]"
       ),
       (

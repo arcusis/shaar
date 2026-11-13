@@ -11,6 +11,17 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorAICopyTests {
+  @Test func backendFailuresUseLocalizedCopyRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorAICopyModel.failureMessage(for: error)
+        == InspectorL10n.string("Could not copy the selected element. Try again."))
+    let known = InspectorFailure("Lock an element first.")
+    #expect(
+      InspectorAICopyModel.failureMessage(for: known)
+        == InspectorL10n.display(known.localizedDescription))
+  }
+
   private func inspector() -> InspectorModel {
     let model = InspectorModel(
       target: .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!),

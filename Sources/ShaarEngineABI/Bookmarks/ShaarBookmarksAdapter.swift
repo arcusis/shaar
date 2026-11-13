@@ -80,6 +80,7 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
           do {
             guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               Self.hasSupportedSchemaVersion(payload),
+              Self.isJSONBoolean(payload["watching"]),
               (payload["watching"] as? Bool) == enabled
             else { throw ShaarBookmarksAdapterError.watchNotConfirmed }
             return .success(())

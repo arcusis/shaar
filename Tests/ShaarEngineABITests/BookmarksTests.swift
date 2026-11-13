@@ -86,6 +86,18 @@ struct BookmarksAdapterTests {
     #expect(arguments[1]["enabled"] as? Bool == false)
   }
 
+  @Test @MainActor func watchRejectsNumericConfirmation() {
+    let transport = FakeBookmarksTransport(["schemaVersion": 1, "watching": 1])
+    let adapter = ShaarBookmarksAdapter(shaar: transport)
+    var rejected = false
+    adapter.watch(enabled: true) { result in
+      if case .failure(ShaarBookmarksAdapterError.watchNotConfirmed) = result {
+        rejected = true
+      }
+    }
+    #expect(rejected)
+  }
+
   @Test @MainActor func selectedShaarApplyRejectsUnconfirmedMutation() {
     let transport = FakeBookmarksTransport([
       "schemaVersion": 1, "applied": 0, "skipped": 0, "invalid": [Any](),

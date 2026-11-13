@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -60,6 +60,18 @@ test("CSS and font downloads all use timeout signals", async () => {
   }
 });
 
+function fontshareFetch(body: string | ArrayBuffer): typeof fetch {
+  return async (input) => {
+    const url = String(input);
+    if (!url.includes("api.fontshare.com")) return new Response(body);
+    const family = url.includes("clash-display") ? "Clash Display" : "Satoshi";
+    const file = url.includes("clash-display") ? "clash-display" : "satoshi";
+    return new Response(
+      `@font-face{font-family:'${family}';src:url('https://fonts.test/${file}.woff2');font-weight:300 900;font-style:normal;}`,
+    );
+  };
+}
+
 test("invalid cached font manifest falls back to system fonts", async () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
   const cache = join(root, "cache");
@@ -98,6 +110,64 @@ test("cached font manifest rejects unexpected font paths", async () => {
   try {
     assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a successful non-WOFF2 response falls back without caching it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  const output = join(root, "output");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fontshareFetch("<!doctype html><title>Unavailable</title>");
+  try {
+    assert.deepEqual(await prepareFonts(cache, output), []);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
+    assert.equal(existsSync(join(output, "satoshi.woff2")), false);
+    assert.equal(existsSync(join(output, "clash-display.woff2")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a cached non-WOFF2 file falls back instead of being copied", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  const output = join(root, "output");
+  mkdirSync(cache);
+  writeFileSync(
+    join(cache, "fonts.json"),
+    JSON.stringify([{ family: "Satoshi", file: "satoshi.woff2", weight: "300 900" }]),
+  );
+  writeFileSync(join(cache, "satoshi.woff2"), "<!doctype html>");
+  try {
+    assert.deepEqual(await prepareFonts(cache, output), []);
+    assert.equal(existsSync(join(output, "satoshi.woff2")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("valid WOFF2 downloads are cached and copied", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  const output = join(root, "output");
+  const originalFetch = globalThis.fetch;
+  const font = readFileSync(
+    new URL(
+      "../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2",
+      import.meta.url,
+    ),
+  );
+  globalThis.fetch = fontshareFetch(new Uint8Array(font).buffer);
+  try {
+    const faces = await prepareFonts(cache, output);
+    assert.equal(faces.length, 2);
+    assert.deepEqual(readFileSync(join(output, "clash-display.woff2")), font);
+    assert.deepEqual(readFileSync(join(output, "satoshi.woff2")), font);
+  } finally {
+    globalThis.fetch = originalFetch;
     rmSync(root, { recursive: true, force: true });
   }
 });

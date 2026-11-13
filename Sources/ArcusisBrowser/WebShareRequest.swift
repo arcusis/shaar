@@ -36,7 +36,7 @@ struct WebShareRequest: Identifiable, Equatable {
       Self.secureOrigin(requestingOrigin),
       let title = Self.boundedText(payload["title"], maxUTF8: 2048, required: false),
       let text = Self.boundedText(payload["text"], maxUTF8: 4096, required: false),
-      let link = Self.shareLink(payload["url"])
+      let link = Self.shareLink(payload["url"], relativeTo: pageURL)
     else { return nil }
     let shareURL = Self.address(link)
     guard Self.filesAreEmpty(payload["files"]) else { return nil }
@@ -112,12 +112,12 @@ struct WebShareRequest: Identifiable, Equatable {
   }
 
   /// A missing or empty URL is allowed. A non-web URL rejects the request.
-  private static func shareLink(_ value: Any?) -> ShareLink? {
+  private static func shareLink(_ value: Any?, relativeTo baseURL: URL) -> ShareLink? {
     guard let value else { return .absent }
     guard let text = value as? String, text.utf8.count <= 4096 else { return nil }
     if text.isEmpty { return .absent }
-    guard let url = URL(string: text), NavigationInput.isWebURL(url),
-      url.user == nil, url.password == nil
+    guard let url = URL(string: text, relativeTo: baseURL)?.absoluteURL,
+      NavigationInput.isWebURL(url), url.user == nil, url.password == nil
     else { return nil }
     return .page(url)
   }

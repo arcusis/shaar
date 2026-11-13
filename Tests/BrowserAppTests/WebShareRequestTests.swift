@@ -21,6 +21,13 @@ import Testing
   #expect(request.sheetID == "web-share-\(request.id)")
 }
 
+@Test func webShareRequestResolvesRelativeURLAgainstTheRequestingPage() throws {
+  let request = try #require(WebShareRequest(payload: sharePayload(
+    url: "../shared?source=web-share")))
+
+  #expect(request.url == URL(string: "https://example.com/shared?source=web-share"))
+}
+
 @Test func webShareConsentOriginIncludesItsLocalhostPort() throws {
   let request = try #require(
     WebShareRequest(payload: sharePayload(origin: "http://localhost:3000")))

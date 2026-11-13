@@ -140,6 +140,25 @@ final class PictureInPictureControlsTests: XCTestCase {
     XCTAssertNil(controls.tabID)
   }
 
+  func testDeallocatingControlsStopsPendingWindowPolling() async {
+    var findCount = 0
+    var controls: PictureInPictureControls? = PictureInPictureControls()
+    weak let weakControls = controls
+
+    controls?.attach(tabID: UUID(), finding: {
+      findCount += 1
+      return nil
+    }, video: { nil })
+    await Task.yield()
+    XCTAssertEqual(findCount, 1)
+
+    controls = nil
+    XCTAssertNil(weakControls)
+    try? await Task.sleep(for: .milliseconds(150))
+
+    XCTAssertEqual(findCount, 1)
+  }
+
   func testCaptureControlsOverVideo() throws {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let cases: [(String, PictureInPictureControlsView.Presentation, Int)] = [

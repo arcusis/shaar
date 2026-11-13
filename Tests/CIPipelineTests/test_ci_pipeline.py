@@ -200,6 +200,18 @@ class PipelineGateTests(unittest.TestCase):
             run = dict(valid, event=event)
             self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [run]}, revision, swift_events), [])
 
+    def test_release_artifact_downloads_have_connection_and_total_timeouts(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        validate = workflow.split("      - name: Validate appcast, update signature and public download\n", 1)[1]
+        validate = validate.split("      - name: Require a newer build than the live feed", 1)[0]
+        curl_commands = [line.strip() for line in validate.splitlines() if line.strip().startswith("curl ")]
+
+        self.assertEqual(len(curl_commands), 2)
+        for command in curl_commands:
+            with self.subTest(command=command):
+                self.assertIn("--connect-timeout 10", command)
+                self.assertIn("--max-time 120", command)
+
     def test_code_scanning_issue_sync_opens_reopens_and_closes_by_alert_number(self):
         def alert(number):
             return {"number": number, "html_url": f"https://example.invalid/{number}",

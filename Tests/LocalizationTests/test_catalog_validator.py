@@ -161,6 +161,22 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn('SettingsL10n.string("Could not clear history. Try again.")', source)
         self.assertNotIn('SettingsL10n.format("Could not clear history: %"', source)
+
+    def test_extension_execution_failure_uses_localized_recovery_copy(self):
+        key = "Could not run the extension. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן להפעיל את התוסף. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('PanelsL10n.string("Could not run the extension. Try again.")', source)
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Fixture.xcstrings"

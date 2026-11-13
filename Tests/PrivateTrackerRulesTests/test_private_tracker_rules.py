@@ -30,6 +30,21 @@ class PrivateTrackerRulesTests(unittest.TestCase):
 
             self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
 
+    def test_output_writer_rejects_symlinked_parent_directory(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as outside:
+            root = Path(temporary)
+            external = Path(outside)
+            sentinel = external / "preserve.txt"
+            sentinel.write_text("preserve this", encoding="utf-8")
+            output_directory = root / "linked"
+            output_directory.symlink_to(external, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "output directory must not be a symlink"):
+                RULES.write_rules(output_directory / "rules.json", {"domains": ["example.test"]})
+
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve this")
+            self.assertFalse((external / "rules.json").exists())
+
     def test_only_complete_domain_rules_are_used(self):
         text = "\n".join((
             "! comment", "||analytics.example^", "||tracker.example^$third-party",

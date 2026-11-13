@@ -231,6 +231,10 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertIn("| windows | fail | 12 | 1 MiB | none | drop / rejected |", table)
         self.assertTrue(table.startswith("| Scenario |"))
 
+    def test_malformed_rows_are_reported_without_crashing_note_formatting(self):
+        notes = PROBE.row_notes({"rows": [None]}, "")
+        self.assertIn("malformed scenario row", notes.lower())
+
     def test_scroll_fixture_appends_rows_only_after_scroll_and_stops_at_200(self):
         node = shutil.which("node")
         if node is None:

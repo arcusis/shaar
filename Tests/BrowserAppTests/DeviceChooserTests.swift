@@ -100,6 +100,13 @@ struct DeviceChooserTests {
 
     #expect(request.displayOrigin == "https://[2001:db8::1]")
 
+    let nondefaultPortOrigin = DeviceChooserRequest(
+      id: "ipv6-origin-port", tabID: tab.id, profileID: store.session.selectedSpace.profileID,
+      pageURL: tab.url, origin: try #require(URL(string: "https://[2001:db8::1]:8443/chooser")),
+      transport: .usb, options: [], bluetoothUnavailable: false, canGrant: false)
+
+    #expect(nondefaultPortOrigin.displayOrigin == "https://[2001:db8::1]:8443")
+
     let httpOrigin = DeviceChooserRequest(
       id: "http-origin", tabID: tab.id, profileID: store.session.selectedSpace.profileID,
       pageURL: tab.url, origin: try #require(URL(string: "http://devices.example:80")),

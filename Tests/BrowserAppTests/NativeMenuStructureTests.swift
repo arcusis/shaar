@@ -49,6 +49,43 @@ import Testing
   #expect(!first.isVisible && !second.isVisible && !third.isVisible)
 }
 
+@Test @MainActor func nativeMenuTitlesResolveToHebrewCatalogEntries() {
+  let menu = NativeBrowserHost.makeMenu(target: NSApplication.shared)
+  let groups = menu.items.compactMap(\.submenu)
+  let identifiers = groups.compactMap { group -> String? in
+    guard group.identifier?.rawValue != ProductIdentity.name else { return nil }
+    return group.identifier?.rawValue
+  } + groups.flatMap(\.items).compactMap { item -> String? in
+    guard let identifier = item.identifier?.rawValue else { return nil }
+    if item.representedObject as? String == BrowserMenuCommand.search.rawValue { return nil }
+    return identifier == "copyCurrentURL:" ? item.title : identifier
+  }
+
+  for identifier in identifiers {
+    let key: String
+    switch identifier {
+    case "About \(ProductIdentity.name)": key = "About %@"
+    case "Hide \(ProductIdentity.name)": key = "Hide %@"
+    case "Quit \(ProductIdentity.name)": key = "Quit %@"
+    case "\(ProductIdentity.name) Support": key = "%@ Support"
+    default: key = identifier
+    }
+    #expect(
+      BrowserLocalization.string(key, table: "Shell", language: .hebrew) != key,
+      "Native menu title lacks Hebrew catalog copy: \(identifier)")
+  }
+
+  for key in ["About %@", "Hide %@", "Quit %@", "%@ Support"] {
+    #expect(
+      BrowserLocalization.format(
+        key, table: "Shell", language: .hebrew,
+        arguments: [.string(ProductIdentity.name)]) != key)
+  }
+  #expect(
+    BrowserLocalization.string("Search or enter address", table: "Shell", language: .hebrew)
+      != "Search or enter address")
+}
+
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared
   let menu = NativeBrowserHost.makeMenu(target: application)

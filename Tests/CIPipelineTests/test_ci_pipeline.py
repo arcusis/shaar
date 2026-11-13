@@ -815,6 +815,13 @@ class SupplyChainTests(unittest.TestCase):
         self.assertIn("--retry 3", curl)
         self.assertIn("--retry-max-time 180", curl)
 
+    def test_test_engine_framework_fetch_has_a_step_timeout(self):
+        workflow = (ROOT / ".github/workflows/source-checks.yml").read_text()
+        fetch = workflow.split("      - name: Fetch SHA-256 pinned Shaar test framework\n", 1)[1]
+        fetch = fetch.split("      - name: Build the headless Shaar verification bundle", 1)[0]
+
+        self.assertIn("timeout-minutes: 10", fetch)
+
     def test_swiftpm_cache_key_tracks_build_plugin_sources(self):
         setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
         self.assertIn("hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Plugins/**')", setup)

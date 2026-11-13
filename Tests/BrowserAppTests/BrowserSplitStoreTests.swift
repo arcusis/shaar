@@ -179,6 +179,11 @@ final class BrowserSplitStoreTests: XCTestCase {
     XCTAssertEqual(SplitDropZone.edge(at: CGPoint(x: 200, y: 290), in: size), .bottom)
   }
 
+  func testSplitDropPreviewRespectsReduceMotion() {
+    XCTAssertNil(SplitDropZone.previewAnimation(reduceMotion: true))
+    XCTAssertNotNil(SplitDropZone.previewAnimation(reduceMotion: false))
+  }
+
   func testSplitDropRejectsStaleTargetWithoutConsumingDrag() throws {
     var session = BrowserSession.fresh()
     let dragged = try XCTUnwrap(session.open(URL(string: "https://drag.example")!))

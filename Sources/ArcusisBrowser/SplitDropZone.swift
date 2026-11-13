@@ -13,6 +13,11 @@ struct SplitDropZone: View {
   let targetID: UUID
   @State private var edge: SplitEdge?
   @Environment(\.layoutDirection) private var layoutDirection
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  static func previewAnimation(reduceMotion: Bool) -> Animation? {
+    reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.86)
+  }
 
   var body: some View {
     if store.tabDrag != nil, store.canDropTab(beside: targetID) {
@@ -38,7 +43,7 @@ struct SplitDropZone: View {
           }
         }
       }
-      .animation(.spring(response: 0.22, dampingFraction: 0.86), value: edge)
+      .animation(Self.previewAnimation(reduceMotion: reduceMotion), value: edge)
     }
   }
 

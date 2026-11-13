@@ -862,6 +862,10 @@ class CatalogValidatorTests(unittest.TestCase):
                 with self.subTest(control=control):
                     with self.assertRaisesRegex(ValueError, f"unlocalized {control}.*{key}"):
                         VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+    def test_split_pane_loading_indicator_uses_localized_shell_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/SplitPageView.swift").read_text(
+            encoding="utf-8")
+        self.assertIn('ProgressView(ShellL10n.string("Loading profile…"))', source)
 
 if __name__ == "__main__":
     unittest.main()

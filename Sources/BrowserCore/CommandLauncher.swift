@@ -281,8 +281,8 @@ public enum CommandLauncher {
     let profileID = session.selectedSpace.profileID
     let results = sources.bookmarks.lazy
       .filter {
-        $0.profileID == profileID && $0.destination != nil
-          && CommandText.matches(query, CommandFields.bookmark($0))
+        $0.profileID == profileID && CommandText.matches(query, CommandFields.bookmark($0))
+          && $0.destination != nil
       }
       .prefix(filteredLimit)
       .map { CommandResult.bookmark($0, subtitle: CommandText.domain(of: $0.destination)) }

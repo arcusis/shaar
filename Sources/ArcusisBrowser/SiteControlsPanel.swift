@@ -237,7 +237,8 @@ struct SitePermissionRow: View {
         .labelsHidden()
         .disabled(value == nil || saving)
         .help(permission.help)
-        .accessibilityLabel(permission.help)
+        .accessibilityLabel(permission.title)
+        .accessibilityHint(permission.help)
     }
     .hoverRowBackground()
   }

@@ -6,6 +6,8 @@ import BrowserCore
 import SwiftUI
 
 struct ProfilePrivacySections: View {
+  static let loadingAccessibilityLabel = SettingsL10n.string("Loading site permission exceptions…")
+
   @State private var model: ProfilePrivacyModel
   @State private var confirmClear = false
   @State private var clearSiteData = true
@@ -87,7 +89,10 @@ struct ProfilePrivacySections: View {
       }
       Section {
         HStack {
-          if model.busy { ProgressView().controlSize(.small) }
+          if model.busy {
+            ProgressView().controlSize(.small)
+              .accessibilityLabel(Self.loadingAccessibilityLabel)
+          }
           Spacer()
           Button(SettingsL10n.string("Refresh")) { Task { await model.load() } }
         }

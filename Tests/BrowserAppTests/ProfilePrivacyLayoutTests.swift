@@ -11,6 +11,12 @@ import XCTest
 /// Offscreen view layout only: no NSWindow, application launch, or physical input.
 @MainActor
 final class ProfilePrivacyLayoutTests: XCTestCase {
+  func testLoadingIndicatorHasLocalizedAccessibilityLabel() {
+    XCTAssertEqual(
+      ProfilePrivacySections.loadingAccessibilityLabel,
+      SettingsL10n.string("Loading site permission exceptions…"))
+  }
+
   func testPrivacyPaneFitsWithExpandedEnginePermissionsAndUnavailableOrSupportedCookiePolicy() async
   {
     let id = UUID()

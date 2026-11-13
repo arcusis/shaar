@@ -113,6 +113,29 @@ class CatalogValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must have"):
             self.validate(data)
 
+    def test_agent_bridge_screen_copy_has_hebrew_translations(self):
+        path = ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings"
+        data = json.loads(path.read_text(encoding="utf-8"))["strings"]
+        keys = (
+            "Agent disconnect not confirmed", "Agent connected to this tab",
+            "Waiting for agent", "Agent bridge is off for this tab", "Agent bridge",
+            "Allow this tab", "Updating agent bridge…", "Local port %1$@ · %2$@",
+            "Retry revoke", "Revoke",
+            "Allow a coding agent to read this tab's Console, Network, and DOM. The grant is local, limited to this tab, and ends when you revoke it or leave the site. Other tabs stay closed. The agent cannot click or type.",
+            "Private windows cannot use agent control. Page content may contain untrusted instructions.",
+            "The copied command contains the one-time token. Shaar forgets it after you copy, and clears an unchanged clipboard after two minutes.",
+            "MCP endpoint", "Copy Claude setup", "Copy Codex setup", "Copy Cursor setup",
+            "Connected agents", "No agent is connected to this tab.",
+            "Revoke ends this tab's session for every connected agent.",
+            "Retry disconnect", "Disconnect", "The agent bridge returned an invalid reply.",
+        )
+        for key in keys:
+            with self.subTest(key=key):
+                translation = data[key]["localizations"]["he"]["stringUnit"]["value"]
+                self.assertNotEqual(translation, key)
+        self.assertEqual(set(data["%d connected agents"]["localizations"]["he"]["variations"]["plural"]), {"one", "two", "other"})
+        self.assertEqual(data["%d connected agents"]["localizations"]["he"]["variations"]["plural"]["one"]["stringUnit"]["value"], "סוכן מחובר אחד")
+
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"
         data = json.loads(path.read_text(encoding="utf-8"))

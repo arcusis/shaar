@@ -334,6 +334,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
     if command == .quit { return true }
+    if command == .bringAllToFront { return true }
     if command == .newMiniWindow {
       return privateHost?.hasActiveWindow != true && miniWindowTarget != nil
     }
@@ -409,7 +410,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Commands that act on the app rather than one window and need no window to be enabled.
   private static let appCommands: Set<BrowserMenuCommand> = [
-    .newPrivateWindow, .newMiniWindow, .nextWindow, .previousWindow, .quit,
+    .newPrivateWindow, .newMiniWindow, .bringAllToFront, .nextWindow, .previousWindow, .quit,
   ]
 
   func perform(_ command: BrowserMenuCommand) {
@@ -435,6 +436,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private func performAppCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .quit: quit()
+    case .bringAllToFront:
+      let windows = NSApp.windows.filter(\.isVisible)
+      Self.bringAllWindowsToFront(
+        windows, keyWindow: NSApp.keyWindow,
+        orderFront: { $0.orderFront(nil) }, makeKey: { $0.makeKey() })
     case .newMiniWindow: openMiniWindow(url: nil)
     case .newPrivateWindow:
       do { try privateHost?.openWindow() } catch { report(error) }
@@ -464,6 +470,15 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let target = candidates[next]
     activate?(target)
     return target
+  }
+
+  static func bringAllWindowsToFront(
+    _ windows: [NSWindow], keyWindow: NSWindow?,
+    orderFront: (NSWindow) -> Void, makeKey: (NSWindow) -> Void
+  ) {
+    windows.forEach(orderFront)
+    if let keyWindow, windows.contains(where: { $0 === keyWindow }) { makeKey(keyWindow) }
+  }
   }
 
   /// Development bundles carry no update feed, so their updater never exists.

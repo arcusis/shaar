@@ -42,38 +42,58 @@ enum CommandText {
   }
 
   /// True when the query is empty or any field contains it, ignoring case.
-  static func matches(_ query: String, _ fields: [String]) -> Bool {
-    query.isEmpty || fields.contains { $0.localizedStandardContains(query) }
+  static func matches(_ query: String, _ field: String) -> Bool {
+    query.isEmpty || field.localizedStandardContains(query)
+  }
+
+  static func matches(_ query: String, _ fields: (String, String)) -> Bool {
+    query.isEmpty || fields.0.localizedStandardContains(query)
+      || fields.1.localizedStandardContains(query)
+  }
+
+  static func matches(_ query: String, _ fields: (String, String, String)) -> Bool {
+    query.isEmpty || fields.0.localizedStandardContains(query)
+      || fields.1.localizedStandardContains(query)
+      || fields.2.localizedStandardContains(query)
+  }
+
+  static func matches(_ query: String, _ fields: (String, String, String, String)) -> Bool {
+    query.isEmpty || fields.0.localizedStandardContains(query)
+      || fields.1.localizedStandardContains(query)
+      || fields.2.localizedStandardContains(query)
+      || fields.3.localizedStandardContains(query)
   }
 }
 
 /// The searchable fields of each kind of launcher row.
 enum CommandFields {
-  static func favorite(_ favorite: BrowserFavorite, page: BrowserFavoritePage?) -> [String] {
-    [
+  static func favorite(_ favorite: BrowserFavorite, page: BrowserFavoritePage?) -> (
+    String, String, String, String
+  ) {
+    (
       favorite.title, favorite.originalURL.absoluteString,
       page?.tab.title ?? "", page?.tab.url.absoluteString ?? "",
-    ]
+    )
   }
 
-  static func tab(_ tab: BrowserTab, folderPath: String = "") -> [String] {
-    [tab.title, tab.url.absoluteString, folderPath]
+  static func tab(_ tab: BrowserTab, folderPath: String = "") -> (String, String, String) {
+    (tab.title, tab.url.absoluteString, folderPath)
   }
 
   /// Includes the row's verb so typing "reopen" lists closed tabs.
-  static func closedTab(_ entry: ClosedBrowserTab) -> [String] {
-    [
+  static func closedTab(_ entry: ClosedBrowserTab) -> (String, String, String) {
+    (
       BrowserLocalization.string("Reopen closed tab"), entry.tab.title,
       entry.tab.url.absoluteString,
-    ]
+    )
   }
 
-  static func bookmark(_ item: BrowserBookmark) -> [String] {
-    [item.title, item.address ?? "", item.path]
+  static func bookmark(_ item: BrowserBookmark) -> (String, String, String) {
+    (item.title, item.address ?? "", item.path)
   }
 
-  static func history(_ entry: BrowserHistoryEntry) -> [String] {
-    [entry.title, entry.address]
+  static func history(_ entry: BrowserHistoryEntry) -> (String, String) {
+    (entry.title, entry.address)
   }
 }
 

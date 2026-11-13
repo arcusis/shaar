@@ -352,7 +352,7 @@ public enum CommandSearch {
       }
       for folder in space.folders {
         let path = folderPathString(to: folder.id)
-        if CommandText.matches(query, [path]) {
+        if CommandText.matches(query, path) {
           if append(
             CommandResult(
               title: folder.name, subtitle: "\(space.name) · \(path)",
@@ -362,7 +362,7 @@ public enum CommandSearch {
           }
         }
       }
-      if CommandText.matches(query, [space.name]) {
+      if CommandText.matches(query, space.name) {
         let profile = session.profiles.first { $0.id == space.profileID }?.name ?? ""
         if append(
           CommandResult(

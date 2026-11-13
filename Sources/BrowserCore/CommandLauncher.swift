@@ -333,7 +333,7 @@ public enum CommandLauncher {
     if CommandText.matches(query, CommandFields.tab(tab)) { return true }
     guard let folderID = tab.folderID else { return false }
     let path = space.folderPath(to: folderID).reversed().map(\.name).joined(separator: " / ")
-    return CommandText.matches(query, [path])
+    return CommandText.matches(query, path)
   }
 
   /// Compares pages so "https://site.example" and "https://site.example/" are one page.

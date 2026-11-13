@@ -51,7 +51,9 @@ enum LocalizationProbe {
     guard let evidence = value as? [String: Any] else {
       throw LocalizationProbeError.malformedEvidence
     }
-    guard let url = evidence["url"] as? String, url.hasPrefix("chrome://version") else {
+    guard let url = evidence["url"] as? String,
+      let parsedURL = URL(string: url), parsedURL.scheme == "chrome", parsedURL.host == "version"
+    else {
       return nil
     }
     let htmlLanguage = evidence["language"] as? String ?? ""

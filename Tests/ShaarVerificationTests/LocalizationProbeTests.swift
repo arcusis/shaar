@@ -102,6 +102,7 @@ import Testing
     for payload: [String: Any] in [
       [:], ["url": "about:blank"], ["url": "https://example.invalid/"],
       ["url": "chrome://version/"],
+      ["url": "chrome://version.attacker.invalid/", "language": "he", "direction": "rtl"],
       ["url": "chrome://version/", "language": "", "direction": ""],
     ] {
       #expect(try LocalizationProbe.validateInternalUI(payload, language: .hebrew) == nil)

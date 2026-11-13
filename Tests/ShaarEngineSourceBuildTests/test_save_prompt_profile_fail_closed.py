@@ -46,6 +46,20 @@ class SavePromptProfileFailClosedTests(unittest.TestCase):
         self.assertLess(not_ready, mismatch)
         self.assertLess(mismatch, wrong_profile)
 
+    def test_offer_with_missing_services_is_declined_before_event_emission(self):
+        source = SOURCE.read_text()
+        start = source.index("bool OfferSavePrompt(")
+        end = source.index("shaar_error_code CompleteDecision(", start)
+        offer = source[start:end]
+
+        services = offer.index("!shaar::EngineContext().profile_services")
+        decline = offer.index("return decline();", services)
+        registry = offer.index("FindSelectedRegularTab", services)
+        event = offer.index("shaar::EmitEvent(", services)
+        self.assertLess(services, decline)
+        self.assertLess(decline, registry)
+        self.assertLess(registry, event)
+
 
 if __name__ == "__main__":
     unittest.main()

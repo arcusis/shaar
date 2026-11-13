@@ -365,6 +365,8 @@ bool OfferSavePrompt(content::WebContents* contents,
       browser_context && browser_context->IsOffTheRecord();
   if (!SavePromptAllowedForContext(browser_context != nullptr, off_the_record))
     return decline();
+  if (!shaar::EngineContext().profile_services)
+    return decline();
 
   shaar_engine* engine = lifecycle::ActiveEngine();
   auto identity =

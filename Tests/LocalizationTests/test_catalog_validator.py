@@ -136,6 +136,14 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertEqual(set(data["%d connected agents"]["localizations"]["he"]["variations"]["plural"]), {"one", "two", "other"})
         self.assertEqual(data["%d connected agents"]["localizations"]["he"]["variations"]["plural"]["one"]["stringUnit"]["value"], "סוכן מחובר אחד")
 
+    def test_profile_deletion_failure_uses_localized_settings_copy(self):
+        key = "Could not delete the profile. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן למחוק את הפרופיל. נסו שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/ProfileDeletionConfirmation.swift").read_text(encoding="utf-8")
+        self.assertIn('deletionFailure = SettingsL10n.string("Could not delete the profile. Try again.")', source)
+        self.assertNotIn('deletionFailure = error.localizedDescription', source)
+
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"
         data = json.loads(path.read_text(encoding="utf-8"))

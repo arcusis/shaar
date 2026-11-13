@@ -481,6 +481,7 @@ const feed=document.getElementById('feed');
 function add(n){for(let i=0;i<n;i++){const row=document.createElement('div');row.textContent=String(feed.children.length);feed.appendChild(row);}}
 add(100);
 feed.addEventListener('scroll',()=>{if(feed.children.length<200)add(100);});
+window.scrollFeedToEnd=()=>{feed.scrollTop=feed.scrollHeight;feed.dispatchEvent(new Event('scroll'));};
 </script>""")
         if path == "/webgl":
             return page("webgl", """

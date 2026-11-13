@@ -530,7 +530,7 @@ import Foundation
       await evaluate(
         runtime, tab: scrollID,
         script:
-          "(()=>{const feed=document.getElementById('feed');if(!feed)return 0;const before=feed.children.length;feed.scrollTop=feed.scrollHeight;return before;})()"
+          "(()=>{const feed=document.getElementById('feed');if(!feed)return 0;const before=feed.children.length;window.scrollFeedToEnd();return before;})()"
       ))
     let before = primed ?? 0
     var after = before

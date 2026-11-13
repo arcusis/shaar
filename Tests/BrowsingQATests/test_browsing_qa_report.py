@@ -4,6 +4,7 @@
 
 from datetime import datetime, timezone
 import importlib.util
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -99,6 +100,41 @@ class BrowsingQAReportTests(unittest.TestCase):
         finally:
             PROBE.shutil.which = original_which
             PROBE.subprocess.run = original_run
+
+    def test_hidden_scroll_fixture_appends_rows_when_scrolled_to_end(self):
+        fixture = object.__new__(PROBE.Fixture)
+        html = fixture.document("/scroll", "http://127.0.0.1/dest")
+        match = re.search(rb"<script>(.*?)</script>", html, re.DOTALL)
+        self.assertIsNotNone(match)
+        script = match.group(1).decode("utf-8")
+        harness = r"""
+const fs = require('fs');
+const vm = require('vm');
+const listeners = {};
+const feed = {
+  children: [], scrollTop: 0,
+  get scrollHeight() { return this.children.length * 40; },
+  addEventListener(name, callback) { listeners[name] = callback; },
+  appendChild(row) { this.children.push(row); },
+  dispatchEvent(event) { listeners[event.type]?.(event); },
+};
+global.document = {
+  getElementById: id => id === 'feed' ? feed : null,
+  createElement: () => ({textContent: ''}),
+};
+global.window = {};
+vm.runInNewContext(fs.readFileSync(0, 'utf8'), {
+  document: global.document, window: global.window, Event,
+});
+if (feed.children.length !== 100) throw new Error(`initial rows: ${feed.children.length}`);
+window.scrollFeedToEnd();
+if (feed.children.length !== 200) throw new Error(`after scroll: ${feed.children.length}`);
+"""
+        result = subprocess.run(
+            ["node", "-e", harness], input=script, text=True,
+            capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_suite_passes_when_every_scenario_is_pass_or_blocked(self):
         self.assertTrue(PROBE.suite_passed([

@@ -75,6 +75,11 @@ let value = 1
         source = 'let message = #"Bundle: \\#(Bundle.module)"#'
         self.assertEqual(len(check.violations_in_source(source, "Sources/BrowserCore/Example.swift")), 1)
 
+    def test_raw_string_embedded_quote_does_not_hide_following_code(self):
+        source = 'let message = #"embedded " quote"#; _ = Bundle.module'
+        violations = check.violations_in_source(source, "Sources/BrowserCore/Example.swift")
+        self.assertEqual(len(violations), 1)
+
     def test_shipping_scan_skips_verification_sources(self):
         roots = set(check.SHIPPING_SOURCE_ROOTS)
         self.assertNotIn("Sources/ShaarVerification", roots)

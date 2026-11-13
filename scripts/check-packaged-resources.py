@@ -33,13 +33,13 @@ def code_portion(line: str, block_comment_depth: list[int] | None = None) -> str
     quoted = False
     escaped = False
     literal_start = 0
-    literal = []
     interpolated = False
     interpolation_depth = 0
     pending_interpolation = False
     interpolation_start = 0
     interpolation_ranges = []
     skip_next = False
+    quote_hashes = 0
     for index, character in enumerate(line):
         if skip_next:
             skip_next = False
@@ -62,7 +62,6 @@ def code_portion(line: str, block_comment_depth: list[int] | None = None) -> str
             skip_next = True
             continue
         if quoted:
-            literal.append(character)
             code.append(character)
             if interpolation_depth:
                 if character == "(":
@@ -83,30 +82,49 @@ def code_portion(line: str, block_comment_depth: list[int] | None = None) -> str
             elif character == "\\":
                 escaped = True
                 cursor = index + 1
+                hashes = 0
                 while cursor < len(line) and line[cursor] == "#":
                     cursor += 1
-                if cursor < len(line) and line[cursor] == "(":
+                    hashes += 1
+                if (
+                    hashes == quote_hashes
+                    and cursor < len(line)
+                    and line[cursor] == "("
+                ):
                     interpolated = True
                     pending_interpolation = True
             elif character == '"':
-                quoted = False
-                if not interpolated:
-                    code[literal_start:] = [" "] * len(literal)
-                elif interpolation_ranges:
-                    keep = {
-                        offset
-                        for start, end in interpolation_ranges
-                        for offset in range(start, end)
-                    }
-                    code[literal_start:] = [
-                        value if offset in keep else " "
-                        for offset, value in enumerate(code[literal_start:], start=literal_start)
-                    ]
+                cursor = index + 1
+                hashes = 0
+                while cursor < len(line) and line[cursor] == "#":
+                    cursor += 1
+                    hashes += 1
+                if hashes == quote_hashes:
+                    quoted = False
+                    if not interpolated:
+                        code[literal_start:] = [" "] * (len(code) - literal_start)
+                    elif interpolation_ranges:
+                        keep = {
+                            offset
+                            for start, end in interpolation_ranges
+                            for offset in range(start, end)
+                        }
+                        code[literal_start:] = [
+                            value if offset in keep else " "
+                            for offset, value in enumerate(code[literal_start:], start=literal_start)
+                        ]
         elif character == '"':
             quoted = True
-            literal_start = len(code)
-            literal = [character]
+            cursor = index - 1
+            quote_hashes = 0
+            while cursor >= 0 and line[cursor] == "#":
+                cursor -= 1
+                quote_hashes += 1
+            literal_start = len(code) - quote_hashes
             interpolated = False
+            interpolation_depth = 0
+            pending_interpolation = False
+            interpolation_ranges = []
             code.append(character)
         elif line.startswith("//", index):
             break

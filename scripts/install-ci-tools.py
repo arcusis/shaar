@@ -129,17 +129,15 @@ def download(url: str, sleep=time.sleep) -> bytes:
                         f"(maximum size of {MAX_ARCHIVE_BYTES} bytes)"
                     )
                 if expected_length is not None and len(payload) != expected_length:
-                    raise urllib.error.URLError(
-                        f"Incomplete download: expected {expected_length} bytes, received {len(payload)}"
-                    )
+                    raise http.client.IncompleteRead(payload, expected_length - len(payload))
+                remaining = getattr(response, "length", None)
+                if expected_length is None and remaining:
+                    raise http.client.IncompleteRead(payload, remaining)
                 return payload
         except urllib.error.HTTPError as error:
             if error.code not in RETRYABLE_STATUS or attempt == DOWNLOAD_ATTEMPTS:
                 raise
-        except http.client.IncompleteRead:
-            if attempt == DOWNLOAD_ATTEMPTS:
-                raise
-        except (urllib.error.URLError, TimeoutError, ConnectionError):
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
             if attempt == DOWNLOAD_ATTEMPTS:
                 raise
         sleep(2 ** attempt)

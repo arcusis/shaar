@@ -52,7 +52,9 @@ struct FolderEditor: View {
         systemImage: "folder"
       )
       .font(.headline)
-      TextField(PanelsL10n.string("Folder name"), text: $name).textFieldStyle(.roundedBorder)
+      TextField(PanelsL10n.string("Folder name"), text: $name)
+        .textFieldStyle(.roundedBorder)
+        .accessibilityLabel(PanelsL10n.string("Folder name"))
         .focused($nameIsFocused).onSubmit { submit() }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
       HStack {

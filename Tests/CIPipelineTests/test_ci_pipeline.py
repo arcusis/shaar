@@ -412,6 +412,12 @@ class PipelineGateTests(unittest.TestCase):
                         needs[stage]["result"] = result
                     self.assertTrue(GATE.gate_errors(needs, True, False, browsing=stage == "basic-browsing"))
 
+    def test_ci_gate_rejects_unclassified_workflow_jobs(self):
+        needs = self.results()
+        needs["new-stage"] = {"result": "failure"}
+        self.assertIn("new-stage: not classified by CI required gate",
+                      GATE.gate_errors(needs, True, False))
+
     def test_cancelled_stale_merge_group_fails_gate_but_replacement_can_pass(self):
         stale = self.results()
         stale["engine"]["result"] = "cancelled"

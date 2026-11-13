@@ -34,6 +34,9 @@ def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
     errors += [f"{name}: {item.get('result', 'missing')}"
                for name, item in needs.items()
                if name in optional and item.get("result") not in ("success", "skipped")]
+    known = expected | optional
+    errors += [f"{name}: not classified by CI required gate"
+               for name in sorted(needs) if name not in known]
     return errors
 
 

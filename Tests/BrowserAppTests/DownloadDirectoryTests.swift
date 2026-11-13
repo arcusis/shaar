@@ -51,6 +51,37 @@ struct DownloadDirectoryTests {
         .downloadDirectory(for: profile) == acknowledged)
   }
 
+  @Test func olderDirectoryAcknowledgementCannotReplaceNewerChoice() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let olderDirectory = root.appending(path: "Older", directoryHint: .isDirectory)
+    let newerDirectory = root.appending(path: "Newer", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: olderDirectory, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: newerDirectory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let profile = try #require(workspace.workspace.catalog.profiles.first?.id)
+    let preferences = BrowserPreferencesStore()
+    var acknowledgements: [CheckedContinuation<URL?, Never>] = []
+    let state = BrowserSettingsState(
+      workspace: workspace, preferences: preferences, downloadDirectorySettingsEnabled: true,
+      applyDownloadDirectory: { _, _ in
+        await withCheckedContinuation { acknowledgements.append($0) }
+      })
+
+    let olderUpdate = Task { await state.applyDownloadDirectory(olderDirectory, for: profile) }
+    for _ in 0..<100 where acknowledgements.count < 1 { await Task.yield() }
+    try #require(acknowledgements.count == 1)
+    let newerUpdate = Task { await state.applyDownloadDirectory(newerDirectory, for: profile) }
+    for _ in 0..<100 where acknowledgements.count < 2 { await Task.yield() }
+    try #require(acknowledgements.count == 2)
+
+    acknowledgements[1].resume(returning: newerDirectory)
+    #expect(await newerUpdate.value)
+    acknowledgements[0].resume(returning: olderDirectory)
+    #expect(await !olderUpdate.value)
+    #expect(preferences.downloadDirectory(for: profile) == newerDirectory)
+  }
+
   @Test func failedEngineUpdateShowsErrorUntilSuccessfulRetry() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

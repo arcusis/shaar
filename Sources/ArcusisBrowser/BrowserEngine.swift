@@ -428,7 +428,8 @@ final class BrowserEngine {
       store.rememberPermissionFrame(
         request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
       guard store.requestPrint(request) else {
-        store.forgetPermissionFrame(request.tabID, matching: request.frameID)
+        store.forgetPermissionFrame(
+          request.tabID, matching: request.frameID, preservingPendingPrints: true)
         self.events.resolvePrint(id, windowID: self.windowID, accepted: false)
         return
       }

@@ -1149,13 +1149,19 @@ final class BrowserStore {
     cancelWebSharesInvalidatedByFrame(for: tabID)
   }
 
-  func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {
+  func forgetPermissionFrame(
+    _ tabID: UUID, matching frameID: String?, preservingPendingPrints: Bool = false
+  ) {
     guard permissionFrames[tabID] == frameID else { return }
     let usedByAcceptedShare = consentRequests.contains { request in
       guard case .webShare(let share) = request else { return false }
       return share.tabID == tabID && share.frameID == frameID
     }
-    guard !usedByAcceptedShare else { return }
+    let usedByPendingPrint = consentRequests.contains { request in
+      guard case .print(let print) = request else { return false }
+      return print.tabID == tabID && print.frameID == frameID
+    }
+    guard !usedByAcceptedShare, !preservingPendingPrints || !usedByPendingPrint else { return }
     permissionFrames[tabID] = nil
     permissionFrameOrigins[tabID] = nil
     cancelWebSharesInvalidatedByFrame(for: tabID)

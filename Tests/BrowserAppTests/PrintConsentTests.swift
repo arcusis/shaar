@@ -171,6 +171,33 @@ struct PrintConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func rejectingQueueOverflowPreservesEarlierPrintConsent() throws {
+    let store = openedStore()
+    var firstRequest: PrintRequest?
+    for _ in 0..<10 {
+      let print = try request(store)
+      if firstRequest == nil { firstRequest = print }
+      store.rememberPermissionFrame(
+        print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+      #expect(store.requestPrint(print))
+    }
+    let first = try #require(firstRequest)
+
+    let overflow = try request(store)
+    store.rememberPermissionFrame(
+      overflow.tabID, frameID: overflow.frameID, origin: overflow.requestingOrigin)
+    #expect(!store.requestPrint(overflow))
+    store.forgetPermissionFrame(
+      overflow.tabID, matching: overflow.frameID, preservingPendingPrints: true)
+
+    var decision: Bool?
+    store.onPrintDecision = { id, accepted in
+      if id == first.id { decision = accepted }
+    }
+    store.resolvePrint(first.id, accepted: true)
+    #expect(decision == true)
+  }
+
   @Test func rendererCrashCancelsPendingPrintConsent() throws {
     let store = openedStore()
     let print = try request(store)

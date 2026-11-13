@@ -14,12 +14,20 @@ struct ProfileIdentityBadge: View {
   var symbol = BrowserProfile.defaultSymbol
   var size: CGFloat = 28
 
+  static func remotePhotoURL(for account: ConnectedAccount) -> URL? {
+    guard let url = account.photoURL, url.scheme?.lowercased() == "https",
+      url.host() != nil, url.user == nil, url.password == nil,
+      url.port.map({ (0...65535).contains($0) }) ?? true
+    else { return nil }
+    return url
+  }
+
   var body: some View {
     Group {
       if let account {
         if let image = account.cachedPhoto {
           Image(nsImage: image).resizable().scaledToFill()
-        } else if let url = account.photoURL, url.scheme == "https" {
+        } else if let url = Self.remotePhotoURL(for: account) {
           AsyncImage(url: url) { phase in
             if let image = phase.image {
               image.resizable().scaledToFill()

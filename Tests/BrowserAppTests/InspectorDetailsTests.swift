@@ -10,6 +10,11 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorDetailsTests {
+  @Test func componentRowTraitsReflectSelection() {
+    #expect(InspectorComponentAccessibility.traits(isSelected: true).contains(.isSelected))
+    #expect(!InspectorComponentAccessibility.traits(isSelected: false).contains(.isSelected))
+  }
+
   @Test func componentSnapshotsValidateIdentityAndRenderFrameworkData() async throws {
     let inspector = try makeInspector(tab: .component)
     defer { inspector.close() }

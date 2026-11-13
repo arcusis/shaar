@@ -56,6 +56,14 @@ class LicenseHeaderTests(unittest.TestCase):
         })
         self.assertEqual(missing, [Path("Sources/Bare.swift"), Path("Sources/Late.swift"), Path("tool.py")])
 
+    def test_tracked_symlink_does_not_inherit_target_license_header(self):
+        external = self.root / "outside.py"
+        external.write_text("\n".join(check_license_headers.expected_notice(Path("outside.py"))) + "\n",
+                            encoding="utf-8")
+        (self.root / "linked.py").symlink_to(external)
+        self.assertEqual(check_license_headers.files_missing_notice(self.root, [Path("linked.py")]),
+                         [Path("linked.py")])
+
     def test_skips_third_party_and_other_file_types(self):
         missing = self._missing({
             "ThirdParty/Vendor/vendor.swift": "import Foundation\n",

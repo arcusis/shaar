@@ -64,8 +64,10 @@ def files_missing_notice(root: Path, paths: list[Path]) -> list[Path]:
         if path.as_posix().startswith(EXCLUDED_DIRECTORIES):
             continue
         notice = expected_notice(path)
-        if notice is not None and not has_notice(root / path, notice):
-            missing.append(path)
+        if notice is not None:
+            tracked_path = root / path
+            if tracked_path.is_symlink() or not has_notice(tracked_path, notice):
+                missing.append(path)
     return missing
 
 

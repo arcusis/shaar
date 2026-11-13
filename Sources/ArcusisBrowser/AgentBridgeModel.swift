@@ -21,7 +21,9 @@ enum AgentBridgeOperation: Int {
 struct AgentBridgeConnection: Equatable, Identifiable {
   let index: Int
   var id: Int { index }
-  var title: String { "Local agent \(index)" }
+  var title: String {
+    ShellL10n.format("Local agent %d", arguments: [.integer(index)])
+  }
 }
 
 enum AgentBridgeSetup {
@@ -178,7 +180,7 @@ final class AgentBridgeModel {
     guard ["http", "https"].contains(target.url.scheme?.lowercased() ?? ""),
       target.origin != nil
     else {
-      failure = "Agent control requires a web page."
+      failure = ShellL10n.string("Agent control requires a web page.")
       return
     }
     busy = true

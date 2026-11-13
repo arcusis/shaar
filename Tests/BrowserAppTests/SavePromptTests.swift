@@ -133,6 +133,13 @@ struct SavePromptTests {
     #expect(store.savePrompt == nil)
   }
 
+  @Test func requestMustMatchTheActiveProfileAndTab() throws {
+    let store = store()
+    #expect(try request(store).matches(store.session))
+    #expect(!(try request(store, profileID: UUID()).matches(store.session)))
+    #expect(!(try request(store, tabID: UUID()).matches(store.session)))
+  }
+
   @Test func neverForACardIsDismissed() throws {
     let store = store()
     let card = try request(store, kind: .card, detail: "Visa •••• 1111")

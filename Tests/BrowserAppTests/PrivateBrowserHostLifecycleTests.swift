@@ -15,19 +15,29 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var containers: [String: NSView] = [:]
   nonisolated(unsafe) var createdContexts: [String] = []
   nonisolated(unsafe) var releasedContexts: [String] = []
+  var holdsContextCreation = false
   var contextCompletion: (@MainActor @Sendable (Bool, Error?) -> Void)?
+  var failedWindowCreations = 0
 
   override func createPrivateContextID(
     _ contextID: String, sourceProfileID: String,
     completion: @escaping @MainActor @Sendable (Bool, Error?) -> Void
   ) {
     createdContexts.append(contextID)
-    contextCompletion = completion
+    if holdsContextCreation {
+      contextCompletion = completion
+    } else {
+      completion(true, nil)
+    }
   }
 
   override func createPrivateWindowID(
     _ windowID: String, contextID: String, tabID: String, url: String
   ) throws {
+    if failedWindowCreations > 0 {
+      failedWindowCreations -= 1
+      throw NSError(domain: "PrivateHostLifecycleRuntime", code: 1)
+    }
     let window = MainActor.assumeIsolated {
       NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
@@ -58,6 +68,7 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
 struct PrivateBrowserHostLifecycleTests {
   @Test func completingContextCreationAfterDetachDoesNotCreateAWindow() throws {
     let runtime = PrivateHostLifecycleRuntime()
+    runtime.holdsContextCreation = true
     let sourceProfileID = UUID().uuidString
     let host = PrivateBrowserHost(
       runtime: runtime, presentsWindows: false,
@@ -75,6 +86,32 @@ struct PrivateBrowserHostLifecycleTests {
     #expect(runtime.releasedContexts == [contextID])
   }
 
+  @Test func failedQueuedWindowCreationDoesNotReleaseContextNeededByNextRequest() throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.holdsContextCreation = true
+    runtime.failedWindowCreations = 1
+    let sourceProfileID = UUID().uuidString
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+
+    try host.openWindow()
+    try host.openWindow()
+    let contextID = try #require(runtime.createdContexts.first)
+    let completion = try #require(runtime.contextCompletion)
+    completion(true, nil)
+
+    #expect(host.windowCount == 1)
+    #expect(host.ownedWindows.first?.contextID == contextID)
+    #expect(runtime.releasedContexts.isEmpty)
+
+    let windowID = try #require(host.ownedWindows.first?.windowID)
+    runtime.onPrivateWindowClosed?(contextID, windowID)
+    #expect(runtime.releasedContexts == [contextID])
+    host.detach()
+  }
+
   @Test func closingOneOfSeveralPrivateWindowsKeepsContextUntilTheLastWindowCloses() throws {
     let runtime = PrivateHostLifecycleRuntime()
     let sourceProfileID = UUID().uuidString
@@ -84,7 +121,6 @@ struct PrivateBrowserHostLifecycleTests {
     host.installCallbacks()
 
     try host.openWindow()
-    runtime.contextCompletion?(true, nil)
     try host.openWindow()
     let owners = host.ownedWindows
     #expect(owners.count == 2)

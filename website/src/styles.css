@@ -690,6 +690,7 @@ p {
     align-items: center;
   }
 
+  html:not([data-enhanced]) .mobile-nav,
   .mobile-nav[data-open] {
     display: grid;
     gap: 4px;

@@ -20,6 +20,9 @@ class DeviceChooserPatchTests(unittest.TestCase):
         source = PATCH.read_text()
         self.assertIn("UsbChooserController::UsbChooserController", source)
         self.assertIn('SetShaarTransport("usb")', source)
+        self.assertIn('HasSwitch("shaar-embedder")', source)
+        self.assertIn(
+            "return shaar::chooser::ShowDeviceChooser(owner, std::move(controller));", source)
         self.assertIn("ShaarDeviceChooser", source)
         self.assertIn('"deviceChooserRequested"', source)
         self.assertIn('"deviceChooserUpdated"', source)

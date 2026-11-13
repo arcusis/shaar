@@ -30,6 +30,7 @@ final class PrivateBrowserHost {
   private var contextsBySource: [String: String] = [:]
   private var windowsByContext: [String: Set<String>] = [:]
   private var pendingWindowRequests: [String: [(String, String)]] = [:]
+  private var contextsAwaitingRelease: Set<String> = []
   private var isDetached = false
 
   init(
@@ -141,7 +142,10 @@ final class PrivateBrowserHost {
   }
 
   func detach() {
-    guard !isDetached else { return }
+    guard !isDetached else {
+      retryPendingContextReleases()
+      return
+    }
     isDetached = true
     runtime.onPrivateNavigationFailed = nil
     runtime.onPrivateTabChanged = nil
@@ -154,6 +158,7 @@ final class PrivateBrowserHost {
     runtime.onPrivateWindowClosed = nil
     for owner in owners.values { retire(owner) }
     owners.removeAll()
+    retryPendingContextReleases()
   }
 
   static func retireHostingContent<Content: View>(_ hosting: NSHostingView<Content?>) {
@@ -181,6 +186,7 @@ final class PrivateBrowserHost {
     guard !isDetached, !runtime.isQuitting, let source = sourceProfileID() else {
       throw WorkspaceError.invalidState
     }
+    retryPendingContextReleases()
     let contextID = contextsBySource[source] ?? UUID().uuidString.uppercased()
     let windowID = UUID().uuidString.uppercased()
     let tabID = UUID().uuidString.uppercased()
@@ -208,7 +214,7 @@ final class PrivateBrowserHost {
           self.contextsBySource.removeValue(forKey: source)
         }
         self.windowsByContext.removeValue(forKey: contextID)
-        if success { _ = runtime.releasePrivateContextID(contextID) }
+        if success { self.releaseContext(contextID) }
         return
       }
       guard success, !self.runtime.isQuitting, self.contextsBySource[source] == contextID,
@@ -222,7 +228,7 @@ final class PrivateBrowserHost {
           self.windowsByContext.removeValue(forKey: contextID)
         }
         if success, self.windowsByContext[contextID] == nil {
-          _ = self.runtime.releasePrivateContextID(contextID)
+          self.releaseContext(contextID)
         }
         return
       }
@@ -422,7 +428,7 @@ final class PrivateBrowserHost {
     else { return }
     windowsByContext.removeValue(forKey: context)
     contextsBySource.removeValue(forKey: source)
-    _ = runtime.releasePrivateContextID(context)
+    releaseContext(context)
   }
 
   private func windowClosed(context: String, window: String) {
@@ -433,7 +439,19 @@ final class PrivateBrowserHost {
     if windowsByContext[context]?.isEmpty == true {
       windowsByContext.removeValue(forKey: context)
       contextsBySource.removeValue(forKey: owner.sourceProfileID)
-      _ = runtime.releasePrivateContextID(context)
+      releaseContext(context)
+    }
+  }
+
+  private func retryPendingContextReleases() {
+    for context in Array(contextsAwaitingRelease) { releaseContext(context) }
+  }
+
+  private func releaseContext(_ context: String) {
+    if runtime.releasePrivateContextID(context) {
+      contextsAwaitingRelease.remove(context)
+    } else {
+      contextsAwaitingRelease.insert(context)
     }
   }
 }

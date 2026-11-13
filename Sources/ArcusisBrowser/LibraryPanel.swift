@@ -70,6 +70,10 @@ struct LibraryPanel: View {
       return true
     }
   }
+  private var searchLabel: String {
+    PanelsL10n.string(section == .bookmarks ? "Search Bookmarks" : "Search History")
+  }
+
   private var history: [BrowserHistoryEntry] {
     (store.library.history[profileID] ?? []).filter {
       LibraryPanelSearch.matches("\($0.title) \($0.address)", query: query)
@@ -92,10 +96,9 @@ struct LibraryPanel: View {
       Picker(PanelsL10n.string("Library"), selection: $section) {
         ForEach(LibrarySection.allCases, id: \.self) { Text($0.title).tag($0) }
       }.pickerStyle(.segmented)
-      TextField(
-        PanelsL10n.string(section == .bookmarks ? "Search Bookmarks" : "Search History"),
-        text: $query
-      ).textFieldStyle(.roundedBorder)
+      TextField(searchLabel, text: $query)
+        .textFieldStyle(.roundedBorder)
+        .accessibilityLabel(searchLabel)
       if !ownsContext {
         ContentUnavailableView(
           PanelsL10n.string("Profile changed"), systemImage: "person.crop.circle"

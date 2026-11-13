@@ -121,6 +121,19 @@ private actor FakeMediaTransport: ShaarMediaTransport {
   }
 }
 
+@Test func stateEventsRejectInvalidNativeStateFields() throws {
+  let adapter = ShaarMediaAdapter(implementation: .shaar, transport: FakeMediaTransport("{}"))
+  let event = ShaarCopiedEvent(
+    sequence: 2, kind: 15, profileID: Data("p".utf8), sessionID: Data(),
+    windowID: Data(), tabID: Data("t".utf8),
+    payloadJSON: Data(
+      #"{"schemaVersion":1,"kind":"state_changed","state":{"schemaVersion":1,"playbackState":"playing","title":"","artist":"","album":"","supportedActions":[0],"canSeek":false,"hasVideo":false,"tabMuted":false,"pageVolume":1.5}}"#
+        .utf8))
+  #expect(throws: ShaarMediaAdapterError.malformedResponse) {
+    try adapter.decodeEvent(event, scope: .init(profileID: "p", tabID: "t"))
+  }
+}
+
 @Test func shaarIsTheDefaultImplementationChoice() {
   let fake = FakeMediaTransport("{}")
   #expect(ShaarMediaAdapter.selected(transport: fake) != nil)

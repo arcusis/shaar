@@ -13,6 +13,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0066-shaar-save-prompts.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
+ENGINE_SOURCE = (
+    ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/save_prompts/"
+    "shaar_save_prompts.cc"
+)
 
 
 class SavePromptPatchTests(unittest.TestCase):
@@ -52,6 +56,19 @@ class SavePromptPatchTests(unittest.TestCase):
             "chrome/browser/shaar/save_prompts/shaar_save_prompts_unittest.cc",
             block["layerFiles"],
         )
+
+    def test_save_prompt_page_url_drops_credentials_query_and_fragment(self):
+        source = ENGINE_SOURCE.read_text()
+        self.assertIn("!url.SchemeIsHTTPOrHTTPS()", source)
+        self.assertIn("replacements.ClearUsername()", source)
+        self.assertIn("replacements.ClearPassword()", source)
+        self.assertIn("replacements.ClearQuery()", source)
+        self.assertIn("replacements.ClearRef()", source)
+        self.assertIn(
+            "const GURL page = CleanPageURL(contents->GetLastCommittedURL());", source
+        )
+        self.assertIn('payload.Set("pageURL", page.spec())', source)
+        self.assertIn('payload.Set("origin", origin.spec())', source)
 
 
 if __name__ == "__main__":

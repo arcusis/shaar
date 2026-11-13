@@ -7,6 +7,31 @@ import CoreFoundation
 import Foundation
 import Testing
 
+@Test func historyEntryConstructionFocusedBenchmark() throws {
+  let profile = UUID()
+  let visits = (0..<32).map { NSNumber(value: Double($0 + 1) * 1_000) }
+  let payload: [String: Any] = [
+    "u": "https://example.com/account", "t": "Example", "n": 32, "v": visits,
+  ]
+  let start = ContinuousClock.now
+  var checksum = 0
+  for _ in 0..<5_000 {
+    let entry = try BrowserHistoryEntry(profileID: profile, payload: payload)
+    checksum += Int(entry.lastVisit.timeIntervalSince1970)
+  }
+  print("historyEntryConstructionFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(checksum == 160_000)
+}
+
+@Test func latestValidHistoryVisitFindsMaximumAndRejectsInvalidInput() {
+  #expect(
+    BrowserHistoryEntry.latestValidVisit(
+      in: [NSNumber(value: 1_000), NSNumber(value: 3_000), NSNumber(value: 2_000)]) == 3_000)
+  #expect(BrowserHistoryEntry.latestValidVisit(in: []) == nil)
+  #expect(BrowserHistoryEntry.latestValidVisit(in: [NSNumber(value: true)]) == nil)
+  #expect(BrowserHistoryEntry.latestValidVisit(in: [NSNumber(value: Double.nan)]) == nil)
+}
+
 @Test func bookmarkTreePreservesHierarchyAndUnsupportedAddressesWithoutExecutingThem() throws {
   let profile = UUID()
   let folder = UUID()

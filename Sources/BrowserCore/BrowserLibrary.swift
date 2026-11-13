@@ -122,7 +122,7 @@ public struct BrowserHistoryEntry: Identifiable, Equatable, Sendable {
       count.doubleValue >= 0, count.doubleValue < Double(Int64.max),
       count.doubleValue.rounded(.towardZero) == count.doubleValue,
       let visits = payload["v"] as? [NSNumber],
-      let last = Self.validatedLatestVisit(in: visits)
+      let last = Self.latestValidVisit(in: visits)
     else { throw LibraryDataError.invalidHistory }
     self.profileID = profileID
     self.address = address
@@ -133,18 +133,22 @@ public struct BrowserHistoryEntry: Identifiable, Equatable, Sendable {
     lastVisit = Date(timeIntervalSince1970: last / 1000)
   }
 
-  static func validatedLatestVisit(in visits: [NSNumber]) -> Double? {
+  static func latestValidVisit(in visits: [NSNumber]) -> Double? {
     guard !visits.isEmpty else { return nil }
-    let maximum = Date.distantFuture.timeIntervalSince1970 * 1000
+    let latestAllowed = Date.distantFuture.timeIntervalSince1970 * 1000
     var latest = 0.0
-    for visit in visits {
-      let timestamp = visit.doubleValue
-      guard CFGetTypeID(visit) != CFBooleanGetTypeID(), timestamp.isFinite,
-        timestamp >= 0, timestamp <= maximum
+    for (index, visit) in visits.enumerated() {
+      let value = visit.doubleValue
+      guard CFGetTypeID(visit) != CFBooleanGetTypeID(), value.isFinite, value >= 0,
+        value <= latestAllowed
       else { return nil }
-      latest = max(latest, timestamp)
+      if index == 0 || value > latest { latest = value }
     }
     return latest
+  }
+
+  static func validatedLatestVisit(in visits: [NSNumber]) -> Double? {
+    latestValidVisit(in: visits)
   }
 }
 

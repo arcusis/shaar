@@ -37,6 +37,18 @@ final class AgentBridgeTests: XCTestCase {
     XCTAssertEqual(AgentBridgeAccessibility.headingTraits, .isHeader)
   }
 
+  func testAgentBridgeExplainsThatItNeedsAWebPage() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(fileURLWithPath: "/tmp/example.html"))
+    let model = AgentBridgeModel(target: target) { _, _, _ in
+      XCTFail("A non-web target must not call the Agent Bridge")
+    }
+
+    model.enable()
+
+    XCTAssertEqual(model.failure, ShellL10n.string("Agent control requires a web page."))
+  }
+
   func testStatusRejectsSecretsAndInvalidPorts() throws {
     XCTAssertThrowsError(
       try AgentBridgeStatus.decode([

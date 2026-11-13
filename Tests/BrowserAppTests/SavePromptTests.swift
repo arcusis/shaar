@@ -56,6 +56,15 @@ struct SavePromptTests {
     #expect(decisions == ["prompt-1:save"])
   }
 
+  @Test func duplicateIDWithDifferentDetailsIsRejected() throws {
+    let store = store()
+    let original = try request(store)
+    let changed = try request(store, detail: "attacker-controlled")
+    #expect(store.requestSavePrompt(original))
+    #expect(!store.requestSavePrompt(changed))
+    #expect(store.savePrompt == original)
+  }
+
   @Test func leavingTheOriginTurnsSaveIntoDismiss() throws {
     let store = store()
     let request = try request(store)
@@ -78,6 +87,21 @@ struct SavePromptTests {
     store.nativeTabChanged(tab.id, url: URL(string: "http://127.0.0.1:9/account")!, title: "Account")
     #expect(store.savePrompt == nil)
     #expect(decisions == [.dismiss])
+  }
+
+  @Test func queryAndFragmentChangesKeepTheSameOfferCurrent() throws {
+    let store = store()
+    let request = try request(store)
+    var decisions: [SavePromptRequest.Decision] = []
+    store.onSavePromptDecision = { _, decision in decisions.append(decision) }
+    #expect(store.requestSavePrompt(request))
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.nativeTabChanged(
+      tab.id, url: URL(string: "http://127.0.0.1:9/password?next=/account#continue")!,
+      title: "Password")
+    #expect(store.savePrompt == request)
+    store.resolveSavePrompt(request.id, decision: .save)
+    #expect(decisions == [.save])
   }
 
   @Test func switchingTabsDismissesTheOffer() throws {

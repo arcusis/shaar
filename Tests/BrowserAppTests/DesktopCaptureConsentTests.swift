@@ -315,12 +315,29 @@ struct DesktopCaptureConsentTests {
     #expect(browser.requestDesktopCapture(capture))
     browser.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
     browser.togglePin(capture.tabID)
-
     browser.nativeTabClosed(capture.tabID)
-
     #expect(browser.session.page(forTabID: capture.tabID) != nil)
     #expect(decisions == [nil])
     #expect(browser.sheet == nil)
+  }
+
+  @Test func permissionFrameChangeImmediatelyCancelsPresentedCaptureRequest() throws {
+    let browser = store()
+    let capture = try request(browser)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: capture.frameID, origin: capture.requestingOrigin)
+    var decisions: [String?] = []
+    browser.onDesktopCaptureDecision = { _, sourceID in decisions.append(sourceID) }
+    #expect(browser.requestDesktopCapture(capture))
+    browser.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    #expect(browser.sheet?.id == capture.sheetID)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: "fedcba9876543210fedcba9876543210",
+      origin: capture.requestingOrigin)
+    #expect(decisions == [nil])
+    #expect(browser.sheet == nil)
+    browser.resolveDesktopCapture(capture.id, sourceID: "screen:1:0")
+    #expect(decisions == [nil])
   }
 
   @Test func aPageTitleCannotOpenTheCaptureSheet() throws {

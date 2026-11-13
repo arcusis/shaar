@@ -1207,6 +1207,7 @@ final class BrowserStore {
     permissionFrames[tabID] = frameID
     permissionFrameOrigins[tabID] = origin
     cancelWebSharesInvalidatedByFrame(for: tabID)
+    cancelDesktopCapturesInvalidatedByFrame(for: tabID)
   }
 
   func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {
@@ -1223,6 +1224,7 @@ final class BrowserStore {
     permissionFrames[tabID] = nil
     permissionFrameOrigins[tabID] = nil
     cancelWebSharesInvalidatedByFrame(for: tabID)
+    cancelDesktopCapturesInvalidatedByFrame(for: tabID)
   }
 
   private func cancelWebSharesInvalidatedByFrame(for tabID: UUID) {
@@ -1235,6 +1237,22 @@ final class BrowserStore {
     }
     for id in staleIDs {
       resolveWebShare(id, outcome: .cancelled)
+    }
+  }
+
+  private func cancelDesktopCapturesInvalidatedByFrame(for tabID: UUID) {
+    let staleIDs = consentRequests.compactMap { request -> String? in
+      guard case .desktopCapture(let capture) = request,
+        capture.tabID == tabID,
+        let frameID = permissionFrames[tabID],
+        let origin = permissionFrameOrigins[tabID],
+        !capture.matches(
+          session, frameID: frameID, origin: origin)
+      else { return nil }
+      return capture.id
+    }
+    for id in staleIDs {
+      resolveDesktopCapture(id, sourceID: nil)
     }
   }
 

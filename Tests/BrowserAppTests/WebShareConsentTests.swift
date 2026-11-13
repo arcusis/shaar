@@ -182,6 +182,19 @@ struct WebShareConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func sharingOutcomeWaitsForServiceCompletionAndFinishesOnce() {
+    let gate = WebShareOutcomeGate()
+    var outcomes: [Bool] = []
+    gate.onFinish = { outcomes.append($0) }
+
+    // Choosing a sharing service is not proof that the service succeeded.
+    gate.chooseService(available: true)
+    #expect(outcomes.isEmpty)
+    gate.finish(true)
+    gate.finish(false)
+    #expect(outcomes == [true])
+  }
+
   @Test func changedFrameOrOriginCancelsAWebShare() throws {
     let store = openedStore()
     let share = try request(store)

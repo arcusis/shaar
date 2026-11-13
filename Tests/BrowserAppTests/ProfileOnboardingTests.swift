@@ -194,6 +194,13 @@ private struct CreationFailure: Error {}
     #expect(
       model.failure == SettingsL10n.string("Could not create the profile. Try again.")
         && model.outcome == nil && recorder.outcomes.isEmpty)
+    #expect(model.failure == SettingsL10n.string("Could not create this profile. Try again."))
+    #expect(model.outcome == nil && recorder.outcomes.isEmpty)
+    #expect(
+      BrowserLocalization.string(
+        "Could not create this profile. Try again.", table: "Settings", language: .hebrew)
+        == "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב.")
+
     recorder.creationError = nil
     model.continueToNext()
     #expect(recorder.drafts.count == 2 && recorder.signIns.isEmpty)

@@ -101,6 +101,12 @@ private struct HostViewportWindowState {
   let findQuery: String?
 }
 
+enum NativeHostViewportValidation {
+  static func sameCSSSize(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
+    abs(lhs.width - rhs.width) <= 1 && abs(lhs.height - rhs.height) <= 1
+  }
+}
+
 /// Exercises the production host class without ordering windows onscreen or sending OS input.
 @MainActor
 final class NativeHostProbe {
@@ -1011,8 +1017,9 @@ final class NativeHostProbe {
   }
 
   private func viewportSizeMatches(_ lhs: HostViewportSample, _ rhs: HostViewportSample) -> Bool {
-    abs(lhs.innerWidthCSSPixels - rhs.innerWidthCSSPixels) <= 1
-      && abs(lhs.innerHeightCSSPixels - rhs.innerHeightCSSPixels) <= 1
+    NativeHostViewportValidation.sameCSSSize(
+      CGSize(width: lhs.innerWidthCSSPixels, height: lhs.innerHeightCSSPixels),
+      CGSize(width: rhs.innerWidthCSSPixels, height: rhs.innerHeightCSSPixels))
   }
 
   private func recordViewportCheck(

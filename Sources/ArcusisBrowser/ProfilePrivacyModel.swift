@@ -250,7 +250,7 @@ final class ProfilePrivacyModel {
   }
 
   func load() async {
-    await run {
+    await run(failureMessage: "Could not load profile privacy settings. Try again.") {
       try await self.backend.loadProfile(self.profileID)
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
       self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
@@ -273,7 +273,7 @@ final class ProfilePrivacyModel {
 
   func resetPermissions(origin: String) async {
     guard sites.contains(where: { $0.id == origin }) else { return }
-    await run {
+    await run(failureMessage: "Could not reset site permissions. Try again.") {
       try await self.backend.loadProfile(self.profileID)
       try await self.backend.resetPermissions(self.profileID, origin: origin)
       try await self.refreshPermissions()
@@ -283,7 +283,7 @@ final class ProfilePrivacyModel {
 
   func setCookiesBlocked(_ blocked: Bool) async {
     guard cookiesBlocked != nil, !cookiesManaged else { return }
-    await run {
+    await run(failureMessage: "Could not update the third-party cookie setting. Try again.") {
       try await self.backend.setThirdPartyCookiesBlocked(blocked, profileID: self.profileID)
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
       self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
@@ -313,7 +313,11 @@ final class ProfilePrivacyModel {
     message = nil
     defer { busy = false }
     do { try await operation() } catch {
-      failure = failureMessage.map(SettingsL10n.string) ?? error.localizedDescription
+      if error is ProfilePermissionDataError {
+        failure = error.localizedDescription
+      } else {
+        failure = failureMessage.map(SettingsL10n.string) ?? error.localizedDescription
+      }
     }
   }
 }

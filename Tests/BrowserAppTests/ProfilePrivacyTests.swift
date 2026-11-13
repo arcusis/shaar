@@ -114,6 +114,15 @@ struct ProfilePrivacyTests {
     await #expect(throws: (any Error).self) { try await backend.deleteProfile(id) }
   }
 
+  @Test func profilePrivacyLoadFailureUsesLocalizedRecoveryCopy() async {
+    let backend = ProfileSettingsStub()
+    backend.failureAction = "load"
+    let model = ProfilePrivacyModel(profileID: UUID(), backend: backend)
+    await model.load()
+    #expect(
+      model.failure == SettingsL10n.string("Could not load profile privacy settings. Try again."))
+  }
+
   @Test func supportedCookiePolicyReadsBackAndFailureKeepsPreviousValue() async {
     let backend = ProfileSettingsStub()
     let id = UUID()
@@ -125,7 +134,10 @@ struct ProfilePrivacyTests {
     #expect(model.cookiesBlocked == true && backend.cookiePolicies[other] == false)
     backend.failureAction = "cookies"
     await model.setCookiesBlocked(false)
-    #expect(model.cookiesBlocked == true && model.failure != nil)
+    #expect(model.cookiesBlocked == true)
+    #expect(
+      model.failure == SettingsL10n.string(
+        "Could not update the third-party cookie setting. Try again."))
   }
 
   @Test func ignoredCookiePolicyWriteReportsFailureAfterReadback() async {
@@ -223,7 +235,9 @@ struct ProfilePrivacyTests {
     #expect(model.message == nil && !model.busy)
     backend.failureAction = "reset"
     await model.resetPermissions(origin: "https://example.test")
-    #expect(model.failure != nil && model.sites.count == 1 && model.message == nil)
+    #expect(
+      model.failure == SettingsL10n.string("Could not reset site permissions. Try again."))
+    #expect(model.sites.count == 1 && model.message == nil)
   }
 
   @Test func protocolHandlerExceptionUsesTheSettingsTitle() {

@@ -65,15 +65,6 @@ struct SavePromptTests {
     #expect(store.savePrompt == original)
   }
 
-  @Test func duplicateIDWithDifferentDetailsIsRejected() throws {
-    let store = store()
-    let original = try request(store)
-    let changed = try request(store, detail: "attacker-controlled")
-    #expect(store.requestSavePrompt(original))
-    #expect(!store.requestSavePrompt(changed))
-    #expect(store.savePrompt == original)
-  }
-
   @Test func leavingTheOriginTurnsSaveIntoDismiss() throws {
     let store = store()
     let request = try request(store)

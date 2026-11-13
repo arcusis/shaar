@@ -148,12 +148,9 @@ import Testing
 
 @Test @MainActor func controlShiftTabCyclesToThePreviousTabAndWraps() throws {
   let store = BrowserStore()
-  for index in 1...3 {
-    store.perform(.open(URL(string: "https://previous\(index).example")!))
-  }
+  for index in 1...3 { store.perform(.open(URL(string: "https://previous\(index).example")!)) }
   let tabs = store.session.selectedSpace.tabs
   store.selectTabByShortcutIndex(0)
-
   let event = NSEvent.keyEvent(
     with: .keyDown, location: .zero, modifierFlags: [.control, .shift], timestamp: 0,
     windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
@@ -170,21 +167,34 @@ import Testing
   store.perform(.open(URL(string: "https://previous-one.example")!))
   store.perform(.open(URL(string: "https://previous-two.example")!))
   let selected = store.session.selectedSpace.selectedTabID
-
   func event(_ type: NSEvent.EventType, _ modifiers: NSEvent.ModifierFlags) -> NSEvent {
     NSEvent.keyEvent(
       with: type, location: .zero, modifierFlags: modifiers, timestamp: 0,
       windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
       isARepeat: false, keyCode: 48)!
   }
-
-  for modifiers in [
-    NSEvent.ModifierFlags(), .control, .control.union(.command),
-    .control.union(.shift).union(.option),
-  ] {
+  for modifiers in [NSEvent.ModifierFlags(), .control, .control.union(.command), .control.union(.shift).union(.option)] {
     #expect(!PreviousTabShortcutRouting.route(event(.keyDown, modifiers), store: store))
   }
   #expect(!PreviousTabShortcutRouting.route(event(.keyUp, [.control, .shift]), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == selected)
+}
+
+@Test @MainActor func commandNumberRoutingRejectsModifiedVariantsAndKeyUp() throws {
+  let store = BrowserStore()
+  store.perform(.open(URL(string: "https://one.example")!))
+  store.perform(.open(URL(string: "https://two.example")!))
+  let selected = store.session.selectedSpace.selectedTabID
+  func event(_ type: NSEvent.EventType, _ modifiers: NSEvent.ModifierFlags) -> NSEvent {
+    NSEvent.keyEvent(
+      with: type, location: .zero, modifierFlags: modifiers, timestamp: 0,
+      windowNumber: 0, context: nil, characters: "1", charactersIgnoringModifiers: "1",
+      isARepeat: false, keyCode: 18)!
+  }
+  for modifiers in [NSEvent.ModifierFlags(), .command.union(.shift), .command.union(.option), .command.union(.control)] {
+    #expect(!TabNumberShortcutRouting.route(event(.keyDown, modifiers), store: store))
+  }
+  #expect(!TabNumberShortcutRouting.route(event(.keyUp, .command), store: store))
   #expect(store.session.selectedSpace.selectedTabID == selected)
 }
 

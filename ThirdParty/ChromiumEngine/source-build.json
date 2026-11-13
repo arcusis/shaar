@@ -529,6 +529,10 @@
       "sha256": "33d111990e8de140bac8983e1e6352836087761f0a17e53dcd45311e3d605bc1"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0116-shaar-password-save-prompt-snapshot.patch",
+      "sha256": "ddbc237dd0f773fad284035ea7dfdd638ad07af8eef0ecb9be34d2c42172a12a"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0070-shaar-website-permission-prompt.patch",
       "sha256": "d23932e1e900fbc569812c38c88f95e7f794ca8fb7446cd54155006e6edc173b"
     },

@@ -90,8 +90,7 @@ final class PrivatePageSession {
     store.rememberPermissionFrame(
       request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
     guard store.requestPrint(request) else {
-      store.forgetPermissionFrame(
-        request.tabID, matching: request.frameID, preservingPendingPrints: true)
+      store.forgetPermissionFrame(request.tabID, matching: request.frameID)
       runtime.resolvePrintRequestID(id, accepted: false)
       return
     }

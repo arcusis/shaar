@@ -36,6 +36,8 @@ final class PictureInPictureControls {
     view.onGesture = { [weak self] in self?.handle($0) }
   }
 
+  isolated deinit { pendingAttachment?.cancel() }
+
   var isAttached: Bool { panel != nil }
 
   /// Attaches to the tab's window once Chromium shows it; Chromium reports the window as it

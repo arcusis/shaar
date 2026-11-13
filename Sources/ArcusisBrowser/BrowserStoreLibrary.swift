@@ -110,6 +110,7 @@ extension BrowserStore {
   @discardableResult
   func deleteBookmark(_ id: UUID, profileID: UUID) -> Bool {
     guard mayUseLibrary(profileID, editing: true),
+      case .bookmarkEditor(let route) = sheet, route.profileID == profileID, route.itemID == id,
       library.bookmarks[profileID]?.items.contains(where: { $0.id == id && !$0.isPermanent })
         == true
     else { return false }

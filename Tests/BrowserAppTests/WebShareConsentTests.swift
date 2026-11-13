@@ -195,6 +195,23 @@ struct WebShareConsentTests {
     #expect(outcomes == [true])
   }
 
+  @Test func failedServiceAndCancelledPickerResolveAsCancelled() {
+    let failedService = WebShareOutcomeGate()
+    var failedOutcome: Bool?
+    failedService.onFinish = { failedOutcome = $0 }
+    failedService.chooseService(available: true)
+    #expect(failedOutcome == nil)
+    failedService.finish(false)
+    #expect(failedOutcome == false)
+
+    let cancelledPicker = WebShareOutcomeGate()
+    var cancelledOutcome: Bool?
+    cancelledPicker.onFinish = { cancelledOutcome = $0 }
+    cancelledPicker.chooseService(available: false)
+    cancelledPicker.finish(true)
+    #expect(cancelledOutcome == false)
+  }
+
   @Test func changedFrameOrOriginCancelsAWebShare() throws {
     let store = openedStore()
     let share = try request(store)

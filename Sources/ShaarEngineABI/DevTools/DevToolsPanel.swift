@@ -2,7 +2,22 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
+
+private func panelInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
+
+private func panelNumber(_ value: Any?) -> Double? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite
+  else { return nil }
+  return number.doubleValue
+}
 
 /// Fixed IDs shared with shaar_devtools_panel_event_id. The protocol method
 /// string never crosses the engine ABI.
@@ -85,7 +100,7 @@ public struct ShaarDevToolsResponseBody: Equatable, Sendable {
     guard data.count <= 1_100_000,
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       Set(object.keys) == ["schemaVersion", "body", "base64Encoded"],
-      object["schemaVersion"] as? Int == 1,
+      panelInteger(object["schemaVersion"]) == 1,
       let body = object["body"] as? String,
       body.utf8.count <= 1_048_576,
       let encoded = object["base64Encoded"] as? Bool
@@ -108,12 +123,13 @@ public enum ShaarDevToolsPanelEventRouter {
       event.payloadJSON.count <= 384 * 1024,
       let root = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       Set(root.keys) == ["schemaVersion", "kind", "eventID", "leaseID", "data"],
-      root["schemaVersion"] as? Int == 1,
+      panelInteger(root["schemaVersion"]) == 1,
       root["kind"] as? String == "panelEvent",
-      let rawID = root["eventID"] as? Int,
+      let rawID = panelInteger(root["eventID"]),
       let id = ShaarDevToolsPanelEventID(rawValue: rawID),
       id == .screencastFrame || event.payloadJSON.count <= 32_768,
-      root["leaseID"] as? UInt32 == leaseID,
+      let rawLeaseID = panelInteger(root["leaseID"]), rawLeaseID >= 0,
+      rawLeaseID <= Int(UInt32.max), UInt32(rawLeaseID) == leaseID,
       let fields = root["data"] as? [String: Any],
       let payload = decodeData(fields, for: id)
     else { return nil }
@@ -134,7 +150,7 @@ public enum ShaarDevToolsPanelEventRouter {
         let jpeg = Data(base64Encoded: text), jpeg.count <= 256 * 1024,
         jpeg.count >= 4, jpeg.starts(with: [0xFF, 0xD8]),
         jpeg.suffix(2).elementsEqual([0xFF, 0xD9]),
-        let sessionID = fields["sessionID"] as? Int, sessionID > 0
+        let sessionID = panelInteger(fields["sessionID"]), sessionID > 0
       else { return nil }
       return ShaarDevToolsPanelData(
         text: nil, level: nil, objectID: nil, requestID: nil, url: nil, method: nil,
@@ -146,7 +162,7 @@ public enum ShaarDevToolsPanelEventRouter {
     }
     if id == .eventsDropped {
       guard Set(fields.keys) == ["count"],
-        let count = fields["count"] as? Int,
+        let count = panelInteger(fields["count"]),
         count > 0, let value = UInt32(exactly: count)
       else { return nil }
       return ShaarDevToolsPanelData(
@@ -174,15 +190,15 @@ public enum ShaarDevToolsPanelEventRouter {
     ].contains(id) && (requestID?.isEmpty ?? true) {
       return nil
     }
-    let status = fields["status"] as? Double
-    let opcode = fields["opcode"] as? Int
+    let status = panelNumber(fields["status"])
+    let opcode = panelInteger(fields["opcode"])
     if fields["opcode"] != nil && (opcode == nil || !(0...15).contains(opcode!)) {
       return nil
     }
     if [.webSocketFrameSent, .webSocketFrameReceived].contains(id) && opcode == nil {
       return nil
     }
-    let encodedBytes = fields["encodedBytes"] as? Double
+    let encodedBytes = panelNumber(fields["encodedBytes"])
     if fields["status"] != nil && (status == nil || !status!.isFinite) { return nil }
     if fields["encodedBytes"] != nil
       && (encodedBytes == nil || !encodedBytes!.isFinite || encodedBytes! < 0)
@@ -196,7 +212,7 @@ public enum ShaarDevToolsPanelEventRouter {
       for entry in entries {
         guard Set(entry.keys) == ["name", "value"],
           let name = entry["name"] as? String, name.utf8.count <= 4_096,
-          let value = entry["value"] as? Double, value.isFinite
+          let value = panelNumber(entry["value"])
         else { return nil }
         parsed.append(ShaarDevToolsPanelMetric(name: name, value: value))
       }

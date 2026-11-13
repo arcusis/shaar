@@ -227,7 +227,7 @@ final class InspectorDetailsModel {
       if matches(inspector, id: selection.id, generation: generation, tab: tab),
         !(error is CancellationError)
       {
-        failure = error.localizedDescription
+        failure = InspectorDetailsL10n.display(error.localizedDescription)
       }
     }
   }
@@ -332,7 +332,7 @@ final class InspectorDetailsModel {
       if request == componentRequest,
         matches(inspector, id: element, generation: generation, tab: .component)
       {
-        failure = error.localizedDescription
+        failure = InspectorDetailsL10n.display(error.localizedDescription)
       }
     }
   }
@@ -446,6 +446,6 @@ final class InspectorDetailsModel {
         filename.isEmpty || [".", ".."].contains(filename) ? "asset" : String(filename.prefix(160))
       guard await panel.begin() == .OK, let destination = panel.url else { return }
       try data.write(to: destination, options: .atomic)
-    } catch { failure = error.localizedDescription }
+    } catch { failure = InspectorDetailsL10n.display(error.localizedDescription) }
   }
 }

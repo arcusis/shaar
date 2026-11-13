@@ -191,7 +191,9 @@ struct FirstRunSetupView: View {
         SettingsL10n.string(
           "Spaces keep different parts of your web in reach. Start with a name you recognize."))
       TextField(SettingsL10n.string("Space name"), text: $spaceName)
-        .textFieldStyle(.roundedBorder).accessibilityIdentifier("firstRun.spaceName")
+        .textFieldStyle(.roundedBorder)
+        .accessibilityLabel(SettingsL10n.string("Space name"))
+        .accessibilityIdentifier("firstRun.spaceName")
       if let spaceError { Text(spaceError).foregroundStyle(.red) }
     case .keychain:
       Text(

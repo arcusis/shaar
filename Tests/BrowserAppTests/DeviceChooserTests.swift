@@ -126,6 +126,18 @@ struct DeviceChooserTests {
     ])
   }
 
+  @Test func chooserEventsRejectFloatingPointSchemaVersions() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    var payload = event(transport: "usb", id: "floating-version", page: tab.url)
+    payload["schemaVersion"] = NSNumber(value: 1.0)
+
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: payload) == nil)
+  }
+
   @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

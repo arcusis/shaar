@@ -153,6 +153,8 @@ enum DeviceChooserIntake {
     guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
       return nil
     }
+    let encoding = String(cString: number.objCType)
+    guard encoding != "f", encoding != "d" else { return nil }
     return Int(exactly: number.doubleValue)
   }
 

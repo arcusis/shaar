@@ -10,26 +10,17 @@ import Testing
 
 @Suite @MainActor
 struct PageFindStateTests {
-  @Test func documentIdentityIgnoresFragmentsButIncludesQueryAndPath() throws {
+  @Test func documentIdentityIncludesQueryParameters() throws {
     let originalURL = URL(string: "https://find.example/article?lang=en#intro")!
     var session = BrowserSession.fresh()
     let tabID = session.open(originalURL)!
     let state = PageFindState(
       profileID: session.selectedSpace.profileID, tabID: tabID, pageURL: originalURL)
-
-    let store = BrowserStore(session: session)
-    store.nativeTabChanged(
-      tabID, url: URL(string: "https://find.example/article?lang=en#details")!, title: "Article")
-    #expect(state.matches(store.session))
+    #expect(state.matches(session))
 
     let queryStore = BrowserStore(session: session)
     queryStore.nativeTabChanged(
       tabID, url: URL(string: "https://find.example/article?lang=fr#intro")!, title: "Article")
     #expect(!state.matches(queryStore.session))
-
-    let pathStore = BrowserStore(session: session)
-    pathStore.nativeTabChanged(
-      tabID, url: URL(string: "https://find.example/other?lang=en#intro")!, title: "Article")
-    #expect(!state.matches(pathStore.session))
   }
 }

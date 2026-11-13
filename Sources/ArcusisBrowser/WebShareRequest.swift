@@ -33,6 +33,7 @@ struct WebShareRequest: Identifiable, Equatable {
       frameID.count >= 1, frameID.count <= 256,
       Self.isTrueBoolean(payload["userActivated"]),
       NavigationInput.isWebURL(pageURL),
+      !Self.hasEmptyExplicitPort(pageURL),
       Self.secureOrigin(requestingOrigin),
       let title = Self.boundedText(payload["title"], maxUTF8: 2048, required: false),
       let text = Self.boundedText(payload["text"], maxUTF8: 4096, required: false),

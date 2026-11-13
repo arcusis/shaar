@@ -102,6 +102,12 @@ import Testing
   #expect(WebShareRequest(payload: payload) == nil)
 }
 
+@Test func webShareRequestRejectsAnEmptyExplicitPageURLPort() {
+  var payload = sharePayload()
+  payload["pageURL"] = "https://example.com:"
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
 private func sharePayload(
   origin: String = "https://example.com", title: String = "Shared page",
   text: String = "A useful link", url: String? = nil

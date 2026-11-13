@@ -64,7 +64,7 @@ struct DesktopCaptureConsentTests {
         "id": UUID().uuidString,
         "profileID": store.session.selectedSpace.profileID.uuidString,
         "tabID": tab.id.uuidString,
-        "pageURL": tab.url.absoluteString,
+        "pageURL": "https://meet.google.com:8443/call",
         "origin": "https://meet.google.com:8443",
         "frameID": "0123456789abcdef0123456789abcdef",
       ]))

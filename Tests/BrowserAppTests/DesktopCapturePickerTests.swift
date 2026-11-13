@@ -5,12 +5,17 @@
 import BrowserCore
 import Foundation
 import ScreenCaptureKit
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct DesktopCapturePickerTests {
+  @Test func desktopCaptureTitleIsVoiceOverHeading() {
+    #expect(DesktopCapturePickerContent.headingTraits == .isHeader)
+  }
+
   @Test func tabOnlyRequestsSkipScreenAccessAndKeepTheCurrentTabSelectable() async throws {
     let store = BrowserStore()
     store.perform(.open(try #require(URL(string: "https://meet.example/call"))))

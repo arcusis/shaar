@@ -73,6 +73,26 @@ struct PrintConsentTests {
     #expect(print.hostLabel == "example.com:8443")
   }
 
+  @Test func sanitizesPageTitleBeforeShowingPrintConsent() throws {
+    let store = openedStore()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let payload: [String: Any] = [
+      "schemaVersion": 1,
+      "id": UUID().uuidString,
+      "profileID": store.session.selectedSpace.profileID.uuidString,
+      "tabID": tab.id.uuidString,
+      "pageURL": tab.url.absoluteString,
+      "origin": "https://example.com",
+      "frameID": frameID,
+      "title": "Report\u{202E}\nNext",
+    ]
+
+    #expect(try #require(PrintRequest(payload: payload)).title == "Report Next")
+    var longTitlePayload = payload
+    longTitlePayload["title"] = String(repeating: "A", count: 512)
+    #expect(try #require(PrintRequest(payload: longTitlePayload)).title.count == 256)
+  }
+
   @Test func rejectsMalformedPrintPayloads() throws {
     let store = openedStore()
     let print = try request(store)

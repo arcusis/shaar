@@ -36,7 +36,7 @@ struct ProfileNameEditor: View {
       }
       HStack {
         Spacer()
-        Button(SettingsL10n.string("Cancel"), action: onCancel)
+        Button(SettingsL10n.string("Cancel"), role: .cancel, action: onCancel)
           .keyboardShortcut(.cancelAction)
         Button(SettingsL10n.string(initialName.isEmpty ? "Create" : "Save")) {
           errorMessage = onSave(name) ? nil : SettingsL10n.string("Profile could not be saved.")

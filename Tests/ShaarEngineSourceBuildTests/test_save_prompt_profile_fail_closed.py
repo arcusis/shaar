@@ -32,6 +32,20 @@ class SavePromptProfileFailClosedTests(unittest.TestCase):
             with self.subTest(required=required):
                 self.assertIn(required, ownership[guard:reject])
 
+    def test_missing_services_returns_not_ready_before_ownership_comparison(self):
+        source = SOURCE.read_text()
+        start = source.index("shaar_error_code CompleteDecision(")
+        end = source.index("}  // namespace shaar::save_prompts", start)
+        complete = source[start:end]
+
+        services = complete.index("if (!context->profile_services)")
+        not_ready = complete.index("SHAAR_NOT_READY", services)
+        mismatch = complete.index("ProfileOwnsContents(context, engine, scope, contents)", services)
+        wrong_profile = complete.index("SHAAR_WRONG_PROFILE", mismatch)
+        self.assertLess(services, not_ready)
+        self.assertLess(not_ready, mismatch)
+        self.assertLess(mismatch, wrong_profile)
+
 
 if __name__ == "__main__":
     unittest.main()

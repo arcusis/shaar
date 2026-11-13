@@ -457,6 +457,9 @@ shaar_error_code CompleteDecision(shaar::ShaarEngineContext* context,
   if (!contents)
     return Fail(immediate_error, SHAAR_NOT_FOUND,
                 "save prompt tab is unavailable");
+  if (!context->profile_services)
+    return Fail(immediate_error, SHAAR_NOT_READY,
+                "save prompt profile services are unavailable");
   if (!ProfileOwnsContents(context, engine, scope, contents))
     return Fail(immediate_error, SHAAR_WRONG_PROFILE,
                 "save prompt tab does not belong to the supplied profile");

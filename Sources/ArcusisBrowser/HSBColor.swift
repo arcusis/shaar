@@ -55,6 +55,16 @@ struct HSBColor: Equatable {
     Self(hue: value, saturation: saturation, brightness: brightness)
   }
 
+  func adjustingField(saturationBy: Double = 0, brightnessBy: Double = 0) -> Self {
+    Self(
+      hue: hue, saturation: saturation + saturationBy,
+      brightness: brightness + brightnessBy)
+  }
+
+  func adjustingHue(by delta: Double) -> Self {
+    withHue(hue + delta)
+  }
+
   private static func unit(_ value: Double) -> Double {
     value.isFinite ? min(1, max(0, value)) : 0
   }

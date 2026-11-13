@@ -8,6 +8,16 @@ import Testing
 @testable import ArcusisBrowser
 
 struct ThemeColorPickerModelTests {
+  @Test func keyboardAdjustmentsChangeTheFocusedColorAxisAndStayInRange() {
+    let color = HSBColor(hue: 0.4, saturation: 0.5, brightness: 0.5)
+    #expect(color.adjustingField(saturationBy: 0.05).saturation == 0.55)
+    #expect(color.adjustingField(brightnessBy: 0.05).brightness == 0.55)
+    #expect(color.adjustingField(saturationBy: -1).saturation == 0)
+    #expect(color.adjustingField(brightnessBy: 1).brightness == 1)
+    #expect(abs(color.adjustingHue(by: 0.02).hue - 0.42) < 0.000_001)
+    #expect(color.adjustingHue(by: -1).hue == 0)
+  }
+
   @Test func uncoloredProfilesStartTheSharedPickerFromTheFirstPreset() {
     let draft = ProfileColorChoice.none.draft
     #expect(draft.tint == .lavender)

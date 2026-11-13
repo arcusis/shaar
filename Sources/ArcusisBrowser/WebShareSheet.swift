@@ -29,7 +29,7 @@ struct WebShareSheet: View {
       return
     }
     let picker = WebShareSystemPicker(items: request.sharingItems)
-    picker.onFinish = { shared in
+    picker.outcome.onFinish = { shared in
       let outcome: WebShareOutcome = shared ? .shared : .cancelled
       store.resolveWebShare(request.id, outcome: outcome)
     }
@@ -104,9 +104,11 @@ struct WebShareAnchorView: NSViewRepresentable {
 }
 
 @MainActor
-final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDelegate {
+final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDelegate,
+  NSSharingServiceDelegate
+{
   let picker: NSSharingServicePicker
-  var onFinish: ((Bool) -> Void)?
+  let outcome = WebShareOutcomeGate()
 
   init(items: [Any]) {
     picker = NSSharingServicePicker(items: items)
@@ -121,6 +123,34 @@ final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDel
   func sharingServicePicker(
     _ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?
   ) {
-    onFinish?(service != nil)
+    outcome.chooseService(available: service != nil)
+    service?.delegate = self
+  }
+
+  func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) {
+    outcome.finish(true)
+  }
+
+  func sharingService(
+    _ sharingService: NSSharingService, didFailToShareItems items: [Any], error: Error
+  ) {
+    outcome.finish(false)
+  }
+}
+
+@MainActor
+final class WebShareOutcomeGate {
+  var onFinish: ((Bool) -> Void)?
+  private var isFinished = false
+
+  func chooseService(available: Bool) {
+    if !available { finish(false) }
+  }
+
+  func finish(_ shared: Bool) {
+    guard !isFinished else { return }
+    isFinished = true
+    onFinish?(shared)
+    onFinish = nil
   }
 }

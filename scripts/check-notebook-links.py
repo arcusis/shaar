@@ -90,6 +90,9 @@ def main() -> int:
     if not args.notebook.is_dir():
         print(f"Notebook path is not a directory: {args.notebook}", file=sys.stderr)
         return 1
+    if not args.notebook.is_dir():
+        print(f"Notebook path is not a directory: {args.notebook}", file=sys.stderr)
+        return 1
     try:
         return check_notebook(args.notebook.resolve())
     except (OSError, UnicodeError) as error:

@@ -6,6 +6,7 @@ import BrowserCore
 import SwiftUI
 
 struct RecentlyClosedPanel: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let store: BrowserStore
   let spaceID: UUID
   @Environment(\.dismiss) private var dismiss
@@ -18,6 +19,7 @@ struct RecentlyClosedPanel: View {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
           Text(PanelsL10n.string("Recently Closed")).font(.title2.weight(.semibold))
+            .accessibilityAddTraits(Self.headingTraits)
           if ownsContext {
             Text(
               PanelsL10n.format(

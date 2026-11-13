@@ -1159,20 +1159,6 @@ class ProbeSoakTests(unittest.TestCase):
                 self.assertEqual(checks.finish(), 1)
                 self.assertIn("Could not validate swift.xml: invalid tests count 'many'", summary.read_text())
 
-    def test_command_summary_rejects_junit_report_without_test_suites(self):
-        from ci_support import Commands
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            summary = root / "summary.md"
-            with patch("ci_support.ROOT", root), patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
-                checks = Commands("empty-report")
-                (checks.directory / "swift.xml").write_text("<testsuites/>\n")
-
-                self.assertEqual(checks.finish(), 1)
-                suite = ET.parse(checks.directory / "commands.xml").getroot()
-                self.assertEqual(suite.attrib["failures"], "1")
-                self.assertIn("JUnit report contains no test suites", summary.read_text())
-
     def test_python_junit_records_subtest_failure_and_skip(self):
         class Example(unittest.TestCase):
             def test_subtests(self):

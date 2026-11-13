@@ -10,8 +10,14 @@ import os
 from pathlib import Path
 
 
+def advisory_stages(raw: str | None) -> set[str]:
+    """Stages named in the CI_ADVISORY_STAGES repository variable report but do not block."""
+    return {name.strip() for name in (raw or "").split(",") if name.strip()}
+
+
 def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
-                browsing: bool = False, shipping_guard: bool = False) -> list[str]:
+                browsing: bool = False, shipping_guard: bool = False,
+                advisory: set[str] | None = None) -> list[str]:
     expected = {"plan", "fast", "dependency-review", "codeql"}
     native = {
         "python-tests", "build", "coverage", "visuals", "localization", "localization-captures",
@@ -29,11 +35,12 @@ def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
         expected |= {"sanitizers", "dead-code"}
     optional = (native | {"basic-browsing", "sanitizers", "dead-code", "website",
                           "shipping-probe-guard"}) - expected
+    advisory = (advisory or set()) - {"plan", "fast", "dependency-review", "codeql", "build"}
     errors = [f"{name}: {needs.get(name, {}).get('result', 'missing')}"
-              for name in sorted(expected) if needs.get(name, {}).get("result") != "success"]
+              for name in sorted(expected - advisory) if needs.get(name, {}).get("result") != "success"]
     errors += [f"{name}: {item.get('result', 'missing')}"
                for name, item in needs.items()
-               if name in optional and item.get("result") not in ("success", "skipped")]
+               if name in optional - advisory and item.get("result") not in ("success", "skipped")]
     known = expected | optional
     errors += [f"{name}: not classified by CI required gate"
                for name in sorted(needs) if name not in known]
@@ -45,11 +52,15 @@ def main() -> int:
     errors = gate_errors(needs, os.environ["CI_FULL"] == "true", os.environ["CI_NIGHTLY"] == "true",
                          os.environ.get("CI_WEBSITE") == "true",
                          os.environ.get("CI_BROWSING") == "true",
-                         os.environ.get("CI_SHIPPING_GUARD") == "true")
+                         os.environ.get("CI_SHIPPING_GUARD") == "true",
+                         advisory_stages(os.environ.get("CI_ADVISORY_STAGES")))
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write("### CI required\n\n| Stage | Result |\n| --- | --- |\n")
         for name, item in sorted(needs.items()):
             output.write(f"| {name} | {item['result']} |\n")
+        advisory = advisory_stages(os.environ.get("CI_ADVISORY_STAGES"))
+        if advisory:
+            output.write("\nAdvisory (reported, not blocking): " + ", ".join(sorted(advisory)) + "\n")
         output.write("\n" + ("\n".join(errors) if errors else "All selected stages passed.") + "\n")
     for error in errors:
         print(error)

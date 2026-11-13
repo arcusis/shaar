@@ -419,6 +419,21 @@ class PipelineGateTests(unittest.TestCase):
                         needs[stage]["result"] = result
                     self.assertTrue(GATE.gate_errors(needs, True, False, browsing=stage == "basic-browsing"))
 
+    def test_advisory_stage_failure_reports_without_blocking(self):
+        needs = self.results()
+        needs["engine"]["result"] = "failure"
+        self.assertIn("engine: failure", GATE.gate_errors(needs, True, False))
+        self.assertEqual(GATE.gate_errors(needs, True, False, advisory={"engine"}), [])
+        self.assertEqual(GATE.advisory_stages(" engine, ,visuals "), {"engine", "visuals"})
+        self.assertEqual(GATE.advisory_stages(None), set())
+
+    def test_core_stages_can_never_be_advisory(self):
+        for stage in ("fast", "dependency-review", "codeql", "build"):
+            with self.subTest(stage=stage):
+                needs = self.results()
+                needs[stage]["result"] = "failure"
+                self.assertTrue(GATE.gate_errors(needs, True, False, advisory={stage}))
+
     def test_ci_gate_rejects_unclassified_workflow_jobs(self):
         needs = self.results()
         needs["new-stage"] = {"result": "failure"}

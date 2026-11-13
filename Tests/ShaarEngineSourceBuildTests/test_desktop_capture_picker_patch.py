@@ -66,6 +66,13 @@ class DesktopCapturePickerPatchTests(unittest.TestCase):
         self.assertNotIn("*value = uuid.AsLowercaseString();", picker)
         self.assertIn("std::to_string(native_id) == digits", picker)
 
+    def test_invalid_reply_cancels_the_pending_picker(self):
+        picker = (LAYER / "chrome/browser/shaar/media/shaar_desktop_capture.cc").read_text()
+        resolve = picker[picker.index("shaar_error_code Resolve("):]
+        invalid_reply = resolve[resolve.index('if (decision != "approve"'):resolve.index("content::DesktopMediaID")]
+        self.assertIn("Cancel(std::string(prompt_id))", invalid_reply)
+        self.assertIn("return SHAAR_INVALID_ARGUMENT", invalid_reply)
+
     def test_expired_picker_notifies_the_app_to_dismiss_its_sheet(self):
         picker = (LAYER / "chrome/browser/shaar/media/shaar_desktop_capture.cc").read_text()
         cancel = picker[picker.index("void Cancel("):picker.index("bool IsCurrent(")]

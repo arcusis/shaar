@@ -324,6 +324,7 @@ shaar_error_code Resolve(shaar_engine* engine,
     return SHAAR_OK;
   }
   if (decision != "approve" || source_token.empty()) {
+    Cancel(std::string(prompt_id));
     return SHAAR_INVALID_ARGUMENT;
   }
   content::DesktopMediaID media_id;

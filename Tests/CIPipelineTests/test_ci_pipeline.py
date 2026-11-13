@@ -859,6 +859,24 @@ class ProbeSoakTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True), self.assertRaises(RuntimeError):
             STAGES.require_hosted_mac()
 
+    def test_swift_crash_report_collection_skips_symlinks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / "home"
+            reports = home / "Library/Logs/DiagnosticReports"
+            reports.mkdir(parents=True)
+            unrelated = root / "private.txt"
+            unrelated.write_text("not a crash report")
+            (reports / "ArcusisBrowserPackageTests-a.ips").symlink_to(unrelated)
+            (reports / "swiftpm-testing-helper-b.ips").write_text("authored crash report")
+            destination = root / "evidence"
+            destination.mkdir()
+            with patch.object(STAGES.Path, "home", return_value=home):
+                STAGES.copy_swift_test_crash_reports(destination, started=0)
+            copied = sorted(destination.iterdir())
+            self.assertEqual([path.name for path in copied], ["swift-test-crash-1.ips"])
+            self.assertEqual(copied[0].read_text(), "authored crash report")
+
     def test_command_failure_survives_later_success_in_junit(self):
         from ci_support import Commands
         with (

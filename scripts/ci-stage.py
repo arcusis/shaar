@@ -77,7 +77,8 @@ def copy_swift_test_crash_reports(directory: Path, started: float) -> None:
     while time.monotonic() < deadline:
         candidates = [path for folder in (report_root, report_root / "Retired")
                       for process in SWIFT_TEST_CRASH_PROCESSES
-                      for path in folder.glob(f"{process}-*.ips")]
+                      for path in folder.glob(f"{process}-*.ips")
+                      if not path.is_symlink() and path.is_file()]
         for path in sorted(candidates):
             try:
                 if path.stat().st_mtime >= started:
@@ -90,6 +91,8 @@ def copy_swift_test_crash_reports(directory: Path, started: float) -> None:
     copied = 0
     for index, path in enumerate(reports[:4], start=1):
         try:
+            if path.is_symlink() or not path.is_file():
+                continue
             shutil.copyfile(path, directory / f"swift-test-crash-{index}.ips")
             copied += 1
         except OSError:

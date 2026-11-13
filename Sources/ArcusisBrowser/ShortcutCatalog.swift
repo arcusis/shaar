@@ -122,6 +122,7 @@ struct ShortcutCatalog {
       (String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)), [.command, .option])
     case .nextWindow: ("`", .command)
     case .previousWindow: ("`", [.command, .shift])
+    case .fullScreen: ("f", [.command, .control])
     case .splitView: ("=", [.control, .shift])
     case .closeTab: ("w", .command)
     case .reopenClosed: ("t", [.command, .shift])

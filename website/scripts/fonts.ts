@@ -68,7 +68,12 @@ function isWoff2(data: Buffer): boolean {
   return (
     data.length >= 48 &&
     data.toString("ascii", 0, 4) === "wOF2" &&
-    data.readUInt32BE(8) === data.length
+    data.readUInt32BE(8) === data.length &&
+    data.readUInt16BE(12) > 0 &&
+    data.readUInt16BE(14) === 0 &&
+    data.readUInt32BE(16) > 0 &&
+    data.readUInt32BE(20) > 0 &&
+    data.readUInt32BE(20) <= data.length - 48
   );
 }
 

@@ -131,6 +131,25 @@ test("a successful non-WOFF2 response falls back without caching it", async () =
   }
 });
 
+test("a WOFF2 signature with an empty header falls back without caching it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  const output = join(root, "output");
+  const originalFetch = globalThis.fetch;
+  const malformed = new Uint8Array(48);
+  malformed.set(Buffer.from("wOF2"));
+  new DataView(malformed.buffer).setUint32(8, malformed.byteLength);
+  globalThis.fetch = fontshareFetch(malformed.buffer);
+  try {
+    assert.deepEqual(await prepareFonts(cache, output), []);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
+    assert.equal(existsSync(join(output, "clash-display.woff2")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a cached non-WOFF2 file falls back instead of being copied", async () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
   const cache = join(root, "cache");

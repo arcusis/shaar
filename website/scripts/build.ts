@@ -33,10 +33,13 @@ const license = await readFile(resolve(repositoryRoot, "LICENSE"), "utf8");
 const projectNotice = await readFile(resolve(repositoryRoot, "NOTICE"), "utf8");
 const thirdParty = await readFile(resolve(repositoryRoot, "THIRD_PARTY_NOTICES.md"), "utf8");
 const pages = Pages(license, projectNotice, thirdParty);
+const faces = await prepareFonts(resolve(root, ".font-cache"), resolve(output, "assets/fonts"));
+const fontFiles = faces.map((face) => face.file);
 
-await writeAsset("index.html", HomePage());
-for (const page of pages) await writeAsset(`${page.path.slice(1)}index.html`, DocumentPage(page));
-await writeAsset("404.html", DocumentPage(notFoundPage));
+await writeAsset("index.html", HomePage(fontFiles));
+for (const page of pages)
+  await writeAsset(`${page.path.slice(1)}index.html`, DocumentPage(page, fontFiles));
+await writeAsset("404.html", DocumentPage(notFoundPage, fontFiles));
 
 await copyFile(
   resolve(repositoryRoot, ".github/assets/shaar-icon.png"),
@@ -57,7 +60,6 @@ await writeAsset(
   "assets/shaar-logo.svg",
   `<!-- ${notice} -->\n${await readFile(resolve(repositoryRoot, "Branding/shaar-logo.svg"), "utf8")}`,
 );
-const faces = await prepareFonts(resolve(root, ".font-cache"), resolve(output, "assets/fonts"));
 await writeAsset(
   "assets/styles.css",
   `${fontFaceCSS(faces)}\n${await readFile(resolve(root, "src/styles.css"), "utf8")}`,

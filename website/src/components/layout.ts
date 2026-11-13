@@ -6,7 +6,11 @@ import { type SitePage, siteOrigin } from "../content";
 import { escapeHtml } from "../html";
 import { Footer, Navigation } from "./navigation";
 
-export function Layout(page: SitePage, content: string): string {
+export function Layout(
+  page: SitePage,
+  content: string,
+  fontFiles = ["clash-display.woff2", "satoshi.woff2"],
+): string {
   const title = page.path === "/" ? page.title : `${page.title} · Shaar`;
   return `<!doctype html>
 <!-- This Source Code Form is subject to the terms of the Mozilla Public
@@ -18,14 +22,15 @@ file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
 ${page.path === "/404.html" ? '<meta name="robots" content="noindex">' : ""}
 <meta property="og:type" content="website"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(page.description)}"><meta property="og:url" content="${siteOrigin}${page.path}"><meta property="og:image" content="${siteOrigin}/assets/shaar-icon.png">
 <meta name="twitter:card" content="summary"><meta name="twitter:title" content="${escapeHtml(title)}"><meta name="twitter:description" content="${escapeHtml(page.description)}"><meta name="twitter:image" content="${siteOrigin}/assets/shaar-icon.png"><link rel="icon" href="/assets/shaar-logo.svg" type="image/svg+xml">
-<link rel="preload" href="/assets/fonts/clash-display.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/assets/fonts/satoshi.woff2" as="font" type="font/woff2" crossorigin>
+${fontFiles.map((file) => `<link rel="preload" href="/assets/fonts/${escapeHtml(file)}" as="font" type="font/woff2" crossorigin>`).join("")}
 <link rel="stylesheet" href="/assets/styles.css"><script src="/assets/client.js" defer></script>
 </head><body id="top">${Navigation(page.path)}<main id="main" tabindex="-1"${page.path !== "/" ? ' class="document-main"' : ""}>${content}</main>${Footer()}</body></html>`;
 }
 
-export function DocumentPage(page: SitePage): string {
+export function DocumentPage(page: SitePage, fontFiles?: string[]): string {
   return Layout(
     page,
     `<header class="document-heading"><h1>${escapeHtml(page.heading)}</h1><p class="document-intro">${escapeHtml(page.description)}</p></header><div class="prose">${page.body}</div>`,
+    fontFiles,
   );
 }

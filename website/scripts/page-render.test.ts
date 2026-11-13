@@ -13,7 +13,7 @@ import { notFoundPage, Pages } from "../src/pages";
 test("every generated page has a language, title, description, canonical URL, and main landmark", () => {
   const rendered = [
     HomePage(),
-    ...Pages("License", "Notice", "Third-party notices").map(DocumentPage),
+    ...Pages("License", "Notice", "Third-party notices").map((page) => DocumentPage(page)),
     DocumentPage(notFoundPage),
   ];
 

@@ -112,7 +112,7 @@ function Finale(): string {
     <p class="finale-meta mono">Free · macOS 26 or later · Apple silicon · <a href="/changelog/">What's new in ${release.version}</a></p></section>`;
 }
 
-export function HomePage(): string {
+export function HomePage(fontFiles?: string[]): string {
   const page: SitePage = {
     path: "/",
     title: "Shaar · Your gateway to the web",
@@ -120,5 +120,5 @@ export function HomePage(): string {
     heading: "",
     body: "",
   };
-  return Layout(page, `${Hero()}${Story()}${OpenSource()}${Finale()}`);
+  return Layout(page, `${Hero()}${Story()}${OpenSource()}${Finale()}`, fontFiles);
 }

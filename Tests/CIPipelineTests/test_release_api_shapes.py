@@ -19,7 +19,7 @@ SPEC.loader.exec_module(RELEASE_CI)
 class ReleaseAPIShapeTests(unittest.TestCase):
     def test_malformed_workflow_and_job_api_responses_are_rejected(self):
         revision = "a" * 40
-        for response in ({"workflow_runs": None}, {"workflow_runs": [None]}):
+        for response in (None, [], {"workflow_runs": None}, {"workflow_runs": [None]}):
             with patch.object(RELEASE_CI, "api", return_value=response):
                 with self.assertRaisesRegex(ValueError, "Invalid GitHub API response for source-checks.yml workflow runs"):
                     RELEASE_CI.require_workflow("arcusis/shaar", revision, "source-checks.yml", {"CI required"})

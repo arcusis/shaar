@@ -179,6 +179,9 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
         self.assertIn('let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0', source)
         self.assertIn('scrollEvents > 0 && scrollEndEvents > 0', source)
+        self.assertIn('window.scrollTo(0, document.documentElement.scrollHeight)', fixture)
+        self.assertIn('let pageScrollEvents = number(second?["pageScrollEvents"]) ?? 0', source)
+        self.assertIn('scrollEvents > 0 && scrollEndEvents > 0 && pageScrollEvents > 0', source)
 
     def test_scroll_failure_is_unproven_without_a_page_event(self):
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()

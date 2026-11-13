@@ -402,6 +402,7 @@ jobs:
           path: build/ShaarEngineTestCache/*.tar.xz
           key: shaar-test-engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ThirdParty/ChromiumEngine/ci-test-pin.json') }}
       - name: Fetch SHA-256 pinned Shaar test framework
+        timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/fetch-shaar-test-engine.sh

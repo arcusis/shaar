@@ -7,7 +7,17 @@ interface Environment {
 }
 
 export default {
-  fetch(request: Request, environment: Environment): Promise<Response> {
+  async fetch(request: Request, environment: Environment): Promise<Response> {
+    const url = new URL(request.url);
+    if (["/404", "/404/", "/404.html"].includes(url.pathname)) {
+      url.pathname = "/404";
+      const notFound = await environment.ASSETS.fetch(new Request(url, request));
+      return new Response(notFound.body, {
+        status: 404,
+        statusText: "Not Found",
+        headers: notFound.headers,
+      });
+    }
     return environment.ASSETS.fetch(request);
   },
 };

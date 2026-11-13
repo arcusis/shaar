@@ -44,7 +44,29 @@ struct InspectorLayoutModelTests {
     let rows = try #require(JSONSerialization.jsonObject(with: json) as? [[String: Any]])
 
     #expect(rows.count == 2)
-    #expect(Set(rows.compactMap { $0["key"] as? String }).count == 2)
+    let keys = Set(rows.compactMap { $0["key"] as? String })
+    #expect(keys.count == 2)
     #expect(rows.compactMap { $0["kind"] as? String } == ["grid", "flex"])
+    let keysByKind: [String: String] = Dictionary(
+      uniqueKeysWithValues: rows.compactMap { row in
+        guard let kind = row["kind"] as? String, let key = row["key"] as? String else {
+          return nil
+        }
+        return (kind, key)
+      })
+    #expect(context.evaluateScript("document.body.children.reverse()") != nil)
+    let reorderedJSON = try #require(
+      context.evaluateScript("JSON.stringify(__shaarInspectorLayout.read())")?.toString().data(
+        using: .utf8))
+    let reorderedRows = try #require(
+      JSONSerialization.jsonObject(with: reorderedJSON) as? [[String: Any]])
+    let reorderedKeysByKind: [String: String] = Dictionary(
+      uniqueKeysWithValues: reorderedRows.compactMap { row in
+        guard let kind = row["kind"] as? String, let key = row["key"] as? String else {
+          return nil
+        }
+        return (kind, key)
+      })
+    #expect(reorderedKeysByKind == keysByKind)
   }
 }

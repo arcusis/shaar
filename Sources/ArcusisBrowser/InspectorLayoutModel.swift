@@ -331,7 +331,16 @@ final class InspectorLayoutModel {
         return name + ':nth-of-type(' + index + ')';
       };
       const keyFor = (el) => {
-        if (el.id) return '#' + clip(el.id, 80);
+        if (el.id) {
+          const id = String(el.id);
+          if (id.length <= 80) return '#' + id;
+          let hash = 2166136261;
+          for (let i = 0; i < id.length; i++) {
+            hash ^= id.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+          }
+          return '#' + clip(id, 64) + '~' + (hash >>> 0).toString(36);
+        }
         const parts = [];
         let current = el;
         while (current && current.nodeType === 1 && parts.length < 6) {

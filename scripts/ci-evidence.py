@@ -14,7 +14,7 @@ from pathlib import Path
 
 def existing_directory(value: str) -> Path:
     path = Path(value)
-    if not path.is_dir():
+    if path.is_symlink() or not path.is_dir():
         raise argparse.ArgumentTypeError(f"directory does not exist or is not a directory: {path}")
     return path
 
@@ -38,6 +38,8 @@ def owned_probe_root(path: Path) -> bool:
 
 
 def collect(log: Path, destination: Path) -> None:
+    if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
+        raise ValueError("evidence destination is not a regular directory")
     for line in log.read_text(errors="replace").splitlines():
         if not line.startswith("Probe evidence: "):
             continue
@@ -45,6 +47,8 @@ def collect(log: Path, destination: Path) -> None:
         if not owned_probe_root(root):
             raise ValueError(f"Refusing foreign probe evidence: {root}")
         output = destination / root.name
+        if output.is_symlink() or (output.exists() and not output.is_dir()):
+            raise ValueError(f"evidence output is not a regular directory: {root.name}")
         output.mkdir(parents=True, exist_ok=True)
         # Never copy Chromium profiles, cookies, extension stores or arbitrary nested files.
         for file in root.iterdir():

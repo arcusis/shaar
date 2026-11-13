@@ -69,9 +69,13 @@ function add(count) {
 add(40);
 window.__frames = 0;
 window.__scrollEvents = 0;
+window.__scrollEndEvents = 0;
 root.addEventListener("scroll", function () {
   window.__scrollEvents += 1;
   if (root.scrollTop + root.clientHeight >= root.scrollHeight - 80) add(400);
+});
+root.addEventListener("scrollend", function () {
+  window.__scrollEndEvents += 1;
 });
 requestAnimationFrame(function tick() {
   window.__frames += 1;

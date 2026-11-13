@@ -38,17 +38,17 @@ struct PrintDocumentTitleTests {
     #expect(PrintDocumentTitle.make(pageTitle: persian, productName: "Shaar") == persian)
   }
 
-  @Test func preservesEmojiJoinersInDefaultPDFName() {
-    let family = "👩‍👩‍👧‍👦"
-    #expect(PrintDocumentTitle.make(pageTitle: family, productName: "Shaar") == family)
-
-    let persian = "می\u{200C}روم"
-    #expect(PrintDocumentTitle.make(pageTitle: persian, productName: "Shaar") == persian)
-  }
-
   @Test func preservesEmojiTagSequencesInPDFNames() {
     let englandFlag = "🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}"
     #expect(PrintDocumentTitle.make(pageTitle: englandFlag, productName: "Shaar") == englandFlag)
+  }
+
+  @Test func fallsBackWhenPageTitleHasNoVisibleFilenameCharacters() {
+    #expect(
+      PrintDocumentTitle.make(pageTitle: "\u{200C}\u{200D}", productName: "Shaar") == "Shaar")
+
+    let tagOnly = "\u{E0067}\u{E0062}\u{E007F}"
+    #expect(PrintDocumentTitle.make(pageTitle: tagOnly, productName: "Shaar") == "Shaar")
   }
 
   @Test func capsPageTitleLength() {

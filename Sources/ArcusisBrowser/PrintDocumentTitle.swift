@@ -20,9 +20,9 @@ enum PrintDocumentTitle {
     }
     let title = String(String.UnicodeScalarView(scalars))
       .split(whereSeparator: \.isWhitespace).joined(separator: " ")
-    guard !title.isEmpty, let boundedTitle = boundedFilenameTitle(title) else {
-      return productName
-    }
+    guard !title.isEmpty, containsVisibleFilenameText(title),
+      let boundedTitle = boundedFilenameTitle(title)
+    else { return productName }
     return boundedTitle
   }
 
@@ -34,6 +34,11 @@ enum PrintDocumentTitle {
       result.append(contentsOf: cluster)
     }
     return result.isEmpty ? nil : result
+  private static func containsVisibleFilenameText(_ title: String) -> Bool {
+    title.unicodeScalars.contains {
+      !isJoiner($0) && !isEmojiTag($0) && !CharacterSet.whitespacesAndNewlines.contains($0)
+    }
+  }
   }
 
   private static func isJoiner(_ scalar: Unicode.Scalar) -> Bool {

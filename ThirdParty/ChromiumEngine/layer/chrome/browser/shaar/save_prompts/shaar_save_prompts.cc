@@ -259,7 +259,7 @@ bool ProfileOwnsContents(shaar::ShaarEngineContext* context,
                          shaar_engine* engine,
                          shaar_scope scope,
                          content::WebContents* contents) {
-  if (!context->profile_services)
+  if (!context || !context->profile_services || !scope.profile || !contents)
     return false;
   Profile* profile =
       context->profile_services->ResolveProfile(engine, scope.profile);

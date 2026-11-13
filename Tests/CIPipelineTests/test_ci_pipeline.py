@@ -701,6 +701,16 @@ class SupplyChainTests(unittest.TestCase):
             INSTALL.binary_from_archive(symbolic, "tool", hashlib.sha256(symbolic).hexdigest())
         self.assertEqual(INSTALL.binary_from_archive(payload, "tool", hashlib.sha256(payload).hexdigest()), b"binary")
 
+    def test_installer_rejects_symlink_members_in_zip_archives(self):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            member = zipfile.ZipInfo("nested/tool")
+            member.external_attr = 0o120777 << 16
+            archive.writestr(member, "../../outside")
+        payload = output.getvalue()
+        with self.assertRaisesRegex(ValueError, "Invalid binary member"):
+            INSTALL.binary_from_archive(payload, "tool", hashlib.sha256(payload).hexdigest())
+
     def test_pin_check_covers_workflows_and_composite_actions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

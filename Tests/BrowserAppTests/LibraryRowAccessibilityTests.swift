@@ -12,6 +12,10 @@ import Testing
   #expect(LibraryPanelFooterAccessibility.footerProgressLabel(language: .hebrew) == "הספרייה מתעדכנת…")
 }
 
+@Test @MainActor func libraryPanelTitleIsAHeading() {
+  #expect(LibraryPanel.titleAccessibilityTraits.contains(.isHeader))
+}
+
 @Test func bookmarkFolderStateUsesTheSelectedLanguage() {
   #expect(
     LibraryBookmarkAccessibility.folderState(collapsed: false, language: .english) == "Expanded")

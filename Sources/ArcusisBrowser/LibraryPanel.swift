@@ -49,6 +49,7 @@ struct LibraryPanel: View {
   let store: BrowserStore
   let profileID: UUID
   @Environment(\.dismiss) private var dismiss
+  static var titleAccessibilityTraits: AccessibilityTraits { .isHeader }
   @State private var section: LibrarySection
   @State private var query = ""
   @State private var collapsed: Set<UUID> = []
@@ -100,6 +101,7 @@ struct LibraryPanel: View {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
           Text(section.title).font(.title2.weight(.semibold))
+            .accessibilityAddTraits(Self.titleAccessibilityTraits)
           if ownsContext {
             Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
               .font(.callout).foregroundStyle(.secondary)

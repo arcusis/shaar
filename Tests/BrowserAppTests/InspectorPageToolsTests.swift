@@ -51,6 +51,24 @@ import Testing
     }
   }
 
+  @Test func pageToolsRejectSnapshotsFromPriorLifecycle() throws {
+    let (inspector, _, tools) = makeModels()
+    defer {
+      tools.stop()
+      inspector.close()
+    }
+    let oldLifecycle = tools.lifecycleID
+    tools.stop()
+    tools.start()
+
+    #expect(throws: CancellationError.self) {
+      try tools.receive(
+        snapshot(), generation: inspector.documentGeneration, lifecycle: oldLifecycle)
+    }
+    #expect(tools.startedAt == nil)
+    #expect(tools.console.isEmpty)
+  }
+
   @Test func updateWaitResumesWhenACompletedSnapshotArrives() async throws {
     let (inspector, _, tools) = makeModels()
     defer {

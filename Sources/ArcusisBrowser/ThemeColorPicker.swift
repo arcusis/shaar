@@ -208,6 +208,12 @@ private struct ThemeColorField: View {
     .accessibilityAdjustableAction { direction in
       onChange(hsb.adjustingField(brightnessBy: direction == .increment ? 0.05 : -0.05))
     }
+    .accessibilityAction(named: Text(SettingsL10n.string("Increase saturation"))) {
+      onChange(hsb.adjustingField(saturationBy: 0.05))
+    }
+    .accessibilityAction(named: Text(SettingsL10n.string("Decrease saturation"))) {
+      onChange(hsb.adjustingField(saturationBy: -0.05))
+    }
     .focusable()
     .onKeyPress(.leftArrow) {
       onChange(hsb.adjustingField(saturationBy: -0.05))

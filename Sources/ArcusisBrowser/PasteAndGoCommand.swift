@@ -21,4 +21,17 @@ enum PasteAndGoCommand {
     guard let url = destination(in: pasteboard, searchEngine: searchEngine) else { return false }
     return navigate(url)
   }
+
+  @MainActor @discardableResult
+  static func route(
+    in pasteboard: NSPasteboard, store: BrowserStore, searchEngine: BrowserSearchEngine,
+    navigate: (URL) -> Bool
+  ) -> Bool {
+    guard let url = destination(in: pasteboard, searchEngine: searchEngine) else { return false }
+    guard store.session.selectedPage != nil else {
+      store.perform(.open(url))
+      return true
+    }
+    return navigate(url)
+  }
 }

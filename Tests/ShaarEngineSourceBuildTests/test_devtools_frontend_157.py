@@ -172,6 +172,32 @@ class DevToolsFrontend157Tests(unittest.TestCase):
                 (FEATURE / "BuildInfoPanel.ts").read_bytes(),
             )
 
+    def test_stage_rejects_symlinked_overlay_files(self):
+        stage = load_stage()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            overlay = root / "overlay"
+            destination = root / "front_end" / "panels" / "shaar"
+            overlay.mkdir()
+            external = root / "outside.ts"
+            external.write_text("external source")
+            (overlay / "linked.ts").symlink_to(external)
+            with self.assertRaisesRegex(SystemExit, "overlay symlink"):
+                stage.stage(overlay, destination)
+            self.assertFalse((destination / "linked.ts").exists())
+
+    def test_stage_rejects_symlinked_overlay_root(self):
+        stage = load_stage()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            external = root / "external"
+            external.mkdir()
+            overlay = root / "overlay"
+            overlay.symlink_to(external, target_is_directory=True)
+            destination = root / "front_end" / "panels" / "shaar"
+            with self.assertRaisesRegex(SystemExit, "Missing overlay"):
+                stage.stage(overlay, destination)
+
 
 if __name__ == "__main__":
     unittest.main()

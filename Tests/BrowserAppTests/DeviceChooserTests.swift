@@ -158,6 +158,22 @@ struct DeviceChooserTests {
         payload: payload) == nil)
   }
 
+  @Test func chooserDeviceNameMatchesTheEngineByteLimit() throws {
+    let store = try store()
+    let acceptedName = String(repeating: "a", count: 256)
+    let accepted = try #require(
+      request(
+        store, transport: "usb", id: "max-name-bytes",
+        options: [["index": 0, "name": acceptedName]], canGrant: true))
+    #expect(accepted.options.first?.title == acceptedName)
+
+    let oversizedName = String(repeating: "a", count: 257)
+    #expect(
+      request(
+        store, transport: "usb", id: "oversized-name",
+        options: [["index": 0, "name": oversizedName]], canGrant: true) == nil)
+  }
+
   @Test func unnamedDevicesHaveAVisibleFallbackLabel() throws {
     let store = try store()
     let request = try #require(

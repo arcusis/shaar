@@ -59,6 +59,30 @@ struct BrowserStoreTests {
     #expect(!store.canReopenClosedTab)
   }
 
+  @Test func clearingTodayTabsRequestsEveryUnpinnedCloseBeforeCallbacksArrive() throws {
+    let store = BrowserStore()
+    let spaceID = store.session.selectedSpaceID
+    store.perform(.open(URL(string: "https://example.com/pinned")!))
+    let pinnedID = try #require(store.session.selectedSpace.selectedTabID)
+    store.togglePin(pinnedID)
+    let ordinaryIDs = (0..<4).compactMap { index in
+      store.session.open(URL(string: "https://example.com/today-\(index)")!)
+    }
+    #expect(ordinaryIDs.count == 4)
+
+    var requests: [UUID] = []
+    store.onCloseTab = { requests.append($0) }
+    store.clearTodayTabs(in: spaceID)
+
+    #expect(Set(requests) == Set(ordinaryIDs))
+    #expect(store.session.selectedSpace.tabs.count == 5)
+    #expect(store.session.selectedSpace.tabs.first { $0.id == pinnedID }?.isPinned == true)
+
+    for id in ordinaryIDs { store.nativeTabClosed(id) }
+    #expect(store.session.selectedSpace.tabs.map(\.id) == [pinnedID])
+    #expect(store.session.closedTabs.count == ordinaryIDs.count)
+  }
+
   @Test func openingAndCancelingLauncherDoesNotCreateTabsOrPersistChanges() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

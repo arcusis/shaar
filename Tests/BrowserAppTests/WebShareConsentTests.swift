@@ -212,6 +212,18 @@ struct WebShareConsentTests {
     #expect(outcomes == [true])
   }
 
+  @Test func onlyOneSystemPickerCanBePresentedForAShareRequest() {
+    let gate = WebSharePresentationGate()
+
+    #expect(gate.begin())
+    #expect(gate.isActive)
+    #expect(!gate.begin())
+
+    gate.finish()
+    #expect(!gate.isActive)
+    #expect(gate.begin())
+  }
+
   @Test func changedFrameOrOriginCancelsAWebShare() throws {
     let store = openedStore()
     let share = try request(store)

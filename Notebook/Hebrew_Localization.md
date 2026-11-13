@@ -12,7 +12,7 @@ The SwiftPM build-tool plugin compiles the Core, Bridge, Shell, Settings, Panels
 
 See [[Hebrew_Glossary]] for approved terms. The exported inventory contains source locations, catalog keys, translations, and retained-value dispositions. Fast gates generate it once per run and publish it as `hebrew-string-inventory-<run>-<attempt>` in Source checks artifacts, retained for 30 days. Translators can download that artifact without building the app.
 
-Catalog values are authoritative. Inventory source locations are explicitly marked lexical occurrences; they are navigation aids rather than proof that every occurrence binds to that table. Source-reference checks cover direct keys, ternary branches, computed filter titles, native menu titles, and known error helpers. Brands, user names, URLs, internal service metadata, and diagnostic text have different ownership from interface translations.
+Catalog values are authoritative. Inventory source locations are explicitly marked lexical occurrences; they are navigation aids rather than proof that every occurrence binds to that table. Source-reference checks cover direct keys, ternary branches, computed filter titles, native menu titles, and known error helpers, while ignoring commented-out example calls. Brands, user names, URLs, internal service metadata, and diagnostic text have different ownership from interface translations.
 
 ## Generated-file audit (#389)
 

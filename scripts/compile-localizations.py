@@ -242,6 +242,60 @@ def localization_key_literals(expression):
     return swift_string_literals(expression)
 
 
+def strip_swift_comments(source):
+    """Blank line and nested block comments without changing source line numbers."""
+    result = list(source)
+    index = 0
+    quote = None
+    while index < len(source):
+        if quote:
+            if quote == '"""' and source.startswith('"""', index):
+                quote = None
+                index += 3
+            elif quote != '"""' and source[index] == "\\":
+                index += 2
+            elif quote != '"""' and source[index] == quote:
+                quote = None
+                index += 1
+            else:
+                index += 1
+            continue
+        if source.startswith('"""', index):
+            quote = '"""'
+            index += 3
+            continue
+        if source[index] == '"':
+            quote = '"'
+            index += 1
+            continue
+        if source.startswith("//", index):
+            end = source.find("\n", index)
+            end = len(source) if end == -1 else end
+            for position in range(index, end):
+                result[position] = " "
+            index = end
+            continue
+        if source.startswith("/*", index):
+            end = index + 2
+            depth = 1
+            while end < len(source) and depth:
+                if source.startswith("/*", end):
+                    depth += 1
+                    end += 2
+                elif source.startswith("*/", end):
+                    depth -= 1
+                    end += 2
+                else:
+                    end += 1
+            for position in range(index, end):
+                if result[position] != "\n":
+                    result[position] = " "
+            index = end
+            continue
+        index += 1
+    return "".join(result)
+
+
 def first_argument(source, open_paren):
     depth = 1
     index = open_paren + 1
@@ -341,7 +395,8 @@ def validate_source_references(root, catalogs, include_app=False):
     source_root = root / "Sources" if include_app else root / "Sources/BrowserCore"
     for path in sorted(source_root.rglob("*.swift")):
         source = path.read_text(encoding="utf-8")
-        for match in direct_text.finditer(source):
+        cleaned = strip_swift_comments(source)
+        for match in direct_text.finditer(cleaned):
             control, literal = match.groups()
             key = decode_swift_literal(literal)
             if key in translated_text_keys:
@@ -349,7 +404,7 @@ def validate_source_references(root, catalogs, include_app=False):
                 raise ValueError(
                     f"unlocalized {control} for catalog key {key!r} ({path.relative_to(root)}:{line})"
                 )
-        for match in direct_accessibility_text.finditer(source):
+        for match in direct_accessibility_text.finditer(cleaned):
             modifier, literal = match.groups()
             key = decode_swift_literal(literal)
             if key in translated_text_keys:
@@ -357,13 +412,13 @@ def validate_source_references(root, catalogs, include_app=False):
                 raise ValueError(
                     f"unlocalized {modifier} for catalog key {key!r} ({path.relative_to(root)}:{line})"
                 )
-        for match in call.finditer(source):
+        for match in call.finditer(cleaned):
             wrapper = match.group(1)
-            argument = first_argument(source, match.end() - 1)
+            argument = first_argument(cleaned, match.end() - 1)
             for key in localization_key_literals(argument):
                 table = wrappers[wrapper]
                 if wrapper == "BrowserLocalization":
-                    suffix = source[match.end():match.end() + 240]
+                    suffix = cleaned[match.end():match.end() + 240]
                     explicit = re.search(r"\btable\s*:\s*\"((?:[^\"\\]|\\.)*)\"", suffix)
                     if explicit:
                         table = decode_swift_literal('"' + explicit.group(1) + '"')

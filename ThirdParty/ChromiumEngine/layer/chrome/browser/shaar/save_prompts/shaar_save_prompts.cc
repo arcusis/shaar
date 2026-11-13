@@ -26,6 +26,7 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/icu/source/common/unicode/uchar.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -169,6 +170,27 @@ std::optional<base::DictValue> ParseArguments(shaar_bytes bytes) {
   if (!parsed || !parsed->is_dict())
     return std::nullopt;
   return std::move(parsed->GetDict());
+}
+
+bool IsFormatCharacter(std::string_view raw, size_t index, size_t length) {
+  if (length == 1)
+    return false;
+  uint32_t code_point = static_cast<unsigned char>(raw[index]);
+  if (length == 2)
+    code_point &= 0x1F;
+  else if (length == 3)
+    code_point &= 0x0F;
+  else
+    code_point &= 0x07;
+  for (size_t offset = 1; offset < length; ++offset) {
+    const auto continuation = static_cast<unsigned char>(raw[index + offset]);
+    if ((continuation & 0xC0) != 0x80)
+      return false;
+    code_point = (code_point << 6) | (continuation & 0x3F);
+  }
+  return code_point <= 0x10FFFF &&
+         !(code_point >= 0xD800 && code_point <= 0xDFFF) &&
+         u_charType(static_cast<UChar32>(code_point)) == U_FORMAT_CHAR;
 }
 
 bool HasOnlyKeys(const base::DictValue& dict,
@@ -393,7 +415,7 @@ std::string SanitizeDetail(std::string_view raw) {
       continue;
     }
     const std::string_view character = raw.substr(index, length);
-    if (IsFormattingCharacter(character)) {
+    if (IsFormattingCharacter(character) || IsFormatCharacter(raw, index, length)) {
       index += length;
       continue;
     }

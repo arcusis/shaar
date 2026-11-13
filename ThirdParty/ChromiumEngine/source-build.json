@@ -49,9 +49,9 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "b585603a6be1612a9bd83ad7c8feb4a2ef66ab3ba91f0e325fab9509a936c7e0",
+    "sha256": "e73b48cfbebaa908c4db5d782d7e641b5c173d70fd8322aaba219164dd969cd0",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "bddfa50a92ee887fccb8ee46487a673d857991d5ed5d72cc057ef4f3c8b9e458",
+      "chrome/browser/shaar/BUILD.gn": "744a01388dba6ca1e1b1e420f0d686099232708833aa0285d2f0a93654e1a2e2",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.h": "15cd5f6fc6ee7c998f5c04e8e0bb9e6c9d5c276cd7ab810a22b83c6ef849cdb5",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_lifecycle_adapter.cc": "02f28526c3d8d14b9efc59973dd8269650d079613085f4d910c2901aba020de7",
@@ -135,9 +135,9 @@
       "chrome/browser/shaar/quit_probe/shaar_quit_probe.h": "d82634ea53ea7a21100b28e8b7a756542f50f0c62f14164fa3430654d324b13b",
       "chrome/browser/shaar/quit_probe/shaar_quit_probe.mm": "9671f0dd818c18b7ddcf79494711ebc8eb4899db5ed82265219574d0e822f511",
       "chrome/browser/shaar/quit_probe/shaar_quit_probe_unittest.cc": "03c3dbbdfe2b0c6e3887ab84f54d8150e9353fb50e78bcac4f5703c81bdf276d",
-      "chrome/browser/shaar/save_prompts/shaar_save_prompts.cc": "d6675569986eb5856865038bcf6a7e9a0475d3277ff2594b004fb58b134071cc",
+      "chrome/browser/shaar/save_prompts/shaar_save_prompts.cc": "ae8925feae23a59f3dd4c5883e114d4eb5bfeec6e270d24ca5047df0710e6aa8",
       "chrome/browser/shaar/save_prompts/shaar_save_prompts.h": "7d23db716ea8f450f455a00a3807a9fa7f8a22d0e5a56bdc787ce5b315eacdcd",
-      "chrome/browser/shaar/save_prompts/shaar_save_prompts_unittest.cc": "58f90f405cce9f93a824528e04a3a2a2b1a17bec27cea5c9d3685973cd01d04e",
+      "chrome/browser/shaar/save_prompts/shaar_save_prompts_unittest.cc": "a16188895afd9139d09887a75de348aaac75e7bb98c460bea573246e330e0cdb",
       "chrome/browser/shaar/shaar_engine.exports": "1a5d925878e2e7032b8406d52d2c1845529426ee90b461a60448baaec3a9841d",
       "chrome/browser/shaar/shaar_engine_quit_probe.exports": "aca39ad95d928184db4325be2ac96bb0a3bd174765986c669c61e49340c5e8a8",
       "chrome/browser/shaar/site_data/shaar_site_data.cc": "2024bf644ce33318336498b6cc26449ea08252c07b3602f3d041445c728f591d",

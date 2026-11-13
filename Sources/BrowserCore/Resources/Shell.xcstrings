@@ -2930,6 +2930,38 @@
         }
       }
     },
+    "Vertical split divider %d of %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vertical split divider %d of %d"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מפריד אנכי בתצוגה מפוצלת, %d מתוך %d"
+          }
+        }
+      }
+    },
+    "Horizontal split divider %d of %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Horizontal split divider %d of %d"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מפריד אופקי בתצוגה מפוצלת, %d מתוך %d"
+          }
+        }
+      }
+    },
     "Split layout": {
       "localizations": {
         "en": {

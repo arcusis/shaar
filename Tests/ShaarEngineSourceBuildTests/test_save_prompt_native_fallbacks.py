@@ -25,8 +25,13 @@ class SavePromptNativeFallbackTests(unittest.TestCase):
                 hook = patch.index(f'OfferSavePrompt(web_contents(), "{prompt}"')
                 branch = patch.rfind('HasSwitch("shaar-embedder")', 0, hook)
                 self.assertNotEqual(branch, -1)
+                self.assertLess(branch, hook)
+                return_at = patch.find("+    return;", hook)
+                self.assertNotEqual(return_at, -1)
                 fallback_at = patch.find(fallback, hook)
                 self.assertNotEqual(fallback_at, -1)
+                self.assertLess(hook, return_at)
+                self.assertLess(return_at, fallback_at)
                 next_file = patch.find('\ndiff --git ', hook)
                 if next_file != -1:
                     self.assertLess(fallback_at, next_file)

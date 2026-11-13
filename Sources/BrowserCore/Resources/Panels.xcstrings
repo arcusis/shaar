@@ -2126,19 +2126,19 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "לשונית אחת מקליטה"
+                  "value": "לכידת מדיה פעילה בלשונית אחת"
                 }
               },
               "two": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "שתי לשוניות מקליטות"
+                  "value": "לכידת מדיה פעילה בשתי לשוניות"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d לשוניות מקליטות"
+                  "value": "לכידת מדיה פעילה ב־%d לשוניות"
                 }
               }
             }

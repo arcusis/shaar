@@ -145,6 +145,19 @@ class CatalogValidatorTests(unittest.TestCase):
         bridge = (ROOT / "Sources/ChromiumBridge/ChromiumBridge.mm").read_text(encoding="utf-8")
         self.assertEqual(bridge.count('Closing the browser will cancel 1 active download.'), 2)
 
+    def test_inspector_storage_view_localizes_known_backend_errors(self):
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorStorageView.swift").read_text(
+            encoding="utf-8")
+        self.assertEqual(
+            source.count("InspectorToolsL10n.backendError(error.localizedDescription)"), 2)
+        strings = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
+                encoding="utf-8"))["strings"]
+        for key in ("Storage is not available in this document.", "Storage could not be read."):
+            with self.subTest(key=key):
+                self.assertNotEqual(
+                    strings[key]["localizations"]["he"]["stringUnit"]["value"], key)
+
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

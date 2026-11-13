@@ -40,6 +40,12 @@ class CatalogValidatorTests(unittest.TestCase):
             path.write_text(json.dumps(data), encoding="utf-8")
             VALIDATOR.validate_catalog(path)
 
+    def test_source_editor_menu_uses_direction_aware_disclosure(self):
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorActionsView.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('Image(systemName: "chevron.forward")', source)
+
     def test_rejects_null_catalog_and_localization_maps_cleanly(self):
         for data in (None, {"sourceLanguage": "en", "strings": {"x": None}},
                      {"sourceLanguage": "en", "strings": {"x": {"localizations": None}}}):

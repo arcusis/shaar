@@ -288,6 +288,17 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertEqual(forms["two"]["stringUnit"]["value"], "שני דפים שנפתחו לאחרונה")
         self.assertEqual(forms["other"]["stringUnit"]["value"], "%d דפים שנפתחו לאחרונה")
 
+    def test_inspector_sanitized_url_placeholders_are_localized_in_ui(self):
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Inspector.xcstrings").read_text(encoding="utf-8"))
+        entry = catalog["strings"]["[URL omitted]"]["localizations"]
+        self.assertEqual(entry["he"]["stringUnit"]["value"], "כתובת URL הושמטה")
+        l10n = (ROOT / "Sources/ArcusisBrowser/InspectorL10n.swift").read_text(encoding="utf-8")
+        self.assertIn('"[URL omitted]", "Unavailable"', l10n)
+        notes = (ROOT / "Sources/ArcusisBrowser/InspectorNotesView.swift").read_text(encoding="utf-8")
+        self.assertIn("InspectorL10n.display(InspectorAIFormatter.url(note.context.url))", notes)
+        actions = (ROOT / "Sources/ArcusisBrowser/InspectorSourceActions.swift").read_text(encoding="utf-8")
+        self.assertIn("location = InspectorL10n.display(InspectorAIFormatter.url(source))", actions)
+
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"
         data = json.loads(path.read_text(encoding="utf-8"))

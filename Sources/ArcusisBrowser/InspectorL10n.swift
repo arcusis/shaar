@@ -43,7 +43,7 @@ enum InspectorL10n {
       "Chromium does not support this CSS value.", "No edits to undo.",
       "Page styles changed after this edit. Undo would overwrite them.",
       "An element capture is already in progress.", "Lock an element first.",
-      "Select an element smaller than 16 megapixels at 2×.",
+      "Select an element smaller than 16 megapixels at 2×.", "[URL omitted]", "Unavailable",
       "Chromium could not capture this element.",
       "The page could not complete the Inspector request.",
       "This Inspector target is no longer available.":

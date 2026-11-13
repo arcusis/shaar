@@ -36,8 +36,10 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
 diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
 --- a/third_party/blink/renderer/core/dom/document.cc
 +++ b/third_party/blink/renderer/core/dom/document.cc
-@@ -6742,7 +6742,24 @@
+@@ -6742,7 +6742,26 @@
  void Document::EnqueueResizeEvent() {
++  if (!GetExecutionContext())
++    return;
    Event* event = Event::Create(event_type_names::kResize);
    event->SetTarget(domWindow());
 -  scripted_animation_controller_->EnqueuePerFrameEvent(event);

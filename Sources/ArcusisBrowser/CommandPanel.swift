@@ -124,6 +124,7 @@ struct CommandPanel: View {
         .font(.system(size: 20))
         .focused($searchIsFocused)
         .onSubmit { acceptCommand() }
+        .accessibilityLabel(Self.searchPrompt)
         .accessibilityIdentifier("command-search")
       filterButtons
     }

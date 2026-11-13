@@ -45,6 +45,25 @@ class CatalogValidatorTests(unittest.TestCase):
             "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים שמשמשים לכניסה באמצעות מפתח גישה.",
         )
 
+    def test_site_action_failure_uses_localized_recovery_copy(self):
+        key = "Could not complete the site action. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן להשלים את הפעולה באתר. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/DevelopmentModeButton.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'engine.reportNotice(ShellL10n.string("Could not complete the site action. Try again."))',
+            source,
+        )
+
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Fixture.xcstrings"

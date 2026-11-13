@@ -60,7 +60,7 @@ struct DevelopmentModeButton: View {
   private func run(_ action: SiteAction, for target: SiteControlTarget) {
     Task {
       do { try await engine.perform(action, for: target) } catch {
-        engine.reportNotice(action.failureNotice())
+        engine.reportNotice(ShellL10n.string("Could not complete the site action. Try again."))
       }
     }
   }

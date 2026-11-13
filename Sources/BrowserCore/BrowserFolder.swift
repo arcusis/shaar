@@ -45,6 +45,11 @@ public enum PinnedSidebarItem: Identifiable, Equatable, Sendable {
   }
 }
 
+public struct BrowserSidebarItemSections: Equatable, Sendable {
+  public let pinned: [PinnedSidebarItem]
+  public let unpinned: [PinnedSidebarItem]
+}
+
 private enum FolderWalk {
   case folder(BrowserFolder, Int)
   case tabs(UUID, Int)
@@ -152,9 +157,17 @@ extension BrowserSpace {
   }
 
   public func orderedSidebarItems(includingCollapsed: Bool = false) -> [PinnedSidebarItem] {
+    let sections = sidebarItemSections(includingCollapsed: includingCollapsed)
+    return sections.pinned + sections.unpinned
+  }
+
+  public func sidebarItemSections(includingCollapsed: Bool = false)
+    -> BrowserSidebarItemSections
+  {
     let index = FolderItemsIndex(tabs: tabs, folders: folders)
-    return index.items(isPinned: true, includingCollapsed: includingCollapsed)
-      + index.items(isPinned: false, includingCollapsed: includingCollapsed)
+    return BrowserSidebarItemSections(
+      pinned: index.items(isPinned: true, includingCollapsed: includingCollapsed),
+      unpinned: index.items(isPinned: false, includingCollapsed: includingCollapsed))
   }
 
   /// Hidden folder contents retain their logical/native order and live documents.

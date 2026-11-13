@@ -185,6 +185,22 @@ struct ExtensionManagementTests {
     #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
   }
 
+  @Test @MainActor func iconLoaderRejectsIconSymlinksOutsideTheExtensionFolder() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let folder = root.appending(path: "\(validID)/2.1_0")
+    try FileManager.default.createDirectory(
+      at: folder.appending(path: "icons"), withIntermediateDirectories: true)
+    let externalIcon = root.appending(path: "private.png")
+    try png(size: 32).write(to: externalIcon)
+    try FileManager.default.createSymbolicLink(
+      at: folder.appending(path: "icons/private.png"), withDestinationURL: externalIcon)
+    try Data(#"{"icons":{"32":"icons/private.png"}}"#.utf8)
+      .write(to: folder.appending(path: "manifest.json"))
+
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
+  }
+
   @Test func unpackedFolderRequiresAManifestV3Directory() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

@@ -2132,6 +2132,22 @@
         }
       }
     },
+    "Paste and Match Style": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste and Match Style"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדבקה והתאמת סגנון"
+          }
+        }
+      }
+    },
     "Permissions": {
       "localizations": {
         "en": {

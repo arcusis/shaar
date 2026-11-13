@@ -39,6 +39,15 @@ TEST(ShaarSavePromptTest, NeverAppliesOnlyToANewPassword) {
   EXPECT_EQ(shaar::save_prompts::DecisionCode("password", false, nullptr), 0);
 }
 
+TEST(ShaarSavePromptTest, DecisionRequestIDsUseBoundedDecimalForm) {
+  EXPECT_FALSE(shaar::save_prompts::IsValidDecisionRequestID(""));
+  EXPECT_TRUE(shaar::save_prompts::IsValidDecisionRequestID("1"));
+  EXPECT_TRUE(shaar::save_prompts::IsValidDecisionRequestID(Repeat('9', 20)));
+  EXPECT_FALSE(shaar::save_prompts::IsValidDecisionRequestID(Repeat('9', 21)));
+  EXPECT_FALSE(shaar::save_prompts::IsValidDecisionRequestID("12x"));
+  EXPECT_FALSE(shaar::save_prompts::IsValidDecisionRequestID("12\xC2\xA0"));
+}
+
 TEST(ShaarSavePromptTest, DetailDropsControlsAndKeepsUtf8Boundaries) {
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("a\nb\x7f" "c"), "abc");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(Repeat('a', 121)).size(), 120u);

@@ -43,7 +43,11 @@ struct PrintRequest: Identifiable, Equatable {
   var sheetID: String { "print-\(id)" }
 
   var hostLabel: String {
-    requestingOrigin.host() ?? pageURL.host() ?? pageURL.absoluteString
+    guard let rawHost = requestingOrigin.host() ?? pageURL.host() else {
+      return pageURL.absoluteString
+    }
+    let host = rawHost.contains(":") && !rawHost.hasPrefix("[") ? "[\(rawHost)]" : rawHost
+    return requestingOrigin.port.map { "\(host):\($0)" } ?? host
   }
 
   func matches(

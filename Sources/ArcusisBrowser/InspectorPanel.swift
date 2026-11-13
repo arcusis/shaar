@@ -256,7 +256,7 @@ struct InspectorPanel: View {
         ForEach(selection.ancestors) { ancestor in
           HStack(spacing: 3) {
             if ancestor.id != selection.ancestors.first?.id {
-              Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(.tertiary)
+              Image(systemName: "chevron.forward").font(.system(size: 6)).foregroundStyle(.tertiary)
             }
             Button {
               model.selectAncestor(ancestor.id)

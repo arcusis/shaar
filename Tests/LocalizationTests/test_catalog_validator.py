@@ -180,6 +180,12 @@ class CatalogValidatorTests(unittest.TestCase):
                 self.assertNotEqual(
                     strings[key]["localizations"]["he"]["stringUnit"]["value"], key)
 
+    def test_inspector_element_breadcrumb_uses_directional_separator(self):
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorPanel.swift").read_text(encoding="utf-8")
+        breadcrumb = source.split("private func breadcrumb(", 1)[1]
+        self.assertIn('Image(systemName: "chevron.forward")', breadcrumb)
+        self.assertNotIn('Image(systemName: "chevron.right")', breadcrumb)
+
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

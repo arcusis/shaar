@@ -135,15 +135,17 @@ shaar_error_code Go(content::NavigationController* controller, bool forward) {
 shaar_error_code Reload(content::NavigationController* controller,
                         bool bypass_cache) {
   if (!controller) return SHAAR_NOT_FOUND;
-  // During a provisional navigation, NavigationController::Reload() can
-  // restart the last committed entry instead of the pending destination.
-  // Reload the pending URL explicitly so a reload requested while a page is
-  // loading continues toward that page.
-  if (const content::NavigationEntry* pending = controller->GetPendingEntry()) {
-    content::NavigationController::LoadURLParams params(pending->GetURL());
+  content::NavigationEntry* pending_entry = controller->GetPendingEntry();
+  if (pending_entry) {
+    content::NavigationEntry* committed_entry = controller->GetLastCommittedEntry();
+    const GURL target = ReloadTargetURL(
+        pending_entry->GetURL(),
+        committed_entry ? committed_entry->GetURL() : GURL());
+    content::NavigationController::LoadURLParams params(target);
     params.transition_type = ui::PAGE_TRANSITION_RELOAD;
     params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE
                                       : content::ReloadType::NORMAL;
+    params.should_replace_current_entry = true;
     controller->LoadURLWithParams(params);
     return SHAAR_OK;
   }
@@ -151,6 +153,10 @@ shaar_error_code Reload(content::NavigationController* controller,
                                   : content::ReloadType::NORMAL,
                      true);
   return SHAAR_OK;
+}
+
+GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url) {
+  return pending_url.is_valid() ? pending_url : last_committed_url;
 }
 
 shaar_error_code Stop(content::WebContents* contents) {

@@ -29,15 +29,18 @@ class PendingReloadCacheModeTests(unittest.TestCase):
     def test_pending_reload_preserves_normal_and_bypassing_cache_modes(self):
         source = SOURCE.read_text()
         pending = source.split(
-            "if (const content::NavigationEntry* pending = controller->GetPendingEntry()) {", 1
+            "content::NavigationEntry* pending_entry = controller->GetPendingEntry();", 1
         )[1].split("\n  }", 1)[0]
-        self.assertIn("content::NavigationController::LoadURLParams params(pending->GetURL())", pending)
+        self.assertIn("const GURL target = ReloadTargetURL(", pending)
+        self.assertIn("pending_entry->GetURL()", pending)
+        self.assertIn("content::NavigationController::LoadURLParams params(target)", pending)
         self.assertIn("params.transition_type = ui::PAGE_TRANSITION_RELOAD", pending)
         self.assertIn("controller->LoadURLWithParams(params)", pending)
         self.assertIn(
             "params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE",
             pending)
         self.assertIn(": content::ReloadType::NORMAL;", pending)
+        self.assertIn("params.should_replace_current_entry = true", pending)
 
     def test_layer_hashes_pin_the_reload_implementation(self):
         layer = json.loads(MANIFEST.read_text())["layer"]

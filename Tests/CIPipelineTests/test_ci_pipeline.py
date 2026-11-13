@@ -980,6 +980,12 @@ class SupplyChainTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "maximum size"):
                 INSTALL.download("https://example.invalid/tool", sleeps.append)
 
+    def test_installer_reports_archives_that_exceed_download_limit(self):
+        with patch.object(INSTALL, "MAX_ARCHIVE_BYTES", 4), \
+                patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(b"12345")):
+            with self.assertRaisesRegex(ValueError, "exceeds the 4-byte limit"):
+                INSTALL.download("https://example.invalid/large-tool", lambda seconds: None)
+
     def archive(self, symbolic=False):
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode="w:gz") as archive:

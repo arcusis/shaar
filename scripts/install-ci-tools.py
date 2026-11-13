@@ -118,10 +118,16 @@ def download(url: str, sleep=time.sleep) -> bytes:
                 raw_length = getattr(response, "headers", {}).get("Content-Length")
                 expected_length = int(raw_length) if raw_length is not None else None
                 if expected_length is not None and expected_length > MAX_ARCHIVE_BYTES:
-                    raise ValueError(f"Archive exceeds maximum size of {MAX_ARCHIVE_BYTES} bytes")
+                    raise ValueError(
+                        f"Archive from {url} exceeds the {MAX_ARCHIVE_BYTES}-byte limit "
+                        f"(maximum size of {MAX_ARCHIVE_BYTES} bytes)"
+                    )
                 payload = response.read(MAX_ARCHIVE_BYTES + 1)
                 if len(payload) > MAX_ARCHIVE_BYTES:
-                    raise ValueError(f"Archive exceeds maximum size of {MAX_ARCHIVE_BYTES} bytes")
+                    raise ValueError(
+                        f"Archive from {url} exceeds the {MAX_ARCHIVE_BYTES}-byte limit "
+                        f"(maximum size of {MAX_ARCHIVE_BYTES} bytes)"
+                    )
                 if expected_length is not None and len(payload) != expected_length:
                     raise urllib.error.URLError(
                         f"Incomplete download: expected {expected_length} bytes, received {len(payload)}"

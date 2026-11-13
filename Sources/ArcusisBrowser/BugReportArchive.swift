@@ -10,7 +10,8 @@ enum BugReportArchive {
     bounded page-level HAR built from resource timing and instrumented fetch/XMLHttpRequest calls.
     Capture starts when page tools are enabled and continues across navigation while they stay open; buffered resource timing from the current navigation is also included. Response bodies, browser-generated request headers,
     cross-origin headers/timings without permission, workers, WebSockets, and other frames may be
-    unavailable. Unknown methods use UNKNOWN and unknown timing phases use -1. Console messages and screenshot content are not
+    unavailable. Unknown methods use UNKNOWN and unknown timing phases use -1. Console messages and
+    screenshot content are not redacted. HAR URL credentials, query values, and fragments are
     redacted. Nothing was uploaded.
     """
 
@@ -83,13 +84,23 @@ enum BugReportArchive {
       guard let value = resource[key] as? Double, value.isFinite, value >= 0 else { return 0 }
       return value
     }
-    let url = String((resource["url"] as? String ?? "").prefix(8192))
+    let rawURL = String((resource["url"] as? String ?? "").prefix(8192))
+    var url = rawURL
+    var query: [[String: String]] = []
+    if var components = URLComponents(string: rawURL) {
+      let items = components.queryItems ?? []
+      query = items.map { ["name": $0.name, "value": $0.value == nil ? "" : "[redacted]"] }
+      components.user = nil
+      components.password = nil
+      components.fragment = nil
+      components.queryItems = items.map {
+        URLQueryItem(name: $0.name, value: $0.value == nil ? nil : "[redacted]")
+      }
+      url = components.string ?? rawURL
+    }
     let started = (origin + number("start")) / 1000
     let timestamp = started.isFinite && started >= 0 && started <= 253_402_300_799 ? started : 0
     let duration = number("duration")
-    let query =
-      URLComponents(string: url)?.queryItems?.map { ["name": $0.name, "value": $0.value ?? ""] }
-      ?? []
     return [
       "startedDateTime": ISO8601DateFormatter().string(
         from: Date(timeIntervalSince1970: timestamp)),

@@ -800,6 +800,10 @@ class CatalogValidatorTests(unittest.TestCase):
 
     def test_rejects_direct_accessibility_strings_when_hebrew_translation_exists(self):
         examples = (
+            ('Button("Translated action") {}', "Button", "Translated action"),
+            ('Label("Translated heading", systemImage: "star")', "Label", "Translated heading"),
+            ('ProgressView("Translated status")', "ProgressView", "Translated status"),
+            ('Text("Translated footer")', "Text", "Translated footer"),
             ('.help("Translated tooltip")', "help", "Translated tooltip"),
             ('.accessibilityLabel("Translated label")', "accessibilityLabel", "Translated label"),
             ('.accessibilityHint("Translated hint")', "accessibilityHint", "Translated hint"),
@@ -815,10 +819,10 @@ class CatalogValidatorTests(unittest.TestCase):
                 for _, _, key in examples
             }}), encoding="utf-8")
 
-            for swift, modifier, key in examples:
-                source.write_text("Text(\"Example\")" + swift + "\n", encoding="utf-8")
-                with self.subTest(modifier=modifier):
-                    with self.assertRaisesRegex(ValueError, f"unlocalized {modifier}.*{key}"):
+            for swift, control, key in examples:
+                source.write_text(swift + "\n", encoding="utf-8")
+                with self.subTest(control=control):
+                    with self.assertRaisesRegex(ValueError, f"unlocalized {control}.*{key}"):
                         VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
     def test_source_reference_scanner_ignores_wrapper_calls_in_comments(self):
         with tempfile.TemporaryDirectory() as directory:

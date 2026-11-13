@@ -772,6 +772,14 @@ class SupplyChainTests(unittest.TestCase):
         self.assertIn("ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}", setup)
         self.assertIn("scripts/install-ci-tools.py --cache-directory build/ci-tool-archives", setup)
 
+    def test_engine_download_has_connection_and_retry_timeouts(self):
+        fetch = (ROOT / "scripts/fetch-engine.sh").read_text()
+        curl = next(line for line in fetch.splitlines() if line.strip().startswith("curl "))
+        self.assertIn("--connect-timeout 30", curl)
+        self.assertIn("--max-time 900", curl)
+        self.assertIn("--retry 3", curl)
+        self.assertIn("--retry-max-time 180", curl)
+
     def test_swiftpm_cache_key_tracks_build_plugin_sources(self):
         setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
         self.assertIn("hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Plugins/**')", setup)

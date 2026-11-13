@@ -106,7 +106,9 @@ public struct ShaarFindUpdate: Equatable, Sendable {
       let request = object["requestID"] as? String,
       UInt64(request) == expectedRequestID,
       let count = findInteger(object["matchCount"]),
+      count >= 0,
       let active = findInteger(object["activeMatch"]),
+      active >= -1,
       let final = findBoolean(object["final"])
     else { return nil }
     return ShaarFindUpdate(

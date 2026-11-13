@@ -2720,6 +2720,12 @@
         "he": { "stringUnit": { "state": "translated", "value": "הדפסה…" } }
       }
     },
+    "Could not open print panel": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not open print panel" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את לוח ההדפסה" } }
+      }
+    },
     "Search tabs, spaces, or the web": {
       "localizations": {
         "en": {

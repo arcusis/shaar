@@ -781,7 +781,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
                            profileID: store.session.selectedSpace.profileID.uuidString)
       else {
         report(NSError(domain: "com.arcusis.browser.print", code: 1,
-                       userInfo: [NSLocalizedDescriptionKey: "Could not open print panel"]))
+                       userInfo: [NSLocalizedDescriptionKey: ShellL10n.string("Could not open print panel")]))
         return
       }
     case .find: store.showPageFind()

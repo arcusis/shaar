@@ -44,8 +44,13 @@ class PrintMenuCommandTests(unittest.TestCase):
         host = (ROOT / "Sources/ArcusisBrowser/NativeBrowserHost.swift").read_text()
         bridge = (ROOT / "Sources/ChromiumBridge/ChromiumShaarBackend.mm").read_text()
         tests = (ROOT / "Tests/BrowserAppTests/NativeMenuStructureTests.swift").read_text()
+        strings = json.loads((ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text())
 
         self.assertIn('add(.print, "Print…", to: file)', host)
+        self.assertIn('ShellL10n.string("Could not open print panel")', host)
+        error_localizations = strings["strings"]["Could not open print panel"]["localizations"]
+        self.assertEqual(error_localizations["en"]["stringUnit"]["value"], "Could not open print panel")
+        self.assertEqual(error_localizations["he"]["stringUnit"]["value"], "לא ניתן לפתוח את לוח ההדפסה")
         self.assertIn("runtime.printTabID(page.tab.id.uuidString", host)
         self.assertIn("decltype(&shaar_tab_print) tab_print = nullptr", bridge)
         self.assertIn("SHAAR_LOAD(tab_print, tab_print)", bridge)

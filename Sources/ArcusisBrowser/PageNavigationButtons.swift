@@ -15,27 +15,13 @@ struct PageNavigationButtons: View {
 
     HStack(spacing: tabID == nil ? 4 : 0) {
       navigationButton("chevron.backward", label: ShellL10n.string("Back")) {
-        if let id {
-          if tabID != nil { store.focusSplitTab(id) }
-          if let privatePage = store.privatePage {
-            privatePage.goBack(id)
-          } else {
-            engine?.runtime.goBack(inTabID: id.uuidString)
-          }
-        }
+        goBack()
       }
       .disabled(state?.canGoBack != true)
       .browserChromeControl("browser.chrome.back")
 
       navigationButton("chevron.forward", label: ShellL10n.string("Forward")) {
-        if let id {
-          if tabID != nil { store.focusSplitTab(id) }
-          if let privatePage = store.privatePage {
-            privatePage.goForward(id)
-          } else {
-            engine?.runtime.goForward(inTabID: id.uuidString)
-          }
-        }
+        goForward()
       }
       .disabled(state?.canGoForward != true)
       .browserChromeControl("browser.chrome.forward")
@@ -50,6 +36,26 @@ struct PageNavigationButtons: View {
       }
       .disabled(tabID.map { !store.canReloadPage($0) } ?? !store.canReloadCurrentPage)
       .browserChromeControl("browser.chrome.reload")
+    }
+  }
+
+  func goBack() {
+    guard let id = tabID ?? store.session.selectedPage?.tab.id else { return }
+    if tabID != nil { store.focusSplitTab(id) }
+    if let privatePage = store.privatePage {
+      privatePage.goBack(id)
+    } else {
+      engine?.runtime.goBack(inTabID: id.uuidString)
+    }
+  }
+
+  func goForward() {
+    guard let id = tabID ?? store.session.selectedPage?.tab.id else { return }
+    if tabID != nil { store.focusSplitTab(id) }
+    if let privatePage = store.privatePage {
+      privatePage.goForward(id)
+    } else {
+      engine?.runtime.goForward(inTabID: id.uuidString)
     }
   }
 

@@ -52,6 +52,10 @@ struct InspectorPseudoForceControls: View {
   var forced: Set<String>
   var toggle: (String) -> Void
 
+  static func accessibilityLabel(for name: String) -> String {
+    InspectorL10n.format("Force CSS %@ state", arguments: [.string(name)])
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text(InspectorL10n.string("Force state"))
@@ -88,7 +92,7 @@ struct InspectorPseudoForceControls: View {
         }
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(":\(name)")
+    .accessibilityLabel(Self.accessibilityLabel(for: name))
     .accessibilityAddTraits(on ? .isSelected : [])
   }
 }

@@ -41,6 +41,7 @@ public struct BookmarkTree: Equatable, Sendable {
   public let barID: UUID
   public let otherID: UUID
   public let items: [BrowserBookmark]
+  private let parents: [UUID: UUID]
 
   public init(profileID: UUID, payload: [String: Any]) throws {
     guard let bar = payload["bar"] as? [String: Any],
@@ -54,6 +55,7 @@ public struct BookmarkTree: Equatable, Sendable {
     self.otherID = otherID
     var items: [BrowserBookmark] = []
     var ids: Set<UUID> = []
+    var parents: [UUID: UUID] = [:]
     var stack: [(node: [String: Any], parent: UUID?, depth: Int, path: String)] = [
       (other, nil, 0, ""), (bar, nil, 0, ""),
     ]
@@ -62,6 +64,7 @@ public struct BookmarkTree: Equatable, Sendable {
         ids.insert(id).inserted, let title = node["t"] as? String,
         let kind = node["k"] as? String, ["f", "u"].contains(kind)
       else { throw LibraryDataError.invalidBookmarks }
+      if let parent { parents[id] = parent }
       let text =
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         ? Self.untitledBookmarkTitle(kind: kind) : title
@@ -85,14 +88,14 @@ public struct BookmarkTree: Equatable, Sendable {
           depth: depth, path: ownPath, isPermanent: parent == nil))
     }
     self.items = items
+    self.parents = parents
   }
 
   public func contains(_ ancestor: UUID, inPathTo id: UUID) -> Bool {
-    let nodes = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
     var current: UUID? = id
-    while let id = current, let node = nodes[id] {
+    while let id = current {
       if id == ancestor { return true }
-      current = node.parentID
+      current = parents[id]
     }
     return false
   }

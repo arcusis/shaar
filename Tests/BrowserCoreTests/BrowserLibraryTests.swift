@@ -32,6 +32,22 @@ import Testing
   #expect(!legacy.isFolder && legacy.address != nil && legacy.destination == nil)
 }
 
+@Test func bookmarkTreeContainsFocusedBenchmark() throws {
+  let ids = (0..<2_000).map { _ in UUID() }
+  let tree = try BookmarkTree(
+    profileID: UUID(),
+    payload: bookmarkPayload(children: ids.map {
+      ["id": $0.uuidString, "k": "u", "t": "Page", "u": "https://example.com"]
+    }))
+  let started = ContinuousClock.now
+  var found = 0
+  for id in ids {
+    if tree.contains(tree.barID, inPathTo: id) { found += 1 }
+  }
+  print("bookmarkTreeContainsFocusedBenchmark: \(started.duration(to: .now))")
+  #expect(found == ids.count)
+}
+
 @Test func whitespaceOnlyBookmarkTitlesUseUntitledFallbacks() throws {
   let folderID = UUID()
   let bookmarkID = UUID()

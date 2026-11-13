@@ -144,6 +144,25 @@ struct PrintConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func rendererCrashCancelsPendingPrintConsent() throws {
+    let store = openedStore()
+    let print = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decisions: [(String, Bool)] = []
+    store.onPrintDecision = { id, accepted in decisions.append((id, accepted)) }
+
+    #expect(store.requestPrint(print))
+    #expect(store.sheet?.id == print.sheetID)
+
+    store.nativeRendererGone(
+      print.tabID, profileID: print.profileID, status: "crashed", exitCode: 1)
+
+    #expect(decisions.map(\.0) == [print.id])
+    #expect(decisions.map(\.1) == [false])
+    #expect(store.sheet == nil)
+  }
+
   @Test func privatePrintRequestsAreBoundAndUnboundRequestsAreDenied() throws {
     let privateStore = BrowserStore(privateSession: .fresh())
     privateStore.perform(.open(URL(string: "https://example.com/article")!))

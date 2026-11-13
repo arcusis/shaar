@@ -159,15 +159,23 @@ final class FaviconCache {
   }
 
   private static func loadEntry(at fileURL: URL) -> Entry? {
-    guard let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+    guard isSafeRegularFile(fileURL),
+      let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
       size <= maximumIconBytes,
       let data = try? Data(contentsOf: fileURL)
     else { return nil }
     return entry(decoding: data, host: loadHost(beside: fileURL))
   }
 
+  private static func isSafeRegularFile(_ url: URL) -> Bool {
+    guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+    else { return false }
+    return values.isRegularFile == true && values.isSymbolicLink != true
+  }
+
   private static func loadHost(beside fileURL: URL) -> String? {
     let hostURL = fileURL.deletingPathExtension().appendingPathExtension("host")
+    guard isSafeRegularFile(hostURL) else { return nil }
     guard let text = try? String(contentsOf: hostURL, encoding: .utf8) else { return nil }
     return siteHost(text)
   }

@@ -146,6 +146,34 @@ struct FaviconCacheTests {
         atPath: outside.appending(path: "\(profileID.uuidString)/\(itemID.uuidString).png").path))
   }
 
+  @Test func cacheDoesNotReadSymlinkedIconOrHostSidecars() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let profileID = UUID()
+    let profile = root.appending(path: profileID.uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let outsideIcon = root.appending(path: "outside.png")
+    try png(.systemRed).write(to: outsideIcon)
+    let iconID = UUID()
+    try FileManager.default.createSymbolicLink(
+      at: profile.appending(path: "\(iconID.uuidString).png"), withDestinationURL: outsideIcon)
+    try Data("icons.example".utf8).write(
+      to: profile.appending(path: "\(iconID.uuidString).host"))
+
+    let outsideHost = root.appending(path: "outside.host")
+    try Data("private.example".utf8).write(to: outsideHost)
+    let hostID = UUID()
+    try png(.systemBlue).write(to: profile.appending(path: "\(hostID.uuidString).png"))
+    try FileManager.default.createSymbolicLink(
+      at: profile.appending(path: "\(hostID.uuidString).host"), withDestinationURL: outsideHost)
+
+    let cache = FaviconCache(directory: root)
+    #expect(cache.icon(for: iconID, profileID: profileID) == nil)
+    #expect(cache.icon(for: hostID, profileID: profileID) == nil)
+    #expect(cache.host(for: hostID, profileID: profileID) == nil)
+  }
+
   @Test func workspaceKeepsPinnedAndFavoriteIconsOnly() throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -525,6 +553,13 @@ struct FaviconCacheTests {
 
   private func temporaryDirectory() -> URL {
     FileManager.default.temporaryDirectory.appending(path: "favicons-\(UUID().uuidString)")
+  }
+
+  private func png(_ color: NSColor) throws -> Data {
+    let image = FaviconFixture.icon(color)
+    let tiff = try #require(image.tiffRepresentation)
+    let bitmap = try #require(NSBitmapImageRep(data: tiff))
+    return try #require(bitmap.representation(using: .png, properties: [:]))
   }
 }
 

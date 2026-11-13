@@ -24,8 +24,15 @@ struct ProfileDeletionConfirmation: View {
     self.profiles = profiles
     self.onDeleteProfile = onDeleteProfile
     self.onDismiss = onDismiss
-    _destinationID = State(initialValue: profiles.first(where: { $0.id != profile.id })?.id)
+    _destinationID = State(
+      initialValue: Self.initialDestinationID(for: profile.id, in: profiles))
     _removeSpaces = State(initialValue: removeSpaces)
+  }
+
+  static func initialDestinationID(
+    for profileID: UUID, in profiles: [BrowserSettingsProfile]
+  ) -> UUID? {
+    profiles.first(where: { $0.id != profileID })?.id
   }
 
   var body: some View {

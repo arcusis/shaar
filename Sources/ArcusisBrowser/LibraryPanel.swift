@@ -244,13 +244,16 @@ struct LibraryPanel: View {
           importError = nil
           showingImportPreview = true
         } catch {
-          guard let message = LibraryImportErrorPresentation.message(for: error) else { return }
+          guard LibraryImportErrorPresentation.message(for: error) != nil else { return }
           let cocoaError = error as NSError
-          importError =
-            error is BrowserImport.ImportError || cocoaError.domain == NSCocoaErrorDomain
-            ? Self.importFailure(error) : message
+          if error is BrowserImport.ImportError || cocoaError.domain == NSCocoaErrorDomain {
+            importError = Self.importFailure(error)
+          } else {
+            importError = Self.importErrorMessage(error)
+          }
           showingImportPreview = true
         }
+      }
       }
     }
     .sheet(
@@ -289,6 +292,11 @@ struct LibraryPanel: View {
       canImport: Self.canImportPreview(
         items: importPreview, hasBookmarkTree: tree != nil, busy: busy, loading: loading),
       onCancel: { showingImportPreview = false }, onImport: applyImport)
+  }
+
+  static func importErrorMessage(_ error: Error) -> String {
+    if error is BrowserImport.ImportError { return error.localizedDescription }
+    return PanelsL10n.string("The selected file could not be read. Try another file.")
   }
 
   static func canImportPreview(

@@ -37,7 +37,7 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
         result.flatMap { data in
           do {
             guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              (payload["schemaVersion"] as? Int) == 1,
+              Self.hasSupportedSchemaVersion(payload),
               payload["bar"] is [String: Any], payload["other"] is [String: Any]
             else { throw ShaarBookmarksAdapterError.invalidTree }
             return .success(payload)
@@ -57,7 +57,7 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
         result.flatMap { data in
           do {
             guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              (payload["schemaVersion"] as? Int) == 1,
+              Self.hasSupportedSchemaVersion(payload),
               !Self.isJSONBoolean(payload["applied"]),
               !Self.isJSONBoolean(payload["skipped"]),
               (payload["applied"] as? Int) == 1,
@@ -79,7 +79,7 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
         result.flatMap { data in
           do {
             guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              (payload["schemaVersion"] as? Int) == 1,
+              Self.hasSupportedSchemaVersion(payload),
               (payload["watching"] as? Bool) == enabled
             else { throw ShaarBookmarksAdapterError.watchNotConfirmed }
             return .success(())
@@ -106,6 +106,13 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
   private static func isJSONBoolean(_ value: Any?) -> Bool {
     guard let number = value as? NSNumber else { return false }
     return CFGetTypeID(number) == CFBooleanGetTypeID()
+  }
+
+  private static func hasSupportedSchemaVersion(_ payload: [String: Any]) -> Bool {
+    guard let version = payload["schemaVersion"] as? NSNumber,
+      !isJSONBoolean(version)
+    else { return false }
+    return Int(exactly: version.doubleValue) == 1
   }
 }
 

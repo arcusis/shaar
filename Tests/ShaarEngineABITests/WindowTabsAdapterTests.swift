@@ -183,6 +183,22 @@ struct WindowTabsAdapterTests {
     #expect(adapter.snapshot(windowID: "window-a")?.orderedTabIDs == ["tab-b"])
   }
 
+  @Test @MainActor func foregroundTabOpensAfterSelectingItsBoundProfile() throws {
+    let fake = FakeWindowTabsEngine()
+    let adapter = makeShaarAdapter(fake)
+    try adapter.openWindow(id: "window-a", scope: .profile("profile-a"))
+    try adapter.bindProfile(id: "profile-b", windowID: "window-a")
+    fake.calls.removeAll()
+
+    try adapter.openTab(
+      id: "tab-b", windowID: "window-a", scope: .profile("profile-b"),
+      url: URL(string: "https://b.example")!, foreground: true)
+
+    #expect(fake.calls == ["profile:profile-b", "tab+tab-b:true"])
+    #expect(adapter.snapshot(windowID: "window-a")?.activeProfileID == "profile-b")
+    #expect(adapter.snapshot(windowID: "window-a")?.activeTabID == "tab-b")
+  }
+
   @Test @MainActor func requestRepliesRequireLiveScopedTargets() throws {
     let fake = FakeWindowTabsEngine()
     let adapter = makeShaarAdapter(fake)

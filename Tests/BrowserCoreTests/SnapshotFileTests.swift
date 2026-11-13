@@ -52,6 +52,55 @@ import Testing
     #expect(try temporaryFiles().isEmpty)
   }
 
+  @Test func separateSnapshotValuesSerializeWritesToTheSamePath() throws {
+    defer { try? FileManager.default.removeItem(at: root) }
+    let first = session(opening: "https://example.com/first")
+    let second = session(opening: "https://example.com/second")
+    let firstFile = SnapshotFile<BrowserSession>(url: file.url)
+    let secondFile = SnapshotFile<BrowserSession>(url: file.url)
+    let ready = DispatchGroup()
+    let start = DispatchSemaphore(value: 0)
+    let arrivedAtSync = DispatchSemaphore(value: 0)
+    let releaseSync = DispatchSemaphore(value: 0)
+    let finished = DispatchGroup()
+
+    for (snapshot, value) in [(firstFile, first), (secondFile, second)] {
+      ready.enter()
+      finished.enter()
+      DispatchQueue.global().async {
+        ready.leave()
+        start.wait()
+        try? snapshot.save(value) { _ in
+          arrivedAtSync.signal()
+          releaseSync.wait()
+        }
+        finished.leave()
+      }
+    }
+
+    ready.wait()
+    start.signal()
+    start.signal()
+    #expect(arrivedAtSync.wait(timeout: .now() + 2) == .success)
+    let overlapped = arrivedAtSync.wait(timeout: .now() + 0.5) == .success
+    releaseSync.signal()
+    if !overlapped {
+      #expect(arrivedAtSync.wait(timeout: .now() + 2) == .success)
+      releaseSync.signal()
+    } else {
+      releaseSync.signal()
+    }
+    #expect(finished.wait(timeout: .now() + 5) == .success)
+
+    #expect(!overlapped)
+    let primary = try #require(try firstFile.load())
+    let backup = try #require(
+      try SnapshotFile<BrowserSession>(url: firstFile.backupURL).loadPrimary())
+    #expect([first, second].contains(primary))
+    #expect([first, second].contains(backup))
+    #expect(primary != backup)
+  }
+
   @Test func saveRestrictsPermissionsOnRotatedLegacySnapshot() throws {
     defer { try? FileManager.default.removeItem(at: root) }
     let first = session(opening: "https://example.com/private")

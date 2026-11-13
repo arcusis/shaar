@@ -171,6 +171,23 @@ final class BrowserSplitStoreTests: XCTestCase {
     XCTAssertEqual(Set(try XCTUnwrap(store.selectedSplit).tabIDs), [ids[0], ids[1], ids[3]])
   }
 
+  func testStartingSameDragAgainCancelsItsEarlierCleanupTask() async throws {
+    var session = BrowserSession.fresh()
+    let tab = try XCTUnwrap(session.open(URL(string: "https://drag.example")!))
+    let store = BrowserStore(session: session)
+    let space = store.session.selectedSpaceID
+    let item = store.beginTabDrag(tab, spaceID: space, fromSplitPane: false)
+
+    try await Task.sleep(for: .milliseconds(200))
+    _ = store.beginTabDrag(tab, spaceID: space, fromSplitPane: false)
+    try await Task.sleep(for: .milliseconds(200))
+
+    XCTAssertEqual(store.sidebarDrag, item)
+    XCTAssertEqual(store.tabDrag?.tabID, tab)
+    store.sidebarDragCleanupTask?.cancel()
+    store.tabDragCleanupTask?.cancel()
+  }
+
   func testDropEdgeFollowsNearestSide() {
     let size = CGSize(width: 400, height: 300)
     XCTAssertEqual(SplitDropZone.edge(at: CGPoint(x: 20, y: 150), in: size), .left)

@@ -23,8 +23,8 @@ class WebShareProbeOutputPathTests(unittest.TestCase):
         source = SCRIPT.read_text()
         self.assertIn("validate_output_destination(options.receipt)", source)
         self.assertIn("validate_output_destination(screenshot)", source)
-        self.assertIn("write_output(screenshot,", source)
-        self.assertIn("write_output(options.receipt,", source)
+        self.assertIn("copy_screenshot(source, screenshot)", source)
+        self.assertIn("write_receipt(options.receipt, receipt)", source)
         self.assertIn("process = run_probe(", source)
         self.assertIn("evidence = read_evidence(report)", source)
 

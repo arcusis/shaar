@@ -24,6 +24,21 @@ export interface SiteFont {
 
 const families: Record<string, string> = { "Clash Display": "clash-display", Satoshi: "satoshi" };
 
+function isSiteFontManifest(value: unknown): value is SiteFont[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (face) =>
+        face !== null &&
+        typeof face === "object" &&
+        face.family in families &&
+        face.file === `${families[face.family]}.woff2` &&
+        typeof face.weight === "string" &&
+        /^\d{3} \d{3}$/.test(face.weight),
+    )
+  );
+}
+
 function parseFaces(css: string): (SiteFont & { url: string })[] {
   const faces: (SiteFont & { url: string })[] = [];
   for (const block of css.split("@font-face").slice(1)) {
@@ -52,7 +67,17 @@ export async function prepareFonts(
   const manifestPath = resolve(cacheDirectory, "fonts.json");
   let faces: SiteFont[] = [];
   if (existsSync(manifestPath)) {
-    faces = JSON.parse(await readFile(manifestPath, "utf8")) as SiteFont[];
+    try {
+      const manifest: unknown = JSON.parse(await readFile(manifestPath, "utf8"));
+      if (!isSiteFontManifest(manifest))
+        throw new Error("Cached font manifest has an invalid shape");
+      faces = manifest;
+    } catch (error) {
+      console.warn(
+        `Cached fonts unavailable, the site falls back to system fonts: ${String(error)}`,
+      );
+      return [];
+    }
   } else {
     try {
       let css = "";
@@ -75,12 +100,17 @@ export async function prepareFonts(
       return [];
     }
   }
-  await mkdir(outputDirectory, { recursive: true });
-  for (const face of faces) {
-    await writeFile(
-      resolve(outputDirectory, face.file),
-      await readFile(resolve(cacheDirectory, face.file)),
-    );
+  try {
+    await mkdir(outputDirectory, { recursive: true });
+    for (const face of faces) {
+      await writeFile(
+        resolve(outputDirectory, face.file),
+        await readFile(resolve(cacheDirectory, face.file)),
+      );
+    }
+  } catch (error) {
+    console.warn(`Cached fonts unavailable, the site falls back to system fonts: ${String(error)}`);
+    return [];
   }
   return faces;
 }

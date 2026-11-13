@@ -49,6 +49,12 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_ci_evidence_collection_runs_after_failure_but_not_cancellation(self):
+        action = (ROOT / ".github/actions/ci-evidence/action.yml").read_text()
+        collector = action.split("    - name: Collect scoped native probe reports\n", 1)[1]
+        collector = collector.split("    - name: Upload logs, reports and authored images", 1)[0]
+        self.assertIn("if: ${{ !cancelled() }}", collector)
+
     def test_evidence_directory_argument_requires_an_existing_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

@@ -20,6 +20,7 @@ runs:
   using: composite
   steps:
     - name: Collect scoped native probe reports
+      if: ${{ !cancelled() }}
       shell: bash
       env:
         CI_STAGE: ${{ inputs.stage }}

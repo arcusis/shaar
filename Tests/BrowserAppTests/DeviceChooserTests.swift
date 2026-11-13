@@ -150,6 +150,27 @@ struct DeviceChooserTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func chooserUpdateCannotChangeTransportOrRequestingOrigin() throws {
+    let store = try store()
+    let opened = try #require(self.request(store, transport: "usb", id: "identity"))
+    #expect(store.requestDeviceChooser(opened))
+
+    let wrongTransport = try #require(
+      self.request(store, kind: "deviceChooserUpdated", transport: "hid", id: "identity"))
+    #expect(!store.updateDeviceChooser(wrongTransport))
+
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    var payload = event(
+      kind: "deviceChooserUpdated", transport: "usb", id: "identity", page: tab.url)
+    payload["origin"] = "https://other-frame.example/"
+    let wrongOrigin = try #require(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.profileID(forTabID: tab.id), pageURL: tab.url,
+        payload: payload))
+    #expect(!store.updateDeviceChooser(wrongOrigin))
+    #expect(store.deviceChooserRequests.first?.transport == .usb)
+  }
+
   @Test func anUpdatedOptionListInvalidatesThePreviousSelection() {
     let previous = [DeviceChooserOption(index: 0, title: "Adapter A", detail: "")]
     let updated = [DeviceChooserOption(index: 0, title: "Adapter B", detail: "")]

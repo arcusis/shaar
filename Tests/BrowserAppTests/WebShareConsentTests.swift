@@ -265,6 +265,8 @@ struct WebShareConsentTests {
     #expect(store.requestWebShare(share))
 
     store.forgetPermissionFrame(share.tabID, matching: share.frameID)
+    #expect(outcome == .cancelled)
+
     store.resolveWebShare(share.id, outcome: .shared)
 
     #expect(outcome == .cancelled)

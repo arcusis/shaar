@@ -1228,7 +1228,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         activeBrowserStore.map(Self.closeTabTitle(for:))
         ?? ShellL10n.string("Close window")
     }
+    if command == .fullScreen,
+      let window = privateHost?.activeOwner?.window ?? activeContext?.window
+    {
+      item.title = ShellL10n.string(
+        Self.fullScreenTitle(isFullScreen: window.styleMask.contains(.fullScreen)))
+    }
     return canPerform(command)
+  }
+
+  static func fullScreenTitle(isFullScreen: Bool) -> String {
+    isFullScreen ? "Exit Full Screen" : "Enter Full Screen"
   }
 
   static func makeMenu(target: AnyObject) -> NSMenu {

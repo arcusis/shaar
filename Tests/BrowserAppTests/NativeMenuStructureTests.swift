@@ -141,6 +141,11 @@ import Testing
   #expect(NativeBrowserHost.shareURL(for: store) == url)
 }
 
+@Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {
+  #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: false) == "Enter Full Screen")
+  #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: true) == "Exit Full Screen")
+}
+
 @Test @MainActor func nativeMenuRetainsKeyEquivalentsAndEditResponderChain() {
   let application = NSApplication.shared
   let menu = NativeBrowserHost.makeMenu(target: application)

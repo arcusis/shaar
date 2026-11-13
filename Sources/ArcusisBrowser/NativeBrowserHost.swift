@@ -14,6 +14,7 @@ enum BrowserMenuCommand: String, CaseIterable {
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
     developerTools, chromiumDeveloperTools
+  case nextWindow, previousWindow
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
   case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
@@ -336,6 +337,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if command == .newMiniWindow {
       return privateHost?.hasActiveWindow != true && miniWindowTarget != nil
     }
+    if command == .nextWindow || command == .previousWindow {
+      return Self.cycledWindow(
+        from: keyWindow(), among: NSApp.windows.filter(\.isVisible),
+        backwards: command == .previousWindow) != nil
+    }
     if command == .newWindow { return started }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
@@ -404,7 +410,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Commands that act on the app rather than one window and need no window to be enabled.
   private static let appCommands: Set<BrowserMenuCommand> = [
-    .newWindow, .newPrivateWindow, .newMiniWindow, .quit,
+    .newWindow, .newPrivateWindow, .newMiniWindow, .nextWindow, .previousWindow, .quit,
   ]
 
   func perform(_ command: BrowserMenuCommand) {
@@ -435,10 +441,32 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .newMiniWindow: openMiniWindow(url: nil)
     case .newPrivateWindow:
       do { try privateHost?.openWindow() } catch { report(error) }
+    case .nextWindow, .previousWindow:
+      if let target = Self.cycledWindow(
+        from: keyWindow(), among: NSApp.windows.filter(\.isVisible),
+        backwards: command == .previousWindow)
+      {
+        target.makeKeyAndOrderFront(nil)
+      }
     case .checkForUpdates: updater?.checkForUpdates()
     default: return false
     }
     return true
+  }
+
+  static func cycledWindow(
+    from current: NSWindow?, among windows: [NSWindow], backwards: Bool,
+    activate: ((NSWindow) -> Void)? = nil
+  ) -> NSWindow? {
+    let candidates = windows.filter(\.canBecomeKey)
+    guard candidates.count > 1, let current,
+      let index = candidates.firstIndex(where: { $0 === current })
+    else { return nil }
+    let direction = backwards ? -1 : 1
+    let next = (index + direction + candidates.count) % candidates.count
+    let target = candidates[next]
+    activate?(target)
+    return target
   }
 
   /// Development bundles carry no update feed, so their updater never exists.
@@ -591,7 +619,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newWindow, .newPrivateWindow, .newMiniWindow, .settings, .quit, .checkForUpdates: break
+    case .newWindow, .newPrivateWindow, .newMiniWindow, .nextWindow, .previousWindow, .settings,
+      .quit, .checkForUpdates: break
     }
   }
 
@@ -1321,6 +1350,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let extensions = section("Extensions")
     add(.extensions, "Manage Extensions…", to: extensions)
     let window = section("Window")
+    add(.nextWindow, "Next Window", to: window)
+    add(.previousWindow, "Previous Window", to: window)
     add(.minimizeWindow, "Minimize", to: window)
     add(.zoomWindow, "Zoom", to: window)
     add(.bringAllToFront, "Bring All to Front", to: window)

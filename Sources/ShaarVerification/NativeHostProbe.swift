@@ -61,6 +61,7 @@ private struct HostViewportSample: Codable {
   let documentInstance: String
   let innerWidthCSSPixels: Double
   let innerHeightCSSPixels: Double
+  let resizeEventCount: Int
   let devicePixelRatio: Double
   let backingScaleFactor: Double
   let sidebarVisible: Bool
@@ -104,6 +105,10 @@ private struct HostViewportWindowState {
 enum NativeHostViewportValidation {
   static func sameCSSSize(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
     abs(lhs.width - rhs.width) <= 1 && abs(lhs.height - rhs.height) <= 1
+  }
+
+  static func deliveredResizeEvent(from previousCount: Int, to currentCount: Int) -> Bool {
+    currentCount > previousCount
   }
 }
 
@@ -659,6 +664,7 @@ final class NativeHostProbe {
         width: max(first.window.minSize.width + 240, 1000),
         height: max(first.window.minSize.height + 220, 760))
       first.window.setFrame(normalFrame, display: false)
+      await waitForResizeEvent(tabID: firstTab, after: firstOriginal.resizeEventCount)
       try await settleViewportLayout(first)
       let firstNormal = try await viewportSample("first-normal", context: first, tabID: firstTab)
       let secondAfterNormal = try await viewportSample(
@@ -669,8 +675,10 @@ final class NativeHostProbe {
         firstNormal.innerWidthCSSPixels > 0 && firstNormal.innerHeightCSSPixels > 0
           && firstNormal.cssMatchesNativePoints && firstNormal.pageMatchesContainer
           && firstNormal.containerWithinVisibleHosting
-          && firstNormal.containerFitsExpectedPageWidth,
-        "Normal window resize produces a measurable first-window viewport.",
+          && firstNormal.containerFitsExpectedPageWidth
+          && NativeHostViewportValidation.deliveredResizeEvent(
+            from: firstOriginal.resizeEventCount, to: firstNormal.resizeEventCount),
+        "Normal window resize produces a measurable viewport and delivers the page resize event.",
         checks: &viewportChecks)
       try recordViewportCheck(
         "normalResizeLeavesSecondWindowStable",
@@ -681,6 +689,7 @@ final class NativeHostProbe {
       var minimumFrame = normalFrame
       minimumFrame.size = first.window.minSize
       first.window.setFrame(minimumFrame, display: false)
+      await waitForResizeEvent(tabID: firstTab, after: firstNormal.resizeEventCount)
       try await settleViewportLayout(first)
       let firstMinimum = try await viewportSample(
         "first-minimum", context: first, tabID: firstTab)
@@ -695,7 +704,9 @@ final class NativeHostProbe {
           && firstNormal.innerWidthCSSPixels > firstMinimum.innerWidthCSSPixels + 100
           && firstNormal.innerHeightCSSPixels > firstMinimum.innerHeightCSSPixels + 100
           && firstMinimum.containerWithinVisibleHosting
-          && firstMinimum.containerFitsExpectedPageWidth,
+          && firstMinimum.containerFitsExpectedPageWidth
+          && NativeHostViewportValidation.deliveredResizeEvent(
+            from: firstNormal.resizeEventCount, to: firstMinimum.resizeEventCount),
         "Minimum window resize updates first-window CSS and native viewport dimensions.",
         checks: &viewportChecks)
       try recordViewportCheck(
@@ -954,6 +965,7 @@ final class NativeHostProbe {
       }).first,
       let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
       let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
+      let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,
       let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue,
       let page = primary.runtime.view(forTabID: tabID.uuidString),
       let container = pageContainer(in: context.hosting, page: page),
@@ -987,6 +999,7 @@ final class NativeHostProbe {
       profileID: context.store.session.selectedSpace.profileID,
       accountID: accountID, documentInstance: instance,
       innerWidthCSSPixels: cssWidth, innerHeightCSSPixels: cssHeight,
+      resizeEventCount: resizeEventCount,
       devicePixelRatio: devicePixelRatio,
       backingScaleFactor: Double(context.window.backingScaleFactor),
       sidebarVisible: context.store.sidebarIsVisible,
@@ -1004,6 +1017,26 @@ final class NativeHostProbe {
       cssMatchesNativePoints: cssMatchesNativePoints,
       tabOwnerMatchesWindow: primary.runtime.windowID(forTabID: tabID.uuidString)
         == context.nativeID)
+  }
+
+  private func waitForResizeEvent(tabID: UUID, after count: Int) async {
+    for _ in 0..<20 {
+      let json: String? = await withCheckedContinuation { continuation in
+        primary.runtime.evaluate(
+          inTabID: tabID.uuidString,
+          script: "({count:window.__arcusisResizeEvents||0})") {
+            continuation.resume(returning: $0)
+          }
+      }
+      if let data = json?.data(using: .utf8),
+        let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let current = (object["count"] as? NSNumber)?.intValue,
+        current > count
+      {
+        return
+      }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
   }
 
   private func pageContainer(in view: NSView, page: NSView) -> ChromiumPageContainerView? {
@@ -1158,8 +1191,15 @@ final class NativeHostProbe {
       let json: String? = await withCheckedContinuation { continuation in
         primary.runtime.evaluate(
           inTabID: id.uuidString,
-          script:
-            "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('arcusisProfileMutation'),session:sessionStorage.getItem('arcusisProfileMutation'),innerWidth:window.innerWidth,innerHeight:window.innerHeight,devicePixelRatio:window.devicePixelRatio})"
+          script: """
+            ({fixture:document.documentElement.dataset.arcusisFixture,
+              instance:window.arcusisInstance,cookie:document.cookie,
+              local:localStorage.getItem('arcusisProfileMutation'),
+              session:sessionStorage.getItem('arcusisProfileMutation'),
+              innerWidth:window.innerWidth,innerHeight:window.innerHeight,
+              devicePixelRatio:window.devicePixelRatio,
+              resizeEventCount:window.__arcusisResizeEvents||0})
+            """
         ) { continuation.resume(returning: $0) }
       }
       if let data = json?.data(using: .utf8),

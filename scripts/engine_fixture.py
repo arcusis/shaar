@@ -818,7 +818,7 @@ console.log('shaar-agent-console-other');
 <p>OrbitFindMarker OrbitFindMarker OrbitFindMarker</p>
 <form><label>Username <input id="username" autocomplete="username"></label>
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
-<script>window.arcusisInstance=crypto.randomUUID();</script></html>""")
+<script>window.arcusisInstance=crypto.randomUUID();window.__arcusisResizeEvents=0;window.addEventListener('resize',function(){window.__arcusisResizeEvents+=1});</script></html>""")
 
     def framework_component(self, filename):
         source = Path(__file__).resolve().parents[1] / "Tests/Fixtures/framework-components" / filename

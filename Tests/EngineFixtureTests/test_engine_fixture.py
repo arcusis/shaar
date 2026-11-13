@@ -164,6 +164,18 @@ class SplitProbePhaseArgumentTests(unittest.TestCase):
 
 
 class DevelopmentModeRunnerTests(unittest.TestCase):
+    def test_account_fixture_counts_page_resize_events(self):
+        server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/account') as response:
+            body = response.read()
+        self.assertIn(b'window.__arcusisResizeEvents=0', body)
+        self.assertIn(b"window.addEventListener('resize'", body)
+        self.assertIn(b'window.__arcusisResizeEvents+=1', body)
+
     def test_inspector_tools_seeds_storage_and_service_worker_bytes_change(self):
         fixture.SW_GENERATION = 1
         server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)

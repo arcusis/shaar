@@ -23,4 +23,10 @@ import Testing
       !NativeHostViewportValidation.sameCSSSize(
         baseline, CGSize(width: 1200, height: 781.01)))
   }
+
+  @Test func resizeDeliveryRequiresAnObservedPageEvent() {
+    #expect(NativeHostViewportValidation.deliveredResizeEvent(from: 0, to: 1))
+    #expect(!NativeHostViewportValidation.deliveredResizeEvent(from: 2, to: 2))
+    #expect(!NativeHostViewportValidation.deliveredResizeEvent(from: 3, to: 1))
+  }
 }

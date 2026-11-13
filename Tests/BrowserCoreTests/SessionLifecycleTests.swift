@@ -6,6 +6,36 @@ import BrowserCore
 import Foundation
 import Testing
 
+@Test func sessionValidationScaleBenchmark() throws {
+  let profile = BrowserProfile(name: "Main")
+  let folderIDs = (0..<300).map { _ in UUID() }
+  let folders = folderIDs.enumerated().map { index, id in
+    BrowserFolder(
+      id: id, name: "Folder \(index)", parentID: index == 0 ? nil : folderIDs[index - 1],
+      isPinned: false)
+  }
+  let tabs = (0..<3_000).map { index in
+    BrowserTab(
+      url: URL(string: "https://example.com/\(index)")!, title: "Tab \(index)",
+      isPinned: false, folderID: folderIDs[index % folderIDs.count])
+  }
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs, folders: folders)
+  let session = try BrowserSession(profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+  #expect(throws: Never.self) { try session.validate() }
+
+  var invalidSession = session
+  var invalidSpace = invalidSession.spaces[0]
+  invalidSpace.tabs[0].folderID = UUID()
+  invalidSession.spaces[0] = invalidSpace
+  #expect(throws: SessionError.invalidState) { try invalidSession.validate() }
+
+  let start = ContinuousClock.now
+  for _ in 0..<10 { try session.validate() }
+  print("sessionValidationScaleBenchmark: \(start.duration(to: .now))")
+}
+
 @Test func keepAliveTabSurvivesLegacyDecodeAndRoundTrip() throws {
   let url = URL(string: "https://example.com/keep")!
   var session = BrowserSession.fresh()

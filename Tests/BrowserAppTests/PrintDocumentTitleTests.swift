@@ -3,9 +3,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Testing
+import AppKit
 
 @testable import ArcusisBrowser
 
+@MainActor
 struct PrintDocumentTitleTests {
   @Test func usesPageTitleForDefaultPDFName() {
     #expect(PrintDocumentTitle.make(pageTitle: "  Quarterly report  ", productName: "Shaar") == "Quarterly report")
@@ -19,5 +21,17 @@ struct PrintDocumentTitleTests {
   @Test func capsPageTitleLength() {
     let result = PrintDocumentTitle.make(pageTitle: String(repeating: "a", count: 200), productName: "Shaar")
     #expect(result.count == 120)
+  }
+
+  @Test func updatesTheAttachedWindowTitleWithoutShowingAWindow() throws {
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 100, height: 100),
+      styleMask: .borderless, backing: .buffered, defer: false)
+    let view = PrintDocumentTitleView(pageTitle: "First page")
+    try #require(window.contentView).addSubview(view)
+    #expect(window.title == "First page")
+
+    view.setPageTitle("Second page")
+    #expect(window.title == "Second page")
   }
 }

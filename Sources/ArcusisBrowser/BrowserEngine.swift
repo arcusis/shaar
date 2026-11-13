@@ -739,7 +739,7 @@ final class BrowserEngine {
       events.router.forgetTab(id.uuidString, windowID: windowID)
       liveTabs.remove(id)
       failedTabs.insert(id)
-      notice = error.localizedDescription
+      notice = ShellL10n.string("This tab could not be opened. Try reloading it.")
     }
   }
 
@@ -869,7 +869,7 @@ final class BrowserEngine {
           events.router.forgetTab(tab.id.uuidString, windowID: windowID)
           liveTabs.remove(tab.id)
           failedTabs.insert(tab.id)
-          notice = error.localizedDescription
+          notice = ShellL10n.string("This tab could not be opened. Try reloading it.")
         }
       }
     }
@@ -900,7 +900,7 @@ final class BrowserEngine {
         events.router.forgetTab(page.tab.id.uuidString, windowID: windowID)
         liveTabs.remove(page.tab.id)
         failedTabs.insert(page.tab.id)
-        notice = error.localizedDescription
+        notice = ShellL10n.string("This tab could not be opened. Try reloading it.")
       }
     }
     for profile in loadedProfiles {

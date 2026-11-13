@@ -44,6 +44,12 @@ enum SavePromptPlacement {
 
 @MainActor
 enum SavePromptButtons {
+  static func textFields(_ view: NSView?) -> [NSTextField] {
+    guard let view else { return [] }
+    let own = (view as? NSTextField).map { [$0] } ?? []
+    return own + view.subviews.flatMap(textFields)
+  }
+
   static func find(_ view: NSView?, identifier: String) -> NSButton? {
     guard let view else { return nil }
     if let button = view as? NSButton, button.identifier?.rawValue == identifier { return button }
@@ -131,7 +137,7 @@ enum SavePromptContent {
     }
     stack.addArrangedSubview(
       label(
-        request.origin.host() ?? request.origin.absoluteString,
+        request.origin.absoluteString,
         size: 13, weight: .medium))
     stack.addArrangedSubview(buttonRow(request, target: target))
     root.addSubview(stack)

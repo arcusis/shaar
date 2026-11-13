@@ -100,6 +100,15 @@ struct SavePromptTests {
     #expect(decisions == [.dismiss])
   }
 
+  @Test func promptShowsTheFullOriginIncludingNonDefaultPort() throws {
+    let store = store()
+    let request = try request(store)
+    let panel = ShaarSavePromptPanel()
+    panel.show(request) { _ in }
+    let labels = SavePromptButtons.textFields(panel.contentView).map(\.stringValue)
+    #expect(labels.contains("http://127.0.0.1:9"))
+  }
+
   @Test func saveButtonsSendTheMatchingDecisionAndStayOffscreen() throws {
     let store = store()
     let password = try request(store)

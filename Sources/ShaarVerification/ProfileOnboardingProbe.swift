@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 
 @testable import ArcusisBrowser
 
@@ -301,7 +302,8 @@ final class ProfileOnboardingProbe {
       url.scheme == "https", state["ready"] as? String == "complete"
     else { return false }
     let host = url.host ?? ""
-    let email = state["email"] as? Bool == true
+    let emailValue = state["email"] as? NSNumber
+    let email = emailValue.map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
     switch provider {
     case .google: return host == "accounts.google.com" && email
     case .microsoft: return ["login.microsoftonline.com", "login.live.com"].contains(host) && email

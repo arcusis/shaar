@@ -181,6 +181,17 @@ import Testing
   #expect(address == "https://bookmark.example/current")
 }
 
+@Test @MainActor func bookmarksMenuOpensTheBookmarksLibrarySection() {
+  let store = BrowserStore()
+
+  NativeBrowserHost.showBookmarks(in: store)
+
+  guard case .library(_, .bookmarks) = store.sheet else {
+    Issue.record("Bookmarks menu should open the bookmarks library section")
+    return
+  }
+}
+
 @Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: false) == "Enter Full Screen")
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: true) == "Exit Full Screen")

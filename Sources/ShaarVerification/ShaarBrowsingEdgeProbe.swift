@@ -486,7 +486,8 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
         "Box did not scroll. rows \(firstCount), top \(top), height \(height), client \(client), frames \(frames)",
         proven: false)
     }
-    let passed = grew && scrollEvents > 0 && scrollEndEvents > 0 && pageScrollEvents > 0
+    let passed =
+      grew && scrollEvents > 0 && scrollEndEvents > 0 && pageScrollEvents > 0
       && ping != nil
       && failure(context) == nil && windowsHidden()
     return makeRow(

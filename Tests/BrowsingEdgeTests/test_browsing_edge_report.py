@@ -169,7 +169,11 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         fixture = PROBE.SCROLL.decode()
         self.assertIn('window.__scrollEvents = 0', fixture)
         self.assertIn('window.__scrollEvents += 1', fixture)
-        self.assertIn('addEventListener("scroll"', fixture)
+        self.assertIn('root.addEventListener("scroll"', fixture)
+        self.assertIn('window.__pageScrollEvents = 0', fixture)
+        self.assertIn('window.__pageScrollEvents += 1', fixture)
+        self.assertIn('window.addEventListener("scroll"', fixture)
+        self.assertIn('height:180vh', fixture)
 
     def test_scroll_fixture_requires_scrollend_listener_delivery(self):
         fixture = PROBE.SCROLL.decode()

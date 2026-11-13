@@ -603,7 +603,7 @@ final class ShaarFirstTabProbe {
       FileHandle.standardError.write(Data("Shaar first-tab report failed: \(error)\n".utf8))
     }
     if !passed {
-      runtime.quit()
+      host.events.quit()
       return
     }
     if checksFavicon || restoresFavicon {
@@ -615,7 +615,8 @@ final class ShaarFirstTabProbe {
       }
       return
     }
-    closeProbeWindows()
+    // Let the normal engine quit path tear down this single probe window. Closing it
+    // separately can race profile refresh submissions still in flight on older engines.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
       self?.quitProbe()
     }
@@ -631,7 +632,7 @@ final class ShaarFirstTabProbe {
     if systemQuit {
       NSApp.terminate(nil)
     } else {
-      runtime.quit()
+      host.events.quit()
     }
   }
 

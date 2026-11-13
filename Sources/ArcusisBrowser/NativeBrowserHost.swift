@@ -871,30 +871,31 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       stopObserving(context)
       context.engine.onClosed = nil
     }
-    if NSApp.mainMenu === menu { NSApp.mainMenu = previousMenu }
-    if NSApp.servicesMenu
-      === menu?.items.first?.submenu?.items.first(where: {
+    guard let menu, let application = NSApp else { return }
+    if application.mainMenu === menu { application.mainMenu = previousMenu }
+    if application.servicesMenu
+      === menu.items.first?.submenu?.items.first(where: {
         $0.submenu?.identifier?.rawValue == "Services"
           || $0.submenu?.title == ShellL10n.string("Services")
       })?.submenu
     {
-      NSApp.servicesMenu = previousServicesMenu
+      application.servicesMenu = previousServicesMenu
     }
-    if NSApp.windowsMenu
-      === menu?.items.first(where: {
+    if application.windowsMenu
+      === menu.items.first(where: {
         $0.submenu?.identifier?.rawValue == "Window"
           || $0.submenu?.title == ShellL10n.string("Window")
       })?.submenu
     {
-      NSApp.windowsMenu = previousWindowsMenu
+      application.windowsMenu = previousWindowsMenu
     }
-    if NSApp.helpMenu
-      === menu?.items.first(where: {
+    if application.helpMenu
+      === menu.items.first(where: {
         $0.submenu?.identifier?.rawValue == "Help"
           || $0.submenu?.title == ShellL10n.string("Help")
       })?.submenu
     {
-      NSApp.helpMenu = previousHelpMenu
+      application.helpMenu = previousHelpMenu
     }
   }
 

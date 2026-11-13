@@ -555,7 +555,9 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   shaar_config config = {};
   config.size = sizeof(config);
   config.requested_major = SHAAR_ENGINE_ABI_MAJOR;
-  config.requested_minor = SHAAR_ENGINE_ABI_MINOR;
+  // Keep the startup contract at the original baseline; newer operations are gated by
+  // the loaded framework's reported ABI minor so older compatible engines can still launch.
+  config.requested_minor = 7;
   config.data_root = Bytes(path);
   config.locale = Bytes(self.languageIdentifier ?: @"en");
   config.on_event = ShaarEventCallback;

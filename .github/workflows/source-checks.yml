@@ -458,12 +458,22 @@ jobs:
             fi
           } > "$reports/runner-environment.txt" 2>&1
           report_dir="$HOME/Library/Logs/DiagnosticReports"
-          if [ -d "$report_dir" ]; then
-            find "$report_dir" -type f -name '*.ips' \
-              -newer "$RUNNER_TEMP/shaar-engine-first-tab-start" \
-              \( -iname 'Shaar*.ips' -o -iname 'Chromium*.ips' \) \
-              -exec cp {} "$reports/" \;
-          fi
+          attempts=15
+          while [ "$attempts" -gt 0 ]; do
+            if [ -d "$report_dir" ]; then
+              find "$report_dir" -type f -name '*.ips' \
+                -newer "$RUNNER_TEMP/shaar-engine-first-tab-start" \
+                \( -iname 'Shaar*.ips' -o -iname 'Chromium*.ips' \) \
+                -print > "$reports/crash-report-paths.txt"
+              if [ -s "$reports/crash-report-paths.txt" ]; then
+                while IFS= read -r report; do cp "$report" "$reports/"; done \
+                  < "$reports/crash-report-paths.txt"
+                break
+              fi
+            fi
+            attempts=$((attempts - 1))
+            sleep 1
+          done
       - name: Upload first-tab crash diagnostics
         if: failure() && steps.first_tab.outcome == 'failure'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

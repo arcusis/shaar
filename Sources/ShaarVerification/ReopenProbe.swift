@@ -9,12 +9,16 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
-private struct RecoveryIdentities: Codable {
+struct RecoveryIdentities: Codable {
   let alpha: UUID
   let beta: UUID
   let folder: UUID
   let alphaClosed: UUID
   let betaClosed: UUID
+
+  var hasDistinctIDs: Bool {
+    Set([alpha, beta, folder, alphaClosed, betaClosed]).count == 5
+  }
 }
 
 @MainActor
@@ -84,6 +88,9 @@ final class ReopenProbe {
         alpha: alpha, beta: beta, folder: folder, alphaClosed: target, betaClosed: betaClosed)
     } else {
       ids = try JSONDecoder().decode(RecoveryIdentities.self, from: Data(contentsOf: file))
+      guard ids.hasDistinctIDs else {
+        throw RecoveryFailure("Closed-tab recovery checkpoint contains duplicate identities.")
+      }
       try expect(
         store.session.closedTabs.contains {
           $0.id == ids.alphaClosed && $0.spaceID == ids.alpha && $0.profileID == base.profileID

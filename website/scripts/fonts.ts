@@ -8,7 +8,7 @@
 // from the site's own origin.
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 // One request per family: the combined endpoint omits some families.
@@ -124,6 +124,7 @@ export async function prepareFonts(
     }
   } catch (error) {
     console.warn(`Cached fonts unavailable, the site falls back to system fonts: ${String(error)}`);
+    await rm(manifestPath, { force: true });
     return [];
   }
   return faces;

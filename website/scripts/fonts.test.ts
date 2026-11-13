@@ -144,6 +144,7 @@ test("a cached non-WOFF2 file falls back instead of being copied", async () => {
   try {
     assert.deepEqual(await prepareFonts(cache, output), []);
     assert.equal(existsSync(join(output, "satoshi.woff2")), false);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

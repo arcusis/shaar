@@ -121,6 +121,17 @@ private actor FakeMediaTransport: ShaarMediaTransport {
   }
 }
 
+@Test func eventSchemaVersionMustBeAnInteger() throws {
+  let adapter = ShaarMediaAdapter(implementation: .shaar, transport: FakeMediaTransport("{}"))
+  let event = ShaarCopiedEvent(
+    sequence: 1, kind: 15, profileID: Data("p".utf8), sessionID: Data(),
+    windowID: Data("w".utf8), tabID: Data("t".utf8),
+    payloadJSON: Data(#"{"schemaVersion":true,"kind":"pip_changed","state":"none"}"#.utf8))
+  #expect(throws: ShaarMediaAdapterError.malformedResponse) {
+    try adapter.decodeEvent(event, scope: .init(profileID: "p", tabID: "t"))
+  }
+}
+
 @Test func stateEventsRejectInvalidNativeStateFields() throws {
   let adapter = ShaarMediaAdapter(implementation: .shaar, transport: FakeMediaTransport("{}"))
   let validFields =

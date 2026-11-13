@@ -2,7 +2,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
+
+private func mediaEventInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
 
 public enum ShaarMediaOperation: UInt32, Sendable {
   case getState = 1100
@@ -184,7 +192,7 @@ public struct ShaarMediaAdapter: Sendable {
       String(data: event.tabID, encoding: .utf8) == scope.tabID
     else { return nil }
     guard let root = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
-      root["schemaVersion"] as? Int == 1,
+      mediaEventInteger(root["schemaVersion"]) == 1,
       let kind = root["kind"] as? String
     else { throw ShaarMediaAdapterError.malformedResponse }
     switch kind {

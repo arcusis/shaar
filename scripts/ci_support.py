@@ -46,6 +46,8 @@ def junit_totals(report: Path) -> dict[str, int]:
     root = ET.parse(report).getroot()
     suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
     leaves = [suite for suite in suites if not suite.findall("testsuite")]
+    if not leaves:
+        raise ValueError("JUnit report contains no test suites")
     totals = {}
     for key in ("tests", "failures", "errors", "skipped"):
         values = []

@@ -9,6 +9,10 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test @MainActor func printStaysUnavailableInPrivateWindowsUntilItsNativeRouteIsSupported() {
+  #expect(!PrivateBrowserHost.supportsPrivateCommand(.print))
+}
+
 @Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {
   let workspace = try BrowserWorkspaceStore()
   try workspace.removeWindow(workspace.workspace.windows[0].id)

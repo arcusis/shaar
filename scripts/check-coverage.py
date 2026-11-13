@@ -43,17 +43,22 @@ NOISE = Fraction(1, 4000)
 def load_report(path: Path, label: str) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ValueError(f"Cannot read {label} coverage report {path}: {error}") from error
 
 
 def module_coverage(report: dict) -> dict[str, tuple[int, int]]:
-    if report.get("type") != "llvm.coverage.json.export" or not report.get("data"):
+    if (not isinstance(report, dict) or report.get("type") != "llvm.coverage.json.export"
+            or not isinstance(report.get("data"), list) or not report["data"]):
         raise ValueError("Missing LLVM coverage data")
     counts = {}
     seen = set()
     for data in report["data"]:
+        if not isinstance(data, dict) or not isinstance(data.get("files"), list):
+            raise ValueError("Malformed LLVM coverage file list")
         for file in data["files"]:
+            if not isinstance(file, dict) or not isinstance(file.get("filename"), str):
+                raise ValueError("Malformed LLVM coverage file entry")
             filename = file["filename"]
             for module in MODULES:
                 marker = f"/Sources/{module}/"
@@ -67,7 +72,10 @@ def module_coverage(report: dict) -> dict[str, tuple[int, int]]:
                 seen.add(identity)
                 if identity in UNIT_COVERAGE_EXCLUDES:
                     continue
-                lines = file["summary"]["lines"]
+                summary = file.get("summary")
+                lines = summary.get("lines") if isinstance(summary, dict) else None
+                if not isinstance(lines, dict) or "covered" not in lines or "count" not in lines:
+                    raise ValueError("Malformed LLVM coverage line summary")
                 covered, count = lines["covered"], lines["count"]
                 if type(count) is not int or type(covered) is not int or not 0 <= covered <= count:
                     raise ValueError("Invalid covered/total line counts")

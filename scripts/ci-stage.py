@@ -165,11 +165,18 @@ def build_base_coverage(checks: Commands) -> None:
         raise RuntimeError("Baseline coverage build/tests failed")
 
 
+def load_coverage_metadata(path: Path, label: str) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"Cannot read {label} coverage metadata {path}: {error}") from error
+
+
 def compare_coverage(checks: Commands) -> None:
     candidate = ROOT / "build/ci/unit"
     baseline = ROOT / "build/ci/coverage-base"
-    candidate_metadata = json.loads((candidate / "metadata.json").read_text())
-    baseline_metadata = json.loads((baseline / "metadata.json").read_text())
+    candidate_metadata = load_coverage_metadata(candidate / "metadata.json", "candidate")
+    baseline_metadata = load_coverage_metadata(baseline / "metadata.json", "base")
     if (not candidate_metadata.get("toolchain")
             or candidate_metadata["toolchain"] != baseline_metadata.get("toolchain")):
         raise ValueError("Coverage baseline and candidate toolchains differ")

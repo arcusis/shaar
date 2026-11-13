@@ -80,6 +80,22 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.isAllowed(.camera) && backend.values[.camera] == .allow && model.failure == nil)
 }
 
+@MainActor @Test func notificationPermissionCanBeRevokedFromSiteControls() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  await model.load()
+
+  #expect(model.permissionValues[.notifications] == .ask)
+  await model.setPermission(.notifications, allowed: true)
+  #expect(model.permissionValues[.notifications] == .allow)
+  #expect(backend.values[.notifications] == .allow)
+
+  await model.setPermission(.notifications, allowed: false)
+  #expect(model.permissionValues[.notifications] == .block)
+  #expect(backend.values[.notifications] == .block)
+  #expect(model.failure == nil)
+}
+
 @MainActor @Test func successfulPermissionRetryClearsStaleFailure() async {
   let backend = FakeSiteBackend()
   let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)

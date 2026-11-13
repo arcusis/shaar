@@ -13,6 +13,9 @@
         "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לקבל את פרטי המקור. כדאי לנסות שוב." } }
       }
     },
+    "This source is no longer available.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"This source is no longer available."}},"he":{"stringUnit":{"state":"translated","value":"המקור הזה כבר אינו זמין."}}}},
+    "This source is no longer in the page resource tree.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"This source is no longer in the page resource tree."}},"he":{"stringUnit":{"state":"translated","value":"המקור הזה כבר אינו מופיע בעץ המשאבים של הדף."}}}},
+    "Source content is unavailable or exceeds 5 MiB.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Source content is unavailable or exceeds 5 MiB."}},"he":{"stringUnit":{"state":"translated","value":"תוכן המקור אינו זמין או שגודלו חורג מ־5 MiB."}}}},
     "A11y": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"A11y"}},"he":{"stringUnit":{"state":"translated","value":"נגישות"}}}},
     "Copy context and screenshot (Command-Shift-C)": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy context and screenshot (Command-Shift-C)"}},"he":{"stringUnit":{"state":"translated","value":"העתקת ההקשר וצילום האלמנט (Command-Shift-C)"}}}},
     "Copying…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copying…"}},"he":{"stringUnit":{"state":"translated","value":"ההעתקה מתבצעת…"}}}},

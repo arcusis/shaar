@@ -129,7 +129,7 @@ enum DeviceChooserIntake {
     var seen: Set<Int> = []
     for raw in rawOptions {
       guard Set(raw.keys).isSubset(of: optionKeys),
-        let index = integer(raw["index"]), index >= 0, seen.insert(index).inserted,
+        let index = integer(raw["index"]), (0..<64).contains(index), seen.insert(index).inserted,
         let name = raw["name"] as? String, name.utf8.count <= 256
       else { return nil }
       options.append(DeviceChooserOption(index: index, title: name, detail: ""))
@@ -145,7 +145,7 @@ enum DeviceChooserIntake {
     guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
       return nil
     }
-    return number.intValue
+    return Int(exactly: number.doubleValue)
   }
 }
 

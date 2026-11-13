@@ -136,6 +136,19 @@ class PipelineGateTests(unittest.TestCase):
             inspector)
         self.assertIn("playwright install chromium --with-deps --only-shell", inspector)
 
+    def test_pnpm_store_caches_fall_back_after_lockfile_changes(self):
+        workflows = (
+            ROOT / ".github/workflows/source-checks.yml",
+            ROOT / ".github/workflows/website-checks.yml",
+        )
+        for path in workflows:
+            with self.subTest(workflow=path.name):
+                workflow = path.read_text()
+                cache = workflow.split("      - name: Cache pnpm store", 1)[1].split(
+                    "\n      - name:", 1)[0]
+                self.assertIn("restore-keys: |", cache)
+                self.assertIn("pnpm-${{ runner.os }}-${{ runner.arch }}-", cache)
+
     def test_release_gate_requires_both_exact_production_workflows_and_zero_alerts(self):
         revision = "a" * 40
         valid = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",

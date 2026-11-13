@@ -39,6 +39,8 @@ jobs:
         with:
           path: ~/.local/share/pnpm/store
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('website/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-${{ runner.arch }}-
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck

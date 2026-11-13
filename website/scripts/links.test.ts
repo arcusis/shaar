@@ -259,6 +259,16 @@ test("link checker rejects empty alternative text on image map links", () => {
   }
 });
 
+test("link checker validates embedded page URLs", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), '<h1>Home</h1><iframe src="/missing-embed/"></iframe>');
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing-embed/"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("link checker validates social preview image targets", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

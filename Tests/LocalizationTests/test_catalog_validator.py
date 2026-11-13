@@ -511,6 +511,13 @@ class CatalogValidatorTests(unittest.TestCase):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserWorkspaceStore.swift").read_text(encoding="utf-8")
         self.assertIn('ShellL10n.string("Window changes could not be saved. Try again.")', source)
         self.assertNotIn('ShellL10n.format("Window changes could not be saved. %@"', source)
+    def test_clear_history_failure_uses_localized_retry_message(self):
+        key = "Could not clear history. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(encoding="utf-8")
+        self.assertIn('historyMessage = SettingsL10n.string("Could not clear history. Try again.")', source)
+        self.assertNotIn('error.localizedDescription))', source)
 
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"

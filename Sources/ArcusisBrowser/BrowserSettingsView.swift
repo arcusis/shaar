@@ -367,7 +367,7 @@ struct BrowserSettingsView: View {
         .accessibilityIdentifier("settings-never-sleep-hosts")
         Text(
           SettingsL10n.string(
-            "One site per line. Pinned tabs, the tab you are looking at, and tabs playing sound stay awake."
+            "One site per line. Pinned and visible tabs, tabs playing sound or using camera, microphone, or screen capture, and tabs with unsaved form input stay awake."
           )
         )
         .font(.caption)

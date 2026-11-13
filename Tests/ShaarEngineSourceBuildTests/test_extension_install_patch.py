@@ -49,7 +49,6 @@ class ExtensionInstallPatchTests(unittest.TestCase):
         patches = json.loads(MANIFEST.read_text())["patches"]
         names = [entry["file"] for entry in patches]
         self.assertNotIn(str(PATCH.relative_to(ROOT)), names)
-        self.assertNotIn(str(PATCH.relative_to(ROOT)), names)
 
     def test_install_layer_hashes_match_the_files(self):
         manifest = json.loads(MANIFEST.read_text())

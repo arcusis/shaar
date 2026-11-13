@@ -664,12 +664,13 @@ final class BrowserStore {
   func nativeTabClosed(_ id: UUID) {
     sleepingTabIDs.remove(id)
     let requested = requestedTabCloses.remove(id) != nil
-    guard session.page(forTabID: id) != nil else { return }
+    let page = session.page(forTabID: id)
     // WebContents destruction also reports "closed". Losing a native document
     // is not permission to delete a saved pin.
-    guard requested || session.page(forTabID: id)?.tab.isPinned != true else { return }
     rendererFailures[id] = nil
     if pendingSplitPlacement?.target == id { dismissCommand() }
+    guard let page else { return }
+    guard requested || page.tab.isPinned != true else { return }
     if let favoritePage = session.favoritePages.first(where: { $0.tab.id == id }) {
       _ = session.closeFavoritePage(favoritePage.favoriteID)
       save()

@@ -1063,6 +1063,26 @@ class ProbeSoakTests(unittest.TestCase):
             dict(name="cached-verification-bundle", command=[], status=0, seconds=0.0),
         ])
 
+    def test_engine_bundle_cache_rebuilds_when_archive_validation_hits_eof(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "build/ci/engine-build"
+            evidence.mkdir(parents=True)
+            (evidence / "bundle.json").write_text("{}")
+            archive = evidence / "verification.tar.gz"
+            archive.write_bytes(b"truncated")
+            output = root / "github-output"
+            checks = SimpleNamespace(directory=evidence, run=unittest.mock.Mock(return_value=0))
+            with (patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"),
+                  patch.object(STAGES, "validate_bundle_archive", side_effect=EOFError("truncated gzip footer")),
+                  patch.object(STAGES, "archive_bundle") as archive_bundle,
+                  patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)})):
+                STAGES.build_engine_bundle(checks, 1)
+            self.assertEqual(checks.run.call_args.args[0], "verification-build")
+            self.assertFalse((evidence / "bundle.json").exists())
+            self.assertFalse(archive.exists())
+            archive_bundle.assert_called_once_with(root, evidence)
+
     def test_soak_keeps_all_iteration_failures_without_retrying(self):
         checks = unittest.mock.Mock()
         checks.run.side_effect = [0, 1, 0, 1]

@@ -235,7 +235,7 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
     if (checks.directory / "bundle.json").is_file():
         try:
             validate_bundle_archive(ROOT, checks.directory)
-        except (OSError, ValueError, tarfile.TarError) as error:
+        except (OSError, ValueError, tarfile.TarError, EOFError) as error:
             print(f"Discarding unusable verification bundle cache and rebuilding: {error}")
             (checks.directory / "bundle.json").unlink(missing_ok=True)
             (checks.directory / "verification.tar.gz").unlink(missing_ok=True)

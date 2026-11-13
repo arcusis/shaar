@@ -59,4 +59,38 @@ struct DesktopCapturePickerTests {
     store.resolveDesktopCapture(request.id, sourceID: tabToken)
     #expect(decision == tabToken)
   }
+
+  @Test func pickerContentRetriesScreenEnumerationAfterAnError() async throws {
+    let store = BrowserStore()
+    store.perform(.open(try #require(URL(string: "https://meet.example/call"))))
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let request = try #require(
+      DesktopCaptureRequest(payload: [
+        "id": UUID().uuidString,
+        "profileID": store.session.selectedSpace.profileID.uuidString,
+        "tabID": tab.id.uuidString,
+        "pageURL": tab.url.absoluteString,
+        "origin": "https://meet.example",
+        "frameID": "0123456789abcdef0123456789abcdef",
+        "sourceTypes": ["screen", "window"],
+      ]))
+    var enumerationCount = 0
+    let picker = DesktopCapturePicker(
+      request: request,
+      store: store,
+      hasScreenRecordingAccess: { true },
+      shareableContent: {
+        enumerationCount += 1
+        throw CocoaError(.fileReadUnknown)
+      }
+    )
+
+    await picker.loadSources()
+    #expect(enumerationCount == 1)
+    let content = picker.pickerContent(error: DesktopCaptureCatalog.screenAccessNote, note: nil)
+    _ = content.body
+    await content.onRetry()
+
+    #expect(enumerationCount == 2)
+  }
 }

@@ -25,6 +25,7 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
       Self.isFrameToken(frameID),
       NavigationInput.isWebURL(pageURL),
       requestingOrigin.host() != nil,
+      Self.hasSameOrigin(pageURL, requestingOrigin),
       requestingOrigin.path.isEmpty || requestingOrigin.path == "/",
       requestingOrigin.query == nil,
       requestingOrigin.fragment == nil,
@@ -57,6 +58,22 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
     return value.unicodeScalars.allSatisfy {
       (48...57).contains(Int($0.value)) || (65...70).contains(Int($0.value))
         || (97...102).contains(Int($0.value))
+    }
+  }
+
+  private static func hasSameOrigin(_ pageURL: URL, _ requestingOrigin: URL) -> Bool {
+    guard pageURL.scheme?.lowercased() == requestingOrigin.scheme?.lowercased(),
+      pageURL.host()?.lowercased() == requestingOrigin.host()?.lowercased()
+    else { return false }
+    return effectivePort(pageURL) == effectivePort(requestingOrigin)
+  }
+
+  private static func effectivePort(_ url: URL) -> Int? {
+    if let port = url.port { return port }
+    return switch url.scheme?.lowercased() {
+    case "https": 443
+    case "http": 80
+    default: nil
     }
   }
 

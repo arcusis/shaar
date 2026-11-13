@@ -55,6 +55,28 @@ struct DesktopCaptureConsentTests {
     #expect(sheet.matches(store.session))
   }
 
+  @Test func captureRequestRejectsMismatchedPageAndRequestOrigins() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let payload: [String: Any] = [
+      "id": UUID().uuidString,
+      "profileID": store.session.selectedSpace.profileID.uuidString,
+      "tabID": tab.id.uuidString,
+      "pageURL": "https://meet.google.com/call",
+      "origin": "https://other.example",
+      "frameID": "0123456789abcdef0123456789abcdef",
+    ]
+    #expect(DesktopCaptureRequest(payload: payload) == nil)
+
+    var sameOrigin = payload
+    sameOrigin["pageURL"] = "https://meet.google.com:443/call"
+    sameOrigin["origin"] = "https://meet.google.com"
+    #expect(DesktopCaptureRequest(payload: sameOrigin) != nil)
+
+    sameOrigin["pageURL"] = "https://meet.google.com:8443/call"
+    #expect(DesktopCaptureRequest(payload: sameOrigin) == nil)
+  }
+
   @Test func pickerStartsInItsLoadingState() throws {
     let store = store()
     let capture = try request(store)
@@ -209,6 +231,7 @@ struct DesktopCaptureConsentTests {
     }
 
     var localHTTP = valid
+    localHTTP["pageURL"] = "http://localhost:3000/call"
     localHTTP["origin"] = "http://localhost:3000"
     #expect(DesktopCaptureRequest(payload: localHTTP) != nil)
   }

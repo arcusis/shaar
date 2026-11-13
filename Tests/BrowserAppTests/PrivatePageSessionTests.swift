@@ -10,6 +10,23 @@ import Testing
 
 @Suite @MainActor
 struct PrivatePageSessionTests {
+  @Test func liveTabOwnershipRequiresThePrivateProfileAndAnOpenSession() throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try BrowserSession.privateWindow(
+        sourceProfileID: UUID(), firstTabID: tabID))
+    let page = PrivatePageSession(
+      runtime: ARCChromiumRuntime(), contextID: UUID().uuidString,
+      windowID: UUID().uuidString, firstTabID: tabID, store: store)
+    defer { page.stopSleepingTabWatch() }
+    let profileID = store.session.selectedSpace.profileID
+
+    #expect(page.ownsLiveTab(tabID, profileID: profileID))
+    #expect(!page.ownsLiveTab(tabID, profileID: UUID()))
+    page.retireInspectors()
+    #expect(!page.ownsLiveTab(tabID, profileID: profileID))
+  }
+
   @Test func failureRemainsVisibleUntilANonBlankURLArrives() throws {
     let tabID = UUID()
     let store = BrowserStore(

@@ -108,7 +108,7 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
       if (!associated) errors.push(`${path}: image references missing map ${usemap}`);
     }
     for (const area of document.querySelectorAll("area[href]")) {
-      if (!area.hasAttribute("alt")) errors.push(`${path}: image map area missing alt`);
+      if (!area.getAttribute("alt")?.trim()) errors.push(`${path}: image map area missing alt`);
     }
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {

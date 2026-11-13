@@ -695,7 +695,7 @@ struct BrowserSidebar: View {
       )
       .font(.system(size: 13))
       .textFieldStyle(.plain)
-      .accessibilityLabel(ShellL10n.string("Folder name"))
+      .accessibilityLabel(PanelsL10n.string("Folder name"))
       .focused($folderNameIsFocused)
       .onSubmit(commitFolderDraft)
       .onExitCommand { folderDraft = nil }

@@ -165,6 +165,13 @@ class CatalogValidatorTests(unittest.TestCase):
         hebrew = catalog["strings"]["Loading profile…"]["localizations"]["he"]["stringUnit"]["value"]
         self.assertEqual(hebrew, "הפרופיל נטען…")
 
+    def test_folder_name_accessibility_uses_panels_catalog(self):
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserSidebar.swift").read_text(encoding="utf-8")
+        self.assertIn('accessibilityLabel(PanelsL10n.string("Folder name"))', source)
+        self.assertNotIn('accessibilityLabel(ShellL10n.string("Folder name"))', source)
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["strings"]["Folder name"]["localizations"]["he"]["stringUnit"]["value"], "שם התיקייה")
+
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"
         data = json.loads(path.read_text(encoding="utf-8"))

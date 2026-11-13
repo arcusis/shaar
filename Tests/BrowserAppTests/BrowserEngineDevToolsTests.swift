@@ -12,7 +12,8 @@ import Testing
 @Suite @MainActor
 struct BrowserEngineDevToolsTests {
   @Test func extensionInstallRefreshUsesBackoffInsteadOfFixedPolling() {
-    #expect(BrowserEngine.extensionInstallRefreshDelaysMilliseconds == [250, 750, 1_500, 3_000, 4_500])
+    #expect(
+      BrowserEngine.extensionInstallRefreshDelaysMilliseconds == [250, 750, 1_500, 3_000, 4_500])
   }
 
   @Test func developerToolsOpenOnlyForTheCurrentLiveOwnedPage() throws {

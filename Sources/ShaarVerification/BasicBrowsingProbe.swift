@@ -125,7 +125,8 @@ struct BasicBrowsingProbe {
       bitmap.pixelsWide > 0, bitmap.pixelsHigh > 0
     else { throw Failure("Live page \(id) produced no renderer capture.") }
     try expect(
-      Self.containsNonBlackPixels(bitmap), "renderer capture for \(id) contains non-black page pixels")
+      Self.containsNonBlackPixels(bitmap),
+      "renderer capture for \(id) contains non-black page pixels")
   }
 
   static func containsNonBlackPixels(_ bitmap: NSBitmapImageRep) -> Bool {

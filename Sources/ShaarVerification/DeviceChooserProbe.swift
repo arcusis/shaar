@@ -170,8 +170,9 @@ final class DeviceChooserProbe {
         finish(error: "\(transport) stalled the main thread for \(stall) seconds.")
         return
       }
-      if engineSheet == nil, let error = DeviceChooserProbePolicy.missingChooserError(
-        transport: transport)
+      if engineSheet == nil,
+        let error = DeviceChooserProbePolicy.missingChooserError(
+          transport: transport)
       {
         finish(error: error)
         return

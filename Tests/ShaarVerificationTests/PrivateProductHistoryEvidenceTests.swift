@@ -28,6 +28,7 @@ struct PrivateProductHistoryEvidenceTests {
   @Test func missingRowsAndQueryErrorsDoNotCountAsEvidence() {
     let error = NSError(domain: "history", code: 1)
     #expect(!PrivateProductHostProbe.historyExcludesProductVisit(rows: nil, error: nil, runID: "x"))
-    #expect(!PrivateProductHostProbe.historyExcludesProductVisit(rows: [], error: error, runID: "x"))
+    #expect(
+      !PrivateProductHostProbe.historyExcludesProductVisit(rows: [], error: error, runID: "x"))
   }
 }

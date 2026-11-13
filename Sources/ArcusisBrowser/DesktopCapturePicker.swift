@@ -94,10 +94,10 @@ struct DesktopCapturePicker: View {
 
   var body: some View {
     pickerContent
-    .padding(24)
-    .frame(width: 480)
-    .task { await loadSources() }
-    .interactiveDismissDisabled()
+      .padding(24)
+      .frame(width: 480)
+      .task { await loadSources() }
+      .interactiveDismissDisabled()
   }
 
   func loadSources() async {
@@ -183,8 +183,8 @@ struct DesktopCapturePickerContent: View {
       Text(PanelsL10n.string("Choose what to share"))
         .font(.title2.weight(.semibold))
       Text(request.displayOrigin)
-      .font(.callout).foregroundStyle(.secondary)
-      .textSelection(.enabled)
+        .font(.callout).foregroundStyle(.secondary)
+        .textSelection(.enabled)
       if let note {
         Text(note).font(.callout).foregroundStyle(.secondary)
       }

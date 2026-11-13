@@ -9,9 +9,11 @@ import Testing
 @testable import ArcusisBrowser
 
 @Test func webShareRequestAcceptsSecureOriginsAndBuildsItems() throws {
-  let request = try #require(WebShareRequest(payload: sharePayload(
-    origin: "https://example.com", title: "Hello", text: "World",
-    url: "https://example.com/article")))
+  let request = try #require(
+    WebShareRequest(
+      payload: sharePayload(
+        origin: "https://example.com", title: "Hello", text: "World",
+        url: "https://example.com/article")))
 
   #expect(request.originLabel == "https://example.com")
   #expect(request.url?.absoluteString == "https://example.com/article")
@@ -20,7 +22,8 @@ import Testing
 }
 
 @Test func webShareConsentOriginIncludesItsLocalhostPort() throws {
-  let request = try #require(WebShareRequest(payload: sharePayload(origin: "http://localhost:3000")))
+  let request = try #require(
+    WebShareRequest(payload: sharePayload(origin: "http://localhost:3000")))
   #expect(request.originLabel == "http://localhost:3000")
 }
 

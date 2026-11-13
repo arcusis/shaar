@@ -73,8 +73,10 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
 
     session.toggleChromiumDeveloperTools()
 
-    #expect(session.failure == ShellL10n.string(
-      "Could not open developer tools in this private window. Try again."))
+    #expect(
+      session.failure
+        == ShellL10n.string(
+          "Could not open developer tools in this private window. Try again."))
   }
 
   @Test func closingReleasedInspectorStillRemovesRendererShield() async throws {

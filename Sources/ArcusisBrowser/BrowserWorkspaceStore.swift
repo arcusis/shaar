@@ -218,9 +218,10 @@ final class BrowserWorkspaceStore {
         ShellL10n.string("Pinned tabs cannot move between windows."))
       return false
     }
-    let destinationFolderIsPinned = folderID.flatMap { folderID in
-      targetSpace.folders.first(where: { $0.id == folderID })?.isPinned
-    } ?? false
+    let destinationFolderIsPinned =
+      folderID.flatMap { folderID in
+        targetSpace.folders.first(where: { $0.id == folderID })?.isPinned
+      } ?? false
     guard pinned != true, !destinationFolderIsPinned else {
       destinationStore.setSidebarNotice(
         ShellL10n.string("Tabs cannot be dropped into the pinned section from another window."))

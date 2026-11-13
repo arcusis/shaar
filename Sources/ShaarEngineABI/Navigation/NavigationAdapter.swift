@@ -4,6 +4,7 @@
 
 import CoreFoundation
 import Foundation
+import ShaarEngineABIC
 
 private func navigationInteger(_ value: Any?) -> Int? {
   guard let number = value as? NSNumber,
@@ -18,7 +19,6 @@ private func navigationGeneration(_ value: Any?) -> UInt64? {
   else { return nil }
   return UInt64(exactly: number.doubleValue)
 }
-import ShaarEngineABIC
 
 public enum ShaarNavigationOperation: UInt32, Sendable {
   case navigate = 300

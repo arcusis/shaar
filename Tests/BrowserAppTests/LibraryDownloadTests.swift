@@ -40,8 +40,9 @@ struct LibraryDownloadTests {
     for index in 0..<100 {
       let url = root.appending(path: "media-\(index).png")
       try Data([0x89, 0x50, 0x4e, 0x47]).write(to: url)
-      rows.append(record(
-        UUID().uuidString.lowercased(), filename: url.lastPathComponent, path: url.path))
+      rows.append(
+        record(
+          UUID().uuidString.lowercased(), filename: url.lastPathComponent, path: url.path))
     }
     model.restore(rows, profileID: profile)
     let items = model.items(in: profile)
@@ -54,10 +55,11 @@ struct LibraryDownloadTests {
         items, search: "", mediaOnly: true, profileID: profile, currentProfileID: profile,
         downloads: model)
       beforeItems = visible
-      beforeCount += visible.compactMap {
-        LibraryDownloadQuery.mediaFile(
-          for: $0, profileID: profile, currentProfileID: profile, downloads: model)
-      }.count
+      beforeCount +=
+        visible.compactMap {
+          LibraryDownloadQuery.mediaFile(
+            for: $0, profileID: profile, currentProfileID: profile, downloads: model)
+        }.count
     }
     let before = beforeStart.duration(to: .now)
 
@@ -79,9 +81,10 @@ struct LibraryDownloadTests {
   @Test func downloadDateGroupsBenchmark() {
     let profile = UUID()
     let model = DownloadsModel()
-    model.restore((0..<5_000).map { index in
-      record(UUID().uuidString.lowercased(), filename: "download-\(index)")
-    }, profileID: profile)
+    model.restore(
+      (0..<5_000).map { index in
+        record(UUID().uuidString.lowercased(), filename: "download-\(index)")
+      }, profileID: profile)
 
     let items = model.items(in: profile)
     let start = ContinuousClock.now

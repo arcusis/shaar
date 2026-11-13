@@ -102,7 +102,9 @@ extension BrowserEngine {
     let favoriteProfiles = Dictionary(
       uniqueKeysWithValues: session.favorites.map { ($0.id, $0.profileID) })
     for page in session.favoritePages {
-      if let profileID = favoriteProfiles[page.favoriteID] { profileByTabID[page.tab.id] = profileID }
+      if let profileID = favoriteProfiles[page.favoriteID] {
+        profileByTabID[page.tab.id] = profileID
+      }
     }
     var downloadingByProfile: [UUID: Bool] = [:]
     return SleepingTabScheduler.candidates(

@@ -384,12 +384,12 @@ enum LibrarySpacesOverviewModel {
       let spaceMatches =
         needle.isEmpty || contains(space.name, needle) || contains(profile?.name ?? "", needle)
       var items = space.orderedSidebarItems(includingCollapsed: true).compactMap {
-          item -> LibrarySpaceCardItem? in
-          switch item {
-          case .folder(let folder, let depth): return .folder(folder, depth: depth)
-          case .tab(let tab, let depth): return .tab(tab, depth: depth)
-          }
+        item -> LibrarySpaceCardItem? in
+        switch item {
+        case .folder(let folder, let depth): return .folder(folder, depth: depth)
+        case .tab(let tab, let depth): return .tab(tab, depth: depth)
         }
+      }
       if !spaceMatches && !needle.isEmpty {
         let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
         let foldersByID = Dictionary(

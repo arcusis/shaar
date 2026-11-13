@@ -39,9 +39,10 @@ import Testing
   let ids = (0..<2_000).map { _ in UUID() }
   let tree = try BookmarkTree(
     profileID: UUID(),
-    payload: bookmarkPayload(children: ids.map {
-      ["id": $0.uuidString, "k": "u", "t": "Page", "u": "https://example.com"]
-    }))
+    payload: bookmarkPayload(
+      children: ids.map {
+        ["id": $0.uuidString, "k": "u", "t": "Page", "u": "https://example.com"]
+      }))
   let started = ContinuousClock.now
   var found = 0
   for id in ids {

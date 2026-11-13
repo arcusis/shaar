@@ -19,7 +19,9 @@ struct BrowserEngineMediaTests {
     let secondTab = try #require(store.session.selectedSpace.selectedTab?.id)
 
     let runtime = MediaOwnershipRuntime()
-    runtime.tabWindows = [firstTab.uuidString: "other-window", secondTab.uuidString: "owner-window"]
+    runtime.tabWindows = [
+      firstTab.uuidString: "other-window", secondTab.uuidString: "owner-window",
+    ]
     let engine = try BrowserEngine(
       events: BrowserRuntimeEvents(runtime: runtime), windowID: "owner-window", store: store)
     engine.liveTabs.formUnion([firstTab, secondTab])

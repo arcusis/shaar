@@ -95,7 +95,8 @@ struct SwitchProbeMetrics: Codable {
     }
     let summary = kind == .space ? spaceSwitchLatency : profileSwitchLatency
     return String(
-      format: "p95 %.1f ms; slowest sample %d %.1f ms (store update %.1f ms, native selection %.1f ms, next paint %.1f ms)",
+      format:
+        "p95 %.1f ms; slowest sample %d %.1f ms (store update %.1f ms, native selection %.1f ms, next paint %.1f ms)",
       summary.p95Milliseconds ?? .infinity, slowest.iteration, slowest.latencyMilliseconds,
       slowest.storeUpdateMilliseconds, slowest.engineSelectionMilliseconds,
       slowest.firstPaintMilliseconds)

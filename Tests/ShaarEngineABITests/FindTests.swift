@@ -81,7 +81,8 @@ import Testing
     let values = ["schemaVersion": "1", "matchCount": "4", "activeMatch": "2"]
     for (field, value) in values {
       for replacement in ["true", "\(value).5"] {
-        let payload = #"{"kind":"result","schemaVersion":1,"requestID":"19","matchCount":4,"activeMatch":2,"final":true}"#
+        let payload =
+          #"{"kind":"result","schemaVersion":1,"requestID":"19","matchCount":4,"activeMatch":2,"final":true}"#
           .replacingOccurrences(of: "\"\(field)\":\(value)", with: "\"\(field)\":\(replacement)")
         let event = ShaarCopiedEvent(
           sequence: 2, kind: 7, profileID: Data("p".utf8), sessionID: Data("s".utf8),

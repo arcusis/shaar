@@ -7,12 +7,13 @@ import Testing
 @testable import ArcusisBrowser
 
 @Test func siteCertificateChainParsesCertificatesAndBoundsNames() throws {
-  let details = try #require(SiteCertificateChain.read([
-    "certificate": [
-      "derChain": [testCertificate],
-      "subjectAltNames": ["example.com", "", String(repeating: "x", count: 256), "other.test"],
-    ] as [String: Any],
-  ]))
+  let details = try #require(
+    SiteCertificateChain.read([
+      "certificate": [
+        "derChain": [testCertificate],
+        "subjectAltNames": ["example.com", "", String(repeating: "x", count: 256), "other.test"],
+      ] as [String: Any]
+    ]))
 
   #expect(details.certificates.count == 1)
   #expect(details.subjectAltNames == ["example.com", "other.test"])
@@ -24,7 +25,7 @@ import Testing
   #expect(SiteCertificateChain.read(["certificate": ["derChain": [testCertificate, "!"]]]) == nil)
   #expect(
     SiteCertificateChain.read([
-      "certificate": ["derChain": Array(repeating: testCertificate, count: 17)],
+      "certificate": ["derChain": Array(repeating: testCertificate, count: 17)]
     ]) == nil)
 }
 

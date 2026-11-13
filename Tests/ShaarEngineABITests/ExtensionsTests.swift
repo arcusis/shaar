@@ -217,7 +217,8 @@ struct ShaarExtensionsAdapterTests {
 
   @Test func extensionListRejectsBooleanSchemaVersion() async throws {
     let fake = FakeExtensionsTransport(#"{"schemaVersion":true,"extensions":[]}"#)
-    await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("unsupported schema version")) {
+    await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("unsupported schema version"))
+    {
       _ = try await ShaarExtensionsAdapter(shaar: fake).list(profileID: UUID())
     }
   }

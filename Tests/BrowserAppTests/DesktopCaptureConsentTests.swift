@@ -426,12 +426,14 @@ struct DesktopCaptureConsentTests {
     var session = store().session
     let profileID = session.selectedSpace.profileID
     let requestingTabID = try #require(session.selectedSpace.selectedTab?.id)
-    #expect(session.insertNativeTab(
-      BrowserTab(url: URL(string: "about:blank")!), profileID: profileID,
-      openerID: requestingTabID, foreground: false) != nil)
-    #expect(session.insertNativeTab(
-      BrowserTab(url: URL(string: "devtools://devtools/bundled/js_app.html")!),
-      profileID: profileID, openerID: requestingTabID, foreground: false) != nil)
+    #expect(
+      session.insertNativeTab(
+        BrowserTab(url: URL(string: "about:blank")!), profileID: profileID,
+        openerID: requestingTabID, foreground: false) != nil)
+    #expect(
+      session.insertNativeTab(
+        BrowserTab(url: URL(string: "devtools://devtools/bundled/js_app.html")!),
+        profileID: profileID, openerID: requestingTabID, foreground: false) != nil)
 
     let sources = DesktopCaptureCatalog.tabSources(
       session: session,
@@ -444,9 +446,10 @@ struct DesktopCaptureConsentTests {
 
   @Test func tabSourceFallsBackToPageHostWhenSavedTitleIsBlank() throws {
     let original = store().session
-    let spaceIndex = try #require(original.spaces.firstIndex {
-      $0.profileID == original.selectedSpace.profileID
-    })
+    let spaceIndex = try #require(
+      original.spaces.firstIndex {
+        $0.profileID == original.selectedSpace.profileID
+      })
     var spaces = original.spaces
     let tabIndex = try #require(spaces[spaceIndex].tabs.indices.first)
     let tabID = spaces[spaceIndex].tabs[tabIndex].id

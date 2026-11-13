@@ -18,8 +18,9 @@ struct WebShareProbeTests {
       "unicode: \u{2028}\u{2029} café",
     ] {
       let encoded = WebShareProbe.javaScriptString(value)
-      let decoded = try JSONSerialization.jsonObject(
-        with: Data("[\(encoded)]".utf8)) as? [String]
+      let decoded =
+        try JSONSerialization.jsonObject(
+          with: Data("[\(encoded)]".utf8)) as? [String]
       #expect(decoded == [value])
     }
   }

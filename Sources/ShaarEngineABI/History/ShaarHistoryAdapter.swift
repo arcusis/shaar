@@ -140,7 +140,8 @@ public struct ShaarHistoryAdapter: Sendable {
     -> ShaarHistoryInsertResult
   {
     guard ["safari", "chrome", "arc", "firefox"].contains(source),
-      (1...5000).contains(pages.count), pages.allSatisfy({ !$0.visits.isEmpty })
+      (1...5000).contains(pages.count),
+      pages.allSatisfy({ !$0.visits.isEmpty && $0.visits.allSatisfy({ $0 >= 0 }) })
     else {
       throw ShaarHistoryAdapterError.invalidResponse("invalid import batch")
     }

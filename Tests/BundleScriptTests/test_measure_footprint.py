@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -27,6 +28,19 @@ def thread(total, frames, trailer=""):
 
 
 class MeasureFootprintSampleTests(unittest.TestCase):
+    def test_report_writer_rejects_symlink_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "outside.json"
+            target.write_text("preserve this", encoding="utf-8")
+            output = root / "report.json"
+            output.symlink_to(target)
+
+            with self.assertRaisesRegex(ValueError, "performance report path must not be a symlink"):
+                measure_footprint.write_report(output, {"schema": 3})
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
     def test_sleeping_comparison_reports_rss_saved_per_tab_count(self):
         comparisons = measure_footprint.compare_sleeping_rss([
             {"tabs": 50, "mode": "eager", "processTreeRSSMiBMean": 900.0},

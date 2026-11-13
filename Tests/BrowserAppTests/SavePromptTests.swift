@@ -29,7 +29,7 @@ struct SavePromptTests {
         "id": id,
         "prompt": kind.rawValue,
         "origin": "http://127.0.0.1:9",
-        "pageURL": "http://127.0.0.1:9/saved",
+        "pageURL": "http://127.0.0.1:9/password",
         "detail": detail,
         "update": update,
         "profileID": store.session.selectedSpace.profileID.uuidString,
@@ -64,8 +64,19 @@ struct SavePromptTests {
     #expect(store.requestSavePrompt(request))
     let tab = try #require(store.session.selectedSpace.selectedTab)
     store.nativeTabChanged(tab.id, url: URL(string: "https://example.com/")!, title: "Other")
-    #expect(store.savePrompt == request)
-    store.resolveSavePrompt(request.id, decision: .save)
+    #expect(store.savePrompt == nil)
+    #expect(decisions == [.dismiss])
+  }
+
+  @Test func navigatingToAnotherPathDismissesTheOfferImmediately() throws {
+    let store = store()
+    let request = try request(store)
+    var decisions: [SavePromptRequest.Decision] = []
+    store.onSavePromptDecision = { _, decision in decisions.append(decision) }
+    #expect(store.requestSavePrompt(request))
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.nativeTabChanged(tab.id, url: URL(string: "http://127.0.0.1:9/account")!, title: "Account")
+    #expect(store.savePrompt == nil)
     #expect(decisions == [.dismiss])
   }
 

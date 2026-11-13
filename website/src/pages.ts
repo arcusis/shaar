@@ -36,15 +36,15 @@ export function Pages(license: string, notice: string, thirdPartyNotices: string
       description:
         "Clone the repository, build the app with its Chromium engine, and run the checks.",
       body: `<h2>Requirements</h2><ul><li>Apple silicon Mac with macOS 26 or later.</li><li>Xcode 26 or later and Swift 6.2 or newer.</li><li>Git. For the Chromium engine bundle: curl, jq, ripgrep and Python 3.</li></ul>
-        <h2>Get the source</h2><pre><code>git clone https://github.com/arcusis/shaar.git
+        <h2>Get the source</h2><pre tabindex="0"><code>git clone https://github.com/arcusis/shaar.git
 cd shaar</code></pre>
-        <h2>Build the browser with its engine</h2><pre><code>bash scripts/bundle-app.sh --with-engine</code></pre><p>The result is <code>build/Shaar.app</code>, signed ad hoc for local development. The script downloads the pinned Chromium framework, checks its SHA-256 and verifies the extracted payload. This is a development build, not a notarized release.</p>
-        <h2>Build the interface without the engine</h2><pre><code>swift build
+        <h2>Build the browser with its engine</h2><pre tabindex="0"><code>bash scripts/bundle-app.sh --with-engine</code></pre><p>The result is <code>build/Shaar.app</code>, signed ad hoc for local development. The script downloads the pinned Chromium framework, checks its SHA-256 and verifies the extracted payload. This is a development build, not a notarized release.</p>
+        <h2>Build the interface without the engine</h2><pre tabindex="0"><code>swift build
 swift run ArcusisBrowser</code></pre><p>This builds the UI-only preview without downloading Chromium. It does not render webpages. Development builds have no live update feed.</p>
-        <h2>Run checks</h2><pre><code>swift test --jobs 2
+        <h2>Run checks</h2><pre tabindex="0"><code>swift test --jobs 2
 swift format lint --strict --recursive Package.swift Sources Tests
 python3 scripts/check-license-headers.py</code></pre><p>Engine probes and Python tooling have additional setup. See the <a href="${source}/CONTRIBUTING.md">contributor guide</a> and <a href="${source}/Notebook/Build_And_Run.md">full build instructions</a>.</p>
-        <h2>Build this website</h2><pre><code>cd website
+        <h2>Build this website</h2><pre tabindex="0"><code>cd website
 pnpm install --frozen-lockfile
 pnpm check
 pnpm wrangler dev</code></pre><p>Local development needs no Cloudflare token. See <a href="${source}/website/README.md">website setup</a> for hosting and release-content maintenance.</p>`,
@@ -68,7 +68,7 @@ pnpm wrangler dev</code></pre><p>Local development needs no Cloudflare token. Se
       heading: "Security and verification",
       description: "Release checks, security reporting and the limits of our verification.",
       body: `<h2>Report a vulnerability</h2><p>Use <a href="${repository}/security/advisories/new">GitHub Security Advisories</a>. Include the affected version or commit, impact and safe reproduction steps. Do not publish unpatched vulnerabilities or include secrets and unrelated personal information.</p><aside class="callout"><h2>Support window</h2><p>Shaar has no fixed support window or promised security update service. The bundled Chromium engine is pinned; a pin does not provide ongoing security updates. Read the <a href="${source}/SECURITY.md">security policy</a>.</p></aside>
-        <h2>Check a downloaded app</h2><p>After copying the published release to Applications, these read-only commands inspect its signature and Gatekeeper assessment:</p><pre><code>codesign --verify --deep --strict --verbose=2 /Applications/Shaar.app
+        <h2>Check a downloaded app</h2><p>After copying the published release to Applications, these read-only commands inspect its signature and Gatekeeper assessment:</p><pre tabindex="0"><code>codesign --verify --deep --strict --verbose=2 /Applications/Shaar.app
 codesign -dv --verbose=4 /Applications/Shaar.app
 spctl --assess --type execute --verbose=4 /Applications/Shaar.app</code></pre><p>Expected release identity: bundle identifier <code>com.arcusis.browser</code>, Developer ID Application for Arcusis LTD, team <code>F9Z784RA6D</code>. A successful local check applies to that installed artifact; it does not audit every browser feature or upstream engine source.</p>
         <h2>What release tooling verifies</h2><p>Release tooling signs nested components, verifies signatures, notarizes and staples the app and DMG, and signs the Sparkle update archive. The release workflow cross-checks public download metadata, bundle identity, versions, feed URL and Ed25519 signature before publishing the appcast. See <a href="${source}/Notebook/Releasing.md">release verification</a>.</p>

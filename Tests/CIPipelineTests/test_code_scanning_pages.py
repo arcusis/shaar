@@ -24,3 +24,9 @@ class CodeScanningPageTests(unittest.TestCase):
         with patch.object(SCANNING_ISSUES, "gh", return_value={"message": "temporary response"}):
             with self.assertRaisesRegex(ValueError, "non-list response for .*code-scanning/alerts"):
                 SCANNING_ISSUES.paged(path)
+
+    def test_non_object_page_rows_are_rejected(self):
+        path = "repos/arcusis/shaar/code-scanning/alerts?state=open"
+        with patch.object(SCANNING_ISSUES, "gh", return_value=[None]):
+            with self.assertRaisesRegex(ValueError, "non-object entry 0 for .*code-scanning/alerts"):
+                SCANNING_ISSUES.paged(path)

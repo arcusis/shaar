@@ -241,6 +241,12 @@ class BrowsingQAReportTests(unittest.TestCase):
         notes = PROBE.row_notes(report, "")
         self.assertIn("malformed scenario row status", notes.lower())
 
+    def test_invalid_utf8_report_is_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_bytes(b"\xff")
+            self.assertEqual(PROBE.read_report(report), {})
+
     def test_malformed_renderer_rows_cannot_hide_a_crash(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
         report = {"rows": [None]}

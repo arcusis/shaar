@@ -13,10 +13,15 @@ import Testing
     origin: "https://example.com", title: "Hello", text: "World",
     url: "https://example.com/article")))
 
-  #expect(request.hostLabel == "example.com")
+  #expect(request.originLabel == "https://example.com")
   #expect(request.url?.absoluteString == "https://example.com/article")
   #expect(request.sharingItems.count == 3)
   #expect(request.sheetID == "web-share-\(request.id)")
+}
+
+@Test func webShareConsentOriginIncludesItsLocalhostPort() throws {
+  let request = try #require(WebShareRequest(payload: sharePayload(origin: "http://localhost:3000")))
+  #expect(request.originLabel == "http://localhost:3000")
 }
 
 @Test func webShareRequestAllowsOnlyLocalHTTPOrigins() {

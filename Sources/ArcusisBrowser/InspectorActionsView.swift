@@ -117,7 +117,7 @@ struct InspectorCopyMenu: View {
           )
           .font(.system(size: 11))
           Spacer()
-          Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(.secondary)
+          Image(systemName: "chevron.forward").font(.system(size: 8)).foregroundStyle(.secondary)
         }.padding(.horizontal, 8).frame(maxWidth: .infinity, alignment: .leading)
           .frame(height: 27).contentShape(Rectangle())
       }.buttonStyle(.plain).frame(maxWidth: .infinity)

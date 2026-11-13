@@ -44,7 +44,7 @@ struct InspectorSection<Content: View>: View {
           }
         } label: {
           HStack(spacing: 6) {
-            Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+            Image(systemName: isCollapsed ? "chevron.forward" : "chevron.down")
               .font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary).frame(width: 9)
             Text(title).font(.system(size: 11, weight: .semibold))
             Spacer(minLength: 0)

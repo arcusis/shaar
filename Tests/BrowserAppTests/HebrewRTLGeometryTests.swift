@@ -10,6 +10,10 @@ import XCTest
 
 @MainActor
 final class HebrewRTLGeometryTests: XCTestCase {
+  func testLogicalForwardChevronSymbolExists() {
+    XCTAssertNotNil(NSImage(systemSymbolName: "chevron.forward", accessibilityDescription: nil))
+  }
+
   func testSplitDropUsesLogicalLeadingAndTrailingEdges() {
     let size = CGSize(width: 400, height: 300)
     XCTAssertEqual(SplitDropZone.edge(at: CGPoint(x: 10, y: 150), in: size), .left)

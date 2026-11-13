@@ -131,7 +131,6 @@ bool ParseSourceToken(std::string_view token,
     if (!uuid.is_valid()) {
       return false;
     }
-    *value = uuid.AsLowercaseString();
     return true;
   }
   uint32_t native_id = 0;
@@ -139,7 +138,8 @@ bool ParseSourceToken(std::string_view token,
   const auto [end, error] =
       std::from_chars(digits.data(), digits.data() + digits.size(), native_id);
   return (*type == "screen" || *type == "window") && error == std::errc() &&
-         end == digits.data() + digits.size() && native_id > 0;
+         end == digits.data() + digits.size() && native_id > 0 &&
+         std::to_string(native_id) == digits;
 }
 
 bool MakeMediaID(PendingCapture& pending,

@@ -60,6 +60,12 @@ class DesktopCapturePickerPatchTests(unittest.TestCase):
         self.assertIn("SHAAR_OP_MEDIA_CAPTURE_REPLY", media)
         self.assertIn("desktop_capture::Resolve", media)
 
+    def test_tab_tokens_keep_registry_uuid_casing_and_native_ids_are_canonical(self):
+        picker = (LAYER / "chrome/browser/shaar/media/shaar_desktop_capture.cc").read_text()
+        self.assertIn("base::Uuid::ParseCaseInsensitive(*value)", picker)
+        self.assertNotIn("*value = uuid.AsLowercaseString();", picker)
+        self.assertIn("std::to_string(native_id) == digits", picker)
+
 
 if __name__ == "__main__":
     unittest.main()

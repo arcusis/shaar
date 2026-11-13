@@ -158,13 +158,16 @@ struct ShaarProfileAdapterTests {
       engine: fake, implementation: .shaar, onProfileEvent: { delivered = $0 })
     let id = "4a4d4885-d38a-4b4a-bc03-b12f634bff08"
     try await adapter.open(profileID: id)
-    let malformed = ShaarCopiedEvent(
-      sequence: 9, kind: 2, profileID: Data(id.utf8), sessionID: Data(),
-      windowID: Data(), tabID: Data(),
-      payloadJSON: Data(#"{"kind":"deleted","schemaVersion":2}"#.utf8))
-
-    adapter.receive(malformed)
-    #expect(adapter.loadedProfileIDs == [id])
+    for (sequence, payload) in [
+      (UInt64(9), #"{"kind":"deleted","schemaVersion":2}"#),
+      (UInt64(10), #"{"kind":"deleted","schemaVersion":true}"#),
+    ] {
+      let malformed = ShaarCopiedEvent(
+        sequence: sequence, kind: 2, profileID: Data(id.utf8), sessionID: Data(),
+        windowID: Data(), tabID: Data(), payloadJSON: Data(payload.utf8))
+      adapter.receive(malformed)
+      #expect(adapter.loadedProfileIDs == [id])
+    }
     #expect(delivered == nil)
   }
 }

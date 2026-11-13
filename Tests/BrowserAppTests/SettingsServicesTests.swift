@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import ChromiumBridge
 import Foundation
 import Testing
@@ -34,6 +35,19 @@ struct SettingsServicesTests {
 
     #expect(runtime.deletedURLs.isEmpty)
   }
+}
+
+@Test @MainActor func browserSettingsAppearanceMapsKnownAndUnknownValues() {
+  let app = NSApplication.shared
+  let original = app.appearance
+  defer { app.appearance = original }
+
+  BrowserSettingsAppearance.apply("light")
+  #expect(app.appearance?.name == .aqua)
+  BrowserSettingsAppearance.apply("dark")
+  #expect(app.appearance?.name == .darkAqua)
+  BrowserSettingsAppearance.apply("system")
+  #expect(app.appearance == nil)
 }
 
 @MainActor

@@ -32,6 +32,9 @@ class HiddenMediaQueryDispatchPatchTests(unittest.TestCase):
             dispatch.index("+  if (!GetExecutionContext())"),
             dispatch.index("scripted_animation_controller_->DispatchMediaQueryListEventsAndCallbacks"),
         )
+        self.assertIn("HiddenDocumentMediaQueryListenerBatchesDispatchTogether", patch)
+        self.assertIn("EnqueueMediaQueryChangeListeners(first_batch)", patch)
+        self.assertIn("EnqueueMediaQueryChangeListeners(second_batch)", patch)
 
 
 if __name__ == "__main__":

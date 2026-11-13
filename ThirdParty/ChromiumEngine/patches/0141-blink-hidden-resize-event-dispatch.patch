@@ -120,7 +120,7 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
  namespace {
  
  class RunTaskCallback final : public FrameCallback {
-@@ -241,6 +244,47 @@
+@@ -241,6 +244,75 @@
                                            {{Controller(), false}});
    EXPECT_FALSE(Controller().HasFrameCallback());
  }
@@ -163,6 +163,34 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
 +
 +  task_environment_.RunUntilIdle();
 +  EXPECT_THAT(observer.Order(), testing::ElementsAre(1));
++}
++
++TEST_F(ScriptedAnimationControllerTest,
++       HiddenDocumentMediaQueryListenerBatchesDispatchTogether) {
++  GetPage().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
++                               /*is_initial_state=*/false);
++  TaskOrderObserver observer;
++  class Listener final : public MediaQueryListListener {
++   public:
++    explicit Listener(base::RepeatingClosure task) : task_(std::move(task)) {}
++    void NotifyMediaQueryChanged() override { task_.Run(); }
++
++   private:
++    base::RepeatingClosure task_;
++  };
++  HeapVector<Member<MediaQueryListListener>> first_batch;
++  first_batch.push_back(
++      MakeGarbageCollected<Listener>(observer.CreateTask(1)));
++  HeapVector<Member<MediaQueryListListener>> second_batch;
++  second_batch.push_back(
++      MakeGarbageCollected<Listener>(observer.CreateTask(2)));
++
++  GetDocument().EnqueueMediaQueryChangeListeners(first_batch);
++  GetDocument().EnqueueMediaQueryChangeListeners(second_batch);
++  EXPECT_TRUE(observer.Order().empty());
++
++  task_environment_.RunUntilIdle();
++  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2));
 +}
 +
  

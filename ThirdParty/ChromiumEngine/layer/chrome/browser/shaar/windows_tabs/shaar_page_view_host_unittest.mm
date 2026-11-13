@@ -8,6 +8,7 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -68,6 +69,28 @@ TEST_F(ShaarTabVisibilityTest, FallbackSelectionTracksOwningWindowVisibility) {
   window.probeMiniaturized = YES;
   ShowSelectedWebContents(nullptr, web_contents());
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+}
+
+TEST_F(ShaarTabVisibilityTest, FallbackSelectionDeliversOnlyRealVisibilityChanges) {
+  web_contents()->WasHidden();
+  ShaarVisibilityProbeWindow* window = [[ShaarVisibilityProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  [window.contentView addSubview:web_contents()->GetNativeView().GetNativeNSView()];
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "window.visibilityChangeCount = 0;"
+      "document.addEventListener('visibilitychange', () => ++window.visibilityChangeCount);"));
+
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.visibilityChangeCount").ExtractInt(), 0);
+
+  window.probeVisible = YES;
+  window.probeOcclusion = NSWindowOcclusionStateVisible;
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.visibilityChangeCount").ExtractInt(), 1);
 }
 
 TEST_F(ShaarTabVisibilityTest, HostTracksWindowOcclusionWithoutOrderingIt) {

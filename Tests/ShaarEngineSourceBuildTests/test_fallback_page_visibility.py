@@ -18,6 +18,9 @@ class FallbackPageVisibilityTests(unittest.TestCase):
     def test_native_regression_covers_hidden_visible_occluded_and_minimized(self):
         source = (ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm").read_text()
         self.assertIn("FallbackSelectionTracksOwningWindowVisibility", source)
+        self.assertIn("FallbackSelectionDeliversOnlyRealVisibilityChanges", source)
+        self.assertIn("document.addEventListener('visibilitychange'", source)
+        self.assertIn("window.visibilityChangeCount", source)
         for state in ("HIDDEN", "VISIBLE", "OCCLUDED"):
             self.assertIn(f"content::Visibility::{state}", source)
 

@@ -81,6 +81,51 @@ struct DevToolsDOMTests {
     }
   }
 
+  @Test func DOMMutationIDsDecodeToTypedMutations() throws {
+    let shadowNodeFields: [String: Any] = [
+      "nodeId": 4, "nodeType": 1, "nodeName": "SPAN", "nodeValue": "",
+    ]
+    let shadowNode = ShaarDOMNode.decode(
+      shadowNodeFields, parentID: 2, relation: .shadowRoot)
+    let cases: [(Int, [String: Any], ShaarDOMMutation)] = [
+      (20, [:], .documentUpdated),
+      (22, ["parentNodeId": 2, "nodeId": 3], .childRemoved(parentID: 2, nodeID: 3)),
+      (
+        23, ["nodeId": 3, "name": "class", "value": "card"],
+        .attributeModified(nodeID: 3, name: "class", value: "card")
+      ),
+      (
+        24, ["nodeId": 3, "value": "updated"],
+        .characterDataModified(nodeID: 3, value: "updated")
+      ),
+      (
+        26, ["parentNodeId": 2, "previousNodeId": 0, "node": shadowNodeFields],
+        .childInserted(
+          parentID: 2, previousID: 0,
+          node: try #require(shadowNode))
+      ),
+      (27, ["parentNodeId": 2, "nodeId": 4], .childRemoved(parentID: 2, nodeID: 4)),
+      (28, ["nodeId": 3, "childNodeCount": 5], .childCountUpdated(nodeID: 3, count: 5)),
+    ]
+
+    for (eventID, input, expected) in cases {
+      var fields = input
+      fields["truncated"] = false
+      let envelope: [String: Any] = [
+        "schemaVersion": 1, "kind": "panelEvent", "eventID": eventID,
+        "leaseID": 7, "data": fields,
+      ]
+      let event = ShaarCopiedEvent(
+        sequence: UInt64(eventID), kind: 14, profileID: Data("profile-a".utf8),
+        sessionID: Data(), windowID: Data("window-a".utf8), tabID: Data("tab-a".utf8),
+        payloadJSON: try JSONSerialization.data(withJSONObject: envelope))
+      #expect(
+        ShaarDOMEventRouter.decode(
+          event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7)?.mutation
+          == expected)
+    }
+  }
+
   @Test func documentAcceptsBoundedLongInlineStyle() throws {
     func document(_ style: String) -> [String: Any] {
       [

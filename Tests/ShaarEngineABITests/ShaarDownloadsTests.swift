@@ -171,6 +171,17 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   }
 }
 
+@Test func downloadEventsRejectBooleanSchemaVersions() throws {
+  let adapter = ShaarDownloadsAdapter(transport: FakeDownloadsTransport(replies: [:]))
+  let event = ShaarCopiedEvent(
+    sequence: 4, kind: 9, profileID: Data("profile".utf8), sessionID: Data(),
+    windowID: Data(), tabID: Data(),
+    payloadJSON: Data(#"{"schemaVersion":true,"change":"remove","downloadId":"g"}"#.utf8))
+  #expect(throws: ShaarDownloadsError.malformedResponse) {
+    try adapter.decodeEvent(event, profileID: "profile", sessionID: nil)
+  }
+}
+
 private struct FakeFailingDownloadsTransport: ShaarDownloadsTransport {
   let error: ShaarDownloadsError
 

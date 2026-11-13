@@ -76,7 +76,7 @@ enum InspectorDetailsScript {
       };
       const accessibility=()=>{const node=inspect.element();if(!node)return null;const win=node.ownerDocument.defaultView;
         const visible=el=>{const style=win.getComputedStyle(el);return el.getClientRects().length>0&&!['hidden','collapse'].includes(style.visibility)&&!el.matches(':disabled')&&!el.closest('[inert]');};
-        const candidates=[];let visited=0;for(const el of node.ownerDocument.querySelectorAll('a[href],area[href],button,input,select,textarea,[tabindex],[contenteditable]')){if(++visited>5000)break;if(!visible(el))continue;let index=el.tabIndex;if(index<0&&el.isContentEditable&&!el.parentElement?.isContentEditable)index=0;if(index>=0)candidates.push({el,index,order:candidates.length});}
+        const candidates=[];let visited=0;for(const el of node.ownerDocument.querySelectorAll('a[href],area[href],button,input,select,textarea,[tabindex],[contenteditable]')){if(++visited>5000)break;if(!visible(el))continue;let index=el.tabIndex;if(index<0&&el.isContentEditable&&!el.parentElement?.isContentEditable&&!el.hasAttribute('tabindex'))index=0;if(index>=0)candidates.push({el,index,order:candidates.length});}
         candidates.sort((a,b)=>(a.index>0&&b.index>0?a.index-b.index:a.index>0?-1:b.index>0?1:0)||a.order-b.order);
         const tab=candidates.findIndex(row=>row.el===node),aria=[...node.attributes].filter(a=>a.name.startsWith('aria-')).slice(0,64).map(a=>({name:cut(a.name,128),value:cut(a.value,512)})),warnings=[];
         if(node.localName==='img'&&!node.hasAttribute('alt'))warnings.push('Image has no alt attribute.');

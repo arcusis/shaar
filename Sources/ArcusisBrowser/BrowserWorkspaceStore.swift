@@ -154,7 +154,8 @@ final class BrowserWorkspaceStore {
       self?.workspace.window(window.id)?.pins.first { $0.tabID == tabID }?.pinID
     }
     stores[window.id]?.onSetSpaceProfile = { [weak self] spaceID, profileID in
-      (try? self?.setSpaceProfile(spaceID, to: profileID)) ?? false
+      guard let self, self.stores[window.id] != nil else { return false }
+      return (try? self.setSpaceProfile(spaceID, to: profileID)) ?? false
     }
     stores[window.id]?.onSpaceRemovalImpact = { [weak self] id in
       let spaces =

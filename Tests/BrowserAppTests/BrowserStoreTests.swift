@@ -59,6 +59,16 @@ struct BrowserStoreTests {
     #expect(!store.canReopenClosedTab)
   }
 
+  @Test func lateCloseForRemovedTabDoesNotPersistAnUnchangedSession() {
+    let store = BrowserStore()
+    var saves = 0
+    store.onSessionChanged = { saves += 1 }
+
+    store.nativeTabClosed(UUID())
+
+    #expect(saves == 0)
+  }
+
   @Test func clearingTodayTabsRequestsEveryUnpinnedCloseBeforeCallbacksArrive() throws {
     let store = BrowserStore()
     let spaceID = store.session.selectedSpaceID

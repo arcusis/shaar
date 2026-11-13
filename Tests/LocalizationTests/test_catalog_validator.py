@@ -54,6 +54,20 @@ class CatalogValidatorTests(unittest.TestCase):
             "localizations"]["he"]["stringUnit"]["value"]
         self.assertNotEqual(translation, "Could not set the default browser.")
 
+    def test_paste_match_style_native_menu_has_hebrew_catalog_entry(self):
+        key = "Paste and Match Style"
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "הדבקה והתאמת סגנון",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/NativeBrowserHost.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('addStandard("Paste and Match Style"', source)
+
     def test_rejects_null_catalog_and_localization_maps_cleanly(self):
         for data in (None, {"sourceLanguage": "en", "strings": {"x": None}},
                      {"sourceLanguage": "en", "strings": {"x": {"localizations": None}}}):

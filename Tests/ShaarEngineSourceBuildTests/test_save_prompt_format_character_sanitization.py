@@ -41,6 +41,8 @@ class SavePromptFormatCharacterSanitizationTests(unittest.TestCase):
         self.assertIn('"user\\xE2\\x80\\xAE" "admin"', unit_test)
         self.assertIn("Repeat('a', 119) +", unit_test)
         self.assertIn('"\\xE2\\x80\\xAE" "b"', unit_test)
+        self.assertIn('"soft\\xC2\\xAD" "hyphen"', unit_test)
+        self.assertIn('"bom\\xEF\\xBB\\xBF" "text"', unit_test)
 
 
 if __name__ == "__main__":

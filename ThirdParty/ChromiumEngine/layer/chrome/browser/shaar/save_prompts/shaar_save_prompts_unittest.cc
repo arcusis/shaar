@@ -86,6 +86,10 @@ TEST(ShaarSavePromptTest, DetailDropsUnicodeFormattingControls) {
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(
                 Repeat('a', 119) + "\xE2\x80\xAE" "b"),
             Repeat('a', 119) + "b");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("soft\xC2\xAD" "hyphen"),
+            "softhyphen");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("bom\xEF\xBB\xBF" "text"),
+            "bomtext");
 }
 
 TEST(ShaarSavePromptTest, RegistersItsModuleAndOperationHandler) {

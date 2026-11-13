@@ -943,7 +943,7 @@ import Foundation
     return false
   }
 
-  private static func wholeNumber(_ value: String?) -> Int? {
+  static func wholeNumber(_ value: String?) -> Int? {
     guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
       return nil
     }
@@ -1114,7 +1114,7 @@ import Foundation
     return (prompted, false, false)
   }
 
-  private static func beforeUnloadStatus(
+  static func beforeUnloadStatus(
     armed: Bool, armedState: String?, prompted: Bool, cancelled: Bool, sawVisibleDialog: Bool,
     dismissed: Bool
   ) -> String {
@@ -1123,7 +1123,7 @@ import Foundation
     return "fail"
   }
 
-  private static func playbackSettled(_ value: String?) -> Bool {
+  static func playbackSettled(_ value: String?) -> Bool {
     guard let value else { return false }
     if value.contains("\"error\":") && !value.contains("\"error\":0") { return true }
     return value.contains("\"paused\":false") && !value.contains("\"width\":0")

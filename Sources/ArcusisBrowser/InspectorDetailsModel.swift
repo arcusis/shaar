@@ -227,7 +227,7 @@ final class InspectorDetailsModel {
       if matches(inspector, id: selection.id, generation: generation, tab: tab),
         !(error is CancellationError)
       {
-        failure = InspectorDetailsL10n.display(error.localizedDescription)
+        failure = Self.failureMessage(for: error)
       }
     }
   }
@@ -333,7 +333,7 @@ final class InspectorDetailsModel {
       if request == componentRequest,
         matches(inspector, id: element, generation: generation, tab: .component)
       {
-        failure = InspectorDetailsL10n.display(error.localizedDescription)
+        failure = Self.failureMessage(for: error)
       }
     }
   }
@@ -451,6 +451,15 @@ final class InspectorDetailsModel {
       try data.write(to: destination, options: .atomic)
     } catch is CancellationError {
       return
-    } catch { failure = InspectorDetailsL10n.display(error.localizedDescription) }
+    } catch {
+      failure = Self.failureMessage(for: error)
+    }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return error.localizedDescription
+    }
+    return InspectorDetailsL10n.string("Inspector details could not be loaded. Try again.")
   }
 }

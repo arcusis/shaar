@@ -98,7 +98,7 @@ export async function prepareFonts(
       console.warn(
         `Cached fonts unavailable, the site falls back to system fonts: ${String(error)}`,
       );
-      await rm(manifestPath, { force: true });
+      await rm(manifestPath, { force: true }).catch(() => undefined);
       return [];
     }
   } else {

@@ -36,7 +36,7 @@ struct BrowserWorkspaceStoreTests {
     try manager.workspace.validate()
   }
 
-  @Test func crossWindowTransferClearsTheSourcesSleepingTabMarker() throws {
+  @Test func crossWindowTransferClearsSourceTransientTabState() throws {
     let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let sourceID = manager.workspace.windows[0].id
     let destinationID = try manager.newWindow(from: sourceID)

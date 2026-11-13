@@ -371,6 +371,37 @@ struct DesktopCaptureConsentTests {
     #expect(empty.sources.isEmpty)
   }
 
+  @Test func catalogExposesOnlyRequestedCaptureSourceKinds() throws {
+    let store = store()
+    let base = try request(store)
+    let sources = [
+      DesktopCaptureSource(
+        id: "tab:\(base.tabID.uuidString):0", name: "Current", kind: .tab),
+      DesktopCaptureSource(id: "screen:1:0", name: "Display", kind: .display),
+      DesktopCaptureSource(id: "window:2:0", name: "Notes", kind: .window),
+    ]
+
+    var screenPayload: [String: Any] = [
+      "id": UUID().uuidString,
+      "profileID": base.profileID.uuidString,
+      "tabID": base.tabID.uuidString,
+      "pageURL": base.pageURL.absoluteString,
+      "origin": base.requestingOrigin.absoluteString,
+      "frameID": base.frameID,
+      "sourceTypes": ["screen"],
+    ]
+    let screenOnly = try #require(DesktopCaptureRequest(payload: screenPayload))
+    #expect(
+      DesktopCaptureCatalog.allowedSources(sources, for: screenOnly).map(\.id)
+        == ["screen:1:0"])
+
+    screenPayload["sourceTypes"] = ["tab"]
+    let tabOnly = try #require(DesktopCaptureRequest(payload: screenPayload))
+    #expect(
+      DesktopCaptureCatalog.allowedSources(sources, for: tabOnly).map(\.id)
+        == ["tab:\(base.tabID.uuidString):0"])
+  }
+
   @Test func staleProfileAndNavigationInvalidateRequestOwnership() throws {
     let browser = store()
     let capture = try request(browser, id: UUID().uuidString)

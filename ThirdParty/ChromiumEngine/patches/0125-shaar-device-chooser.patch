@@ -36,7 +36,7 @@ new file mode 100644
 index 0000000..e5604ab
 --- /dev/null
 +++ b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,496 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -289,8 +289,8 @@ index 0000000..e5604ab
 +  }
 +
 +  void PublishUpdate() {
-+    if (announced_ && !finishing_)
-+      Publish("deviceChooserUpdated");
++    if (announced_ && !finishing_ && !Publish("deviceChooserUpdated"))
++      RequestFinish(/*cancel=*/true);
 +  }
 +
 +  bool Publish(const char* kind) {

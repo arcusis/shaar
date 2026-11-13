@@ -621,7 +621,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0125-shaar-device-chooser.patch",
-      "sha256": "a4744b373ddb44ec7ee35549cf983f391c0b8ab37841988ca41ee7fb3efa7093"
+      "sha256": "bce4068054ee1ea5cd1a181f105378dd3b156a648d8296a8478ccca69edd2846"
     }
   ],
   "devtoolsFrontend157": {

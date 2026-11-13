@@ -27,6 +27,8 @@ class DeviceChooserPatchTests(unittest.TestCase):
         self.assertIn('"deviceChooserRequested"', source)
         self.assertIn('"deviceChooserUpdated"', source)
         self.assertIn('"deviceChooserDismissed"', source)
+        self.assertIn(
+            '!Publish("deviceChooserUpdated"))\n+      RequestFinish(/*cancel=*/true);', source)
         self.assertIn("shaar_device_chooser_register", source)
         self.assertIn("base::UnguessableToken::Create().ToString()", source)
         self.assertNotIn("NextID()", source)

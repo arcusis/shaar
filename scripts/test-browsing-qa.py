@@ -366,7 +366,13 @@ def read_report(path: Path) -> dict:
 
 def row_notes(report: dict, extra: str) -> str:
     parts = [extra] if extra else []
-    for row in report.get("rows") or []:
+    rows = report.get("rows")
+    if not isinstance(rows, list):
+        return " ".join(parts + ["Malformed scenario rows."])
+    for row in rows:
+        if not isinstance(row, dict):
+            parts.append("Malformed scenario row.")
+            continue
         if row.get("status") in {"fail", "blocked"}:
             parts.append(f"{row.get('name')}: {row.get('detail') or ''}".strip())
     return " ".join(parts)

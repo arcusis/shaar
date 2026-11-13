@@ -163,6 +163,10 @@ process.stdin.on('end', () => {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_malformed_rows_are_reported_without_crashing_note_formatting(self):
+        notes = PROBE.row_notes({"rows": [None]}, "")
+        self.assertIn("malformed scenario row", notes.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

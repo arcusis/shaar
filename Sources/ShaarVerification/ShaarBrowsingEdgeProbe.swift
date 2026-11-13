@@ -517,7 +517,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let media = object(from: json) ?? [:]
     let pixel = numbers(media["pixel"])
     let webgl = flag(media["webgl"]) == true
-    let video = flag(media["video"]) == true
+    let video = videoIsPlaying(media)
     let vendor = media["vendor"] as? String ?? ""
     let error = media["error"] as? String ?? ""
     return [
@@ -1328,6 +1328,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       CFGetTypeID(number) == CFBooleanGetTypeID()
     else { return nil }
     return number.boolValue
+  }
+
+  nonisolated static func videoIsPlaying(_ evidence: [String: Any]) -> Bool {
+    flag(evidence["video"]) == true && flag(evidence["paused"]) == false
   }
 
   nonisolated static func numbers(_ value: Any?) -> [Int] {

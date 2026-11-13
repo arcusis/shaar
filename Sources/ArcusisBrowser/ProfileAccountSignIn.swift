@@ -344,7 +344,7 @@ private struct ProfileAccountSignInView: View {
         Text(store.session.selectedPage?.tab.url.host() ?? "").lineLimit(1)
         Spacer()
         Text(title).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-        Button(SettingsL10n.string("Cancel"), action: cancel)
+        Button(SettingsL10n.string("Cancel"), role: .cancel, action: cancel)
       }
       .padding(10)
       .background(Color(nsColor: .windowBackgroundColor))

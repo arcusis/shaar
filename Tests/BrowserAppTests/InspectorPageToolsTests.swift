@@ -62,6 +62,26 @@ import Testing
     #expect(tools.startedAt != nil)
   }
 
+  @Test func cancellingAnUpdateWaitRemovesAndResumesItsWaiter() async throws {
+    let (inspector, _, tools) = makeModels()
+    defer {
+      tools.stop()
+      inspector.close()
+    }
+    let waiter = Task { await tools.waitForUpdate(after: tools.updateRevision) }
+    for _ in 0..<100 where tools.pendingUpdateWaiterCount == 0 {
+      await Task.yield()
+    }
+    try #require(tools.pendingUpdateWaiterCount == 1)
+
+    waiter.cancel()
+    for _ in 0..<100 where tools.pendingUpdateWaiterCount != 0 {
+      await Task.yield()
+    }
+    try #require(tools.pendingUpdateWaiterCount == 0)
+    await waiter.value
+  }
+
   @Test func technologiesAndStorageValidateBoundedUntrustedData() throws {
     let (inspector, _, tools) = makeModels()
     defer {

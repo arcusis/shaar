@@ -267,7 +267,7 @@ private func groupedHistory(
   _ rows: [[String: BrowserImportSQLite.Value]], source: BrowserImportSource,
   date: (BrowserImportSQLite.Value) -> Date?
 ) -> [BrowserImportItem] {
-  var grouped: [String: (String, [Date])] = [:]
+  var grouped: [String: (title: String, visits: [Date], needsSort: Bool, lastVisit: Date?)] = [:]
   var order: [String] = []
   var addressCache = BrowserImportAddressCache()
   for row in rows {
@@ -277,25 +277,30 @@ private func groupedHistory(
     else { continue }
     if grouped[address] == nil {
       order.append(address)
-      grouped[address] = (title: row["title"]?.string ?? "", visits: [])
+      grouped[address] = (
+        title: row["title"]?.string ?? "", visits: [], needsSort: false, lastVisit: nil)
     }
     let title = row["title"]?.string ?? ""
+    var group = grouped[address]!
     if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      grouped[address, default: (title, [])].0 = title
+      group.title = title
     }
-    grouped[address, default: (title, [])].1.append(visit)
+    if let lastVisit = group.lastVisit, visit < lastVisit { group.needsSort = true }
+    group.lastVisit = visit
+    group.visits.append(visit)
+    grouped[address] = group
   }
   return order.compactMap { address in
-    guard let (title, visits) = grouped[address], !visits.isEmpty else { return nil }
+    guard let group = grouped[address], !group.visits.isEmpty else { return nil }
     let displayTitle: String
-    if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+    if group.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       displayTitle = URL(string: address)?.host() ?? address
     } else {
-      displayTitle = title
+      displayTitle = group.title
     }
     return BrowserImportItem(
       kind: .history, source: source, title: displayTitle, address: address,
-      visitTimes: visits.sorted())
+      visitTimes: group.needsSort ? group.visits.sorted() : group.visits)
   }
 }
 

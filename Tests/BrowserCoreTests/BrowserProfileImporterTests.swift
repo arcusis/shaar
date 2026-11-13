@@ -480,6 +480,23 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   #expect(after < before * 0.5)
 }
 
+@Test func duplicateHistoryURLsKeepVisitsChronological() throws {
+  let profile = try profileDirectory(name: "DuplicateHistoryURLs")
+  try createDatabase(
+    sqlFixture: "ChromiumHistory.sql", at: profile.appending(path: "History"),
+    extraSQL: """
+      INSERT INTO urls VALUES(2, 'https://history.example.test/', 'Duplicate history page', 1,
+        13344473500000000);
+      INSERT INTO visits VALUES(4, 2, 13344473500000000, 0);
+      """
+  )
+
+  let batch = try BrowserImport.readProfile(at: profile, source: .chrome)
+  #expect(batch.history.count == 1)
+  #expect(batch.history[0].visitTimes.count == 3)
+  #expect(batch.history[0].visitTimes == batch.history[0].visitTimes.sorted())
+}
+
 @Test func sqliteSnapshotRejectsMissingSourcesAndInvalidQueries() throws {
   let absent = FileManager.default.temporaryDirectory.appending(path: "missing-\(UUID()).sqlite")
   #expect(throws: BrowserImport.ImportError.self) {

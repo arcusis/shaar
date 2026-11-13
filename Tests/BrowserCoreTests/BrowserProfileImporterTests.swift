@@ -187,6 +187,18 @@ import Testing
   }
 }
 
+@Test func privateBrowserProfileAncestorsAreRejectedBeforeReading() throws {
+  let root = FileManager.default.temporaryDirectory.appending(path: "BrowserImport-\(UUID())")
+  defer { try? FileManager.default.removeItem(at: root) }
+  let profile = root.appending(path: "Incognito/First/Second/Profile")
+  try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+  try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))
+
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: profile, source: .chrome)
+  }
+}
+
 @Test func ordinaryProfileFolderContainingGuestImportsNormally() throws {
   let profile = try profileDirectory(name: "Guesthouse")
   try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))

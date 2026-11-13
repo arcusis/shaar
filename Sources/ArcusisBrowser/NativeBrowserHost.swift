@@ -11,7 +11,7 @@ enum BrowserMenuCommand: String, CaseIterable {
   case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
     closeWindow,
     addFavorite
-  case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
+  case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
     developerTools, chromiumDeveloperTools
   case nextWindow, previousWindow
@@ -74,6 +74,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private var appClosingWindows: Set<UUID> = []
   private(set) var menu: NSMenu?
   private(set) var lastError: String?
+  var lastClosedWindowSnapshot: WorkspaceWindow?
   private let presentation: Presentation
   private let usesPrimaryWindow: Bool
   private let keyWindow: () -> NSWindow?
@@ -335,6 +336,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
     if command == .quit { return true }
+    if command == .reopenClosedWindow { return lastClosedWindowSnapshot != nil }
     if command == .newMiniWindow {
       return privateHost?.hasActiveWindow != true && miniWindowTarget != nil
     }
@@ -410,7 +412,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Commands that act on the app rather than one window and need no window to be enabled.
   private static let appCommands: Set<BrowserMenuCommand> = [
-    .newPrivateWindow, .newMiniWindow, .nextWindow, .previousWindow, .quit,
+    .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .nextWindow, .previousWindow, .quit,
   ]
 
   func perform(_ command: BrowserMenuCommand) {
@@ -436,6 +438,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private func performAppCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .quit: quit()
+    case .reopenClosedWindow:
+      guard let closedWindow = lastClosedWindowSnapshot else { return true }
+      do {
+        _ = try restoreWindow(closedWindow)
+        lastClosedWindowSnapshot = nil
+      } catch { report(error) }
     case .newMiniWindow: openMiniWindow(url: nil)
     case .newPrivateWindow:
       do { try privateHost?.openWindow() } catch { report(error) }
@@ -465,6 +473,23 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let target = candidates[next]
     activate?(target)
     return target
+  }
+
+  private func restoreWindow(_ closedWindow: WorkspaceWindow) throws -> UUID {
+    guard started, !events.runtime.isQuitting else { throw WorkspaceError.invalidState }
+    let source = activeContext
+    let id = try workspace.restoreWindow(closedWindow, from: source?.id)
+    do {
+      try attach(id, source: source?.window.frame)
+    } catch {
+      try? workspace.removeWindow(id)
+      if events.runtime.window(forID: id.uuidString) != nil {
+        events.runtime.closeWindowID(id.uuidString)
+      }
+      throw error
+    }
+    if presentation == .visible { contexts[id]?.window.makeKeyAndOrderFront(nil) }
+    return id
   }
 
   /// Development bundles carry no update feed, so their updater never exists.
@@ -617,8 +642,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newPrivateWindow, .newMiniWindow, .nextWindow, .previousWindow, .settings,
-      .quit, .checkForUpdates:
+    case .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .nextWindow, .previousWindow,
+      .settings, .quit, .checkForUpdates:
       break
     case .fullScreen: context.window.toggleFullScreen(nil)
     }
@@ -1165,6 +1190,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     stopObserving(context)
     saveGeometry(context)
     if !quitting {
+      context.store.save()
+      lastClosedWindowSnapshot = workspace.workspace.window(id)
       do { try workspace.removeWindow(id) } catch { report(error) }
     } else {
       workspace.persistSnapshot()
@@ -1354,6 +1381,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.reopenClosed, "Reopen last closed tab", to: tabs)
     let history = section("History")
     add(.recentlyClosed, "Recently closed…", to: history)
+    add(.reopenClosedWindow, "Reopen Last Closed Window", to: history)
     add(.history, "Show All History", to: history)
     let bookmarks = section("Bookmarks")
     add(.bookmarkPage, "Bookmark this page", to: bookmarks)

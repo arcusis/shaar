@@ -49,6 +49,36 @@ import Testing
   #expect(!first.isVisible && !second.isVisible && !third.isVisible)
 }
 
+@Test @MainActor func reopenClosedWindowCommandRoutesAndPreservesSnapshotOnAttachFailure() throws {
+  let runtime = ARCChromiumRuntime()
+  let workspace = try BrowserWorkspaceStore()
+  let host = NativeBrowserHost(
+    events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
+    presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
+  defer { host.detach() }
+  var snapshotSession = workspace.workspace.windows[0].session
+  let spaceID = snapshotSession.selectedSpaceID
+  for tab in snapshotSession.selectedSpace.tabs where !tab.isPinned {
+    snapshotSession.closeTab(tab.id)
+  }
+  for closed in snapshotSession.recentlyClosedTabs(in: spaceID) {
+    _ = snapshotSession.reopenClosedTab(closed.id, in: spaceID)
+  }
+  _ = snapshotSession.open(URL(string: "https://restored-window.example")!)
+  let snapshot = try #require(
+    BrowserWorkspace(session: snapshotSession).windows.first)
+  host.lastClosedWindowSnapshot = snapshot
+  let windowIDs = workspace.workspace.windows.map(\.id)
+
+  #expect(throws: (any Error).self) { try host.restore() }
+  #expect(host.canPerform(.reopenClosedWindow))
+  host.perform(.reopenClosedWindow)
+
+  #expect(host.lastError != nil)
+  #expect(host.lastClosedWindowSnapshot == snapshot)
+  #expect(workspace.workspace.windows.map(\.id) == windowIDs)
+}
+
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared
   let menu = NativeBrowserHost.makeMenu(target: application)
@@ -103,6 +133,10 @@ import Testing
   #expect(item(.history)?.title == "Show All History")
   #expect(item(.history)?.representedObject as? String == BrowserMenuCommand.history.rawValue)
   #expect(item(.recentlyClosed)?.menu?.title == "History")
+  #expect(item(.reopenClosedWindow)?.menu?.title == "History")
+  #expect(
+    item(.reopenClosedWindow)?.representedObject as? String
+      == BrowserMenuCommand.reopenClosedWindow.rawValue)
   #expect(item(.downloads)?.menu?.title == "File")
   #expect(item(.extensions)?.menu?.title == "Extensions")
   #expect(item(.minimizeWindow)?.menu?.title == "Window")

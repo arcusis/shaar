@@ -516,4 +516,25 @@ struct PrintConsentTests {
     #expect(decision == false)
     #expect(store.sheet == nil)
   }
+
+  @Test func consentURLRedactsCredentialsAndPreservesComponents() throws {
+    let store = openedStore()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let payload: [String: Any] = [
+      "schemaVersion": 1,
+      "id": UUID().uuidString,
+      "profileID": store.session.selectedSpace.profileID.uuidString,
+      "tabID": tab.id.uuidString,
+      "pageURL": "https://alice:secret@example.com:8443/article?q=print#page",
+      "origin": "https://example.com:8443",
+      "frameID": frameID,
+      "title": "Article",
+    ]
+    let printRequest = try #require(PrintRequest(payload: payload))
+
+    #expect(printRequest.pageURL.user() == "alice")
+    #expect(!printRequest.displayPageURL.contains("alice"))
+    #expect(!printRequest.displayPageURL.contains("secret"))
+    #expect(printRequest.displayPageURL == "https://example.com:8443/article?q=print#page")
+  }
 }

@@ -32,6 +32,14 @@ enum ExtensionPanelRoute: Identifiable, Equatable {
 }
 
 struct ExtensionToolbar: View {
+  static func accessibilityLabel(
+    profileName: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Extensions for %@", table: "Panels", language: language,
+      arguments: [.string(profileName)])
+  }
+
   @Bindable var engine: BrowserEngine
   let store: BrowserStore
 
@@ -61,7 +69,8 @@ struct ExtensionToolbar: View {
       } label: {
         Image(systemName: "puzzlepiece.extension")
       }
-      .help(PanelsL10n.format("Extensions for %@", .string(store.profileName)))
+      .help(Self.accessibilityLabel(profileName: store.profileName))
+      .accessibilityLabel(Self.accessibilityLabel(profileName: store.profileName))
       .accessibilityLabel(PanelsL10n.format("Extensions for %@", .string(store.profileName)))
     }
     .popover(

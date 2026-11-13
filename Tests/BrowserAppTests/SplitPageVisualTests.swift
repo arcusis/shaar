@@ -11,6 +11,11 @@ import XCTest
 
 @MainActor
 final class SplitPageVisualTests: XCTestCase {
+  func testSplitDividerHighlightAnimationRespectsReduceMotion() {
+    XCTAssertNil(SplitGroupView.dividerHighlightAnimation(reduceMotion: true))
+    XCTAssertNotNil(SplitGroupView.dividerHighlightAnimation(reduceMotion: false))
+  }
+
   func testSplitDividerKeyboardInputRespectsAxisAndDirection() {
     XCTAssertEqual(
       SplitDividerInput.keyboardDelta(for: .left, axis: .columns, isRightToLeft: false, step: 32),

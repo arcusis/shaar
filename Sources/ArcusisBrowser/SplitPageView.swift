@@ -60,6 +60,10 @@ struct SplitGroupView: View {
   static let dividerThickness: CGFloat = 8
   static let minimumPane: CGFloat = 160
 
+  static func dividerHighlightAnimation(reduceMotion: Bool) -> Animation? {
+    reduceMotion ? nil : .easeOut(duration: 0.12)
+  }
+
   let axis: SplitAxis
   let weights: [Double]
   let onWeightsChange: ([Double]) -> Void
@@ -68,6 +72,7 @@ struct SplitGroupView: View {
   @State private var activeDivider: Int?
   @State private var hoveredDivider: Int?
   @Environment(\.layoutDirection) private var layoutDirection
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     let shown = liveWeights ?? weights
@@ -126,7 +131,7 @@ struct SplitGroupView: View {
           activeDivider = nil
         }
     )
-    .animation(.easeOut(duration: 0.12), value: highlighted)
+    .animation(Self.dividerHighlightAnimation(reduceMotion: reduceMotion), value: highlighted)
     .accessibilityLabel(ShellL10n.string("Split divider"))
     .accessibilityValue("\(Int((leadingPercent * 100).rounded()))%")
     .accessibilityAdjustableAction(

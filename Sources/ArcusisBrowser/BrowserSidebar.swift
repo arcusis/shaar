@@ -699,7 +699,7 @@ struct BrowserSidebar: View {
       .focused($folderNameIsFocused)
       .onSubmit(commitFolderDraft)
       .onExitCommand { folderDraft = nil }
-      Button {
+      Button(role: .cancel) {
         folderDraft = nil
       } label: {
         Image(systemName: "xmark")

@@ -132,6 +132,12 @@ extension BrowserSpace {
       isPinned: isPinned, includingCollapsed: includingCollapsed)
   }
 
+  public func orderedSidebarItems(includingCollapsed: Bool = false) -> [PinnedSidebarItem] {
+    let index = FolderItemsIndex(tabs: tabs, folders: folders)
+    return index.items(isPinned: true, includingCollapsed: includingCollapsed)
+      + index.items(isPinned: false, includingCollapsed: includingCollapsed)
+  }
+
   /// Hidden folder contents retain their logical/native order and live documents.
   public var orderedTabs: [BrowserTab] {
     let index = FolderItemsIndex(tabs: tabs, folders: folders)

@@ -383,9 +383,7 @@ enum LibrarySpacesOverviewModel {
       let profile = profiles[space.profileID]
       let spaceMatches =
         needle.isEmpty || contains(space.name, needle) || contains(profile?.name ?? "", needle)
-      var items =
-        (space.pinnedItems(includingCollapsed: true)
-        + space.items(isPinned: false, includingCollapsed: true)).compactMap {
+      var items = space.orderedSidebarItems(includingCollapsed: true).compactMap {
           item -> LibrarySpaceCardItem? in
           switch item {
           case .folder(let folder, let depth): return .folder(folder, depth: depth)

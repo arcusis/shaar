@@ -49,6 +49,36 @@ private func orderedSession() throws -> BrowserSession {
   #expect(resultCount == 200_000)
 }
 
+@Test func orderedSidebarItemsIndexBenchmark() {
+  let profileID = UUID()
+  let folderIDs = (0..<500).map { _ in UUID() }
+  let folders = folderIDs.enumerated().map { index, id in
+    BrowserFolder(id: id, name: "Folder \(index)", isPinned: index.isMultiple(of: 2))
+  }
+  let tabs = (0..<5_000).map { index in
+    BrowserTab(
+      url: URL(string: "https://example.com/\(index)")!, title: "Tab \(index)",
+      isPinned: index.isMultiple(of: 2), folderID: folderIDs[index % folderIDs.count])
+  }
+  let space = BrowserSpace(
+    profileID: profileID, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs, folders: folders)
+
+  let beforeStart = ContinuousClock.now
+  var beforeItems: [PinnedSidebarItem] = []
+  for _ in 0..<40 {
+    beforeItems = space.pinnedItems(includingCollapsed: true)
+      + space.items(isPinned: false, includingCollapsed: true)
+  }
+  let before = beforeStart.duration(to: .now)
+  let afterStart = ContinuousClock.now
+  var afterItems: [PinnedSidebarItem] = []
+  for _ in 0..<40 { afterItems = space.orderedSidebarItems(includingCollapsed: true) }
+  let after = afterStart.duration(to: .now)
+  print("orderedSidebarItemsIndexBenchmark: before=\(before), after=\(after)")
+  #expect(beforeItems == afterItems)
+}
+
 @Test func selectedTabMoveFollowsItsLiveIdentityWithinTheSameProfile() throws {
   var session = try orderedSession()
   let source = session.spaces[0]

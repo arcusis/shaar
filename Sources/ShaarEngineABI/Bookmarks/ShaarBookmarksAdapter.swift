@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
 
 public enum ShaarBookmarkOperation: UInt32, Sendable {
@@ -57,6 +58,8 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
           do {
             guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               (payload["schemaVersion"] as? Int) == 1,
+              !Self.isJSONBoolean(payload["applied"]),
+              !Self.isJSONBoolean(payload["skipped"]),
               (payload["applied"] as? Int) == 1,
               (payload["skipped"] as? Int) == 0,
               (payload["invalid"] as? [Any])?.isEmpty == true
@@ -98,6 +101,11 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
     } catch {
       completion(.failure(error))
     }
+  }
+
+  private static func isJSONBoolean(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber else { return false }
+    return CFGetTypeID(number) == CFBooleanGetTypeID()
   }
 }
 

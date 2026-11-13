@@ -752,11 +752,26 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unlocalized Text.*Translated footer"):
                 VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
-    def test_rejects_direct_swiftui_control_titles_with_hebrew_catalog_translations(self):
-        controls = (
-            "Button", "ColorPicker", "DatePicker", "Label", "LabeledContent", "Menu",
-            "NavigationLink", "Picker", "ProgressView", "Section", "SecureField",
-            "TextField", "Toggle",
+    def test_rejects_direct_swiftui_control_titles_when_hebrew_translation_exists(self):
+        examples = (
+            ('Button("Translated button") { }', "Button", "Translated button"),
+            ('ColorPicker("Translated color", selection: $color)', "ColorPicker", "Translated color"),
+            ('DatePicker("Translated date", selection: $date)', "DatePicker", "Translated date"),
+            ('Label("Translated heading", systemImage: "star")', "Label", "Translated heading"),
+            ('LabeledContent("Translated label", value: "value")', "LabeledContent", "Translated label"),
+            ('Menu("Translated menu") {}', "Menu", "Translated menu"),
+            ('NavigationLink("Translated navigation") {}', "NavigationLink", "Translated navigation"),
+            ('Picker("Translated picker", selection: $selection) {}', "Picker", "Translated picker"),
+            ('ProgressView("Translated progress")', "ProgressView", "Translated progress"),
+            ('Section("Translated section") {}', "Section", "Translated section"),
+            ('SecureField("Translated secure prompt", text: $secret)', "SecureField", "Translated secure prompt"),
+            ('Toggle("Translated toggle", isOn: $enabled)', "Toggle", "Translated toggle"),
+            ('TextField("Translated prompt", text: $value)', "TextField", "Translated prompt"),
+            (
+                'TextField(\n  "Translated multiline prompt",\n  text: $value\n)',
+                "TextField",
+                "Translated multiline prompt",
+            ),
         )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -764,30 +779,19 @@ class CatalogValidatorTests(unittest.TestCase):
             source.parent.mkdir(parents=True)
             catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
             catalog_path.parent.mkdir(parents=True)
-            keys = {f"Translated {control}": {
-                "localizations": {"he": unit(f"{control} מתורגם")}
-            } for control in controls}
+            keys = {
+                key: {"localizations": {"he": unit("תרגום")}}
+                for _, _, key in examples
+            }
             catalog_path.write_text(json.dumps({"strings": keys}), encoding="utf-8")
 
-            for control in controls:
-                key = f"Translated {control}"
-                source.write_text(f'{control}("{key}")\n', encoding="utf-8")
+            for swift, control, key in examples:
+                source.write_text(swift + "\n", encoding="utf-8")
                 with self.subTest(control=control):
                     with self.assertRaisesRegex(
                         ValueError, f"unlocalized {control} title.*{key}"
                     ):
                         VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
-
-            multiline_key = "Translated multiline prompt"
-            catalog_path.write_text(json.dumps({"strings": {
-                multiline_key: {"localizations": {"he": unit("הנחיה מתורגמת")}}
-            }}), encoding="utf-8")
-            source.write_text(
-                'TextField(\n  "Translated multiline prompt",\n  text: $value\n)\n',
-                encoding="utf-8",
-            )
-            with self.assertRaisesRegex(ValueError, "unlocalized TextField title.*Translated multiline prompt"):
-                VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
     def test_rejects_direct_swiftui_text_when_hebrew_plural_catalog_exists(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -853,34 +857,6 @@ class CatalogValidatorTests(unittest.TestCase):
             catalog_path.parent.mkdir(parents=True)
             catalog_path.write_text(json.dumps({"strings": {}}), encoding="utf-8")
             VALIDATOR.validate_source_references(root, [catalog_path])
-
-    def test_rejects_direct_swiftui_control_titles_when_hebrew_translation_exists(self):
-        examples = (
-            ('Menu("Translated menu") {}', "Menu", "Translated menu"),
-            ('Picker("Translated picker", selection: $selection) {}', "Picker", "Translated picker"),
-            ('Toggle("Translated toggle", isOn: $enabled)', "Toggle", "Translated toggle"),
-            ('Section("Translated section") {}', "Section", "Translated section"),
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            source = root / "Sources/ArcusisBrowser/ExampleView.swift"
-            source.parent.mkdir(parents=True)
-            catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
-            catalog_path.parent.mkdir(parents=True)
-            catalog_path.write_text(json.dumps({"strings": {
-                key: {"localizations": {"he": unit("תרגום")}}
-                for _, _, key in examples
-            }}), encoding="utf-8")
-
-            for swift, control, key in examples:
-                source.write_text(swift + "\n", encoding="utf-8")
-                with self.subTest(control=control):
-                    with self.assertRaisesRegex(ValueError, f"unlocalized {control}.*{key}"):
-                        VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
-    def test_split_pane_loading_indicator_uses_localized_shell_copy(self):
-        source = (ROOT / "Sources/ArcusisBrowser/SplitPageView.swift").read_text(
-            encoding="utf-8")
-        self.assertIn('ProgressView(ShellL10n.string("Loading profile…"))', source)
 
 if __name__ == "__main__":
     unittest.main()

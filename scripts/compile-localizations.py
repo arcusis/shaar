@@ -404,7 +404,7 @@ def validate_source_references(root, catalogs, include_app=False):
         r'\s*\(\s*("(?:[^"\\]|\\.)*")'
     )
     direct_control_title = re.compile(
-        r'\b(Button|Label|Toggle|Picker|TextField|Section|Menu|NavigationLink)'
+        r'\b(Button|Label|Toggle|Picker|TextField|Section|Menu|NavigationLink|ProgressView)'
         r'\s*\(\s*("(?:[^"\\]|\\.)*")'
     )
     direct_accessibility_text = re.compile(

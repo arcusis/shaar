@@ -177,6 +177,13 @@ struct ShaarHistoryAdapterTests {
       windowID: Data(), tabID: Data(), payloadJSON: payload)
     #expect(
       ShaarHistoryEventRouter.changedProfile(for: regular, knownProfiles: [profile]) == profile)
+    let booleanSchemaEvent = ShaarCopiedEvent(
+      sequence: 4, kind: 11, profileID: id, sessionID: Data(),
+      windowID: Data(), tabID: Data(),
+      payloadJSON: Data(#"{"schemaVersion":true,"kind":"changed"}"#.utf8))
+    #expect(
+      ShaarHistoryEventRouter.changedProfile(
+        for: booleanSchemaEvent, knownProfiles: [profile]) == nil)
     let privateEvent = ShaarCopiedEvent(
       sequence: 3, kind: 11, profileID: id,
       sessionID: Data("private-session".utf8), windowID: Data(),

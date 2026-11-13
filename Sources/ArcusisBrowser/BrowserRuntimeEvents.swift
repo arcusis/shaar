@@ -10,6 +10,7 @@ final class BrowserRuntimeEvents {
   let runtime: ARCChromiumRuntime
   let router = BrowserRuntimeRouter()
   var onWindowClosed: ((String, Bool) -> Void)?
+  var onDeviceChooserResolution: ((String, String, Int?) -> Void)?
   var onQuitRequested: (() -> Void)?
   var onQuitCancelled: (() -> Void)?
   var onWindowRequest: (@MainActor @Sendable (String, String) -> String?)? {
@@ -305,6 +306,10 @@ final class BrowserRuntimeEvents {
 
   func resolveDeviceChooser(_ id: String, windowID: String, index: Int?) {
     guard router.consume(.deviceChooser, id: id, windowID: windowID) else { return }
+    if let onDeviceChooserResolution {
+      onDeviceChooserResolution(id, windowID, index)
+      return
+    }
     runtime.resolveDeviceChooserRequestID(id, index: index.map(NSNumber.init(value:)))
   }
 

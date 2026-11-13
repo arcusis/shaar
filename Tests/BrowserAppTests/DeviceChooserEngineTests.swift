@@ -50,6 +50,31 @@ struct DeviceChooserEngineTests {
     #expect(store.deviceChooserRequests.isEmpty)
   }
 
+  @Test func malformedUpdateCancelsAndDismissesTheStaleChooser() throws {
+    let runtime = ARCChromiumRuntime()
+    let events = BrowserRuntimeEvents(runtime: runtime)
+    events.onDeviceChooserResolution = { _, _, _ in }
+    let store = BrowserStore()
+    store.perform(.open(try #require(URL(string: "https://devices.example/chooser"))))
+    let engine = try BrowserEngine(events: events, windowID: "chooser-window", store: store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    #expect(events.router.bindTab(tab.id.uuidString, windowID: engine.windowID))
+
+    var payload = Self.event(
+      id: "chooser-invalid-update", kind: "deviceChooserRequested", tabID: tab.id,
+      profileID: store.session.selectedSpace.profileID, url: tab.url)
+    runtime.onDeviceChooserEvent?(payload)
+    #expect(store.sheet?.id == "chooser-chooser-invalid-update")
+
+    payload["kind"] = "deviceChooserUpdated"
+    payload["options"] = [["index": 0, "name": "USB adapter"]]
+    payload["canGrant"] = false
+    runtime.onDeviceChooserEvent?(payload)
+
+    #expect(store.sheet == nil)
+    #expect(store.deviceChooserRequests.isEmpty)
+  }
+
   private static func event(
     id: String, kind: String, tabID: UUID, profileID: UUID, url: URL
   ) -> [String: Any] {

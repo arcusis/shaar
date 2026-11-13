@@ -7,8 +7,10 @@ import BrowserCore
 import ChromiumBridge
 import Observation
 import SwiftUI
+import os
 
 typealias ProfileDownloadDirectoryApplier = @MainActor (UUID, URL?) async throws -> URL?
+typealias ProfileDirectoryRemovalOperation = @Sendable (URL?) async throws -> Void
 
 @MainActor @Observable
 final class BrowserSettingsState {
@@ -25,6 +27,7 @@ final class BrowserSettingsState {
   private var didPresent = false
   let downloadDirectorySettingsEnabled: Bool
   private let applyDownloadDirectoryToEngine: ProfileDownloadDirectoryApplier?
+  private let removeProfileDirectory: ProfileDirectoryRemovalOperation
   var onOpenSpace: (UUID) -> Void = { _ in }
   var onConnectAccount: (UUID, AccountSignInOption) -> Void = { _, _ in }
   var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
@@ -36,7 +39,9 @@ final class BrowserSettingsState {
     runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil,
     sharedExtensions: SharedExtensionSettingsModel? = nil,
     downloadDirectorySettingsEnabled: Bool = false,
-    applyDownloadDirectory: ProfileDownloadDirectoryApplier? = nil
+    applyDownloadDirectory: ProfileDownloadDirectoryApplier? = nil,
+    removeProfileDirectory: @escaping ProfileDirectoryRemovalOperation =
+      ProfileDataDirectoryRemoval.removeIfPresent
   ) {
     self.workspace = workspace
     self.preferences = preferences
@@ -50,6 +55,7 @@ final class BrowserSettingsState {
           httpsOnlyMode: { preferences.httpsOnlyChoice(for: $0) })
       }
     applyDownloadDirectoryToEngine = applyDownloadDirectory
+    self.removeProfileDirectory = removeProfileDirectory
     self.downloadDirectorySettingsEnabled =
       downloadDirectorySettingsEnabled && applyDownloadDirectory != nil
   }
@@ -332,32 +338,40 @@ final class BrowserSettingsState {
     try draft.deleteProfile(id, movingSpacesTo: destinationID)
     try workspace.validateWritableSnapshot()
     try await profileBackend.deleteProfile(id)
-    try await ProfileDataDirectoryRemoval.removeIfPresent(at: profileDirectory)
     try workspace.deleteProfile(id, movingSpacesTo: destinationID)
     if selectedProfileID == id {
       _ = selectProfile(destinationID ?? workspace.workspace.catalog.profiles.first?.id)
     }
     try preferences.removeProfile(id)
     try workspace.flushSaves()
+    do {
+      try await removeProfileDirectory(profileDirectory)
+    } catch {
+      let message = error.localizedDescription
+      Logger(subsystem: "org.arcusis.shaar", category: "profiles").error(
+        "Deleted profile data could not be removed: \(message, privacy: .public)")
+    }
   }
 
 }
 
 enum ProfileDataDirectoryRemoval {
-  static func removeIfPresent(at directory: URL?, fileManager: FileManager = .default) async throws
-  {
-    guard let directory, fileManager.fileExists(atPath: directory.path) else { return }
-    for attempt in 0..<50 {
-      guard fileManager.fileExists(atPath: directory.path) else { return }
-      do {
-        try fileManager.removeItem(at: directory)
-        return
-      } catch {
-        guard fileManager.fileExists(atPath: directory.path) else { return }
-        guard attempt < 49 else { throw error }
-        try await Task.sleep(for: .milliseconds(100))
+  static func removeIfPresent(at directory: URL?) async throws {
+    guard let directory else { return }
+    try await Task.detached(priority: .utility) {
+      for attempt in 0..<50 {
+        do {
+          let fileManager = FileManager.default
+          guard fileManager.fileExists(atPath: directory.path) else { return }
+          try fileManager.removeItem(at: directory)
+          return
+        } catch {
+          guard FileManager.default.fileExists(atPath: directory.path) else { return }
+          guard attempt < 49 else { throw error }
+          try await Task.sleep(for: .milliseconds(100))
+        }
       }
-    }
+    }.value
   }
 }
 

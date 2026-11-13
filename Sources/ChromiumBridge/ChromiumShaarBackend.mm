@@ -1035,12 +1035,12 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (!canonical) return NO;
   NSNumber *previous = _shaarHttpsOnly[canonical];
   BOOL changed = !previous || previous.boolValue != enabled;
-  _shaarHttpsOnly[canonical] = @(enabled);
   if (_shaarUserDataDirectory && changed &&
       !ARCWriteHttpsOnlyPreference(_shaarUserDataDirectory, canonical, enabled)) return NO;
   if ([self loadedProfileValueForID:profileID]) {
-    return !changed || [self applyLiveHttpsOnly:enabled profileID:profileID];
+    if (changed && ![self applyLiveHttpsOnly:enabled profileID:profileID]) return NO;
   }
+  _shaarHttpsOnly[canonical] = @(enabled);
   return YES;
 }
 

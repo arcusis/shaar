@@ -55,8 +55,11 @@ diff --git a/chrome/browser/extensions/api/tabs/windows_api.cc b/chrome/browser/
  
    bool initialized_type = false;
  #if !BUILDFLAG(IS_ANDROID)
-@@ -901,27 +904,30 @@ ExtensionFunction::ResponseValue WindowsCreateFunction::OnBrowserWindowCreated(
+@@ -901,27 +904,33 @@ ExtensionFunction::ResponseValue WindowsCreateFunction::OnBrowserWindowCreated(
    // the window, destroying `new_window`.
++  if (!new_window) {
++    return Error(ExtensionTabUtil::kNoCurrentWindowError);
++  }
    base::WeakPtr<BrowserWindowInterface> weak_window = new_window->GetWeakPtr();
  
 -  if (focused) {

@@ -24,6 +24,13 @@ class ManagedWindowRequestPatchTests(unittest.TestCase):
         self.assertIn("engine_requested", source)
         self.assertIn("SetEngineRequestedWindowHandler", source)
 
+    def test_patch_checks_window_creation_before_dereferencing(self):
+        source = PATCH.read_text()
+        null_check = source.index("if (!new_window) {")
+        weak_ptr = source.index("new_window->GetWeakPtr()")
+        self.assertLess(null_check, weak_ptr)
+        self.assertIn("return Error(ExtensionTabUtil::kNoCurrentWindowError);", source)
+
     def test_layer_requires_gesture_and_rejects_local_file_navigation(self):
         lifecycle = (LAYER / "windows_tabs/shaar_windows_tabs_lifecycle.cc").read_text()
         event_bridge = (LAYER / "engine/shaar_event_bridge.cc").read_text()

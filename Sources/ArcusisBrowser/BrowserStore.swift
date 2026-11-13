@@ -1120,12 +1120,27 @@ final class BrowserStore {
   func rememberPermissionFrame(_ tabID: UUID, frameID: String, origin: URL? = nil) {
     permissionFrames[tabID] = frameID
     permissionFrameOrigins[tabID] = origin
+    cancelWebSharesInvalidatedByFrame(for: tabID)
   }
 
   func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {
     guard permissionFrames[tabID] == frameID else { return }
     permissionFrames[tabID] = nil
     permissionFrameOrigins[tabID] = nil
+    cancelWebSharesInvalidatedByFrame(for: tabID)
+  }
+
+  private func cancelWebSharesInvalidatedByFrame(for tabID: UUID) {
+    let staleIDs = consentRequests.compactMap { request -> String? in
+      guard case .webShare(let share) = request,
+        share.tabID == tabID,
+        !webShareRequestIsCurrent(share)
+      else { return nil }
+      return share.id
+    }
+    for id in staleIDs {
+      resolveWebShare(id, outcome: .cancelled)
+    }
   }
 
   func websitePermissionIsCurrent(_ request: WebsitePermissionRequest) -> Bool {

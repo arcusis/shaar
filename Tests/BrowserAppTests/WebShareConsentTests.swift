@@ -251,6 +251,8 @@ struct WebShareConsentTests {
     store.rememberPermissionFrame(
       share.tabID, frameID: "fedcba9876543210fedcba9876543210",
       origin: URL(string: "https://other.example")!)
+    #expect(outcome == .cancelled)
+
     store.resolveWebShare(share.id, outcome: .shared)
     #expect(outcome == .cancelled)
   }

@@ -9,6 +9,13 @@ import Testing
 
 @Suite("Web Share probe JavaScript strings")
 struct WebShareProbeTests {
+  @Test func authoredPageMustBeAnUnauthenticatedLoopbackURL() {
+    #expect(WebShareProbe.authoredLoopbackPageURL("http://127.0.0.1:43210/share") != nil)
+    #expect(WebShareProbe.authoredLoopbackPageURL("http://user:secret@127.0.0.1:43210/share") == nil)
+    #expect(WebShareProbe.authoredLoopbackPageURL("https://127.0.0.1:43210/share") == nil)
+    #expect(WebShareProbe.authoredLoopbackPageURL("http://localhost:43210/share") == nil)
+  }
+
   @Test func titleValuesRoundTripAsSingleJavaScriptStrings() throws {
     for value in [
       "plain title",

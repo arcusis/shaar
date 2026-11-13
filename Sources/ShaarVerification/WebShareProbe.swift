@@ -49,8 +49,7 @@ final class WebShareProbe {
         "The web share probe requires Shaar Verification.app and its bundled Chromium framework."
       )
     }
-    guard let page = URL(string: try value(after: "--probe-url")),
-      page.scheme == "http", page.host == "127.0.0.1"
+    guard let page = Self.authoredLoopbackPageURL(try value(after: "--probe-url"))
     else { throw Failure("The web share probe requires an authored loopback page.") }
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
@@ -223,6 +222,13 @@ final class WebShareProbe {
     let data = try? JSONSerialization.data(withJSONObject: [value])
     let encoded = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[\"\"]"
     return String(encoded.dropFirst().dropLast())
+  }
+
+  nonisolated static func authoredLoopbackPageURL(_ value: String) -> URL? {
+    guard let page = URL(string: value), page.scheme == "http", page.host == "127.0.0.1",
+      page.user == nil, page.password == nil
+    else { return nil }
+    return page
   }
 
   private func pause() async {

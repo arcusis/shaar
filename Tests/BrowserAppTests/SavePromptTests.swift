@@ -133,11 +133,16 @@ struct SavePromptTests {
     #expect(store.savePrompt == nil)
   }
 
-  @Test func requestMustMatchTheActiveProfileAndTab() throws {
+  @Test func closingTheRequestingTabDismissesItsSavePrompt() throws {
     let store = store()
-    #expect(try request(store).matches(store.session))
-    #expect(!(try request(store, profileID: UUID()).matches(store.session)))
-    #expect(!(try request(store, tabID: UUID()).matches(store.session)))
+    let request = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    var decisions: [SavePromptRequest.Decision] = []
+    store.onSavePromptDecision = { _, decision in decisions.append(decision) }
+    #expect(store.requestSavePrompt(request))
+    store.closeTab(tab.id)
+    #expect(store.savePrompt == nil)
+    #expect(decisions == [.dismiss])
   }
 
   @Test func neverForACardIsDismissed() throws {

@@ -101,8 +101,8 @@ function siteControls(): string {
 
 function launcher(): string {
   return `<div class="demo-launcher" role="dialog" aria-label="${commandInterfaceName}" hidden>
-    <label class="demo-launcher-field">${icon.search}<input type="text" placeholder="Search with ${commandInterfaceName} or enter an address" autocomplete="off" spellcheck="false" aria-label="Search with ${commandInterfaceName} or enter an address"></label>
-    <ul class="demo-results" role="listbox"></ul>
+    <label class="demo-launcher-field">${icon.search}<input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="demo-results" placeholder="Search with ${commandInterfaceName} or enter an address" autocomplete="off" spellcheck="false" aria-label="Search with ${commandInterfaceName} or enter an address"></label>
+    <ul class="demo-results" id="demo-results" role="listbox"></ul>
   </div>`;
 }
 

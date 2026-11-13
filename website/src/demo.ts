@@ -66,6 +66,8 @@ export function initializeDemo(): void {
 
   const closeOverlays = () => {
     launcher.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
     popover.hidden = true;
     controlsButton.setAttribute("aria-expanded", "false");
   };
@@ -82,20 +84,24 @@ export function initializeDemo(): void {
     highlighted = Math.min(highlighted, Math.max(0, found.length - 1));
     const rows = found.map(
       (item, index) =>
-        `<li role="option" aria-selected="${index === highlighted}" data-space="${item.space}" data-tab="${item.tab}"><img src="/assets/screens/fav-${item.page}.png" width="16" height="16" alt=""><span>${escapeText(item.title)}</span><em>${escapeText(item.host)}</em>${index === highlighted ? "<kbd>↩</kbd>" : ""}</li>`,
+        `<li id="demo-result-${index}" role="option" aria-selected="${index === highlighted}" data-space="${item.space}" data-tab="${item.tab}"><img src="/assets/screens/fav-${item.page}.png" width="16" height="16" alt=""><span>${escapeText(item.title)}</span><em>${escapeText(item.host)}</em>${index === highlighted ? "<kbd>↩</kbd>" : ""}</li>`,
     );
     if (input.value.trim() && found.length === 0) {
       rows.push(
-        `<li role="option" aria-selected="true" data-search><span>Search for "${escapeText(input.value.trim())}"</span></li>`,
+        `<li id="demo-result-0" role="option" aria-selected="true" data-search><span>Search for "${escapeText(input.value.trim())}"</span></li>`,
       );
     }
     results.innerHTML = rows.join("");
+    const active = results.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (active) input.setAttribute("aria-activedescendant", active.id);
+    else input.removeAttribute("aria-activedescendant");
   };
 
   const openLauncher = (trigger: HTMLElement) => {
     launcherTrigger = trigger;
     popover.hidden = true;
     launcher.hidden = false;
+    input.setAttribute("aria-expanded", "true");
     input.value = "";
     highlighted = 0;
     renderResults();
@@ -122,6 +128,8 @@ export function initializeDemo(): void {
 
   controlsButton.addEventListener("click", () => {
     launcher.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
     popover.hidden = !popover.hidden;
     controlsButton.setAttribute("aria-expanded", String(!popover.hidden));
   });

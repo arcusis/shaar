@@ -15,6 +15,16 @@ enum BrowserImportSQLite {
 
   static func rows(at source: URL, query: String, limit: Int = 100_000) throws -> [[String: Value]]
   {
+    var rows: [[String: Value]] = []
+    try read(at: source, queries: [query], limit: limit) { _, result in rows = result }
+    return rows
+  }
+
+  static func read(
+    at source: URL, queries: [String], limit: Int = 100_000,
+    consume: (Int, [[String: Value]]) throws -> Void
+  ) throws {
+    guard !queries.isEmpty else { return }
     let temporary = FileManager.default.temporaryDirectory
       .appending(path: "shaar-import-\(UUID().uuidString).sqlite")
     defer {
@@ -63,43 +73,45 @@ enum BrowserImportSQLite {
     else { throw BrowserImport.ImportError.databaseUnavailable("open copied snapshot") }
     defer { sqlite3_close(snapshot) }
 
-    var statement: OpaquePointer?
-    guard sqlite3_prepare_v2(snapshot, query, -1, &statement, nil) == SQLITE_OK,
-      let statement
-    else { throw BrowserImport.ImportError.databaseUnavailable("prepare history query") }
-    defer { sqlite3_finalize(statement) }
+    for (queryIndex, query) in queries.enumerated() {
+      var statement: OpaquePointer?
+      guard sqlite3_prepare_v2(snapshot, query, -1, &statement, nil) == SQLITE_OK,
+        let statement
+      else { throw BrowserImport.ImportError.databaseUnavailable("prepare query") }
+      defer { sqlite3_finalize(statement) }
 
-    let columnCount = Int(sqlite3_column_count(statement))
-    var result: [[String: Value]] = []
-    var stepResult = sqlite3_step(statement)
-    while stepResult == SQLITE_ROW {
-      guard result.count < limit else { throw BrowserImport.ImportError.tooManyRows }
-      var row: [String: Value] = [:]
-      for index in 0..<columnCount {
-        guard let name = sqlite3_column_name(statement, Int32(index)) else { continue }
-        switch sqlite3_column_type(statement, Int32(index)) {
-        case SQLITE_INTEGER:
-          row[String(cString: name)] = .integer(sqlite3_column_int64(statement, Int32(index)))
-        case SQLITE_FLOAT:
-          row[String(cString: name)] = .real(sqlite3_column_double(statement, Int32(index)))
-        case SQLITE_TEXT:
-          if let value = sqlite3_column_text(statement, Int32(index)) {
-            let bytes = Int(sqlite3_column_bytes(statement, Int32(index)))
-            row[String(cString: name)] = .text(
-              String(decoding: UnsafeBufferPointer(start: value, count: bytes), as: UTF8.self))
-          } else {
+      let columnCount = Int(sqlite3_column_count(statement))
+      var result: [[String: Value]] = []
+      var stepResult = sqlite3_step(statement)
+      while stepResult == SQLITE_ROW {
+        guard result.count < limit else { throw BrowserImport.ImportError.tooManyRows }
+        var row: [String: Value] = [:]
+        for index in 0..<columnCount {
+          guard let name = sqlite3_column_name(statement, Int32(index)) else { continue }
+          switch sqlite3_column_type(statement, Int32(index)) {
+          case SQLITE_INTEGER:
+            row[String(cString: name)] = .integer(sqlite3_column_int64(statement, Int32(index)))
+          case SQLITE_FLOAT:
+            row[String(cString: name)] = .real(sqlite3_column_double(statement, Int32(index)))
+          case SQLITE_TEXT:
+            if let value = sqlite3_column_text(statement, Int32(index)) {
+              let bytes = Int(sqlite3_column_bytes(statement, Int32(index)))
+              row[String(cString: name)] = .text(
+                String(decoding: UnsafeBufferPointer(start: value, count: bytes), as: UTF8.self))
+            } else {
+              row[String(cString: name)] = .null
+            }
+          default:
             row[String(cString: name)] = .null
           }
-        default:
-          row[String(cString: name)] = .null
         }
+        result.append(row)
+        stepResult = sqlite3_step(statement)
       }
-      result.append(row)
-      stepResult = sqlite3_step(statement)
+      guard stepResult == SQLITE_DONE else {
+        throw BrowserImport.ImportError.databaseUnavailable("read query")
+      }
+      try consume(queryIndex, result)
     }
-    guard stepResult == SQLITE_DONE else {
-      throw BrowserImport.ImportError.databaseUnavailable("read history query")
-    }
-    return result
   }
 }

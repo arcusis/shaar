@@ -90,7 +90,6 @@ struct DeviceChooserTests {
           payload: payload) == nil)
     }
   }
-
   @Test func chooserOriginFormattingOmitsDefaultPortsAndBracketsIPv6() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

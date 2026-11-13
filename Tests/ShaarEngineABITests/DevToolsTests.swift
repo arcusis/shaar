@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineABIC
 import Testing
 
 @testable import ShaarEngineABI
@@ -31,6 +32,61 @@ private final class FakeDevToolsEngine: ShaarDevToolsSubmitting, @unchecked Send
     lock.unlock()
     Task { completion(.success(response)) }
     return 91
+  }
+}
+
+private struct FakeDevToolsHandleResolver: ShaarNavigationHandleResolving {
+  func resolve(
+    scope: ShaarNavigationScope, windowID: String, tabID: String
+  ) throws -> ShaarABINativeHandles {
+    let profile = OpaquePointer(bitPattern: 0x11)!
+    let window = OpaquePointer(bitPattern: 0x22)!
+    let tab = OpaquePointer(bitPattern: 0x33)!
+    let engine = OpaquePointer(bitPattern: 0x44)!
+    let nativeScope = shaar_scope(
+      size: UInt32(MemoryLayout<shaar_scope>.size), profile: profile, private_session: nil)
+    return ShaarABINativeHandles(
+      engine: engine, scope: nativeScope, window: window, tab: tab)
+  }
+}
+
+@_cdecl("fake_shaar_devtools_submit_boolean_schema")
+private func fakeShaarDevToolsSubmitBooleanSchema(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ args: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard let reply, let replyContext else { return shaar_error_code(rawValue: 1) }
+  let contextAddress = UInt(bitPattern: replyContext)
+  DispatchQueue.global().async {
+    let context = UnsafeMutableRawPointer(bitPattern: contextAddress)!
+    let response = Data("{\"schemaVersion\":true}".utf8)
+    response.withUnsafeBytes { rawBuffer in
+      let payload = rawBuffer.bindMemory(to: CChar.self)
+      let error = shaar_error(
+        size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
+        platform_code: 0, message: shaar_bytes(data: nil, size: 0))
+      var result = shaar_result(
+        size: UInt32(MemoryLayout<shaar_result>.size), request_id: requestID,
+        error: error, payload_json: shaar_bytes(data: payload.baseAddress, size: payload.count))
+      reply(context, &result)
+    }
+  }
+  return shaar_error_code(rawValue: 0)
+}
+
+private struct FakeBooleanSchemaDevToolsSymbols: ShaarSymbolResolving {
+  func symbol(named: String) -> UnsafeRawPointer? {
+    guard named == "shaar_submit" else { return nil }
+    let function =
+      fakeShaarDevToolsSubmitBooleanSchema
+      as @convention(c) (
+        OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+        shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+        UnsafeMutablePointer<shaar_error>?
+      ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
   }
 }
 
@@ -241,6 +297,30 @@ struct DevToolsTests {
         booleanVersion, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
   }
 
+
+  @Test func abiCallbackRejectsBooleanSchemaVersion() async throws {
+    let transport = try ShaarDevToolsABITransport(
+      resolver: FakeBooleanSchemaDevToolsSymbols(),
+      handleResolver: FakeDevToolsHandleResolver())
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: transport))
+    let result = await withCheckedContinuation {
+      (continuation: CheckedContinuation<Result<Data, ShaarEngineError>, Never>) in
+      do {
+        _ = try adapter.call(
+          capability: .inspector, command: .domGetDocument,
+          scope: ShaarNavigationScope(profileID: "profile-a"),
+          windowID: "window-a", tabID: "tab-a") { continuation.resume(returning: $0) }
+      } catch let error as ShaarEngineError {
+        continuation.resume(returning: .failure(error))
+      } catch {
+        continuation.resume(returning: .failure(.invalidEvent("unexpected DevTools error")))
+      }
+    }
+    guard case .failure(.invalidEvent(_)) = result else {
+      Issue.record("Boolean schemaVersion was accepted by the DevTools ABI callback")
+      return
+    }
+  }
 
   @Test func shaarDefaultConstructsAdapter() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)

@@ -191,3 +191,17 @@ test("valid WOFF2 assets are cached and copied", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("unparseable font CSS falls back without caching an empty manifest", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<!doctype html><title>Unavailable</title>");
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});

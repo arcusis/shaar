@@ -929,6 +929,22 @@
         }
       }
     },
+    "Force CSS %@ state": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force CSS %@ state"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כפיית מצב CSS %@"
+          }
+        }
+      }
+    },
     "Edit box model value": {
       "localizations": {
         "en": {

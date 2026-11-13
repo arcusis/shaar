@@ -2,12 +2,24 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import Foundation
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite struct InspectorPseudoForceTests {
+  @Test func pseudoStateAccessibilityLabelsExplainTheAction() {
+    #expect(
+      BrowserLocalization.format(
+        "Force CSS %@ state", table: "Inspector", language: .english,
+        arguments: [.string("focus-within")]) == "Force CSS focus-within state")
+    #expect(
+      BrowserLocalization.format(
+        "Force CSS %@ state", table: "Inspector", language: .hebrew,
+        arguments: [.string("focus-within")]) == "כפיית מצב CSS \u{2068}focus-within\u{2069}")
+  }
+
   @Test func hoverRuleAppearsOnlyWhileThatStateIsForced() {
     let base = payload([rule("button", color: "black"), rule("#save", color: "red")])
     let on = InspectorPseudoForce.matched(

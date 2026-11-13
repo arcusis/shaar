@@ -547,6 +547,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0078-shaar-trusted-click-layout.patch",
       "sha256": "93d724a6e39e9f41637808a86efc403db304fb141524856646cf83fa05f24f86"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0143-blink-hidden-scroll-snap-event-dispatch.patch",
+      "sha256": "18ac0e71db76a39fe481e7548fc0ca4a829a43a69421980a7926915bf051e5d0"
     }
   ],
   "devtoolsFrontend157": {

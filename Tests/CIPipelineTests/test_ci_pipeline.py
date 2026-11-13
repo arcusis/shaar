@@ -1920,9 +1920,7 @@ class EngineTransferTests(unittest.TestCase):
             (evidence / "bundle.json").write_text("partial metadata")
             (evidence / "verification.tar.gz").write_bytes(b"partial archive")
             checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
-            with patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"), \
-                    patch.object(STAGES, "restore_shared_verification_bundle",
-                                 side_effect=ValueError("bundle digest differs")):
+            with patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"):
                 STAGES.run_basic_browsing(checks)
 
             self.assertEqual(

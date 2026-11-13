@@ -170,7 +170,7 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
     }
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {
-    const css = readFileSync(file, "utf8");
+    const css = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
     for (const match of css.matchAll(/url\(["']?([^"')]+)["']?\)/g)) {
       const url = new URL(match[1], siteOrigin);
       if (url.origin !== siteOrigin || !localTarget(root, url))

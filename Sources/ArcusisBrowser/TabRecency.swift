@@ -14,6 +14,22 @@ struct TabRecency {
     bySpace[space] = tabs
   }
 
+  @discardableResult
+  mutating func reconcile(availableBySpace: [UUID: [UUID]]) -> Int {
+    var removed = 0
+    var retained: [UUID: [UUID]] = [:]
+    for (space, available) in availableBySpace {
+      let availableIDs = Set(available)
+      let tabs = (bySpace[space] ?? []).filter { availableIDs.contains($0) }
+      removed += (bySpace[space]?.count ?? 0) - tabs.count
+      if !tabs.isEmpty { retained[space] = tabs }
+    }
+    removed += bySpace.filter { availableBySpace[$0.key] == nil }
+      .reduce(0) { $0 + $1.value.count }
+    bySpace = retained
+    return removed
+  }
+
   func ordered(in space: UUID, available: [UUID]) -> [UUID] {
     let valid = Set(available)
     let recent = (bySpace[space] ?? []).filter { valid.contains($0) }

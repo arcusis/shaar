@@ -16,6 +16,17 @@ final class TabSwitcherController {
   private var lastReverse = false
 
   func record(store: BrowserStore) {
+    let favoriteIDsByProfile = Dictionary(
+      grouping: store.session.favorites, by: \.profileID
+    ).mapValues { Set($0.map(\.id)) }
+    let availableBySpace = Dictionary(uniqueKeysWithValues: store.session.spaces.map { space in
+      let favoriteIDs = favoriteIDsByProfile[space.profileID] ?? []
+      let favoritePageIDs = store.session.favoritePages.compactMap { page in
+        favoriteIDs.contains(page.favoriteID) ? page.tab.id : nil
+      }
+      return (space.id, space.tabs.map(\.id) + favoritePageIDs)
+    })
+    recency.reconcile(availableBySpace: availableBySpace)
     if let tab = store.session.selectedPage?.tab.id {
       recency.record(tab, in: store.session.selectedSpaceID)
     }

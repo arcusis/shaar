@@ -23,6 +23,23 @@ final class TabRecencyTests: XCTestCase {
     XCTAssertEqual(history.ordered(in: other, available: [b, a]), [a, b])
   }
 
+  func testReconciliationDropsClosedTabsAndRemovedSpacesFromLongLivedHistory() {
+    let space = UUID()
+    let removedSpace = UUID()
+    let available = UUID()
+    var history = TabRecency()
+    for _ in 0..<2_000 {
+      history.record(UUID(), in: space)
+    }
+    history.record(UUID(), in: removedSpace)
+    history.record(available, in: space)
+
+    let removed = history.reconcile(availableBySpace: [space: [available]])
+
+    XCTAssertEqual(removed, 2_001)
+    XCTAssertEqual(history.ordered(in: space, available: [available]), [available])
+  }
+
   func testCycleWrapsInBothDirections() {
     XCTAssertEqual(TabRecency.cycle(0, count: 3, reverse: false), 1)
     XCTAssertEqual(TabRecency.cycle(0, count: 3, reverse: true), 2)

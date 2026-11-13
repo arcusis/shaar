@@ -142,14 +142,16 @@ struct SiteControlsPanel: View {
   }
 }
 
-private struct SiteSectionTitle: View {
+struct SiteSectionTitle: View {
   let title: String
+  static let accessibilityTraits: AccessibilityTraits = .isHeader
 
   init(_ title: String) { self.title = title }
 
   var body: some View {
     ShellL10n.text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
       .padding(.horizontal, 8)
+      .accessibilityAddTraits(Self.accessibilityTraits)
   }
 }
 

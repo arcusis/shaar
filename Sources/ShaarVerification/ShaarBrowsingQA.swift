@@ -950,7 +950,7 @@ import Foundation
     return Int(text)
   }
 
-  private static func playbackStarted(_ value: String?) -> Bool {
+  static func playbackStarted(_ value: String?) -> Bool {
     guard let value else { return false }
     let playing = value.contains("\"paused\":false")
     let silentError = value.contains("\"error\":0")

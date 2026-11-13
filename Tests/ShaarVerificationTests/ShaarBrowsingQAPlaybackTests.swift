@@ -16,4 +16,12 @@ import Testing
     #expect(ShaarBrowsingQA.playbackSettled("{\"error\":3}"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"error\":0,\"paused\":true,\"width\":0}"))
   }
+
+  @Test func playbackVerdictRequiresPlayingVideoWithPictureAndNoError() {
+    #expect(!ShaarBrowsingQA.playbackStarted(nil))
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":true,\"width\":320,\"error\":0}"))
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":0,\"error\":0}"))
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":3}"))
+    #expect(ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":0}"))
+  }
 }

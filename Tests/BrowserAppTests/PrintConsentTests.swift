@@ -303,6 +303,19 @@ struct PrintConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func cancellingPrintConsentDeniesTheRequest() throws {
+    let store = openedStore()
+    let print = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decision: Bool?
+    store.onPrintDecision = { _, accepted in decision = accepted }
+    #expect(store.requestPrint(print))
+    store.resolvePrint(print.id, accepted: false)
+    #expect(decision == false)
+    #expect(store.sheet == nil)
+  }
+
   @Test func printConsentRequestsArePresentedInOrder() throws {
     let store = openedStore()
     let first = try request(store)

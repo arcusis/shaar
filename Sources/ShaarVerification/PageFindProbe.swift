@@ -26,6 +26,12 @@ enum PageFindProbeEvidence {
   }
 }
 
+enum PageFindDocumentReadiness {
+  static func isReady(_ document: [String: Any]) -> Bool {
+    PageFindProbeEvidence.isReadyDocument(document)
+  }
+}
+
 /// Searches authored fixture text through Chromium's find API, never page JavaScript.
 @MainActor
 final class PageFindProbe {
@@ -199,7 +205,7 @@ final class PageFindProbe {
       let audit = runtime.normalProbeSelectionAudit(forTabID: tab.uuidString)
       if audit["selectedNativeTab"] as? Bool == true {
         document = await evaluate(tab, expression) ?? [:]
-        if PageFindProbeEvidence.isReadyDocument(document) {
+        if PageFindDocumentReadiness.isReady(document) {
           try await Task.sleep(for: .milliseconds(100))
           return
         }

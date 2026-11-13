@@ -30,8 +30,10 @@ enum DesktopCaptureCatalog {
     var seen: Set<UUID> = []
     for space in session.spaces where space.profileID == profileID {
       for tab in space.tabs where seen.insert(tab.id).inserted {
+        let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = title.isEmpty ? tab.url.host() ?? tab.url.absoluteString : title
         let source = DesktopCaptureSource(
-          id: "tab:\(tab.id.uuidString):0", name: tab.title, kind: .tab,
+          id: "tab:\(tab.id.uuidString):0", name: name, kind: .tab,
           isRequestingTab: tab.id == requestingTabID)
         if tab.id == requestingTabID {
           requesting.append(source)

@@ -371,6 +371,32 @@ struct DesktopCaptureConsentTests {
     #expect(empty.sources.isEmpty)
   }
 
+  @Test func tabSourceFallsBackToPageHostWhenSavedTitleIsBlank() throws {
+    let original = store().session
+    let spaceIndex = try #require(original.spaces.firstIndex {
+      $0.profileID == original.selectedSpace.profileID
+    })
+    var spaces = original.spaces
+    let tabIndex = try #require(spaces[spaceIndex].tabs.indices.first)
+    let tabID = spaces[spaceIndex].tabs[tabIndex].id
+    spaces[spaceIndex].tabs[tabIndex].title = " \n\t"
+    let session = try BrowserSession(
+      profiles: original.profiles,
+      spaces: spaces,
+      selectedSpaceID: original.selectedSpaceID
+    )
+
+    let sources = DesktopCaptureCatalog.tabSources(
+      session: session,
+      profileID: session.selectedSpace.profileID,
+      requestingTabID: UUID()
+    )
+
+    #expect(sources.first?.id == "tab:\(tabID.uuidString):0")
+    #expect(sources.first?.name == "meet.google.com")
+    #expect(sources.first?.label == PanelsL10n.format("Tab: %@", .string("meet.google.com")))
+  }
+
   @Test func catalogExposesOnlyRequestedCaptureSourceKinds() throws {
     let store = store()
     let base = try request(store)

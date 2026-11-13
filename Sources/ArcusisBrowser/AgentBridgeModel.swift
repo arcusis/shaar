@@ -173,8 +173,8 @@ final class AgentBridgeModel {
     request(.status, currentTarget) { [weak self] result, error in
       guard let self, self.revision == current, self.statusRequestID == requestID else { return }
       self.statusRequestID = nil
-      if let error {
-        self.failure = error.localizedDescription
+      if error != nil {
+        self.failure = ShellL10n.string("The Agent Bridge request failed. Try again.")
         return
       }
       do {
@@ -216,8 +216,8 @@ final class AgentBridgeModel {
       }
       self.busy = false
       self.pendingOrigin = nil
-      if let error {
-        self.failure = error.localizedDescription
+      if error != nil {
+        self.failure = ShellL10n.string("The Agent Bridge request failed. Try again.")
         return
       }
       self.acceptEnabled(result ?? [:])
@@ -339,8 +339,8 @@ final class AgentBridgeModel {
     request(.disable, old) { [weak self] _, error in
       guard let self, !self.closed, self.revision == current else { return }
       self.busy = false
-      if let error {
-        self.failure = error.localizedDescription
+      if error != nil {
+        self.failure = ShellL10n.string("The Agent Bridge request failed. Try again.")
       } else {
         self.clear()
       }

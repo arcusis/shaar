@@ -49,6 +49,43 @@ final class AgentBridgeTests: XCTestCase {
     XCTAssertEqual(model.failure, ShellL10n.string("Agent control requires a web page."))
   }
 
+  func testBackendFailuresUseLocalizedRecoveryCopy() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    let backendError = NSError(
+      domain: "AgentBridgeTests", code: 9,
+      userInfo: [NSLocalizedDescriptionKey: "Raw English agent bridge error."])
+    let expected = ShellL10n.string("The Agent Bridge request failed. Try again.")
+
+    let statusModel = AgentBridgeModel(target: target) { _, _, reply in
+      reply(nil, backendError)
+    }
+    statusModel.refresh()
+    XCTAssertEqual(statusModel.failure, expected)
+
+    let enableModel = AgentBridgeModel(target: target) { _, _, reply in
+      reply(nil, backendError)
+    }
+    enableModel.enable()
+    XCTAssertEqual(enableModel.failure, expected)
+
+    let disconnectModel = AgentBridgeModel(target: target) { operation, _, reply in
+      if operation == .enable {
+        reply([
+          "schemaVersion": 1, "enabled": true, "port": 9222,
+          "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
+          "connectionCount": 0, "token": String(repeating: "a", count: 43),
+        ], nil)
+      } else {
+        reply(nil, backendError)
+      }
+    }
+    disconnectModel.enable()
+    disconnectModel.disable()
+    XCTAssertEqual(disconnectModel.failure, expected)
+    XCTAssertTrue(disconnectModel.revocationUnconfirmed)
+  }
+
   func testStatusRejectsSecretsAndInvalidPorts() throws {
     XCTAssertThrowsError(
       try AgentBridgeStatus.decode([

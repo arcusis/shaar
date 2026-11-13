@@ -863,6 +863,13 @@ class SwiftReportTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 SWIFT_REPORTS.xctest_cases(text)
 
+    def test_empty_xctest_filter_result_fails(self):
+        empty = ("Test Suite 'All tests' started at now.\n"
+                 "Test Suite 'All tests' passed at now.\n"
+                 " Executed 0 tests, with 0 failures in 0.000 seconds\n")
+        with self.assertRaisesRegex(ValueError, "selected no test cases"):
+            SWIFT_REPORTS.xctest_cases(empty)
+
     def test_missing_native_swift_testing_report_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -873,6 +880,14 @@ class SwiftReportTests(unittest.TestCase):
 
 
 class ProbeSoakTests(unittest.TestCase):
+    def test_visual_shards_validate_each_filtered_test_report(self):
+        checks = unittest.mock.Mock()
+        checks.run.return_value = 0
+        with patch.object(STAGES, "require_hosted_mac"), patch.object(STAGES, "run_swift_tests") as run:
+            STAGES.run_visuals(checks, "1")
+        self.assertEqual([call.args[1] for call in run.call_args_list], list(STAGES.VISUAL_SHARDS["1"]))
+        self.assertTrue(all("--filter" in call.args[2] for call in run.call_args_list))
+
     def test_shards_cover_every_original_iteration_once_without_retry(self):
         from collections import Counter
         from ci_engine import (

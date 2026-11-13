@@ -110,4 +110,12 @@ struct PrintRequest: Identifiable, Equatable {
     return true
   }
 
+<<<<<<< HEAD
+=======
+  private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x061C || value == 0x200E || value == 0x200F
+      || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
+  }
+>>>>>>> 68306ac0 (refactor: isolate print title bidi checks)
 }

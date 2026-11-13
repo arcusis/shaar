@@ -1003,11 +1003,16 @@ final class BrowserStore {
 
   @discardableResult
   func requestWebShare(_ request: WebShareRequest) -> Bool {
+    guard webShareRequestIsCurrent(request) else { return false }
+    return enqueueConsent(.webShare(request))
+  }
+
+  private func webShareRequestIsCurrent(_ request: WebShareRequest) -> Bool {
     guard let frameID = permissionFrames[request.tabID],
       let origin = permissionFrameOrigins[request.tabID],
       request.matches(session, frameID: frameID, origin: origin)
     else { return false }
-    return enqueueConsent(.webShare(request))
+    return true
   }
 
   @discardableResult
@@ -1052,9 +1057,7 @@ final class BrowserStore {
     let accepted =
       presented
       && outcome == .shared
-      && share.matches(
-        session, frameID: permissionFrames[share.tabID],
-        origin: permissionFrameOrigins[share.tabID])
+      && webShareRequestIsCurrent(share)
       && rendererFailures[share.tabID] == nil
     onWebShareDecision?(id, accepted ? .shared : .cancelled)
     presentNextConsent()

@@ -31,6 +31,10 @@ class HiddenScrollEventDispatchPatchTests(unittest.TestCase):
         self.assertIn("TaskType::kDOMManipulation", patch)
         self.assertIn("event_type_names::kScrollend", patch)
         self.assertIn("HiddenDocumentScrollEventsDispatchWithoutAnimationFrame", patch)
+        self.assertIn("HiddenDocumentElementScrollEventsDispatchWithoutAnimationFrame", patch)
+        self.assertIn("body->addEventListener(", patch)
+        self.assertIn("GetDocument().EnqueueScrollEventForNode(body)", patch)
+        self.assertIn("GetDocument().EnqueueScrollEndEventForNode(body)", patch)
 
 
 if __name__ == "__main__":

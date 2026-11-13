@@ -115,7 +115,7 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
  #include "third_party/blink/renderer/core/execution_context/execution_context.h"
  #include "third_party/blink/renderer/core/frame/local_frame.h"
  #include "third_party/blink/renderer/core/loader/document_loader.h"
-@@ -160,6 +161,26 @@
+@@ -160,6 +161,47 @@
  
  // Tasks should be run after events are dispatched, even if they were enqueued
  // first.
@@ -137,6 +137,27 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
 +
 +  task_environment_.RunUntilIdle();
 +  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2));
++}
++
++TEST_F(ScriptedAnimationControllerTest,
++       HiddenDocumentElementScrollEventsDispatchWithoutAnimationFrame) {
++  GetPage().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
++                               /*is_initial_state=*/false);
++  TaskOrderObserver observer;
++  auto* body = GetDocument().body();
++  body->addEventListener(
++      event_type_names::kScroll,
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(3)));
++  body->addEventListener(
++      event_type_names::kScrollend,
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(4)));
++
++  GetDocument().EnqueueScrollEventForNode(body);
++  GetDocument().EnqueueScrollEndEventForNode(body);
++  EXPECT_TRUE(observer.Order().empty());
++
++  task_environment_.RunUntilIdle();
++  EXPECT_THAT(observer.Order(), testing::ElementsAre(3, 4));
 +}
 +
  TEST_F(ScriptedAnimationControllerTest, EnqueueTaskAndEvent) {

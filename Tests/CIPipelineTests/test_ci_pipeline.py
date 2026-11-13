@@ -244,6 +244,8 @@ class PipelineGateTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn("--connect-timeout 10", command)
                 self.assertIn("--max-time 120", command)
+                self.assertIn("--retry 3", command)
+                self.assertIn("--retry-max-time 90", command)
 
     def test_release_gate_api_requests_are_bounded_and_report_timeouts(self):
         with patch.object(RELEASE_CI.subprocess, "check_output", return_value="{}") as command:

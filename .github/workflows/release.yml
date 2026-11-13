@@ -122,9 +122,9 @@ jobs:
           # Download without credentials, exactly as Sparkle clients do.
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG"
           mkdir -p "$RUNNER_TEMP/pages"
-          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 "$base/$EXPECTED_APPCAST" \
+          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 --retry 3 --retry-max-time 90 "$base/$EXPECTED_APPCAST" \
             --output "$RUNNER_TEMP/pages/appcast.xml"
-          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 "$base/$EXPECTED_ZIP" \
+          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 --retry 3 --retry-max-time 90 "$base/$EXPECTED_ZIP" \
             --output "$RUNNER_TEMP/$EXPECTED_ZIP"
           "$PYTHON" scripts/release_feed.py validate \
             --appcast "$RUNNER_TEMP/pages/appcast.xml" --zip "$RUNNER_TEMP/$EXPECTED_ZIP"

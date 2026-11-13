@@ -54,10 +54,14 @@ private final class PrivateBrowserHostTestRuntime: ARCChromiumRuntime {
   override func createPrivateWindowID(
     _ windowID: String, contextID: String, tabID: String, url: String
   ) throws {
-    windows[windowID] = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-      styleMask: [.titled, .closable], backing: .buffered, defer: false)
-    containers[windowID] = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+    windows[windowID] = MainActor.assumeIsolated {
+      NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    }
+    containers[windowID] = MainActor.assumeIsolated {
+      NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+    }
   }
 
   override func window(forPrivateWindowID windowID: String, contextID: String) -> NSWindow? {

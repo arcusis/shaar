@@ -180,6 +180,15 @@ class CatalogValidatorTests(unittest.TestCase):
                 self.assertNotEqual(
                     strings[key]["localizations"]["he"]["stringUnit"]["value"], key)
 
+    def test_inspector_markup_size_uses_hebrew_byte_term_in_all_plural_forms(self):
+        strings = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/InspectorDetails.xcstrings").read_text(
+                encoding="utf-8"))["strings"]
+        forms = strings["%d bytes of markup"]["localizations"]["he"]["variations"]["plural"]
+        self.assertEqual(forms["one"]["stringUnit"]["value"], "בייט אחד של קוד סימון")
+        self.assertEqual(forms["two"]["stringUnit"]["value"], "שני בייטים של קוד סימון")
+        self.assertEqual(forms["other"]["stringUnit"]["value"], "%d בייטים של קוד סימון")
+
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

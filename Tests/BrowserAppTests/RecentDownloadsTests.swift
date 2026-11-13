@@ -21,6 +21,33 @@ struct RecentDownloadsTests {
     #expect(RecentDownloadsPopover.progressLabel(for: nil) == nil)
   }
 
+  @Test func recentDownloadAccessibilityValueIncludesProgressWhenDeterminate() {
+    let profileID = UUID()
+    func item(total: Double, dangerous: Bool = false, state: DownloadState = .downloading) -> BrowserDownload {
+      BrowserDownload(
+        id: id, profileID: profileID, filename: "report.zip", path: "",
+        sourceURL: "https://example.test/report.zip", state: state,
+        paused: false, dangerous: dangerous, offTheRecord: false,
+        received: 50, total: total, startTime: 1)!
+    }
+
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(for: item(total: 100), language: .english)
+        == "50 percent")
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(for: item(total: 100), language: .hebrew)
+        == "50 אחוזים")
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(for: item(total: -1), language: .english)
+        == nil)
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(
+        for: item(total: 100, dangerous: true), language: .english) == nil)
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(
+        for: item(total: 100, state: .finished), language: .english) == nil)
+  }
+
   @Test func finishedDownloadRetriesThumbnailAfterCardStateChanges() async throws {
     final class Calls { var count = 0 }
     let calls = Calls()

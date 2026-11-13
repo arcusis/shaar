@@ -135,8 +135,15 @@ def source_build_header(root: Path, pin: dict) -> tuple[set[str], set[str], str]
         if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
             raise ContractError("source-build patch entry must name a relative file")
         relative_patch = Path(entry["file"])
+        try:
+            patch_is_inside_repository = (root / relative_patch).resolve(strict=True).is_relative_to(root.resolve())
+        except FileNotFoundError:
+            # Keep the dedicated missing-patch error below for ordinary absent files.
+            patch_is_inside_repository = True
+        except (OSError, RuntimeError):
+            patch_is_inside_repository = False
         if (relative_patch.is_absolute() or ".." in relative_patch.parts
-                or not (root / relative_patch).resolve().is_relative_to(root.resolve())):
+                or not patch_is_inside_repository):
             raise ContractError(f"source-build patch path escapes the repository: {entry['file']!r}")
         patch_path = root / relative_patch
         if not patch_path.is_file():

@@ -44,6 +44,28 @@ import Testing
     #expect(rejectedMissingURL)
   }
 
+  @Test func paintURLMustBeTheAuthoredLoopbackFixturePath() throws {
+    let target = try ShaarPreviewProbe.paintTarget(
+      arguments: ["--probe-paint-url", "http://127.0.0.1:8080/paint"], required: true)
+    #expect(target?.absoluteString == "http://127.0.0.1:8080/paint")
+
+    for value in [
+      "https://127.0.0.1:8080/paint",
+      "http://localhost:8080/paint",
+      "http://127.0.0.1:8080/other",
+      "http://example.com/paint",
+      "",
+    ] {
+      #expect(throws: (any Error).self) {
+        try ShaarPreviewProbe.paintTarget(
+          arguments: ["--probe-paint-url", value], required: true)
+      }
+    }
+    #expect(throws: (any Error).self) {
+      try ShaarPreviewProbe.paintTarget(arguments: ["--probe-paint-url"], required: true)
+    }
+  }
+
   @Test func blankRendererCaptureCannotPassPaintCheck() {
     let bitmap = NSBitmapImageRep(
       bitmapDataPlanes: nil, pixelsWide: 100, pixelsHigh: 100,

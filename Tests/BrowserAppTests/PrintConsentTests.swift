@@ -536,5 +536,10 @@ struct PrintConsentTests {
     #expect(!printRequest.displayPageURL.contains("alice"))
     #expect(!printRequest.displayPageURL.contains("secret"))
     #expect(printRequest.displayPageURL == "https://example.com:8443/article?q=print#page")
+
+    var encodedPayload = payload
+    encodedPayload["pageURL"] = "https://alice%40corp:secret%3F@example.com/article"
+    let encodedRequest = try #require(PrintRequest(payload: encodedPayload))
+    #expect(encodedRequest.displayPageURL == "https://example.com/article")
   }
 }

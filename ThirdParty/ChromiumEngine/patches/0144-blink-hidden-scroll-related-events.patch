@@ -1,12 +1,14 @@
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
-@@ -296,26 +296,27 @@
+@@ -296,26 +296,29 @@
    return To<LocalDOMWindow>(GetExecutionContext());
  }
  
 -void ScriptedAnimationController::EnqueueHiddenScrollSnapEvent(Event* event) {
 +void ScriptedAnimationController::EnqueueHiddenScrollRelatedEvent(Event* event) {
++  if (!GetExecutionContext())
++    return;
    if (!InsertToPerFrameEventsMap(event))
      return;
    EnqueueEvent(event);

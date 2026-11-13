@@ -203,7 +203,10 @@ def ensure_archive(name, archive_dir, from_web_store):
 
 def unpack(name, archive_path, destination):
     pin = PINS[name]
-    archive = archive_path.read_bytes()
+    with archive_path.open("rb") as source:
+        archive = source.read(MAX_ARCHIVE_SIZE + 1)
+    if len(archive) > MAX_ARCHIVE_SIZE:
+        raise ValueError(f"{name}: archive exceeds size limit")
     if hashlib.sha256(archive).hexdigest() != pin.sha256:
         raise ValueError(f"{name}: CRX SHA-256 mismatch; upstream version may have changed")
     public_key = public_key_for_id(archive, pin.extension_id)

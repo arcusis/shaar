@@ -27,6 +27,10 @@ struct SidebarSplitRow: View {
     return contentWidth / CGFloat(segmentCount) >= titleMinimumWidth
   }
 
+  static func hoverAnimation(reduceMotion: Bool) -> Animation? {
+    reduceMotion ? nil : .easeOut(duration: 0.12)
+  }
+
   let segments: [Segment]
   let focusedID: UUID?
   let isSelected: Bool
@@ -66,7 +70,10 @@ struct SidebarSplitRow: View {
     .overlay(
       RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
     )
-    .animation(.easeOut(duration: 0.12), value: hoveredID)
+    .animation(
+      Self.hoverAnimation(
+        reduceMotion: reduceMotion || accessibilityOverrides.reduceMotion == true),
+      value: hoveredID)
     .accessibilityElement(children: .contain)
     .accessibilityLabel(ShellL10n.plural("Split View, %d tabs", count: segments.count))
   }

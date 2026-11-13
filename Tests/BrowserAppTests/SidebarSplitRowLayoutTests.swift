@@ -20,4 +20,9 @@ struct SidebarSplitRowLayoutTests {
       SidebarSplitRow.showsTitles(
         totalWidth: 212, segmentCount: 3, hasStackDragHandle: false))
   }
+
+  @Test func hoverAnimationIsDisabledForReduceMotion() {
+    #expect(SidebarSplitRow.hoverAnimation(reduceMotion: true) == nil)
+    #expect(SidebarSplitRow.hoverAnimation(reduceMotion: false) != nil)
+  }
 }

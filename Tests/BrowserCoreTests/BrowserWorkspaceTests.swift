@@ -22,6 +22,29 @@ private func workspaceFixture() throws -> BrowserSession {
   return session
 }
 
+@Test func workspaceUpdatePinnedReferenceMapFocusedBenchmark() throws {
+  let profile = BrowserProfile(name: "Scale")
+  let spaces = (0..<20).map { spaceIndex in
+    let tabs = (0..<500).map { tabIndex in
+      BrowserTab(
+        url: URL(string: "https://example.test/\(spaceIndex)/\(tabIndex)")!,
+        title: "Tab \(tabIndex)", isPinned: true)
+    }
+    return BrowserSpace(
+      profileID: profile.id, name: "Space \(spaceIndex)", symbol: "house", tint: .ocean,
+      tabs: tabs)
+  }
+  let session = try BrowserSession(
+    profiles: [profile], spaces: spaces, selectedSpaceID: spaces[0].id)
+  var workspace = try BrowserWorkspace(session: session)
+  let windowID = try #require(workspace.windows.first?.id)
+
+  let start = ContinuousClock.now
+  for _ in 0..<5 { try workspace.updateWindow(windowID, session: session) }
+  print("workspaceUpdatePinnedReferenceMapFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(workspace.window(windowID)?.pins.count == 10_000)
+}
+
 @Test func workspaceMigrationPreservesLegacyBytesIDsAndRecoveryUntilExplicitSave() throws {
   let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: directory) }

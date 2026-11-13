@@ -6,17 +6,22 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import Foundation
 import SwiftUI
 
 @testable import ArcusisBrowser
 
-private struct LibraryIdentities: Codable {
+struct LibraryIdentities: Codable {
   let alpha: UUID
   let beta: UUID
   let shared: UUID
   let folder: UUID
   let bookmarkA: UUID
   let bookmarkB: UUID
+
+  static func decode(from data: Data) throws -> Self {
+    try JSONDecoder().decode(Self.self, from: data)
+  }
 }
 
 @MainActor
@@ -90,7 +95,7 @@ final class LibraryProbe {
         bookmarkB: bookmarkB)
       try JSONEncoder().encode(ids).write(to: file, options: .atomic)
     } else {
-      ids = try JSONDecoder().decode(LibraryIdentities.self, from: Data(contentsOf: file))
+      ids = try LibraryIdentities.decode(from: Data(contentsOf: file))
       try await wait("native bookmark restart recovery") {
         self.item(ids.bookmarkA, in: a) != nil && self.item(ids.bookmarkB, in: b) != nil
       }

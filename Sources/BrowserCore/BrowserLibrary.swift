@@ -92,6 +92,7 @@ public struct BookmarkTree: Equatable, Sendable {
   }
 
   public func contains(_ ancestor: UUID, inPathTo id: UUID) -> Bool {
+    guard id == barID || id == otherID || parents[id] != nil else { return false }
     var current: UUID? = id
     while let id = current {
       if id == ancestor { return true }

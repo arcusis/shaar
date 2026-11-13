@@ -28,6 +28,9 @@ import Testing
   #expect(item.parentID == folder && item.depth == 2 && item.path.contains("Company / Console"))
   #expect(tree.contains(folder, inPathTo: page))
   #expect(!tree.contains(page, inPathTo: folder))
+  let missing = UUID()
+  #expect(!tree.contains(missing, inPathTo: missing))
+  #expect(!tree.contains(tree.barID, inPathTo: missing))
   let legacy = try #require(tree.items.first { $0.id == script })
   #expect(!legacy.isFolder && legacy.address != nil && legacy.destination == nil)
 }

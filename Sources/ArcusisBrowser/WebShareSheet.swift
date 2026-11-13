@@ -136,7 +136,7 @@ struct WebShareAnchorView: NSViewRepresentable {
 
 @MainActor
 final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDelegate,
-  NSSharingServiceDelegate
+  @MainActor NSCloudSharingServiceDelegate
 {
   let picker: NSSharingServicePicker
   let outcome = WebShareOutcomeGate()
@@ -179,6 +179,12 @@ final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDel
     _ sharingService: NSSharingService, didFailToShareItems items: [Any], error: Error
   ) {
     outcome.finish(false)
+  }
+
+  func sharingService(
+    _ sharingService: NSSharingService, didCompleteForItems items: [Any], error: Error?
+  ) {
+    outcome.finish(error == nil)
   }
 }
 

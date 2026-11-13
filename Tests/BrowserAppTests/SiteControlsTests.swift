@@ -17,6 +17,12 @@ import Testing
     BrowserLocalization.string("In progress", table: "Shell", language: .hebrew) == "בתהליך")
 }
 
+@Test @MainActor func askPermissionStateHasAnAccessibleToggleValue() {
+  #expect(SitePermissionRow.accessibilityValue(for: .ask) == SettingsL10n.string("Ask"))
+  #expect(SitePermissionRow.accessibilityValue(for: .block) == nil)
+  #expect(SitePermissionRow.accessibilityValue(for: nil) == nil)
+}
+
 private struct FakeFailure: LocalizedError {
   var errorDescription: String? { "The engine refused." }
 }

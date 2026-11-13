@@ -237,9 +237,16 @@ struct SitePermissionRow: View {
         .labelsHidden()
         .disabled(value == nil || saving)
         .help(permission.help)
-        .accessibilityLabel(permission.help)
+        .accessibilityLabel(permission.title)
+        .accessibilityHint(permission.help)
+        .accessibilityValue(
+          Self.accessibilityValue(for: value) ?? "", isEnabled: value == .ask)
     }
     .hoverRowBackground()
+  }
+
+  static func accessibilityValue(for value: SitePermissionValue?) -> String? {
+    value == .ask ? SettingsL10n.string("Ask") : nil
   }
 }
 

@@ -84,6 +84,8 @@ jobs:
         with:
           path: ~/.local/share/pnpm/store
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Tests/InspectorContractTests/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-${{ runner.arch }}-
       - name: Cache Playwright Chromium shell
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:

@@ -59,7 +59,9 @@ struct LibraryDownloadsView: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 6) {
         HStack(spacing: 8) {
-          Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+          Image(systemName: "magnifyingglass")
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
           TextField(
             PanelsL10n.string(mediaOnly ? "Search Media…" : "Search Downloads…"), text: $search
           )

@@ -11,6 +11,31 @@ import XCTest
 
 @MainActor
 final class LibrarySpacesOverviewTests: XCTestCase {
+  func testFolderSearchPathBenchmark() throws {
+    let profile = BrowserProfile(name: "Scale")
+    let folders = (0..<300).map { index in
+      BrowserFolder(name: "Folder \(index)", isPinned: index.isMultiple(of: 2))
+    }
+    let tabs = (0..<3_000).map { index in
+      BrowserTab(
+        url: URL(string: "https://example.test/\(index)")!, title: "Tab \(index)",
+        isPinned: index.isMultiple(of: 2), folderID: folders[index % folders.count].id)
+    }
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+      tabs: tabs, folders: folders)
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+    let start = ContinuousClock.now
+    var count = 0
+    for _ in 0..<10 {
+      count += LibrarySpacesOverviewModel.cards(in: session, query: "Folder 299").count
+    }
+    print("folderSearchPathBenchmark: \(start.duration(to: .now))")
+    XCTAssertEqual(count, 10)
+  }
+
   func testTodayFoldersAndNestedTabsAppearInSpaceCard() throws {
     let profile = BrowserProfile(name: "Daily")
     let folder = BrowserFolder(name: "Reading list", isPinned: false)

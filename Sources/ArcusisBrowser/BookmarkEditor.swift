@@ -64,10 +64,11 @@ struct BookmarkEditor: View {
       ).font(.title2.weight(.semibold))
       Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
         .font(.callout).foregroundStyle(.secondary)
-      TextField(PanelsL10n.string("Name"), text: $title).textFieldStyle(.roundedBorder).focused(
-        $nameIsFocused
-      )
-      .onSubmit { submit() }
+      TextField(PanelsL10n.string("Name"), text: $title)
+        .textFieldStyle(.roundedBorder)
+        .accessibilityLabel(PanelsL10n.string("Name"))
+        .focused($nameIsFocused)
+        .onSubmit { submit() }
       if !isFolder {
         TextField(PanelsL10n.string("https://example.com"), text: $address).textFieldStyle(
           .roundedBorder

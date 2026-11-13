@@ -10,6 +10,13 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorStylesTests {
+  @Test func declarationToggleNameIdentifiesTheProperty() {
+    let enabled = InspectorDeclaration(name: "color", value: "red", disabled: false)
+    let disabled = InspectorDeclaration(name: "color", value: "red", disabled: true)
+    #expect(InspectorStylesView.declarationToggleAccessibilityLabel(for: enabled) == "color")
+    #expect(InspectorStylesView.declarationToggleAccessibilityLabel(for: disabled) == "color")
+  }
+
   @Test func authoredDeclarationsPreserveFallbacksAndKeepDisabledRows() {
     let inspector = makeInspector()
     let rows = inspector.styles.declarations([

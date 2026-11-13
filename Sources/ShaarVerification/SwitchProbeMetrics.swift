@@ -88,6 +88,19 @@ struct SwitchProbeMetrics: Codable {
   var spaceSwitchLatency: Summary { latency(for: spaceSwitchSamples) }
   var profileSwitchLatency: Summary { latency(for: profileSwitchSamples) }
 
+  func latencyDiagnostic(for kind: SwitchKind) -> String {
+    let samples = kind == .space ? spaceSwitchSamples : profileSwitchSamples
+    guard let slowest = samples.max(by: { $0.latencyMilliseconds < $1.latencyMilliseconds }) else {
+      return "no \(kind.rawValue) switch samples"
+    }
+    let summary = kind == .space ? spaceSwitchLatency : profileSwitchLatency
+    return String(
+      format: "p95 %.1f ms; slowest sample %d %.1f ms (store update %.1f ms, native selection %.1f ms, next paint %.1f ms)",
+      summary.p95Milliseconds ?? .infinity, slowest.iteration, slowest.latencyMilliseconds,
+      slowest.storeUpdateMilliseconds, slowest.engineSelectionMilliseconds,
+      slowest.firstPaintMilliseconds)
+  }
+
   var spaceSwitchWithinBudget: Bool {
     spaceWarmupSamples.count == Self.expectedSpaceWarmupCount
       && spaceSwitchSamples.count == Self.expectedSwitchCount

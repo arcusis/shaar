@@ -973,11 +973,11 @@ final class EngineProbe {
       let switchReport = switchMetrics.report(phase: phase)
       try expect(
         switchReport.spaceSwitchWithinBudget,
-        "\(phase) Space switch p95 \(switchReport.spaceSwitchLatency.p95Milliseconds ?? .infinity) ms is within the \(SwitchProbeMetrics.latencyBudgetMilliseconds) ms budget"
+        "\(phase) Space switch \(switchReport.latencyDiagnostic(for: .space)); budget \(SwitchProbeMetrics.latencyBudgetMilliseconds) ms"
       )
       try expect(
         switchReport.profileSwitchWithinBudget,
-        "\(phase) Profile switch p95 \(switchReport.profileSwitchLatency.p95Milliseconds ?? .infinity) ms is within the \(SwitchProbeMetrics.latencyBudgetMilliseconds) ms budget"
+        "\(phase) Profile switch \(switchReport.latencyDiagnostic(for: .profile)); budget \(SwitchProbeMetrics.latencyBudgetMilliseconds) ms"
       )
       let profileIDs = store.session.profiles.map(\.id)
       let restored = BrowserStore(

@@ -148,7 +148,22 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
     case .privateSession:
       guard state.scope == scope else { throw ShaarWindowTabsError.scopeMismatch }
     }
-    try engine.openTab(id: id, windowID: windowID, url: url, foreground: foreground)
+    let previousProfileID = state.activeProfileID
+    let needsProfileSwitch = previousProfileID != scope.profileID
+    if needsProfileSwitch {
+      try engine.setActiveProfile(id: scope.profileID, windowID: windowID)
+    }
+    do {
+      try engine.openTab(id: id, windowID: windowID, url: url, foreground: foreground)
+    } catch {
+      if needsProfileSwitch {
+        try? engine.setActiveProfile(id: previousProfileID, windowID: windowID)
+      }
+      throw error
+    }
+    if needsProfileSwitch && !foreground {
+      try engine.setActiveProfile(id: previousProfileID, windowID: windowID)
+    }
     state.tabIDsByProfile[scope.profileID, default: []].append(id)
     if foreground {
       state.activeProfileID = scope.profileID

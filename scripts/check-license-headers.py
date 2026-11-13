@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -52,9 +53,9 @@ def has_notice(path: Path, notice: list[str]) -> bool:
 
 def tracked_files(root: Path) -> list[Path]:
     output = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=root, check=True, capture_output=True, text=True
+        ["git", "ls-files", "-z"], cwd=root, check=True, capture_output=True
     ).stdout
-    return [Path(name) for name in output.split("\0") if name]
+    return [Path(os.fsdecode(path)) for path in output.split(b"\0") if path]
 
 
 def files_missing_notice(root: Path, paths: list[Path]) -> list[Path]:

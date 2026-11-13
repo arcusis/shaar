@@ -99,6 +99,21 @@ struct DeviceChooserTests {
     }
   }
 
+  @Test func unnamedDevicesHaveAVisibleFallbackLabel() throws {
+    let store = try store()
+    let request = try #require(
+      self.request(
+        store, transport: "usb", id: "unnamed-device",
+        options: [
+          ["index": 0, "name": ""],
+          ["index": 1, "name": "   "],
+        ], canGrant: true))
+
+    #expect(request.options.map(\.title) == [
+      PanelsL10n.string("Unknown device"), PanelsL10n.string("Unknown device"),
+    ])
+  }
+
   @Test func sheetCancelRejectsWithoutADeviceIndex() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

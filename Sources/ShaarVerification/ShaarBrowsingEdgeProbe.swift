@@ -534,7 +534,11 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       runtime, tab: selectedID(context), script: "window.__edgeMedia || {}", seconds: 5)
     let media = object(from: json) ?? [:]
     let pixel = numbers(media["pixel"])
+<<<<<<< HEAD
     let webgl = flag(media["webgl"]) == true && webGLPixelIsPainted(pixel)
+=======
+    let webgl = flag(media["webgl"]) == true
+>>>>>>> 9446487c1 (test: require playing video in edge probe)
     let video = videoIsPlaying(media)
     let vendor = media["vendor"] as? String ?? ""
     let error = media["error"] as? String ?? ""

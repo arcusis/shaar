@@ -78,9 +78,8 @@ struct DevelopmentModeLabel: View {
       if let budget {
         Image(systemName: budget.badgeSymbol)
           .foregroundStyle(budget.badgeColor)
-          .help(
-            "Route budget: \(budget.passed) passed, \(budget.failed) over, \(budget.unavailable) unavailable"
-          )
+          .help(budget.accessibilityDescription)
+          .accessibilityLabel(budget.accessibilityDescription)
       }
     }
     .font(.system(size: 11, weight: .semibold))
@@ -93,6 +92,10 @@ struct DevelopmentModeLabel: View {
 }
 
 extension ShaarPerformanceBudgetResult {
+  var accessibilityDescription: String {
+    "Route budget: \(passed) passed, \(failed) over, \(unavailable) unavailable"
+  }
+
   fileprivate var badgeSymbol: String {
     if failed > 0 { return "exclamationmark.circle.fill" }
     if unavailable > 0 { return "questionmark.circle.fill" }

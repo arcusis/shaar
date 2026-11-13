@@ -16,7 +16,7 @@ from sensitive_files import policy_errors
 def config(root: Path, key: str, *, scope: str | None = None, path_value: bool = False) -> str | None:
     arguments = ["config", *([scope] if scope else []), *(["--path"] if path_value else []), "--get", key]
     try:
-        return git(root, *arguments).decode().strip()
+        return git(root, *arguments).decode().removesuffix("\n")
     except subprocess.CalledProcessError as error:
         if error.returncode != 1:
             raise

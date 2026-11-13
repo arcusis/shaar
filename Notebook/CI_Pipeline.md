@@ -47,4 +47,6 @@ Shipping includes [[Sparkle_Update_Simulation]], using ephemeral fixture keys fo
 
 Current before/after measurements, extraction counts, annotation audit and the retained-check matrix live in [[CI_Run_Time]]. The earlier production nightly run [41372340304](https://github.com/arcusis/shaar/actions/runs/41372340304) passed repeated probes, both sanitizers and Periphery; scheduled Scorecard run [41384743935](https://github.com/arcusis/shaar/actions/runs/41384743935) passed. These identify those runs' scope, not proof for a later head. Production-only provenance and a real green merge-group run require their own execution evidence. Signed-distribution provenance stays outside the approved unsigned-CI-candidate scope.
 
+Hook configuration values preserve path whitespace; only Git's output line terminator is removed when reading `core.hooksPath`.
+
 Related: [[CI_Pipeline_Design]], [[Verification_Harness]], [[Test_Coverage]], [[Releasing]], [[Notebook_Maintenance]], [[CI_Run_Time]], [[Commit_Gates]].

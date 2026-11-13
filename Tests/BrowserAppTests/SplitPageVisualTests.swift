@@ -22,6 +22,21 @@ final class SplitPageVisualTests: XCTestCase {
     XCTAssertNotNil(SplitGroupView.dividerHighlightAnimation(reduceMotion: false))
   }
 
+  func testSplitDividerLabelsIncludeOrientationAndPosition() {
+    XCTAssertEqual(
+      SplitDividerAccessibility.label(
+        axis: .columns, index: 1, dividerCount: 2, language: .english),
+      "Vertical split divider 2 of 2")
+    XCTAssertEqual(
+      SplitDividerAccessibility.label(
+        axis: .rows, index: 0, dividerCount: 1, language: .english),
+      "Horizontal split divider 1 of 1")
+    XCTAssertEqual(
+      SplitDividerAccessibility.label(
+        axis: .columns, index: 0, dividerCount: 1, language: .hebrew),
+      "מפריד אנכי בתצוגה מפוצלת, 1 מתוך 1")
+  }
+
   func testSplitDividerKeyboardInputRespectsAxisAndDirection() {
     XCTAssertEqual(
       SplitDividerInput.keyboardDelta(for: .left, axis: .columns, isRightToLeft: false, step: 32),

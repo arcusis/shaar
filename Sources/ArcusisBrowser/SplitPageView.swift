@@ -132,7 +132,10 @@ struct SplitGroupView: View {
         }
     )
     .animation(Self.dividerHighlightAnimation(reduceMotion: reduceMotion), value: highlighted)
-    .accessibilityLabel(ShellL10n.string("Split divider"))
+    .accessibilityLabel(
+      SplitDividerAccessibility.label(
+        axis: axis, index: index, dividerCount: weights.count - 1,
+        language: .currentLaunchLanguage))
     .accessibilityValue("\(Int((leadingPercent * 100).rounded()))%")
     .accessibilityAdjustableAction(
       SplitDividerInput.accessibilityAction(step: Self.keyboardStep) {
@@ -191,6 +194,18 @@ struct SplitGroupView: View {
     next[index] = leading
     next[index + 1] = pair - leading
     return next
+  }
+}
+
+enum SplitDividerAccessibility {
+  static func label(
+    axis: SplitAxis, index: Int, dividerCount: Int, language: BrowserLanguage
+  ) -> String {
+    let key = axis == .columns
+      ? "Vertical split divider %d of %d" : "Horizontal split divider %d of %d"
+    return BrowserLocalization.format(
+      key, table: "Shell", language: language,
+      arguments: [.integer(index + 1), .integer(dividerCount)])
   }
 }
 

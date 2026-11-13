@@ -15,6 +15,19 @@ enum BrowserImportPreviewCounts {
       }
     }
   }
+
+  static func summary(
+    bookmarks: Int, history: Int, profileName: String,
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    let bookmarkCount = BrowserLocalization.plural(
+      "%d bookmark", count: bookmarks, table: "Panels", language: language)
+    let historyCount = BrowserLocalization.plural(
+      "%d history entry", count: history, table: "Panels", language: language)
+    return BrowserLocalization.format(
+      "%@ and %@ are ready to import into %@.", table: "Panels", language: language,
+      arguments: [.string(bookmarkCount), .string(historyCount), .string(profileName)])
+  }
 }
 
 struct BrowserImportPreviewView: View {
@@ -52,9 +65,8 @@ struct BrowserImportPreviewView: View {
         Text(PanelsL10n.format("From %@", .string(source.title)))
           .font(.caption).foregroundStyle(.secondary)
         Text(
-          PanelsL10n.format(
-            "%d bookmarks and %d history entries are ready to import into %@.",
-            .integer(counts.bookmarks), .integer(counts.history), .string(profileName)))
+          BrowserImportPreviewCounts.summary(
+            bookmarks: counts.bookmarks, history: counts.history, profileName: profileName))
         List(items.prefix(40)) { item in
           VStack(alignment: .leading) {
             HStack {

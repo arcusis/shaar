@@ -37,12 +37,30 @@ struct BrowserEngineDevToolsTests {
     #expect(!engine.openChromiumDeveloperTools(for: tab.id))
     #expect(runtime.openedTabs == [tab.id.uuidString])
   }
+
+  @Test func extensionExecutionFailureUsesLocalizedRecoveryCopy() throws {
+    let store = BrowserStore()
+    store.perform(.open(try #require(URL(string: "https://extensions.example/"))))
+    let runtime = DevToolsEngineRuntime()
+    runtime.extensionExecutionError = NSError(domain: "ExtensionBackend", code: 7)
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), windowID: "extension-window", store: store)
+
+    engine.executeExtension("extension-id")
+
+    #expect(engine.notice == "Could not run this extension. Try again.")
+    #expect(
+      BrowserLocalization.string(
+        "Could not run this extension. Try again.", table: "Shell", language: .hebrew)
+        == "לא ניתן להפעיל את התוסף. כדאי לנסות שוב.")
+  }
 }
 
 @MainActor
 private final class DevToolsEngineRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var tabWindows: [String: String] = [:]
   nonisolated(unsafe) var openedTabs: [String] = []
+  nonisolated(unsafe) var extensionExecutionError: Error?
 
   override func windowID(forTabID tabID: String) -> String? {
     tabWindows[tabID]
@@ -51,5 +69,9 @@ private final class DevToolsEngineRuntime: ARCChromiumRuntime {
   override func showDevTools(forTabID tabID: String) -> Bool {
     openedTabs.append(tabID)
     return true
+  }
+
+  override func executeExtensionID(_ extensionID: String, tabID: String) throws {
+    if let extensionExecutionError { throw extensionExecutionError }
   }
 }

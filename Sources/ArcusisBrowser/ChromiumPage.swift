@@ -45,6 +45,12 @@ final class ChromiumPageContainerView: NSView {
     return page.superview === target && page.window === window
   }
 
+  static func latestLiveContainer(for tabID: UUID) -> ChromiumPageContainerView? {
+    live.allObjects
+      .filter { $0.shownTabID == tabID }
+      .max { $0.selectionOrder < $1.selectionOrder }
+  }
+
   private(set) weak var pageView: NSView?
   private var retainedPages: [UUID: NSView] = [:]
   private var shownTabID: UUID?
@@ -98,7 +104,7 @@ final class ChromiumPageContainerView: NSView {
     shownTabID = nil
     attach(nil)
     for (tabID, page) in owned {
-      Self.live.allObjects.first { $0.shownTabID == tabID }?.attach(page)
+      Self.latestLiveContainer(for: tabID)?.attach(page)
     }
   }
 

@@ -65,6 +65,25 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertTrue(incoming.pageView === page)
   }
 
+  func testOutgoingContainerHandsPageToMostRecentlySelectedContainer() {
+    let tabID = UUID()
+    let page = NSView()
+    let stale = ChromiumPageContainerView()
+    let latest = ChromiumPageContainerView()
+    let outgoing = ChromiumPageContainerView()
+
+    stale.select(page, tabID: tabID, liveTabs: [tabID])
+    latest.select(page, tabID: tabID, liveTabs: [tabID])
+    outgoing.select(page, tabID: tabID, liveTabs: [tabID])
+    XCTAssertTrue(ChromiumPageContainerView.latestLiveContainer(for: tabID) === outgoing)
+
+    outgoing.dismantle()
+
+    XCTAssertTrue(ChromiumPageContainerView.latestLiveContainer(for: tabID) === latest)
+    XCTAssertTrue(page.superview === latest)
+    XCTAssertFalse(page.superview === stale)
+  }
+
   func testMultiTabSelectionRoundTripRetainsOnlyLivePages() {
     let firstID = UUID()
     let secondID = UUID()

@@ -6,6 +6,7 @@ import { initializeDemo } from "./demo";
 import { initializeMenu } from "./menu";
 import { startScene } from "./scene";
 import { initializeSky, type SkyState } from "./sky";
+import { nearestStep } from "./story";
 
 const root = document.documentElement;
 root.dataset.enhanced = "true";
@@ -30,14 +31,19 @@ function initializeStickyHeader(): void {
 function initializeStory(): void {
   const grid = document.querySelector<HTMLElement>(".story-grid");
   if (!grid) return;
+  const intersecting = new Set<HTMLElement>();
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (entry.isIntersecting && entry.target instanceof HTMLElement) {
-          grid.dataset.active = entry.target.dataset.step ?? "0";
-          for (const step of grid.querySelectorAll<HTMLElement>(".step")) {
-            step.toggleAttribute("data-current", step === entry.target);
-          }
+        if (!(entry.target instanceof HTMLElement)) continue;
+        if (entry.isIntersecting) intersecting.add(entry.target);
+        else intersecting.delete(entry.target);
+      }
+      const active = nearestStep(intersecting, window.innerHeight / 2);
+      if (active) {
+        grid.dataset.active = active.dataset.step ?? "0";
+        for (const step of grid.querySelectorAll<HTMLElement>(".step")) {
+          step.toggleAttribute("data-current", step === active);
         }
       }
     },

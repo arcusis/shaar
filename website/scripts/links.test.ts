@@ -85,6 +85,20 @@ test("link checker validates every responsive image source", () => {
   }
 });
 
+test("link checker validates the image fallback when srcset is present", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img src="/fallback.png" alt="" srcset="/small.png 1x">',
+    );
+    writeFileSync(join(root, "small.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /fallback.png"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("link checker verifies image map associations", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

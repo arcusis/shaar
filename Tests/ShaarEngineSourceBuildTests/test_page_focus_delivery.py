@@ -17,7 +17,10 @@ class PageFocusDeliveryTests(unittest.TestCase):
         source = (ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm").read_text()
         self.assertIn("FocusForwardsToSelectedWebContents", source)
         self.assertIn("window.addEventListener('focus'", source)
+        self.assertIn("window.addEventListener('blur'", source)
+        self.assertIn("NSWindowDidResignKeyNotification", source)
         self.assertIn('window.pageFocusCount', source)
+        self.assertIn('window.pageBlurCount', source)
 
 
 if __name__ == "__main__":

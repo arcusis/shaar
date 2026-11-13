@@ -253,11 +253,17 @@ TEST_F(ShaarTabVisibilityTest, FocusForwardsToSelectedWebContents) {
   ASSERT_TRUE(content::ExecJs(
       web_contents(),
       "window.pageFocusCount = 0;"
-      "window.addEventListener('focus', () => ++window.pageFocusCount);"));
+      "window.pageBlurCount = 0;"
+      "window.addEventListener('focus', () => ++window.pageFocusCount);"
+      "window.addEventListener('blur', () => ++window.pageBlurCount);"));
 
   ASSERT_TRUE(host.Focus(tab));
   EXPECT_EQ(target.acceptedResponder, tab);
   EXPECT_EQ(content::EvalJs(web_contents(), "window.pageFocusCount").ExtractInt(), 1);
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:NSWindowDidResignKeyNotification
+                    object:target];
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.pageBlurCount").ExtractInt(), 1);
   host.Detach(tab);
   [target close];
 }

@@ -378,8 +378,19 @@ def validate_source_references(root, catalogs, include_app=False):
         strings = json.loads(catalog.read_text(encoding="utf-8"))["strings"]
         catalog_keys[catalog.stem] = set(strings)
         for key, entry in strings.items():
-            hebrew = entry.get("localizations", {}).get("he", {}).get("stringUnit", {}).get("value")
-            if hebrew is not None and hebrew != key:
+            hebrew = entry.get("localizations", {}).get("he", {})
+            string_unit = hebrew.get("stringUnit")
+            if isinstance(string_unit, dict):
+                hebrew_values = [string_unit.get("value")]
+            else:
+                plural = hebrew.get("variations", {}).get("plural", {})
+                hebrew_values = [
+                    form.get("stringUnit", {}).get("value")
+                    for form in plural.values()
+                    if isinstance(form, dict)
+                    and isinstance(form.get("stringUnit"), dict)
+                ]
+            if any(value is not None and value != key for value in hebrew_values):
                 translated_text_keys.add(key)
     wrappers = {"BrowserLocalization": "Core", "ShellL10n": "Shell",
                 "SettingsL10n": "Settings", "PanelsL10n": "Panels",

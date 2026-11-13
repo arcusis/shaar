@@ -473,6 +473,24 @@ class CatalogValidatorTests(unittest.TestCase):
                     ):
                         VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
+    def test_rejects_direct_swiftui_text_when_hebrew_plural_catalog_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Sources/ArcusisBrowser/ExampleView.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text('Text("%d week ago")\n', encoding="utf-8")
+            catalog_path = root / "Sources/BrowserCore/Resources/Panels.xcstrings"
+            catalog_path.parent.mkdir(parents=True)
+            catalog_path.write_text(json.dumps({"strings": {
+                "%d week ago": {"localizations": {"he": {"variations": {"plural": {
+                    "one": unit("לפני שבוע"),
+                    "two": unit("לפני שבועיים"),
+                    "other": unit("לפני %d שבועות"),
+                }}}}}
+            }}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unlocalized Text.*%d week ago"):
+                VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+
     def test_folder_name_field_uses_its_shell_catalog_translation(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserSidebar.swift").read_text(
             encoding="utf-8"

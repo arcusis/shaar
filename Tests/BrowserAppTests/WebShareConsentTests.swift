@@ -123,6 +123,23 @@ struct WebShareConsentTests {
     local["origin"] = "http://localhost:3000"
     local["files"] = [Any]()
     #expect(WebShareRequest(payload: local) != nil)
+
+    for origin in [
+      "http://127.0.0.2:3000",
+      "http://dev.localhost:3000",
+      "http://localhost.:3000",
+      "http://[::1]:3000",
+    ] {
+      var loopback = valid
+      loopback["origin"] = origin
+      #expect(WebShareRequest(payload: loopback) != nil)
+    }
+
+    for origin in ["http://192.168.0.1", "http://localhost.example", "http://127.0.0.256"] {
+      var remote = valid
+      remote["origin"] = origin
+      #expect(WebShareRequest(payload: remote) == nil)
+    }
   }
 
   @Test func aPageTitleCannotOpenTheShareSheet() throws {

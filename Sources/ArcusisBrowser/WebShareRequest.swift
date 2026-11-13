@@ -88,7 +88,21 @@ struct WebShareRequest: Identifiable, Equatable {
     let scheme = origin.scheme?.lowercased()
     if scheme == "https" { return true }
     let host = origin.host()?.lowercased() ?? ""
-    return scheme == "http" && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host)
+    guard scheme == "http" else { return false }
+    return host == "localhost" || host == "localhost."
+      || host.hasSuffix(".localhost") || host.hasSuffix(".localhost.")
+      || host == "::1" || host == "[::1]"
+      || Self.isIPv4Loopback(host)
+  }
+
+  private static func isIPv4Loopback(_ host: String) -> Bool {
+    let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+    guard octets.count == 4,
+      octets.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
+      let first = UInt8(octets[0]), first == 127,
+      octets.dropFirst().allSatisfy({ UInt8($0) != nil })
+    else { return false }
+    return true
   }
 
   private enum ShareLink {

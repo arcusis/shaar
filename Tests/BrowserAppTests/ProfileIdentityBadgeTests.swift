@@ -14,6 +14,18 @@ import Testing
     let secure = ConnectedAccount(
       provider: .google, email: "alex@example.test", photoURL: secureURL)
     #expect(ProfileIdentityBadge.remotePhotoURL(for: secure) == secureURL)
+    #expect(
+      AccountPhotoURLPolicy.allowsRedirect(
+        from: secureURL, to: URL(string: "https://images.example.test/redirected.png")!))
+    #expect(
+      !AccountPhotoURLPolicy.allowsRedirect(
+        from: secureURL, to: URL(string: "https://other.example.test/avatar.png")!))
+    #expect(
+      !AccountPhotoURLPolicy.allowsRedirect(
+        from: secureURL, to: URL(string: "http://images.example.test/avatar.png")!))
+    #expect(
+      AccountPhotoURLPolicy.allowsRedirect(
+        from: URL(string: "https://images.example.test:443/avatar.png")!, to: secureURL))
 
     for address in [
       "http://images.example.test/avatar.png",

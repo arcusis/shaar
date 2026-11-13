@@ -26,6 +26,7 @@ class SavePromptArgumentBoundsTests(unittest.TestCase):
         parser = self.source[start:end]
         self.assertIn("!bytes.data || bytes.size == 0", parser)
         self.assertIn("bytes.size > kMaximumArgumentsBytes", parser)
+        self.assertIn("base::JSON_PARSE_RFC", parser)
         self.assertIn("!parsed || !parsed->is_dict()", parser)
 
     def test_decision_request_rejects_unknown_fields_and_control_identifiers(self):

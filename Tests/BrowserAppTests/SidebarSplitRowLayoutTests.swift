@@ -15,6 +15,11 @@ struct SidebarSplitRowLayoutTests {
     #expect(!SidebarSplitRow.isActivationKey(.leftArrow))
   }
 
+  @Test func hoverAnimationRespectsReduceMotion() {
+    #expect(SidebarSplitRow.hoverAnimation(reduceMotion: true) == nil)
+    #expect(SidebarSplitRow.hoverAnimation(reduceMotion: false) != nil)
+  }
+
   @Test func titlesRequireActualPaneWidthAfterHandleAndSpacing() {
     #expect(
       !SidebarSplitRow.showsTitles(

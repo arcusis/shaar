@@ -116,7 +116,7 @@ enum DeviceChooserIntake {
   ) -> DeviceChooserRequest? {
     guard let profileID, pageURL.scheme == "http" || pageURL.scheme == "https",
       Set(payload.keys).isSubset(of: payloadKeys),
-      payload["schemaVersion"] as? Int == 1,
+      integer(payload["schemaVersion"]) == 1,
       let kind = payload["kind"] as? String,
       kind == "deviceChooserRequested" || kind == "deviceChooserUpdated",
       let id = payload["id"] as? String, isChooserID(id),

@@ -52,6 +52,12 @@ import Testing
   }
 }
 
+@Test func webShareRequestRejectsZeroPortOrigins() {
+  for origin in ["https://example.com:0", "http://localhost:0"] {
+    #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
+  }
+}
+
 @Test func webShareRequestRequiresRealBooleanActivationAndContent() {
   var payload = sharePayload()
   payload["userActivated"] = 1

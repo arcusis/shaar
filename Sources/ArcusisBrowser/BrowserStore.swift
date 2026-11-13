@@ -961,8 +961,9 @@ final class BrowserStore {
   func selectNumberedPage(_ number: Int) -> Bool {
     let space = session.selectedSpace
     let tabs = space.tabs
+    let orderedTabs = space.orderedTabs
     let favorites = session.favorites(for: space.profileID)
-    let pageIDs = tabs.map(\.id) + favorites.compactMap {
+    let pageIDs = orderedTabs.map(\.id) + favorites.compactMap {
       session.favoritePage(for: $0.id)?.tab.id
     }
     let index = number == 9 ? pageIDs.count - 1 : number - 1

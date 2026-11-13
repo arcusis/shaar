@@ -109,6 +109,28 @@ import Testing
   #expect(store.session.selectedPage?.tab.id != first)
 }
 
+@Test @MainActor func commandNumberFollowsNativeOrderAfterFolderMoves() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let first = session.open(URL(string: "https://folder-first.example")!)!
+  let second = session.open(URL(string: "https://folder-second.example")!)!
+  let third = session.open(URL(string: "https://folder-third.example")!)!
+  let folderOne = session.addFolder(name: "One", in: spaceID)!
+  let folderTwo = session.addFolder(name: "Two", in: spaceID)!
+  let movedFirst = session.moveTab(first, from: spaceID, to: spaceID, folderID: folderOne)
+  let movedSecond = session.moveTab(second, from: spaceID, to: spaceID, folderID: folderTwo)
+  #expect(movedFirst && movedSecond)
+  #expect(session.selectedSpace.orderedTabs.map(\.id) == [first, second, third])
+  let store = BrowserStore(session: session)
+  let firstShortcut = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+    windowNumber: 0, context: nil, characters: "1", charactersIgnoringModifiers: "1",
+    isARepeat: false, keyCode: 0)!
+
+  #expect(TabNumberShortcutRouting.route(firstShortcut, store: store))
+  #expect(store.session.selectedPage?.tab.id == first)
+}
+
 @Test @MainActor func controlTabCyclesToTheNextTabAndWraps() throws {
   let store = BrowserStore()
   for index in 1...3 {

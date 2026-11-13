@@ -814,6 +814,23 @@ class SupplyChainTests(unittest.TestCase):
                 EVIDENCE.collect(log, destination)
             self.assertEqual(list(external.iterdir()), [sentinel])
 
+    def test_evidence_rejects_symlinked_output_file_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory, \
+                tempfile.TemporaryDirectory() as output, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
+            (root / "initial.json").write_text("new report")
+            log = Path(output) / "probe.log"
+            log.write_text(f"Probe evidence: {root}\n")
+            evidence_dir = Path(output) / "evidence" / root.name
+            evidence_dir.mkdir(parents=True)
+            sentinel = Path(outside) / "keep.txt"
+            sentinel.write_text("preserve")
+            (evidence_dir / "initial.json").symlink_to(sentinel)
+            with self.assertRaisesRegex(ValueError, "evidence output file is a symlink"):
+                EVIDENCE.collect(log, Path(output) / "evidence")
+            self.assertEqual(sentinel.read_text(), "preserve")
+
 
 class SwiftReportTests(unittest.TestCase):
     def transcript(self, state="passed"):

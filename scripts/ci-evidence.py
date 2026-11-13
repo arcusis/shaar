@@ -54,7 +54,10 @@ def collect(log: Path, destination: Path) -> None:
         for file in root.iterdir():
             if (file.is_file() and not file.is_symlink() and file.suffix in (".json", ".log", ".png")
                     and file.stat().st_uid == os.getuid() and file.stat().st_size <= 20_000_000):
-                shutil.copyfile(file, output / file.name)
+                destination_file = output / file.name
+                if destination_file.is_symlink():
+                    raise ValueError(f"evidence output file is a symlink: {root.name}/{file.name}")
+                shutil.copyfile(file, destination_file)
 
 
 def main() -> None:

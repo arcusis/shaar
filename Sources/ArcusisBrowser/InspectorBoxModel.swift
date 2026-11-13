@@ -80,7 +80,7 @@ struct InspectorBoxModel: View {
             RoundedRectangle(cornerRadius: 2).strokeBorder(
               .primary.opacity(0.13),
               style: StrokeStyle(lineWidth: 0.5, dash: name == "margin" ? [3, 2] : [])))
-        InspectorL10n.text(name.capitalized).font(.system(size: 9)).foregroundStyle(.tertiary)
+        InspectorL10n.text(name.capitalized).font(.system(size: 9)).foregroundStyle(.secondary)
           .offset(x: 5, y: 3)
         if values.count == 4 {
           value(values[0], region: name, index: 0).position(x: width / 2, y: 10)
@@ -130,7 +130,7 @@ struct InspectorBoxModel: View {
     let zero = Double(text) == 0
     let label = Text(zero ? "—" : text)
       .font(.system(size: 10, weight: zero ? .regular : .medium, design: .monospaced))
-      .foregroundStyle(zero ? .tertiary : .primary).lineLimit(1)
+      .foregroundStyle(zero ? .secondary : .primary).lineLimit(1)
       .padding(.horizontal, 2).frame(minWidth: 16, minHeight: 16)
       .background(
         .primary.opacity(hovered == key ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 3)

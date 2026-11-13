@@ -12,6 +12,27 @@ import XCTest
 
 @MainActor
 final class AgentBridgeTests: XCTestCase {
+  func testOlderStatusRefreshCannotReplaceTheLatestReply() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    var replies: [AgentBridgeModel.Reply] = []
+    let model = AgentBridgeModel(target: target) { operation, _, reply in
+      if operation == .status { replies.append(reply) }
+    }
+
+    model.refresh()
+    model.refresh()
+    replies[1](
+      [
+        "schemaVersion": 1, "enabled": true, "port": 9222,
+        "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id", "connectionCount": 1,
+      ], nil)
+    replies[0](["schemaVersion": 1, "enabled": false, "port": 0, "connectionCount": 0], nil)
+
+    XCTAssertTrue(model.status.enabled)
+    XCTAssertTrue(model.isConnected)
+  }
+
   func testStatusRejectsSecretsAndInvalidPorts() throws {
     XCTAssertThrowsError(
       try AgentBridgeStatus.decode([

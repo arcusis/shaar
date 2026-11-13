@@ -675,6 +675,20 @@ class SupplyChainTests(unittest.TestCase):
                     INSTALL.archive_payload(pin, cache)
             self.assertFalse((cache / f"{digest}.archive").exists())
 
+    def test_installer_rejects_dangling_archive_cache_symlink_before_download(self):
+        payload = self.archive()
+        digest = hashlib.sha256(payload).hexdigest()
+        pin = {"url": "https://example.invalid/tool", "sha256": digest}
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            cache = Path(directory)
+            external_target = Path(outside) / "downloaded.archive"
+            (cache / f"{digest}.archive").symlink_to(external_target)
+            with patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(payload)) as fetch:
+                with self.assertRaisesRegex(ValueError, "Refusing symlinked cached archive"):
+                    INSTALL.archive_payload(pin, cache)
+                fetch.assert_not_called()
+            self.assertFalse(external_target.exists())
+
     def test_managed_python_install_retries_only_transient_download_failures(self):
         calls = []
         sleeps = []

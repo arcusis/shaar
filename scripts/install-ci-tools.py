@@ -43,6 +43,8 @@ def verify_archive(payload: bytes, digest: str, name: str) -> None:
 
 
 def read_verified_cached_archive(cache_path: Path, digest: str) -> Optional[bytes]:
+    if cache_path.is_symlink():
+        raise ValueError(f"Refusing symlinked cached archive: {cache_path}")
     if not cache_path.is_file():
         return None
     if cache_path.stat().st_size > MAX_ARCHIVE_BYTES:

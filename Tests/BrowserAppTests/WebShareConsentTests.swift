@@ -225,6 +225,16 @@ struct WebShareConsentTests {
       service, didFailToShareItems: ["Shared item"],
       error: NSError(domain: "WebShareConsentTests", code: 1))
     systemPicker.sharingService(service, didShareItems: ["Shared item"])
+    #expect(outcomes == [false])
+  }
+
+  @Test func dismissingTheSystemPickerCancelsTheShareOnce() {
+    let systemPicker = WebShareSystemPicker(items: ["Shared item"])
+    var outcomes: [Bool] = []
+    systemPicker.outcome.onFinish = { outcomes.append($0) }
+
+    systemPicker.sharingServicePicker(systemPicker.picker, didChoose: nil)
+    systemPicker.outcome.finish(true)
 
     #expect(outcomes == [false])
   }

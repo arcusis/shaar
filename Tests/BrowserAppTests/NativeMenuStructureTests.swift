@@ -50,6 +50,21 @@ import Testing
   #expect(workspace.workspace.windows.map(\.id) == originalWindowIDs)
 }
 
+@Test @MainActor func nextAndPreviousWindowCommandsCycleWithoutPresentingWindows() {
+  let first = NSWindow(contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
+  let second = NSWindow(contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
+  let third = NSWindow(contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
+  var activated: NSWindow?
+
+  let next = NativeBrowserHost.cycledWindow(
+    from: first, among: [first, second, third], backwards: false, activate: { activated = $0 })
+  let previous = NativeBrowserHost.cycledWindow(
+    from: first, among: [first, second, third], backwards: true)
+  #expect(next === second && activated === second)
+  #expect(previous === third)
+  #expect(!first.isVisible && !second.isVisible && !third.isVisible)
+}
+
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared
   let menu = NativeBrowserHost.makeMenu(target: application)
@@ -104,6 +119,10 @@ import Testing
   #expect(item(.downloads)?.menu?.title == "File")
   #expect(item(.extensions)?.menu?.title == "Extensions")
   #expect(item(.minimizeWindow)?.menu?.title == "Window")
+  #expect(item(.nextWindow)?.menu?.title == "Window")
+  #expect(item(.nextWindow)?.keyEquivalent == "`")
+  #expect(item(.nextWindow)?.keyEquivalentModifierMask == .command)
+  #expect(item(.previousWindow)?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item(.help)?.menu?.title == "Help")
   #expect(item(.checkForUpdates)?.menu?.title == "Shaar")
   #expect(item(.checkForUpdates)?.title == "Check for Updates…")

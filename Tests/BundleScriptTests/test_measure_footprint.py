@@ -27,6 +27,14 @@ def thread(total, frames, trailer=""):
 
 
 class MeasureFootprintSampleTests(unittest.TestCase):
+    def test_sample_duration_must_be_positive_integer(self):
+        self.assertEqual(measure_footprint.positive_seconds("15"), 15)
+        for value in ("0", "-1", "1.5", "invalid"):
+            with self.subTest(value=value), self.assertRaises(
+                measure_footprint.argparse.ArgumentTypeError
+            ):
+                measure_footprint.positive_seconds(value)
+
     def test_busy_parent_outranks_a_smaller_child(self):
         parsed = measure_footprint.parse_main_thread_sample(thread(100, [
             "    + 100 doWork  (in Shaar)",

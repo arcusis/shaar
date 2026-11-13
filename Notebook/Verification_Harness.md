@@ -39,6 +39,8 @@ Related: [[Source_And_Native_Verification]], [[Engine_Interop_Boundary]], [[Buil
 
 Build the verification bundle once with `nice -n 15 bash scripts/bundle-app.sh --with-engine --verification`, then run `python3 scripts/measure-footprint.py --sample-seconds 15`. The result is written to `build/performance-baseline.json`. RSS is summed from `ps` rows for the app and its descendants; physical footprint, energy and physical paint are not measured. The verification app size includes its harness executable and must not be reported as the shipping bundle size.
 
+`--sample-seconds` must be a positive integer; invalid durations are rejected before the verification app is launched.
+
 Production head `9d9d675a`, two runs measured 2026-11-06 on arm64 Mac. Values are mean across runs; parentheses show the observed cross-run or sample range:
 
 | Tabs | Launch to all pages ready | Process-tree RSS mean (range) | Idle CPU mean (range) | Mean process count |

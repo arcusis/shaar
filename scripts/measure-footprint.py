@@ -108,6 +108,16 @@ def parse_tab_counts(text):
     return counts
 
 
+def positive_seconds(text):
+    try:
+        seconds = int(text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer number of seconds") from error
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return seconds
+
+
 def main_thread_sample(pid, copy_path=None):
     """Two-second sample of the Swift process main thread while the page is idle."""
     handle = tempfile.NamedTemporaryFile(
@@ -405,7 +415,7 @@ def main():
     parser.add_argument(
         "--output", type=Path, default=Path("build/performance-baseline.json")
     )
-    parser.add_argument("--sample-seconds", type=int, default=15)
+    parser.add_argument("--sample-seconds", type=positive_seconds, default=15)
     parser.add_argument(
         "--tab-counts", default="1,10,30",
         help="Comma-separated saved-tab counts. Allowed: 1, 10, 30, 50, 100.",

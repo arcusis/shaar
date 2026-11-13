@@ -12,6 +12,14 @@ struct SidebarDropHint: View {
   let symbol: String
   let isTargeted: Bool
 
+  static func targetAnimation(reduceMotion: Bool) -> Animation? {
+    reduceMotion ? nil : .easeOut(duration: 0.12)
+  }
+
+  private var reduceSidebarMotion: Bool {
+    accessibilityOverrides.reduceMotion ?? reduceMotion
+  }
+
   var body: some View {
     Label(title, systemImage: symbol)
       .font(.system(size: 12, weight: .medium))
@@ -28,9 +36,9 @@ struct SidebarDropHint: View {
             isTargeted ? Color.accentColor : Color.primary.opacity(0.22),
             style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
       )
-      .animation(.easeOut(duration: 0.12), value: isTargeted)
+      .animation(Self.targetAnimation(reduceMotion: reduceSidebarMotion), value: isTargeted)
       .transition(
-        reduceMotion || accessibilityOverrides.reduceMotion == true
+        reduceSidebarMotion
           ? .opacity : .opacity.combined(with: .scale(scale: 0.96))
       )
       .allowsHitTesting(false)

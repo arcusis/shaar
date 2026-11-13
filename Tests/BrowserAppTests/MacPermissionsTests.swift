@@ -35,3 +35,13 @@ import Testing
   #expect(notifications.scheme == "x-apple.systempreferences")
   #expect(notifications.absoluteString.contains("com.apple.Notifications-Settings.extension?id="))
 }
+
+@Test func permissionStatusesHaveDistinctLabels() {
+  #expect(MacPermissionStatus.allowed.label == "Allowed")
+  #expect(MacPermissionStatus.denied.label == "Not allowed")
+  #expect(MacPermissionStatus.notDetermined.label == "Not asked yet")
+}
+
+@Test func notificationStatusAvoidsSystemLookupOutsideAnAppBundle() async {
+  #expect(await MacPermissionStatusReader.status(of: .notifications) == .notDetermined)
+}

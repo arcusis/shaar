@@ -165,3 +165,12 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
             cache.symlink_to(target)
             with patch.dict(fetcher.PINS, {"react": pin}):
                 self.assertFalse(fetcher.archive_matches("react", cache))
+
+    def test_oversized_pinned_cache_is_rejected_before_reading(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "react.crx"
+            with cache.open("wb") as output:
+                output.truncate(fetcher.MAX_ARCHIVE_SIZE + 1)
+            with patch.object(Path, "read_bytes", side_effect=AssertionError("oversized cache read")):
+                self.assertFalse(fetcher.archive_matches("react", cache))

@@ -10,7 +10,9 @@ public struct BrowserExtension: Identifiable, Equatable, Sendable {
   public let version: String
 
   public init?(id: String, name: String, version: String) {
-    guard Self.isValidID(id), !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+    guard Self.isValidID(id),
+      !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
       name.utf8.count <= 1024, !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
       version.utf8.count <= 128
     else { return nil }
@@ -59,7 +61,13 @@ public struct ExtensionInstallRequest: Identifiable, Equatable, Sendable {
   ) {
     guard !id.isEmpty, id.utf8.count <= 128, !browserExtension.name.isEmpty,
       browserExtension.name.utf8.count <= 1024, browserExtension.version.utf8.count <= 128,
-      permissions.count <= 128, permissions.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 8192 }),
+      permissions.count <= 128,
+      permissions.allSatisfy({ permission in
+        !permission.isEmpty && permission.utf8.count <= 8192
+          && !permission.unicodeScalars.contains(where: {
+            CharacterSet.controlCharacters.contains($0)
+          })
+      }),
       permissions.reduce(0, { $0 + $1.utf8.count }) <= 65536,
       NavigationInput.isWebURL(sourceURL)
     else { return nil }

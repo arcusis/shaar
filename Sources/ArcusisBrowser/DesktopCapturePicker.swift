@@ -107,8 +107,10 @@ struct DesktopCapturePicker: View {
     )
     var screens: [DesktopCaptureSource] = []
     let wantsScreen = request.allows(.display) || request.allows(.window)
-    var screenAccessFailed =
-      wantsScreen && !hasScreenRecordingAccess() && !requestScreenRecordingAccess()
+    let hasAccess = !wantsScreen || hasScreenRecordingAccess()
+    let screenAccessFailed =
+      wantsScreen && !hasAccess && !requestScreenRecordingAccess()
+    var screenEnumerationFailed = false
     if wantsScreen && !screenAccessFailed {
       do {
         if let screenSourcesProvider {
@@ -119,14 +121,15 @@ struct DesktopCapturePicker: View {
         guard !Task.isCancelled else { return }
       } catch {
         guard !Task.isCancelled else { return }
-        screenAccessFailed = true
+        screenEnumerationFailed = true
       }
     }
     guard !Task.isCancelled else { return }
     let listing = DesktopCaptureCatalog.listing(
       tabs: DesktopCaptureCatalog.allowedSources(tabs, for: request),
       screens: DesktopCaptureCatalog.allowedSources(screens, for: request),
-      screenAccessFailed: screenAccessFailed)
+      screenAccessFailed: screenAccessFailed,
+      screenEnumerationFailed: screenEnumerationFailed)
     sources = listing.sources
     store.setDesktopCaptureSources(listing.sources.map(\.id), for: request.id)
     error = listing.error.map(PanelsL10n.string)

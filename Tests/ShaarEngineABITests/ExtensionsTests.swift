@@ -283,4 +283,25 @@ struct ShaarExtensionsAdapterTests {
       _ = try await ShaarExtensionsAdapter(shaar: fake).list(profileID: UUID())
     }
   }
+
+  @Test func extensionResponseFlagsRejectNumericJSONValues() async throws {
+    let list = FakeExtensionsTransport(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Extension","version":"1","enabled":1,"mayDisable":true,"incognitoEnabled":false,"source":0}]}"#)
+    await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+      _ = try await ShaarExtensionsAdapter(shaar: list).list(profileID: UUID())
+    }
+
+    let manage = FakeExtensionsTransport(#"{"schemaVersion":1,"updated":1}"#)
+    await #expect(throws: ShaarExtensionsAdapterError.mutationNotConfirmed) {
+      try await ShaarExtensionsAdapter(shaar: manage).manage(
+        profileID: UUID(), action: .setEnabled("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", true))
+    }
+
+    let profile = UUID()
+    let install = FakeExtensionsTransport(#"{"schemaVersion":1,"installed":1}"#)
+    let result = await ShaarExtensionsAdapter(shaar: install).installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1", profileIDs: [profile])
+    #expect(result.installed.isEmpty)
+    #expect(result.failed == [profile])
+  }
 }

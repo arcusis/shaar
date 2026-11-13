@@ -1,6 +1,7 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Could not load this profile. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load this profile. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את הפרופיל. כדאי לנסות שוב."}}}},
     "Previous Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Previous Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הקודם"}}}},
     "Next Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Next Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הבא"}}}},
     "Browser sidebar": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Browser sidebar"}},"he":{"stringUnit":{"state":"translated","value":"סרגל הצד של הדפדפן"}}}},

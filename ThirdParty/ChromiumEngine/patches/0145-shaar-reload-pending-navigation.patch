@@ -1,0 +1,59 @@
+--- a/chrome/browser/shaar/navigation/shaar_navigation.cc
++++ b/chrome/browser/shaar/navigation/shaar_navigation.cc
+@@ -135,10 +135,28 @@
+ shaar_error_code Reload(content::NavigationController* controller,
+                         bool bypass_cache) {
+   if (!controller) return SHAAR_NOT_FOUND;
++  content::NavigationEntry* pending_entry = controller->GetPendingEntry();
++  if (pending_entry) {
++    content::NavigationEntry* committed_entry = controller->GetLastCommittedEntry();
++    const GURL target = ReloadTargetURL(
++        pending_entry->GetURL(),
++        committed_entry ? committed_entry->GetURL() : GURL());
++    content::NavigationController::LoadURLParams params(target);
++    params.transition_type = ui::PAGE_TRANSITION_RELOAD;
++    params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE
++                                      : content::ReloadType::NORMAL;
++    params.should_replace_current_entry = true;
++    controller->LoadURLWithParams(params);
++    return SHAAR_OK;
++  }
+   controller->Reload(bypass_cache ? content::ReloadType::BYPASSING_CACHE
+                                   : content::ReloadType::NORMAL,
+                      true);
+   return SHAAR_OK;
++}
++
++GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url) {
++  return pending_url.is_valid() ? pending_url : last_committed_url;
+ }
+ 
+ shaar_error_code Stop(content::WebContents* contents) {
+--- a/chrome/browser/shaar/navigation/shaar_navigation.h
++++ b/chrome/browser/shaar/navigation/shaar_navigation.h
+@@ -40,6 +40,9 @@
+ shaar_error_code Go(content::NavigationController* controller, bool forward);
+ shaar_error_code Reload(content::NavigationController* controller,
+                         bool bypass_cache);
++// A reload requested while a navigation is pending restarts that destination
++// instead of falling back to the last committed entry.
++GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url);
+ shaar_error_code Stop(content::WebContents* contents);
+ std::string PageReadableURL(const GURL& url);
+ 
+--- a/chrome/browser/shaar/navigation/shaar_navigation_unittest.cc
++++ b/chrome/browser/shaar/navigation/shaar_navigation_unittest.cc
+@@ -120,6 +120,13 @@
+   EXPECT_FALSE(backend.did_bypass_cache);
+ }
+ 
++TEST(ShaarNavigationHandlerTest, ReloadDuringNavigationKeepsPendingDestination) {
++  const GURL committed("https://example.test/previous");
++  const GURL pending("https://example.test/slow");
++  EXPECT_EQ(ReloadTargetURL(pending, committed), pending);
++  EXPECT_EQ(ReloadTargetURL(GURL(), committed), committed);
++}
++
+ TEST(ShaarNavigationHandlerTest, StopIsDispatchedAndNullBackendIsNotFound) {
+   FakeBackend backend;
+   std::string reason;

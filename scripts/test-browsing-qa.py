@@ -157,7 +157,7 @@ def deliberate_renderer_kill(report: dict, crash_text: str, finished: datetime) 
             continue
         pids = row.get("signaledPIDs")
         for pid in pids if isinstance(pids, list) else []:
-            if isinstance(pid, int):
+            if isinstance(pid, int) and not isinstance(pid, bool):
                 signaled.add(pid)
         parsed = parse_signaled_at(row.get("signaledAt"))
         if parsed is not None:

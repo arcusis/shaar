@@ -194,6 +194,21 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, text_only, finished))
         self.assertTrue(PROBE.crash_counts_against_suite("windows", report, match, finished))
 
+    def test_boolean_signal_pid_cannot_hide_a_renderer_crash(self):
+        finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
+        report = {"rows": [
+            {
+                "name": "renderer-kill",
+                "status": "pass",
+                "signaledPIDs": [True],
+                "signaledAt": "2026-11-10T12:00:05+00:00",
+            },
+            {"name": "renderer-recover", "status": "pass"},
+        ]}
+        crash = '{"pid" : 1, "captureTime" : "2026-11-10 07:00:10.0000 -0500"}'
+        self.assertFalse(PROBE.deliberate_renderer_kill(report, crash, finished))
+        self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, crash, finished))
+
     def test_make_clip_timeout_returns_no_bytes(self):
         def expired(*_args, **_kwargs):
             raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=30)

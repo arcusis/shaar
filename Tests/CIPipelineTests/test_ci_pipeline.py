@@ -1032,6 +1032,13 @@ class EngineTransferTests(unittest.TestCase):
         self.assertEqual(matching_pr_bundle_run_id(response, 448, "arcusis/shaar"), "11")
         self.assertEqual(matching_pr_bundle_run_id(response, 448, "other/shaar"), "")
 
+    def test_merge_group_bundle_lookup_is_bounded_and_fail_open(self):
+        workflow = (ROOT / ".github/workflows/ci-engine-bundle.yml").read_text()
+        lookup = workflow.split("      - name: Find the matching successful PR bundle for this merge group\n", 1)[1]
+        lookup = lookup.split("      - name: Download the verified bundle artifact", 1)[0]
+        self.assertIn("continue-on-error: true", lookup)
+        self.assertIn("timeout-minutes: 2", lookup)
+
     def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil

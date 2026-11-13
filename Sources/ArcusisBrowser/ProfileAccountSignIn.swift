@@ -345,6 +345,7 @@ private struct ProfileAccountSignInView: View {
         Spacer()
         Text(title).font(.callout).foregroundStyle(.secondary).lineLimit(1)
         Button(SettingsL10n.string("Cancel"), role: .cancel, action: cancel)
+          .keyboardShortcut(.cancelAction)
       }
       .padding(10)
       .background(Color(nsColor: .windowBackgroundColor))

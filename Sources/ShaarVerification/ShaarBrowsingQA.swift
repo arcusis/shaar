@@ -943,7 +943,7 @@ import Foundation
     return false
   }
 
-  private static func wholeNumber(_ value: String?) -> Int? {
+  static func wholeNumber(_ value: String?) -> Int? {
     guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
       return nil
     }

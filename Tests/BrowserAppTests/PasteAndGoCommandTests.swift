@@ -67,3 +67,24 @@ import Testing
     PasteAndGoCommand.route(in: pasteboard, store: store, searchEngine: .google) { _ in false })
   #expect(store.session.selectedPage?.tab.url == destination)
 }
+
+@Test @MainActor func pasteAndGoNavigatesTheSelectedPrivatePage() throws {
+  let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoPrivateSelectedPageTests"))
+  pasteboard.clearContents()
+  let destination = URL(string: "https://private-selected-page.example/path")!
+  #expect(pasteboard.setString(destination.absoluteString, forType: .string))
+  let session = try BrowserSession.privateWindow(sourceProfileID: UUID(), firstTabID: UUID())
+  let store = BrowserStore(privateSession: session)
+  let currentURL = URL(string: "https://private-current-page.example/")!
+  store.perform(.open(currentURL))
+  var navigated: URL?
+
+  #expect(store.session.selectedPage != nil)
+  #expect(
+    PasteAndGoCommand.route(in: pasteboard, store: store, searchEngine: .google) { url in
+      navigated = url
+      return true
+    })
+  #expect(navigated == destination)
+  #expect(store.session.selectedPage?.tab.url == currentURL)
+}

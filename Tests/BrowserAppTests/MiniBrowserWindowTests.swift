@@ -13,15 +13,15 @@ struct MiniBrowserWindowTests {
     #expect(
       MiniBrowserController.navigationURL(for: "  example.com/path  ")
         == URL(string: "https://example.com/path"))
+    #expect(
+      MiniBrowserController.navigationURL(for: " http://example.com ")
+        == URL(string: "http://example.com"))
   }
 
   @Test func explicitUnsupportedSchemesAndSearchTextAreRejected() {
     for input in [
-      "javascript:alert(1)",
-      "mailto:person@example.com",
-      "file:///tmp/secret",
-      "data:text/html,hello",
-      "search terms",
+      "", "   ", "javascript:alert(1)", "mailto:person@example.com", "file:///tmp/secret",
+      "data:text/html,hello", "search terms", "shaar://settings",
     ] {
       #expect(MiniBrowserController.navigationURL(for: input) == nil, "input: \(input)")
     }
@@ -32,4 +32,5 @@ struct MiniBrowserWindowTests {
       MiniBrowserController.navigationURL(for: "http://localhost:8080/path")
         == URL(string: "http://localhost:8080/path"))
   }
+
 }

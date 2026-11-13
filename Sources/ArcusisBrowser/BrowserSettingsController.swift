@@ -21,6 +21,7 @@ final class BrowserSettingsState {
   private(set) var selectedProfileID: UUID?
   private(set) var downloadDirectoryRevision = 0
   private(set) var downloadDirectoryErrors: [UUID: String] = [:]
+  private var downloadDirectoryRequests: [UUID: UUID] = [:]
   private var didPresent = false
   let downloadDirectorySettingsEnabled: Bool
   private let applyDownloadDirectoryToEngine: ProfileDownloadDirectoryApplier?
@@ -232,29 +233,38 @@ final class BrowserSettingsState {
       workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }),
       let applyDownloadDirectoryToEngine
     else { return false }
+    let request = UUID()
+    downloadDirectoryRequests[profileID] = request
     if let directory, !DownloadDirectoryPolicy.validate(directory, bundleURL: Bundle.main.bundleURL)
     {
       downloadDirectoryErrors[profileID] = SettingsL10n.string(
         "The download folder could not be changed. Try again.")
+      downloadDirectoryRequests[profileID] = nil
       return false
     }
     do {
       let acknowledged = try await applyDownloadDirectoryToEngine(profileID, directory)
+      guard downloadDirectoryRequests[profileID] == request else { return false }
       guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+        downloadDirectoryRequests[profileID] = nil
         return false
       }
       if directory != nil && acknowledged == nil {
         downloadDirectoryErrors[profileID] = SettingsL10n.string(
           "The download folder could not be changed. Try again.")
+        downloadDirectoryRequests[profileID] = nil
         return false
       }
       preferences.setDownloadDirectory(directory == nil ? nil : acknowledged, for: profileID)
       downloadDirectoryErrors[profileID] = nil
       downloadDirectoryRevision &+= 1
+      downloadDirectoryRequests[profileID] = nil
       return true
     } catch {
+      guard downloadDirectoryRequests[profileID] == request else { return false }
       downloadDirectoryErrors[profileID] = SettingsL10n.string(
         "The download folder could not be changed. Try again.")
+      downloadDirectoryRequests[profileID] = nil
       return false
     }
   }

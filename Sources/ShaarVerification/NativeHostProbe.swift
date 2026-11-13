@@ -113,6 +113,25 @@ enum NativeHostViewportValidation {
     }.first
   }
 
+  static func documentFields(from document: [String: Any]) -> HostViewportDocumentFields? {
+    guard document["fixture"] as? String == "v1",
+      let instance = document["instance"] as? String,
+      let cookie = document["cookie"] as? String,
+      let accountID = accountID(fromCookie: cookie),
+      let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
+      let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
+      let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,
+      let pageFocusEventCount = (document["pageFocusEventCount"] as? NSNumber)?.intValue,
+      let pageBlurEventCount = (document["pageBlurEventCount"] as? NSNumber)?.intValue,
+      let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue
+    else { return nil }
+    return HostViewportDocumentFields(
+      accountID: accountID, instance: instance, cssWidth: cssWidth, cssHeight: cssHeight,
+      resizeEventCount: resizeEventCount, pageFocusEventCount: pageFocusEventCount,
+      pageBlurEventCount: pageBlurEventCount, devicePixelRatio: devicePixelRatio)
+  }
+  }
+
   static func sameCSSSize(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
     abs(lhs.width - rhs.width) <= 1 && abs(lhs.height - rhs.height) <= 1
   }
@@ -120,6 +139,17 @@ enum NativeHostViewportValidation {
   static func deliveredResizeEvent(from previousCount: Int, to currentCount: Int) -> Bool {
     currentCount > previousCount
   }
+}
+
+struct HostViewportDocumentFields: Equatable {
+  let accountID: String
+  let instance: String
+  let cssWidth: Double
+  let cssHeight: Double
+  let resizeEventCount: Int
+  let pageFocusEventCount: Int
+  let pageBlurEventCount: Int
+  let devicePixelRatio: Double
 }
 
 /// Exercises the production host class without ordering windows onscreen or sending OS input.
@@ -978,16 +1008,7 @@ final class NativeHostProbe {
     try await settleViewportLayout(context)
     try captureNativeHitTesting(stage, context: context)
     let document = try await document(tabID)
-    guard document["fixture"] as? String == "v1",
-      let instance = document["instance"] as? String,
-      let cookie = document["cookie"] as? String,
-      let accountID = NativeHostViewportValidation.accountID(fromCookie: cookie),
-      let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
-      let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
-      let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,
-      let pageFocusEventCount = (document["pageFocusEventCount"] as? NSNumber)?.intValue,
-      let pageBlurEventCount = (document["pageBlurEventCount"] as? NSNumber)?.intValue,
-      let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue,
+    guard let fields = NativeHostViewportValidation.documentFields(from: document),
       let page = primary.runtime.view(forTabID: tabID.uuidString),
       let container = pageContainer(in: context.hosting, page: page),
       page.superview === container
@@ -1013,16 +1034,16 @@ final class NativeHostProbe {
       && containerFrame.maxX <= expectedMaxX + tolerance
     let pageMatchesContainer = pageFrame == containerBounds
     let cssMatchesNativePoints =
-      abs(cssWidth - Double(pageFrame.width)) <= 1
-      && abs(cssHeight - Double(pageFrame.height)) <= 1
+      abs(fields.cssWidth - Double(pageFrame.width)) <= 1
+      && abs(fields.cssHeight - Double(pageFrame.height)) <= 1
     return HostViewportSample(
       stage: stage, windowID: context.id, tabID: tabID,
       profileID: context.store.session.selectedSpace.profileID,
-      accountID: accountID, documentInstance: instance,
-      innerWidthCSSPixels: cssWidth, innerHeightCSSPixels: cssHeight,
-      resizeEventCount: resizeEventCount,
-      pageFocusEventCount: pageFocusEventCount, pageBlurEventCount: pageBlurEventCount,
-      devicePixelRatio: devicePixelRatio,
+      accountID: fields.accountID, documentInstance: fields.instance,
+      innerWidthCSSPixels: fields.cssWidth, innerHeightCSSPixels: fields.cssHeight,
+      resizeEventCount: fields.resizeEventCount,
+      pageFocusEventCount: fields.pageFocusEventCount, pageBlurEventCount: fields.pageBlurEventCount,
+      devicePixelRatio: fields.devicePixelRatio,
       backingScaleFactor: Double(context.window.backingScaleFactor),
       sidebarVisible: context.store.sidebarIsVisible,
       windowFramePoints: HostViewportRect(context.window.frame),

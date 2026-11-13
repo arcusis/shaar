@@ -364,6 +364,7 @@ struct BrowserSettingsView: View {
           SettingsL10n.string("Sites that never sleep"), text: $neverSleepHosts, axis: .vertical
         )
         .lineLimit(2...4)
+        .accessibilityLabel(SettingsL10n.string("Sites that never sleep"))
         .accessibilityIdentifier("settings-never-sleep-hosts")
         Text(
           SettingsL10n.string(

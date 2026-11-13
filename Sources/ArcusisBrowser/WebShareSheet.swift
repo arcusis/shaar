@@ -24,12 +24,15 @@ struct WebShareSheet: View {
   /// Shows the system picker only for a visible window. A hidden window cancels.
   @MainActor
   static func finish(_ request: WebShareRequest, store: BrowserStore, anchor: WebShareAnchor) {
+    guard anchor.presentationGate.begin() else { return }
     guard let view = anchor.view, view.window?.isVisible == true else {
+      anchor.presentationGate.finish()
       store.resolveWebShare(request.id, outcome: .cancelled)
       return
     }
     let picker = WebShareSystemPicker(items: request.sharingItems)
     picker.outcome.onFinish = { shared in
+      anchor.presentationGate.finish()
       let outcome: WebShareOutcome = shared ? .shared : .cancelled
       store.resolveWebShare(request.id, outcome: outcome)
     }
@@ -87,6 +90,22 @@ struct WebShareSheetContent: View {
 final class WebShareAnchor {
   weak var view: NSView?
   var picker: WebShareSystemPicker?
+  let presentationGate = WebSharePresentationGate()
+}
+
+@MainActor
+final class WebSharePresentationGate {
+  private(set) var isActive = false
+
+  func begin() -> Bool {
+    guard !isActive else { return false }
+    isActive = true
+    return true
+  }
+
+  func finish() {
+    isActive = false
+  }
 }
 
 struct WebShareAnchorView: NSViewRepresentable {

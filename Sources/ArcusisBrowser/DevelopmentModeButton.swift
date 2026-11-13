@@ -60,7 +60,7 @@ struct DevelopmentModeButton: View {
   private func run(_ action: SiteAction, for target: SiteControlTarget) {
     Task {
       do { try await engine.perform(action, for: target) } catch {
-        engine.reportNotice(error.localizedDescription)
+        engine.reportNotice(action.failureNotice())
       }
     }
   }

@@ -112,10 +112,10 @@ extension PrivatePageSession {
     for space in session.spaces {
       for tab in space.tabs { profileByTabID[tab.id] = space.profileID }
     }
-    let favoriteProfiles = Dictionary(
+    let profileByFavoriteID = Dictionary(
       uniqueKeysWithValues: session.favorites.map { ($0.id, $0.profileID) })
     for page in session.favoritePages {
-      if let profileID = favoriteProfiles[page.favoriteID] {
+      if let profileID = profileByFavoriteID[page.favoriteID] {
         profileByTabID[page.tab.id] = profileID
       }
     }
@@ -129,7 +129,7 @@ extension PrivatePageSession {
       hasAgentConnection: { _ in false },
       profileIsDownloading: { id in
         guard let profile = profileByTabID[id] else { return false }
-        if let cached = downloadingByProfile[profile] { return cached }
+        if let isDownloading = downloadingByProfile[profile] { return isDownloading }
         let isDownloading = isProfileDownloading(profile)
         downloadingByProfile[profile] = isDownloading
         return isDownloading

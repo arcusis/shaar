@@ -244,8 +244,17 @@ def strip_comments(text: str) -> str:
             index = end
             continue
         if text.startswith("/*", index):
-            end = text.find("*/", index + 2)
-            end = len(text) if end == -1 else end + 2
+            end = index + 2
+            depth = 1
+            while end < len(text) and depth:
+                if text.startswith("/*", end):
+                    depth += 1
+                    end += 2
+                elif text.startswith("*/", end):
+                    depth -= 1
+                    end += 2
+                else:
+                    end += 1
             for position in range(index, end):
                 if result[position] != "\n":
                     result[position] = " "

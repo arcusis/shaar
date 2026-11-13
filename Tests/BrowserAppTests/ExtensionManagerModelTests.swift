@@ -82,12 +82,31 @@ struct ExtensionManagerModelTests {
       .onSite, extensionID: extensionID, origin: "https://example.test", tabID: nil)
     model.setDeveloperMode(true)
     #expect(runtime.replies.count == 2)
-
     runtime.replies[1](nil, 0)
     #expect(model.status == ExtensionInstallNotice.developerModeFailed)
     runtime.replies[0](nil, 1)
     #expect(model.status == ExtensionInstallNotice.developerModeFailed)
   }
+
+  @Test func olderDeveloperModeFailureCannotReplaceNewerAccessSuccess() {
+    let runtime = DelayedSiteAccessRuntime()
+    let profileID = UUID()
+    let preferences = BrowserPreferencesStore(
+      fileURL: FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json"))
+    let model = ExtensionManagerModel.shared(
+      runtime: runtime, preferences: preferences, profileID: profileID)
+    let extensionID = String(repeating: "a", count: 32)
+
+    model.setDeveloperMode(true)
+    model.setSiteAccess(.onClick, extensionID: extensionID, origin: "https://example.test", tabID: nil)
+    runtime.complete(1, json: #"{"schemaVersion":1,"updated":true}"#, code: 0)
+    runtime.complete(0, json: nil, code: 1)
+
+    #expect(model.status == nil)
+    #expect(!model.developerMode)
+    #expect(!preferences.extensionDeveloperMode(for: profileID))
+  }
+
 }
 
 @MainActor

@@ -268,8 +268,6 @@ def run_engine_shard(checks: Commands, shard: str, iterations: int) -> None:
         return
     for mode, repetitions in modes:
         run_probe_iterations(checks, mode, repetitions)
-        if checks.results[-1]["status"]:
-            return
 
 
 def run_visuals(checks: Commands, shard: str) -> None:

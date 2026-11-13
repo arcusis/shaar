@@ -128,12 +128,15 @@ class CatalogValidatorTests(unittest.TestCase):
             "Connected agents", "No agent is connected to this tab.",
             "Revoke ends this tab's session for every connected agent.",
             "Retry disconnect", "Disconnect", "The agent bridge returned an invalid reply.",
+            "Agent control requires a web page.",
         )
         for key in keys:
             with self.subTest(key=key):
                 translation = data[key]["localizations"]["he"]["stringUnit"]["value"]
                 self.assertNotEqual(translation, key)
         self.assertEqual(set(data["%d connected agents"]["localizations"]["he"]["variations"]["plural"]), {"one", "two", "other"})
+        model = (ROOT / "Sources/ArcusisBrowser/AgentBridgeModel.swift").read_text(encoding="utf-8")
+        self.assertIn('failure = ShellL10n.string("Agent control requires a web page.")', model)
         self.assertEqual(data["%d connected agents"]["localizations"]["he"]["variations"]["plural"]["one"]["stringUnit"]["value"], "סוכן מחובר אחד")
 
     def test_bridge_english_single_download_keeps_numeric_one(self):

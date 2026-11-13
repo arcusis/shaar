@@ -177,7 +177,7 @@ final class AgentBridgeModel {
     guard ["http", "https"].contains(target.url.scheme?.lowercased() ?? ""),
       target.origin != nil
     else {
-      failure = "Agent control requires a web page."
+      failure = ShellL10n.string("Agent control requires a web page.")
       return
     }
     busy = true

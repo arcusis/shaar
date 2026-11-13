@@ -226,10 +226,12 @@ final class PrivateBrowserHost {
         }
         return
       }
-      let requests = self.pendingWindowRequests.removeValue(forKey: contextID) ?? []
-      for (window, tab) in requests {
+      let requests = self.pendingWindowRequests[contextID] ?? []
+      for (index, (window, tab)) in requests.enumerated() {
+        self.pendingWindowRequests[contextID] = Array(requests.dropFirst(index + 1))
         self.createWindow(context: contextID, source: source, window: window, tab: tab)
       }
+      self.pendingWindowRequests.removeValue(forKey: contextID)
     }
   }
 
@@ -414,7 +416,8 @@ final class PrivateBrowserHost {
   }
 
   private func releaseEmptyContext(_ context: String, source: String) {
-    guard windowsByContext[context]?.isEmpty == true,
+    guard pendingWindowRequests[context]?.isEmpty != false,
+      windowsByContext[context]?.isEmpty == true,
       contextsBySource[source] == context
     else { return }
     windowsByContext.removeValue(forKey: context)

@@ -129,6 +129,22 @@ struct ProfilePrivacyTests {
       model.failure == SettingsL10n.string("Could not load profile privacy settings. Try again."))
   }
 
+  @Test func cancelledProfileLoadDoesNotShowAFailure() async {
+    let backend = ProfileSettingsStub()
+    let id = UUID()
+    backend.suspendedProfile = id
+    let model = ProfilePrivacyModel(profileID: id, backend: backend)
+    let load = Task { await model.load() }
+    for _ in 0..<100 where !model.busy { await Task.yield() }
+    #expect(model.busy)
+
+    load.cancel()
+    await load.value
+
+    #expect(!model.busy)
+    #expect(model.failure == nil)
+  }
+
   @Test func supportedCookiePolicyReadsBackAndFailureKeepsPreviousValue() async {
     let backend = ProfileSettingsStub()
     let id = UUID()
@@ -431,6 +447,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   var ignoreCookieWrites = false
   var managedCookieProfiles: Set<UUID> = []
   var delayedProfile: UUID?
+  var suspendedProfile: UUID?
   var loadContinuation: CheckedContinuation<Void, Never>?
 
   func record(_ action: String, _ id: UUID) throws {
@@ -439,6 +456,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   }
   func loadProfile(_ id: UUID) async throws {
     try record("load", id)
+    if id == suspendedProfile { try await Task.sleep(for: .seconds(60)) }
     if id == delayedProfile {
       await withCheckedContinuation { loadContinuation = $0 }
     }

@@ -72,7 +72,14 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
         if (url.hash && target.endsWith(".html")) {
           const targetDocument =
             target === file ? document : parseHTML(readFileSync(target, "utf8")).document;
-          if (!targetDocument.getElementById(decodeURIComponent(url.hash.slice(1))))
+          let fragment: string;
+          try {
+            fragment = decodeURIComponent(url.hash.slice(1));
+          } catch {
+            errors.push(`${path}: invalid fragment ${value}`);
+            continue;
+          }
+          if (!targetDocument.getElementById(fragment))
             errors.push(`${path}: missing fragment ${value}`);
         }
       }

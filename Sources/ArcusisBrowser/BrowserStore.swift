@@ -1734,6 +1734,9 @@ final class BrowserStore {
     sleepingTabIDs.formIntersection(liveTabIDs)
     requestedTabCloses.formIntersection(liveTabIDs)
     if let tabDrag, !liveTabIDs.contains(tabDrag.tabID) { self.tabDrag = nil }
+    if case .tab(_, _, let tabID) = sidebarDrag, !liveTabIDs.contains(tabID) {
+      sidebarDrag = nil
+    }
     if let pendingSplitPlacement, !liveTabIDs.contains(pendingSplitPlacement.target) {
       dismissCommand()
     }

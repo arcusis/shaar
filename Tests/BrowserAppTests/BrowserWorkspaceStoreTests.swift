@@ -49,16 +49,19 @@ struct BrowserWorkspaceStoreTests {
     source.pendingSplitPlacement = SplitPlacement(target: tabID, edge: .right)
     let transfer = SidebarTransfer.tab(
       sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID, tabID: tabID)
+    source.sidebarDrag = transfer
 
     #expect(source.sleepingTabIDs == [tabID])
     #expect(source.tabDrag?.tabID == tabID)
     #expect(source.splitTabRecency == [tabID])
     #expect(source.pendingSplitPlacement?.target == tabID)
+    #expect(source.sidebarDrag == transfer)
     #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
     #expect(source.sleepingTabIDs.isEmpty)
     #expect(source.tabDrag == nil)
     #expect(source.splitTabRecency.isEmpty)
     #expect(source.pendingSplitPlacement == nil)
+    #expect(source.sidebarDrag == nil)
   }
 
   @Test func pinnedAndPrivateWindowTransfersAreRefusedWithNotices() throws {

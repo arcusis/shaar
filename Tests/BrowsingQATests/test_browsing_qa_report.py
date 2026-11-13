@@ -254,6 +254,5 @@ process.stdin.on('end', () => {
         self.assertTrue(
             PROBE.crash_counts_against_suite("renderer", report, "EXC_CRASH", finished))
         self.assertFalse(PROBE.deliberate_renderer_kill(report, "EXC_CRASH", finished))
-
 if __name__ == "__main__":
     unittest.main()

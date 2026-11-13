@@ -19,6 +19,7 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
   var contextCompletion: (@MainActor @Sendable (Bool, Error?) -> Void)?
   nonisolated(unsafe) var failedWindowCreations = 0
   nonisolated(unsafe) var failedContextReleases = 0
+  nonisolated(unsafe) var missingPrivateWindow = false
 
   override func createPrivateContextID(
     _ contextID: String, sourceProfileID: String,
@@ -52,11 +53,20 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
   }
 
   override func window(forPrivateWindowID windowID: String, contextID: String) -> NSWindow? {
-    windows[windowID]
+    if missingPrivateWindow { return nil }
+    return windows[windowID]
   }
 
   override func hostView(forPrivateWindowID windowID: String, contextID: String) -> NSView? {
     containers[windowID]
+  }
+
+  override func closePrivateWindowID(
+    _ windowID: String, contextID: String, completion: @escaping @MainActor @Sendable (Bool) -> Void
+  ) {
+    windows.removeValue(forKey: windowID)
+    containers.removeValue(forKey: windowID)
+    completion(false)
   }
 
   override func releasePrivateContextID(_ contextID: String) -> Bool {
@@ -176,6 +186,22 @@ struct PrivateBrowserHostLifecycleTests {
     let windowID = try #require(host.ownedWindows.first?.windowID)
     runtime.onPrivateWindowClosed?(contextID, windowID)
     #expect(runtime.releasedContexts == [contextID])
+    host.detach()
+  }
+
+  @Test func missingNativeWindowStillReleasesEmptyPrivateContext() throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.missingPrivateWindow = true
+    let sourceProfileID = UUID().uuidString
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+
+    try host.openWindow()
+
+    #expect(host.windowCount == 0)
+    #expect(runtime.releasedContexts == runtime.createdContexts)
     host.detach()
   }
 

@@ -401,8 +401,10 @@ final class PrivateBrowserHost {
     guard let nativeWindow = runtime.window(forPrivateWindowID: window, contextID: context),
       let container = runtime.hostView(forPrivateWindowID: window, contextID: context)
     else {
-      runtime.closePrivateWindowID(window, contextID: context) { [weak self] closed in
-        if closed { self?.releaseEmptyContext(context, source: source) }
+      runtime.closePrivateWindowID(window, contextID: context) { [weak self] _ in
+        // The runtime may report that the window is already gone. Either way this
+        // host never acquired it, so release the context if no other owner needs it.
+        self?.releaseEmptyContext(context, source: source)
       }
       return
     }

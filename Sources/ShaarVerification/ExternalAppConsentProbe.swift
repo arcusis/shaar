@@ -552,7 +552,7 @@ final class ExternalAppConsentProbe {
     self.secondaryWindowID = nil
   }
 
-  private static func loadRunIdentity(root: URL, phase: String) throws -> Evidence {
+  static func loadRunIdentity(root: URL, phase: String) throws -> Evidence {
     let url = root.appending(path: "external-app-consent-run.json")
     if phase == "initial" {
       try? FileManager.default.removeItem(

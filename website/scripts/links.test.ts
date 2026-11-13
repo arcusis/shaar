@@ -254,7 +254,6 @@ test("link checker validates inline SVG resource references", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
-
 test("link checker validates image submit controls and their alternative text", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

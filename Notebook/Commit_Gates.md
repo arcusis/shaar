@@ -12,7 +12,7 @@ Pre-commit checks an owned temporary snapshot of the index, preserving partial s
 
 The stdlib sensitive-file checker rejects case-insensitive private-key extensions (`.p8`, `.pem`, `.key`, `.p12`, `.pfx`), conventional private-key names, Sparkle private/secret key names and environment files. Files above 10 MiB are rejected regardless of extension, preventing renaming from bypassing the large-binary limit; the largest existing tracked blob is about 1.15 MB. Escaping symlinks, unresolved index entries and uninspectable objects fail. Deletions are allowed, while renamed additions receive the same checks.
 
-CI runs the same tree checks and scans every new commit between the immutable event base and head, catching sensitive files or secrets added and then deleted. Gitleaks reports are redacted; inline allow comments cannot bypass scanning. Existing exact public-key exceptions remain. No GitHub secret-scanning or push-protection feature is involved.
+CI runs the same tree checks and scans every new commit between the immutable event base and head, catching sensitive files or secrets added and then deleted. Gitleaks reports are redacted, and the report output cannot be a symlink; inline allow comments cannot bypass scanning. Existing exact public-key exceptions remain. No GitHub secret-scanning or push-protection feature is involved.
 
 ## Verification
 

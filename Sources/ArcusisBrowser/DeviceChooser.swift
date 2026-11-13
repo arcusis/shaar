@@ -47,6 +47,7 @@ struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
   let tabID: UUID
   let profileID: UUID
   let pageURL: URL
+  let origin: URL
   let transport: DeviceChooserTransport
   let options: [DeviceChooserOption]
   let bluetoothUnavailable: Bool
@@ -54,6 +55,11 @@ struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
   let canGrant: Bool
 
   var sheetID: String { "chooser-\(id)" }
+
+  var displayOrigin: String {
+    guard let host = origin.host() else { return pageURL.host() ?? pageURL.absoluteString }
+    return origin.port.map { "\(host):\($0)" } ?? host
+  }
 
   func matches(_ session: BrowserSession) -> Bool {
     session.selectedSpace.profileID == profileID
@@ -115,7 +121,7 @@ enum DeviceChooserIntake {
       let eventPage = URL(string: pageText), eventPage == pageURL,
       let originText = payload["origin"] as? String,
       let origin = URL(string: originText),
-      origin.scheme == "http" || origin.scheme == "https",
+      (origin.scheme == "http" || origin.scheme == "https"), origin.host() != nil,
       let rawOptions = payload["options"] as? [[String: Any]], rawOptions.count <= 64,
       let canGrant = payload["canGrant"] as? Bool
     else { return nil }
@@ -130,7 +136,8 @@ enum DeviceChooserIntake {
     }
     guard canGrant == !options.isEmpty else { return nil }
     return DeviceChooserRequest(
-      id: id, tabID: tabID, profileID: profileID, pageURL: pageURL, transport: transport,
+      id: id, tabID: tabID, profileID: profileID, pageURL: pageURL, origin: origin,
+      transport: transport,
       options: options, bluetoothUnavailable: false, canGrant: canGrant)
   }
 
@@ -165,7 +172,7 @@ struct DeviceChooserConsent: View {
     VStack(alignment: .leading, spacing: 16) {
       Label(PanelsL10n.string("Choose a device"), systemImage: presented.transport.symbol)
         .font(.title2.weight(.semibold))
-      Text(presented.pageURL.host() ?? presented.pageURL.absoluteString)
+      Text(presented.displayOrigin)
         .font(.headline)
         .textSelection(.enabled)
         .environment(\.layoutDirection, .leftToRight)

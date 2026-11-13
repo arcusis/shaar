@@ -53,3 +53,20 @@ test("link checker rejects unsafe schemes and duplicate ids", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker validates every responsive image source", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img src="/small.png" alt="" srcset="/medium.png 2x, /large.png 3x">',
+    );
+    writeFileSync(join(root, "small.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: missing target /medium.png",
+      "index.html: missing target /large.png",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

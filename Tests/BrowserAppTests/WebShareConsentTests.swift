@@ -199,6 +199,19 @@ struct WebShareConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func dismissingTheShareSheetCancelsAnOutstandingPicker() {
+    let anchor = WebShareAnchor()
+    let picker = WebShareSystemPicker(items: ["Shared item"])
+    var outcomes: [Bool] = []
+    picker.outcome.onFinish = { outcomes.append($0) }
+    anchor.picker = picker
+
+    anchor.cancel()
+
+    #expect(outcomes == [false])
+    #expect(anchor.picker == nil)
+  }
+
   @Test func sharingOutcomeWaitsForServiceCompletionAndFinishesOnce() {
     let gate = WebShareOutcomeGate()
     var outcomes: [Bool] = []

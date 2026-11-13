@@ -19,6 +19,7 @@ struct WebShareSheet: View {
     .background {
       WebShareAnchorView(anchor: anchor)
     }
+    .onDisappear { anchor.cancel() }
   }
 
   /// Shows the system picker only for a visible window. A hidden window cancels.
@@ -91,6 +92,11 @@ final class WebShareAnchor {
   weak var view: NSView?
   var picker: WebShareSystemPicker?
   let presentationGate = WebSharePresentationGate()
+
+  func cancel() {
+    picker?.outcome.finish(false)
+    picker = nil
+  }
 }
 
 @MainActor

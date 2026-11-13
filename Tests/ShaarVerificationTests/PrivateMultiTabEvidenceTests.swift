@@ -139,6 +139,8 @@ import Testing
       "stage": "tab-0", "containerCount": 1, "layerBacked": [true],
       "attached": true, "attachedInWindow": true, "nativeHidden": false,
       "rawWindowSibling": false,
+      "nativeFrameInHost": NSStringFromRect(NSRect(x: 0, y: 0, width: 320, height: 240)),
+      "containerFramesInHost": [NSStringFromRect(NSRect(x: 0, y: 0, width: 320, height: 240))],
     ]
     #expect(PrivateMultiTabEvidence.liveShellAudit(valid, stage: "tab-0"))
     #expect(!PrivateMultiTabEvidence.liveShellAudit(valid, stage: "search"))
@@ -171,12 +173,29 @@ import Testing
     #expect(!PrivateMultiTabEvidence.splitShellAudit(hiddenPane))
   }
 
+  @Test func shellAuditRejectsAZeroSizedNativePageInsideItsContainer() {
+    let audit: [String: Any] = [
+      "stage": "tab-0", "containerCount": 1, "layerBacked": [true],
+      "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
+      "nativeFrameInHost": "{{0, 0}, {0, 0}}",
+      "containerFramesInHost": ["{{0, 0}, {320, 240}}"],
+    ]
+    #expect(!PrivateMultiTabEvidence.liveShellAudit(audit, stage: "tab-0"))
+    var outside = audit
+    outside["nativeFrameInHost"] = NSStringFromRect(NSRect(x: 400, y: 0, width: 320, height: 240))
+    #expect(!PrivateMultiTabEvidence.liveShellAudit(outside, stage: "tab-0"))
+  }
+  }
+
   @Test func blankPrivateTabCannotCoverTheSwiftUIShell() {
     let valid: [String: Any] = [
       "stage": "first-blank", "nativeViewPresent": true,
       "rawWindowSibling": false, "containerCount": 1,
       "layerBacked": [true], "attached": true,
       "attachedInWindow": true, "nativeHidden": false,
+      "nativeFrameInHost": NSStringFromRect(NSRect(x: 0, y: 0, width: 320, height: 240)),
+      "containerFramesInHost": [NSStringFromRect(NSRect(x: 0, y: 0, width: 320, height: 240))],
     ]
     #expect(PrivateMultiTabEvidence.blankShellAudit(valid))
     for key in valid.keys {

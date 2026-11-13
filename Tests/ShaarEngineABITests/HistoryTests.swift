@@ -140,6 +140,21 @@ struct ShaarHistoryAdapterTests {
     }
   }
 
+  @Test func queryRejectsBooleanIntegerFields() async throws {
+    let row = #""url":"https://example.test/","title":"A","visitCount":1,"visits":[1]"#
+    let replies = [
+      #"{"schemaVersion":true,"entries":[]}"#,
+      "{\"schemaVersion\":1,\"entries\":[{" + row + "]}",
+      #"{"schemaVersion":1,"entries":[{"url":"https://example.test/","title":"A","visitCount":1,"visits":[true]}]}"#,
+    ]
+    for reply in replies {
+      let fake = FakeHistoryEngine(reply: reply)
+      await #expect(throws: (any Error).self) {
+        try await ShaarHistoryAdapter(engine: fake).query(profileID: UUID())
+      }
+    }
+  }
+
   @Test func insertRejectsNegativeVisitTimestampsBeforeSubmit() async throws {
     let fake = FakeHistoryEngine(reply: #"{"schemaVersion":1}"#)
     let adapter = ShaarHistoryAdapter(engine: fake)

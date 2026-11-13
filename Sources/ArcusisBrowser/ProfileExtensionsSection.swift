@@ -268,6 +268,7 @@ private struct ExtensionInstallStatus: View {
 }
 
 struct ExtensionDetails: View {
+  static let detailsHeadingTraits: AccessibilityTraits = .isHeader
   let model: ExtensionManagerModel
   let item: ManagedExtension
   let pageOrigin: () -> String?
@@ -366,6 +367,7 @@ struct ExtensionDetails: View {
     if !values.isEmpty {
       VStack(alignment: .leading, spacing: 4) {
         Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+          .accessibilityAddTraits(Self.detailsHeadingTraits)
         ForEach(values, id: \.self) { value in
           Text(value).font(.caption).lineLimit(1).truncationMode(.middle)
         }

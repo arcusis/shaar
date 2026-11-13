@@ -422,7 +422,7 @@ struct BrowserSettingsView: View {
       do {
         try await DefaultBrowserService.makeDefault()
         defaultError = nil
-      } catch { defaultError = error.localizedDescription }
+      } catch { defaultError = SettingsL10n.string("Could not set the default browser.") }
       refreshDefaultStatus()
     }
   }

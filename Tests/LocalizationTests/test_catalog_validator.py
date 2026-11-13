@@ -40,6 +40,20 @@ class CatalogValidatorTests(unittest.TestCase):
             path.write_text(json.dumps(data), encoding="utf-8")
             VALIDATOR.validate_catalog(path)
 
+    def test_default_browser_failure_uses_hebrew_settings_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('SettingsL10n.string("Could not set the default browser.")', source)
+        settings = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        translation = settings["strings"]["Could not set the default browser."][
+            "localizations"]["he"]["stringUnit"]["value"]
+        self.assertNotEqual(translation, "Could not set the default browser.")
+
     def test_rejects_null_catalog_and_localization_maps_cleanly(self):
         for data in (None, {"sourceLanguage": "en", "strings": {"x": None}},
                      {"sourceLanguage": "en", "strings": {"x": {"localizations": None}}}):

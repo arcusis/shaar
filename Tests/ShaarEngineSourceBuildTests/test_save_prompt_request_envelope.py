@@ -36,6 +36,8 @@ class SavePromptRequestEnvelopeTests(unittest.TestCase):
                 self.assertIn(f'payload.Set("{field}"', offer)
         self.assertIn('payload.Set("schemaVersion", 1)', offer)
         self.assertIn('payload.Set("kind", "savePromptRequested")', offer)
+        self.assertIn('payload.Set("detail", safe_detail)', offer)
+        self.assertIn('SanitizeDetail(detail ? detail : "")', offer)
         self.assertIn("shaar::EmitEvent(", offer)
         self.assertIn("SHAAR_EVENT_SAVE_PROMPT", offer)
 

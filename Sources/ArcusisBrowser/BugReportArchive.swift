@@ -74,7 +74,7 @@ enum BugReportArchive {
         !components.isDisjoint(
           with: [
             "token", "secret", "password", "passwd", "credential", "csrf", "xsrf",
-            "signature", "session",
+            "signature", "session", "auth", "authorization", "cookie",
           ])
         || (components.contains("api") && components.contains("key"))
         || (components.contains("client") && components.contains("key"))

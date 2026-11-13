@@ -13,6 +13,7 @@ import Testing
     ["name": "Cookie", "value": "session=fixture-secret"],
     ["name": "Set-Cookie", "value": "session=fixture-secret"],
     ["name": "Proxy-Authorization", "value": "fixture-secret"],
+    ["name": "X-Authorization", "value": "fixture-custom-auth"],
     ["name": "X-API-Key", "value": "fixture-api-key-secret"],
     ["name": "X-Private-Key", "value": "fixture-private-key"],
     ["name": "X-Refresh-Token", "value": "fixture-refresh-token"],
@@ -37,6 +38,7 @@ import Testing
     withJSONObject: BugReportArchive.har(
       snapshot: snapshot, includeSensitiveHeaders: true, version: "test"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-secret"))
+  #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-custom-auth"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-api-key-secret"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-private-key"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-refresh-token"))

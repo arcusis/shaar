@@ -152,7 +152,7 @@ final class SiteControlsModel: Identifiable {
       else {
         return
       }
-      failure = error.localizedDescription
+      failure = ShellL10n.string("Could not load site permissions. Try again.")
     }
   }
 
@@ -171,7 +171,7 @@ final class SiteControlsModel: Identifiable {
       failure = nil
     } catch {
       permissionValues[permission] = previous
-      failure = error.localizedDescription
+      failure = ShellL10n.string("Could not update this permission. Try again.")
     }
   }
 
@@ -188,7 +188,8 @@ final class SiteControlsModel: Identifiable {
     } catch is CancellationError {
       return false
     } catch {
-      failure = error.localizedDescription
+      failure = ShellL10n.format(
+        "Could not complete the %@ action. Try again.", arguments: [.string(action.title)])
       return false
     }
   }
@@ -201,7 +202,7 @@ final class SiteControlsModel: Identifiable {
     do {
       return try await backend.certificateChain(for: target)
     } catch {
-      failure = error.localizedDescription
+      failure = ShellL10n.string("Could not load this site’s certificate. Try again.")
       return nil
     }
   }

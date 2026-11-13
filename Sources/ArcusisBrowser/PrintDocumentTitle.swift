@@ -10,7 +10,9 @@ enum PrintDocumentTitle {
   static func make(pageTitle: String?, productName: String = ProductIdentity.name) -> String {
     let scalars = (pageTitle ?? "").unicodeScalars.map { scalar -> Unicode.Scalar in
       if CharacterSet.controlCharacters.contains(scalar)
-        || scalar.properties.generalCategory == .format || scalar == "/"
+        || scalar.properties.generalCategory == .format
+        || scalar.properties.generalCategory == .lineSeparator
+        || scalar.properties.generalCategory == .paragraphSeparator || scalar == "/"
       {
         return " "
       }

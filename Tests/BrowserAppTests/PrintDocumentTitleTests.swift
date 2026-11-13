@@ -18,6 +18,8 @@ struct PrintDocumentTitleTests {
   @Test func fallsBackAndRemovesControlCharacters() {
     #expect(PrintDocumentTitle.make(pageTitle: "\n\t", productName: "Shaar") == "Shaar")
     #expect(PrintDocumentTitle.make(pageTitle: "First\nSecond", productName: "Shaar") == "First Second")
+    #expect(PrintDocumentTitle.make(pageTitle: "First\u{2028}Second", productName: "Shaar") == "First Second")
+    #expect(PrintDocumentTitle.make(pageTitle: "First\u{2029}Second", productName: "Shaar") == "First Second")
   }
 
   @Test func capsPageTitleLength() {

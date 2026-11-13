@@ -22,6 +22,13 @@ class PageFocusDeliveryTests(unittest.TestCase):
         self.assertIn('window.pageFocusCount', source)
         self.assertIn('window.pageBlurCount', source)
 
+    def test_rejected_native_focus_does_not_emit_page_focus(self):
+        source = (ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm").read_text()
+        self.assertIn("RejectedNativeFocusDoesNotFocusWebContents", source)
+        self.assertIn("target.rejectFirstResponder = YES;", source)
+        self.assertIn("EXPECT_FALSE(host.Focus(tab));", source)
+        self.assertIn('"window.pageFocusCount").ExtractInt(), 0', source)
+
 
 if __name__ == "__main__":
     unittest.main()

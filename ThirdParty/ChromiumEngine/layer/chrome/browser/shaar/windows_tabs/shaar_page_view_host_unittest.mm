@@ -14,13 +14,14 @@
 
 @interface ShaarFocusProbeWindow : NSWindow
 @property(nonatomic, strong) NSResponder* acceptedResponder;
+@property(nonatomic) BOOL rejectFirstResponder;
 @end
 
 @implementation ShaarFocusProbeWindow
 - (BOOL)isKeyWindow { return YES; }
 - (BOOL)makeFirstResponder:(NSResponder*)responder {
   self.acceptedResponder = responder;
-  return YES;
+  return !self.rejectFirstResponder;
 }
 @end
 
@@ -264,6 +265,32 @@ TEST_F(ShaarTabVisibilityTest, FocusForwardsToSelectedWebContents) {
       postNotificationName:NSWindowDidResignKeyNotification
                     object:target];
   EXPECT_EQ(content::EvalJs(web_contents(), "window.pageBlurCount").ExtractInt(), 1);
+  host.Detach(tab);
+  [target close];
+}
+
+TEST_F(ShaarTabVisibilityTest, RejectedNativeFocusDoesNotFocusWebContents) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* tab = web_contents()->GetNativeView().GetNativeNSView();
+  ASSERT_TRUE(host.Attach(tab));
+  host.SetSelectedWebContents(web_contents());
+  ShaarFocusProbeWindow* target = [[ShaarFocusProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  target.releasedWhenClosed = NO;
+  target.rejectFirstResponder = YES;
+  target.contentView = tab;
+  web_contents()->WasShown();
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "window.pageFocusCount = 0;"
+      "window.addEventListener('focus', () => ++window.pageFocusCount);"));
+
+  EXPECT_FALSE(host.Focus(tab));
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.pageFocusCount").ExtractInt(), 0);
+  EXPECT_EQ(target.acceptedResponder, tab);
   host.Detach(tab);
   [target close];
 }

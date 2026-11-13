@@ -533,6 +533,17 @@ class CoverageGateTests(unittest.TestCase):
 
 
 class SupplyChainTests(unittest.TestCase):
+    def test_spdx_inventory_rejects_symlinked_app_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "outside-app"
+            app.mkdir()
+            (app / "Main").write_bytes(b"external executable")
+            link = root / "Shaar.app"
+            link.symlink_to(app, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "inventory root is not a regular directory"):
+                SBOM.inventory_files(link)
+
     def test_generated_directory_exclusions_never_cover_nested_source_paths(self):
         config = tomllib.loads((ROOT / ".gitleaks.toml").read_text())
         patterns = config["allowlists"][0]["paths"]

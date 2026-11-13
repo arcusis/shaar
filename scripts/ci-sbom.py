@@ -31,6 +31,8 @@ def package(identifier: str, name: str, version: str, url: str) -> dict:
 
 
 def inventory_files(app: Path) -> tuple[list[dict], dict[str, str], str]:
+    if app.is_symlink() or not app.is_dir():
+        raise ValueError("candidate app inventory root is not a regular directory")
     files, links, verification_hashes = [], {}, []
     for path in sorted(app.rglob("*")):
         relative = "./Shaar.app/" + path.relative_to(app).as_posix()

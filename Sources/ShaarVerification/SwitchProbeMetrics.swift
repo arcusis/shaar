@@ -195,7 +195,7 @@ struct SwitchProbeMetrics: Codable {
           && [
             sample.storeUpdateMilliseconds, sample.engineSelectionMilliseconds,
             sample.firstPaintMilliseconds,
-          ].allSatisfy { $0.isFinite && $0 >= 0 }
+          ].allSatisfy { $0.isFinite && $0 >= 0 && ($0 * 1_000).isFinite }
       })
   }
 
@@ -246,9 +246,12 @@ struct SwitchProbeMetricsRecorder {
     residentMemoryBytes: UInt64?
   ) throws {
     let latencyMilliseconds = latencySeconds * 1_000
+    let validBreakdown = [storeUpdateSeconds, engineSelectionSeconds, firstPaintSeconds]
+      .allSatisfy { $0.isFinite && $0 >= 0 && ($0 * 1_000).isFinite }
     guard iteration == spaceWarmupSamples.count + 1,
       iteration <= SwitchProbeMetrics.expectedSpaceWarmupCount,
-      latencySeconds.isFinite, latencySeconds >= 0, latencyMilliseconds.isFinite
+      latencySeconds.isFinite, latencySeconds >= 0, latencyMilliseconds.isFinite,
+      validBreakdown
     else { throw SwitchProbeMetricsError.invalidSample }
     spaceWarmupSamples.append(
       SwitchProbeMetrics.Sample(
@@ -268,7 +271,7 @@ struct SwitchProbeMetricsRecorder {
     let latencyMilliseconds = latencySeconds * 1_000
     let count = kind == .space ? spaceSwitchSamples.count : profileSwitchSamples.count
     let validBreakdown = [storeUpdateSeconds, engineSelectionSeconds, firstPaintSeconds]
-      .allSatisfy { $0.isFinite && $0 >= 0 }
+      .allSatisfy { $0.isFinite && $0 >= 0 && ($0 * 1_000).isFinite }
     guard iteration == count + 1,
       iteration <= SwitchProbeMetrics.expectedSwitchCount,
       latencySeconds.isFinite, latencySeconds >= 0, latencyMilliseconds.isFinite,

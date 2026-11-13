@@ -193,7 +193,10 @@ public struct ShaarExtensionsAdapter: Sendable {
   }
 
   private func requireVersion(_ root: [String: Any]) throws {
-    guard root["schemaVersion"] as? Int == 1 else {
+    guard !Self.isJSONBoolean(root["schemaVersion"]),
+      let version = root["schemaVersion"] as? NSNumber,
+      Int(exactly: version.doubleValue) == 1
+    else {
       throw ShaarExtensionsAdapterError.invalidResponse("unsupported schema version")
     }
   }

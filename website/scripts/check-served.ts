@@ -51,6 +51,7 @@ const appcast = await fetch(`${origin}/appcast.xml`);
 assert.equal(appcast.status, 404, "The website must not serve a replacement appcast.");
 for (const path of [
   "/assets/client.js",
+  "/assets/home.js",
   "/assets/styles.css",
   "/assets/shaar-logo.svg",
   "/assets/geist-mono.woff2",

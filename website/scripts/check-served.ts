@@ -15,12 +15,23 @@ const paths = [
   "/license/",
   "/notice/",
 ];
+
+function assertSecurityHeaders(response: Response, path: string): void {
+  assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self'/, path);
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff", path);
+  assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin", path);
+  assert.equal(
+    response.headers.get("permissions-policy"),
+    "camera=(), microphone=(), geolocation=()",
+    path,
+  );
+}
+
 for (const path of paths) {
   const response = await fetch(`${origin}${path}`);
   assert.equal(response.status, 200, path);
   assert.match(response.headers.get("content-type") ?? "", /text\/html/, path);
-  assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self'/, path);
-  assert.equal(response.headers.get("x-content-type-options"), "nosniff", path);
+  assertSecurityHeaders(response, path);
   assert.match(await response.text(), /<h1[ >]/, path);
 }
 const redirect = await fetch(`${origin}/download`, { redirect: "manual" });
@@ -29,10 +40,12 @@ assert.equal(new URL(redirect.headers.get("location") ?? "", origin).pathname, "
 const missing = await fetch(`${origin}/this-page-does-not-exist/`);
 assert.equal(missing.status, 404);
 assert.match(await missing.text(), /Page not found/);
+assertSecurityHeaders(missing, "/this-page-does-not-exist/");
 for (const path of ["/404", "/404/", "/404.html"]) {
   const explicitNotFound = await fetch(`${origin}${path}`, { redirect: "manual" });
   assert.equal(explicitNotFound.status, 404, path);
   assert.match(await explicitNotFound.text(), /Page not found/, path);
+  assertSecurityHeaders(explicitNotFound, path);
 }
 const appcast = await fetch(`${origin}/appcast.xml`);
 assert.equal(appcast.status, 404, "The website must not serve a replacement appcast.");

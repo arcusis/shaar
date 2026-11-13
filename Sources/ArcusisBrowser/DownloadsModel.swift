@@ -35,7 +35,7 @@ final class DownloadsModel {
   }
 
   func libraryItems(in profileID: UUID) -> [BrowserDownload] {
-    let browserItems = items(in: profileID).filter { item in
+    let browserItems = (records[profileID] ?? [:]).values.filter { item in
       item.state != .finished || Self.isRegularFile(item.fileURL)
     }
     let paths = Set(

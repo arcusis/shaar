@@ -13,6 +13,23 @@ import Testing
 
 @Suite @MainActor
 struct LibraryDownloadTests {
+  @Test func downloadLibrarySortBenchmark() {
+    let profile = UUID()
+    let model = DownloadsModel()
+    let rows = (0..<5_000).map { index in
+      record(
+        UUID().uuidString.lowercased(), filename: "download-\(index)", path: "",
+        state: "downloading", start: Double(index))
+    }
+    model.restore(rows, profileID: profile)
+
+    let start = ContinuousClock.now
+    var count = 0
+    for _ in 0..<10 { count += model.libraryItems(in: profile).count }
+    print("downloadLibrarySortBenchmark: \(start.duration(to: .now))")
+    #expect(count == 50_000)
+  }
+
   @Test func downloadSourceSubtitleUsesSelectedLanguage() {
     let hebrew = LibraryDownloadsView.subtitle(
       kind: "PDF", source: "example.test", language: .hebrew

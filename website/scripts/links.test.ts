@@ -225,6 +225,22 @@ test("link checker validates social preview image targets", () => {
   }
 });
 
+test("link checker validates inline SVG resource references", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><div id="icon"></div><svg><use href="#icon"></use><use href="#missing"></use><image xlink:href="/missing.svg"></image></svg>',
+    );
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: missing fragment #missing",
+      "index.html: missing target /missing.svg",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("link checker validates image submit controls and their alternative text", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

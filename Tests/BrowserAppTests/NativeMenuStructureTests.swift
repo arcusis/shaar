@@ -13,6 +13,18 @@ import Testing
   #expect(!PrivateBrowserHost.supportsPrivateCommand(.print))
 }
 
+@Test @MainActor func printCommandRequiresASelectedPageAndNativeSupport() {
+  let store = BrowserStore()
+  #expect(!NativeBrowserHost.printCommandIsAvailable(in: store, hasNativePrint: true))
+
+  store.perform(.open(URL(string: "https://example.com/print")!))
+  #expect(NativeBrowserHost.printCommandIsAvailable(in: store, hasNativePrint: true))
+  #expect(!NativeBrowserHost.printCommandIsAvailable(in: store, hasNativePrint: false))
+
+  store.commandIsOpen = true
+  #expect(!NativeBrowserHost.printCommandIsAvailable(in: store, hasNativePrint: true))
+}
+
 @Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {
   let workspace = try BrowserWorkspaceStore()
   try workspace.removeWindow(workspace.workspace.windows[0].id)

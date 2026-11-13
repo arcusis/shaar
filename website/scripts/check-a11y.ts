@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { accessibilityStandards } from "../src/a11y";
 
 const page = process.argv[2];
 if (!page || !/^[a-f0-9-]{36}$/.test(page)) {
@@ -37,7 +38,7 @@ for (let offset = 0; offset < axe.length; offset += 50000) {
 }
 evaluate("(0, eval)(globalThis.__shaarAxeSource); delete globalThis.__shaarAxeSource; 'axe ready'");
 const report = JSON.parse(
-  evaluate(`axe.run(document, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa']}}).then(result => JSON.stringify({
+  evaluate(`axe.run(document, {runOnly: {type: 'tag', values: ${JSON.stringify(accessibilityStandards)}}}).then(result => JSON.stringify({
   url: location.href, passes: result.passes.length,
   violations: result.violations.map(violation => ({id: violation.id, impact: violation.impact, nodes: violation.nodes.map(node => ({target: node.target, summary: node.failureSummary}))})),
   incomplete: result.incomplete.map(check => check.id)

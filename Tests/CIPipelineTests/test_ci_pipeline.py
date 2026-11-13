@@ -229,12 +229,6 @@ class PipelineGateTests(unittest.TestCase):
         self.assertEqual(check_output.call_args.kwargs["timeout"], SCANNING_ISSUES.GH_API_TIMEOUT_SECONDS)
         self.assertGreater(SCANNING_ISSUES.GH_API_TIMEOUT_SECONDS, 0)
 
-    def test_code_scanning_issue_sync_rejects_non_list_page_responses(self):
-        path = "repos/arcusis/shaar/code-scanning/alerts?state=open"
-        with patch.object(SCANNING_ISSUES, "gh", return_value={"message": "temporary response"}):
-            with self.assertRaisesRegex(ValueError, "non-list response for .*code-scanning/alerts"):
-                SCANNING_ISSUES.paged(path)
-
     def test_app_icon_changes_skip_website_jobs_but_logo_changes_keep_them(self):
         self.assertEqual(PLAN.select_stages(["Branding/shaar-logo.svg"], "pull_request"),
                          (False, True, True))

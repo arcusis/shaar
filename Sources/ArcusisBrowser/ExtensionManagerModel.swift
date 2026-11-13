@@ -293,9 +293,7 @@ final class ExtensionManagerModel {
     guard let runtime, ExtensionManagementOperation.isValidProfileID(profileID.uuidString) else {
       return
     }
-    runtime.manageExtensions(operation, profileID: profileID) { [weak self] _ in
-      Task { @MainActor [weak self] in self?.refresh() }
-    }
+    runtime.manageExtensions(operation, profileID: profileID) { [weak self] _ in self?.refresh() }
   }
 
   private func submitManage(

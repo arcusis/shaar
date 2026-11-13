@@ -262,7 +262,19 @@ enum ExtensionIconLoader {
 enum ExtensionManageDelivery {
   static func deliver(
     _ reply: ExtensionManageReply,
-    to completion: @escaping @MainActor (ExtensionManageReply) -> Void
+    to completion: @escaping @MainActor @Sendable (ExtensionManageReply) -> Void
+  ) {
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { completion(reply) }
+      return
+    }
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated { completion(reply) }
+    }
+  }
+
+  static func deliver(
+    _ reply: String?, to completion: @escaping @MainActor @Sendable (String?) -> Void
   ) {
     if Thread.isMainThread {
       MainActor.assumeIsolated { completion(reply) }
@@ -278,7 +290,7 @@ extension ARCChromiumRuntime {
   /// Submits one extension-manage payload and interprets legacy refusal codes by action.
   func submitExtensionManage(
     profileID: UUID, tabID: UUID?, payload: [String: Any],
-    completion: @escaping @MainActor (ExtensionManageReply) -> Void
+    completion: @escaping @MainActor @Sendable (ExtensionManageReply) -> Void
   ) {
     let action = payload["action"] as? String
     submitExtensionManage(
@@ -292,10 +304,13 @@ extension ARCChromiumRuntime {
   /// Runs one extension-management operation; the bridge builds the script from fixed templates.
   func manageExtensions(
     _ operation: ExtensionManagementOperation, profileID: UUID,
-    completion: @escaping @Sendable (String?) -> Void
+    completion: @escaping @MainActor @Sendable (String?) -> Void
   ) {
     manageExtensions(
       forProfileID: profileID.uuidString, operation: operation.bridgeOperation,
-      extensionID: operation.extensionID, enabled: operation.enabled, completion: completion)
+      extensionID: operation.extensionID, enabled: operation.enabled
+    ) { json in
+      ExtensionManageDelivery.deliver(json, to: completion)
+    }
   }
 }

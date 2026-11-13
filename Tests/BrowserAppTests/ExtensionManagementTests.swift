@@ -22,6 +22,17 @@ struct ExtensionManagementTests {
     }
   }
 
+  @Test @MainActor func manageOperationRepliesReturnToTheMainActor() async {
+    let reply: Bool = await withCheckedContinuation { continuation in
+      DispatchQueue.global().async {
+        ExtensionManageDelivery.deliver("ok") { value in
+          continuation.resume(returning: Thread.isMainThread && value == "ok")
+        }
+      }
+    }
+    #expect(reply)
+  }
+
   @Test @MainActor func rowCallbacksAreSendableForSwiftUIBindings() {
     var enabled = false
     let actions = ExtensionRowActions(

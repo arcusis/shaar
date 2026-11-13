@@ -394,20 +394,39 @@ enum LibrarySpacesOverviewModel {
         }
       if !spaceMatches && !needle.isEmpty {
         let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
+        let foldersByID = Dictionary(
+          space.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var folderPathCache: [UUID: [UUID]] = [:]
+        func folderPathIDs(to id: UUID?) -> [UUID] {
+          guard let id else { return [] }
+          if let cached = folderPathCache[id] { return cached }
+          var path: [UUID] = []
+          var next: UUID? = id
+          var visited: Set<UUID> = []
+          while let current = next,
+            let folder = foldersByID[current],
+            visited.insert(current).inserted
+          {
+            path.append(current)
+            next = folder.parentID
+          }
+          folderPathCache[id] = path
+          return path
+        }
         var visibleFolderIDs = matchingFolderIDs
         for folder in space.folders {
-          let path = Set(space.folderPath(to: folder.id).map(\.id))
-          if !path.isDisjoint(with: matchingFolderIDs) {
+          let path = folderPathIDs(to: folder.id)
+          if path.contains(where: matchingFolderIDs.contains) {
             visibleFolderIDs.formUnion(path)
           }
         }
         let matchingTabIDs = Set(
           space.tabs.filter { tab in
-            let path = Set(space.folderPath(to: tab.folderID).map(\.id))
-            return tabMatches(tab, needle) || !path.isDisjoint(with: matchingFolderIDs)
+            let path = folderPathIDs(to: tab.folderID)
+            return tabMatches(tab, needle) || path.contains(where: matchingFolderIDs.contains)
           }.map(\.id))
         for tab in space.tabs where matchingTabIDs.contains(tab.id) {
-          visibleFolderIDs.formUnion(space.folderPath(to: tab.folderID).map(\.id))
+          visibleFolderIDs.formUnion(folderPathIDs(to: tab.folderID))
         }
         items = items.filter { item in
           switch item {

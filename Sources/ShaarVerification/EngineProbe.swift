@@ -1641,8 +1641,10 @@ private struct ProbeFailure: LocalizedError {
 /// `SHAAR_PROBE_TIMEOUT_SCALE` (at least 1) so a slow run is not reported as a hang.
 enum ProbeTimeout {
   static var scale: Double {
-    let value = ProcessInfo.processInfo.environment["SHAAR_PROBE_TIMEOUT_SCALE"].flatMap(
-      Double.init)
-    return max(1, value ?? 1)
+    scale(from: ProcessInfo.processInfo.environment["SHAAR_PROBE_TIMEOUT_SCALE"])
+  }
+
+  static func scale(from value: String?) -> Double {
+    max(1, value.flatMap(Double.init) ?? 1)
   }
 }

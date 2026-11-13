@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import BrowserCore
 import JavaScriptCore
 import SwiftUI
 import Testing
@@ -10,6 +11,17 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorPageToolsTests {
+  @Test func storageEditorAccessibilityLabelsAreLocalized() {
+    #expect(
+      BrowserLocalization.string("Key", table: "InspectorTools", language: .english) == "Key")
+    #expect(
+      BrowserLocalization.string("Key", table: "InspectorTools", language: .hebrew) == "מפתח")
+    #expect(
+      BrowserLocalization.string("Value", table: "InspectorTools", language: .english) == "Value")
+    #expect(
+      BrowserLocalization.string("Value", table: "InspectorTools", language: .hebrew) == "ערך")
+  }
+
   @Test func pageSnapshotsRetainUnknownsAndRejectStaleDocuments() throws {
     let (inspector, _, tools) = makeModels()
     defer {

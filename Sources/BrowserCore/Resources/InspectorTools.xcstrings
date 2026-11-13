@@ -817,6 +817,22 @@
         }
       }
     },
+    "Value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Value"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ערך"
+          }
+        }
+      }
+    },
     "Domain, path, expiry, partition and security flags are preserved.": {
       "localizations": {
         "en": {

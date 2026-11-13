@@ -30,6 +30,7 @@ final class SharedExtensionSettingsModel {
   private var pending: [String: Set<UUID>] = [:]
   private var failed: [String: Set<UUID>] = [:]
   private var reloadID = UUID()
+  private var reconcileIDs: [UUID: UUID] = [:]
   private(set) var rows: [SharedExtensionSettingsRow] = []
   private(set) var error: String?
 
@@ -108,7 +109,10 @@ final class SharedExtensionSettingsModel {
   }
 
   func reconcile(profileID: UUID) async {
+    let request = UUID()
+    reconcileIDs[profileID] = request
     let details = await home.reconcileDetails(profileID: profileID)
+    guard reconcileIDs[profileID] == request, !Task.isCancelled else { return }
     for (id, result) in details {
       pending[id, default: []].subtract([profileID])
       failed[id, default: []].subtract([profileID])

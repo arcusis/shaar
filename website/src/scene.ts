@@ -53,6 +53,24 @@ export function resetPointerOnLeave(
   if (reducedMotion) wake();
 }
 
+export function applyMotionPreferenceChange(
+  current: boolean,
+  next: boolean,
+  frame: number,
+  cancel: (frame: number) => void,
+  wake: () => void,
+  redraw: () => void,
+): boolean {
+  if (current === next) return current;
+  if (next) {
+    if (frame) cancel(frame);
+    redraw();
+  } else {
+    wake();
+  }
+  return next;
+}
+
 const bladeShades = ["#4f8a2c", "#5c9733", "#6aa53b", "#3f7726", "#7cb247", "#8fbf55"];
 const flowerShades = ["#f7d54a", "#f6f2e4", "#ea8fb4", "#b39be2", "#f2a65a"];
 
@@ -146,7 +164,8 @@ export function startScene(
 ): (state: SkyState) => void {
   const context = canvas.getContext("2d");
   if (!context) return () => {};
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let reducedMotion = motionPreference.matches;
   let sky = initial;
   let width = 0;
   let height = 0;
@@ -536,6 +555,18 @@ export function startScene(
   const wake = () => {
     if (!frame && visible) frame = requestAnimationFrame(loop);
   };
+
+  motionPreference.addEventListener("change", (event) => {
+    reducedMotion = applyMotionPreferenceChange(
+      reducedMotion,
+      event.matches,
+      frame,
+      cancelAnimationFrame,
+      wake,
+      () => draw(performance.now()),
+    );
+    if (event.matches) frame = 0;
+  });
 
   const frameElement = canvas.closest<HTMLElement>(".hero-frame") ?? canvas;
   frameElement.addEventListener("pointermove", (event) => {

@@ -10,17 +10,16 @@ import Testing
 private final class FakeDevToolsEngine: ShaarDevToolsSubmitting, @unchecked Sendable {
   private let lock = NSLock()
   private var stored: ShaarDevToolsRequest?
-  private var reply: Data
-  init(reply: Data = Data("{\"schemaVersion\":1}".utf8)) { self.reply = reply }
-  func setReply(_ value: String) {
-    lock.lock()
-    reply = Data(value.utf8)
-    lock.unlock()
-  }
+  private var reply = Data("{\"schemaVersion\":1}".utf8)
   var request: ShaarDevToolsRequest? {
     lock.lock()
     defer { lock.unlock() }
     return stored
+  }
+  func setReply(_ value: String) {
+    lock.lock()
+    reply = Data(value.utf8)
+    lock.unlock()
   }
   func submit(
     _ request: ShaarDevToolsRequest,
@@ -241,6 +240,7 @@ struct DevToolsTests {
       ShaarDevToolsEventRouter.decodeFrontendState(
         booleanVersion, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
   }
+
 
   @Test func shaarDefaultConstructsAdapter() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)

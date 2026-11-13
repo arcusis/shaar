@@ -119,6 +119,7 @@ private struct InspectorAuditImpactGroup: View {
     VStack(alignment: .leading, spacing: 4) {
       Text(InspectorDetailsL10n.string(impact.capitalized))
         .font(.system(size: 10, weight: .semibold)).foregroundStyle(impactColor)
+        .accessibilityAddTraits(.isHeader)
       ForEach(findings) { finding in
         Button {
           select(finding)

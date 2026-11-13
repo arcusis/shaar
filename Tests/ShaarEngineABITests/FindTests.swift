@@ -139,4 +139,19 @@ import Testing
         event, expectedScope: .init(profileID: "p", sessionID: "s"),
         expectedTabID: "t", expectedRequestID: 19) == nil)
   }
+
+  @Test func findEventFinalRequiresJSONBoolean() {
+    let adapter = ShaarFindAdapter(shaar: FakeFindEngine())
+    for value in ["0", "1"] {
+      let payload =
+        #"{"kind":"result","schemaVersion":1,"requestID":"19","matchCount":4,"activeMatch":2,"final":\#(value)}"#
+      let event = ShaarCopiedEvent(
+        sequence: 2, kind: 7, profileID: Data("p".utf8), sessionID: Data("s".utf8),
+        windowID: Data("w".utf8), tabID: Data("t".utf8), payloadJSON: Data(payload.utf8))
+      #expect(
+        adapter.decode(
+          event, expectedScope: .init(profileID: "p", sessionID: "s"),
+          expectedTabID: "t", expectedRequestID: 19) == nil)
+    }
+  }
 }

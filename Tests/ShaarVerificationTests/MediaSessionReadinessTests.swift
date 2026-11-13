@@ -157,6 +157,14 @@ import Testing
   #expect(inactive["replyID"] as? String == id)
   #expect(inactive["replyOutcome"] as? Int == 0)
 
+  var numericActivationPayload = payload
+  numericActivationPayload["userActivated"] = 1
+  let numericActivation = ARCProbeWebShareEventDispatch(
+    numericActivationPayload, 15, true, true)
+  #expect((numericActivation["received"] as? [String: Any])?.isEmpty == true)
+  #expect(numericActivation["replyID"] as? String == id)
+  #expect(numericActivation["replyOutcome"] as? Int == 0)
+
   let oldABI = ARCProbeWebShareEventDispatch(payload, 14, true, true)
   #expect((oldABI["received"] as? [String: Any])?.isEmpty == true)
   #expect(oldABI["replyID"] as? String == "")

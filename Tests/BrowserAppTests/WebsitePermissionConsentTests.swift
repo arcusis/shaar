@@ -150,6 +150,27 @@ struct WebsitePermissionConsentTests {
     #expect(store.websitePermissionRequests.isEmpty)
   }
 
+  @Test func notificationPermissionUsesPersistentConsentCopy() throws {
+    let store = store()
+    let request = try request(store)
+    let notification = try #require(
+      WebsitePermissionRequest(
+        id: "notification-copy", profileID: request.profileID, tabID: request.tabID,
+        pageURL: request.pageURL, requestingOrigin: URL(string: "https://meet.google.com")!,
+        kinds: [.notifications], frameID: "0123456789abcdef0123456789abcdef"))
+
+    #expect(!notification.kinds[0].supportsOneTimeGrant)
+    #expect(
+      WebsitePermissionPersistence.forGrant(isPrivate: false, kinds: notification.kinds)
+        == .profile)
+    #expect(WebsitePermissionSheetCopy.allowButton(isPrivate: false, oneTime: false) == "Allow")
+    #expect(
+      WebsitePermissionSheetCopy.duration(isPrivate: false, oneTime: false)
+        == "The site keeps this permission in this profile until you change it.")
+    #expect(notification.kinds[0].purpose == PanelsL10n.string("show notifications"))
+    #expect(notification.kinds[0].symbol == "bell.badge")
+  }
+
   @Test func aReplacedFrameCannotReceiveTheGrant() throws {
     let store = store()
     let tab = try #require(store.session.selectedPage?.tab)

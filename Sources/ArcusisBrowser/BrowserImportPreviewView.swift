@@ -69,7 +69,7 @@ struct BrowserImportPreviewView: View {
       }
       HStack {
         Spacer()
-        Button(PanelsL10n.string("Cancel"), action: onCancel)
+        Button(PanelsL10n.string("Cancel"), role: .cancel, action: onCancel)
         if error == nil {
           Button(PanelsL10n.string("Import Data"), action: onImport)
             .keyboardShortcut(.defaultAction)

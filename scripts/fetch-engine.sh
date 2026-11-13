@@ -27,6 +27,10 @@ checksum=$(jq -er .sha256 "$pin")
 }
 archive="$cache/$asset"
 mkdir -p "$cache"
+if [[ -L "$archive" || -L "$archive.partial" ]]; then
+  echo 'Engine archive cache paths must not be symlinks.' >&2
+  exit 1
+fi
 verify() { [[ $(shasum -a 256 "$1" | cut -d ' ' -f 1) == "$checksum" ]]; }
 if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   echo "Fetching pinned Shaar engine $tag..." >&2

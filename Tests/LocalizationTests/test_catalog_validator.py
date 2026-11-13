@@ -35,6 +35,22 @@ def catalog(english, hebrew, key="Open %@"):
 
 
 class CatalogValidatorTests(unittest.TestCase):
+    def test_show_all_history_native_menu_has_hebrew_settings_copy(self):
+        key = "Show All History"
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "הצגת כל ההיסטוריה",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/NativeBrowserHost.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('add(.history, "Show All History", to: history)', source)
+
     def test_hebrew_bluetooth_permission_copy_uses_natural_passkey_wording(self):
         path = ROOT / "Resources/Localizations/InfoPlist.xcstrings"
         strings = json.loads(path.read_text(encoding="utf-8"))["strings"]

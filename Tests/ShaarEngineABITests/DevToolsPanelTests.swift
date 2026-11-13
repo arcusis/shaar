@@ -433,4 +433,22 @@ struct DevToolsPanelTests {
         event(injected, scope: privateScope), scope: privateScope,
         windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
   }
+
+  @Test func phase2EventEnvelopeRejectsBooleanIntegerFields() {
+    let values = ["schemaVersion": 1, "eventID": 12, "leaseID": 42]
+    for (field, value) in values {
+      let payload = #"{"schemaVersion":1,"kind":"panelEvent","eventID":12,"leaseID":42,"data":{"isLocalStorage":true,"key":"k","value":"v","truncated":false}}"#
+        .replacingOccurrences(of: "\"\(field)\":\(value)", with: "\"\(field)\":true")
+      #expect(
+        ShaarDevToolsPhase2EventRouter.decode(
+          event(payload, scope: privateScope), scope: privateScope,
+          windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+      let fractional = #"{"schemaVersion":1,"kind":"panelEvent","eventID":12,"leaseID":42,"data":{"isLocalStorage":true,"key":"k","value":"v","truncated":false}}"#
+        .replacingOccurrences(of: "\"\(field)\":\(value)", with: "\"\(field)\":\(value).5")
+      #expect(
+        ShaarDevToolsPhase2EventRouter.decode(
+          event(fractional, scope: privateScope), scope: privateScope,
+          windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+    }
+  }
 }

@@ -5,6 +5,13 @@
 import CoreFoundation
 import Foundation
 
+private func phase2Integer(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
+
 /// Fixed commands within the tab-scoped DevTools panel lease. Cookies and
 /// site-data clearing belong to the site-data adapter.
 public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
@@ -265,10 +272,11 @@ public enum ShaarDevToolsPhase2EventRouter {
       event.payloadJSON.count <= 32_768,
       let root = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       Set(root.keys) == ["schemaVersion", "kind", "eventID", "leaseID", "data"],
-      root["schemaVersion"] as? Int == 1, root["kind"] as? String == "panelEvent",
-      let rawID = root["eventID"] as? Int,
+      phase2Integer(root["schemaVersion"]) == 1, root["kind"] as? String == "panelEvent",
+      let rawID = phase2Integer(root["eventID"]),
       let id = ShaarDevToolsPhase2EventID(rawValue: rawID),
-      root["leaseID"] as? UInt32 == leaseID,
+      let rawLeaseID = phase2Integer(root["leaseID"]), rawLeaseID >= 0,
+      rawLeaseID <= Int(UInt32.max), UInt32(rawLeaseID) == leaseID,
       let data = root["data"] as? [String: Any],
       let truncated = data["truncated"] as? Bool
     else { return nil }

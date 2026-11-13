@@ -134,6 +134,7 @@ struct SiteControlsPanel: View {
   private var header: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(model.target.host).font(.headline).lineLimit(1).truncationMode(.middle)
+        .accessibilityAddTraits(.isHeader)
       Text(ShellL10n.format("%@ profile", arguments: [.string(profileName)]))
         .font(.caption).foregroundStyle(.secondary)
     }

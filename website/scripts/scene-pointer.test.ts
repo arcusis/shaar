@@ -6,9 +6,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyMotionPreferenceChange,
+  refreshSceneAfterResize,
   resetPointerOnLeave,
   updateSceneVisibility,
 } from "../src/scene";
+
+test("reduced-motion resize redraws once without scheduling animation", () => {
+  let wakes = 0;
+  let redraws = 0;
+  refreshSceneAfterResize(
+    true,
+    () => {
+      wakes += 1;
+    },
+    () => {
+      redraws += 1;
+    },
+  );
+  assert.equal(wakes, 0);
+  assert.equal(redraws, 1);
+});
 
 test("returning to a visible tab does not animate an offscreen scene", () => {
   const visibility = { inViewport: true, documentVisible: true };

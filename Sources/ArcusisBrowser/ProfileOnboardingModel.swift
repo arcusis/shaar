@@ -184,8 +184,7 @@ final class ProfileOnboardingModel {
       outcome = .created(id)
       actions.close(.created(id))
     } catch {
-      failure = SettingsL10n.format(
-        "The profile could not be created. %@", .string(error.localizedDescription))
+      failure = SettingsL10n.string("The profile could not be created. Try again.")
     }
   }
 }

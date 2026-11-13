@@ -177,7 +177,9 @@ private struct CreationFailure: Error {}
     advanceToAccount(model)
     model.skip()
     model.continueToNext()
-    #expect(model.failure != nil && model.outcome == nil && recorder.outcomes.isEmpty)
+    #expect(
+      model.failure == SettingsL10n.string("The profile could not be created. Try again.")
+        && model.outcome == nil && recorder.outcomes.isEmpty)
     recorder.creationError = nil
     model.continueToNext()
     #expect(recorder.drafts.count == 2 && recorder.signIns.isEmpty)

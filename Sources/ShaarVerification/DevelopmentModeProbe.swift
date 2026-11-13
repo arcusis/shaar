@@ -31,7 +31,11 @@ final class DevelopmentModeProbe {
   }
 
   static func fixtureURL(_ account: URL, path: String) -> URL {
-    account.deletingLastPathComponent().appending(path: path)
+    let base = account.deletingLastPathComponent()
+    var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+    components?.query = nil
+    components?.fragment = nil
+    return (components?.url ?? base).appending(path: path)
   }
 
   func run() async throws -> [String] {

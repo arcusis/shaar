@@ -31,6 +31,7 @@ final class PrivateBrowserHost {
   private var windowsByContext: [String: Set<String>] = [:]
   private var pendingWindowRequests: [String: [(String, String)]] = [:]
   private var contextsAwaitingRelease: Set<String> = []
+  private var contextReleaseRetryTask: Task<Void, Never>?
   private var isDetached = false
 
   init(
@@ -147,6 +148,8 @@ final class PrivateBrowserHost {
       return
     }
     isDetached = true
+    contextReleaseRetryTask?.cancel()
+    contextReleaseRetryTask = nil
     runtime.onPrivateNavigationFailed = nil
     runtime.onPrivateTabChanged = nil
     runtime.onPrivateTabSelected = nil
@@ -455,8 +458,29 @@ final class PrivateBrowserHost {
   private func releaseContext(_ context: String) {
     if runtime.releasePrivateContextID(context) {
       contextsAwaitingRelease.remove(context)
+      if contextsAwaitingRelease.isEmpty {
+        contextReleaseRetryTask?.cancel()
+        contextReleaseRetryTask = nil
+      }
     } else {
       contextsAwaitingRelease.insert(context)
+      scheduleContextReleaseRetry()
+    }
+  }
+
+  private func scheduleContextReleaseRetry() {
+    guard !isDetached, !runtime.isQuitting, !contextsAwaitingRelease.isEmpty,
+      contextReleaseRetryTask == nil
+    else { return }
+    contextReleaseRetryTask = Task { @MainActor [weak self] in
+      do {
+        try await Task.sleep(for: .seconds(1))
+      } catch {
+        return
+      }
+      guard let self else { return }
+      self.contextReleaseRetryTask = nil
+      self.retryPendingContextReleases()
     }
   }
 }

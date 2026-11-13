@@ -160,6 +160,27 @@ struct PrivateBrowserHostLifecycleTests {
     host.detach()
   }
 
+  @Test func failedContextReleaseRetriesWithoutAnotherWindowRequest() async throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.failedContextReleases = 1
+    let sourceProfileID = UUID().uuidString
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+
+    try host.openWindow()
+    let owner = try #require(host.ownedWindows.first)
+    runtime.onPrivateWindowClosed?(owner.contextID, owner.windowID)
+
+    for _ in 0..<150 where runtime.releasedContexts.count < 2 {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(runtime.releasedContexts == [owner.contextID, owner.contextID])
+    #expect(host.windowCount == 0)
+    host.detach()
+  }
+
   @Test func closingOneOfSeveralPrivateWindowsKeepsContextUntilTheLastWindowCloses() throws {
     let runtime = PrivateHostLifecycleRuntime()
     let sourceProfileID = UUID().uuidString

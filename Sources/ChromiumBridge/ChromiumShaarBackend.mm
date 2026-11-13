@@ -908,6 +908,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_hostCloseObservers removeObjectForKey:windowID];
   [_hostSizes removeObjectForKey:windowID];
   [_shaarSelectedTabs removeObjectForKey:windowID];
+  for (NSString *requestID in [_shaarShareRequests.allKeys copy]) {
+    NSString *tabID = _shaarShareRequests[requestID];
+    if ([_shaarTabWindows[tabID] isEqualToString:windowID])
+      [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
+  }
   for (NSString *tabID in [_shaarTabWindows.allKeys copy]) {
     if (![_shaarTabWindows[tabID] isEqualToString:windowID]) continue;
     [_shaarTabs removeObjectForKey:tabID];

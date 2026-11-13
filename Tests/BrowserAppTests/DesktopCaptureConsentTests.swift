@@ -597,12 +597,19 @@ struct DesktopCaptureConsentTests {
   }
 
   @Test func screenRecordingFailureOffersSettingsLinkOnlyForThatFailure() throws {
-    let action = try #require(
-      DesktopCaptureCatalog.settingsAction(for: DesktopCaptureCatalog.screenAccessNote))
+    let emptyListing = DesktopCaptureCatalog.listing(
+      tabs: [], screens: [], screenAccessFailed: true)
+    let action = try #require(DesktopCaptureCatalog.settingsAction(for: emptyListing))
     #expect(action.title == PanelsL10n.string("Open Settings"))
     #expect(action.destination == MacPermission.screenRecording.settingsURL)
-    #expect(DesktopCaptureCatalog.settingsAction(for: "No screens available") == nil)
-    #expect(DesktopCaptureCatalog.settingsAction(for: nil) == nil)
+
+    let partialListing = DesktopCaptureCatalog.listing(
+      tabs: [DesktopCaptureSource(id: "tab:00000000-0000-0000-0000-000000000001:0",
+        name: "Meet", kind: .tab)], screens: [], screenAccessFailed: true)
+    #expect(DesktopCaptureCatalog.settingsAction(for: partialListing) == action)
+    let noPermissionIssue = DesktopCaptureCatalog.listing(
+      tabs: [], screens: [], screenAccessFailed: false)
+    #expect(DesktopCaptureCatalog.settingsAction(for: noPermissionIssue) == nil)
   }
   }
 

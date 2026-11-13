@@ -29,6 +29,10 @@ enum DesktopCaptureCatalog {
       title: PanelsL10n.string("Open Settings"), destination: destination)
   }
 
+  static func settingsAction(for listing: DesktopCaptureListing) -> DesktopCaptureSettingsAction? {
+    settingsAction(for: listing.note ?? listing.error)
+  }
+
   static func allowedSources(
     _ sources: [DesktopCaptureSource], for request: DesktopCaptureRequest
   ) -> [DesktopCaptureSource] {

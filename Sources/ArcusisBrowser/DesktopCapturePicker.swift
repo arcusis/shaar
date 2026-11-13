@@ -62,6 +62,7 @@ struct DesktopCapturePicker: View {
   @State private var error: String?
   @State private var note: String?
   @State private var needsScreenRecordingAccess = false
+  @State private var settingsAction: DesktopCaptureSettingsAction?
 
   init(
     request: DesktopCaptureRequest,
@@ -105,6 +106,7 @@ struct DesktopCapturePicker: View {
       loading: loading,
       error: displayedError,
       note: displayedNote,
+      settingsAction: settingsAction,
       onRetry: { await reloadSources() },
       needsScreenRecordingAccess: needsScreenRecordingAccess,
       settingsButton: settingsButton(for: needsScreenRecordingAccess),
@@ -154,6 +156,7 @@ struct DesktopCapturePicker: View {
     needsScreenRecordingAccess = screenAccessFailed
     sources = listing.sources
     store.setDesktopCaptureSources(listing.sources.map(\.id), for: request.id)
+    settingsAction = DesktopCaptureCatalog.settingsAction(for: listing)
     error = listing.error.map(PanelsL10n.string)
     note = listing.note.map(PanelsL10n.string)
     loading = false
@@ -197,6 +200,7 @@ struct DesktopCapturePickerContent: View {
   var onRetry: () async -> Void = {}
   var needsScreenRecordingAccess = false
   var settingsButton: DesktopCaptureSettingsButton? = nil
+  var settingsAction: DesktopCaptureSettingsAction? = nil
   let onSelect: (String) -> Void
   let onCancel: () -> Void
 
@@ -242,7 +246,7 @@ struct DesktopCapturePickerContent: View {
         .listStyle(.inset)
         .frame(minHeight: 150, maxHeight: 330)
       }
-      if let action = DesktopCaptureCatalog.settingsAction(for: note ?? error) {
+      if !needsScreenRecordingAccess, let action = settingsAction {
         Link(action.title, destination: action.destination)
           .font(.callout)
       }

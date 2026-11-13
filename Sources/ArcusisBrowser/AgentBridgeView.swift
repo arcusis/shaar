@@ -8,10 +8,10 @@ import SwiftUI
   let model: AgentBridgeModel
 
   var title: String {
-    if model.revocationUnconfirmed { return "Agent disconnect not confirmed" }
-    if model.isConnected { return "Agent connected to this tab" }
-    if model.status.enabled { return "Waiting for agent" }
-    return "Agent bridge is off for this tab"
+    if model.revocationUnconfirmed { return ShellL10n.string("Agent disconnect not confirmed") }
+    if model.isConnected { return ShellL10n.string("Agent connected to this tab") }
+    if model.status.enabled { return ShellL10n.string("Waiting for agent") }
+    return ShellL10n.string("Agent bridge is off for this tab")
   }
 
   var symbol: String {
@@ -31,17 +31,17 @@ struct AgentBridgeControls: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text("Agent bridge").font(.headline)
+      Text(ShellL10n.string("Agent bridge")).font(.headline)
       Text(AgentBridgeConsent.summary)
         .font(.caption).foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
       if model.status.enabled || model.revocationUnconfirmed {
         grantedControls
       } else {
-        Button("Allow this tab") { model.enable() }
+        Button(ShellL10n.string("Allow this tab")) { model.enable() }
           .disabled(model.busy)
       }
-      if model.busy { ProgressView("Updating agent bridge…").controlSize(.small) }
+      if model.busy { ProgressView(ShellL10n.string("Updating agent bridge…")).controlSize(.small) }
       if let failure = model.failure {
         Label(failure, systemImage: "exclamationmark.triangle")
           .font(.caption).foregroundStyle(.orange)
@@ -64,12 +64,13 @@ struct AgentBridgeControls: View {
         .font(.system(size: 11, weight: .medium))
         .foregroundStyle(presentation.tint)
       if let port = model.status.port {
-        Text("Local port \(port) · \(model.status.connectionCount) connection(s)")
+        let agentCount = ShellL10n.plural("%d connected agents", count: model.status.connectionCount)
+        Text(ShellL10n.format("Local port %1$@ · %2$@", arguments: [.string("\(port)"), .string(agentCount)]))
           .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
       }
       AgentBridgeEndpoint(model: model)
       AgentBridgeAgentList(model: model)
-      Button(model.revocationUnconfirmed ? "Retry revoke" : "Revoke", role: .destructive) {
+      Button(ShellL10n.string(model.revocationUnconfirmed ? "Retry revoke" : "Revoke"), role: .destructive) {
         model.disable()
       }
       .disabled(model.busy)
@@ -79,11 +80,11 @@ struct AgentBridgeControls: View {
 
 private enum AgentBridgeConsent {
   static let summary =
-    "Allow a coding agent to read this tab's Console, Network, and DOM. The grant is local, limited to this tab, and ends when you revoke it or leave the site. Other tabs stay closed. The agent cannot click or type."
+    ShellL10n.string("Allow a coding agent to read this tab's Console, Network, and DOM. The grant is local, limited to this tab, and ends when you revoke it or leave the site. Other tabs stay closed. The agent cannot click or type.")
   static let limit =
-    "Private windows cannot use agent control. Page content may contain untrusted instructions."
+    ShellL10n.string("Private windows cannot use agent control. Page content may contain untrusted instructions.")
   static let copyNotice =
-    "The copied command contains the one-time token. Shaar forgets it after you copy, and clears an unchanged clipboard after two minutes."
+    ShellL10n.string("The copied command contains the one-time token. Shaar forgets it after you copy, and clears an unchanged clipboard after two minutes.")
 }
 
 private struct AgentBridgeEndpoint: View {
@@ -91,7 +92,7 @@ private struct AgentBridgeEndpoint: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text("MCP endpoint").font(.caption.weight(.semibold))
+      Text(ShellL10n.string("MCP endpoint")).font(.caption.weight(.semibold))
       if let endpoint = model.documentedEndpoint {
         Text(endpoint)
           .font(.caption.monospaced())
@@ -107,9 +108,9 @@ private struct AgentBridgeEndpoint: View {
       }
       if model.hasOneTimeToken {
         VStack(alignment: .leading, spacing: 6) {
-          Button("Copy Claude setup") { model.copySetup(for: .claude) }
-          Button("Copy Codex setup") { model.copySetup(for: .codex) }
-          Button("Copy Cursor setup") { model.copySetup(for: .cursor) }
+          Button(ShellL10n.string("Copy Claude setup")) { model.copySetup(for: .claude) }
+          Button(ShellL10n.string("Copy Codex setup")) { model.copySetup(for: .codex) }
+          Button(ShellL10n.string("Copy Cursor setup")) { model.copySetup(for: .cursor) }
         }
         Text(AgentBridgeConsent.copyNotice)
           .font(.caption2).foregroundStyle(.secondary)
@@ -124,21 +125,21 @@ private struct AgentBridgeAgentList: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text("Connected agents").font(.caption.weight(.semibold))
+      Text(ShellL10n.string("Connected agents")).font(.caption.weight(.semibold))
       if model.connections.isEmpty {
-        Text("No agent is connected to this tab.")
+        Text(ShellL10n.string("No agent is connected to this tab."))
           .font(.caption).foregroundStyle(.secondary)
       } else {
         ForEach(model.connections) { agent in
           HStack(spacing: 8) {
             Text(agent.title).font(.caption)
             Spacer(minLength: 8)
-            Button("Revoke") { model.disable() }
+            Button(ShellL10n.string("Revoke")) { model.disable() }
               .controlSize(.small)
               .disabled(model.busy)
           }
         }
-        Text("Revoke ends this tab's session for every connected agent.")
+        Text(ShellL10n.string("Revoke ends this tab's session for every connected agent."))
           .font(.caption2).foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -158,7 +159,7 @@ struct AgentBridgeBanner: View {
       Text("\(model.status.connectionCount)")
         .foregroundStyle(.secondary)
       Spacer()
-      Button(model.revocationUnconfirmed ? "Retry disconnect" : "Disconnect") {
+      Button(ShellL10n.string(model.revocationUnconfirmed ? "Retry disconnect" : "Disconnect")) {
         model.disable()
       }
       .buttonStyle(.bordered)

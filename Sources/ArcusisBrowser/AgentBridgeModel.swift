@@ -9,7 +9,7 @@ import Observation
 
 enum AgentBridgeFailure: LocalizedError {
   case invalidReply
-  var errorDescription: String? { "The agent bridge returned an invalid reply." }
+  var errorDescription: String? { ShellL10n.string("The agent bridge returned an invalid reply.") }
 }
 
 enum AgentBridgeOperation: Int {

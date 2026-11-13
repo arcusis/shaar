@@ -180,6 +180,13 @@ class CatalogValidatorTests(unittest.TestCase):
                 self.assertNotEqual(
                     strings[key]["localizations"]["he"]["stringUnit"]["value"], key)
 
+    def test_developer_simulation_runtime_errors_use_hebrew_recovery_copy(self):
+        key = "Could not apply developer settings. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(encoding="utf-8"))["strings"]
+        self.assertEqual(catalog[key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן להחיל את הגדרות הפיתוח. כדאי לנסות שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/DeveloperPageModel.swift").read_text(encoding="utf-8")
+        self.assertIn("Self.failureMessage(for: error)", source)
+
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1,6 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Could not apply developer settings. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not apply developer settings. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להחיל את הגדרות הפיתוח. כדאי לנסות שוב." } }
+      }
+    },
     "Tech stack": {
       "localizations": {
         "en": {

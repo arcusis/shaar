@@ -845,6 +845,15 @@ class SupplyChainTests(unittest.TestCase):
     def test_swiftpm_cache_key_tracks_build_plugin_sources(self):
         setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
         self.assertIn("hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Plugins/**')", setup)
+    def test_swiftpm_dependency_cache_reuses_same_toolchain_sources_after_lock_changes(self):
+        setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
+        cache = setup.split("    - name: Cache SwiftPM dependencies without compiled app objects\n", 1)[1]
+        cache = cache.split("    - name:", 1)[0]
+        self.assertIn("restore-keys: |", cache)
+        self.assertIn(
+            "swift-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-",
+            cache,
+        )
 
     def test_installer_retries_transient_download_failures_only(self):
         def http_error(code):

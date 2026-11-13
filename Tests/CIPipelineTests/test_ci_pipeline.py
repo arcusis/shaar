@@ -721,6 +721,18 @@ class SupplyChainTests(unittest.TestCase):
                 INSTALL.write_binary(output, b"replace", True)
             self.assertEqual(target.read_bytes(), b"keep")
 
+    def test_installer_refuses_symlinked_output_directory(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            target = Path(outside) / "actionlint"
+            output_directory = root / "tools"
+            output_directory.symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "symlinked tool output"):
+                INSTALL.write_binary(
+                    output_directory / "actionlint", b"replace", True, output_directory
+                )
+            self.assertFalse(target.exists())
+
     def test_spdx_inventory_rejects_symlinked_app_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

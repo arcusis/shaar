@@ -137,7 +137,10 @@ enum DeviceChooserIntake {
         let index = integer(raw["index"]), (0..<64).contains(index), seen.insert(index).inserted,
         let name = raw["name"] as? String, name.utf8.count <= 256
       else { return nil }
-      options.append(DeviceChooserOption(index: index, title: displayName(name), detail: ""))
+      let sanitizedName = displayName(name)
+      let title = sanitizedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ? PanelsL10n.string("Unknown device") : sanitizedName
+      options.append(DeviceChooserOption(index: index, title: title, detail: ""))
     }
     guard canGrant == !options.isEmpty else { return nil }
     return DeviceChooserRequest(

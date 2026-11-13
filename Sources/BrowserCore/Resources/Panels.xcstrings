@@ -1064,6 +1064,16 @@
         }
       }
     },
+    "Unknown device": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מכשיר לא ידוע"
+          }
+        }
+      }
+    },
     "Bluetooth access isn't available.": {
       "localizations": {
         "he": {

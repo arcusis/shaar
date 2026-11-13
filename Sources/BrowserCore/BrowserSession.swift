@@ -405,11 +405,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
               $0.id == tab.folderID && $0.isPinned == tab.isPinned
             })
         }),
-        (space.items(isPinned: true, includingCollapsed: true)
-          + space.items(isPinned: false, includingCollapsed: true)).filter({
-            if case .folder = $0 { return true }
-            return false
-          }).count == space.folders.count
+        space.reachableFolderCount(isPinned: true)
+          + space.reachableFolderCount(isPinned: false) == space.folders.count
       else { throw SessionError.invalidState }
     }
   }

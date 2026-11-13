@@ -79,6 +79,16 @@ private struct FolderItemsSection {
     }
     return result
   }
+
+  func reachableFolderCount() -> Int {
+    var stack = Array(folders.filter { $0.parentID == nil }.reversed())
+    var visited: Set<UUID> = []
+    while let folder = stack.popLast() {
+      guard visited.insert(folder.id).inserted else { continue }
+      stack += children[folder.id] ?? []
+    }
+    return visited.count
+  }
 }
 
 private struct FolderItemsIndex {
@@ -119,6 +129,10 @@ private struct FolderItemsIndex {
       unpinned.items(includingCollapsed: includingCollapsed)
     }
   }
+
+  func reachableFolderCount(isPinned: Bool) -> Int {
+    if isPinned { pinned.reachableFolderCount() } else { unpinned.reachableFolderCount() }
+  }
 }
 
 extension BrowserSpace {
@@ -130,6 +144,11 @@ extension BrowserSpace {
   public func items(isPinned: Bool, includingCollapsed: Bool = false) -> [PinnedSidebarItem] {
     FolderItemsIndex(tabs: tabs, folders: folders, onlyPinned: isPinned).items(
       isPinned: isPinned, includingCollapsed: includingCollapsed)
+  }
+
+  func reachableFolderCount(isPinned: Bool) -> Int {
+    FolderItemsIndex(tabs: [], folders: folders, onlyPinned: isPinned)
+      .reachableFolderCount(isPinned: isPinned)
   }
 
   public func orderedSidebarItems(includingCollapsed: Bool = false) -> [PinnedSidebarItem] {

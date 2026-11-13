@@ -4,12 +4,17 @@
 
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct PrintConsentTests {
+  @Test func printConsentTitleIsVoiceOverHeading() {
+    #expect(PrintConsentContent.headingTraits == .isHeader)
+  }
+
   private let frameID = "0123456789abcdef0123456789abcdef"
 
   private func openedStore() -> BrowserStore {

@@ -80,7 +80,7 @@ struct SymbolPicker: View {
     }
     .buttonStyle(.plain)
     .help(value)
-    .accessibilityLabel(value)
+    .accessibilityLabel(SymbolCatalog.accessibilityLabel(for: value))
   }
 }
 
@@ -231,6 +231,10 @@ enum SymbolCatalog {
       Section(name: section.name, symbols: section.symbols.filter { seen.insert($0).inserted })
     }
   }()
+
+  static func accessibilityLabel(for symbol: String) -> String {
+    symbol.replacingOccurrences(of: ".", with: " ").capitalized
+  }
 
   private static let keywords: [String: String] = [
     "airplane": "plane flight travel", "airplane.departure": "plane flight takeoff",

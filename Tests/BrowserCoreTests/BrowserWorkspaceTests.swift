@@ -66,6 +66,27 @@ private func workspaceFixture() throws -> BrowserSession {
   #expect(workspace.window(windowID)?.pins.count == 10_000)
 }
 
+@Test func sessionFolderValidationFocusedBenchmark() throws {
+  let profile = BrowserProfile(name: "Folders")
+  let folders = (0..<300).map { index in
+    BrowserFolder(name: "Folder \(index)", isPinned: index.isMultiple(of: 2))
+  }
+  let tabs = (0..<1_000).map { index in
+    let folder = folders[index % folders.count]
+    return BrowserTab(
+      url: URL(string: "https://example.test/\(index)")!,
+      isPinned: folder.isPinned, folderID: folder.id)
+  }
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Folders", symbol: "folder", tint: .ocean,
+    tabs: tabs, folders: folders)
+  let session = try BrowserSession(profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+  let start = ContinuousClock.now
+  for _ in 0..<20 { try session.validate() }
+  print("sessionFolderValidationFocusedBenchmark: \(start.duration(to: .now))")
+}
+
 @Test func workspaceMigrationPreservesLegacyBytesIDsAndRecoveryUntilExplicitSave() throws {
   let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: directory) }

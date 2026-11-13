@@ -7,7 +7,7 @@ import Testing
 @testable import ArcusisBrowser
 
 struct SidebarDropHintTests {
-  @Test func targetAnimationRespectsReduceMotion() {
+  @Test @MainActor func targetAnimationRespectsReduceMotion() {
     #expect(SidebarDropHint.targetAnimation(reduceMotion: true) == nil)
     #expect(SidebarDropHint.targetAnimation(reduceMotion: false) != nil)
   }

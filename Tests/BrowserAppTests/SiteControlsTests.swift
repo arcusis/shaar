@@ -27,6 +27,14 @@ import Testing
   #expect(SitePermissionRow.accessibilityValue(for: nil) == nil)
 }
 
+@Test func sitePermissionAskValueIsLocalizedAndOnlyUsedForAsk() {
+  #expect(SitePermissionRow.askStateValue(for: .ask, language: .english) == "Asks first")
+  #expect(SitePermissionRow.askStateValue(for: .ask, language: .hebrew) == "ישאל תחילה")
+  #expect(SitePermissionRow.askStateValue(for: .allow, language: .english) == nil)
+  #expect(SitePermissionRow.askStateValue(for: .block, language: .english) == nil)
+  #expect(SitePermissionRow.askStateValue(for: nil, language: .english) == nil)
+}
+
 private struct FakeFailure: LocalizedError {
   var errorDescription: String? { "The engine refused." }
 }

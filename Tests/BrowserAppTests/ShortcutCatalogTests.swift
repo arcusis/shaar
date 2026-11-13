@@ -7,6 +7,10 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func clearHistoryShortcutDisplaysTheDeleteKey() {
+  #expect(ShortcutCatalog.displayKeys(for: .clearHistory) == "⇧⌘⌫")
+}
+
 @Test @MainActor func shortcutCatalogContainsEveryMenuKeyEquivalent() {
   let menu = NativeBrowserHost.makeMenu(target: NSApplication.shared)
   let expected = menu.items.compactMap(\.submenu).flatMap { section in

@@ -144,6 +144,8 @@ import Testing
   #expect(item(.back)?.keyEquivalentModifierMask == .command)
   #expect(item(.clearHistory)?.menu?.title == "History")
   #expect(item(.clearHistory)?.title == "Clear History…")
+  #expect(item(.clearHistory)?.keyEquivalent == "\u{8}")
+  #expect(item(.clearHistory)?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item(.recentlyClosed)?.menu?.title == "History")
   #expect(item(.downloads)?.menu?.title == "File")
   #expect(item(.extensions)?.menu?.title == "Extensions")

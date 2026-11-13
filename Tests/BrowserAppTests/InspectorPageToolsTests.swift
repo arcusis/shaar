@@ -15,6 +15,11 @@ import Testing
     #expect(InspectorPageToolsView.titleAccessibilityTraits.contains(.isHeader))
   }
 
+  @Test func storageEntrySelectionAccessibilityTraitTracksSelection() {
+    #expect(InspectorStorageView.entryAccessibilityTraits(isSelected: true).contains(.isSelected))
+    #expect(!InspectorStorageView.entryAccessibilityTraits(isSelected: false).contains(.isSelected))
+  }
+
   @Test func storageEditorAccessibilityLabelsAreLocalized() {
     #expect(
       BrowserLocalization.string("Key", table: "InspectorTools", language: .english) == "Key")

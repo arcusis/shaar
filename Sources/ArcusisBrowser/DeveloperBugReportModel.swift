@@ -5,6 +5,15 @@
 import Foundation
 
 extension DeveloperPageModel {
+  static func redactedReportPageURL(_ raw: String) -> String {
+    guard var components = URLComponents(string: raw) else { return "Unavailable" }
+    components.user = nil
+    components.password = nil
+    components.query = nil
+    components.fragment = nil
+    return components.string ?? "Unavailable"
+  }
+
   @discardableResult
   func createBugReport() async -> URL? {
     guard !creatingBugReport else { return nil }
@@ -58,7 +67,8 @@ extension DeveloperPageModel {
         }
       }
       let metadata: [String: Any] = [
-        "url": String((snapshot["url"] as? String ?? destination.url.absoluteString).prefix(8192)),
+        "url": Self.redactedReportPageURL(
+          String((snapshot["url"] as? String ?? destination.url.absoluteString).prefix(8192))),
         "title": String((snapshot["title"] as? String ?? "").prefix(4096)), "shaarVersion": version,
         "engineVersion": engine.runtime.chromiumVersion,
         "macOSVersion": ProcessInfo.processInfo.operatingSystemVersionString,

@@ -28,6 +28,7 @@ class SavePromptErrorStructBoundsTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertIn(f"offsetof(shaar_error, {field})", fail)
                 self.assertIn(f"sizeof(error->{field})", fail)
+        self.assertEqual(fail.count("size >="), 3)
         self.assertIn("return code;", fail)
 
 

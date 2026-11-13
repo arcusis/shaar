@@ -16,6 +16,12 @@ enum DesktopCaptureCatalog {
     "Screen Recording access is unavailable. Check Privacy & Security settings."
   static let emptySources = "No screens, windows, or tabs are available"
 
+  static func allowedSources(
+    _ sources: [DesktopCaptureSource], for request: DesktopCaptureRequest
+  ) -> [DesktopCaptureSource] {
+    sources.filter { request.allows($0.kind) }
+  }
+
   static func tabSources(
     session: BrowserSession, profileID: UUID, requestingTabID: UUID
   ) -> [DesktopCaptureSource] {

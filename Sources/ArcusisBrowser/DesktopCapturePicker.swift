@@ -84,20 +84,21 @@ struct DesktopCapturePicker: View {
   func loadSources() async {
     let tabs = DesktopCaptureCatalog.tabSources(
       session: store.session, profileID: request.profileID, requestingTabID: request.tabID
-    ).filter { request.allows($0.kind) }
+    )
     var screens: [DesktopCaptureSource] = []
     let wantsScreen = request.allows(.display) || request.allows(.window)
     var screenAccessFailed = wantsScreen && !hasScreenRecordingAccess()
     if wantsScreen && !screenAccessFailed {
       do {
         screens = try await screenSources(from: shareableContent())
-        screens = screens.filter { request.allows($0.kind) }
       } catch {
         screenAccessFailed = true
       }
     }
     let listing = DesktopCaptureCatalog.listing(
-      tabs: tabs, screens: screens, screenAccessFailed: screenAccessFailed)
+      tabs: DesktopCaptureCatalog.allowedSources(tabs, for: request),
+      screens: DesktopCaptureCatalog.allowedSources(screens, for: request),
+      screenAccessFailed: screenAccessFailed)
     sources = listing.sources
     store.setDesktopCaptureSources(listing.sources.map(\.id), for: request.id)
     error = listing.error.map(PanelsL10n.string)

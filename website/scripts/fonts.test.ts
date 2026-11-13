@@ -7,7 +7,16 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { fetchFontAsset, prepareFonts } from "./fonts";
+import { fetchFontAsset, parseFaces, prepareFonts } from "./fonts";
+
+test("font CSS ignores inherited family names", () => {
+  assert.deepEqual(
+    parseFaces(
+      "@font-face{font-family:'toString';src:url('https://fonts.test/font.woff2');font-weight:300 900;font-style:normal;}",
+    ),
+    [],
+  );
+});
 
 test("font requests abort after their configured timeout", async () => {
   const originalFetch = globalThis.fetch;

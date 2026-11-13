@@ -48,14 +48,15 @@ function isSiteFontManifest(value: unknown): value is SiteFont[] {
   );
 }
 
-function parseFaces(css: string): (SiteFont & { url: string })[] {
+export function parseFaces(css: string): (SiteFont & { url: string })[] {
   const faces: (SiteFont & { url: string })[] = [];
   for (const block of css.split("@font-face").slice(1)) {
     const family = /font-family:\s*'([^']+)'/.exec(block)?.[1];
     const url = /url\('([^']+\.woff2)'\)/.exec(block)?.[1];
     const weight = /font-weight:\s*([^;]+);/.exec(block)?.[1]?.trim();
     const style = /font-style:\s*([^;]+);/.exec(block)?.[1]?.trim();
-    if (!family || !url || !weight || style !== "normal" || !families[family]) continue;
+    if (!family || !Object.hasOwn(families, family) || !url || !weight || style !== "normal")
+      continue;
     // The API lists the variable face (a weight range) next to static weights; keep the variable one.
     if (!weight.includes(" ")) continue;
     faces.push({

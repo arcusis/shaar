@@ -181,7 +181,9 @@ struct SplitGroupView: View {
   static func resized(_ weights: [Double], at index: Int, by delta: CGFloat, available: CGFloat)
     -> [Double]
   {
-    guard available > 0, weights.indices.contains(index + 1) else { return weights }
+    guard available > 0, weights.count >= 2, (0..<(weights.count - 1)).contains(index) else {
+      return weights
+    }
     let pair = weights[index] + weights[index + 1]
     let minimum = min(Double(minimumPane / available), pair / 2)
     let leading = min(max(weights[index] + Double(delta / available), minimum), pair - minimum)

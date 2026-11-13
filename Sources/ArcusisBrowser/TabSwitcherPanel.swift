@@ -118,6 +118,9 @@ struct TabSwitcherPanel: View {
               .background(
                 index == controller.index ? Color.accentColor.opacity(0.25) : .clear,
                 in: RoundedRectangle(cornerRadius: 6))
+              .accessibilityElement(children: .combine)
+              .accessibilityLabel(tab.title)
+              .accessibilityAddTraits(index == controller.index ? .isSelected : [])
             }
           }
         }

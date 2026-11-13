@@ -85,6 +85,48 @@ import Testing
   #expect(!TabNumberShortcutRouting.route(event("0"), store: store))
 }
 
+@Test @MainActor func controlTabCyclesToTheNextTabAndWraps() throws {
+  let store = BrowserStore()
+  for index in 1...3 {
+    store.perform(.open(URL(string: "https://cycle\(index).example")!))
+  }
+  let tabs = store.session.selectedSpace.tabs
+  store.selectTabByShortcutIndex(0)
+
+  let event = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 0,
+    windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+    isARepeat: false, keyCode: 48)!
+  #expect(NextTabShortcutRouting.route(event, store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[1].id)
+  store.selectTabByShortcutIndex(2)
+  #expect(NextTabShortcutRouting.route(event, store: store))
+  #expect(store.session.selectedSpace.selectedTabID == tabs[0].id)
+}
+
+@Test @MainActor func controlTabRejectsAdditionalModifiersAndKeyUp() throws {
+  let store = BrowserStore()
+  store.perform(.open(URL(string: "https://next-one.example")!))
+  store.perform(.open(URL(string: "https://next-two.example")!))
+  let selected = store.session.selectedSpace.selectedTabID
+
+  func event(_ type: NSEvent.EventType, _ modifiers: NSEvent.ModifierFlags) -> NSEvent {
+    NSEvent.keyEvent(
+      with: type, location: .zero, modifierFlags: modifiers, timestamp: 0,
+      windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+      isARepeat: false, keyCode: 48)!
+  }
+
+  for modifiers in [
+    NSEvent.ModifierFlags(), .control.union(.shift), .control.union(.option),
+    .control.union(.command),
+  ] {
+    #expect(!NextTabShortcutRouting.route(event(.keyDown, modifiers), store: store))
+  }
+  #expect(!NextTabShortcutRouting.route(event(.keyUp, .control), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == selected)
+}
+
 @Test func downloadsShortcutDoesNotReserveOtherCommandJVariants() {
   #expect(ARCReservedBrowserShortcut("J", [.command, .shift]))
   #expect(!ARCReservedBrowserShortcut("j", .command))

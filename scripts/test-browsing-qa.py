@@ -115,7 +115,9 @@ def scenario_result(report: dict, exit_code: int | None, timed_out: bool, crashe
     if not isinstance(rows, list) or not rows:
         return "fail"
     if any(
-        not isinstance(row, dict) or row.get("status") not in {"pass", "blocked"}
+        not isinstance(row, dict)
+        or not isinstance(row.get("status"), str)
+        or row.get("status") not in {"pass", "blocked"}
         for row in rows
     ):
         return "fail"
@@ -387,7 +389,11 @@ def row_notes(report: dict, extra: str) -> str:
         if not isinstance(row, dict):
             parts.append("Malformed scenario row.")
             continue
-        if row.get("status") in {"fail", "blocked"}:
+        status = row.get("status")
+        if not isinstance(status, str) or status not in {"pass", "fail", "blocked"}:
+            parts.append("Malformed scenario row status.")
+            continue
+        if status in {"fail", "blocked"}:
             parts.append(f"{row.get('name')}: {row.get('detail') or ''}".strip())
     return " ".join(parts)
 

@@ -777,6 +777,20 @@ class SupplyChainTests(unittest.TestCase):
                 fetch.assert_not_called()
             self.assertFalse(external_target.exists())
 
+    def test_installer_rejects_symlinked_archive_cache_directory(self):
+        payload = self.archive()
+        digest = hashlib.sha256(payload).hexdigest()
+        pin = {"url": "https://example.invalid/tool", "sha256": digest}
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            cache = Path(directory) / "cache"
+            external = Path(outside)
+            cache.symlink_to(external, target_is_directory=True)
+            with patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(payload)) as fetch:
+                with self.assertRaisesRegex(ValueError, "Archive cache directory is a symlink"):
+                    INSTALL.archive_payload(pin, cache)
+                fetch.assert_not_called()
+            self.assertEqual(list(external.iterdir()), [])
+
     def test_managed_python_install_retries_only_transient_download_failures(self):
         calls = []
         sleeps = []

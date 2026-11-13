@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import CoreFoundation
 import Foundation
 import Observation
 
@@ -179,12 +180,21 @@ final class DownloadsModel {
       let state = (record["state"] as? String).flatMap(DownloadState.init(rawValue:)),
       let paused = record["paused"] as? Bool, let dangerous = record["dangerous"] as? Bool,
       let privateItem = record["offTheRecord"] as? Bool,
-      let received = record["received"] as? Double, let total = record["total"] as? Double,
-      let start = record["startTime"] as? Double
+      let received = numericValue(record["received"]),
+      let total = numericValue(record["total"]),
+      let start = numericValue(record["startTime"])
     else { return nil }
     return BrowserDownload(
       id: id, profileID: profileID, filename: filename, path: path, sourceURL: address,
       state: state, paused: paused, dangerous: dangerous, offTheRecord: privateItem,
       received: received, total: total, startTime: start)
+  }
+
+  private func numericValue(_ value: Any?) -> Double? {
+    guard let value else { return nil }
+    if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+      return nil
+    }
+    return value as? Double
   }
 }

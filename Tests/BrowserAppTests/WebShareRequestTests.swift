@@ -26,6 +26,9 @@ import Testing
   for origin in ["http://example.com", "file:///tmp/page", "https://user@example.com/path"] {
     #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
   }
+  for origin in ["https://example.com:65536", "http://localhost:65536"] {
+    #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
+  }
 }
 
 @Test func webShareRequestRequiresRealBooleanActivationAndContent() {

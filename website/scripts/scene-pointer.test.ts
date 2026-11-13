@@ -4,7 +4,19 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyMotionPreferenceChange, resetPointerOnLeave } from "../src/scene";
+import {
+  applyMotionPreferenceChange,
+  resetPointerOnLeave,
+  updateSceneVisibility,
+} from "../src/scene";
+
+test("returning to a visible tab does not animate an offscreen scene", () => {
+  const visibility = { inViewport: true, documentVisible: true };
+  assert.equal(updateSceneVisibility(visibility, { inViewport: false }), false);
+  assert.equal(updateSceneVisibility(visibility, { documentVisible: false }), false);
+  assert.equal(updateSceneVisibility(visibility, { documentVisible: true }), false);
+  assert.equal(updateSceneVisibility(visibility, { inViewport: true }), true);
+});
 
 test("motion preference changes stop or resume hero animation", () => {
   let cancelled = 0;

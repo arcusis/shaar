@@ -297,6 +297,8 @@ struct SiteActionsSection: View {
         .disabled(!model.isAvailable(action))
         .help(action.help)
         .accessibilityLabel(action.help)
+        .accessibilityValue(
+          ShellL10n.string("In progress"), isEnabled: model.runningAction == action)
       }
       Button(action: showDeveloperTools) {
         HStack(spacing: 10) {

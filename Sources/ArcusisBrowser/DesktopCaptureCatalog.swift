@@ -22,6 +22,17 @@ enum DesktopCaptureCatalog {
     sources.filter { DesktopCaptureSource.isValidToken($0.id) && request.allows($0.kind) }
   }
 
+  static func windowName(owner: String?, title: String?) -> String {
+    let owner = owner?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let title = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return switch (owner.isEmpty, title.isEmpty) {
+    case (false, false): "\(owner) — \(title)"
+    case (false, true): owner
+    case (true, false): title
+    case (true, true): PanelsL10n.string("Window")
+    }
+  }
+
   static func tabSources(
     session: BrowserSession, profileID: UUID, requestingTabID: UUID
   ) -> [DesktopCaptureSource] {

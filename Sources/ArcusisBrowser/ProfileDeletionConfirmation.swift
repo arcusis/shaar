@@ -56,7 +56,7 @@ struct ProfileDeletionConfirmation: View {
       if let deletionFailure { Text(deletionFailure).foregroundStyle(.red) }
       HStack {
         Spacer()
-        Button(SettingsL10n.string("Cancel")) { onDismiss() }.disabled(deleting)
+        Button(SettingsL10n.string("Cancel"), role: .cancel) { onDismiss() }.disabled(deleting)
         Button(SettingsL10n.string(deleting ? "Deleting…" : "Delete"), role: .destructive) {
           let destination = removeSpaces ? nil : destinationID
           deleting = true

@@ -1,6 +1,8 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Could not load private cookie settings.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load private cookie settings."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את הגדרות העוגיות בגלישה פרטית."}}}},
+    "Could not update private cookie settings. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not update private cookie settings. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לעדכן את הגדרות העוגיות בגלישה פרטית. כדאי לנסות שוב."}}}},
     "Could not load this profile. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load this profile. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את הפרופיל. כדאי לנסות שוב."}}}},
     "Previous Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Previous Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הקודם"}}}},
     "Next Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Next Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הבא"}}}},

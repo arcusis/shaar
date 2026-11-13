@@ -52,6 +52,31 @@ class CatalogValidatorTests(unittest.TestCase):
             data["strings"],
         )
 
+    def test_private_site_control_failures_use_hebrew_recovery_copy(self):
+        expected = {
+            "Could not load private cookie settings.": "לא ניתן לטעון את הגדרות העוגיות בגלישה פרטית.",
+            "Could not update private cookie settings. Try again.": "לא ניתן לעדכן את הגדרות העוגיות בגלישה פרטית. כדאי לנסות שוב.",
+            "Could not load private site cookie settings. Try again.": "לא ניתן לטעון את הגדרות קובצי ה-Cookie של האתר בחלון הפרטי. כדאי לנסות שוב.",
+            "Could not update private site cookie settings. Try again.": "לא ניתן לעדכן את הגדרות קובצי ה-Cookie של האתר בחלון הפרטי. כדאי לנסות שוב.",
+        }
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        for key, translation in expected.items():
+            with self.subTest(key=key):
+                self.assertEqual(
+                    catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+                    translation,
+                )
+        source = (ROOT / "Sources/ArcusisBrowser/SiteControlsPrivate.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"Could not load private site cookie settings. Try again."', source)
+        self.assertIn('"Could not update private site cookie settings. Try again."', source)
+        self.assertNotIn("failure = error.localizedDescription", source)
+
     def test_show_all_history_native_menu_has_hebrew_settings_copy(self):
         key = "Show All History"
         catalog = json.loads(

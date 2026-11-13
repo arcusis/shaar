@@ -54,8 +54,16 @@ struct LibraryDownloadsView: View {
     return results.filter(typeFilter.includes)
   }
 
+  private var mediaResults: [LibraryMediaDownload] {
+    guard profileIsCurrent, let downloads else { return [] }
+    return LibraryDownloadQuery.mediaResults(
+      downloads.libraryItems(in: profileID), search: search, kind: mediaKind,
+      profileID: profileID, currentProfileID: currentProfileID, downloads: downloads)
+  }
+
   var body: some View {
-    let visibleItems = items
+    let visibleMedia = mediaOnly ? mediaResults : []
+    let visibleItems = mediaOnly ? visibleMedia.map(\.item) : items
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 6) {
         HStack(spacing: 8) {
@@ -110,7 +118,7 @@ struct LibraryDownloadsView: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if mediaOnly {
-        mediaGrid(visibleItems)
+        mediaGrid(visibleMedia)
       } else {
         downloadList(visibleItems)
       }
@@ -291,17 +299,13 @@ struct LibraryDownloadsView: View {
       arguments: [.string(kind), .string(source)])
   }
 
-  private func mediaGrid(_ items: [BrowserDownload]) -> some View {
+  private func mediaGrid(_ items: [LibraryMediaDownload]) -> some View {
     let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     return ScrollView {
       LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-        ForEach(items) { item in
-          if let downloads,
-            let media = LibraryDownloadQuery.mediaFile(
-              for: item, profileID: profileID, currentProfileID: currentProfileID,
-              downloads: downloads)
-          {
-            mediaCard(item, media: media, downloads: downloads)
+        ForEach(items) { result in
+          if let downloads {
+            mediaCard(result.item, media: result.file, downloads: downloads)
           }
         }
       }

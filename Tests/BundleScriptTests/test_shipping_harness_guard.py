@@ -290,6 +290,13 @@ class ShippingHarnessGuardTests(unittest.TestCase):
             GUARD.engine_testing_findings(source, source.read_text()), []
         )
 
+    def test_nested_swift_block_comments_do_not_report_harness_tokens(self):
+        source = self.plant(
+            "Sources/ArcusisBrowser/Comment.swift",
+            "/* outer /* SHAAR_ENGINE_TESTING */ still a comment */\n",
+        )
+        self.assertEqual(GUARD.engine_testing_findings(source, source.read_text()), [])
+
     def test_engine_testing_string_in_the_binary_is_allowed(self):
         self.binary.write_bytes(b"prefix SHAAR_ENGINE_TESTING suffix")
         self.assertEqual(GUARD.findings(self.root, self.binary), [])

@@ -11,6 +11,12 @@ import XCTest
 
 @MainActor
 final class SplitPageVisualTests: XCTestCase {
+  func testSplitLayoutMenuValueIncludesArrangementAndPaneCount() {
+    let value = SplitLayoutControls.accessibilityValue(preset: .rows, paneCount: 3)
+    XCTAssertTrue(value.contains(SplitLayoutPreset.rows.title))
+    XCTAssertTrue(value.contains(ShellL10n.plural("%d tabs", count: 3)))
+  }
+
   func testSplitDividerHighlightAnimationRespectsReduceMotion() {
     XCTAssertNil(SplitGroupView.dividerHighlightAnimation(reduceMotion: true))
     XCTAssertNotNil(SplitGroupView.dividerHighlightAnimation(reduceMotion: false))

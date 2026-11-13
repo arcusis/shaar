@@ -91,6 +91,12 @@ struct SplitLayoutControls: View {
   let split: BrowserSplit
   @Environment(\.layoutDirection) private var layoutDirection
 
+  static func accessibilityValue(preset: SplitLayoutPreset?, paneCount: Int) -> String {
+    let value = ShellL10n.plural("%d tabs", count: paneCount)
+    guard let preset else { return value }
+    return "\(preset.title), \(value)"
+  }
+
   var body: some View {
     let current = SplitLayoutPreset.matching(split.root)
     Menu {
@@ -131,5 +137,6 @@ struct SplitLayoutControls: View {
     .fixedSize()
     .help(ShellL10n.string("Split layout"))
     .accessibilityLabel(ShellL10n.string("Split layout"))
+    .accessibilityValue(Self.accessibilityValue(preset: current, paneCount: split.tabIDs.count))
   }
 }

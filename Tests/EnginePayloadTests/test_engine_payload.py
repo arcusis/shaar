@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import plistlib
+from contextlib import redirect_stdout
 from pathlib import Path
 import struct
 import shutil
@@ -626,6 +627,17 @@ class EnginePayloadTests(unittest.TestCase):
         self.assertFalse(report["payload_match"])
         self.assertEqual(report["reason"], "archive is not a supported regular file")
         self.assertNotIn(str(self.root), json.dumps(report))
+
+    def test_cli_reports_non_utf8_pin_as_malformed_json(self):
+        pin_path = self.root / "pin.json"
+        pin_path.write_bytes(b"\xff\xfe")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = payload.main(["--archive", str(self.archive), "--pin", str(pin_path)])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(report["reason"], "pin file unavailable or malformed")
+        self.assertFalse(report["archive_metadata_verified"])
 
     def test_unavailable_paths_do_not_leak_machine_paths(self):
         missing = self.root / "private-machine-path" / "missing.tar.xz"

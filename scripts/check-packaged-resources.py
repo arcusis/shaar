@@ -24,7 +24,6 @@ SHIPPING_SOURCE_ROOTS = (
 )
 MODULE_TOKEN = re.compile(r"Bundle\.module|(?<![\w.])\.module\b")
 FALLBACK_CLOSURE = re.compile(r"\{\s*\.module\s*\}")
-BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 
 def code_portion(line: str, block_comment_depth: list[int] | None = None) -> str:
@@ -122,8 +121,7 @@ def code_lines(lines: list[str]) -> list[str]:
 
 
 def violations_in_source(text: str, path: str) -> list[str]:
-    original_lines = text.splitlines()
-    lines = code_lines(original_lines)
+    lines = code_lines(text.splitlines())
     errors = []
     for index, line in enumerate(lines):
         if not MODULE_TOKEN.search(line):
@@ -134,6 +132,30 @@ def violations_in_source(text: str, path: str) -> list[str]:
                 "development fallback passed to PackagedResourceBundle.resolve"
             )
     return errors
+
+
+def without_block_comments(code: str) -> str:
+    masked = []
+    depth = 0
+    index = 0
+    while index < len(code):
+        if depth and code.startswith("/*", index):
+            depth += 1
+            masked.extend("  ")
+            index += 2
+        elif depth and code.startswith("*/", index):
+            depth -= 1
+            masked.extend("  ")
+            index += 2
+        elif not depth and code.startswith("/*", index):
+            depth = 1
+            masked.extend("  ")
+            index += 2
+        else:
+            character = code[index]
+            masked.append("\n" if depth and character == "\n" else " " if depth else character)
+            index += 1
+    return "".join(masked)
 
 def fallback_only(line: str, lines: list[str], index: int) -> bool:
     window = "\n".join(lines[max(0, index - 5) : index + 1])

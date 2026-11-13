@@ -287,6 +287,13 @@ process.stdin.on('end', () => {
             report.write_bytes(b"\xff")
             self.assertEqual(PROBE.read_report(report), {})
 
+    def test_report_removed_after_existence_check_is_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_text("{}")
+            with patch.object(PROBE.Path, "read_text", side_effect=FileNotFoundError):
+                self.assertEqual(PROBE.read_report(report), {})
+
     def test_malformed_renderer_rows_cannot_hide_a_crash(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
         report = {"rows": [None]}

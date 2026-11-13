@@ -35,3 +35,18 @@ test("missing cached font file falls back to system fonts", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("cached font manifest rejects unexpected font paths", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  mkdirSync(cache);
+  writeFileSync(
+    join(cache, "fonts.json"),
+    JSON.stringify([{ family: "Satoshi", file: "../outside.woff2", weight: "300 900" }]),
+  );
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

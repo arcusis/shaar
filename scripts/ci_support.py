@@ -42,6 +42,26 @@ def file_sha256(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
+def junit_totals(report: Path) -> dict[str, int]:
+    root = ET.parse(report).getroot()
+    suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+    leaves = [suite for suite in suites if not suite.findall("testsuite")]
+    totals = {}
+    for key in ("tests", "failures", "errors", "skipped"):
+        values = []
+        for suite in leaves:
+            raw = suite.get(key, "0")
+            try:
+                value = int(raw)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"invalid {key} count {raw!r}") from error
+            if value < 0:
+                raise ValueError(f"negative {key} count {value}")
+            values.append(value)
+        totals[key] = sum(values)
+    return totals
+
+
 class Commands:
     def __init__(self, stage: str):
         self.directory = ROOT / "build/ci" / stage
@@ -87,14 +107,16 @@ class Commands:
 
     def finish(self) -> int:
         invalid_reports = []
+        report_totals = {}
         for report in sorted(self.directory.glob("*.xml")):
             if report.name == "commands.xml":
                 continue
             try:
-                ET.parse(report)
-            except (ET.ParseError, OSError) as error:
+                report_totals[report.name] = junit_totals(report)
+            except (ET.ParseError, OSError, ValueError) as error:
                 name = f"invalid-report-{report.name}"
-                message = f"Could not parse {report.name}: {error}"
+                action = "parse" if isinstance(error, (ET.ParseError, OSError)) else "validate"
+                message = f"Could not {action} {report.name}: {error}"
                 (self.directory / f"{name}.log").write_text(message + "\n")
                 self.results.append(dict(name=name, command=["validate XML report", str(report)],
                                          status=1, seconds=0.0))
@@ -110,16 +132,9 @@ class Commands:
                 for message in invalid_reports:
                     output.write(f"\n{message}\n")
                 for report in sorted(self.directory.glob("*.xml")):
-                    if report.name == "commands.xml":
+                    totals = report_totals.get(report.name)
+                    if totals is None:
                         continue
-                    try:
-                        root = ET.parse(report).getroot()
-                    except (ET.ParseError, OSError):
-                        continue
-                    suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
-                    leaves = [suite for suite in suites if not suite.findall("testsuite")]
-                    totals = {key: sum(int(suite.get(key, "0")) for suite in leaves)
-                              for key in ("tests", "failures", "errors", "skipped")}
                     output.write(f"\n`{report.name}`: {totals['tests']} tests, {totals['failures']} failures, "
                                  f"{totals['errors']} errors, {totals['skipped']} skipped.\n")
         return int(not self.results or any(item["status"] != 0 for item in self.results))

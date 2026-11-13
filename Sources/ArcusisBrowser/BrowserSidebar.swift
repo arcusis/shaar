@@ -19,7 +19,7 @@ struct BrowserSidebar: View {
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
   @State private var targetedFolder: UUID?
-  @State private var folderHoverTask: Task<Void, Never>?
+  @State private var folderHoverDelay = SidebarFolderHoverDelay()
   @State private var folderHoverTab: UUID?
   @State private var folderHoverSession: DropSession.ID?
   @State private var folderHoverDeadline: ContinuousClock.Instant?
@@ -657,25 +657,22 @@ struct BrowserSidebar: View {
   }
 
   private func scheduleFolderHover(_ tab: BrowserTab, in space: BrowserSpace) {
-    guard folderHoverTask == nil, folderDropReady == nil, tab.isPinned,
+    guard !folderHoverDelay.isScheduled, folderDropReady == nil, tab.isPinned,
       !space.splits.contains(where: { $0.tabIDs.contains(tab.id) }),
       let drag = store.tabDrag, drag.tabID != tab.id
     else { return }
     // Measure the hold from the native event, even if other main-actor work delays the task.
     let deadline = ContinuousClock.now + .milliseconds(650)
     folderHoverDeadline = deadline
-    folderHoverTask = Task { @MainActor in
-      try? await Task.sleep(until: deadline, clock: .continuous)
-      guard !Task.isCancelled, folderHoverTab == tab.id,
-        targetedTabIntent?.combinesTabs != false
-      else { return }
+    folderHoverDelay.schedule(until: deadline) {
+      folderHoverTab == tab.id && targetedTabIntent?.combinesTabs != false
+    } activate: {
       folderDropReady = tab.id
     }
   }
 
   private func cancelFolderHover() {
-    folderHoverTask?.cancel()
-    folderHoverTask = nil
+    folderHoverDelay.cancel()
     folderDropReady = nil
     folderHoverTab = nil
     folderHoverSession = nil
@@ -1162,6 +1159,42 @@ struct BrowserSidebar: View {
     let before = siblings.insertionAnchor(movingIndex: index, by: offset)
     store.moveFolder(
       folder.id, from: space.id, to: space.id, parentID: folder.parentID, before: before)
+  }
+}
+
+@MainActor
+final class SidebarFolderHoverDelay {
+  private var task: Task<Void, Never>?
+  private var activeID: UUID?
+
+  var isScheduled: Bool { activeID != nil }
+
+  func schedule(
+    until deadline: ContinuousClock.Instant,
+    isCurrent: @escaping @MainActor () -> Bool,
+    activate: @escaping @MainActor () -> Void
+  ) {
+    guard activeID == nil else { return }
+    let id = UUID()
+    activeID = id
+    task = Task { @MainActor [weak self] in
+      do { try await Task.sleep(until: deadline, clock: .continuous) } catch {}
+      guard let self, self.activeID == id else { return }
+      self.activeID = nil
+      self.task = nil
+      guard !Task.isCancelled, isCurrent() else { return }
+      activate()
+    }
+  }
+
+  func cancel() {
+    activeID = nil
+    task?.cancel()
+    task = nil
+  }
+
+  func waitForCurrentTask() async {
+    await task?.value
   }
 }
 

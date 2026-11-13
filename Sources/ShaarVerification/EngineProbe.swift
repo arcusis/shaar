@@ -41,6 +41,7 @@ final class EngineProbe {
   private static let measurementTabCounts: Set<Int> = [1, 10, 30, 50, 100]
   private let measurementTabCount: Int?
   private let measurementEager: Bool
+  private let measurementSleeping: Bool
   private let measurementInspector: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
@@ -84,7 +85,7 @@ final class EngineProbe {
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
     localizationMode: Bool, basicBrowsingMode: Bool, reloadWindowMode: Bool, devModeOnly: Bool,
     mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool,
-    measurementTabCount: Int?, measurementEager: Bool,
+    measurementTabCount: Int?, measurementEager: Bool, measurementSleeping: Bool,
     measurementInspector: Bool
   ) throws {
     self.root = root
@@ -109,6 +110,7 @@ final class EngineProbe {
     self.devtoolsRouteOnlyMode = devtoolsRouteOnlyMode
     self.measurementTabCount = measurementTabCount
     self.measurementEager = measurementEager
+    self.measurementSleeping = measurementSleeping
     self.measurementInspector = measurementInspector
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
@@ -244,12 +246,16 @@ final class EngineProbe {
         return Int(arguments[index + 1])
       }()
       let measurementEager = arguments.contains("--probe-measure-eager")
+      let measurementSleeping = arguments.contains("--probe-measure-sleeping")
       let measurementInspector = arguments.contains("--probe-measure-inspector")
       guard !measurementEager || measurementTabCount != nil else {
         throw ProbeFailure("Eager measurement requires --probe-measure-tabs.")
       }
       guard !measurementInspector || measurementTabCount != nil else {
         throw ProbeFailure("Inspector measurement requires --probe-measure-tabs.")
+      }
+      guard !measurementSleeping || (measurementTabCount != nil && measurementEager) else {
+        throw ProbeFailure("Sleeping measurement requires eagerly loaded measurement tabs.")
       }
       guard
         measurementTabCount.map({ measurementTabCounts.contains($0) }) ?? !arguments.contains(
@@ -342,6 +348,7 @@ final class EngineProbe {
         mediaSessionOnlyMode: mediaSessionOnlyMode,
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
         measurementTabCount: measurementTabCount, measurementEager: measurementEager,
+        measurementSleeping: measurementSleeping,
         measurementInspector: measurementInspector)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
@@ -624,14 +631,18 @@ final class EngineProbe {
           store.session.selectedSpace.tabs.count == measurementTabCount
         else { throw ProbeFailure("Measurement tab materialization count is incorrect.") }
         if measurementInspector { try await openMeasurementInspector(browserEngine) }
+        if measurementSleeping {
+          try await sleepMeasurementTabs(browserEngine, target: measurementTabCount - 1)
+        }
         bootstrapStage = .ready
         fixtureStage = "measurement-ready"
         let ready =
           [
             "schema": 2, "phase": phase, "tabs": measurementTabCount,
-            "mode": measurementEager ? "eager" : "lazy",
+            "mode": measurementSleeping ? "sleeping" : (measurementEager ? "eager" : "lazy"),
             "liveTabs": browserEngine.liveTabs.count,
             "placeholders": measurementTabCount - browserEngine.liveTabs.count,
+            "sleepingTabs": store.sleepingTabIDs.count,
             "inspector": measurementInspector,
             "inspectorLocked": measurementInspector,
             "readyAt": ProcessInfo.processInfo.systemUptime,
@@ -645,7 +656,7 @@ final class EngineProbe {
           try await Task.sleep(for: .seconds(hold))
         }
         checks.append(
-          "\(browserEngine.liveTabs.count) fixture pages loaded and \(measurementTabCount - browserEngine.liveTabs.count) placeholders in a hidden window"
+          "\(browserEngine.liveTabs.count) fixture tabs loaded and \(store.sleepingTabIDs.count) sleeping in a hidden window"
         )
         localFixturesPassed = true
         finish(error: nil)
@@ -1212,6 +1223,18 @@ final class EngineProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw ProbeFailure("Measurement fixture did not finish loading in \(tabID).")
+  }
+
+  private func sleepMeasurementTabs(_ engine: BrowserEngine, target: Int) async throws {
+    let deadline = ProcessInfo.processInfo.systemUptime + 30
+    while store.sleepingTabIDs.count < target {
+      guard ProcessInfo.processInfo.systemUptime < deadline else {
+        throw ProbeFailure(
+          "Only \(store.sleepingTabIDs.count) of \(target) eligible measurement tabs slept.")
+      }
+      engine.sleepForMemoryPressure()
+      try await Task.sleep(for: .milliseconds(100))
+    }
   }
 
   private func argumentValue(_ name: String) -> String? {

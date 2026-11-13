@@ -27,6 +27,37 @@ def thread(total, frames, trailer=""):
 
 
 class MeasureFootprintSampleTests(unittest.TestCase):
+    def test_sleeping_comparison_reports_rss_saved_per_tab_count(self):
+        comparisons = measure_footprint.compare_sleeping_rss([
+            {"tabs": 50, "mode": "eager", "processTreeRSSMiBMean": 900.0},
+            {"tabs": 50, "mode": "sleeping", "processTreeRSSMiBMean": 540.0},
+            {"tabs": 100, "mode": "eager", "processTreeRSSMiBMean": 1600.0},
+            {"tabs": 100, "mode": "sleeping", "processTreeRSSMiBMean": 800.0},
+        ])
+        self.assertEqual(comparisons, [
+            {
+                "tabs": 50,
+                "awakeProcessTreeRSSMiBMean": 900.0,
+                "sleepingProcessTreeRSSMiBMean": 540.0,
+                "processTreeRSSMiBSaved": 360.0,
+                "processTreeRSSReductionPercent": 40.0,
+            },
+            {
+                "tabs": 100,
+                "awakeProcessTreeRSSMiBMean": 1600.0,
+                "sleepingProcessTreeRSSMiBMean": 800.0,
+                "processTreeRSSMiBSaved": 800.0,
+                "processTreeRSSReductionPercent": 50.0,
+            },
+        ])
+
+    def test_sleeping_comparison_omits_counts_without_both_modes(self):
+        comparisons = measure_footprint.compare_sleeping_rss([
+            {"tabs": 50, "mode": "eager", "processTreeRSSMiBMean": 900.0},
+            {"tabs": 100, "mode": "sleeping", "processTreeRSSMiBMean": 800.0},
+        ])
+        self.assertEqual(comparisons, [])
+
     def test_sample_duration_must_be_positive_integer(self):
         self.assertEqual(measure_footprint.positive_seconds("15"), 15)
         for value in ("0", "-1", "1.5", "invalid"):

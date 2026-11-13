@@ -53,6 +53,11 @@ class CatalogValidatorTests(unittest.TestCase):
         translation = settings["strings"]["Could not set the default browser."][
             "localizations"]["he"]["stringUnit"]["value"]
         self.assertNotEqual(translation, "Could not set the default browser.")
+    def test_inspector_section_disclosure_uses_direction_aware_chevron(self):
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorPanelComponents.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('isCollapsed ? "chevron.forward" : "chevron.down"', source)
 
     def test_rejects_null_catalog_and_localization_maps_cleanly(self):
         for data in (None, {"sourceLanguage": "en", "strings": {"x": None}},

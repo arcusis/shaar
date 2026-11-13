@@ -36,10 +36,12 @@ def matching_pr_bundle_run_id(response: dict, pr_number: int, repository_full_na
         return ""
     runs = [
         run
-        for run in response.get("workflow_runs", [])
+        for run in (response.get("workflow_runs") or [])
+        if isinstance(run, dict)
         if run.get("conclusion") == "success"
         and (run.get("head_repository") or {}).get("full_name") == repository_full_name
-        and any(pr.get("number") == pr_number for pr in run.get("pull_requests", []))
+        and any(pr.get("number") == pr_number
+                for pr in (run.get("pull_requests") or []) if isinstance(pr, dict))
     ]
     if not runs:
         return ""

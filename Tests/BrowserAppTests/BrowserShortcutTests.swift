@@ -85,6 +85,29 @@ import Testing
   #expect(!TabNumberShortcutRouting.route(event("0"), store: store))
 }
 
+@Test @MainActor func commandNumberTabShortcutRejectsOtherChordsAndKeyUp() throws {
+  let store = BrowserStore()
+  store.perform(.open(URL(string: "https://number-one.example")!))
+  store.perform(.open(URL(string: "https://number-two.example")!))
+  let selected = store.session.selectedSpace.selectedTabID
+
+  func event(_ type: NSEvent.EventType, _ modifiers: NSEvent.ModifierFlags) -> NSEvent {
+    NSEvent.keyEvent(
+      with: type, location: .zero, modifierFlags: modifiers, timestamp: 0,
+      windowNumber: 0, context: nil, characters: "1", charactersIgnoringModifiers: "1",
+      isARepeat: false, keyCode: 18)!
+  }
+
+  for modifiers in [
+    NSEvent.ModifierFlags(), .shift.union(.command), .option.union(.command),
+    .control.union(.command),
+  ] {
+    #expect(!TabNumberShortcutRouting.route(event(.keyDown, modifiers), store: store))
+  }
+  #expect(!TabNumberShortcutRouting.route(event(.keyUp, .command), store: store))
+  #expect(store.session.selectedSpace.selectedTabID == selected)
+}
+
 @Test @MainActor func controlTabCyclesToTheNextTabAndWraps() throws {
   let store = BrowserStore()
   for index in 1...3 {

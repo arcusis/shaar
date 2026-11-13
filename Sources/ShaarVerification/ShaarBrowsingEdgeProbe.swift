@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import CoreFoundation
 import Darwin
 import Foundation
 
@@ -1309,19 +1310,21 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     edgeProbeWrite(value, to: url)
   }
 
-  private static func number(_ value: Any?) -> Int? {
-    if let value = value as? Int { return value }
-    if let value = value as? NSNumber { return Int(value.int64Value) }
-    return nil
+  nonisolated static func number(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return nil }
+    return Int(exactly: number.doubleValue)
   }
 
-  private static func flag(_ value: Any?) -> Bool? {
-    if let value = value as? Bool { return value }
-    if let value = value as? NSNumber { return value.boolValue }
-    return nil
+  nonisolated static func flag(_ value: Any?) -> Bool? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) == CFBooleanGetTypeID()
+    else { return nil }
+    return number.boolValue
   }
 
-  private static func numbers(_ value: Any?) -> [Int] {
+  nonisolated static func numbers(_ value: Any?) -> [Int] {
     if let values = value as? [Any] { return values.compactMap { number($0) } }
     if let values = value as? NSArray { return values.compactMap { number($0) } }
     return []

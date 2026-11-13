@@ -1,0 +1,30 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import Testing
+
+@testable import ShaarVerification
+
+@Suite("Browsing edge report scalar parsing")
+struct ShaarBrowsingEdgeProbeScalarTests {
+  @Test func integerParserRejectsBooleansFractionsAndOverflow() {
+    #expect(ShaarBrowsingEdgeProbe.number(7) == 7)
+    #expect(ShaarBrowsingEdgeProbe.number(-2) == -2)
+    #expect(ShaarBrowsingEdgeProbe.number(2.5) == nil)
+    #expect(ShaarBrowsingEdgeProbe.number(true) == nil)
+    #expect(ShaarBrowsingEdgeProbe.number(UInt64.max) == nil)
+  }
+
+  @Test func booleanParserAcceptsOnlyBooleanValues() {
+    #expect(ShaarBrowsingEdgeProbe.flag(true) == true)
+    #expect(ShaarBrowsingEdgeProbe.flag(false) == false)
+    #expect(ShaarBrowsingEdgeProbe.flag(1) == nil)
+    #expect(ShaarBrowsingEdgeProbe.flag("true") == nil)
+  }
+
+  @Test func integerArraysDiscardNonIntegerScalars() {
+    #expect(ShaarBrowsingEdgeProbe.numbers([1, 2.5, true, "4", 5]) == [1, 5])
+    #expect(ShaarBrowsingEdgeProbe.numbers("not an array").isEmpty)
+  }
+}

@@ -3553,6 +3553,18 @@
         "he": { "stringUnit": { "state": "translated", "value": "הרחבה" } }
       }
     },
+    "The private cookie setting could not be changed.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The private cookie setting could not be changed." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לשנות את הגדרת העוגיות בחלון הפרטי." } }
+      }
+    },
+    "The private cookie setting could not be loaded.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The private cookie setting could not be loaded." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לטעון את הגדרת העוגיות בחלון הפרטי." } }
+      }
+    },
     "This page has no certificate to show.": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "This page has no certificate to show." } },

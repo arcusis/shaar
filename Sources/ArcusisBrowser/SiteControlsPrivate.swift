@@ -58,7 +58,7 @@ final class PrivateSiteControlsModel: Identifiable {
       guard !Task.isCancelled, currentRead == readRevision, currentChange == changeRevision else {
         return
       }
-      failure = error.localizedDescription
+      failure = ShellL10n.string("The private cookie setting could not be loaded.")
     }
   }
 
@@ -81,7 +81,7 @@ final class PrivateSiteControlsModel: Identifiable {
         applied == value
         ? nil
         : ARCBridgeLocalizedString("The private cookie setting was not applied.")
-    } catch { failure = error.localizedDescription }
+    } catch { failure = ShellL10n.string("The private cookie setting could not be changed.") }
   }
 }
 

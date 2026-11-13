@@ -42,7 +42,9 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
   /// The provider redirects here once sign-in has finished. Google may land on any of its pages
   /// (for example www.google.com after an error), so anything off the sign-in host counts.
   func isSignedInPage(_ url: URL) -> Bool {
-    guard url.scheme?.lowercased() == "https" else { return false }
+    guard url.scheme?.lowercased() == "https", url.user == nil, url.password == nil,
+      url.port == nil || url.port == 443
+    else { return false }
     let host = url.host()?.lowercased() ?? ""
     switch self {
     case .google:

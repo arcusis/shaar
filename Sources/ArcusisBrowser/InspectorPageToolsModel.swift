@@ -410,7 +410,10 @@ final class InspectorPageToolsModel {
         "writeStorage", arguments: [storageArea, key, value as Any? ?? NSNull()])
       try await loadStorage()
       failure = nil
-    } catch { failure = error.localizedDescription }
+    } catch {
+      guard active, !Task.isCancelled, !(error is CancellationError) else { return }
+      failure = error.localizedDescription
+    }
   }
 
   func writeCookie(_ cookie: Cookie?, name: String, value: String) async {
@@ -442,7 +445,10 @@ final class InspectorPageToolsModel {
       }
       try await loadStorage()
       failure = nil
-    } catch { failure = error.localizedDescription }
+    } catch {
+      guard active, !Task.isCancelled, !(error is CancellationError) else { return }
+      failure = error.localizedDescription
+    }
   }
 
   func deleteCookie(_ cookie: Cookie) async {
@@ -455,7 +461,10 @@ final class InspectorPageToolsModel {
       _ = try await developer.call("Network.deleteCookies", params: params)
       try await loadStorage()
       failure = nil
-    } catch { failure = error.localizedDescription }
+    } catch {
+      guard active, !Task.isCancelled, !(error is CancellationError) else { return }
+      failure = error.localizedDescription
+    }
   }
 
   private func expression(_ method: String, arguments: [Any]) async throws -> [String: Any] {

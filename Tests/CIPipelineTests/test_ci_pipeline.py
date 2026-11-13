@@ -82,6 +82,8 @@ class PipelineGateTests(unittest.TestCase):
             self.assertEqual(report.find("testcase").attrib["name"], "stage-error")
             self.assertEqual((root / "build/ci/stage-error/error.txt").read_text(),
                              "bundle metadata is invalid\n")
+            self.assertEqual((root / "build/ci/stage-error/stage-error.log").read_text(),
+                             "bundle metadata is invalid\n")
 
     def test_hosted_visual_shards_run_each_existing_filter_once(self):
         selected = [name for shard in STAGES.VISUAL_SHARDS.values() for name in shard]

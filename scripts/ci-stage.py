@@ -303,6 +303,7 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 def record_stage_error(checks: Commands, error: Exception) -> None:
     message = str(error)
     (checks.directory / "error.txt").write_text(message + "\n")
+    (checks.directory / "stage-error.log").write_text(message + "\n")
     checks.results.append(dict(name="stage-error", command=["report CI stage exception"],
                                status=1, seconds=0.0))
     print(message, file=sys.stderr)

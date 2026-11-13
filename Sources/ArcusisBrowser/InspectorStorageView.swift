@@ -114,7 +114,8 @@ struct InspectorStorageView: View {
                   reading || cookie?.editable == false)
               }
               Spacer()
-              Button(InspectorToolsL10n.string("Cancel"), action: reset)
+              Button(InspectorToolsL10n.string("Cancel"), role: .cancel, action: reset)
+                .keyboardShortcut(.cancelAction)
               Button(InspectorToolsL10n.string("Save")) { save(deleting: false) }.disabled(
                 reading || cookie?.editable == false
                   || (model.storageArea == "cookies" && key.isEmpty))

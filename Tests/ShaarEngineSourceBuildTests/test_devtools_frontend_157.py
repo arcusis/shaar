@@ -232,6 +232,21 @@ class DevToolsFrontend157Tests(unittest.TestCase):
                 stage.stage(PANEL, destination)
             self.assertFalse((external / "BuildInfoPanel.ts").exists())
 
+    def test_stage_rejects_symlinked_panels_parent(self):
+        stage = load_stage()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            front_end = root / "front_end"
+            front_end.mkdir()
+            external = root / "external"
+            external.mkdir()
+            panels = front_end / "panels"
+            panels.symlink_to(external, target_is_directory=True)
+            destination = panels / "shaar"
+            with self.assertRaisesRegex(SystemExit, "symlinked panels directory"):
+                stage.stage(PANEL, destination)
+            self.assertFalse((external / "shaar-meta.ts").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

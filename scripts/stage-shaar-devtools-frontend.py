@@ -20,6 +20,8 @@ OVERLAY = (
 def stage(overlay: Path, destination: Path) -> list[str]:
     if destination.name != "shaar" or destination.parent.name != "panels":
         raise SystemExit(f"Refusing to stage outside panels/shaar: {destination}")
+    if destination.parent.is_symlink():
+        raise SystemExit(f"Refusing symlinked panels directory: {destination.parent}")
     if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
         raise SystemExit(f"Refusing to stage into destination symlink or non-directory: {destination}")
     if overlay.is_symlink() or not overlay.is_dir():

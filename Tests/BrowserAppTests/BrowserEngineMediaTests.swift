@@ -38,7 +38,7 @@ struct BrowserEngineMediaTests {
 
 @MainActor
 private final class MediaOwnershipRuntime: ARCChromiumRuntime {
-  var tabWindows: [String: String] = [:]
+  nonisolated(unsafe) var tabWindows: [String: String] = [:]
 
   override func windowID(forTabID tabID: String) -> String? { tabWindows[tabID] }
 }

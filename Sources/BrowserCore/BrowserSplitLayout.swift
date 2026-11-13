@@ -115,9 +115,13 @@ public indirect enum SplitNode: Equatable, Sendable {
   }
 
   static func normalized(_ weights: [Double]) -> [Double] {
-    let total = weights.reduce(0, +)
-    guard total > 0 else { return weights.map { _ in 1 / Double(weights.count) } }
-    return weights.map { $0 / total }
+    let maximum = weights.max() ?? 0
+    guard maximum > 0, maximum.isFinite else {
+      return weights.map { _ in 1 / Double(weights.count) }
+    }
+    let scaled = weights.map { $0 / maximum }
+    let total = scaled.reduce(0, +)
+    return scaled.map { $0 / total }
   }
 }
 

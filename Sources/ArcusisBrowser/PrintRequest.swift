@@ -15,7 +15,8 @@ struct PrintRequest: Identifiable, Equatable {
   let title: String
 
   init?(payload: [String: Any]) {
-    guard let id = payload["id"] as? String,
+    guard payload["schemaVersion"] as? Int == 1,
+      let id = payload["id"] as? String,
       UUID(uuidString: id) != nil,
       let profileID = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
       let tabID = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),

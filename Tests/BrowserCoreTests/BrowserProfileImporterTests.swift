@@ -197,6 +197,12 @@ import Testing
   #expect(throws: BrowserImport.ImportError.self) {
     try BrowserImport.readProfile(at: profile, source: .chrome)
   }
+
+  let guestHome = root.appending(path: "Guest/First/Second/Profile")
+  try FileManager.default.createDirectory(at: guestHome, withIntermediateDirectories: true)
+  try copyFixture("ChromiumBookmarks", to: guestHome.appending(path: "Bookmarks"))
+  let imported = try BrowserImport.readProfile(at: guestHome, source: .chrome)
+  #expect(imported.bookmarks.count == 1)
 }
 
 @Test func ordinaryProfileFolderContainingGuestImportsNormally() throws {

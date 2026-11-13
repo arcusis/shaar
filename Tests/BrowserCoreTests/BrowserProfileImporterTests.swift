@@ -449,6 +449,29 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   #expect(batch.history[0].visitTimes.count == 30_002)
 }
 
+@Test func sqliteRowMaterializationFocusedBenchmark() throws {
+  let profile = try profileDirectory(name: "SQLiteRowsBenchmark")
+  defer { try? FileManager.default.removeItem(at: profile) }
+  let database = profile.appending(path: "History")
+  try createDatabase(
+    sqlFixture: "ChromiumHistory.sql", at: database,
+    extraSQL: """
+      WITH RECURSIVE sequence(value) AS (
+        SELECT 10 UNION ALL SELECT value + 1 FROM sequence WHERE value < 30009
+      )
+      INSERT INTO visits SELECT value, 1, 13344473602000000 + value, 0 FROM sequence;
+      """)
+  let start = ContinuousClock.now
+  var rowCount = 0
+  for _ in 0..<4 {
+    rowCount += try BrowserImportSQLite.rows(
+      at: database,
+      query: "SELECT id, url, visit_time, transition FROM visits ORDER BY id").count
+  }
+  print("sqliteRowMaterializationFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(rowCount == 120_012)
+}
+
 @Test func repeatedHistoryAddressValidationBenchmark() {
   let address = "https://example.com/repeated-history-entry"
   var validationCache = BrowserImportAddressCache()

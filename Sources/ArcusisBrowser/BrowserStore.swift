@@ -841,7 +841,11 @@ final class BrowserStore {
   }
 
   func nativeDocumentCommitted(_ id: UUID, profileID: UUID) {
-    if session.profileID(forTabID: id) == profileID { requestedTabCloses.remove(id) }
+    guard session.profileID(forTabID: id) == profileID else { return }
+    requestedTabCloses.remove(id)
+    permissionFrames[id] = nil
+    permissionFrameOrigins[id] = nil
+    cancelWebSharesInvalidatedByFrame(for: id)
     guard rendererFailures[id]?.profileID == profileID else { return }
     rendererFailures[id] = nil
   }
@@ -1025,11 +1029,23 @@ final class BrowserStore {
 
   @discardableResult
   func requestWebShare(_ request: WebShareRequest) -> Bool {
+    guard webShareRequestIsCurrent(request) else { return false }
+    return enqueueConsent(.webShare(request))
+  }
+
+  private func webShareRequestIsCurrent(_ request: WebShareRequest) -> Bool {
     guard let frameID = permissionFrames[request.tabID],
       let origin = permissionFrameOrigins[request.tabID],
       request.matches(session, frameID: frameID, origin: origin)
     else { return false }
-    return enqueueConsent(.webShare(request))
+    return true
+  }
+
+  func canPresentWebShare(_ request: WebShareRequest) -> Bool {
+    sheet?.id == request.sheetID
+      && presentedConsentID == request.sheetID
+      && webShareRequestIsCurrent(request)
+      && rendererFailures[request.tabID] == nil
   }
 
   @discardableResult
@@ -1074,9 +1090,7 @@ final class BrowserStore {
     let accepted =
       presented
       && outcome == .shared
-      && share.matches(
-        session, frameID: permissionFrames[share.tabID],
-        origin: permissionFrameOrigins[share.tabID])
+      && webShareRequestIsCurrent(share)
       && rendererFailures[share.tabID] == nil
     onWebShareDecision?(id, accepted ? .shared : .cancelled)
     presentNextConsent()
@@ -1132,12 +1146,32 @@ final class BrowserStore {
   func rememberPermissionFrame(_ tabID: UUID, frameID: String, origin: URL? = nil) {
     permissionFrames[tabID] = frameID
     permissionFrameOrigins[tabID] = origin
+    cancelWebSharesInvalidatedByFrame(for: tabID)
   }
 
   func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {
     guard permissionFrames[tabID] == frameID else { return }
+    let usedByAcceptedShare = consentRequests.contains { request in
+      guard case .webShare(let share) = request else { return false }
+      return share.tabID == tabID && share.frameID == frameID
+    }
+    guard !usedByAcceptedShare else { return }
     permissionFrames[tabID] = nil
     permissionFrameOrigins[tabID] = nil
+    cancelWebSharesInvalidatedByFrame(for: tabID)
+  }
+
+  private func cancelWebSharesInvalidatedByFrame(for tabID: UUID) {
+    let staleIDs = consentRequests.compactMap { request -> String? in
+      guard case .webShare(let share) = request,
+        share.tabID == tabID,
+        !webShareRequestIsCurrent(share)
+      else { return nil }
+      return share.id
+    }
+    for id in staleIDs {
+      resolveWebShare(id, outcome: .cancelled)
+    }
   }
 
   func websitePermissionIsCurrent(_ request: WebsitePermissionRequest) -> Bool {

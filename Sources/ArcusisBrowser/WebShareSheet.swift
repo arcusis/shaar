@@ -26,6 +26,11 @@ struct WebShareSheet: View {
   @MainActor
   static func finish(_ request: WebShareRequest, store: BrowserStore, anchor: WebShareAnchor) {
     guard anchor.presentationGate.begin() else { return }
+    guard store.canPresentWebShare(request) else {
+      anchor.presentationGate.finish()
+      store.resolveWebShare(request.id, outcome: .cancelled)
+      return
+    }
     guard let view = anchor.view, view.window?.isVisible == true else {
       anchor.presentationGate.finish()
       store.resolveWebShare(request.id, outcome: .cancelled)

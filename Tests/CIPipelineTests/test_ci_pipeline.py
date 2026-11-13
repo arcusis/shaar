@@ -629,6 +629,20 @@ class SupplyChainTests(unittest.TestCase):
         )
         self.assertEqual(sleeps, [5])
 
+    def test_managed_python_install_retries_subprocess_timeouts(self):
+        calls = []
+        sleeps = []
+
+        def run(command, **kwargs):
+            calls.append(kwargs["timeout"])
+            if len(calls) == 1:
+                raise PYTHON_INSTALL.subprocess.TimeoutExpired(command, kwargs["timeout"], output=b"partial")
+            return SimpleNamespace(returncode=0, stdout="installed\n", stderr="")
+
+        self.assertEqual(PYTHON_INSTALL.install_python("3.13", run, sleeps.append), 0)
+        self.assertEqual(calls, [PYTHON_INSTALL.INSTALL_TIMEOUT_SECONDS] * 2)
+        self.assertEqual(sleeps, [5])
+
     def test_managed_python_install_retries_are_bounded(self):
         calls = []
         sleeps = []

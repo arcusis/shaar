@@ -3,15 +3,16 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { HomePage } from "../src/components/home";
 import { DocumentPage } from "../src/components/layout";
-import { screens, siteOrigin } from "../src/content";
+import { siteOrigin } from "../src/content";
 import { notFoundPage, Pages } from "../src/pages";
 import { fontFaceCSS, prepareFonts } from "./fonts";
+import { websiteScreenAssets } from "./screen-assets";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const repositoryRoot = resolve(root, "..");
@@ -43,12 +44,7 @@ await copyFile(
   resolve(output, "assets/shaar-icon.png"),
 );
 await mkdir(resolve(output, "assets/screens"), { recursive: true });
-for (const file of await readdir(resolve(root, "screens"))) {
-  if (/\.(png|webp)$/.test(file)) {
-    await copyFile(resolve(root, "screens", file), resolve(output, "assets/screens", file));
-  }
-}
-for (const { file } of Object.values(screens)) {
+for (const file of websiteScreenAssets()) {
   const fresh = resolve(root, "screens", file);
   const source = existsSync(fresh) ? fresh : resolve(repositoryRoot, ".github/assets", file);
   await copyFile(source, resolve(output, "assets/screens", file));

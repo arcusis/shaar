@@ -79,6 +79,33 @@ import Testing
   #expect(results.isEmpty)
 }
 
+@Test func mostVisitedSkipsOpenPageWithDifferentFragment() throws {
+  var fixture = try LauncherFixture()
+  let opened = fixture.session.open(URL(string: "https://example.com/docs#section")!)
+  #expect(opened != nil)
+  let history = [try entry("https://example.com/docs#top", visits: 12, profile: fixture.profileID)]
+
+  #expect(CommandLauncher.mostVisited(in: fixture.session, history: history).isEmpty)
+}
+
+@Test func mostVisitedSkipsOpenPageWithTerminalDotHost() throws {
+  var fixture = try LauncherFixture()
+  let opened = fixture.session.open(URL(string: "https://example.com./docs")!)
+  #expect(opened != nil)
+  let history = [try entry("https://example.com/docs", visits: 12, profile: fixture.profileID)]
+
+  #expect(CommandLauncher.mostVisited(in: fixture.session, history: history).isEmpty)
+}
+
+@Test func mostVisitedSkipsOpenPageWithExplicitDefaultPort() throws {
+  var fixture = try LauncherFixture()
+  let opened = fixture.session.open(URL(string: "https://example.com:443/docs")!)
+  #expect(opened != nil)
+  let history = [try entry("https://example.com/docs", visits: 12, profile: fixture.profileID)]
+
+  #expect(CommandLauncher.mostVisited(in: fixture.session, history: history).isEmpty)
+}
+
 @Test func emptySpaceStillSuggestsFavoritesClosedTabsAndHistory() throws {
   var fixture = try LauncherFixture()
   for id in [fixture.openTabID, fixture.pinnedTabID, fixture.closedTabID] {

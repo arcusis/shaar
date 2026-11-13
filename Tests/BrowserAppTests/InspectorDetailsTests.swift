@@ -128,6 +128,21 @@ import Testing
     }
   }
 
+  @Test func cancelledComponentSelectionDoesNotStartOrPublishFailure() async throws {
+    let inspector = try makeInspector(tab: .component)
+    defer { inspector.close() }
+    let model = inspector.details
+    try model.receive(
+      .component(tree("React"), nil), selectionID: 8, generation: inspector.documentGeneration)
+
+    let selection = Task { @MainActor in await model.selectComponent(1) }
+    selection.cancel()
+    await selection.value
+
+    #expect(model.failure == nil)
+    #expect(model.selectedComponent == 1)
+  }
+
   @Test func malformedAssetDimensionsAndOversizedPayloadsAreRejected() throws {
     let inspector = try makeInspector(tab: .assets)
     defer { inspector.close() }

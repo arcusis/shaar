@@ -4,6 +4,11 @@
 
 import Foundation
 
+private func isJSONBoolean(_ value: Any?) -> Bool {
+  guard let number = value as? NSNumber else { return false }
+  return CFGetTypeID(number) == CFBooleanGetTypeID()
+}
+
 public enum ShaarSiteDataOperation: UInt32, Sendable {
   case settingsGet = 700
   case settingsSet = 701
@@ -62,13 +67,15 @@ public struct ShaarSiteCookie: Equatable, Sendable, Identifiable {
       let httpOnly = dictionary["httpOnly"] as? Bool,
       let rawSameSite = dictionary["sameSite"] as? String,
       let sameSite = ShaarCookieSameSite(rawValue: rawSameSite),
+      !isJSONBoolean(dictionary["sourceScheme"]),
       let sourceScheme = dictionary["sourceScheme"] as? Int, (0...2).contains(sourceScheme),
+      !isJSONBoolean(dictionary["sourcePort"]),
       let sourcePort = dictionary["sourcePort"] as? Int, (-1...65535).contains(sourcePort)
     else { return nil }
     let expires = dictionary["expiresUnixMs"]
     let partition = dictionary["partitionSite"]
     let crossSite = dictionary["partitionCrossSite"]
-    guard expires is NSNull || expires as? Int64 != nil,
+    guard expires is NSNull || (!isJSONBoolean(expires) && expires as? Int64 != nil),
       partition is NSNull || partition as? String != nil,
       crossSite is NSNull || crossSite as? Bool != nil,
       (partition is NSNull) == (crossSite is NSNull)

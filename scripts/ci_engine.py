@@ -142,7 +142,8 @@ def validate_bundle_archive(root: Path, directory: Path) -> Path:
 def restore_bundle(root: Path, directory: Path) -> None:
     archive = validate_bundle_archive(root, directory)
     destination = root / "build"
-    if (destination / BUNDLE_NAME).exists():
+    bundle_destination = destination / BUNDLE_NAME
+    if bundle_destination.exists() or bundle_destination.is_symlink():
         raise ValueError("Verification bundle destination already exists")
     with tarfile.open(archive) as source:
         for member in source.getmembers():

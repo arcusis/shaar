@@ -49,6 +49,26 @@ import Testing
   #expect(WebShareRequest(payload: payload) == nil)
 }
 
+@Test func webShareRequestBoundsTitleTextAndURLByUTF8Bytes() {
+  var payload = sharePayload(title: String(repeating: "é", count: 1024))
+  #expect(WebShareRequest(payload: payload) != nil)
+
+  payload["title"] = String(repeating: "é", count: 1025)
+  #expect(WebShareRequest(payload: payload) == nil)
+
+  payload = sharePayload(text: String(repeating: "💾", count: 1024))
+  #expect(WebShareRequest(payload: payload) != nil)
+
+  payload["text"] = String(repeating: "💾", count: 1025)
+  #expect(WebShareRequest(payload: payload) == nil)
+
+  payload = sharePayload(url: "https://example.com/" + String(repeating: "x", count: 4076))
+  #expect(WebShareRequest(payload: payload) != nil)
+
+  payload["url"] = "https://example.com/" + String(repeating: "é", count: 2040)
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
 private func sharePayload(
   origin: String = "https://example.com", title: String = "Shared page",
   text: String = "A useful link", url: String? = nil

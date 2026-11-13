@@ -57,6 +57,11 @@ class NotebookLinksTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("Note.md", result.stderr)
 
+    def test_missing_index_target_fails_even_when_there_are_no_orphan_notes(self):
+        result = self.run_check({"_INDEX_Main.md": "[[Missing_Note]]"})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Broken Notebook index link: Missing_Note.md", result.stderr)
+
     def test_missing_indexes_fail_even_for_empty_notebook(self):
         for files in ({}, {"Note.md": "# Note"}):
             with self.subTest(files=files):

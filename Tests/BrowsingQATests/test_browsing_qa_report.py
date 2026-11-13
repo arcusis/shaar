@@ -4,6 +4,8 @@
 
 from datetime import datetime, timezone
 import importlib.util
+import re
+import shutil
 import subprocess
 import unittest
 from pathlib import Path
@@ -122,6 +124,44 @@ class BrowsingQAReportTests(unittest.TestCase):
         }])
         self.assertIn("| windows | fail | 12 | 1 MiB | none | drop / rejected |", table)
         self.assertTrue(table.startswith("| Scenario |"))
+
+    def test_scroll_fixture_appends_rows_only_after_scroll_and_stops_at_200(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node.js is required to execute the fixture script")
+
+        fixture = PROBE.Fixture.document(None, "/scroll", "").decode()
+        match = re.search(r"<script>(.*?)</script>", fixture, re.DOTALL)
+        self.assertIsNotNone(match)
+        runner = r"""
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+let source = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => source += chunk);
+process.stdin.on('end', () => {
+  const feed = {
+    children: [], listeners: {},
+    appendChild(row) { this.children.push(row); },
+    addEventListener(name, callback) { this.listeners[name] = callback; },
+  };
+  const document = {
+    getElementById(id) { assert.equal(id, 'feed'); return feed; },
+    createElement(tag) { assert.equal(tag, 'div'); return {textContent: ''}; },
+  };
+  vm.runInNewContext(source, {document});
+  assert.equal(feed.children.length, 100, 'initial rows');
+  feed.listeners.scroll();
+  assert.equal(feed.children.length, 200, 'rows after first scroll');
+  feed.listeners.scroll();
+  assert.equal(feed.children.length, 200, 'row cap after later scroll');
+});
+"""
+        completed = subprocess.run(
+            [node, "-e", runner], input=match.group(1), text=True,
+            capture_output=True, timeout=10, check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 if __name__ == "__main__":

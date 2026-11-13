@@ -140,7 +140,7 @@ enum DeviceChooserIntake {
       (origin.path().isEmpty || origin.path() == "/"),
       origin.query() == nil, origin.fragment() == nil,
       let rawOptions = payload["options"] as? [[String: Any]], rawOptions.count <= 64,
-      let canGrant = payload["canGrant"] as? Bool
+      let canGrant = boolean(payload["canGrant"])
     else { return nil }
     var options: [DeviceChooserOption] = []
     var seen: Set<Int> = []
@@ -166,6 +166,13 @@ enum DeviceChooserIntake {
       return nil
     }
     return Int(exactly: number.doubleValue)
+  }
+
+  private static func boolean(_ value: Any?) -> Bool? {
+    guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+      return nil
+    }
+    return number.boolValue
   }
 
   private static func displayName(_ value: String) -> String {

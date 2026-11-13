@@ -40,6 +40,18 @@ struct DeviceChooserTests {
         payload: payload) == nil)
   }
 
+  @Test func chooserEventsRejectNumericGrantFlags() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    var payload = event(transport: "usb", id: "numeric-grant", page: tab.url)
+    payload["canGrant"] = NSNumber(value: 0)
+
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: payload) == nil)
+  }
+
   @Test func chooserDisplaysTheRequestingFrameOrigin() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

@@ -1917,7 +1917,7 @@ class EngineTransferTests(unittest.TestCase):
             root = Path(temporary)
             evidence = root / "build/ci/engine-build"
             evidence.mkdir(parents=True)
-            (evidence / "bundle.json").write_text("partial metadata")
+            (evidence / "bundle.json").write_text("[]")
             (evidence / "verification.tar.gz").write_bytes(b"partial archive")
             checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
             with patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"):

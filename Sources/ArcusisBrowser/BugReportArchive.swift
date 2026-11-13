@@ -67,9 +67,20 @@ enum BugReportArchive {
       guard let name = row["name"] as? String, let value = row["value"] as? String else {
         return nil
       }
+      let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      let components = Set(
+        normalizedName.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+      let containsSecretMarker =
+        !components.isDisjoint(
+          with: [
+            "token", "secret", "password", "passwd", "credential", "csrf", "xsrf",
+            "signature",
+          ])
+        || (components.contains("api") && components.contains("key"))
+        || (components.contains("client") && components.contains("key"))
       let hidden =
         !includeSensitive
-        && sensitive.contains(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        && (sensitive.contains(normalizedName) || containsSecretMarker)
       return [
         "name": String(name.prefix(128)),
         "value": hidden ? "[redacted]" : String(value.prefix(512)),
@@ -91,11 +102,13 @@ enum BugReportArchive {
   }
 
   private static func redactURLs(in value: String) -> String {
-    guard let regex = try? NSRegularExpression(
-      pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
+    guard
+      let regex = try? NSRegularExpression(
+        pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
     else { return value }
     var result = value
-    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed()
+    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
+      .reversed()
     {
       guard let range = Range(match.range, in: result) else { continue }
       result.replaceSubrange(range, with: redactedURL(String(result[range])).url)

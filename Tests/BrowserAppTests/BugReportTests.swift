@@ -13,6 +13,9 @@ import Testing
     ["name": "Cookie", "value": "session=fixture-secret"],
     ["name": "Set-Cookie", "value": "session=fixture-secret"],
     ["name": "Proxy-Authorization", "value": "fixture-secret"],
+    ["name": "X-API-Key", "value": "fixture-api-key-secret"],
+    ["name": "X-Refresh-Token", "value": "fixture-refresh-token"],
+    ["name": "X-CSRF-Token", "value": "fixture-csrf-token"],
     ["name": "X-Fixture", "value": "kept"],
   ]
   let snapshot: [String: Any] = [
@@ -32,8 +35,12 @@ import Testing
     withJSONObject: BugReportArchive.har(
       snapshot: snapshot, includeSensitiveHeaders: true, version: "test"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-secret"))
+  #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-api-key-secret"))
+  #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-refresh-token"))
+  #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-csrf-token"))
   #expect(String(decoding: redacted, as: UTF8.self).contains("kept"))
   #expect(String(decoding: included, as: UTF8.self).contains("fixture-secret"))
+  #expect(String(decoding: included, as: UTF8.self).contains("fixture-api-key-secret"))
 }
 
 @MainActor @Test func generatedReportSurvivesEngineHistoryRefreshAndStaysProfileScoped() throws {

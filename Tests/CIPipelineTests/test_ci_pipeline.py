@@ -411,6 +411,9 @@ class CoverageGateTests(unittest.TestCase):
             malformed.write_text("{")
             with self.assertRaisesRegex(ValueError, "candidate coverage report"):
                 COVERAGE.load_report(malformed, "candidate")
+            malformed.write_bytes(b"\xff\xfe")
+            with self.assertRaisesRegex(ValueError, "Cannot read base coverage report"):
+                COVERAGE.load_report(malformed, "base")
 
     def test_parallel_coverage_reports_require_matching_toolchain_and_revision(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -429,6 +432,9 @@ class CoverageGateTests(unittest.TestCase):
                     (baseline / "metadata.json").write_text(json.dumps(metadata | changed))
                     with self.assertRaises(ValueError):
                         STAGES.compare_coverage(checks)
+                (candidate / "metadata.json").write_bytes(b"\xff\xfe")
+                with self.assertRaisesRegex(ValueError, "Cannot read candidate coverage metadata"):
+                    STAGES.compare_coverage(checks)
 
     def test_cached_profiles_are_removed_only_inside_expected_scratch_directory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -499,7 +505,15 @@ class CoverageGateTests(unittest.TestCase):
         self.assertEqual(len(COVERAGE.regressions(base, {"ArcusisBrowser": (22680, 36330)})), 1)
 
     def test_missing_malformed_and_duplicate_source_data_fail(self):
-        reports = [{}, {"type": "llvm.coverage.json.export", "data": [{"files": []}]}, self.report(core=(11, 10))]
+        reports = [
+            {},
+            {"type": "llvm.coverage.json.export", "data": [{"files": []}]},
+            {"type": "llvm.coverage.json.export", "data": [{}]},
+            {"type": "llvm.coverage.json.export", "data": [{"files": [
+                {"filename": "/checkout/Sources/ArcusisBrowser/File.swift"},
+            ]}]},
+            self.report(core=(11, 10)),
+        ]
         duplicated = self.report()
         duplicated["data"][0]["files"].append(duplicated["data"][0]["files"][0])
         reports.append(duplicated)

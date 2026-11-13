@@ -23,6 +23,16 @@ enum BitwardenProbeEvidence {
   }
 }
 
+enum BitwardenStoreButtonValidation {
+  static func hasEnabledInstallButton(in page: [String: Any]) -> Bool {
+    guard let buttons = page["buttons"] as? [[String: Any]] else { return false }
+    return buttons.contains {
+      ($0["text"] as? String)?.lowercased() == "add to chrome"
+        && $0["disabled"] as? Bool != true
+    }
+  }
+}
+
 /// Opt-in public-store compatibility test in an empty disposable profile.
 @MainActor
 final class BitwardenProbe {
@@ -97,9 +107,7 @@ final class BitwardenProbe {
               buttons:[...document.querySelectorAll('button,[role="button"]')].map(b=>
                 ({text:(b.innerText || b.getAttribute('aria-label') || '').trim(), disabled:b.disabled || b.getAttribute('aria-disabled')==='true'}))})
             """) ?? [:]
-        if let buttons = page["buttons"] as? [[String: Any]],
-          BitwardenProbeEvidence.hasEnabledAddToChromeButton(buttons)
-        {
+        if BitwardenStoreButtonValidation.hasEnabledInstallButton(in: page) {
           buttonReady = true
           break
         }

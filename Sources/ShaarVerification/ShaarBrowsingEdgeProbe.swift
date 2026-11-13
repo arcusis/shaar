@@ -1314,7 +1314,11 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     guard let number = value as? NSNumber,
       CFGetTypeID(number) != CFBooleanGetTypeID()
     else { return nil }
-    return Int(exactly: number.doubleValue)
+    let encoding = String(cString: number.objCType)
+    if encoding == "f" || encoding == "d" {
+      return Int(exactly: number.doubleValue)
+    }
+    return Int(number.stringValue)
   }
 
   nonisolated static func flag(_ value: Any?) -> Bool? {

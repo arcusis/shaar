@@ -11,6 +11,7 @@ struct ShaarBrowsingEdgeProbeScalarTests {
   @Test func integerParserRejectsBooleansFractionsAndOverflow() {
     #expect(ShaarBrowsingEdgeProbe.number(7) == 7)
     #expect(ShaarBrowsingEdgeProbe.number(-2) == -2)
+    #expect(ShaarBrowsingEdgeProbe.number(Int64.max) == Int(Int64.max))
     #expect(ShaarBrowsingEdgeProbe.number(2.5) == nil)
     #expect(ShaarBrowsingEdgeProbe.number(true) == nil)
     #expect(ShaarBrowsingEdgeProbe.number(UInt64.max) == nil)

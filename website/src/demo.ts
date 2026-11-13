@@ -42,6 +42,7 @@ export function initializeDemo(): void {
   const selectedTab = new Map<number, number>(spaces.map((_, index) => [index, 0]));
   let currentSpace = 0;
   let highlighted = 0;
+  let launcherTrigger: HTMLElement | null = null;
 
   const show = (space: number, tab: number) => {
     currentSpace = space;
@@ -91,7 +92,8 @@ export function initializeDemo(): void {
     results.innerHTML = rows.join("");
   };
 
-  const openLauncher = () => {
+  const openLauncher = (trigger: HTMLElement) => {
+    launcherTrigger = trigger;
     popover.hidden = true;
     launcher.hidden = false;
     input.value = "";
@@ -104,6 +106,7 @@ export function initializeDemo(): void {
     if (!row) return;
     if (row.dataset.space) show(Number(row.dataset.space), Number(row.dataset.tab));
     closeOverlays();
+    launcherTrigger?.focus();
   };
 
   for (const dot of dots)
@@ -115,7 +118,7 @@ export function initializeDemo(): void {
       show(Number(button.dataset.space), Number(button.dataset.tab)),
     );
   for (const trigger of demo.querySelectorAll<HTMLElement>("[data-launcher]"))
-    trigger.addEventListener("click", openLauncher);
+    trigger.addEventListener("click", () => openLauncher(trigger));
 
   controlsButton.addEventListener("click", () => {
     launcher.hidden = true;
@@ -153,6 +156,7 @@ export function initializeDemo(): void {
       choose(rows[highlighted]);
     } else if (event.key === "Escape") {
       closeOverlays();
+      launcherTrigger?.focus();
     }
   });
   results.addEventListener("click", (event) => {

@@ -54,4 +54,16 @@ import Testing
       in: "console.log(1);\n//# sourceMappingURL=app.js.map", resourceURL: resource)
     #expect(map?.absoluteString == "http://localhost:3000/app.js.map")
   }
+
+  @Test func workspaceManifestURLRejectsCredentialedOrInvalidPageAuthorities() {
+    for page in [
+      "https://alice:secret@localhost:3000/app.js", "http://localhost:99999/app.js",
+    ] {
+      #expect(DevelopmentSourceResolver.workspaceURL(for: URL(string: page)!) == nil)
+    }
+    #expect(
+      DevelopmentSourceResolver.workspaceURL(
+        for: URL(string: "http://localhost:3000/app.js")!)?.path
+        == "/.well-known/appspecific/com.chrome.devtools.json")
+  }
 }

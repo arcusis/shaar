@@ -1030,9 +1030,10 @@ final class BrowserStore {
     if let origin = permissionFrameOrigins[request.tabID], origin != request.requestingOrigin {
       return false
     }
+    guard enqueueConsent(.desktopCapture(request)) else { return false }
     rememberPermissionFrame(
       request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
-    return enqueueConsent(.desktopCapture(request))
+    return true
   }
 
   @discardableResult

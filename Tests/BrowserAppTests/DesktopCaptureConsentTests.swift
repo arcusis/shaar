@@ -16,7 +16,10 @@ struct DesktopCaptureConsentTests {
     return store
   }
 
-  private func request(_ store: BrowserStore, id: String = UUID().uuidString)
+  private func request(
+    _ store: BrowserStore, id: String = UUID().uuidString,
+    frameID: String = "0123456789abcdef0123456789abcdef"
+  )
     throws -> DesktopCaptureRequest
   {
     let tab = try #require(store.session.selectedSpace.selectedTab)
@@ -27,7 +30,7 @@ struct DesktopCaptureConsentTests {
         "tabID": tab.id.uuidString,
         "pageURL": tab.url.absoluteString,
         "origin": "https://meet.google.com",
-        "frameID": "0123456789abcdef0123456789abcdef",
+        "frameID": frameID,
       ]))
   }
 
@@ -377,6 +380,19 @@ struct DesktopCaptureConsentTests {
 
     #expect(!store.requestDesktopCapture(capture))
     #expect(store.sheet == nil)
+  }
+
+  @Test func staleCaptureRequestDoesNotReplaceCurrentFrameProvenance() throws {
+    let store = store()
+    let stale = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.nativeTabChanged(
+      tab.id, url: URL(string: "https://meet.google.com/new-call")!, title: "New call")
+    let current = try request(store, frameID: "fedcba9876543210fedcba9876543210")
+
+    #expect(!store.requestDesktopCapture(stale))
+    #expect(store.requestDesktopCapture(current))
+    #expect(store.sheet?.id == current.sheetID)
   }
 
   @Test func privateWindowListsOnlyItsOwnTab() throws {

@@ -22,6 +22,12 @@ class HiddenScrollEventDispatchPatchTests(unittest.TestCase):
         patch = content.decode()
         self.assertIn("if (hidden())", patch)
         self.assertIn("EnqueueHiddenScrollEvent", patch)
+        self.assertIn(
+            "+void ScriptedAnimationController::EnqueueHiddenScrollEvent(Event* event) {\n"
+            "+  if (!GetExecutionContext())\n+    return;\n"
+            "+  if (!InsertToPerFrameEventsMap(event))",
+            patch,
+        )
         self.assertIn("TaskType::kDOMManipulation", patch)
         self.assertIn("event_type_names::kScrollend", patch)
         self.assertIn("HiddenDocumentScrollEventsDispatchWithoutAnimationFrame", patch)

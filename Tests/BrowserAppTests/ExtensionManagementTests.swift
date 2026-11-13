@@ -13,6 +13,17 @@ import Testing
 struct ExtensionManagementTests {
   private let validID = String(repeating: "b", count: 32)
 
+  @Test @MainActor func rowCallbacksAreSendableForSwiftUIBindings() {
+    var enabled = false
+    let actions = ExtensionRowActions(
+      run: {}, setPinned: { _ in }, setEnabled: { enabled = $0 }, showDetails: {})
+    requireSendable(actions.setEnabled)
+    actions.setEnabled(true)
+    #expect(enabled)
+  }
+
+  private func requireSendable<T: Sendable>(_ value: T) { _ = value }
+
   @Test func shaarListHidesComponentLocationsWithoutMatchingNames() throws {
     func row(_ id: String, name: String, source: Int) -> [String: Any] {
       ["id": id, "name": name, "version": "1.0", "source": source]

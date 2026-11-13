@@ -258,12 +258,15 @@ private func groupedHistory(
     guard let address = row["url"]?.string, LibraryAddress.destination(address) != nil,
       let rawVisit = row["visit_time"], let visit = date(rawVisit)
     else { continue }
-    if grouped[address] == nil { order.append(address) }
+    if grouped[address] == nil {
+      order.append(address)
+      grouped[address] = (title: row["title"]?.string ?? "", visits: [])
+    }
     let title = row["title"]?.string ?? ""
-    var existing = grouped[address] ?? (title, [])
-    if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { existing.0 = title }
-    existing.1.append(visit)
-    grouped[address] = existing
+    if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      grouped[address, default: (title, [])].0 = title
+    }
+    grouped[address, default: (title, [])].1.append(visit)
   }
   return order.compactMap { address in
     guard let (title, visits) = grouped[address], !visits.isEmpty else { return nil }

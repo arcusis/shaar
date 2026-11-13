@@ -26,6 +26,9 @@ import Testing
     #expect(
       AccountPhotoURLPolicy.allowsRedirect(
         from: URL(string: "https://images.example.test:443/avatar.png")!, to: secureURL))
+    #expect(
+      !AccountPhotoURLPolicy.allowsRedirect(
+        from: URL(string: "https://images.example.test:8443/avatar.png")!, to: secureURL))
 
     for address in [
       "http://images.example.test/avatar.png",

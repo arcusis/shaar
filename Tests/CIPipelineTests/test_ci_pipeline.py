@@ -983,6 +983,28 @@ class EngineTransferTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "digest"):
                 restore_bundle(root, directory)
 
+    def test_bundle_restore_rejects_dangling_destination_symlinks(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            bundle = root / "build" / BUNDLE_NAME
+            bundle.mkdir(parents=True)
+            (bundle / "Main").write_bytes(b"authored executable")
+            evidence = root / "evidence"
+            evidence.mkdir()
+            archive_bundle(root, evidence)
+            import shutil
+            shutil.rmtree(bundle)
+            bundle.symlink_to(root / "missing-target")
+
+            with self.assertRaisesRegex(ValueError, "destination already exists"):
+                restore_bundle(root, evidence)
+
     def test_normal_browsing_restores_the_shared_exact_source_bundle(self):
         from ci_engine import BUNDLE_NAME, archive_bundle
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {

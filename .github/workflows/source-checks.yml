@@ -559,4 +559,5 @@ jobs:
           CI_BROWSING: ${{ needs.plan.outputs.full == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
           CI_SHIPPING_GUARD: ${{ needs.plan.outputs.shipping_guard == 'true' && github.event_name == 'pull_request' }}
           CI_NIGHTLY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.deep_checks) }}
+          CI_ADVISORY_STAGES: ${{ vars.CI_ADVISORY_STAGES }}
         run: python3 scripts/ci-gate.py

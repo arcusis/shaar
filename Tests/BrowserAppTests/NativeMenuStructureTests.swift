@@ -60,7 +60,6 @@ import Testing
     if item.representedObject as? String == BrowserMenuCommand.search.rawValue { return nil }
     return identifier == "copyCurrentURL:" ? item.title : identifier
   }
-
   for identifier in identifiers {
     let key: String
     switch identifier {
@@ -74,7 +73,6 @@ import Testing
       BrowserLocalization.string(key, table: "Shell", language: .hebrew) != key,
       "Native menu title lacks Hebrew catalog copy: \(identifier)")
   }
-
   for key in ["About %@", "Hide %@", "Quit %@", "%@ Support"] {
     #expect(
       BrowserLocalization.format(
@@ -84,6 +82,31 @@ import Testing
   #expect(
     BrowserLocalization.string("Search or enter address", table: "Shell", language: .hebrew)
       != "Search or enter address")
+}
+
+@Test @MainActor func reopenClosedWindowCommandRoutesAndPreservesSnapshotOnAttachFailure() throws {
+  let runtime = ARCChromiumRuntime()
+  let workspace = try BrowserWorkspaceStore()
+  let host = NativeBrowserHost(
+    events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
+    presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
+  defer { host.detach() }
+  var snapshotSession = workspace.workspace.windows[0].session
+  let spaceID = snapshotSession.selectedSpaceID
+  for tab in snapshotSession.selectedSpace.tabs where !tab.isPinned { snapshotSession.closeTab(tab.id) }
+  for closed in snapshotSession.recentlyClosedTabs(in: spaceID) {
+    _ = snapshotSession.reopenClosedTab(closed.id, in: spaceID)
+  }
+  _ = snapshotSession.open(URL(string: "https://restored-window.example")!)
+  let snapshot = try #require(BrowserWorkspace(session: snapshotSession).windows.first)
+  host.lastClosedWindowSnapshot = snapshot
+  let windowIDs = workspace.workspace.windows.map(\.id)
+  #expect(throws: (any Error).self) { try host.restore() }
+  #expect(host.canPerform(.reopenClosedWindow))
+  host.perform(.reopenClosedWindow)
+  #expect(host.lastError != nil)
+  #expect(host.lastClosedWindowSnapshot == snapshot)
+  #expect(workspace.workspace.windows.map(\.id) == windowIDs)
 }
 
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
@@ -150,6 +173,10 @@ import Testing
   #expect(item(.clearHistory)?.keyEquivalent == "\u{8}")
   #expect(item(.clearHistory)?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item(.recentlyClosed)?.menu?.title == "History")
+  #expect(item(.reopenClosedWindow)?.menu?.title == "History")
+  #expect(
+    item(.reopenClosedWindow)?.representedObject as? String
+      == BrowserMenuCommand.reopenClosedWindow.rawValue)
   #expect(item(.downloads)?.menu?.title == "File")
   #expect(item(.extensions)?.menu?.title == "Extensions")
   #expect(item(.minimizeWindow)?.menu?.title == "Window")

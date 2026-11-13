@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
 from urllib.parse import unquote, urlparse
 
 from ci_support import swift_source_files

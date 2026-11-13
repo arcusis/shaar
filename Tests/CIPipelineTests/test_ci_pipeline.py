@@ -1173,6 +1173,20 @@ class EngineTransferTests(unittest.TestCase):
 
 
 class SwiftExtractionTests(unittest.TestCase):
+    def test_cli_reports_malformed_json_without_name_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = root / "extraction.json"
+            report.write_text("{")
+            error_output = io.StringIO()
+            with (patch.object(EXTRACTION, "ROOT", root),
+                  patch.object(EXTRACTION, "swift_source_files", return_value={"Sources/App.swift"}),
+                  patch.object(sys, "argv", ["check-codeql-extraction.py", str(report)]),
+                  patch.object(sys, "stderr", error_output)):
+                status = EXTRACTION.main()
+            self.assertEqual(status, 2)
+            self.assertIn("Invalid CodeQL extraction report", error_output.getvalue())
+
     def test_malformed_extraction_tuple_fails_with_a_value_error(self):
         report = {"#select": {"tuples": [[]]}}
         with self.assertRaisesRegex(ValueError, "tuple 0 is malformed"):

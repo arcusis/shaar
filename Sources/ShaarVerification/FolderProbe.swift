@@ -21,7 +21,7 @@ enum FolderProbeEvidence {
   }
 }
 
-private struct FolderIdentities: Codable {
+struct FolderIdentities: Codable, Equatable {
   let source: UUID
   let destination: UUID
   let root: UUID

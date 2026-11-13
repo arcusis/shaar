@@ -11,6 +11,8 @@ import UniformTypeIdentifiers
 import _QuickLook_SwiftUI
 
 struct LibraryDownloadsView: View {
+  static let downloadProgressAccessibilityTraits: AccessibilityTraits = .updatesFrequently
+
   let store: BrowserStore
   let profileID: UUID
   let mediaOnly: Bool
@@ -200,9 +202,11 @@ struct LibraryDownloadsView: View {
           if let progress = item.progress {
             ProgressView(value: progress)
               .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
+              .accessibilityAddTraits(Self.downloadProgressAccessibilityTraits)
           } else {
             ProgressView().controlSize(.small)
               .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
+              .accessibilityAddTraits(Self.downloadProgressAccessibilityTraits)
           }
           Text(byteStatus(item)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }

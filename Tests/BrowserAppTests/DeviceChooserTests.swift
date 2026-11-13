@@ -85,6 +85,23 @@ struct DeviceChooserTests {
     }
   }
 
+  @Test func chooserOriginFormattingOmitsDefaultPortsAndBracketsIPv6() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let request = DeviceChooserRequest(
+      id: "ipv6-origin", tabID: tab.id, profileID: store.session.selectedSpace.profileID,
+      pageURL: tab.url, origin: try #require(URL(string: "https://[2001:db8::1]:443")),
+      transport: .usb, options: [], bluetoothUnavailable: false, canGrant: false)
+
+    #expect(request.displayOrigin == "https://[2001:db8::1]")
+
+    let httpOrigin = DeviceChooserRequest(
+      id: "http-origin", tabID: tab.id, profileID: store.session.selectedSpace.profileID,
+      pageURL: tab.url, origin: try #require(URL(string: "http://devices.example:80")),
+      transport: .usb, options: [], bluetoothUnavailable: false, canGrant: false)
+    #expect(httpOrigin.displayOrigin == "http://devices.example")
+  }
+
   @Test func emptyChooserEventsCannotBeGranted() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

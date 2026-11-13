@@ -1,0 +1,69 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import CoreFoundation
+import Foundation
+import Testing
+
+@testable import ArcusisBrowser
+
+@Test func webShareRequestAcceptsSecureOriginsAndBuildsItems() throws {
+  let request = try #require(WebShareRequest(payload: sharePayload(
+    origin: "https://example.com", title: "Hello", text: "World",
+    url: "https://example.com/article")))
+
+  #expect(request.hostLabel == "example.com")
+  #expect(request.url?.absoluteString == "https://example.com/article")
+  #expect(request.sharingItems.count == 3)
+  #expect(request.sheetID == "web-share-\(request.id)")
+}
+
+@Test func webShareRequestAllowsOnlyLocalHTTPOrigins() {
+  for origin in ["http://localhost", "http://127.0.0.1", "http://[::1]"] {
+    #expect(WebShareRequest(payload: sharePayload(origin: origin)) != nil)
+  }
+  for origin in ["http://example.com", "file:///tmp/page", "https://user@example.com/path"] {
+    #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
+  }
+}
+
+@Test func webShareRequestRequiresRealBooleanActivationAndContent() {
+  var payload = sharePayload()
+  payload["userActivated"] = 1
+  #expect(WebShareRequest(payload: payload) == nil)
+
+  payload = sharePayload()
+  payload["title"] = ""
+  payload["text"] = ""
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
+@Test func webShareRequestRejectsOversizedTextAndNonWebLinks() {
+  var payload = sharePayload()
+  payload["title"] = String(repeating: "x", count: 2049)
+  #expect(WebShareRequest(payload: payload) == nil)
+
+  payload = sharePayload()
+  payload["url"] = "file:///tmp/private"
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
+private func sharePayload(
+  origin: String = "https://example.com", title: String = "Shared page",
+  text: String = "A useful link", url: String? = nil
+) -> [String: Any] {
+  [
+    "id": UUID().uuidString,
+    "profileID": UUID().uuidString,
+    "tabID": UUID().uuidString,
+    "pageURL": "https://example.com/current",
+    "origin": origin,
+    "frameID": "main-frame",
+    "title": title,
+    "text": text,
+    "url": url ?? "",
+    "userActivated": true,
+    "files": [Any](),
+  ]
+}

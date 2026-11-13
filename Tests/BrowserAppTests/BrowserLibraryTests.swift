@@ -32,6 +32,16 @@ struct BrowserLibraryTests {
         items: [bookmark], hasBookmarkTree: true, busy: false, loading: false))
   }
 
+  @Test func importFailureMessageLocalizesUnreadableExportErrors() {
+    let error = NSError(domain: NSCocoaErrorDomain, code: NSFileReadCorruptFileError)
+    #expect(
+      LibraryPanel.importFailureMessage(for: error)
+        == PanelsL10n.string("The selected import file could not be read."))
+    #expect(
+      LibraryPanel.importFailureMessage(for: BrowserImport.ImportError.unsupported)
+        == BrowserImport.ImportError.unsupported.localizedDescription)
+  }
+
   @Test func newerReadsWinAndMalformedRepliesKeepLastGoodProfileSnapshot() throws {
     let model = BrowserLibraryModel()
     let a = UUID()

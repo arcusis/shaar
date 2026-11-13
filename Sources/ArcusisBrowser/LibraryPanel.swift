@@ -174,7 +174,7 @@ struct LibraryPanel: View {
         importError = nil
         showingImportPreview = true
       } catch {
-        importError = error.localizedDescription
+        importError = Self.importFailureMessage(for: error)
         showingImportPreview = true
       }
     }
@@ -221,6 +221,11 @@ struct LibraryPanel: View {
   ) -> Bool {
     !items.isEmpty && !busy && !loading
       && (hasBookmarkTree || !items.contains { $0.kind == .bookmark })
+  }
+
+  static func importFailureMessage(for error: Error) -> String {
+    if error is BrowserImport.ImportError { return error.localizedDescription }
+    return PanelsL10n.string("The selected import file could not be read.")
   }
 
   private func applyImport() {

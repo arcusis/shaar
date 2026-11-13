@@ -180,6 +180,14 @@ class CatalogValidatorTests(unittest.TestCase):
                 self.assertNotEqual(
                     strings[key]["localizations"]["he"]["stringUnit"]["value"], key)
 
+    def test_library_import_io_failure_uses_localized_panels_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/LibraryPanel.swift").read_text(encoding="utf-8")
+        self.assertIn("Self.importFailureMessage(for: error)", source)
+        self.assertIn('if error is BrowserImport.ImportError { return error.localizedDescription }', source)
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(encoding="utf-8"))
+        key = "The selected import file could not be read."
+        self.assertEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן לקרוא את קובץ הייבוא שנבחר.")
+
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

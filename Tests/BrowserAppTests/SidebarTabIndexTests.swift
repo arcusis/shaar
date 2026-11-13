@@ -25,6 +25,16 @@ struct SidebarTabIndexTests {
     #expect(index.dropSlot(targetID: uuid(99), sourceID: uuid(1), after: true) == nil)
   }
 
+  @Test func splitMenuCandidatesPreserveOrderAndOmitTheSelectedTab() {
+    let tabs = [tab(1), tab(2), tab(3)]
+    let middle = SidebarSplitMenuCandidateRanges(tabs: tabs, excluding: uuid(2))
+    #expect((Array(middle.before) + Array(middle.after)).map { tabs[$0].id } == [uuid(1), uuid(3)])
+    let unknown = SidebarSplitMenuCandidateRanges(tabs: tabs, excluding: uuid(99))
+    #expect((Array(unknown.before) + Array(unknown.after)).map { tabs[$0].id } == tabs.map(\.id))
+    let singleton = SidebarSplitMenuCandidateRanges(tabs: [tabs[1]], excluding: tabs[1].id)
+    #expect(singleton.before.isEmpty && singleton.after.isEmpty)
+  }
+
   @Test func mixedGroupsKeepOriginalSiblingOrderAndEdges() {
     let folderA = uuid(100)
     let folderB = uuid(101)
@@ -157,6 +167,37 @@ struct SidebarTabIndexTests {
   private func seconds(_ duration: Duration) -> Double {
     let components = duration.components
     return Double(components.seconds) + Double(components.attoseconds) / 1e18
+  @Test func sidebarSplitMenuCandidateFilteringFocusedBenchmark() {
+    let tabs = (0..<1_000).map { offset in
+      tab(offset + 1)
+    }
+    var candidateCount = 0
+    let start = ContinuousClock.now
+    for _ in 0..<3 {
+      for selected in tabs {
+        for candidate in tabs.filter({ $0.id != selected.id }) {
+          candidateCount += candidate.title.isEmpty ? 0 : 1
+        }
+      }
+    }
+    print("sidebarSplitMenuCandidateFilteringFocusedBenchmark: \(start.duration(to: .now))")
+    #expect(candidateCount == 2_997_000)
+
+    var indexedCandidateCount = 0
+    let indexedStart = ContinuousClock.now
+    for _ in 0..<3 {
+      for selected in tabs {
+        let ranges = SidebarSplitMenuCandidateRanges(tabs: tabs, excluding: selected.id)
+        for index in ranges.before {
+          indexedCandidateCount += tabs[index].title.isEmpty ? 0 : 1
+        }
+        for index in ranges.after {
+          indexedCandidateCount += tabs[index].title.isEmpty ? 0 : 1
+        }
+      }
+    }
+    print("sidebarSplitMenuCandidateRangeFocusedBenchmark: \(indexedStart.duration(to: .now))")
+    #expect(indexedCandidateCount == candidateCount)
   }
 
   private func tab(_ number: Int, pinned: Bool = false, folderID: UUID? = nil) -> BrowserTab {

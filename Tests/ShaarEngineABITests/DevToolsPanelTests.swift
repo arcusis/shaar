@@ -112,6 +112,22 @@ struct DevToolsPanelTests {
         == nil)
   }
 
+  @Test func panelEventEnvelopeRejectsBooleanIntegerFields() {
+    let valid =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"hello","level":"log","truncated":false}}"#
+    let invalidSchema = valid.replacingOccurrences(
+      of: #""schemaVersion":1"#, with: #""schemaVersion":true"#)
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        event(invalidSchema, scope: regular), scope: regular,
+        windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+    let booleanLease = valid.replacingOccurrences(
+      of: #""leaseID":42"#, with: #""leaseID":true"#)
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        event(booleanLease, scope: regular), scope: regular,
+        windowID: "window-a", tabID: "tab-a", leaseID: 1) == nil)  }
+
   @Test func networkHeadersAreAcceptedOnRequestAndResponseEvents() {
     let request =
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":4,"leaseID":42,"data":{"requestID":"r1","url":"https://example.test/","method":"GET","requestHeaders":[{"name":"Accept","value":"text/html"}],"truncated":false}}"#

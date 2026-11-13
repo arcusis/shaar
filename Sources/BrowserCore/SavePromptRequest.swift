@@ -127,7 +127,9 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
   private static func isPlainPageText(_ scalar: Unicode.Scalar) -> Bool {
     let value = scalar.value
     if value < 32 || value == 127 { return false }
-    return scalar.properties.generalCategory != .format
+    let category = scalar.properties.generalCategory
+    return category != .control && category != .format && category != .lineSeparator
+      && category != .paragraphSeparator
   }
 
   private static func origin(_ value: Any?) -> URL? {

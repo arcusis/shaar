@@ -23,6 +23,44 @@ export function localTarget(root: string, url: URL): string | undefined {
   return options.find((option) => existsSync(option) && statSync(option).isFile());
 }
 
+function cssImportURLs(css: string): string[] {
+  const urls: string[] = [];
+  let position = 0;
+  while (position < css.length) {
+    if (css.startsWith("/*", position)) {
+      const end = css.indexOf("*/", position + 2);
+      position = end === -1 ? css.length : end + 2;
+      continue;
+    }
+    if (css[position] === "'" || css[position] === '"') {
+      const quote = css[position++];
+      while (position < css.length && css[position] !== quote) {
+        if (css[position] === "\\") position++;
+        position++;
+      }
+      position++;
+      continue;
+    }
+    if (css.slice(position, position + 7).toLowerCase() === "@import") {
+      let argument = position + 7;
+      while (/\s/.test(css[argument] ?? "")) argument++;
+      const quote = css[argument];
+      if (quote === "'" || quote === '"') {
+        const start = ++argument;
+        while (argument < css.length && css[argument] !== quote) {
+          if (css[argument] === "\\") argument++;
+          argument++;
+        }
+        urls.push(css.slice(start, argument));
+        position = argument + 1;
+        continue;
+      }
+    }
+    position++;
+  }
+  return urls;
+}
+
 export function checkLinks(root: string): { errors: string[]; external: string[]; pages: number } {
   const errors: string[] = [];
   const external = new Set<string>();
@@ -121,10 +159,16 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
     }
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {
-    for (const match of readFileSync(file, "utf8").matchAll(/url\(["']?([^"')]+)["']?\)/g)) {
+    const css = readFileSync(file, "utf8");
+    for (const match of css.matchAll(/url\(["']?([^"')]+)["']?\)/g)) {
       const url = new URL(match[1], siteOrigin);
       if (url.origin !== siteOrigin || !localTarget(root, url))
         errors.push(`${relative(root, file)}: missing/nonlocal CSS asset ${match[1]}`);
+    }
+    for (const value of cssImportURLs(css)) {
+      const url = new URL(value, siteOrigin);
+      if (url.origin !== siteOrigin || !localTarget(root, url))
+        errors.push(`${relative(root, file)}: missing/nonlocal CSS asset ${value}`);
     }
   }
   return { errors, external: [...external].sort(), pages: htmlFiles.length };

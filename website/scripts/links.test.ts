@@ -119,6 +119,21 @@ test("link checker reports images that target a missing map", () => {
   }
 });
 
+test("link checker validates quoted CSS imports outside comments", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
+    writeFileSync(
+      join(root, "styles.css"),
+      '@import "/missing-import.css"; /* @import "/commented.css"; */ .x { content: "@import \'/string.css\'"; }',
+    );
+    assert.deepEqual(checkLinks(root).errors, [
+      "styles.css: missing/nonlocal CSS asset /missing-import.css",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test("link checker catches missing poster when video source exists", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

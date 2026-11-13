@@ -37,7 +37,6 @@ struct ThemeColorPicker: View {
       ThemeColorField(hsb: hsb) { update($0) }
         .frame(height: 200)
         .environment(\.layoutDirection, .leftToRight)
-        .focusable()
         .focused($fieldFocused)
       ThemeHueSlider(hsb: hsb) { update($0) }
         .frame(height: 28)
@@ -207,9 +206,24 @@ private struct ThemeColorField: View {
         .integer(Int(hsb.saturation * 100)), .integer(Int(hsb.brightness * 100)))
     )
     .accessibilityAdjustableAction { direction in
-      let delta = direction == .increment ? 0.05 : -0.05
-      onChange(
-        HSBColor(hue: hsb.hue, saturation: hsb.saturation, brightness: hsb.brightness + delta))
+      onChange(hsb.adjustingField(brightnessBy: direction == .increment ? 0.05 : -0.05))
+    }
+    .focusable()
+    .onKeyPress(.leftArrow) {
+      onChange(hsb.adjustingField(saturationBy: -0.05))
+      return .handled
+    }
+    .onKeyPress(.rightArrow) {
+      onChange(hsb.adjustingField(saturationBy: 0.05))
+      return .handled
+    }
+    .onKeyPress(.upArrow) {
+      onChange(hsb.adjustingField(brightnessBy: 0.05))
+      return .handled
+    }
+    .onKeyPress(.downArrow) {
+      onChange(hsb.adjustingField(brightnessBy: -0.05))
+      return .handled
     }
   }
 
@@ -260,7 +274,16 @@ private struct ThemeHueSlider: View {
     .accessibilityLabel(SettingsL10n.string("Theme hue"))
     .accessibilityValue(SettingsL10n.format("%d degrees", .integer(Int(hsb.hue * 360))))
     .accessibilityAdjustableAction { direction in
-      onChange(hsb.withHue(hsb.hue + (direction == .increment ? 0.02 : -0.02)))
+      onChange(hsb.adjustingHue(by: direction == .increment ? 0.02 : -0.02))
+    }
+    .focusable()
+    .onKeyPress(.leftArrow) {
+      onChange(hsb.adjustingHue(by: -0.02))
+      return .handled
+    }
+    .onKeyPress(.rightArrow) {
+      onChange(hsb.adjustingHue(by: 0.02))
+      return .handled
     }
   }
 }

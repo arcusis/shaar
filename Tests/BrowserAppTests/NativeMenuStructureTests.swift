@@ -239,13 +239,22 @@ import Testing
 
 @Test @MainActor func bookmarksMenuOpensTheBookmarksLibrarySection() {
   let store = BrowserStore()
-
   NativeBrowserHost.showBookmarks(in: store)
-
   guard case .library(_, .bookmarks) = store.sheet else {
     Issue.record("Bookmarks menu should open the bookmarks library section")
     return
   }
+}
+
+@Test @MainActor func recentlyClosedHistoryCommandOpensTheActiveSpaceList() {
+  let store = BrowserStore()
+  let activeSpaceID = store.session.selectedSpaceID
+  NativeBrowserHost.showRecentlyClosed(in: store)
+  guard case .recentlyClosed(let spaceID) = store.sheet else {
+    Issue.record("Recently Closed did not open")
+    return
+  }
+  #expect(spaceID == activeSpaceID)
 }
 
 @Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {

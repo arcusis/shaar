@@ -8,6 +8,26 @@ import Testing
 
 @testable import BrowserCore
 
+@Test func firefoxProfileImportSnapshotBenchmark() throws {
+  let database = try databaseURLProfile(name: "FirefoxSnapshot", databaseName: "places.sqlite")
+  defer { try? FileManager.default.removeItem(at: database.deletingLastPathComponent()) }
+  try createDatabase(
+    sqlFixture: "FirefoxPlaces.sql", at: database,
+    extraSQL: """
+      CREATE TABLE snapshot_padding(data BLOB);
+      INSERT INTO snapshot_padding VALUES(zeroblob(16000000));
+      """
+  )
+
+  let start = ContinuousClock.now
+  var importedItems = 0
+  for _ in 0..<3 {
+    importedItems += try BrowserImport.readProfile(at: database, source: .firefox).items.count
+  }
+  print("firefoxProfileImportSnapshotBenchmark: \(start.duration(to: .now))")
+  #expect(importedItems == 12)
+}
+
 @Test func chromiumFamilyProfilesImportBookmarksAndHistoryWithSourceAttribution() throws {
   for source in [BrowserImportSource.chrome, .edge, .brave, .arc] {
     let profile = try profileDirectory(name: source.rawValue)

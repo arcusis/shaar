@@ -93,10 +93,9 @@ private struct FirefoxProfileImporter: BrowserProfileImporter {
     guard FileManager.default.fileExists(atPath: databaseURL.path) else {
       throw BrowserImport.ImportError.unsupported
     }
-    let bookmarkItems = try FirefoxHistoryReader.bookmarks(databaseURL).map {
-      $0.with(source: source)
-    }
-    let historyItems = try FirefoxHistoryReader.history(databaseURL)
+    let imported = try FirefoxHistoryReader.read(databaseURL)
+    let bookmarkItems = imported.bookmarks.map { $0.with(source: source) }
+    let historyItems = imported.history
     return BrowserImportBatch(source: source, items: bookmarkItems + historyItems)
   }
 }
@@ -156,18 +155,44 @@ private enum SafariHistoryReader {
 }
 
 private enum FirefoxHistoryReader {
-  static func history(_ database: URL) throws -> [BrowserImportItem] {
-    let rows = try BrowserImportSQLite.rows(
+  static func read(
+    _ database: URL
+  ) throws -> (bookmarks: [BrowserImportItem], history: [BrowserImportItem]) {
+    var bookmarkItems: [BrowserImportItem] = []
+    var historyItems: [BrowserImportItem] = []
+    try BrowserImportSQLite.read(
       at: database,
-      query: """
+      queries: [
+        """
+        SELECT moz_bookmarks.id AS id, moz_bookmarks.type AS type,
+               moz_bookmarks.parent AS parent, moz_bookmarks.position AS position,
+               moz_bookmarks.title AS title, moz_places.url AS url
+        FROM moz_bookmarks LEFT JOIN moz_places ON moz_places.id = moz_bookmarks.fk
+        WHERE moz_bookmarks.type IN (1, 2)
+        ORDER BY moz_bookmarks.parent, moz_bookmarks.position
+        """,
+        """
         SELECT moz_places.url AS url, moz_places.title AS title,
                moz_historyvisits.visit_date AS visit_time
         FROM moz_historyvisits JOIN moz_places ON moz_places.id = moz_historyvisits.place_id
         WHERE moz_historyvisits.visit_type != 5
         ORDER BY moz_places.id, moz_historyvisits.visit_date
-        """
-    )
-    return groupedHistory(rows, source: .firefox) { value in
+        """,
+      ],
+      consume: { index, rows in
+        if index == 0 {
+          bookmarkItems = bookmarks(rows)
+        } else if index == 1 {
+          historyItems = history(rows)
+        }
+      })
+    return (bookmarkItems, historyItems)
+  }
+
+  private static func history(
+    _ rows: [[String: BrowserImportSQLite.Value]]
+  ) -> [BrowserImportItem] {
+    groupedHistory(rows, source: .firefox) { value in
       guard let micros = value.number, micros.isFinite, micros >= 0,
         micros / 1_000_000 <= Date.distantFuture.timeIntervalSince1970
       else { return nil }
@@ -175,18 +200,9 @@ private enum FirefoxHistoryReader {
     }
   }
 
-  static func bookmarks(_ database: URL) throws -> [BrowserImportItem] {
-    let rows = try BrowserImportSQLite.rows(
-      at: database,
-      query: """
-        SELECT moz_bookmarks.id AS id, moz_bookmarks.type AS type,
-               moz_bookmarks.parent AS parent, moz_bookmarks.position AS position,
-               moz_bookmarks.title AS title, moz_places.url AS url
-        FROM moz_bookmarks LEFT JOIN moz_places ON moz_places.id = moz_bookmarks.fk
-        WHERE moz_bookmarks.type IN (1, 2)
-        ORDER BY moz_bookmarks.parent, moz_bookmarks.position
-        """
-    )
+  private static func bookmarks(
+    _ rows: [[String: BrowserImportSQLite.Value]]
+  ) -> [BrowserImportItem] {
     let nodes = rows.compactMap { row -> FirefoxBookmarkNode? in
       guard let id = row["id"]?.integer, let type = row["type"]?.integer,
         let parent = row["parent"]?.integer

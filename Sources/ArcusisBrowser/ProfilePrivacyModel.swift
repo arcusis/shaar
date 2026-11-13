@@ -255,9 +255,11 @@ final class ProfilePrivacyModel {
       progressMessage: "Loading site permissions…",
       failureMessage: "Could not load profile privacy settings. Try again.") {
       try await self.backend.loadProfile(self.profileID)
+      try Task.checkCancellation()
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
       self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
       try await self.refreshPermissions()
+      try Task.checkCancellation()
       self.loaded = true
     }
   }
@@ -267,11 +269,13 @@ final class ProfilePrivacyModel {
       progressMessage: siteData ? "Clearing site data…" : "Clearing cache…",
       failureMessage: "Could not clear this profile's data. Try again.") {
       try await self.backend.loadProfile(self.profileID)
+      try Task.checkCancellation()
       if siteData {
         try await self.backend.clearSiteData(self.profileID)
       } else {
         try await self.backend.clearCache(self.profileID)
       }
+      try Task.checkCancellation()
       self.message = SettingsL10n.string(siteData ? "Site data cleared." : "Cache cleared.")
     }
   }
@@ -282,8 +286,11 @@ final class ProfilePrivacyModel {
       progressMessage: "Resetting site permissions…",
       failureMessage: "Could not reset site permissions. Try again.") {
       try await self.backend.loadProfile(self.profileID)
+      try Task.checkCancellation()
       try await self.backend.resetPermissions(self.profileID, origin: origin)
+      try Task.checkCancellation()
       try await self.refreshPermissions()
+      try Task.checkCancellation()
       self.message = Self.resetPermissionsMessage(origin: origin)
     }
   }
@@ -294,6 +301,7 @@ final class ProfilePrivacyModel {
       progressMessage: "Updating third-party cookie setting…",
       failureMessage: "Could not update the third-party cookie setting. Try again.") {
       try await self.backend.setThirdPartyCookiesBlocked(blocked, profileID: self.profileID)
+      try Task.checkCancellation()
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
       self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
       if self.cookiesBlocked != blocked {
@@ -306,9 +314,11 @@ final class ProfilePrivacyModel {
 
   private func refreshPermissions() async throws {
     let origins = try await backend.permissionOrigins(profileID)
+    try Task.checkCancellation()
     var result: [ProfilePermissionSite] = []
     for origin in Set(origins).sorted() {
       let settings = try await backend.permissions(profileID, origin: origin)
+      try Task.checkCancellation()
       let permissions = try ProfileSitePermission.exceptions(settings)
       if !permissions.isEmpty { result.append(.init(id: origin, permissions: permissions)) }
     }

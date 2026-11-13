@@ -120,6 +120,26 @@ struct ProfilePrivacyTests {
     #expect(resumedOnCancellation)
   }
 
+  @Test func cancelledPrivacyLoadDoesNotPublishLateProfileState() async throws {
+    let profile = UUID()
+    let backend = ProfileSettingsStub()
+    backend.delayedProfile = profile
+    let model = ProfilePrivacyModel(profileID: profile, backend: backend)
+    let load = Task { await model.load() }
+    for _ in 0..<100 where backend.loadContinuation == nil { await Task.yield() }
+    try #require(backend.loadContinuation != nil)
+
+    load.cancel()
+    backend.loadContinuation?.resume()
+    await load.value
+
+    #expect(!model.loaded)
+    #expect(model.sites.isEmpty)
+    #expect(model.failure == nil)
+    #expect(!model.busy)
+    #expect(backend.calls.map(\.0) == ["load"])
+  }
+
   @Test func readableStoreWithoutAnHttpsOnlyKeyStillAppliesOn() async throws {
     let store = BrowserPreferencesStore()
     let id = UUID()

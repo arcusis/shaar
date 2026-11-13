@@ -547,6 +547,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0078-shaar-trusted-click-layout.patch",
       "sha256": "93d724a6e39e9f41637808a86efc403db304fb141524856646cf83fa05f24f86"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0141-blink-hidden-resize-event-dispatch.patch",
+      "sha256": "2334200793eff0040c8d97fdfef63a147c733d1b34ad2238f91c80d9c5c4567a"
     }
   ],
   "devtoolsFrontend157": {

@@ -14,7 +14,9 @@ import Testing
     ["name": "Set-Cookie", "value": "session=fixture-secret"],
     ["name": "Proxy-Authorization", "value": "fixture-secret"],
     ["name": "X-API-Key", "value": "fixture-api-key-secret"],
+    ["name": "X-Private-Key", "value": "fixture-private-key"],
     ["name": "X-Refresh-Token", "value": "fixture-refresh-token"],
+    ["name": "X-Session-ID", "value": "fixture-session-id"],
     ["name": "X-CSRF-Token", "value": "fixture-csrf-token"],
     ["name": "X-Fixture", "value": "kept"],
   ]
@@ -36,7 +38,9 @@ import Testing
       snapshot: snapshot, includeSensitiveHeaders: true, version: "test"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-secret"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-api-key-secret"))
+  #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-private-key"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-refresh-token"))
+  #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-session-id"))
   #expect(!String(decoding: redacted, as: UTF8.self).contains("fixture-csrf-token"))
   #expect(String(decoding: redacted, as: UTF8.self).contains("kept"))
   #expect(String(decoding: included, as: UTF8.self).contains("fixture-secret"))

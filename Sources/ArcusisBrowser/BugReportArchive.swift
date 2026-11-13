@@ -74,10 +74,12 @@ enum BugReportArchive {
         !components.isDisjoint(
           with: [
             "token", "secret", "password", "passwd", "credential", "csrf", "xsrf",
-            "signature",
+            "signature", "session",
           ])
         || (components.contains("api") && components.contains("key"))
         || (components.contains("client") && components.contains("key"))
+        || (components.contains("access") && components.contains("key"))
+        || (components.contains("private") && components.contains("key"))
       let hidden =
         !includeSensitive
         && (sensitive.contains(normalizedName) || containsSecretMarker)

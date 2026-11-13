@@ -20,6 +20,13 @@ struct SidebarSplitRowLayoutTests {
     #expect(SidebarSplitRow.hoverAnimation(reduceMotion: false) != nil)
   }
 
+  @Test func keyboardActivationRunsSplitSelection() {
+    var selections = 0
+    let activate = SidebarSplitRow.keyboardActivationAction { selections += 1 }
+    #expect(activate() == .handled)
+    #expect(selections == 1)
+  }
+
   @Test func titlesRequireActualPaneWidthAfterHandleAndSpacing() {
     #expect(
       !SidebarSplitRow.showsTitles(

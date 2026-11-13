@@ -205,4 +205,13 @@ struct ShaarExtensionsAdapterTests {
     #expect(invalidInstall.installed.isEmpty)
     #expect(invalidInstall.failed.count == 1)
   }
+
+  @Test func extensionSourceRejectsBooleanInteger() async throws {
+    let fake = FakeExtensionsTransport(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Extension","version":"1","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":true}]}"#
+    )
+    await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+      _ = try await ShaarExtensionsAdapter(shaar: fake).list(profileID: UUID())
+    }
+  }
 }

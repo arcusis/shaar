@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
 
 public enum ShaarExtensionsOperation: UInt32, Sendable {
@@ -113,6 +114,7 @@ public struct ShaarExtensionsAdapter: Sendable {
         let enabled = row["enabled"] as? Bool,
         let mayDisable = row["mayDisable"] as? Bool,
         let incognitoEnabled = row["incognitoEnabled"] as? Bool,
+        !Self.isJSONBoolean(row["source"]),
         let source = row["source"] as? Int,
         row["description"] == nil || row["description"] is String,
         row["permissions"] == nil || row["permissions"] is [String],
@@ -202,6 +204,11 @@ public struct ShaarExtensionsAdapter: Sendable {
 
   private static func isValidExtensionID(_ id: String) -> Bool {
     id.utf8.count == 32 && id.utf8.allSatisfy { (97...112).contains(Int($0)) }
+  }
+
+  private static func isJSONBoolean(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber else { return false }
+    return CFGetTypeID(number) == CFBooleanGetTypeID()
   }
 
   static func isValidVersion(_ version: String) -> Bool {

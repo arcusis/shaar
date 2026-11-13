@@ -37,11 +37,16 @@ def require_workflow(repository: str, revision: str, workflow: str, required: se
     prefix = f"repos/{repository}/actions"
     event_filter = f"&event={events[0]}" if len(events) == 1 else ""
     runs = api(f"{prefix}/workflows/{workflow}/runs?head_sha={revision}{event_filter}&branch=production&status=success&per_page=100")
+    if not isinstance(runs, dict) or not isinstance(runs.get("workflow_runs"), list):
+        raise ValueError(f"Invalid GitHub API response for {workflow} workflow runs")
     for run in production_runs(runs, revision, events):
         jobs = []
         page = 1
         while True:
-            batch = api(f"{prefix}/runs/{run['id']}/jobs?per_page=100&page={page}")["jobs"]
+            response = api(f"{prefix}/runs/{run['id']}/jobs?per_page=100&page={page}")
+            if not isinstance(response, dict) or not isinstance(response.get("jobs"), list):
+                raise ValueError(f"Invalid GitHub API response for {workflow} run {run['id']} jobs")
+            batch = response["jobs"]
             jobs.extend(batch)
             if len(batch) < 100:
                 break

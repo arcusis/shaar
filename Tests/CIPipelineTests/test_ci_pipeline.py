@@ -245,6 +245,17 @@ class PipelineGateTests(unittest.TestCase):
                 self.assertIn("--connect-timeout 10", command)
                 self.assertIn("--max-time 120", command)
 
+    def test_release_gate_reports_malformed_workflow_and_job_api_responses(self):
+        revision = "a" * 40
+        with patch.object(RELEASE_CI, "api", return_value={"workflow_runs": None}):
+            with self.assertRaisesRegex(ValueError, "Invalid GitHub API response for source-checks.yml workflow runs"):
+                RELEASE_CI.require_workflow("arcusis/shaar", revision, "source-checks.yml", {"CI required"})
+        valid = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",
+                 "status": "completed", "conclusion": "success"}
+        with patch.object(RELEASE_CI, "api", side_effect=[{"workflow_runs": [valid]}, {"jobs": None}]):
+            with self.assertRaisesRegex(ValueError, "Invalid GitHub API response for source-checks.yml run 9 jobs"):
+                 RELEASE_CI.require_workflow("arcusis/shaar", revision, "source-checks.yml", {"CI required"})
+
     def test_release_gate_api_requests_are_bounded_and_report_timeouts(self):
         with patch.object(RELEASE_CI.subprocess, "check_output", return_value="{}") as command:
             self.assertEqual(RELEASE_CI.api("repos/arcusis/shaar/actions"), {})

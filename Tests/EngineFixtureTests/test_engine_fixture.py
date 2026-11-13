@@ -33,6 +33,21 @@ class PrivateSearchEvidenceTests(unittest.TestCase):
         self.assertFalse(fixture.private_search_has_results(dict(search, textLength=100), 'search.example'))
 
 
+class PageFocusEventProbeTests(unittest.TestCase):
+    def test_authored_account_fixture_counts_window_focus_and_blur(self):
+        source = (Path(__file__).resolve().parents[2] / 'scripts/engine_fixture.py').read_text()
+        self.assertIn("window.__shaarPageFocusEvents={focus:0,blur:0}", source)
+        self.assertIn("window.addEventListener('focus'", source)
+        self.assertIn("window.addEventListener('blur'", source)
+
+    def test_native_host_samples_report_focus_and_blur_counts(self):
+        source = (Path(__file__).resolve().parents[2] / 'Sources/ShaarVerification/NativeHostProbe.swift').read_text()
+        self.assertIn('pageFocusEventCount', source)
+        self.assertIn('pageBlurEventCount', source)
+        self.assertIn('window.__shaarPageFocusEvents?.focus', source)
+        self.assertIn('window.__shaarPageFocusEvents?.blur', source)
+
+
 class SavedTabCapacityRunnerTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')

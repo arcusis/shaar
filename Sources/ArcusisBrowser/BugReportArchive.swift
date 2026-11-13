@@ -77,6 +77,32 @@ enum BugReportArchive {
     }
   }
 
+  private static func redactedURL(_ raw: String) -> (url: String, query: [[String: String]]) {
+    guard var components = URLComponents(string: raw) else { return ("Unavailable", []) }
+    let items = components.queryItems ?? []
+    let query = items.map { ["name": $0.name, "value": $0.value == nil ? "" : "[redacted]"] }
+    components.user = nil
+    components.password = nil
+    components.fragment = nil
+    components.queryItems = items.map {
+      URLQueryItem(name: $0.name, value: $0.value == nil ? nil : "[redacted]")
+    }
+    return (components.string ?? "Unavailable", query)
+  }
+
+  private static func redactURLs(in value: String) -> String {
+    guard let regex = try? NSRegularExpression(
+      pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
+    else { return value }
+    var result = value
+    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed()
+    {
+      guard let range = Range(match.range, in: result) else { continue }
+      result.replaceSubrange(range, with: redactedURL(String(result[range])).url)
+    }
+    return result
+  }
+
   private static func entry(
     resource: [String: Any], call: [String: Any]?, origin: Double, includeSensitive: Bool
   ) -> [String: Any] {
@@ -85,19 +111,7 @@ enum BugReportArchive {
       return value
     }
     let rawURL = String((resource["url"] as? String ?? "").prefix(8192))
-    var url = rawURL
-    var query: [[String: String]] = []
-    if var components = URLComponents(string: rawURL) {
-      let items = components.queryItems ?? []
-      query = items.map { ["name": $0.name, "value": $0.value == nil ? "" : "[redacted]"] }
-      components.user = nil
-      components.password = nil
-      components.fragment = nil
-      components.queryItems = items.map {
-        URLQueryItem(name: $0.name, value: $0.value == nil ? nil : "[redacted]")
-      }
-      url = components.string ?? rawURL
-    }
+    let (url, query) = redactedURL(rawURL)
     let started = (origin + number("start")) / 1000
     let timestamp = started.isFinite && started >= 0 && started <= 253_402_300_799 ? started : 0
     let duration = number("duration")
@@ -122,7 +136,7 @@ enum BugReportArchive {
       "cache": [:], "timings": ["send": -1, "wait": -1, "receive": -1],
       "_transferSize": number("transfer"),
       "_initiator": resource["initiator"] as? String ?? "script",
-      "_error": call?["error"] as? String ?? "",
+      "_error": redactURLs(in: call?["error"] as? String ?? ""),
       "_timingSource": resource["initiator"] == nil ? "instrumented-call" : "page-resource-timing",
     ]
   }

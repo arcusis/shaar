@@ -10,7 +10,13 @@ struct BugReportArchiveTests {
   @Test func harRedactsURLCredentialsQueryValuesAndFragments() throws {
     let secretURL = "https://report-user:fixture-password@report.localhost/data?token=fixture-token&mode=private#fixture-fragment"
     let report = BugReportArchive.har(
-      snapshot: ["resources": [["url": secretURL, "start": 0.0, "duration": 1.0]]],
+      snapshot: [
+        "resources": [["url": secretURL, "start": 0.0, "duration": 1.0]],
+        "network": [[
+          "url": secretURL, "start": 0.0, "end": 1.0,
+          "error": "Failed https://error-user:error-password@report.localhost/data?token=error-token#error-fragment",
+        ]],
+      ],
       includeSensitiveHeaders: false, version: "test")
     let encoded = try JSONSerialization.data(withJSONObject: report)
     let serialized = String(decoding: encoded, as: UTF8.self)
@@ -18,6 +24,9 @@ struct BugReportArchiveTests {
     #expect(!serialized.contains("fixture-password"))
     #expect(!serialized.contains("fixture-token"))
     #expect(!serialized.contains("fixture-fragment"))
+    #expect(!serialized.contains("error-password"))
+    #expect(!serialized.contains("error-token"))
+    #expect(!serialized.contains("error-fragment"))
     let log = try #require(report["log"] as? [String: Any])
     let entries = try #require(log["entries"] as? [[String: Any]])
     let request = try #require(entries.first?["request"] as? [String: Any])

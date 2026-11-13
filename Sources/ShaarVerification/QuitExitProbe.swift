@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 
 @testable import ArcusisBrowser
@@ -131,11 +132,18 @@ final class QuitExitProbe {
 
   private func backgroundModeIsOff() -> Bool {
     let url = root.appending(path: "Chromium/Local State")
-    guard let data = try? Data(contentsOf: url),
+    return Self.backgroundModeIsOff(try? Data(contentsOf: url))
+  }
+
+  static func backgroundModeIsOff(_ data: Data?) -> Bool {
+    guard let data,
       let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let mode = state["background_mode"] as? [String: Any]
     else { return false }
-    return mode["enabled"] as? Bool == false
+    guard let enabled = mode["enabled"] as? NSNumber,
+      CFGetTypeID(enabled) == CFBooleanGetTypeID()
+    else { return false }
+    return !enabled.boolValue
   }
 
   private func load(_ profile: String) async throws {

@@ -154,6 +154,28 @@ final class AgentBridgeTests: XCTestCase {
     XCTAssertFalse(model.hasOneTimeToken)
   }
 
+  func testOlderStatusRefreshCannotOverwriteTheLatestReply() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    var replies: [AgentBridgeModel.Reply] = []
+    let model = AgentBridgeModel(target: target) { operation, _, reply in
+      if operation == .status { replies.append(reply) }
+    }
+
+    model.refresh()
+    model.refresh()
+    replies[1](
+      [
+        "schemaVersion": 1, "enabled": true, "port": 9222,
+        "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id", "connectionCount": 2,
+      ], nil)
+    replies[0](
+      ["schemaVersion": 1, "enabled": false, "connectionCount": 0], nil)
+
+    XCTAssertTrue(model.status.enabled)
+    XCTAssertEqual(model.status.connectionCount, 2)
+  }
+
   func testFailedDisconnectKeepsWarningUntilConfirmed() {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)

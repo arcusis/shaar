@@ -50,6 +50,7 @@ jobs:
         id: pr-bundle-run
         if: github.event_name == 'merge_group' && steps.bundle-cache.outputs.cache-hit != 'true'
         continue-on-error: true
+        timeout-minutes: 2
         env:
           QUEUE_HEAD_REF: ${{ github.event.merge_group.head_ref }}
           GH_TOKEN: ${{ github.token }}

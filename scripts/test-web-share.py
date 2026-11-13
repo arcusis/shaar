@@ -165,12 +165,8 @@ def main():
             except OSError:
                 screenshot_data = None
             shots = {"share-sheet.png": screenshot_data is not None}
-            if evidence and evidence.get("passed"):
-                if screenshot_data is not None:
-                    write_screenshot(screenshot, screenshot_data)
-                source = root / "share-sheet.png"
-                if source.is_file():
-                    write_output(screenshot, source.read_bytes())
+            if evidence and evidence.get("passed") and screenshot_data is not None:
+                write_screenshot(screenshot, screenshot_data)
         server.shutdown()
     crashes = sorted(crash_names() - before)
     receipt = {
@@ -184,7 +180,6 @@ def main():
         and all(shots.values()) and not crashes,
     }
     write_receipt(options.receipt, receipt)
-    write_output(options.receipt, (json.dumps(receipt, indent=2) + "\n").encode())
     print(json.dumps({key: receipt[key] for key in (
         "exitCode", "passed", "screenshots", "crashReports")}, indent=2))
     if evidence:

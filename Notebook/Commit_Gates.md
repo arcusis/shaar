@@ -16,7 +16,7 @@ CI runs the same tree checks and scans every new commit between the immutable ev
 
 ## Verification
 
-Test staged-versus-working content, real Gitleaks detection/redaction, path/size policies, deleted/renamed files, symlinks, push ref parsing, missing CI baselines, previous-hook chaining and worktree-only installation. Temporary repositories need no commits or identity overrides. Run focused Python tests and the shared fast entrypoint; hosted CI supplies the full build/native verification. Keep private data and unredacted findings out of logs.
+Test staged-versus-working content, real Gitleaks detection/redaction, path/size policies, deleted/renamed files, symlinks including cycles reached through directory components, push ref parsing, missing CI baselines, previous-hook chaining and worktree-only installation. Temporary repositories need no commits or identity overrides. Run focused Python tests and the shared fast entrypoint; hosted CI supplies the full build/native verification. Keep private data and unredacted findings out of logs.
 
 References: [Git hooks](https://git-scm.com/docs/githooks), [worktree configuration](https://git-scm.com/docs/git-worktree#_configuration_file), [Gitleaks](https://github.com/gitleaks/gitleaks/tree/v8.30.1). Related: [[Notebook_Maintenance]], [[CI_Pipeline_Design]].
 

@@ -91,6 +91,14 @@ class HookTests(unittest.TestCase):
         self.assertEqual(len(errors), 2)
         self.assertTrue(all("symlink cycle" in error for error in errors))
 
+    def test_symlink_cycle_through_directory_component_is_rejected(self):
+        (self.root / "first").symlink_to("directory/inside")
+        (self.root / "directory").symlink_to("first")
+        git_content.git(self.root, "add", "first", "directory")
+        errors = sensitive_files.policy_errors(self.root)
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(all("symlink cycle" in error for error in errors))
+
     def test_snapshot_preserves_staged_bytes_index_and_worktree(self):
         path = self.stage("nested/source.txt", b"staged bytes")
         path.write_bytes(b"unstaged bytes")

@@ -171,8 +171,8 @@ final class SiteControlsModel: Identifiable {
       guard !Task.isCancelled else { return }
       failure = nil
     } catch {
-      guard !Task.isCancelled else { return }
       permissionValues[permission] = previous
+      guard !Task.isCancelled else { return }
       failure = ShellL10n.string("Could not update this permission. Try again.")
     }
   }

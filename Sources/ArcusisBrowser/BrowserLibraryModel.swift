@@ -25,6 +25,22 @@ enum LibraryMutation {
   }
 }
 
+enum LibraryHistoryRows {
+  static func parse(profileID: UUID, rows: [[String: Any]]) throws -> [BrowserHistoryEntry] {
+    var entries: [BrowserHistoryEntry] = []
+    entries.reserveCapacity(rows.count)
+    var addresses: Set<String> = []
+    addresses.reserveCapacity(rows.count)
+    for row in rows {
+      let entry = try BrowserHistoryEntry(profileID: profileID, payload: row)
+      guard addresses.insert(entry.id).inserted else { throw LibraryDataError.invalidHistory }
+      entries.append(entry)
+    }
+    entries.sort { $0.lastVisit > $1.lastVisit }
+    return entries
+  }
+}
+
 @MainActor @Observable
 final class BrowserLibraryModel {
   private(set) var bookmarks: [UUID: BookmarkTree] = [:]
@@ -80,11 +96,7 @@ final class BrowserLibraryModel {
           guard let rows = payload as? [[String: Any]] else {
             throw LibraryDataError.invalidHistory
           }
-          let entries = try rows.map { try BrowserHistoryEntry(profileID: profile, payload: $0) }
-          guard Set(entries.map(\.id)).count == entries.count else {
-            throw LibraryDataError.invalidHistory
-          }
-          self.history[profile] = entries.sorted { $0.lastVisit > $1.lastVisit }
+          self.history[profile] = try LibraryHistoryRows.parse(profileID: profile, rows: rows)
         }
       } catch { self.notices[key] = error.localizedDescription }
       if self.dirty.remove(key) != nil { self.invalidate(profile, section: section) }

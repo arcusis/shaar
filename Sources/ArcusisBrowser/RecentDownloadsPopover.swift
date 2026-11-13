@@ -39,7 +39,7 @@ struct RecentDownloadsPopover: View {
 
   var body: some View {
     // Arc lists the newest download closest to the footer.
-    let shown = Array(items.prefix(5).reversed())
+    let shown = Self.presentedItems(items)
     VStack(alignment: .leading, spacing: 10) {
       if shown.isEmpty {
         Text(PanelsL10n.string("No recent downloads")).font(.callout).foregroundStyle(.secondary)
@@ -64,6 +64,10 @@ struct RecentDownloadsPopover: View {
     .onExitCommand(perform: dismiss)
     .accessibilityElement(children: .contain)
     .accessibilityLabel(PanelsL10n.string("Recent downloads for current profile"))
+  }
+
+  static func presentedItems(_ items: [BrowserDownload]) -> [BrowserDownload] {
+    Array(items.prefix(5).reversed())
   }
 
   private func revealAnimation(stepsFromFooter: Int) -> Animation {

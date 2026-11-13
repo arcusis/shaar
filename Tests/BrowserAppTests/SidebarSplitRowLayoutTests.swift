@@ -16,8 +16,11 @@ struct SidebarSplitRowLayoutTests {
   }
 
   @Test func hoverAnimationRespectsReduceMotion() {
-    #expect(SidebarSplitRow.hoverAnimation(reduceMotion: true) == nil)
-    #expect(SidebarSplitRow.hoverAnimation(reduceMotion: false) != nil)
+    #expect(SidebarSplitRow.hoverAnimation(systemSetting: true, override: nil) == nil)
+    #expect(SidebarSplitRow.hoverAnimation(systemSetting: false, override: true) == nil)
+    #expect(SidebarSplitRow.hoverAnimation(systemSetting: true, override: false) == nil)
+    #expect(SidebarSplitRow.hoverAnimation(systemSetting: false, override: false) != nil)
+    #expect(SidebarSplitRow.hoverAnimation(systemSetting: false, override: nil) != nil)
   }
 
   @Test func keyboardActivationRunsSplitSelection() {

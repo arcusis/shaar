@@ -158,6 +158,7 @@ struct ShortcutCatalog {
     case "Cut": ("x", .command)
     case "Copy": ("c", .command)
     case "Paste": ("v", .command)
+    case "Paste and Match Style": ("V", [.command, .option])
     case "Select All": ("a", .command)
     case "Copy URL": ("c", [.command, .option, .shift])
     default: nil

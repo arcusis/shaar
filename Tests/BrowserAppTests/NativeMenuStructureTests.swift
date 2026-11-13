@@ -167,8 +167,12 @@ import Testing
   #expect(item("Cut")?.action == NSSelectorFromString("cut:"))
   #expect(item("Copy")?.action == NSSelectorFromString("copy:"))
   #expect(item("Paste")?.action == NSSelectorFromString("paste:"))
+  #expect(item("Paste and Match Style")?.action == NSSelectorFromString("pasteAsPlainText:"))
+  #expect(item("Paste and Match Style")?.keyEquivalent == "V")
+  #expect(item("Paste and Match Style")?.keyEquivalentModifierMask == [.command, .option])
   #expect(item("Select All")?.action == NSSelectorFromString("selectAll:"))
   #expect(item("Undo")?.target == nil && item("Paste")?.target == nil)
+  #expect(item("Paste and Match Style")?.target == nil)
 }
 
 @Test @MainActor func copyURLMenuUsesTheActivePrivatePage() throws {

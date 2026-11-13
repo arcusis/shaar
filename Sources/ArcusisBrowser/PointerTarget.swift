@@ -16,7 +16,13 @@ extension Array where Element: Identifiable {
   /// The element to insert before when moving the element at `index` one step by `offset`
   /// (-1 or 1); nil moves it to the end.
   func insertionAnchor(movingIndex index: Int, by offset: Int) -> Element.ID? {
-    if offset < 0 { return self[index - 1].id }
-    return indices.contains(index + 2) ? self[index + 2].id : nil
+    guard indices.contains(index), offset == -1 || offset == 1 else { return nil }
+    if offset < 0 {
+      guard index > startIndex else { return nil }
+      return self[index - 1].id
+    }
+    guard index < count - 1 else { return nil }
+    let target = index + 2
+    return indices.contains(target) ? self[target].id : nil
   }
 }

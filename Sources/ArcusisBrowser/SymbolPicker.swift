@@ -27,6 +27,7 @@ struct SymbolPickerButton: View {
 
 /// Searchable grid of SF Symbols shared by the Space and profile editors.
 struct SymbolPicker: View {
+  static let sectionHeaderTraits: AccessibilityTraits = .isHeader
   @Binding var symbol: String
   @Environment(\.dismiss) private var dismiss
   @State private var query = ""
@@ -49,6 +50,7 @@ struct SymbolPicker: View {
           ForEach(SymbolCatalog.sections(matching: query), id: \.name) { section in
             Text(SettingsL10n.string(section.name)).font(.caption.weight(.semibold))
               .foregroundStyle(.secondary)
+              .accessibilityAddTraits(Self.sectionHeaderTraits)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 34), spacing: 4)], spacing: 4) {
               ForEach(section.symbols, id: \.self) { value in iconButton(value) }
             }

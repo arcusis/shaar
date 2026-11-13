@@ -86,7 +86,7 @@ def download_previous_release(url: str, destination: Path) -> None:
             return
         except urllib.error.HTTPError as error:
             destination.unlink(missing_ok=True)
-            if error.code not in {429, 500, 502, 503, 504} or attempt == 2:
+            if error.code not in {408, 429, 500, 502, 503, 504} or attempt == 2:
                 raise
         except (urllib.error.URLError, TimeoutError, ConnectionError):
             destination.unlink(missing_ok=True)

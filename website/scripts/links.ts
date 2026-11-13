@@ -40,9 +40,14 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
       "a[href], link[href], img[src], script[src], img[srcset], source[srcset]",
     )) {
       const references = element.hasAttribute("srcset")
-        ? (element.getAttribute("srcset") ?? "")
-            .split(",")
-            .map((candidate) => candidate.trim().split(/\s+/, 1)[0])
+        ? [
+            ...(element.localName === "img" && element.hasAttribute("src")
+              ? [element.getAttribute("src") ?? ""]
+              : []),
+            ...(element.getAttribute("srcset") ?? "")
+              .split(",")
+              .map((candidate) => candidate.trim().split(/\s+/, 1)[0]),
+          ]
         : [element.getAttribute("href") ?? element.getAttribute("src") ?? ""];
       for (const value of references) {
         if (!value || value.startsWith("javascript:")) {

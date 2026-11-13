@@ -1222,15 +1222,20 @@ final class NativeHostProbe {
             """
         ) { continuation.resume(returning: $0) }
       }
-      if let data = json?.data(using: .utf8),
-        let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["fixture"] as? String == "v1", value["instance"] as? String != nil
-      {
+      if let value = Self.parseDocumentJSON(json) {
         return value
       }
       try await Task.sleep(for: .milliseconds(100))
     }
     throw HostProbeFailure("Native host fixture document not ready.")
+  }
+
+  static func parseDocumentJSON(_ json: String?) -> [String: Any]? {
+    guard let data = json?.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      value["fixture"] as? String == "v1", value["instance"] as? String != nil
+    else { return nil }
+    return value
   }
 
   private func verifyNativeNavigation(

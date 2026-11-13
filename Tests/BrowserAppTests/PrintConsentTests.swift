@@ -146,6 +146,9 @@ struct PrintConsentTests {
     var maxByteTitle = valid
     maxByteTitle["title"] = String(repeating: "👩", count: 512)
     #expect(PrintRequest(payload: maxByteTitle) != nil)
+    var maxByteURL = valid
+    maxByteURL["pageURL"] = "https://example.com/" + String(repeating: "a", count: 4076)
+    #expect(PrintRequest(payload: maxByteURL) != nil)
 
     for unsupportedVersion: Any in [2, "1", true, NSNumber(value: 1.0), NSNull()] {
       var unsupported = valid
@@ -159,7 +162,7 @@ struct PrintConsentTests {
     for (key, value) in [
       ("id", "not-a-uuid" as Any),
       ("pageURL", "file:///tmp/page" as Any),
-      ("pageURL", ("https://example.com/" + String(repeating: "a", count: 4096)) as Any),
+      ("pageURL", ("https://example.com/" + String(repeating: "a", count: 4077)) as Any),
       ("origin", "file:///tmp/page" as Any),
       ("origin", "https://example.com/path" as Any),
       ("origin", "https://example.com?unexpected=query" as Any),

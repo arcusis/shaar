@@ -78,6 +78,19 @@ class ReportResult(unittest.TextTestResult):
         ET.ElementTree(self.report).write(path, encoding="utf-8", xml_declaration=True)
 
 
+class ImportFailureTest(unittest.TestCase):
+    def __init__(self, path: Path, error: Exception):
+        super().__init__("runTest")
+        self.path = path
+        self.error = error
+
+    def id(self):
+        return self.path.name
+
+    def runTest(self):
+        raise RuntimeError(f"Could not import test module {self.path}: {self.error}") from self.error
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--junit", type=Path)
@@ -100,7 +113,11 @@ def main() -> int:
                 return 1
             module = importlib.util.module_from_spec(module_spec)
             sys.modules[module_spec.name] = module
-            module_spec.loader.exec_module(module)
+            try:
+                module_spec.loader.exec_module(module)
+            except Exception as error:
+                suite.addTest(ImportFailureTest(test_file, error))
+                continue
             suite.addTests(loader.loadTestsFromModule(module))
 
     test_count = suite.countTestCases()

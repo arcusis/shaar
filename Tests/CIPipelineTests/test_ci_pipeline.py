@@ -1130,6 +1130,39 @@ class ProbeSoakTests(unittest.TestCase):
             self.assertEqual(len(suite.findall("testcase/failure")), 1)
             self.assertEqual(len(suite.findall("testcase/skipped")), 2)
 
+    def test_python_module_import_error_is_reported_without_skipping_other_modules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tests = root / "Tests"
+            fixture = tests / "Fixture"
+            fixture.mkdir(parents=True)
+            (fixture / "test_broken.py").write_text("raise RuntimeError('fixture import failed')\n")
+            (fixture / "test_valid.py").write_text(
+                "import unittest\n"
+                "class ValidTest(unittest.TestCase):\n"
+                "    def test_runs(self):\n"
+                "        self.assertTrue(True)\n"
+            )
+            report = root / "python.xml"
+            text_runner = unittest.TextTestRunner
+
+            def quiet_runner(**kwargs):
+                return text_runner(stream=io.StringIO(), **kwargs)
+
+            with (
+                patch.object(PYTHON_TESTS, "TESTS_ROOT", tests),
+                patch.object(PYTHON_TESTS.unittest, "TextTestRunner", side_effect=quiet_runner),
+                patch.object(sys, "argv", ["test-python.py", "--junit", str(report)]),
+            ):
+                self.assertEqual(PYTHON_TESTS.main(), 1)
+
+            suite = ET.parse(report).getroot()
+            self.assertEqual(suite.get("tests"), "2")
+            self.assertEqual(suite.get("errors"), "1")
+            cases = {case.get("name"): case for case in suite.findall("testcase")}
+            self.assertIn("Could not import test module", cases["test_broken.py"].find("error").text)
+            self.assertIsNone(cases["test_valid.ValidTest.test_runs"].find("error"))
+
 
 class EngineTransferTests(unittest.TestCase):
     def test_merge_group_bundle_selection_rejects_fork_pull_request_runs(self):

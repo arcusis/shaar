@@ -278,6 +278,17 @@ struct DevToolsPanelTests {
     #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)
   }
 
+  @Test func responseBodyRejectsMalformedRequiredFields() {
+    for payload in [
+      #"{"schemaVersion":2,"body":"ok","base64Encoded":false}"#,
+      #"{"schemaVersion":1,"body":7,"base64Encoded":false}"#,
+      #"{"schemaVersion":1,"body":"ok","base64Encoded":"false"}"#,
+      "not-json",
+    ] {
+      #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)
+    }
+  }
+
   @Test func networkRulesUseFixedActionsAndScopedLease() throws {
     let fake = FakePanelEngine()
     let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))

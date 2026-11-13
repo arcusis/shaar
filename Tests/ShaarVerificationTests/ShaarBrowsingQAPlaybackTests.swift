@@ -12,8 +12,18 @@ import Testing
     #expect(!ShaarBrowsingQA.playbackSettled("{}"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":true,\"width\":320}"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":false,\"width\":0}"))
-    #expect(ShaarBrowsingQA.playbackSettled("{\"paused\":false,\"width\":320}"))
-    #expect(ShaarBrowsingQA.playbackSettled("{ \"width\": 320, \"paused\": false }"))
+    #expect(
+      !ShaarBrowsingQA.playbackSettled(
+        "{\"paused\":false,\"width\":320,\"error\":0,\"playResult\":\"pending\"}"))
+    #expect(
+      ShaarBrowsingQA.playbackSettled(
+        "{\"paused\":false,\"width\":320,\"error\":0,\"playResult\":\"resolved\"}"))
+    #expect(
+      ShaarBrowsingQA.playbackSettled(
+        "{ \"width\": 320, \"paused\": false, \"error\": 0, \"playResult\": \"resolved\" }"))
+    #expect(
+      ShaarBrowsingQA.playbackSettled(
+        "{\"paused\":true,\"width\":0,\"error\":0,\"playResult\":\"NotAllowedError\"}"))
     #expect(ShaarBrowsingQA.playbackSettled("{\"error\":3}"))
     #expect(ShaarBrowsingQA.playbackSettled("{ \"error\": 3 }"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"error\":0,\"paused\":true,\"width\":0}"))

@@ -1209,6 +1209,10 @@ import Foundation
       error = nil
     }
     if let error, error != 0 { return true }
+    guard let playResult = evidence["playResult"] as? String, playResult != "pending" else {
+      return false
+    }
+    if playResult != "resolved" { return true }
     guard let paused = jsonBoolean(evidence["paused"]),
       let width = integer(evidence["width"])
     else { return false }

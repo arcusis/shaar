@@ -359,10 +359,17 @@ struct LibraryDownloadTests {
       let task = Task { await thumbnail.generate() }
       var iterator = started.makeAsyncIterator()
       let completion = try #require(await iterator.next())
+      var returned = false
+      let waiter = Task {
+        _ = await task.value
+        returned = true
+      }
       task.cancel()
       #expect(task.isCancelled)
+      for _ in 0..<100 where !returned { await Task.yield() }
+      #expect(returned, "Cancellation must resume the thumbnail task without a generator callback.")
       completion(nil, CancellationError())
-      #expect(await task.value == nil)
+      await waiter.value
     }
   }
 

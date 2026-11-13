@@ -196,19 +196,36 @@ struct RecentDownloadsPopover: View {
 }
 
 private enum RecentDownloadThumbnail {
+  @MainActor
   static func generate(_ request: QLThumbnailGenerator.Request) async -> NSImage? {
     let handle = RecentDownloadThumbnailRequest(request)
-    return await withTaskCancellationHandler {
+    let completion = CancellableContinuation<RecentThumbnailResult?>()
+    let result = await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
+        completion.install(continuation)
+        guard !Task.isCancelled else {
+          completion.resume(returning: nil)
+          return
+        }
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
-          continuation.resume(
-            returning: representation.map { NSImage(cgImage: $0.cgImage, size: .zero) })
+          completion.resume(
+            returning: representation.map {
+              RecentThumbnailResult(NSImage(cgImage: $0.cgImage, size: .zero))
+            })
         }
       }
     } onCancel: {
-      handle.cancel()
+      Task { @MainActor in handle.cancel() }
+      completion.resume(returning: nil)
     }
+    return result?.image
   }
+}
+
+private struct RecentThumbnailResult: @unchecked Sendable {
+  let image: NSImage
+
+  init(_ image: NSImage) { self.image = image }
 }
 
 private final class RecentDownloadThumbnailRequest: @unchecked Sendable {

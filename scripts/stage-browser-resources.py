@@ -106,6 +106,10 @@ def stage(
     pin_dir: Path,
     catalog_dir: Optional[Path] = None,
 ) -> None:
+    if resources.is_symlink():
+        raise ValueError(f"resource output directory must not be a symlink: {resources}")
+    if resources.exists() and not resources.is_dir():
+        raise ValueError(f"resource output path is not a directory: {resources}")
     root = Path(__file__).resolve().parent.parent
     catalog_dir = catalog_dir or root / "Sources/BrowserCore/Resources"
     source = binary_dir / BUNDLE

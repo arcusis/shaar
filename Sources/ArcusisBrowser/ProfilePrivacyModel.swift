@@ -44,20 +44,19 @@ struct EngineProfileSettings: ProfileSettingsBackend {
   let httpsOnlyMode: (UUID) -> Bool?
 
   func loadProfile(_ id: UUID) async throws {
-    try await withCheckedThrowingContinuation {
-      (continuation: CheckedContinuation<Void, Error>) in
+    try await ProfileSettingsCallback.run { completion in
       runtime.loadProfileID(id, httpsOnly: httpsOnlyMode(id)) { error in
         if let error {
-          continuation.resume(throwing: error)
+          completion(.failure(error))
         } else {
-          continuation.resume()
+          completion(.success(()))
         }
       }
     }
     if let shaar = runtime as? ARCShaarRuntime {
-      await withCheckedContinuation { continuation in
+      try await ProfileSettingsCallback.run { completion in
         shaar.refreshThirdPartyCookiePolicy(forProfileID: id.uuidString) {
-          continuation.resume()
+          completion(.success(()))
         }
       }
     }
@@ -90,6 +89,71 @@ struct EngineProfileSettings: ProfileSettingsBackend {
   }
   func deleteProfile(_ id: UUID) async throws {
     try await runtime.deleteEngineProfileID(id.uuidString)
+  }
+}
+
+private enum ProfileSettingsCallback {
+  typealias Completion = @Sendable (Result<Void, any Error>) -> Void
+  typealias Start = @MainActor (@escaping Completion) -> Void
+
+  @MainActor
+  static func run(_ start: Start) async throws {
+    let gate = ProfileSettingsContinuation()
+    try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        gate.install(continuation)
+        guard !Task.isCancelled else {
+          gate.resume(.failure(CancellationError()))
+          return
+        }
+        start { gate.resume($0) }
+      }
+    } onCancel: {
+      gate.resume(.failure(CancellationError()))
+    }
+  }
+}
+
+private final class ProfileSettingsContinuation: @unchecked Sendable {
+  private enum State {
+    case waiting
+    case installed(CheckedContinuation<Void, any Error>)
+    case finished(Result<Void, any Error>)
+  }
+
+  private let lock = NSLock()
+  private var state = State.waiting
+
+  func install(_ continuation: CheckedContinuation<Void, any Error>) {
+    lock.lock()
+    switch state {
+    case .waiting:
+      state = .installed(continuation)
+      lock.unlock()
+    case .installed:
+      lock.unlock()
+      preconditionFailure("A profile settings continuation can only be installed once.")
+    case .finished(let result):
+      lock.unlock()
+      continuation.resume(with: result)
+    }
+  }
+
+  func resume(_ result: Result<Void, any Error>) {
+    lock.lock()
+    let continuation: CheckedContinuation<Void, any Error>?
+    switch state {
+    case .waiting:
+      state = .finished(result)
+      continuation = nil
+    case .installed(let installed):
+      state = .finished(result)
+      continuation = installed
+    case .finished:
+      continuation = nil
+    }
+    lock.unlock()
+    continuation?.resume(with: result)
   }
 }
 

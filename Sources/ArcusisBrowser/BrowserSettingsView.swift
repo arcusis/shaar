@@ -205,7 +205,8 @@ struct BrowserSettingsView: View {
     clearHistory: ((UUID) async throws -> Void)? = nil,
     httpsOnlyModeEnabled: @escaping (UUID) -> Bool,
     onSetHttpsOnlyMode: @escaping (UUID, Bool) -> Bool,
-    initialSection: BrowserSettingsSection = .general
+    initialSection: BrowserSettingsSection = .general,
+    confirmsClearHistoryOnAppear: Bool = false
   ) {
     self.profiles = profiles
     self.searchEngines = searchEngines
@@ -236,6 +237,7 @@ struct BrowserSettingsView: View {
     self.httpsOnlyModeEnabled = httpsOnlyModeEnabled
     self.onSetHttpsOnlyMode = onSetHttpsOnlyMode
     _selectedSection = State(initialValue: initialSection)
+    _confirmHistory = State(initialValue: confirmsClearHistoryOnAppear)
   }
 
   static func historyClearFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {

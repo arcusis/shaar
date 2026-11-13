@@ -346,6 +346,8 @@ enum DownloadDirectoryPolicy {
 
 private struct BrowserSettingsRoot: View {
   let state: BrowserSettingsState
+  var initialSection: BrowserSettingsSection = .general
+  var confirmsClearHistoryOnAppear = false
 
   var body: some View {
     BrowserSettingsView(
@@ -384,7 +386,8 @@ private struct BrowserSettingsRoot: View {
         state.preferences.setHttpsOnlyMode(enabled, for: profileID)
         guard let runtime = state.runtime as? ARCShaarRuntime else { return false }
         return runtime.setHttpsOnlyModeEnabled(enabled, forProfileID: profileID.uuidString)
-      })
+      }, initialSection: initialSection,
+      confirmsClearHistoryOnAppear: confirmsClearHistoryOnAppear)
   }
 }
 
@@ -410,6 +413,8 @@ final class BrowserSettingsController: NSObject {
   let presentation: Presentation
   private var windowDelegate: BrowserSettingsWindowDelegate?
   private(set) var window: NSWindow?
+  private(set) var initialSection: BrowserSettingsSection = .general
+  private(set) var confirmsClearHistoryOnAppear = false
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
@@ -477,14 +482,27 @@ final class BrowserSettingsController: NSObject {
     state.setProfileSymbol(id, to: symbol)
   }
 
-  func show(for profileID: UUID? = nil) {
+  func show(
+    for profileID: UUID? = nil, section: BrowserSettingsSection = .general,
+    confirmsClearHistory: Bool = false
+  ) {
     state.prepareFirstPresentation(for: profileID)
+    initialSection = section
+    confirmsClearHistoryOnAppear = confirmsClearHistory
     let settingsWindow = makeWindowIfNeeded()
+    settingsWindow.contentView = NSHostingView(
+      rootView: BrowserSettingsRoot(
+        state: state, initialSection: section,
+        confirmsClearHistoryOnAppear: confirmsClearHistory).settingsLocalization())
     if presentation == .visible {
       settingsWindow.makeKeyAndOrderFront(nil)
     } else {
       settingsWindow.orderOut(nil)
     }
+  }
+
+  func showClearHistory(for profileID: UUID?) {
+    show(for: profileID, section: .privacy, confirmsClearHistory: true)
   }
 
   func close() {
@@ -501,7 +519,9 @@ final class BrowserSettingsController: NSObject {
     settingsWindow.minSize = NSSize(width: 620, height: 500)
     settingsWindow.isReleasedWhenClosed = false
     settingsWindow.contentView = NSHostingView(
-      rootView: BrowserSettingsRoot(state: state).settingsLocalization())
+      rootView: BrowserSettingsRoot(
+        state: state, initialSection: initialSection,
+        confirmsClearHistoryOnAppear: confirmsClearHistoryOnAppear).settingsLocalization())
     settingsWindow.center()
     let delegate = BrowserSettingsWindowDelegate(controller: self)
     windowDelegate = delegate

@@ -54,7 +54,7 @@ enum BrowserMenuCommand: String, CaseIterable {
   case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
     closeWindow,
     addFavorite
-  case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
+  case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, clearHistory, downloads
   case back, find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
     developerTools, chromiumDeveloperTools
   case nextWindow, previousWindow
@@ -487,6 +487,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       settingsController?.show(for: activeContext?.store.session.selectedSpace.profileID)
       return
     }
+    if command == .clearHistory {
+      let profileID = activeContext?.store.session.selectedSpace.profileID
+        ?? privateWindowSourceProfileID().flatMap(UUID.init(uuidString:))
+      settingsController?.showClearHistory(
+        for: profileID)
+      return
+    }
     if let settingsWindow = settingsController?.window, keyWindow() === settingsWindow {
       settingsController?.close()
       return
@@ -642,6 +649,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bookmarkPage: store.bookmarkCurrentPage()
     case .bookmarks: store.showLibrary(.bookmarks)
     case .history: store.showLibrary(.history)
+    case .clearHistory: break  // Routed through the settings controller above.
     case .downloads: store.showDownloads()
     case .sharePage:
       if let url = Self.shareURL(for: store) {
@@ -1424,6 +1432,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.back, "Back", to: history)
     add(.recentlyClosed, "Recently closed…", to: history)
     add(.history, "Show All History", to: history)
+    add(.clearHistory, "Clear History…", to: history)
     let bookmarks = section("Bookmarks")
     add(.bookmarkPage, "Bookmark this page", to: bookmarks)
     add(.bookmarks, "Bookmarks…", to: bookmarks)

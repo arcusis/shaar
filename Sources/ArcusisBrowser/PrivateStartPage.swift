@@ -80,6 +80,7 @@ struct PrivateStartPage: View {
         .frame(maxWidth: 420)
         VStack(alignment: .leading, spacing: 12) {
           ShellL10n.text("Private protections").font(.headline)
+            .accessibilityAddTraits(.isHeader)
           protection(
             "Cookies and site storage blocked by default", active: status?.cookiesAndStorage)
           protection("Trackers blocked", active: status?.trackers)

@@ -1830,8 +1830,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       [windowID isEqualToString:_shaarTabWindows[tabID]];
   BOOL validPromptID = [requestID isKindOfClass:NSString.class] &&
       requestID.length <= 64 && [[NSUUID alloc] initWithUUIDString:requestID];
-  if (!ownsTab || !validPromptID) return;
+  if (!validPromptID) return;
   if (_shaarCaptureRequests[requestID]) return;
+  if (!ownsTab) {
+    // The event identity is untrusted here, but the registered tab mapping is
+    // authoritative. Cancel a valid pending prompt through that mapping so a
+    // malformed ownership tuple does not leave Chromium waiting for its timeout.
+    if (_shaarTabs[tabID] && _shaarTabProfiles[tabID] && _shaarTabWindows[tabID]) {
+      _shaarCaptureRequests[requestID] = tabID;
+      [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
+    }
+    return;
+  }
   if (![payload[@"schemaVersion"] isEqual:@1] ||
       ![self desktopCaptureField:payload[@"origin"] maxLength:2048] ||
       ![self desktopCaptureField:payload[@"pageURL"] maxLength:4096] ||

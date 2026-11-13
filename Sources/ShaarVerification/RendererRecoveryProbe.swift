@@ -10,11 +10,15 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
-private struct RendererRecoveryIdentity: Codable {
+struct RendererRecoveryIdentity: Codable {
   let spaceID: UUID
   let tabID: UUID
   let profileID: UUID
   let lastDocument: String
+
+  var hasUsableDocumentIdentity: Bool {
+    !lastDocument.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 }
 
 /// Terminates authored renderers only. The browser process and original account pages stay alive.
@@ -103,6 +107,9 @@ final class RendererRecoveryProbe {
     } else {
       let identity = try JSONDecoder().decode(
         RendererRecoveryIdentity.self, from: Data(contentsOf: file))
+      guard identity.hasUsableDocumentIdentity else {
+        throw RendererProbeFailure("Renderer recovery checkpoint has no prior document identity.")
+      }
       tab = identity.tabID
       spaceID = identity.spaceID
       store.perform(.space(spaceID))
@@ -190,6 +197,9 @@ final class RendererRecoveryProbe {
       let identity = RendererRecoveryIdentity(
         spaceID: spaceID, tabID: tab, profileID: profile,
         lastDocument: after["instance"] as! String)
+      try expect(
+        identity.hasUsableDocumentIdentity,
+        "initial renderer checkpoint records the prior document identity")
       try JSONEncoder().encode(identity).write(to: file, options: .atomic)
       try expect(
         store.rendererFailures[tab] != nil,

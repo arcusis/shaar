@@ -29,6 +29,33 @@ import Testing
     }
   }
 
+  @Test func liveTabCountsRejectBooleansFractionsAndStrings() {
+    let base: [AnyHashable: Any] = [
+      "sourceIsRegular": true,
+      "contextIsPrivate": true,
+      "contextDistinct": true,
+      "allWindowsUsePrivateActiveProfile": true,
+      "allTabsInNativeProfileBrowser": true,
+      "allWindowsDisplayOwnedWebContents": true,
+      "visibleNativeViewportCount": 1,
+      "tabCount": 1,
+    ]
+    #expect(PrivateMultiTabEvidence.liveTabAudit(base, tabCount: 1))
+
+    for (key, value) in [
+      ("visibleNativeViewportCount", true as Any),
+      ("visibleNativeViewportCount", 1.5 as Any),
+      ("visibleNativeViewportCount", "1" as Any),
+      ("tabCount", true as Any),
+      ("tabCount", 1.5 as Any),
+      ("tabCount", "1" as Any),
+    ] {
+      var invalid = base
+      invalid[key] = value
+      #expect(!PrivateMultiTabEvidence.liveTabAudit(invalid, tabCount: 1))
+    }
+  }
+
   @Test func shellAuditRequiresAttachedLayerBackedPage() {
     let valid: [String: Any] = [
       "stage": "tab-0", "containerCount": 1, "layerBacked": [true],

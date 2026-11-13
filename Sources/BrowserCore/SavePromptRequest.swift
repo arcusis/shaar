@@ -125,14 +125,15 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
     return url
   }
 
-  /// Queries and fragments can carry tokens, so the app accepts only an origin and a path.
-  /// Patch 0066 removes both before the offer is emitted, so a login page such as
-  /// `/login?next=` still arrives here as a path.
+  /// Queries and fragments can carry tokens. Strip them before retaining the page URL so
+  /// login pages such as `/login?next=` can still show a prompt without keeping the token.
   private static func page(_ value: Any?) -> URL? {
-    guard let url = webURL(value), url.user == nil, url.password == nil, url.query == nil,
-      url.fragment == nil
+    guard let url = webURL(value), url.user == nil, url.password == nil,
+      var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
     else { return nil }
-    return url
+    components.query = nil
+    components.fragment = nil
+    return components.url
   }
 
   private static func webURL(_ value: Any?) -> URL? {

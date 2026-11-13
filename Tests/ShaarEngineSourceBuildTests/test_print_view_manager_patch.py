@@ -40,6 +40,24 @@ class PrintViewManagerPatchTests(unittest.TestCase):
             next(i for i, entry in enumerate(entries) if entry["file"] == name),
         )
 
+    def test_failed_native_handoff_resets_state_before_rejecting_preview(self):
+        patch = PATCH.read_text()
+        failure = patch.split("if (!PrintForSystemDialogNow(base::DoNothing()))", 1)[1]
+        failure = failure.split("\n+    return;", 1)[0]
+
+        self.assertLess(
+            failure.index("if (!weak_this)"),
+            failure.index("on_print_dialog_shown_callback_.Reset();"),
+        )
+        self.assertLess(
+            failure.index("on_print_dialog_shown_callback_.Reset();"),
+            failure.index("is_switching_to_system_dialog_ = false;"),
+        )
+        self.assertLess(
+            failure.index("is_switching_to_system_dialog_ = false;"),
+            failure.index("OnPrintPreviewRequestRejected(rfh_id);"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

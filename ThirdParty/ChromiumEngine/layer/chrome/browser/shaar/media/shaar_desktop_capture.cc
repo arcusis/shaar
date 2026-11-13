@@ -72,7 +72,32 @@ void Finish(std::string_view prompt_id, PickerResult result) {
   std::move(callback).Run(std::move(result));
 }
 
+void NotifyDismissal(const PendingCapture& pending, std::string_view prompt_id) {
+  if (!lifecycle::EngineIsReady(pending.engine)) {
+    return;
+  }
+  base::DictValue payload;
+  payload.Set("schemaVersion", 1);
+  payload.Set("kind", "desktopCaptureDismissed");
+  payload.Set("id", prompt_id);
+  std::string json;
+  if (!base::JSONWriter::Write(payload, &json)) {
+    return;
+  }
+  shaar::EmitEvent(
+      pending.engine, SHAAR_EVENT_PERMISSION,
+      {pending.profile_id.data(), pending.profile_id.size()}, {},
+      {pending.window_id.data(), pending.window_id.size()},
+      {pending.tab_id.data(), pending.tab_id.size()},
+      {json.data(), json.size()});
+}
+
 void Cancel(std::string prompt_id) {
+  auto found = Pending().find(prompt_id);
+  if (found == Pending().end()) {
+    return;
+  }
+  NotifyDismissal(found->second, prompt_id);
   Finish(prompt_id, base::unexpected(CaptureError::PERMISSION_DENIED_BY_USER));
 }
 

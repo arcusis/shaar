@@ -66,6 +66,15 @@ class DesktopCapturePickerPatchTests(unittest.TestCase):
         self.assertNotIn("*value = uuid.AsLowercaseString();", picker)
         self.assertIn("std::to_string(native_id) == digits", picker)
 
+    def test_expired_picker_notifies_the_app_to_dismiss_its_sheet(self):
+        picker = (LAYER / "chrome/browser/shaar/media/shaar_desktop_capture.cc").read_text()
+        cancel = picker[picker.index("void Cancel("):picker.index("bool IsCurrent(")]
+        self.assertIn("NotifyDismissal(found->second, prompt_id)", cancel)
+        self.assertIn('payload.Set("kind", "desktopCaptureDismissed")', picker)
+        self.assertIn('payload.Set("id", prompt_id)', picker)
+        self.assertIn("pending.window_id.data()", picker)
+        self.assertIn("pending.tab_id.data()", picker)
+
 
 if __name__ == "__main__":
     unittest.main()

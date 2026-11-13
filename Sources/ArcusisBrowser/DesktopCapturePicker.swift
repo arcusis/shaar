@@ -23,7 +23,9 @@ struct DesktopCaptureSource: Identifiable, Equatable {
       else { return nil }
       return .tab
     case "window", "screen":
-      guard let value = UInt32(parts[1]), String(value) == String(parts[1]) else { return nil }
+      guard let value = UInt32(parts[1]), value > 0, String(value) == String(parts[1]) else {
+        return nil
+      }
       return parts[0] == "window" ? .window : .display
     default: return nil
     }

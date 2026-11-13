@@ -304,6 +304,8 @@ struct DesktopCaptureConsentTests {
     store.resolveDesktopCapture(capture.id, sourceID: "screen:999:0")
     #expect(decision == "cancel")
     #expect(!DesktopCaptureSource.isValidToken("screen:-1:0"))
+    #expect(!DesktopCaptureSource.isValidToken("screen:0:0"))
+    #expect(!DesktopCaptureSource.isValidToken("window:0:0"))
     #expect(!DesktopCaptureSource.isValidToken("window:01:0"))
     #expect(!DesktopCaptureSource.isValidToken("tab:not-a-uuid:0"))
   }

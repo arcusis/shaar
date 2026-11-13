@@ -520,16 +520,17 @@ final class EngineProbe {
 
   private func warmUpSameProfileSpaceSwitches(_ tabIDs: [String]) async throws {
     guard
-      tabIDs.count == SwitchProbeMetrics.expectedSpaceWarmupCount,
-      Set(tabIDs).count == SwitchProbeMetrics.expectedSpaceWarmupCount
+      tabIDs.count == SwitchProbeMetrics.expectedSpaceWarmupTabCount,
+      Set(tabIDs).count == SwitchProbeMetrics.expectedSpaceWarmupTabCount
     else {
-      throw ProbeFailure("Space switch warm-up count does not match its measurement contract.")
+      throw ProbeFailure("Space switch warm-up targets do not match their measurement contract.")
     }
     let selectedTabID = store.session.selectedSpace.selectedTabID?.uuidString
     let orderedTabIDs =
       tabIDs.filter { $0 != selectedTabID }
       + tabIDs.filter { $0 == selectedTabID }
-    let warmupTabIDs = (0..<2).flatMap { _ in orderedTabIDs }
+    let warmupTabIDs = (0..<SwitchProbeMetrics.expectedSpaceWarmupPassCount)
+      .flatMap { _ in orderedTabIDs }
     for (index, tabID) in warmupTabIDs.enumerated() {
       guard
         let space = store.session.spaces.first(where: {

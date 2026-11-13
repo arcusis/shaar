@@ -7,7 +7,9 @@ import Foundation
 
 struct SwitchProbeMetrics: Codable {
   static let expectedSwitchCount = 20
-  static let expectedSpaceWarmupCount = 4
+  static let expectedSpaceWarmupTabCount = 2
+  static let expectedSpaceWarmupPassCount = 2
+  static let expectedSpaceWarmupCount = expectedSpaceWarmupTabCount * expectedSpaceWarmupPassCount
   static let latencyBudgetMilliseconds = 100.0
   static let warmupDiscardReason =
     "The first selections of each same-profile tab can include one-time native WebContents activation and first-display setup. Two complete warm-up passes are measured and reported separately, then excluded from the steady-state Space p95."

@@ -33,6 +33,8 @@ import Testing
     let memoryJSON = try #require(object["residentMemory"] as? [String: Any])
     #expect(object["expectedSampleCount"] as? Int == 20)
     #expect(object["expectedSpaceWarmupCount"] as? Int == 4)
+    #expect(SwitchProbeMetrics.expectedSpaceWarmupTabCount == 2)
+    #expect(SwitchProbeMetrics.expectedSpaceWarmupPassCount == 2)
     #expect(object["warmupDiscardReason"] as? String == SwitchProbeMetrics.warmupDiscardReason)
     #expect((object["spaceWarmupSamples"] as? [Any])?.count == 4)
     #expect(object["latencyBudgetMilliseconds"] as? Double == 100)

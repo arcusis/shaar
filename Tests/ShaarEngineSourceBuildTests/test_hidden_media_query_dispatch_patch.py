@@ -22,6 +22,9 @@ class HiddenMediaQueryDispatchPatchTests(unittest.TestCase):
         self.assertIn("DispatchHiddenMediaQueryChangeTask", patch)
         self.assertIn("DispatchMediaQueryListEventsAndCallbacks", patch)
         self.assertIn("HiddenDocumentMediaQueryListListenersDispatchWithoutAnimationFrame", patch)
+        self.assertIn("HiddenDocumentMediaQueryListenerBatchesDispatchTogether", patch)
+        self.assertIn("EnqueueMediaQueryChangeListeners(first_batch)", patch)
+        self.assertIn("EnqueueMediaQueryChangeListeners(second_batch)", patch)
 
 
 if __name__ == "__main__":

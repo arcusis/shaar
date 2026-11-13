@@ -280,3 +280,13 @@ enum NextTabShortcutRouting {
     return store.selectAdjacentTab(by: 1)
   }
 }
+
+@MainActor
+enum PreviousTabShortcutRouting {
+  static func route(_ event: NSEvent, store: BrowserStore) -> Bool {
+    guard event.type == .keyDown, event.keyCode == 48,
+      event.modifierFlags.intersection([.command, .option, .control, .shift]) == [.control, .shift]
+    else { return false }
+    return store.selectAdjacentTab(by: -1)
+  }
+}

@@ -29,8 +29,12 @@ enum SiteControlsProbeEvidence {
       && (value["instance"] as? String).map { !$0.isEmpty } == true
   }
 }
-}
 
+enum SiteControlsPageReadiness {
+  static func isReady(_ document: [String: Any]) -> Bool {
+    SiteControlsProbeEvidence.hasAuthoredDocument(document)
+  }
+}
 /// Drives the site control center against an authored loopback page in its own site, so clearing
 /// cookies and storage never touches other probes' accounts.
 @MainActor
@@ -225,7 +229,7 @@ final class SiteControlsProbe {
           tab,
           "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('siteControl')})"
         ),
-        SiteControlsProbeEvidence.hasAuthoredDocument(value)
+        SiteControlsPageReadiness.isReady(value)
       {
         return value
       }

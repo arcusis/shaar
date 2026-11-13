@@ -2,7 +2,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
+
+private func findInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
 
 public enum ShaarFindOperation: UInt32, Sendable {
   case find = 900
@@ -87,11 +95,11 @@ public struct ShaarFindUpdate: Equatable, Sendable {
       String(decoding: event.tabID, as: UTF8.self) == expectedTabID,
       let object = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       object["kind"] as? String == "result",
-      object["schemaVersion"] as? Int == 1,
+      findInteger(object["schemaVersion"]) == 1,
       let request = object["requestID"] as? String,
       UInt64(request) == expectedRequestID,
-      let count = object["matchCount"] as? Int,
-      let active = object["activeMatch"] as? Int,
+      let count = findInteger(object["matchCount"]),
+      let active = findInteger(object["activeMatch"]),
       let final = object["final"] as? Bool
     else { return nil }
     return ShaarFindUpdate(

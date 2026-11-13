@@ -39,6 +39,12 @@ struct ProfileAccountsTests {
     #expect(GoogleAccountList.accounts(fromBody: text) == nil)
   }
 
+  @Test func googlePhotoURLRejectsEmbeddedAuthenticationCredentials() {
+    #expect(
+      GoogleAccountList.photoURL(from: "https://user:secret@photos.example/avatar.png") == nil)
+    #expect(GoogleAccountList.photoURL(from: "https://user@photos.example/avatar.png") == nil)
+    #expect(GoogleAccountList.photoURL(from: "https://photos.example/user@avatar.png") != nil)
+
   @Test func providersRecognizeTheirSignedInLandingPages() {
     #expect(AccountProvider.google.isSignedInPage(URL(string: "https://myaccount.google.com/")!))
     #expect(AccountProvider.google.isSignedInPage(URL(string: "https://www.google.com/")!))

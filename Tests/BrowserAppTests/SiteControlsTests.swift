@@ -29,6 +29,8 @@ private final class FakeSiteBackend: SiteControlBackend {
   var finishFirstWrite: CheckedContinuation<Void, Never>?
   var suspendNextRead = false
   var finishRead: CheckedContinuation<Void, Never>?
+  var suspendNextAction = false
+  var finishAction: CheckedContinuation<Void, Never>?
 
   func security(of target: SiteControlTarget) -> SiteSecurity { securityValue }
 
@@ -56,6 +58,10 @@ private final class FakeSiteBackend: SiteControlBackend {
   }
 
   func perform(_ action: SiteAction, for target: SiteControlTarget) async throws {
+    if suspendNextAction {
+      suspendNextAction = false
+      await withCheckedContinuation { finishAction = $0 }
+    }
     if failsWrites { throw FakeFailure() }
     performed.append(action)
   }
@@ -150,6 +156,23 @@ private func target(_ address: String) -> SiteControlTarget {
 
   #expect(model.permissionValues.isEmpty)
   #expect(model.failure == nil)
+}
+
+@MainActor @Test func cancelledSiteActionDoesNotReturnSuccessAfterBackendReply() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  backend.suspendNextAction = true
+  let action = Task { await model.perform(.reload) }
+  for _ in 0..<100 where backend.finishAction == nil { await Task.yield() }
+  #expect(backend.finishAction != nil)
+
+  action.cancel()
+  backend.finishAction?.resume()
+
+  let succeeded = await action.value
+  #expect(!succeeded)
+  #expect(model.failure == nil)
+  #expect(model.runningAction == nil)
 }
 
 @MainActor @Test func olderPermissionReadCannotReplaceNewerRefresh() async {

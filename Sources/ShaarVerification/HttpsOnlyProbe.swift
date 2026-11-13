@@ -34,6 +34,33 @@ enum HttpsOnlyProbeEvidence {
   }
 }
 
+enum HttpsOnlyPageEvidence: Equatable {
+  case retry
+  case passed
+  case failed(String)
+
+  static func evaluate(
+    href: String, text: String, expectsUpgrade: Bool, windowsHidden: Bool,
+    fixtureMarker: String
+  ) -> HttpsOnlyPageEvidence {
+    let loadedFixture = text.contains(fixtureMarker)
+    let warned =
+      text.range(of: "HTTPS", options: .caseInsensitive) != nil
+      || text.range(of: "not secure", options: .caseInsensitive) != nil
+    if expectsUpgrade {
+      if loadedFixture {
+        return .failed("Public HTTP page loaded without an HTTPS-only warning.")
+      }
+      if warned && !text.isEmpty {
+        return windowsHidden ? .passed : .failed("The HTTPS-only warning was visible on screen.")
+      }
+    } else if loadedFixture && href.hasPrefix("http:") {
+      return windowsHidden ? .passed : .failed("The HTTP fixture was visible on screen.")
+    }
+    return .retry
+  }
+}
+
 /// Hidden check that a public HTTP page on a non-default port shows the HTTPS-only interstitial.
 @MainActor
 final class HttpsOnlyProbe {
@@ -170,23 +197,16 @@ final class HttpsOnlyProbe {
     let text = page["text"] as? String ?? ""
     lastHref = href
     lastText = text
-    switch HttpsOnlyProbeEvidence.verdict(href: href, text: text, expectsUpgrade: expectsUpgrade) {
-    case .unexpectedHttpPage:
-      finish(error: "Public HTTP page loaded without an HTTPS-only warning.")
-    case .upgradeWarning:
-      guard windowsHidden else {
-        finish(error: "The HTTPS-only warning was visible on screen.")
-        return
-      }
-      finish(passed: true)
-    case .loadedHttpFixture:
-      guard windowsHidden else {
-        finish(error: "The HTTP fixture was visible on screen.")
-        return
-      }
-      finish(passed: true)
-    case .waiting:
+    switch HttpsOnlyPageEvidence.evaluate(
+      href: href, text: text, expectsUpgrade: expectsUpgrade, windowsHidden: windowsHidden,
+      fixtureMarker: Self.fixtureMarker)
+    {
+    case .retry:
       scheduleRead()
+    case .passed:
+      finish(passed: true)
+    case .failed(let message):
+      finish(error: message)
     }
   }
 

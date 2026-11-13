@@ -29,7 +29,6 @@ enum SiteControlsProbeEvidence {
       && (value["instance"] as? String).map { !$0.isEmpty } == true
   }
 }
-}
 
 /// Drives the site control center against an authored loopback page in its own site, so clearing
 /// cookies and storage never touches other probes' accounts.

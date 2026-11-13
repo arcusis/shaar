@@ -74,9 +74,14 @@ enum SpacePagerDecision {
     index: Int, count: Int, offset: CGFloat, velocity: CGFloat, width: CGFloat
   ) -> Int {
     guard count > 0, width > 0 else { return index }
+    let current = min(max(index, 0), count - 1)
     let projected = offset + velocity * 0.12
-    let step = Int((-projected / width).rounded())
-    return min(count - 1, max(0, index + step))
+    guard projected.isFinite else { return current }
+    let target = Double(current) + Double((-projected / width).rounded())
+    guard target.isFinite else { return current }
+    if target <= 0 { return 0 }
+    if target >= Double(count - 1) { return count - 1 }
+    return Int(target)
   }
 }
 

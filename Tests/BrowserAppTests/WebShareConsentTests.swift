@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import BrowserCore
 import Foundation
 import Testing
@@ -210,6 +211,22 @@ struct WebShareConsentTests {
     gate.finish(true)
     gate.finish(false)
     #expect(outcomes == [true])
+  }
+
+  @Test func serviceFailureCancelsAndFinishesTheShareOnce() {
+    let systemPicker = WebShareSystemPicker(items: ["Shared item"])
+    let service = NSSharingService(
+      title: "Test", image: NSImage(size: NSSize(width: 1, height: 1)),
+      alternateImage: nil, handler: {})
+    var outcomes: [Bool] = []
+    systemPicker.outcome.onFinish = { outcomes.append($0) }
+
+    systemPicker.sharingService(
+      service, didFailToShareItems: ["Shared item"],
+      error: NSError(domain: "WebShareConsentTests", code: 1))
+    systemPicker.sharingService(service, didShareItems: ["Shared item"])
+
+    #expect(outcomes == [false])
   }
 
   @Test func onlyOneSystemPickerCanBePresentedForAShareRequest() {

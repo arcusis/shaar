@@ -42,11 +42,13 @@ class PrintMenuCommandTests(unittest.TestCase):
 
     def test_file_menu_print_routes_through_selected_bridge_tab(self):
         host = (ROOT / "Sources/ArcusisBrowser/NativeBrowserHost.swift").read_text()
+        private_host = (ROOT / "Sources/ArcusisBrowser/PrivateBrowserHost.swift").read_text()
         bridge = (ROOT / "Sources/ChromiumBridge/ChromiumShaarBackend.mm").read_text()
         tests = (ROOT / "Tests/BrowserAppTests/NativeMenuStructureTests.swift").read_text()
         strings = json.loads((ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text())
 
         self.assertIn('add(.print, "Print…", to: file)', host)
+        self.assertIn(".newMiniWindow, .checkForUpdates, .print:", private_host)
         self.assertIn('ShellL10n.string("Could not open print panel")', host)
         error_localizations = strings["strings"]["Could not open print panel"]["localizations"]
         self.assertEqual(error_localizations["en"]["stringUnit"]["value"], "Could not open print panel")

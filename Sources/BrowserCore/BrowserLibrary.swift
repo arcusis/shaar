@@ -143,7 +143,9 @@ public enum LibraryAddress {
   }
 
   public static func destination(_ value: String) -> URL? {
-    guard isValid(value), let url = URL(string: value), NavigationInput.isWebURL(url) else {
+    guard value.utf8.count <= 32768, !value.contains("\0"),
+      let url = URL(string: value), NavigationInput.isWebURL(url)
+    else {
       return nil
     }
     return url

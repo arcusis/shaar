@@ -39,7 +39,8 @@ struct ProfileNameEditor: View {
         Button(SettingsL10n.string("Cancel"), role: .cancel, action: onCancel)
           .keyboardShortcut(.cancelAction)
         Button(SettingsL10n.string(initialName.isEmpty ? "Create" : "Save")) {
-          errorMessage = onSave(name) ? nil : SettingsL10n.string("Profile could not be saved.")
+          errorMessage = onSave(Self.trimmedName(name))
+            ? nil : SettingsL10n.string("Profile could not be saved.")
         }
         .keyboardShortcut(.defaultAction)
         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -48,5 +49,9 @@ struct ProfileNameEditor: View {
     .padding(20)
     .frame(width: 360)
     .onAppear { isNameFocused = true }
+  }
+
+  static func trimmedName(_ name: String) -> String {
+    name.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

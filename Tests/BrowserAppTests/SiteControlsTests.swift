@@ -136,6 +136,22 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.permissionValues[.camera] == .allow)
 }
 
+@MainActor @Test func cancelledPermissionLoadDoesNotPublishItsLateReply() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  backend.suspendNextRead = true
+  let load = Task { await model.load() }
+  for _ in 0..<100 where backend.finishRead == nil { await Task.yield() }
+  #expect(backend.finishRead != nil)
+
+  load.cancel()
+  backend.finishRead?.resume()
+  await load.value
+
+  #expect(model.permissionValues.isEmpty)
+  #expect(model.failure == nil)
+}
+
 @MainActor @Test func olderPermissionReadCannotReplaceNewerRefresh() async {
   let backend = FakeSiteBackend()
   let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)

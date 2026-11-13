@@ -120,6 +120,7 @@ public enum ShaarDownloadAction: String, Codable, Sendable {
 }
 
 public enum ShaarDownloadsError: Error, Equatable, Sendable {
+  case invalidControl
   case malformedResponse
   case invalidControl
   case unsafeTarget

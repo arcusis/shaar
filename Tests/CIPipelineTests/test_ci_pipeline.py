@@ -843,6 +843,29 @@ class ProbeSoakTests(unittest.TestCase):
             suite = ET.parse(checks.directory / "commands.xml").getroot()
             self.assertEqual(suite.attrib["failures"], "1")
 
+    def test_command_logs_replace_invalid_utf8_and_malformed_reports_do_not_mask_failure(self):
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            summary = root / "summary.md"
+            with (
+                patch("ci_support.ROOT", root),
+                patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}),
+            ):
+                checks = Commands("sanitize")
+                status = checks.run(
+                    "malformed-output",
+                    [sys.executable, "-c", "import os; os.write(1, bytes([226])); raise SystemExit(7)"],
+                )
+                self.assertEqual(status, 7)
+                self.assertIn("\ufffd", (checks.directory / "malformed-output.log").read_text())
+                (checks.directory / "swift-swift-testing.xml").write_text('<?xml version="1.0"?>\n')
+
+                self.assertEqual(checks.finish(), 1)
+                suite = ET.parse(checks.directory / "commands.xml").getroot()
+                self.assertEqual(suite.attrib["failures"], "2")
+                self.assertIn("Could not parse swift-swift-testing.xml", summary.read_text())
+
     def test_python_junit_records_subtest_failure_and_skip(self):
         class Example(unittest.TestCase):
             def test_subtests(self):

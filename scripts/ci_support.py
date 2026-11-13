@@ -58,7 +58,7 @@ class Commands:
             with log.open("w") as output:
                 with subprocess.Popen(
                     arguments, cwd=cwd, env=env, stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, text=True,
+                    stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                 ) as process:
                     for line in process.stdout:
                         print(line, end="", flush=True)
@@ -85,6 +85,19 @@ class Commands:
         ET.ElementTree(suite).write(self.directory / "commands.xml", encoding="utf-8", xml_declaration=True)
 
     def finish(self) -> int:
+        invalid_reports = []
+        for report in sorted(self.directory.glob("*.xml")):
+            if report.name == "commands.xml":
+                continue
+            try:
+                ET.parse(report)
+            except (ET.ParseError, OSError) as error:
+                name = f"invalid-report-{report.name}"
+                message = f"Could not parse {report.name}: {error}"
+                (self.directory / f"{name}.log").write_text(message + "\n")
+                self.results.append(dict(name=name, command=["validate XML report", str(report)],
+                                         status=1, seconds=0.0))
+                invalid_reports.append(message)
         self.write_reports()
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
@@ -93,10 +106,15 @@ class Commands:
                 output.write("| Check | Exit | Seconds |\n| --- | ---: | ---: |\n")
                 for item in self.results:
                     output.write(f"| {item['name']} | {item['status']} | {item['seconds']} |\n")
+                for message in invalid_reports:
+                    output.write(f"\n{message}\n")
                 for report in sorted(self.directory.glob("*.xml")):
                     if report.name == "commands.xml":
                         continue
-                    root = ET.parse(report).getroot()
+                    try:
+                        root = ET.parse(report).getroot()
+                    except (ET.ParseError, OSError):
+                        continue
                     suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
                     leaves = [suite for suite in suites if not suite.findall("testsuite")]
                     totals = {key: sum(int(suite.get(key, "0")) for suite in leaves)

@@ -180,8 +180,11 @@ final class DownloadProbe {
     guard let shaar = runtime as? ARCShaarRuntime else {
       throw DownloadProbeFailure("Downloads require the Shaar runtime.")
     }
-    let destination = root.appending(path: "Downloads", directoryHint: .isDirectory)
-      .standardizedFileURL.resolvingSymlinksInPath()
+    let requestedDestination = root.appending(path: "Downloads", directoryHint: .isDirectory)
+    guard Self.isProbeDownloadDirectory(requestedDestination, root: root) else {
+      throw DownloadProbeFailure("Download directory escaped the disposable probe folder.")
+    }
+    let destination = requestedDestination.standardizedFileURL.resolvingSymlinksInPath()
     try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
     for profile in store.session.profiles {
       let acknowledged = try await acknowledgedDownloadDirectory(
@@ -192,6 +195,13 @@ final class DownloadProbe {
       }
     }
     checks.append("downloads stay in the disposable probe folder")
+  }
+
+  static func isProbeDownloadDirectory(_ destination: URL, root: URL) -> Bool {
+    let resolvedRoot = root.standardizedFileURL.resolvingSymlinksInPath()
+    let resolvedDestination = destination.standardizedFileURL.resolvingSymlinksInPath()
+    return resolvedDestination.lastPathComponent == "Downloads"
+      && resolvedDestination.path.hasPrefix(resolvedRoot.path + "/")
   }
 
   private func acknowledgedDownloadDirectory(

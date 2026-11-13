@@ -51,7 +51,7 @@ private final class DownloadDirectoryContinuation: @unchecked Sendable {
 }
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
+  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage, print,
     closeWindow,
     addFavorite
   case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history,
@@ -526,6 +526,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .sharePage: return Self.shareURL(for: store) != nil
     case .pasteAndGo:
       return Self.pasteAndGoDestination(for: store) != nil
+    case .print:
+      return store.session.selectedPage != nil && !store.commandIsOpen
+        && (context.engine.runtime as? ARCShaarRuntime)?.supportsNativePrint() == true
     case .addFavorite:
       return afterLauncher ? store.currentPageAllowsFavorite : store.canFavoriteCurrentPage
     default: return true
@@ -771,6 +774,16 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         in: .general, store: store,
         searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID),
         navigate: context.engine.navigateCurrentPage(to:))
+    case .print:
+      guard let page = store.session.selectedPage,
+        let runtime = context.engine.runtime as? ARCShaarRuntime,
+        runtime.printTabID(page.tab.id.uuidString, windowID: context.nativeID,
+                           profileID: store.session.selectedSpace.profileID.uuidString)
+      else {
+        report(NSError(domain: "com.arcusis.browser.print", code: 1,
+                       userInfo: [NSLocalizedDescriptionKey: "Could not open print panel"]))
+        return
+      }
     case .find: store.showPageFind()
     case .findNext: store.movePageFind(forward: true)
     case .findPrevious: store.movePageFind(forward: false)
@@ -1512,6 +1525,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.newMiniWindow, "New Mini Window", to: file)
     add(.newTab, "New tab", to: file)
     add(.search, CommandPanel.searchPrompt, to: file)
+    add(.print, "Print…", to: file)
     add(.sharePage, "Share Page…", to: file)
     add(.downloads, "Downloads", to: file)
     add(.closeTab, "Close tab", to: file)

@@ -273,7 +273,7 @@ final class PrivateBrowserHost {
   static func supportsPrivateCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .bookmarkPage, .bookmarks, .history, .downloads, .extensions, .settings,
-      .newMiniWindow, .checkForUpdates:
+      .newMiniWindow, .checkForUpdates, .print:
       false
     default: true
     }

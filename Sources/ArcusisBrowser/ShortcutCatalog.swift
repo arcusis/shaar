@@ -98,6 +98,7 @@ struct ShortcutCatalog {
     case .newTab: ("t", .command)
     case .back: ("[", .command)
     case .forward: ("]", .command)
+    case .print: ("p", .command)
     case .search: ("l", .command)
     case .closeWindow: ("w", [.command, .shift])
     case .find: ("f", .command)

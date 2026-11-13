@@ -2714,6 +2714,12 @@
         }
       }
     },
+    "Print…": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Print…" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הדפסה…" } }
+      }
+    },
     "Search tabs, spaces, or the web": {
       "localizations": {
         "en": {

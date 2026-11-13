@@ -140,6 +140,7 @@ struct Symbols {
   decltype(&shaar_window_native_window) window_native_window = nullptr;
   decltype(&shaar_tab_open) tab_open = nullptr;
   decltype(&shaar_tab_find) tab_find = nullptr;
+  decltype(&shaar_tab_print) tab_print = nullptr;
   decltype(&shaar_tab_close) tab_close = nullptr;
   decltype(&shaar_tab_favicon_png) tab_favicon_png = nullptr;
   decltype(&shaar_tab_host_view) tab_host_view = nullptr;
@@ -163,6 +164,7 @@ struct Symbols {
     SHAAR_LOAD(window_host_resize, window_host_resize);
     SHAAR_LOAD(window_native_window, window_native_window);
     SHAAR_LOAD(tab_open, tab_open);
+    SHAAR_LOAD(tab_print, tab_print);
     SHAAR_LOAD(tab_close, tab_close);
     SHAAR_LOAD(tab_favicon_png, tab_favicon_png);
     SHAAR_LOAD(tab_host_view, tab_host_view);
@@ -1295,6 +1297,21 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (!window || !tab) return;
   shaar_error error = EmptyError();
   _symbols.tab_view_focus(_shaarEngine, window, tab, &error);
+}
+
+- (BOOL)supportsNativePrint { return _symbols.tab_print != nullptr; }
+
+- (BOOL)printTabID:(NSString *)tabID windowID:(NSString *)windowID profileID:(NSString *)profileID {
+  if (!NSThread.isMainThread || !_shaarEngine || !_symbols.tab_print ||
+      !tabID.length || !windowID.length || !profileID.length ||
+      ![_shaarSelectedTabs[windowID] isEqualToString:tabID] ||
+      ![_shaarTabWindows[tabID] isEqualToString:windowID] ||
+      [_shaarTabProfiles[tabID] caseInsensitiveCompare:profileID] != NSOrderedSame) return NO;
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  shaar_tab *tab = (shaar_tab *)_shaarTabs[tabID].pointerValue;
+  if (!window || !tab) return NO;
+  shaar_error error = EmptyError();
+  return _symbols.tab_print(tab, &error) == SHAAR_OK;
 }
 
 - (void)clearActiveTabInWindowID:(NSString *)windowID {

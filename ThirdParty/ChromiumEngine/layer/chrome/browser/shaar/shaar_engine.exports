@@ -28,6 +28,7 @@ _shaar_window_open
 _shaar_window_close
 _shaar_tab_open
 _shaar_tab_close
+_shaar_tab_print
 _shaar_window_host_view
 _shaar_window_native_window
 _shaar_tab_host_view

@@ -3,11 +3,62 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { prepareFonts } from "./fonts";
+import { fetchFontAsset, prepareFonts } from "./fonts";
+
+test("font requests abort after their configured timeout", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (_input, init) =>
+    new Promise((_resolve, reject) => {
+      const signal = init?.signal;
+      if (!signal) {
+        reject(new Error("Missing request timeout signal"));
+        return;
+      }
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  try {
+    await assert.rejects(fetchFontAsset("https://fonts.test/font.woff2", 5), {
+      name: "TimeoutError",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("CSS and font downloads all use timeout signals", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const originalFetch = globalThis.fetch;
+  const font = readFileSync(
+    new URL(
+      "../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2",
+      import.meta.url,
+    ),
+  );
+  const signals: (AbortSignal | null | undefined)[] = [];
+  globalThis.fetch = async (input, init) => {
+    signals.push(init?.signal);
+    if (String(input).includes("api.fontshare.com")) {
+      const family = String(input).includes("clash-display") ? "Clash Display" : "Satoshi";
+      const file = String(input).includes("clash-display") ? "clash-display" : "satoshi";
+      return new Response(
+        `@font-face{font-family:'${family}';src:url('https://fonts.test/${file}.woff2');font-weight:300 900;font-style:normal;}`,
+      );
+    }
+    return new Response(new Uint8Array(font));
+  };
+  try {
+    assert.equal((await prepareFonts(join(root, "cache"), join(root, "output"))).length, 2);
+    assert.equal(signals.length, 4);
+    assert.ok(signals.every((signal) => signal instanceof AbortSignal));
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("invalid cached font manifest falls back to system fonts", async () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));

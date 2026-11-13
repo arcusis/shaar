@@ -15,6 +15,11 @@ import { resolve } from "node:path";
 const fontshareCSS = ["clash-display@1", "satoshi@1"].map(
   (family) => `https://api.fontshare.com/v2/css?f[]=${family}&display=swap`,
 );
+const fontRequestTimeoutMs = 15_000;
+
+export function fetchFontAsset(url: string, timeoutMs = fontRequestTimeoutMs): Promise<Response> {
+  return fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+}
 
 export interface SiteFont {
   family: string;
@@ -82,14 +87,14 @@ export async function prepareFonts(
     try {
       let css = "";
       for (const url of fontshareCSS) {
-        const response = await fetch(url);
+        const response = await fetchFontAsset(url);
         if (!response.ok) throw new Error(`Fontshare CSS returned ${response.status}`);
         css += await response.text();
       }
       const parsed = parseFaces(css);
       await mkdir(cacheDirectory, { recursive: true });
       for (const face of parsed) {
-        const font = await fetch(face.url);
+        const font = await fetchFontAsset(face.url);
         if (!font.ok) throw new Error(`Font download returned ${font.status} for ${face.family}`);
         await writeFile(resolve(cacheDirectory, face.file), Buffer.from(await font.arrayBuffer()));
       }

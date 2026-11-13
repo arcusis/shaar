@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Darwin
 import Foundation
 import SwiftUI
@@ -409,7 +410,7 @@ final class DeviceChooserProbe {
     }
   }
 
-  private struct PageSettlement {
+  struct PageSettlement {
     var errorName: String? = nil
     var message: String? = nil
     var resolvedCount: Int? = nil
@@ -423,7 +424,12 @@ final class DeviceChooserProbe {
       if let error = object["error"] as? String, !error.isEmpty {
         errorName = error
         message = object["message"] as? String
-      } else if (object["ok"] as? Bool) == true, let count = object["count"] as? Int {
+      } else if let ok = object["ok"] as? NSNumber,
+        CFGetTypeID(ok) == CFBooleanGetTypeID(), ok.boolValue,
+        let countValue = object["count"] as? NSNumber,
+        CFGetTypeID(countValue) != CFBooleanGetTypeID(),
+        let count = object["count"] as? Int
+      {
         resolvedCount = count
       }
     }

@@ -52,6 +52,10 @@ class PackagedResourceSourceTests(unittest.TestCase):
         source = 'let message = "Bundle.module is only available in development"'
         self.assertEqual(check.violations_in_source(source, "Sources/BrowserCore/Example.swift"), [])
 
+    def test_module_reference_in_interpolated_string_text_is_ignored(self):
+        source = 'let message = "Bundle.module is text, not code: \\(label)"'
+        self.assertEqual(check.violations_in_source(source, "Sources/BrowserCore/Example.swift"), [])
+
     def test_module_reference_in_string_interpolation_is_still_checked(self):
         source = 'let message = "Bundle: \\(Bundle.module)"'
         self.assertEqual(len(check.violations_in_source(source, "Sources/BrowserCore/Example.swift")), 1)

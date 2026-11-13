@@ -21,7 +21,10 @@ def api(path: str) -> dict | list:
             ["gh", "api", path], text=True, timeout=API_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired as error:
         raise ValueError(f"GitHub API request timed out after {API_TIMEOUT_SECONDS}s: {path}") from error
-    return json.loads(response)
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"GitHub API returned invalid JSON for {path}: {error}") from error
 
 
 def production_runs(document: dict, revision: str, events: tuple[str, ...] = ("push",)) -> list[dict]:

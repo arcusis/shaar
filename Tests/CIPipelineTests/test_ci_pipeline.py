@@ -256,6 +256,12 @@ class PipelineGateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Invalid GitHub API response for source-checks.yml run 9 jobs"):
                  RELEASE_CI.require_workflow("arcusis/shaar", revision, "source-checks.yml", {"CI required"})
 
+    def test_release_gate_explains_invalid_github_api_json(self):
+        path = "repos/arcusis/shaar/actions/workflows/source-checks.yml/runs"
+        with patch.object(RELEASE_CI.subprocess, "check_output", return_value="{"):
+            with self.assertRaisesRegex(ValueError, "GitHub API returned invalid JSON for .*source-checks.yml/runs"):
+                RELEASE_CI.api(path)
+
     def test_release_gate_api_requests_are_bounded_and_report_timeouts(self):
         with patch.object(RELEASE_CI.subprocess, "check_output", return_value="{}") as command:
             self.assertEqual(RELEASE_CI.api("repos/arcusis/shaar/actions"), {})

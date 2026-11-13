@@ -133,6 +133,17 @@ class EnginePayloadTests(unittest.TestCase):
         self.assertEqual(report["members"][0]["path"], "Chromium Framework")
         self.assertNotIn(str(self.root), json.dumps(report))
 
+    def test_explicit_directory_entries_match_framework_inventory(self):
+        files = {"Chromium Framework": b"engine", "Resources/helper.dat": b"resource"}
+        self.fixture(files=files, links={}, extra_archive=[
+            (f"{FRAMEWORK}/Resources", "directory", None),
+        ])
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertTrue(report["archive_metadata_verified"])
+        self.assertTrue(report["payload_match"], report["reason"])
+        self.assertIn({"path": "Resources", "status": "match"}, report["members"])
+
     def test_terminal_adhoc_signature_changes_normalize(self):
         files = {"Chromium Framework": macho(24)}
         report = self.fixture(files=files, links={})

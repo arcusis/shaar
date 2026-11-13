@@ -10,6 +10,22 @@ import Testing
 @MainActor
 @Suite("Basic browsing renderer capture evidence")
 struct BasicBrowsingProbeTests {
+  @Test func livePageRequiresCompletedNonemptyDocumentAtExpectedHost() {
+    let loaded: [String: Any] = [
+      "href": "http://127.0.0.1:43123/account", "ready": "complete", "text": "fixture",
+    ]
+    #expect(BasicBrowsingPageEvidence.isLive(loaded, expectedHost: "127.0.0.1"))
+    #expect(BasicBrowsingPageEvidence.isLive(loaded, expectedHost: nil))
+    #expect(!BasicBrowsingPageEvidence.isLive(loaded, expectedHost: "example.test"))
+    #expect(!BasicBrowsingPageEvidence.isLive([
+      "href": "http://127.0.0.1:43123/account", "ready": "loading", "text": "fixture",
+    ], expectedHost: "127.0.0.1"))
+    #expect(!BasicBrowsingPageEvidence.isLive([
+      "href": "http://127.0.0.1:43123/account", "ready": "complete", "text": "",
+    ], expectedHost: "127.0.0.1"))
+    #expect(!BasicBrowsingPageEvidence.isLive(["ready": "complete"], expectedHost: nil))
+  }
+
   @Test func blackCaptureFailsAndColoredPageCapturePasses() throws {
     let bitmap = try #require(
       NSBitmapImageRep(

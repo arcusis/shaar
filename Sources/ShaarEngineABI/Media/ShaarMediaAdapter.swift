@@ -118,12 +118,7 @@ public struct ShaarMediaAdapter: Sendable {
   public func state(scope: ShaarMediaScope) async throws -> ShaarMediaState {
     let data = try await send(scope, .getState, ["schemaVersion": 1])
     let state = try JSONDecoder().decode(ShaarMediaState.self, from: data)
-    guard state.schemaVersion == 1,
-      state.supportedActions.allSatisfy({ $0 <= UInt32(ShaarMediaCommand.pipExit.rawValue) }),
-      state.pageVolume == nil
-        || (state.pageVolume!.isFinite && (0...1).contains(state.pageVolume!)),
-      (state.videoWidth == nil) == (state.videoHeight == nil)
-    else { throw ShaarMediaAdapterError.malformedResponse }
+    guard Self.isValid(state) else { throw ShaarMediaAdapterError.malformedResponse }
     return state
   }
 
@@ -196,7 +191,7 @@ public struct ShaarMediaAdapter: Sendable {
     case "state_changed":
       guard let stateData = try? JSONSerialization.data(withJSONObject: root["state"] ?? [:]),
         let state = try? JSONDecoder().decode(ShaarMediaState.self, from: stateData),
-        state.schemaVersion == 1
+        Self.isValid(state)
       else { throw ShaarMediaAdapterError.malformedResponse }
       return .stateChanged(state)
     case "pip_changed":
@@ -241,6 +236,14 @@ public struct ShaarMediaAdapter: Sendable {
     default:
       return value == nil
     }
+  }
+
+  private static func isValid(_ state: ShaarMediaState) -> Bool {
+    state.schemaVersion == 1
+      && state.supportedActions.allSatisfy({ $0 <= UInt32(ShaarMediaCommand.pipExit.rawValue) })
+      && (state.pageVolume == nil
+        || (state.pageVolume!.isFinite && (0...1).contains(state.pageVolume!)))
+      && ((state.videoWidth == nil) == (state.videoHeight == nil))
   }
 
   private static func requireEmptySuccess(_ data: Data) throws {

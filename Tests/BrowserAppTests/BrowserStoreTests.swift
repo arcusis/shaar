@@ -83,6 +83,22 @@ struct BrowserStoreTests {
     #expect(store.session.closedTabs.count == ordinaryIDs.count)
   }
 
+  @Test func repeatedBulkCloseDoesNotRequestTabsAlreadyClosing() throws {
+    let store = BrowserStore()
+    let spaceID = store.session.selectedSpaceID
+    let tabIDs = (0..<3).compactMap { index in
+      store.session.open(URL(string: "https://example.com/repeated-close-\(index)")!)
+    }
+    var requests: [UUID] = []
+    store.onCloseTab = { requests.append($0) }
+
+    store.clearTodayTabs(in: spaceID)
+    store.clearTodayTabs(in: spaceID)
+
+    #expect(requests == tabIDs)
+    #expect(store.session.selectedSpace.tabs.map(\.id) == tabIDs)
+  }
+
   @Test func openingAndCancelingLauncherDoesNotCreateTabsOrPersistChanges() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

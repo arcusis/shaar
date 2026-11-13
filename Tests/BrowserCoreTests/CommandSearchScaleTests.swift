@@ -324,6 +324,28 @@ private func stableID(_ suffix: Int) -> UUID {
   }
 }
 
+@Test func commandHistorySearchFocusedBenchmark() throws {
+  let profile = BrowserProfile(name: "Personal")
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Main", symbol: "house", tint: .ocean)
+  let session = try BrowserSession(
+    profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+  let history = try (0..<1_000).map { index in
+    try BrowserHistoryEntry(
+      profileID: profile.id,
+      payload: [
+        "u": "https://example.com/page-\(index)", "t": "Needle page \(index)", "n": 1,
+        "v": [1_000.0 + Double(index)],
+      ])
+  }
+  let start = ContinuousClock.now
+  let results = CommandSearch.results(
+    for: "Needle", in: session, bookmarks: [], history: history,
+    searchEngine: .google, limit: 1_001)
+  print("commandHistorySearchFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(results.count == 1_001)
+}
+
 private let nineBenchmarkBatches = 9
 
 private func commandSearchBenchmarkSession(tabCount: Int) -> BrowserSession {

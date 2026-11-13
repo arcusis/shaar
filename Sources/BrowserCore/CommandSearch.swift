@@ -407,10 +407,10 @@ public enum CommandSearch {
             break search
           }
         }
-        for entry in history
-        where entry.profileID == profile && entry.destination != nil
-          && !bookmarked.contains(entry.address)
-        {
+        for entry in history {
+          guard entry.profileID == profile, !bookmarked.contains(entry.address),
+            let destination = entry.destination
+          else { continue }
           guard CommandText.matches(query, CommandFields.history(entry)) else { continue }
           if append(
             .history(
@@ -427,7 +427,7 @@ public enum CommandSearch {
                             BrowserLanguage.currentLaunchLanguage == .hebrew
                               ? Locale(identifier: "he") : .autoupdatingCurrent))),
                   ])
-            ), url: entry.destination)
+            ), url: destination)
           {
             break search
           }

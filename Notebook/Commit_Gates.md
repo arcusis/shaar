@@ -29,6 +29,7 @@ References: [Git hooks](https://git-scm.com/docs/githooks), [worktree configurat
 The license-header gate reads `git ls-files -z` as bytes and uses filesystem surrogate escapes, so unusual tracked filenames do not crash path discovery.
 
 Prior hook paths use Git's path expansion, including `~/…`, rather than treating configuration values as literal repository-relative strings. A temporary-repository regression covers this without changing the home directory or identity.
+The installer refuses a symlink at the private Git directory's managed hook root before writing any launcher files.
 
 Thirteen focused tests passed, including a real redacted Gitleaks finding from staged content after the working copy was sanitized, with inline allow comments ignored. The complete ten-gate entrypoint passed 203 Python tests on the production baseline. The installer was executed in this worktree; identity/signing configuration remained byte-for-byte unchanged, and Orca still resolved the checkout. Real installed commit/push execution and hosted CI provide the remaining integration evidence.
 

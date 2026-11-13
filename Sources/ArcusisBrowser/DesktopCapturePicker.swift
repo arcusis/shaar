@@ -161,10 +161,7 @@ struct DesktopCapturePickerContent: View {
     VStack(alignment: .leading, spacing: 16) {
       Text(PanelsL10n.string("Choose what to share"))
         .font(.title2.weight(.semibold))
-      Text(
-        request.requestingOrigin.host() ?? request.pageURL.host()
-          ?? request.pageURL.absoluteString
-      )
+      Text(request.displayOrigin)
       .font(.callout).foregroundStyle(.secondary)
       .textSelection(.enabled)
       if let note {

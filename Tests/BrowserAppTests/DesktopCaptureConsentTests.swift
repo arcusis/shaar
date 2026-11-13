@@ -37,6 +37,7 @@ struct DesktopCaptureConsentTests {
 
     #expect(capture.pageURL == URL(string: "https://meet.google.com/example"))
     #expect(capture.requestingOrigin == URL(string: "https://meet.google.com"))
+    #expect(capture.displayOrigin == capture.requestingOrigin.absoluteString)
     #expect(capture.frameID == "0123456789abcdef0123456789abcdef")
     #expect(capture.sheetID == "desktop-capture-\(capture.id)")
     #expect(capture.matches(store.session))
@@ -53,6 +54,22 @@ struct DesktopCaptureConsentTests {
     #expect(sheet.isConsent)
     #expect(sheet.tabID == capture.tabID)
     #expect(sheet.matches(store.session))
+  }
+
+  @Test func capturePromptShowsTheCompleteOriginIncludingPort() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let capture = try #require(
+      DesktopCaptureRequest(payload: [
+        "id": UUID().uuidString,
+        "profileID": store.session.selectedSpace.profileID.uuidString,
+        "tabID": tab.id.uuidString,
+        "pageURL": tab.url.absoluteString,
+        "origin": "https://meet.google.com:8443",
+        "frameID": "0123456789abcdef0123456789abcdef",
+      ]))
+
+    #expect(capture.displayOrigin == "https://meet.google.com:8443")
   }
 
   @Test func pickerStartsInItsLoadingState() throws {

@@ -78,6 +78,8 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
 
   var sheetID: String { "desktop-capture-\(id)" }
 
+  var displayOrigin: String { requestingOrigin.absoluteString }
+
   func matches(
     _ session: BrowserSession, frameID: String? = nil, origin: URL? = nil
   ) -> Bool {

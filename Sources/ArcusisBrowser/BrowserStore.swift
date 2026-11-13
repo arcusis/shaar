@@ -612,11 +612,20 @@ final class BrowserStore {
     let combined = byTopic.map {
       SidebarTidyGroup(topic: $0.key, tabIDs: $0.value.flatMap(\.tabIDs))
     }.sorted { $0.topic.localizedStandardCompare($1.topic) == .orderedAscending }
+    let tabsByID = Dictionary(uniqueKeysWithValues: space.tabs.map { ($0.id, $0) })
+    let foldersByID = Dictionary(uniqueKeysWithValues: space.folders.map { ($0.id, $0) })
+    var tabIDsByFolderID: [UUID: Set<UUID>] = [:]
+    for tab in space.tabs {
+      if let folderID = tab.folderID { tabIDsByFolderID[folderID, default: []].insert(tab.id) }
+    }
     var handled: Set<UUID> = []
     for group in combined where group.tabIDs.count > 1 {
       let ids = Set(group.tabIDs)
       guard ids.isSubset(of: todayIDs), ids.isDisjoint(with: handled) else { continue }
-      if tidyGroupIsCurrent(group, ids: ids, in: space) {
+      if tidyGroupIsCurrent(
+        group, ids: ids, tabsByID: tabsByID, foldersByID: foldersByID,
+        tabIDsByFolderID: tabIDsByFolderID)
+      {
         handled.formUnion(ids)
         continue
       }
@@ -631,16 +640,15 @@ final class BrowserStore {
   }
 
   private func tidyGroupIsCurrent(
-    _ group: SidebarTidyGroup, ids: Set<UUID>, in space: BrowserSpace
+    _ group: SidebarTidyGroup, ids: Set<UUID>, tabsByID: [UUID: BrowserTab],
+    foldersByID: [UUID: BrowserFolder], tabIDsByFolderID: [UUID: Set<UUID>]
   ) -> Bool {
     guard let first = group.tabIDs.first,
-      let folderID = space.tabs.first(where: { $0.id == first })?.folderID,
-      space.folders.contains(where: {
-        $0.id == folderID && !$0.isPinned
-          && $0.name == group.topic.trimmingCharacters(in: .whitespacesAndNewlines)
-      })
+      let folderID = tabsByID[first]?.folderID,
+      let folder = foldersByID[folderID], !folder.isPinned,
+      folder.name == group.topic.trimmingCharacters(in: .whitespacesAndNewlines)
     else { return false }
-    return Set(space.tabs.filter { $0.folderID == folderID }.map(\.id)) == ids
+    return tabIDsByFolderID[folderID] == ids
   }
 
   func noteTabSleeping(_ id: UUID) {

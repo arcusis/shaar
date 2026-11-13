@@ -82,3 +82,31 @@ import Testing
   #expect(folder.name == "Research")
   #expect(store.session.selectedSpace.tabs.allSatisfy { $0.folderID == folder.id })
 }
+
+@Test @MainActor func tidyExistingGroupsFocusedBenchmark() throws {
+  let profile = BrowserProfile(name: "Scale")
+  let folders = (0..<300).map { index in
+    BrowserFolder(name: "Topic \(index)", isPinned: false)
+  }
+  let tabs = (0..<3_000).map { index in
+    BrowserTab(
+      url: URL(string: "https://example.test/\(index)")!, title: "Tab \(index)",
+      isPinned: false, folderID: folders[index / 10].id)
+  }
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs, folders: folders)
+  let session = try BrowserSession(
+    profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+  let store = BrowserStore(session: session)
+  let groups = folders.enumerated().map { index, folder in
+    SidebarTidyGroup(
+      topic: folder.name,
+      tabIDs: Array(tabs[(index * 10)..<(index * 10 + 10)].map(\.id)))
+  }
+
+  let start = ContinuousClock.now
+  store.applyTidyGroups(groups, in: space.id)
+  print("tidyExistingGroupsFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(store.session.spaces[0].folders.count == folders.count)
+}

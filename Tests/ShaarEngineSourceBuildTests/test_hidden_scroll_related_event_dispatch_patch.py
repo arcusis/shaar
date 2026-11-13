@@ -27,6 +27,8 @@ class HiddenScrollRelatedEventDispatchPatchTests(unittest.TestCase):
         self.assertIn('AtomicString("overscroll")', patch)
         self.assertIn("EnqueueOverscrollEvent", patch)
         self.assertIn("HiddenDocumentScrollRelatedEventsDispatchWithoutAnimationFrame", patch)
+        self.assertIn("+  GetDocument().body()->addEventListener(", patch)
+        self.assertIn("+                                       GetDocument().body(),\n+                                       GetDocument().body(),", patch)
         self.assertIn("EXPECT_TRUE(observer.Order().empty())", patch)
         self.assertIn("testing::ElementsAre(1, 2, 3)", patch)
 

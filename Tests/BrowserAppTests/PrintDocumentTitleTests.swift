@@ -2,15 +2,17 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import Testing
 import AppKit
+import Testing
 
 @testable import ArcusisBrowser
 
 @MainActor
 struct PrintDocumentTitleTests {
   @Test func usesPageTitleForDefaultPDFName() {
-    #expect(PrintDocumentTitle.make(pageTitle: "  Quarterly report  ", productName: "Shaar") == "Quarterly report")
+    #expect(
+      PrintDocumentTitle.make(pageTitle: "  Quarterly report  ", productName: "Shaar")
+        == "Quarterly report")
   }
 
   @Test func fallsBackAndRemovesControlCharacters() {
@@ -19,8 +21,15 @@ struct PrintDocumentTitleTests {
   }
 
   @Test func capsPageTitleLength() {
-    let result = PrintDocumentTitle.make(pageTitle: String(repeating: "a", count: 200), productName: "Shaar")
+    let result = PrintDocumentTitle.make(
+      pageTitle: String(repeating: "a", count: 200), productName: "Shaar")
     #expect(result.count == 120)
+  }
+
+  @Test func removesBidiFormattingAndFilenameSeparators() {
+    #expect(
+      PrintDocumentTitle.make(pageTitle: "Report\u{202E}fdp/part", productName: "Shaar")
+        == "Report fdp part")
   }
 
   @Test func updatesTheAttachedWindowTitleWithoutShowingAWindow() throws {

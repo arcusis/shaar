@@ -8,9 +8,15 @@ import SwiftUI
 
 enum PrintDocumentTitle {
   static func make(pageTitle: String?, productName: String = ProductIdentity.name) -> String {
-    let title = (pageTitle ?? "")
-      .components(separatedBy: .controlCharacters)
-      .joined(separator: " ")
+    let scalars = (pageTitle ?? "").unicodeScalars.map { scalar -> Unicode.Scalar in
+      if CharacterSet.controlCharacters.contains(scalar)
+        || scalar.properties.generalCategory == .format || scalar == "/"
+      {
+        return " "
+      }
+      return scalar
+    }
+    let title = String(String.UnicodeScalarView(scalars))
       .trimmingCharacters(in: .whitespacesAndNewlines)
     return title.isEmpty ? productName : String(title.prefix(120))
   }

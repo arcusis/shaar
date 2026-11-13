@@ -70,3 +70,16 @@ test("link checker validates every responsive image source", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker parses embedded data URLs in srcset candidates", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img alt="pixel" srcset="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs= 1x, /large.png 2x">',
+    );
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /large.png"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

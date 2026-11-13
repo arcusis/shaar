@@ -23,6 +23,21 @@ export function localTarget(root: string, url: URL): string | undefined {
   return options.find((option) => existsSync(option) && statSync(option).isFile());
 }
 
+function srcsetURLs(srcset: string): string[] {
+  const urls: string[] = [];
+  let position = 0;
+  while (position < srcset.length) {
+    while (position < srcset.length && /[\s,]/.test(srcset[position])) position++;
+    const start = position;
+    while (position < srcset.length && !/\s/.test(srcset[position])) position++;
+    const url = srcset.slice(start, position).replace(/,+$/, "");
+    if (url) urls.push(url);
+    while (position < srcset.length && srcset[position] !== ",") position++;
+    position++;
+  }
+  return urls;
+}
+
 export function checkLinks(root: string): { errors: string[]; external: string[]; pages: number } {
   const errors: string[] = [];
   const external = new Set<string>();
@@ -40,11 +55,10 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
       "a[href], link[href], img[src], script[src], img[srcset], source[srcset]",
     )) {
       const references = element.hasAttribute("srcset")
-        ? (element.getAttribute("srcset") ?? "")
-            .split(",")
-            .map((candidate) => candidate.trim().split(/\s+/, 1)[0])
+        ? srcsetURLs(element.getAttribute("srcset") ?? "")
         : [element.getAttribute("href") ?? element.getAttribute("src") ?? ""];
       for (const value of references) {
+        if (element.localName === "img" && value.startsWith("data:image/")) continue;
         if (!value || value.startsWith("javascript:")) {
           errors.push(`${path}: empty or unsafe link`);
           continue;

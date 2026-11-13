@@ -234,12 +234,22 @@ class PipelineGateTests(unittest.TestCase):
         validate = workflow.split("      - name: Validate appcast, update signature and public download\n", 1)[1]
         validate = validate.split("      - name: Require a newer build than the live feed", 1)[0]
         curl_commands = [line.strip() for line in validate.splitlines() if line.strip().startswith("curl ")]
-
         self.assertEqual(len(curl_commands), 2)
         for command in curl_commands:
             with self.subTest(command=command):
                 self.assertIn("--connect-timeout 10", command)
                 self.assertIn("--max-time 120", command)
+
+    def test_release_gate_api_requests_are_bounded_and_report_timeouts(self):
+        with patch.object(RELEASE_CI.subprocess, "check_output", return_value="{}") as command:
+            self.assertEqual(RELEASE_CI.api("repos/arcusis/shaar/actions"), {})
+        self.assertEqual(command.call_args.kwargs["timeout"], RELEASE_CI.API_TIMEOUT_SECONDS)
+        with patch.object(
+            RELEASE_CI.subprocess, "check_output",
+            side_effect=RELEASE_CI.subprocess.TimeoutExpired(["gh", "api"], 60),
+        ):
+            with self.assertRaisesRegex(ValueError, "GitHub API request timed out after 60s"):
+                RELEASE_CI.api("repos/arcusis/shaar/actions")
 
     def test_code_scanning_issue_sync_opens_reopens_and_closes_by_alert_number(self):
         def alert(number):

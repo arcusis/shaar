@@ -35,6 +35,7 @@ final class ExtensionManagerModel {
   private(set) var status: String?
   private var requestID = UUID()
   private var developerModeRequestID = UUID()
+  private var siteAccessRequestID = UUID()
 
   static func shared(
     runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID
@@ -261,6 +262,8 @@ final class ExtensionManagerModel {
       status = ExtensionInstallNotice.siteAccessRefused
       return
     }
+    let request = UUID()
+    siteAccessRequestID = request
     status = nil
     submitManage(
       [
@@ -268,7 +271,7 @@ final class ExtensionManagerModel {
         "access": access.rawValue, "origin": origin,
       ], tabID: tabID
     ) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.siteAccessRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil

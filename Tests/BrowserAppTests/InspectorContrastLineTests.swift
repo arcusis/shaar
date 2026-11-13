@@ -7,7 +7,7 @@ import Testing
 @testable import ArcusisBrowser
 
 struct InspectorContrastLineTests {
-  @Test func ratioTextUsesTwoDecimalPlaces() {
+  @Test @MainActor func ratioTextUsesTwoDecimalPlaces() {
     #expect(InspectorContrastLine.ratioText(4.5) == "4.50:1")
     #expect(InspectorContrastLine.ratioText(2.999) == "3.00:1")
   }

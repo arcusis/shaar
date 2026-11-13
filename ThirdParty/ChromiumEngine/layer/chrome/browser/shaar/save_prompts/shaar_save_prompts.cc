@@ -305,6 +305,13 @@ std::string SanitizeDetail(std::string_view raw) {
       ++index;
       continue;
     }
+    if (lead == 0xC2 && index + 1 < raw.size()) {
+      const auto second = static_cast<unsigned char>(raw[index + 1]);
+      if (second >= 0x80 && second <= 0x9F) {
+        index += 2;
+        continue;
+      }
+    }
     size_t length = 1;
     if (lead >= 0xC2 && lead <= 0xDF)
       length = 2;

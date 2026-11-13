@@ -115,6 +115,9 @@ struct SidebarMediaPlayer: View {
       volumeIsVisible = false
       editingVolume = false
     }
+    .onChange(of: focusedControl) { _, focused in
+      if focused == .mute { volumeIsVisible = true }
+    }
   }
 
   private var volumeControl: some View {

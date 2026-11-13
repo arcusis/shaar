@@ -62,7 +62,7 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
       session.profileID(forTabID: tabID) == profileID,
       let current = session.selectedPage?.tab.url
     else { return false }
-    return Self.sameOrigin(current, pageURL) && Self.sameOrigin(current, origin)
+    return Self.samePage(current, pageURL) && Self.sameOrigin(current, origin)
   }
 
   public func decision(_ choice: Decision, matchesSession: Bool) -> Decision {
@@ -161,5 +161,9 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
     lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
       && lhs.host()?.lowercased() == rhs.host()?.lowercased()
       && lhs.port == rhs.port
+  }
+
+  private static func samePage(_ lhs: URL, _ rhs: URL) -> Bool {
+    sameOrigin(lhs, rhs) && lhs.path == rhs.path
   }
 }

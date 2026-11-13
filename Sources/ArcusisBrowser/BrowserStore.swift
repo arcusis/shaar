@@ -937,6 +937,7 @@ final class BrowserStore {
     } else if session.updateTab(id, url: url, title: title) {
       save()
     }
+    dismissSavePromptIfPageChanged(id)
   }
 
   func nativeFavoritePageChanged(_ id: UUID, profileID: UUID, url: URL, title: String) {
@@ -1449,6 +1450,15 @@ final class BrowserStore {
     guard !dismissingSavePrompt, let prompt = savePrompt else { return }
     let selected = session.selectedPage?.tab.id
     guard selected != previous.selectedPage?.tab.id, prompt.tabID != selected else { return }
+    dismissingSavePrompt = true
+    resolveSavePrompt(prompt.id, decision: .dismiss)
+    dismissingSavePrompt = false
+  }
+
+  private func dismissSavePromptIfPageChanged(_ tabID: UUID) {
+    guard !dismissingSavePrompt, let prompt = savePrompt, prompt.tabID == tabID,
+      !prompt.matches(session, inPrivateWindow: isPrivate)
+    else { return }
     dismissingSavePrompt = true
     resolveSavePrompt(prompt.id, decision: .dismiss)
     dismissingSavePrompt = false

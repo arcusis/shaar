@@ -2,8 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
 import ShaarEngineABIC
+
+private func devToolsEnvelopeInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
 
 public enum ShaarDevToolsOperation: UInt32, Sendable {
   case call = 1000
@@ -197,7 +205,7 @@ private let shaarDevToolsABICallback: shaar_reply_fn = { context, result in
       message: String(decoding: try copyDevToolsBytes(value.error.message), as: UTF8.self))
     let data = try copyDevToolsBytes(value.payload_json)
     guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      root["schemaVersion"] as? Int == 1
+      devToolsEnvelopeInteger(root["schemaVersion"]) == 1
     else { throw ShaarEngineError.invalidEvent("invalid DevTools response payload") }
     box.completion(.success(data))
   } catch let error as ShaarEngineError {
@@ -336,8 +344,8 @@ public struct ShaarDevToolsAdapter: Sendable {
         result.flatMap { payload in
           guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
             Set(object.keys) == ["schemaVersion", "leaseID"],
-            object["schemaVersion"] as? Int == 1,
-            let leaseID = object["leaseID"] as? Int,
+            devToolsEnvelopeInteger(object["schemaVersion"]) == 1,
+            let leaseID = devToolsEnvelopeInteger(object["leaseID"]),
             leaseID > 0, let value = UInt32(exactly: leaseID)
           else { return .failure(.invalidEvent("invalid panel lease reply")) }
           return .success(value)

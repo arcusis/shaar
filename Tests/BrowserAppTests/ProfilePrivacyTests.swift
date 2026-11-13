@@ -51,6 +51,15 @@ struct ProfilePrivacyTests {
         == "עדכון הגדרת קובצי Cookie של צד שלישי…")
   }
 
+  @Test func permissionsLoadingAccessibilityLabelIsLocalized() {
+    #expect(
+      ProfilePrivacyAccessibility.loadingPermissionsLabel(language: .english)
+        == "Loading site permissions")
+    #expect(
+      ProfilePrivacyAccessibility.loadingPermissionsLabel(language: .hebrew)
+        == "טעינת הרשאות אתרים")
+  }
+
   @Test func settingsUseSelectedShaarRuntimeForPrivacyBackend() throws {
     let runtime = ARCShaarRuntime()
     let workspace = try BrowserWorkspaceStore(initialSession: .fresh())

@@ -5,6 +5,12 @@
 import BrowserCore
 import SwiftUI
 
+enum ProfilePrivacyAccessibility {
+  static func loadingPermissionsLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string("Loading site permissions", table: "Settings", language: language)
+  }
+}
+
 struct ProfilePrivacySections: View {
   @State private var model: ProfilePrivacyModel
   @State private var confirmClear = false
@@ -88,7 +94,9 @@ struct ProfilePrivacySections: View {
       Section {
         HStack {
           if let busyMessage = model.busyMessage {
-            ProgressView(busyMessage).controlSize(.small)
+            ProgressView(busyMessage)
+              .controlSize(.small)
+              .accessibilityLabel(ProfilePrivacyAccessibility.loadingPermissionsLabel())
           }
           Spacer()
           Button(SettingsL10n.string("Refresh")) { Task { await model.load() } }

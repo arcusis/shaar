@@ -135,6 +135,22 @@ test("link checker validates quoted CSS imports outside comments", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker validates embedded object resources", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><embed src="/missing-embed.pdf"><object data="/missing-object.svg"></object>',
+    );
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: missing target /missing-embed.pdf",
+      "index.html: missing target /missing-object.svg",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test("link checker catches missing poster when video source exists", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

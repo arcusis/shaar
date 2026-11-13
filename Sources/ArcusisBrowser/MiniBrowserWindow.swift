@@ -103,10 +103,12 @@ final class MiniBrowserController {
     engine.runtime.closeWindowID(engine.windowID)
   }
 
+  static func navigationURL(for input: String) -> URL? {
+    NavigationInput.address(for: input)
+  }
+
   func navigate(_ text: String) {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    let address = trimmed.contains("://") ? trimmed : "https://" + trimmed
-    guard let url = URL(string: address), NavigationInput.isWebURL(url) else { return }
+    guard let url = Self.navigationURL(for: text) else { return }
     if store.session.selectedPage == nil {
       store.perform(.open(url))
     } else {

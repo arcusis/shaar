@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import CryptoKit
 import Foundation
 
@@ -342,8 +343,8 @@ enum PrivateMultiTabEvidence {
       && audit?["allWindowsUsePrivateActiveProfile"] as? Bool == true
       && audit?["allTabsInNativeProfileBrowser"] as? Bool == true
       && audit?["allWindowsDisplayOwnedWebContents"] as? Bool == true
-      && audit?["visibleNativeViewportCount"] as? Int == 1
-      && audit?["tabCount"] as? Int == tabCount
+      && integerEvidence(audit?["visibleNativeViewportCount"]) == 1
+      && integerEvidence(audit?["tabCount"]) == tabCount
   }
 
   static func liveShellAudit(_ audit: [String: Any], stage: String) -> Bool {
@@ -378,5 +379,16 @@ enum PrivateMultiTabEvidence {
       }
     }
     return light
+  }
+
+  private static func integerEvidence(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return nil }
+    let encoding = String(cString: number.objCType)
+    if encoding == "f" || encoding == "d" {
+      return Int(exactly: number.doubleValue)
+    }
+    return Int(number.stringValue)
   }
 }

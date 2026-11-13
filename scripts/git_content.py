@@ -48,7 +48,7 @@ def history_commits(root: Path, base: str, head: str) -> list[str]:
 
 def push_updates(data: bytes) -> list[tuple[str, str]]:
     updates = []
-    for line in data.decode("utf-8").splitlines():
+    for line in data.decode("utf-8", errors="surrogateescape").splitlines():
         fields = line.split()
         if len(fields) != 4:
             raise ValueError("Malformed pre-push ref list")

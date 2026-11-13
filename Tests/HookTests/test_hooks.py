@@ -132,6 +132,11 @@ class HookTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 git_content.push_updates(bad)
 
+    def test_push_parser_accepts_non_utf8_ref_labels(self):
+        head, base = "a" * 40, "b" * 40
+        data = b"refs/heads/name-\xff " + head.encode() + b" refs/heads/name-\xff " + base.encode()
+        self.assertEqual(git_content.push_updates(data), [(head, base)])
+
     def test_push_runner_checks_every_outgoing_head_and_propagates_failure(self):
         first, second, base = "a" * 40, "b" * 40, "c" * 40
         data = f"refs/heads/a {first} refs/heads/a {base}\nrefs/heads/b {second} refs/heads/b {base}\n".encode()

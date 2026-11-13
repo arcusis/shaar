@@ -13,7 +13,7 @@ extension DeveloperPageModel {
       ),
       (#"(?i)\b(?:cookie|set-cookie)\s*:\s*[^\r\n]+"#, "[redacted cookie]"),
       (
-        #"(?i)([\"']?(?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|credential|authorization|proxy-authorization|cookie|set-cookie|session[_-]?id)[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^,\s;&]+)"#,
+        #"(?i)([\"']?(?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|credential|authorization|proxy-authorization|cookie|set-cookie|session[_-]?id)[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^,\r\n;&]+)"#,
         "$1[redacted]"
       ),
       (

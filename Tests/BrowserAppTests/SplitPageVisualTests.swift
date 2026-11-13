@@ -74,6 +74,7 @@ final class SplitPageVisualTests: XCTestCase {
     XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 40, available: 400), [0.6, 0.4])
     XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 400, available: 400), [0.6, 0.4])
     XCTAssertEqual(SplitGroupView.resized(initial, at: 2, by: 40, available: 400), initial)
+    XCTAssertEqual(SplitGroupView.resized(initial, at: .max, by: 40, available: 400), initial)
     XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 40, available: 0), initial)
   }
 

@@ -550,7 +550,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0143-blink-hidden-scroll-snap-event-dispatch.patch",
-      "sha256": "18ac0e71db76a39fe481e7548fc0ca4a829a43a69421980a7926915bf051e5d0"
+      "sha256": "567ef5ebb03e1b573c350ef2552cb0abd0fee3f568fbf58080f01858b15b7053"
     }
   ],
   "devtoolsFrontend157": {

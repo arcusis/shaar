@@ -23,8 +23,11 @@ class HiddenScrollSnapEventDispatchPatchTests(unittest.TestCase):
         self.assertIn("scrollsnapchanging", patch)
         self.assertIn("if (hidden())", patch)
         self.assertIn("HiddenDocumentScrollSnapEventsDispatchWithoutAnimationFrame", patch)
+        self.assertIn("HiddenDocumentScrollSnapEventsDeduplicatePerTargetAndType", patch)
         self.assertIn("EXPECT_TRUE(observer.Order().empty())", patch)
         self.assertIn("testing::ElementsAre(1, 2)", patch)
+        self.assertEqual(patch.count("EnqueueScrollSnapChangeEvent(&GetDocument()"), 3)
+        self.assertEqual(patch.count("EnqueueScrollSnapChangingEvent(&GetDocument()"), 3)
 
 
 if __name__ == "__main__":

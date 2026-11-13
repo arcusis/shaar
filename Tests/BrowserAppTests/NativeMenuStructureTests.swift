@@ -165,6 +165,21 @@ import Testing
   #expect(item("Select All")?.action == NSSelectorFromString("selectAll:"))
   #expect(item("Undo")?.target == nil && item("Paste")?.target == nil)
   #expect(item("Paste and Match Style")?.target == nil)
+  #expect(item("Emoji & Symbols")?.action == #selector(NSApplication.orderFrontCharacterPalette(_:)))
+  #expect(item("Emoji & Symbols")?.keyEquivalent == "e")
+  #expect(item("Emoji & Symbols")?.keyEquivalentModifierMask == .function)
+  #expect(item("Emoji & Symbols")?.target == nil)
+}
+
+@Test @MainActor func functionEStaysOnTheSystemResponderChainWithPageFocus() {
+  let menu = NativeBrowserHost.makeMenu(target: NSApplication.shared)
+  let page = ChromiumPageContainerView()
+  let event = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .function, timestamp: 0,
+    windowNumber: 0, context: nil, characters: "e", charactersIgnoringModifiers: "e",
+    isARepeat: false, keyCode: 14)!
+
+  #expect(!ShortcutPageRouting.route(event, menu: menu, responder: page))
 }
 
 @Test @MainActor func copyURLMenuUsesTheActivePrivatePage() throws {

@@ -50,14 +50,11 @@ struct BrowserSidebar: View {
     sidebarReduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.82)
   }
 
-  private var sidebarLayoutKey: [String] {
-    store.profileFavorites.map { $0.id.uuidString }
-      + store.session.selectedSpace.folders.map {
-        "\($0.id):\($0.parentID?.uuidString ?? "root"):\($0.isPinned):\($0.isCollapsed)"
-      }
-      + store.session.selectedSpace.tabs.map {
-        "\($0.id):\($0.isPinned):\($0.folderID?.uuidString ?? "root")"
-      }
+  private var sidebarLayoutKey: SidebarLayoutKey {
+    SidebarLayoutKey(
+      favorites: store.profileFavorites,
+      folders: store.session.selectedSpace.folders,
+      tabs: store.session.selectedSpace.tabs)
   }
 
   private var activeSidebarSelectionKey: String {
@@ -108,7 +105,9 @@ struct BrowserSidebar: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       profileFavorites
-        .id(sidebarReduceMotion ? sidebarLayoutKey.description : "favorites")
+        .id(
+          sidebarReduceMotion
+            ? SidebarLayoutIdentity.layout(sidebarLayoutKey) : .constant("favorites"))
         .transition(.opacity)
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 7) {
@@ -139,7 +138,9 @@ struct BrowserSidebar: View {
       }
       SpacePager(store: store, state: pagerState, reduceMotion: sidebarReduceMotion) { space in
         tabList(space)
-          .id(sidebarReduceMotion ? sidebarLayoutKey.description : "tabs")
+          .id(
+            sidebarReduceMotion
+              ? SidebarLayoutIdentity.layout(sidebarLayoutKey) : .constant("tabs"))
           .transition(.opacity)
       }
       Spacer(minLength: 0)

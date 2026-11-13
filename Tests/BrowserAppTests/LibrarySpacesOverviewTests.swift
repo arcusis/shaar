@@ -42,6 +42,32 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     XCTAssertEqual(count, 10)
   }
 
+  func testFolderPathLookupBenchmark() throws {
+    let profile = BrowserProfile(name: "Daily")
+    let folderIDs = (0..<150).map { _ in UUID() }
+    let folders = folderIDs.enumerated().map { index, id in
+      BrowserFolder(
+        id: id, name: "Folder \(index)", parentID: index == 0 ? nil : folderIDs[index - 1],
+        isPinned: false)
+    }
+    let tabs = (0..<500).map { index in
+      BrowserTab(
+        url: URL(string: "https://example.com/\(index)")!, title: "Needle page \(index)",
+        isPinned: false, folderID: folderIDs[index % folderIDs.count])
+    }
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Work", symbol: "tray", tint: .ocean,
+      tabs: tabs, folders: folders)
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+    let start = ContinuousClock.now
+    for _ in 0..<10 {
+      _ = LibrarySpacesOverviewModel.cards(in: session, query: "Needle")
+    }
+    print("librarySpacesFolderPathBenchmark: \(start.duration(to: .now))")
+  }
+
   func testTodayFoldersAndNestedTabsAppearInSpaceCard() throws {
     let profile = BrowserProfile(name: "Daily")
     let folder = BrowserFolder(name: "Reading list", isPinned: false)

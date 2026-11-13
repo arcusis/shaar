@@ -10,6 +10,10 @@ import Testing
 
 @Suite @MainActor
 struct ExtensionConsentTests {
+  @Test func consentSectionTitlesAreVoiceOverHeadings() {
+    #expect(ExtensionConsent.headingTraits == .isHeader)
+  }
+
   private func storeWithPage() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://chromewebstore.google.com/example")!))

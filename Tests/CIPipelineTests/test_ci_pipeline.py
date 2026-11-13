@@ -1288,6 +1288,34 @@ class ProbeSoakTests(unittest.TestCase):
 
 
 class EngineTransferTests(unittest.TestCase):
+    def test_transferred_bundle_rejects_symlinked_or_missing_build_directory(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
+        import shutil
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            bundle = root / "build" / BUNDLE_NAME
+            bundle.mkdir(parents=True)
+            (bundle / "Main").write_text("authored executable")
+            evidence = root / "evidence"
+            evidence.mkdir()
+            archive_bundle(root, evidence)
+            shutil.rmtree(root / "build")
+            outside = root / "outside"
+            outside.mkdir()
+            (root / "build").symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "destination is not a directory"):
+                restore_bundle(root, evidence)
+            self.assertEqual(list(outside.iterdir()), [])
+            (root / "build").unlink()
+            with self.assertRaisesRegex(ValueError, "destination is not a directory"):
+                restore_bundle(root, evidence)
+
     def test_merge_group_bundle_selection_rejects_fork_pull_request_runs(self):
         from ci_engine import matching_pr_bundle_run_id
         response = {"workflow_runs": [

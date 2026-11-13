@@ -8,6 +8,21 @@ import Testing
 @testable import ShaarVerification
 
 @Suite struct SwitchProbeMetricsTests {
+  @Test func warmupSequenceAcceptsTwoTargetsAndRunsTwoPasses() {
+    #expect(
+      SwitchProbeMetrics.spaceWarmupSequence(
+        tabIDs: ["shared", "selected"], selectedTabID: "selected")
+        == ["shared", "selected", "shared", "selected"])
+    #expect(
+      SwitchProbeMetrics.spaceWarmupSequence(tabIDs: ["one", "two"], selectedTabID: "other")
+        == ["one", "two", "one", "two"])
+    #expect(
+      SwitchProbeMetrics.spaceWarmupSequence(
+        tabIDs: ["one", "two", "three", "four"], selectedTabID: nil) == nil)
+    #expect(
+      SwitchProbeMetrics.spaceWarmupSequence(tabIDs: ["one", "one"], selectedTabID: nil) == nil)
+  }
+
   @Test func twentySamplesRoundTripSummariesAndAccounting() throws {
     var recorder = SwitchProbeMetricsRecorder()
     try recordSpaceWarmups(&recorder, latencies: [0.301, 0.966, 0.012, 0.014])

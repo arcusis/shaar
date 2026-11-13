@@ -104,6 +104,16 @@ struct SwitchProbeMetrics: Codable {
       slowest.firstPaintMilliseconds)
   }
 
+  static func spaceWarmupSequence(tabIDs: [String], selectedTabID: String?) -> [String]? {
+    guard tabIDs.count == expectedSpaceWarmupTabCount,
+      Set(tabIDs).count == expectedSpaceWarmupTabCount
+    else { return nil }
+    let orderedTabIDs =
+      tabIDs.filter { $0 != selectedTabID }
+      + tabIDs.filter { $0 == selectedTabID }
+    return (0..<expectedSpaceWarmupPassCount).flatMap { _ in orderedTabIDs }
+  }
+
   var spaceSwitchWithinBudget: Bool {
     spaceWarmupSamples.count == Self.expectedSpaceWarmupCount
       && spaceSwitchSamples.count == Self.expectedSwitchCount

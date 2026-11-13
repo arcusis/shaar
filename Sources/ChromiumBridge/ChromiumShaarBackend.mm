@@ -293,18 +293,6 @@ static BOOL ShaarLifecycleProbeCapable(NSDictionary *reply, NSError *error) {
   return [@[@"active", @"frozen", @"discarded"] containsObject:state];
 }
 
-static NSString *ShaarLifecycleFailureDescription(NSDictionary *reply,
-                                                  NSError *error) {
-  if (error.localizedDescription.length)
-    return error.localizedDescription;
-  id message = reply[@"error"];
-  if ([message isKindOfClass:NSString.class])
-    return message;
-  if ([message isKindOfClass:NSNumber.class])
-    return [NSString stringWithFormat:@"engine error code %@", message];
-  return @"engine returned no lifecycle state";
-}
-
 static void ShaarEventCallback(void *context, const shaar_event *event) {
   ARCPerformShaarEventCallback(^{
     [(__bridge ARCShaarRuntime *)context receiveEvent:event];
@@ -1149,9 +1137,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
          completion:^(NSDictionary *reply, NSError *error) {
     const BOOL capable = ShaarLifecycleProbeCapable(reply, error);
     if (!capable) {
-      NSLog(@"Shaar lifecycle probe failed for tab %@ (ABI %u): %@; reply=%@",
-            tabID, _symbols.abi_minor ? _symbols.abi_minor() : 0,
-            ShaarLifecycleFailureDescription(reply, error), reply ?: @{});
+      NSLog(@"Shaar lifecycle probe failed (ABI %u)",
+            _symbols.abi_minor ? _symbols.abi_minor() : 0);
     }
     ShaarFinishOnMain(completion, capable);
   }];
@@ -1164,16 +1151,13 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     return;
   }
   NSString *discardReason = reason.length ? reason : @"proactive";
-  NSLog(@"Shaar tab discard requested for tab %@ (reason %@)", tabID,
-        discardReason);
+  NSLog(@"Shaar tab discard requested");
   [self submitTabID:tabID operation:kShaarOpTabDiscard
             payload:@{@"schemaVersion": @1, @"reason": discardReason}
          completion:^(NSDictionary *reply, NSError *error) {
     const BOOL accepted = ShaarLifecycleAccepted(reply, error, @[@"discarded"]);
     if (!accepted) {
-      NSLog(@"Shaar tab discard refused for tab %@ (reason %@): %@; reply=%@",
-            tabID, discardReason, ShaarLifecycleFailureDescription(reply, error),
-            reply ?: @{});
+      NSLog(@"Shaar tab discard refused");
     }
     ShaarFinishOnMain(completion, accepted);
   }];

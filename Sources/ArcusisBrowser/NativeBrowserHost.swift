@@ -205,7 +205,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if workspace.workspace.windows.isEmpty { try workspace.newWindow() }
     workspace.persistSnapshot()
     let focused = workspace.workspace.focusedWindowID
-    for record in workspace.workspace.windows { try attach(record.id, source: nil) }
+    do {
+      for record in workspace.workspace.windows { try attach(record.id, source: nil) }
+    } catch {
+      for context in contexts.values {
+        stopObserving(context)
+        context.engine.onClosed = nil
+        _ = events.runtime.closeWindowID(context.nativeID)
+      }
+      contexts.removeAll()
+      throw error
+    }
     let privateHost = PrivateBrowserHost(
       runtime: events.runtime, presentsWindows: presentation == .visible,
       keyWindow: keyWindow,

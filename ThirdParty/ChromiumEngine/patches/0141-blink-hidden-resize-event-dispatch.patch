@@ -64,16 +64,9 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
 diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/renderer/core/dom/document.h
 --- a/third_party/blink/renderer/core/dom/document.h
 +++ b/third_party/blink/renderer/core/dom/document.h
-@@ -1647,6 +1647,7 @@
- 
-   void EnqueueMoveEvent();
-   void EnqueueResizeEvent();
-+  void DispatchHiddenResizeEventTask();
-   void EnqueueScrollEventForNode(Node*);
-   void EnqueueScrollEndEventForNode(Node*);
-   void EnqueueDisplayLockActivationTask(base::OnceClosure);
-@@ -3143,6 +3144,7 @@
+@@ -3143,6 +3143,8 @@
    unsigned write_recursion_depth_ = 0;
++  void DispatchHiddenResizeEventTask();
  
    Member<ScriptedAnimationController> scripted_animation_controller_;
 +  bool hidden_resize_event_task_pending_ = false;

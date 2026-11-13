@@ -15,6 +15,12 @@ import Testing
     #expect(!InspectorComponentAccessibility.traits(isSelected: false).contains(.isSelected))
   }
 
+  @Test func selectedComponentRowsExposeTheirSelectionState() {
+    #expect(
+      InspectorDetailsView.componentSelectionTraits(isSelected: true).contains(.isSelected))
+    #expect(!InspectorDetailsView.componentSelectionTraits(isSelected: false).contains(.isSelected))
+  }
+
   @Test func backendFailuresUseLocalizedInspectorDetailsRecoveryCopy() {
     let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(

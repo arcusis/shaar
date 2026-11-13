@@ -137,6 +137,22 @@ struct ShaarEngineABITests {
     #expect(reported == .invalidEvent("profile-scoped event has no profile ID"))
   }
 
+  @Test func eventCopyRejectsShortStructAndInvalidByteSlice() {
+    var shortEvent = engineEvent(sequence: 1)
+    shortEvent.size = 0
+    #expect(throws: ShaarEngineError.invalidEvent("short event struct")) {
+      try ShaarEventCopy.copy(shortEvent)
+    }
+
+    var invalidSliceEvent = engineEvent(sequence: 2)
+    var invalidSlice = shaar_bytes()
+    invalidSlice.size = 1
+    invalidSliceEvent.profile_id = invalidSlice
+    #expect(throws: ShaarEngineError.invalidEvent("invalid profile ID slice")) {
+      try ShaarEventCopy.copy(invalidSliceEvent)
+    }
+  }
+
   @Test func frameworkLoadFailureHasItsOwnTypedError() {
     let frameworkURL = URL(fileURLWithPath: "/no/such/Shaar.framework")
     do {

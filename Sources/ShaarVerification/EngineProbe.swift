@@ -529,7 +529,8 @@ final class EngineProbe {
     let orderedTabIDs =
       tabIDs.filter { $0 != selectedTabID }
       + tabIDs.filter { $0 == selectedTabID }
-    for (index, tabID) in orderedTabIDs.enumerated() {
+    let warmupTabIDs = (0..<2).flatMap { _ in orderedTabIDs }
+    for (index, tabID) in warmupTabIDs.enumerated() {
       guard
         let space = store.session.spaces.first(where: {
           $0.profileID.uuidString == profileA && $0.tabs.contains { $0.id.uuidString == tabID }

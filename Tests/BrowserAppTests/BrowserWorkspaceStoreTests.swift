@@ -36,6 +36,23 @@ struct BrowserWorkspaceStoreTests {
     try manager.workspace.validate()
   }
 
+  @Test func transferredTabDropsItsSourceWindowSleepingState() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let tabID = try #require(source.session.selectedSpace.selectedTabID)
+    source.noteTabSleeping(tabID)
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID,
+      tabID: tabID)
+
+    #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
+    #expect(!source.sleepingTabIDs.contains(tabID))
+    #expect(!destination.sleepingTabIDs.contains(tabID))
+  }
+
   @Test func pinnedAndPrivateWindowTransfersAreRefusedWithNotices() throws {
     let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let sourceID = manager.workspace.windows[0].id

@@ -1310,6 +1310,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     ] {
       addStandard(title, NSSelectorFromString(action), to: edit)
     }
+    addStandard("Paste and Match Style", NSSelectorFromString("pasteAsPlainText:"), to: edit)
     edit.addItem(.separator())
     add(.find, "Find in Page…", to: edit)
     add(.findNext, "Find Next", to: edit)

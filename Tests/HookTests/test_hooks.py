@@ -54,6 +54,12 @@ class HookTests(unittest.TestCase):
         for name in ("scripts/release-config.sh", "public.pub", "public-key.json", "sparkle-fixture.json"):
             self.assertFalse(sensitive_files.blocked_name(name))
 
+    def test_hook_config_preserves_trailing_path_whitespace(self):
+        configured_path = "/tmp/previous hooks "
+        with patch.object(hook_support, "git", return_value=(configured_path + "\n").encode()):
+            self.assertEqual(hook_support.config(self.root, "core.hooksPath", scope="--local", path_value=True),
+                             configured_path)
+
     def test_policy_reads_index_despite_unstaged_replacement(self):
         path = self.stage("notes.txt", b"staged payload")
         path.write_bytes(b"short")

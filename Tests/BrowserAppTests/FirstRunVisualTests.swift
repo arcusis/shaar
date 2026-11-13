@@ -15,6 +15,10 @@ final class FirstRunVisualTests: XCTestCase {
       SettingsL10n.format("Step %d of %d", .integer(4), .integer(FirstRunStep.allCases.count)))
   }
 
+  func testCurrentStepTitleIsVoiceOverHeading() {
+    XCTAssertTrue(FirstRunSetupView.stepHeadingTraits.contains(.isHeader))
+  }
+
   func testEveryStepRendersOffscreenInLightAndDark() throws {
     let output = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)

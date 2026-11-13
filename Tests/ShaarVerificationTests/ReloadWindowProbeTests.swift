@@ -37,4 +37,14 @@ import Foundation
         tabID: newTab, sourceID: source, prior: prior,
         candidateOwnerID: otherOwner, ownerID: owner, requiresNewTab: true))
   }
+
+  @Test func aPopupGestureMustCreateExactlyOneDestinationTab() {
+    let destination = UUID()
+    #expect(ReloadWindowProbe.hasSingleDestinationTab([destination], destination: destination))
+    #expect(!ReloadWindowProbe.hasSingleDestinationTab([], destination: destination))
+    #expect(
+      !ReloadWindowProbe.hasSingleDestinationTab(
+        [destination, UUID()], destination: destination))
+    #expect(!ReloadWindowProbe.hasSingleDestinationTab([UUID()], destination: destination))
+  }
 }

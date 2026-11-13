@@ -37,7 +37,7 @@ struct ExtensionManagerModelTests {
 
 @MainActor
 private final class SiteAccessRuntime: ARCShaarRuntime {
-  var payloads: [[String: Any]] = []
+  nonisolated(unsafe) var payloads: [[String: Any]] = []
 
   override func submitExtensionManage(
     forProfileID profileID: String, tabID: String?, payload: [String: Any],

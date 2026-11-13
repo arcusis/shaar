@@ -101,7 +101,7 @@ private func target(_ address: String) -> SiteControlTarget {
   let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
   backend.failsReads = true
   await model.load()
-  #expect(model.failure == "The engine refused.")
+  #expect(model.failure == ShellL10n.string("Could not load site permissions. Try again."))
 
   backend.failsReads = false
   backend.values[.camera] = .allow
@@ -117,7 +117,7 @@ private func target(_ address: String) -> SiteControlTarget {
   backend.failsWrites = true
   await model.setPermission(.microphone, allowed: true)
   #expect(model.permissionValues[.microphone] == .ask)
-  #expect(model.failure == "The engine refused.")
+  #expect(model.failure == ShellL10n.string("Could not update this permission. Try again."))
 }
 
 @MainActor @Test func latePermissionRefreshDoesNotUndoNewerToggle() async {
@@ -209,7 +209,17 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(!model.hasCertificate)
   backend.failsWrites = true
   #expect(!(await model.perform(.clearCookiesAndReload)))
-  #expect(model.failure == "The engine refused." && model.runningAction == nil)
+  #expect(
+    model.failure == ShellL10n.format(
+      "Could not complete the %@ action. Try again.",
+      arguments: [.string(SiteAction.clearCookiesAndReload.title)]) && model.runningAction == nil)
+}
+
+@MainActor @Test func certificateFailureUsesLocalizedRecoveryCopy() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://news.example"), backend: backend)
+  #expect(await model.certificateChain() == nil)
+  #expect(model.failure == ShellL10n.string("Could not load this site’s certificate. Try again."))
 }
 
 @MainActor @Test func reloadActionsShowTheirMenuShortcuts() {

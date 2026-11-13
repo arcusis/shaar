@@ -44,7 +44,7 @@ struct DeviceChooserTests {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
     var payload = event(transport: "usb", id: "embedded", page: tab.url)
-    payload["origin"] = "https://device-frame.example:8443/chooser"
+    payload["origin"] = "https://device-frame.example:8443"
 
     let request = try #require(
       DeviceChooserIntake.request(
@@ -60,6 +60,25 @@ struct DeviceChooserTests {
         tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
         payload: payload))
     #expect(insecureOrigin.displayOrigin == "http://device-frame.example:8443")
+  }
+
+  @Test func chooserOriginMustBeSerializedWithoutCredentialsOrPath() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+
+    for invalidOrigin in [
+      "https://trusted.example@attacker.example",
+      "https://device-frame.example/private",
+      "https://device-frame.example/?next=attacker.example",
+      "https://device-frame.example/#section",
+    ] {
+      var payload = event(transport: "usb", id: "non-origin", page: tab.url)
+      payload["origin"] = invalidOrigin
+      #expect(
+        DeviceChooserIntake.request(
+          tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+          payload: payload) == nil)
+    }
   }
 
   @Test func emptyChooserEventsCannotBeGranted() throws {
@@ -250,9 +269,14 @@ struct DeviceChooserTests {
     kind: String = "deviceChooserRequested", transport: String, id: String, page: URL,
     options: [[String: Any]] = [], canGrant: Bool = false
   ) -> [String: Any] {
-    [
+    var origin = URLComponents(url: page, resolvingAgainstBaseURL: false)
+    origin?.path = ""
+    origin?.query = nil
+    origin?.fragment = nil
+    return [
       "schemaVersion": 1, "kind": kind, "id": id, "transport": transport,
-      "pageURL": page.absoluteString, "origin": page.absoluteString, "options": options,
+      "pageURL": page.absoluteString, "origin": origin?.string ?? page.absoluteString,
+      "options": options,
       "canGrant": canGrant, "profileID": "profile", "tabID": "tab", "windowID": "window",
     ]
   }

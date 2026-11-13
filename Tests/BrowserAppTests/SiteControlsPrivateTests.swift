@@ -10,6 +10,10 @@ import Testing
 
 @Suite @MainActor
 struct SiteControlsPrivateTests {
+  @Test func panelTitleIsVoiceOverHeading() {
+    #expect(PrivateSiteControlsPanel.headingTraits.contains(.isHeader))
+  }
+
   @Test func privateTargetRetainsWindowContextAndCanonicalOrigin() throws {
     let tabID = UUID().uuidString
     let windowID = UUID().uuidString

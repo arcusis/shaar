@@ -569,15 +569,15 @@ import Foundation
       rows.append(row("heavy-scroll", "fail", "The scroll page did not load."))
       return rows
     }
-    let primed = wholeNumber(
-      await evaluate(
-        runtime, tab: scrollID,
-        script:
-          "(()=>{const feed=document.getElementById('feed');if(!feed)return 0;const before=feed.children.length;feed.scrollTop=feed.scrollHeight;return before;})()"
-      ))
-    let before = primed ?? 0
-    let deliveredScroll = await untilReady(attempts: 20) {
-      (wholeNumber(await evaluate(runtime, tab: scrollID, script: "window.__scrollEvents||0")) ?? 0) > 0
+    let before = wholeNumber(
+      await evaluate(runtime, tab: scrollID, script: "document.getElementById('feed')?.children.length ?? 0")
+    ) ?? 0
+    let scrolled = await trustedScroll(runtime, tab: scrollID, element: "feed")
+    var deliveredScroll = false
+    if scrolled {
+      deliveredScroll = await untilReady(attempts: 20) {
+        (wholeNumber(await evaluate(runtime, tab: scrollID, script: "window.__scrollEvents||0")) ?? 0) > 0
+      }
     }
     var reachedLoadThreshold = false
     if deliveredScroll {
@@ -588,10 +588,15 @@ import Foundation
         )) ?? 0) == 1
       }
     }
-    if !deliveredScroll {
+    if !scrolled {
       rows.append(row(
         "heavy-scroll", "blocked",
-        "The hidden scroll did not deliver a scroll event to the page; row growth was not attributable."
+        "A trusted wheel event could not be submitted to the feed; row growth was not attributable."
+      ))
+    } else if !deliveredScroll {
+      rows.append(row(
+        "heavy-scroll", "blocked",
+        "The trusted wheel input did not deliver a scroll event to the page; row growth was not attributable."
       ))
     } else if !reachedLoadThreshold {
       rows.append(row(
@@ -601,19 +606,15 @@ import Foundation
     } else {
       var after = before
       let grew = await untilReady(attempts: 40) {
-        after =
-          wholeNumber(
-            await evaluate(
-              runtime, tab: scrollID,
-              script:
-                "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
-            )) ?? 0
+        after = wholeNumber(await evaluate(
+          runtime, tab: scrollID,
+          script: "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
+        )) ?? 0
         return before == 100 && after > before
       }
-      rows.append(
-        row(
-          "heavy-scroll", grew ? "pass" : "fail",
-          "Scroll grew from \(before) to \(after) nodes."))
+      rows.append(row(
+        "heavy-scroll", grew ? "pass" : "fail",
+        "Trusted scroll submitted=\(scrolled); rows grew from \(before) to \(after)."))
     }
 
     context.store.perform(.open(url(base, path: "/webgl")))
@@ -1093,6 +1094,16 @@ import Foundation
   ) async -> Bool {
     await withCheckedContinuation { continuation in
       runtime.submitTrustedProbeClick(inTabID: tab.uuidString, elementID: element) {
+        continuation.resume(returning: $0)
+      }
+    }
+  }
+
+  private static func trustedScroll(
+    _ runtime: ARCShaarRuntime, tab: UUID, element: String
+  ) async -> Bool {
+    await withCheckedContinuation { continuation in
+      runtime.submitTrustedProbeScroll(inTabID: tab.uuidString, elementID: element) {
         continuation.resume(returning: $0)
       }
     }

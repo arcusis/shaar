@@ -608,6 +608,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0145-shaar-reload-pending-navigation.patch",
       "sha256": "7b5d22ba0f5c6e38b8e7fad7d8166899ab20f098c92c5b2f3172655af18d75f9"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0146-shaar-hidden-trusted-scroll.patch",
+      "sha256": "e70b7542bb0c220c773f1af92d7a8a4be0066f24ffdacbf0d57e0c03efc89c37"
     }
   ],
   "devtoolsFrontend157": {

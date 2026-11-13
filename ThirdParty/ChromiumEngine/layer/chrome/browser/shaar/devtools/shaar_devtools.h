@@ -66,6 +66,7 @@ bool ParseProbeClickArguments(shaar_bytes args_json,
                               int* x,
                               int* y,
                               std::string* element_id);
+bool ParseProbeScrollArguments(shaar_bytes args_json, std::string* element_id);
 bool ParseNodeProbePort(shaar_bytes args_json, int* port);
 bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
                               std::string* popup_id, std::string* expression);

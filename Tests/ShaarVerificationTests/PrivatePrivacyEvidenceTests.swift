@@ -220,4 +220,10 @@ import Testing
     #expect(!ARCProbeTrustedClickElementAllowed("quit"))
     #expect(!ARCProbeTrustedClickElementAllowed(""))
   }
+
+  @Test func trustedScrollAllowlistIsLimitedToTheInfiniteScrollFixture() {
+    #expect(ARCProbeTrustedScrollElementAllowed("feed"))
+    #expect(!ARCProbeTrustedScrollElementAllowed("popup"))
+    #expect(!ARCProbeTrustedScrollElementAllowed(""))
+  }
 }

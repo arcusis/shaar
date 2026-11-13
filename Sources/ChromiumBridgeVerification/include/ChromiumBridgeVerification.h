@@ -47,10 +47,18 @@ FOUNDATION_EXPORT BOOL ARCProbeNativeHoldAuditVisible(
   BOOL ownerCurrent, BOOL nativeHold);
 /// Trusted clicks are limited to authored fixture element ids.
 FOUNDATION_EXPORT BOOL ARCProbeTrustedClickElementAllowed(NSString * _Nullable elementID);
+/// Trusted wheel input is limited to the authored infinite-scroll fixture.
+FOUNDATION_EXPORT BOOL ARCProbeTrustedScrollElementAllowed(NSString * _Nullable elementID);
 
 @interface ARCShaarRuntime (TrustedProbeClick)
 /// Trusted click on an authored fixture element. Requires testing mode and a hidden window.
 - (void)submitTrustedProbeClickInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                            completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+@end
+
+@interface ARCShaarRuntime (TrustedProbeScroll)
+/// Trusted wheel scroll over an authored fixture element. Requires testing mode and hidden windows.
+- (void)submitTrustedProbeScrollInTabID:(NSString *)tabID elementID:(NSString *)elementID
                             completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 @end
 

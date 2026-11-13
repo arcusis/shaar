@@ -98,6 +98,11 @@ TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
       Bytes(R"({"schemaVersion":1,"elementID":"parity-action"})"), &x,
       &y, &element_id));
   EXPECT_EQ("parity-action", element_id);
+  EXPECT_TRUE(ParseProbeScrollArguments(
+      Bytes(R"({"schemaVersion":1,"elementID":"feed"})"), &element_id));
+  EXPECT_EQ("feed", element_id);
+  EXPECT_FALSE(ParseProbeScrollArguments(
+      Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &element_id));
   for (const std::string invalid : {
            R"({"schemaVersion":1,"x":-1,"y":2})",
            R"({"schemaVersion":1,"x":20,"y":8192})",
@@ -903,6 +908,7 @@ TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CALL));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_PROBE_CAPTURE_TAB));
   EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_TRUSTED_CLICK));
+  EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_TRUSTED_SCROLL));
   EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_NODE_LIVE));
   EXPECT_EQ(&HandleDevToolsOperation,
             registry.Find(SHAAR_OP_PROBE_POPUP_EVALUATE));

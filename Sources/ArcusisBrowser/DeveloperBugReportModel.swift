@@ -25,11 +25,23 @@ extension DeveloperPageModel {
         "[redacted token]"
       ),
     ]
-    return patterns.reduce(raw) { value, pattern in
+    let redacted = patterns.reduce(raw) { value, pattern in
       guard let regex = try? NSRegularExpression(pattern: pattern.0) else { return value }
       return regex.stringByReplacingMatches(
         in: value, range: NSRange(value.startIndex..., in: value), withTemplate: pattern.1)
     }
+    guard
+      let regex = try? NSRegularExpression(
+        pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
+    else { return redacted }
+    var result = redacted
+    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
+      .reversed()
+    {
+      guard let range = Range(match.range, in: result) else { continue }
+      result.replaceSubrange(range, with: redactedReportPageURL(String(result[range])))
+    }
+    return result
   }
 
   static func redactedReportPageURL(_ raw: String) -> String {

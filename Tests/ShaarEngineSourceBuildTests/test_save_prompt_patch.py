@@ -40,6 +40,19 @@ class SavePromptPatchTests(unittest.TestCase):
             matching[0]["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest()
         )
 
+    def test_save_prompt_layer_and_decision_operation_are_registered(self):
+        block = json.loads(MANIFEST.read_text())["moduleBlocks"]["save_prompts"]
+        self.assertEqual(block["operationRange"], [1500, 1500])
+        self.assertEqual(block["moduleID"], 1500)
+        self.assertIn(
+            "chrome/browser/shaar/save_prompts/shaar_save_prompts.cc",
+            block["layerFiles"],
+        )
+        self.assertIn(
+            "chrome/browser/shaar/save_prompts/shaar_save_prompts_unittest.cc",
+            block["layerFiles"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

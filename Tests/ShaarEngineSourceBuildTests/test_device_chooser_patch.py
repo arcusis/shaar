@@ -31,6 +31,8 @@ class DeviceChooserPatchTests(unittest.TestCase):
         self.assertIn("base::UnguessableToken::Create().ToString()", source)
         self.assertNotIn("NextID()", source)
         self.assertIn('option.Set("index", static_cast<int>(index))', source)
+        self.assertIn(
+            "std::min(session->controller()->NumOptions(), kMaximumOptions)", source)
         self.assertNotIn("optionID", source)
 
     def test_patch_digest_is_pinned_in_source_build(self):

@@ -33,10 +33,10 @@ index 97789b2..3b1f8a7 100644
      "profiles/shaar_profiles_unittest.cc",
 diff --git a/chrome/browser/shaar/chooser/shaar_device_chooser.cc b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
 new file mode 100644
-index 0000000..94a7abe
+index 0000000..bb88f68
 --- /dev/null
 +++ b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
-@@ -0,0 +1,456 @@
+@@ -0,0 +1,457 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -456,7 +456,8 @@ index 0000000..94a7abe
 +  }
 +  if (decision->select) {
 +    if (!session->controller() ||
-+        decision->index >= session->controller()->NumOptions()) {
++        decision->index >=
++            std::min(session->controller()->NumOptions(), kMaximumOptions)) {
 +      return Fail(error, SHAAR_INVALID_ARGUMENT,
 +                  "device chooser index is out of range");
 +    }

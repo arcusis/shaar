@@ -920,6 +920,13 @@ class SupplyChainTests(unittest.TestCase):
         self.assertEqual(len(calls), PYTHON_INSTALL.INSTALL_ATTEMPTS)
         self.assertEqual(sleeps, [5, 15])
 
+    def test_managed_python_install_version_argument_requires_numeric_release(self):
+        self.assertEqual(PYTHON_INSTALL.parse_python_version("3.13"), "3.13")
+        self.assertEqual(PYTHON_INSTALL.parse_python_version("3.13.2"), "3.13.2")
+        for invalid in ("3", "latest", "3.13.2.1", "3.x"):
+            with self.subTest(version=invalid), self.assertRaises(PYTHON_INSTALL.argparse.ArgumentTypeError):
+                PYTHON_INSTALL.parse_python_version(invalid)
+
     def test_ci_setup_pins_and_caches_managed_python_and_tool_archives(self):
         setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
         self.assertIn("version: '0.13.8'", setup)

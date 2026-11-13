@@ -37,6 +37,8 @@ import Testing
         unexpectedSurfaces: failingCheck == "surface" ? ["NSOpenPanel"] : [],
         promptedNames: prompts, rememberedKinds: ["geolocation", "notifications", "midi"],
         openedProtocols: [])
+        promptedNames: prompts,
+        rememberedKinds: ["geolocation", "notifications", "midi"])
       #expect(!result, "\(failingCheck) must prevent a pass")
     }
   }
@@ -49,6 +51,7 @@ import Testing
         .filter { $0 != "midi" },
       rememberedKinds: ["geolocation", "notifications", "midi"],
       openedProtocols: ["web+shaarparity", "mailto"])
+      rememberedKinds: ["geolocation", "notifications", "midi"])
     #expect(!result)
   }
 

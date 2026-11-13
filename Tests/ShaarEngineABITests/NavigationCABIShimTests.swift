@@ -12,7 +12,7 @@ private typealias NavigationShimSubmit = @convention(c) (
   UnsafeMutablePointer<shaar_error>?
 ) -> shaar_error_code
 
-private let noOpNavigationShimReply: shaar_reply_fn = { _, _ in }
+private let noOpNavigationReply: shaar_reply_fn = { _, _ in }
 
 @_cdecl("fake_navigation_c_shim_submit")
 private func fakeNavigationCShimSubmit(
@@ -47,7 +47,7 @@ private func fakeNavigationCShimSubmit(
     withUnsafeMutablePointer(to: &immediateError) { errorPointer in
       shaar_navigation_submit_invoke(
         UnsafeRawPointer(bitPattern: 1), nil, scopePointer, nil, nil, 0,
-        shaar_bytes(data: nil, size: 0), 1, nil, nil, errorPointer)
+        shaar_bytes(data: nil, size: 0), 1, noOpNavigationReply, nil, errorPointer)
     }
   }
   #expect(noEngine == invalidArgument)

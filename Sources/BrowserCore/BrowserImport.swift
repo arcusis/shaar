@@ -141,7 +141,10 @@ public enum BrowserImport {
         index += 1
         var completedSynchronously = false
         var synchronousError: Error?
+        var callbackConsumed = false
         applyOperation(operation) { error in
+          guard !callbackConsumed else { return }
+          callbackConsumed = true
           if isApplying {
             completedSynchronously = true
             synchronousError = error

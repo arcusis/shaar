@@ -829,7 +829,11 @@ final class BrowserStore {
   }
 
   func nativeDocumentCommitted(_ id: UUID, profileID: UUID) {
-    if session.profileID(forTabID: id) == profileID { requestedTabCloses.remove(id) }
+    guard session.profileID(forTabID: id) == profileID else { return }
+    requestedTabCloses.remove(id)
+    permissionFrames[id] = nil
+    permissionFrameOrigins[id] = nil
+    cancelWebSharesInvalidatedByFrame(for: id)
     guard rendererFailures[id]?.profileID == profileID else { return }
     rendererFailures[id] = nil
   }
@@ -1125,6 +1129,11 @@ final class BrowserStore {
 
   func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {
     guard permissionFrames[tabID] == frameID else { return }
+    let usedByAcceptedShare = consentRequests.contains { request in
+      guard case .webShare(let share) = request else { return false }
+      return share.tabID == tabID && share.frameID == frameID
+    }
+    guard !usedByAcceptedShare else { return }
     permissionFrames[tabID] = nil
     permissionFrameOrigins[tabID] = nil
     cancelWebSharesInvalidatedByFrame(for: tabID)

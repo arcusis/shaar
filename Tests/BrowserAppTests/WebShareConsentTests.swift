@@ -257,19 +257,29 @@ struct WebShareConsentTests {
     #expect(outcome == .cancelled)
   }
 
-  @Test func missingFrameBindingCancelsAWebShare() throws {
+  @Test func sameURLDocumentCommitCancelsAWebShare() throws {
     let store = openedStore()
     let share = try request(store)
     var outcome: WebShareOutcome?
     store.onWebShareDecision = { _, value in outcome = value }
     #expect(store.requestWebShare(share))
 
-    store.forgetPermissionFrame(share.tabID, matching: share.frameID)
+    store.nativeDocumentCommitted(share.tabID, profileID: share.profileID)
     #expect(outcome == .cancelled)
 
     store.resolveWebShare(share.id, outcome: .shared)
 
     #expect(outcome == .cancelled)
+  }
+
+  @Test func forgettingRejectedPromptBindingKeepsAnAcceptedShare() throws {
+    let store = openedStore()
+    let share = try request(store)
+    #expect(store.requestWebShare(share))
+
+    store.forgetPermissionFrame(share.tabID, matching: share.frameID)
+
+    #expect(store.canPresentWebShare(share))
   }
 
   @Test func pickerPresentationRequiresTheCurrentPresentedFrame() throws {

@@ -121,18 +121,19 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
    GetDocument().addEventListener(
        AtomicString("scrollsnapchanging"),
        MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(2)));
-+  GetDocument().addEventListener(
++  GetDocument().body()->addEventListener(
 +      AtomicString("overscroll"),
 +      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(3)));
    Member<Node> block_target = &GetDocument();
    Member<Node> inline_target = &GetDocument();
  
-@@ -465,6 +468,9 @@
+@@ -465,6 +468,10 @@
                                               inline_target);
    GetDocument().EnqueueScrollSnapChangingEvent(&GetDocument(), block_target,
                                                 inline_target);
 +  GetDocument().EnqueueOverscrollEvent(AtomicString("overscroll"),
-+                                       &GetDocument(), GetDocument().body(),
++                                       GetDocument().body(),
++                                       GetDocument().body(),
 +                                       /*overscrolling=*/false);
    EXPECT_TRUE(observer.Order().empty());
  

@@ -20,6 +20,7 @@ extension BrowserEngine {
       guard let request = deviceChooserRequest(payload, store: store),
         store.updateDeviceChooser(request)
       else {
+        store.dismissDeviceChooserFromEngine(id)
         events.resolveDeviceChooser(id, windowID: windowID, index: nil)
         return
       }

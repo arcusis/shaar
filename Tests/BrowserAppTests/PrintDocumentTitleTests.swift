@@ -52,6 +52,11 @@ struct PrintDocumentTitleTests {
     #expect(result == String(title.prefix(result.count)))
   }
 
+  @Test func fallsBackWhenOneGraphemeExceedsTheFilenameByteLimit() {
+    let title = "a" + String(repeating: "\u{0301}", count: 100)
+    #expect(PrintDocumentTitle.make(pageTitle: title, productName: "Shaar") == "Shaar")
+  }
+
   @Test func removesBidiFormattingAndFilenameSeparators() {
     #expect(
       PrintDocumentTitle.make(pageTitle: "Report\u{202E}fdp/part", productName: "Shaar")

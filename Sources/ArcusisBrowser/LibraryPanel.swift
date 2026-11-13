@@ -31,6 +31,14 @@ enum LibraryHistoryAccessibility {
   }
 }
 
+enum LibraryPanelFooterAccessibility {
+  static func footerProgressLabel(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    PanelsL10n.string("Updating Library…", language: language)
+  }
+}
+
 struct LibraryPanel: View {
   let store: BrowserStore
   let profileID: UUID
@@ -156,7 +164,10 @@ struct LibraryPanel: View {
         } label: {
           Label(PanelsL10n.string("Import…"), systemImage: "square.and.arrow.down")
         }
-        if loading || busy { ProgressView().controlSize(.small) }
+        if loading || busy {
+          ProgressView().controlSize(.small)
+            .accessibilityLabel(LibraryPanelFooterAccessibility.footerProgressLabel())
+        }
         Button(PanelsL10n.string("Refresh")) { store.library.refresh(profileID, section: section) }
       }
       .disabled(!ownsContext || busy || loading)

@@ -21,6 +21,17 @@ import Testing
   #expect(items.insertionAnchor(movingIndex: 2, by: 1) == nil)
 }
 
+@Test func insertionAnchorRejectsInvalidMovesAndBoundaryIndexes() {
+  let items = [PointerTargetTestItem(id: "a"), .init(id: "b")]
+  let empty: [PointerTargetTestItem] = []
+
+  #expect(empty.insertionAnchor(movingIndex: 0, by: -1) == nil)
+  #expect(items.insertionAnchor(movingIndex: 0, by: -1) == nil)
+  #expect(items.insertionAnchor(movingIndex: 1, by: 1) == nil)
+  #expect(items.insertionAnchor(movingIndex: -1, by: 1) == nil)
+  #expect(items.insertionAnchor(movingIndex: 0, by: 0) == nil)
+}
+
 private struct PointerTargetTestItem: Identifiable {
   let id: String
 }

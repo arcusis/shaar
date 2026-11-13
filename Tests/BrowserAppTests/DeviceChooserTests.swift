@@ -341,6 +341,12 @@ struct DeviceChooserTests {
       !DeviceChooserConsent.optionAccessibilityTraits(isSelected: false).contains(.isSelected))
   }
 
+  @Test func selectedDevicePresentationTracksTheSelectedIndex() {
+    #expect(DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: 2))
+    #expect(!DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: 1))
+    #expect(!DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: nil))
+  }
+
   private func store() throws -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(try #require(URL(string: "https://devices.example/chooser"))))

@@ -10,6 +10,13 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum WindowClientProbeEvidence {
+  static func hasAuthoredDocument(_ value: [String: Any]) -> Bool {
+    value["fixture"] as? String == "v1"
+      && (value["instance"] as? String).map { !$0.isEmpty } == true
+  }
+}
+
 /// Exercises two real application clients with one runtime, without showing either window.
 @MainActor
 final class WindowClientProbe {
@@ -273,8 +280,8 @@ final class WindowClientProbe {
     for _ in 0..<80 {
       if let value = try? await evaluate(
         tab,
-        "({fixture:document.documentElement.dataset.arcusisFixture,cookie:document.cookie,local:localStorage.getItem('account')})"
-      ) as? [String: Any], value["fixture"] as? String == "v1" {
+        "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('account')})"
+      ) as? [String: Any], WindowClientProbeEvidence.hasAuthoredDocument(value) {
         return value
       }
       try await Task.sleep(for: .milliseconds(100))

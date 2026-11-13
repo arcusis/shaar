@@ -71,6 +71,29 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
 
 @Suite @MainActor
 struct PrivateBrowserHostLifecycleTests {
+  @Test func failedContextCreationReportsErrorAndDropsQueuedWindows() throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.holdsContextCreation = true
+    let sourceProfileID = UUID().uuidString
+    var reportedErrors: [Error] = []
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      reportError: { reportedErrors.append($0) },
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+
+    try host.openWindow()
+    try host.openWindow()
+    let completion = try #require(runtime.contextCompletion)
+    completion(false, NSError(domain: "PrivateHostLifecycleRuntime", code: 2))
+
+    #expect(host.windowCount == 0)
+    #expect(runtime.createdContexts.count == 1)
+    #expect(reportedErrors.count == 1)
+    #expect((reportedErrors.first as NSError?)?.code == 2)
+    host.detach()
+  }
+
   @Test func fullScreenMenuCommandRoutesToActivePrivateWindow() throws {
     let runtime = PrivateHostLifecycleRuntime()
     let sourceProfileID = UUID().uuidString

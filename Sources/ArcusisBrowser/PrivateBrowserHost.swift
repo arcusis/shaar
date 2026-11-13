@@ -27,6 +27,7 @@ final class PrivateBrowserHost {
   private let presentsWindows: Bool
   private let preferences: BrowserPreferencesStore
   private let profileIsDownloading: (UUID) -> Bool
+  private let reportError: (Error) -> Void
   private var owners: [String: Owner] = [:]
   private var contextsBySource: [String: String] = [:]
   private var windowsByContext: [String: Set<String>] = [:]
@@ -41,6 +42,7 @@ final class PrivateBrowserHost {
     toggleFullScreen: @escaping (NSWindow) -> Void = { $0.toggleFullScreen(nil) },
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
     profileIsDownloading: @escaping (UUID) -> Bool = { _ in false },
+    reportError: @escaping (Error) -> Void = { NSApp.presentError($0) },
     sourceProfileID: @escaping () -> String?
   ) {
     self.runtime = runtime
@@ -49,6 +51,7 @@ final class PrivateBrowserHost {
     self.toggleFullScreen = toggleFullScreen
     self.preferences = preferences
     self.profileIsDownloading = profileIsDownloading
+    self.reportError = reportError
     self.sourceProfileID = sourceProfileID
   }
 
@@ -209,7 +212,7 @@ final class PrivateBrowserHost {
     pendingWindowRequests[contextID] = [(windowID, tabID)]
     let runtime = self.runtime
     runtime.createPrivateContextID(contextID, sourceProfileID: source) {
-      [weak self, runtime] success, _ in
+      [weak self, runtime] success, error in
       guard let self else {
         if success, !runtime.releasePrivateContextID(contextID) {
           _ = runtime.releasePrivateContextID(contextID)
@@ -228,7 +231,22 @@ final class PrivateBrowserHost {
         }
         return
       }
-      guard success, !self.runtime.isQuitting, self.contextsBySource[source] == contextID,
+      guard success else {
+        self.pendingWindowRequests.removeValue(forKey: contextID)
+        if self.contextsBySource[source] == contextID {
+          self.contextsBySource.removeValue(forKey: source)
+        }
+        self.windowsByContext.removeValue(forKey: contextID)
+        if !self.runtime.isQuitting {
+          self.reportError(
+            error ?? NSError(
+              domain: "org.arcusis.shaar.private-window", code: 1,
+              userInfo: [NSLocalizedDescriptionKey: "The private window context could not be created."]
+            ))
+        }
+        return
+      }
+      guard !self.runtime.isQuitting, self.contextsBySource[source] == contextID,
         self.windowsByContext[contextID] != nil
       else {
         self.pendingWindowRequests.removeValue(forKey: contextID)
@@ -238,7 +256,7 @@ final class PrivateBrowserHost {
         if self.windowsByContext[contextID]?.isEmpty == true {
           self.windowsByContext.removeValue(forKey: contextID)
         }
-        if success, self.windowsByContext[contextID] == nil {
+        if self.windowsByContext[contextID] == nil {
           self.releaseContext(contextID)
         }
         return

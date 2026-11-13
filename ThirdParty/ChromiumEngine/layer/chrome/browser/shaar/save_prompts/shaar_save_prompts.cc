@@ -103,6 +103,24 @@ GURL OriginURL(const GURL& page) {
   return url::Origin::Create(page).GetURL();
 }
 
+bool IsFormattingCharacter(std::string_view bytes) {
+  if (bytes.size() == 2 &&
+      (bytes == "\xC2\xAD" || bytes == "\xD8\x9C"))
+    return true;
+  if (bytes.size() == 3 && bytes[0] == '\xE2') {
+    const unsigned char second = static_cast<unsigned char>(bytes[1]);
+    const unsigned char third = static_cast<unsigned char>(bytes[2]);
+    if (second == 0x80 &&
+        (third == 0x8B || third == 0x8C || third == 0x8D ||
+         third == 0x8E || third == 0x8F ||
+         (third >= 0xAA && third <= 0xAE)))
+      return true;
+    if (second == 0x81 && third >= 0xA0 && third <= 0xAF)
+      return true;
+  }
+  return bytes == "\xEF\xBB\xBF";
+}
+
 void DeliverReply(ReplyContext request,
                   shaar_error_code code,
                   std::string payload,
@@ -340,7 +358,9 @@ std::string SanitizeDetail(std::string_view raw) {
       break;
     if (cleaned.size() + length > kMaximumDetailBytes)
       break;
-    cleaned.append(raw.substr(index, length));
+    const std::string_view character = raw.substr(index, length);
+    if (!IsFormattingCharacter(character))
+      cleaned.append(character);
     index += length;
   }
   return cleaned;

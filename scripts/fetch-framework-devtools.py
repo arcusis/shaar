@@ -14,6 +14,7 @@ only when a maintainer is reviewing a new pin. Scorecard treats a committed
 import argparse
 import base64
 from dataclasses import dataclass
+import http.client
 import hashlib
 import json
 import os
@@ -22,6 +23,7 @@ import shutil
 import struct
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -134,13 +136,26 @@ def read_bounded(response, name):
     return data
 
 
-def download_url(url, name, destination):
+DOWNLOAD_ATTEMPTS = 3
+RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
+
+
+def download_url(url, name, destination, sleep=time.sleep):
     request = urllib.request.Request(url, headers={"User-Agent": "shaar-fetch-framework-devtools"})
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            destination.write_bytes(read_bounded(response, name))
-    except urllib.error.HTTPError as error:
-        raise ValueError(f"{name}: download failed from {url} ({error.code})") from error
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                payload = read_bounded(response, name)
+        except urllib.error.HTTPError as error:
+            if error.code not in RETRYABLE_STATUS or attempt == DOWNLOAD_ATTEMPTS:
+                raise ValueError(f"{name}: download failed from {url} ({error.code})") from error
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise ValueError(f"{name}: download failed from {url}: {error}") from error
+        else:
+            destination.write_bytes(payload)
+            return
+        sleep(2 ** attempt)
 
 
 def download_release(name, destination):

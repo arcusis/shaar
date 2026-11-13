@@ -311,7 +311,7 @@ final class InspectorLayoutModel {
     error.localizedDescription == "This Inspector target is no longer available."
   }
 
-  private static let install = #"""
+  static let install = #"""
     (() => {
       if (globalThis.__shaarInspectorLayout) return true;
       const nodes = new Map();
@@ -363,16 +363,23 @@ final class InspectorLayoutModel {
         while (el && out.length < 40) {
           if (el.nodeType === 1 && !(el.closest && el.closest('[data-shaar-inspector]'))) {
             const kind = kindFor(el);
-            if (kind && !nodes.has(keyFor(el))) {
-              const key = keyFor(el);
-              nodes.set(key, el);
-              out.push({
-                key,
-                tag: clip(el.localName || 'element', 32),
-                id: clip(el.id || '', 80),
-                classes: classesFor(el),
-                kind
-              });
+            if (kind) {
+              const base = keyFor(el);
+              let key = base;
+              let suffix = 1;
+              while (nodes.has(key) && nodes.get(key) !== el) {
+                key = clip(base, 174) + '~' + (++suffix);
+              }
+              if (!nodes.has(key)) {
+                nodes.set(key, el);
+                out.push({
+                  key,
+                  tag: clip(el.localName || 'element', 32),
+                  id: clip(el.id || '', 80),
+                  classes: classesFor(el),
+                  kind
+                });
+              }
             }
           }
           el = walker.nextNode();

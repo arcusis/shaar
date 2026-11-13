@@ -119,7 +119,7 @@ final class PrivatePageSession {
           contextID: contextID, url: tab.url.absoluteString)
         liveTabs.insert(tab.id)
       } catch {
-        failure = error.localizedDescription
+        failure = ShellL10n.string("Could not open the private tab. Try again.")
       }
     }
     for id in liveTabs.subtracting(expected) { close(id) }
@@ -334,7 +334,7 @@ final class PrivatePageSession {
           id.uuidString, windowID: windowID,
           contextID: contextID)
         selectedTabID = id
-      } catch { failure = error.localizedDescription }
+      } catch { failure = ShellL10n.string("Could not open the private tab. Try again.") }
     }
   }
 

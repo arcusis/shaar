@@ -172,6 +172,18 @@ struct DeviceChooserTests {
       request(
         store, transport: "usb", id: "oversized-name",
         options: [["index": 0, "name": oversizedName]], canGrant: true) == nil)
+
+    let multibyteName = String(repeating: "🔌", count: 64)
+    #expect(
+      request(
+        store, transport: "usb", id: "max-multibyte-name",
+        options: [["index": 0, "name": multibyteName]], canGrant: true)?.options.first?.title
+        == multibyteName)
+    let oversizedMultibyteName = String(repeating: "🔌", count: 65)
+    #expect(
+      request(
+        store, transport: "usb", id: "oversized-multibyte-name",
+        options: [["index": 0, "name": oversizedMultibyteName]], canGrant: true) == nil)
   }
 
   @Test func unnamedDevicesHaveAVisibleFallbackLabel() throws {

@@ -23,6 +23,10 @@ class PrintViewManagerPatchTests(unittest.TestCase):
         self.assertIn("PrintForSystemDialogNow(base::DoNothing())", patch)
         self.assertIn("ShaarEmbedderScriptedPrintUsesNativePanel", patch)
         self.assertIn("EXPECT_TRUE(print_view_manager->system_dialog_shown);", patch)
+        self.assertIn("if (!weak_this)", patch)
+        self.assertIn("on_print_dialog_shown_callback_.Reset();", patch)
+        self.assertIn("is_switching_to_system_dialog_ = false;", patch)
+        self.assertIn("OnPrintPreviewRequestRejected(rfh_id);", patch)
 
     def test_patch_is_pinned_once_in_application_order(self):
         entries = json.loads(MANIFEST.read_text())["patches"]

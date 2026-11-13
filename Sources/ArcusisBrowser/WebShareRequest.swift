@@ -128,7 +128,7 @@ struct WebShareRequest: Identifiable, Equatable {
     if text.isEmpty { return .absent }
     guard let url = URL(string: text, relativeTo: baseURL)?.absoluteURL,
       NavigationInput.isWebURL(url), url.user == nil, url.password == nil,
-      !hasEmptyExplicitPort(url)
+      !hasEmptyExplicitPort(url), url.absoluteString.utf8.count <= 4096
     else { return nil }
     return .page(url)
   }

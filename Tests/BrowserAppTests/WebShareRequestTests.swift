@@ -108,6 +108,12 @@ import Testing
   #expect(WebShareRequest(payload: payload) == nil)
 }
 
+@Test func webShareRequestBoundsTheCanonicalURLAfterEscaping() {
+  var payload = sharePayload(url: "https://example.com/" + String(repeating: "é", count: 700))
+  #expect((payload["url"] as? String)?.utf8.count ?? 0 < 4096)
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
 private func sharePayload(
   origin: String = "https://example.com", title: String = "Shared page",
   text: String = "A useful link", url: String? = nil

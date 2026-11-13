@@ -64,7 +64,7 @@ final class ChromiumPageContainerView: NSView {
   @discardableResult
   func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
     Self.live.add(self)
-    shownTabID = page == nil ? nil : tabID
+    shownTabID = liveTabs.contains(tabID) ? tabID : nil
     Self.nextSelectionOrder &+= 1
     selectionOrder = Self.nextSelectionOrder
     wantsLayer = true

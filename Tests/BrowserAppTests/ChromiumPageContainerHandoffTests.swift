@@ -187,6 +187,22 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertNil(secondPage.superview)
   }
 
+  func testSelectedTabCanBeRestoredAfterItsNativeViewIsTemporarilyMissing() {
+    let tabID = UUID()
+    let page = NSView()
+    let frame = NSRect(x: 0, y: 0, width: 500, height: 400)
+    let window = NSWindow(contentRect: frame, styleMask: [], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let container = ChromiumPageContainerView(frame: frame)
+    window.contentView?.addSubview(container)
+    defer { window.close() }
+
+    XCTAssertFalse(container.select(nil, tabID: tabID, liveTabs: [tabID]))
+    XCTAssertTrue(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tabID, in: window))
+    XCTAssertTrue(page.superview === container)
+    XCTAssertTrue(container.pageView === page)
+  }
+
   func testContainerLayoutKeepsNativeDockClickAreaUncovered() {
     let tab = UUID()
     let frame = NSRect(x: 0, y: 0, width: 1000, height: 700)

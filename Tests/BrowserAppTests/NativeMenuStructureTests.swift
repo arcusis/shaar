@@ -124,6 +124,10 @@ import Testing
   let url = URL(string: "https://share.example/page")!
   store.perform(.open(url))
   #expect(NativeBrowserHost.shareURL(for: store) == url)
+
+  let credentialed = URL(string: "https://user:secret@share.example/private")!
+  store.perform(.open(credentialed))
+  #expect(NativeBrowserHost.shareURL(for: store) == URL(string: "https://share.example/private"))
 }
 
 @Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {

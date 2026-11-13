@@ -537,9 +537,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   static func shareURL(for store: BrowserStore?) -> URL? {
     guard let url = store?.session.selectedPage?.tab.url,
-      NavigationInput.isWebURL(url)
+      NavigationInput.isWebURL(url),
+      var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
     else { return nil }
-    return CleanLink.clean(url)
+    components.user = nil
+    components.password = nil
+    guard let shareURL = components.url else { return nil }
+    return CleanLink.clean(shareURL)
   }
 
   static func pasteAndGoDestination(for store: BrowserStore) -> URL? {

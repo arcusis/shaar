@@ -175,4 +175,13 @@ extension DownloadsTests {
     #expect(status("finished", dangerous: true) == "Blocked")
     #expect(Set(LibraryMediaKind.allCases.map(\.symbol)).count == LibraryMediaKind.allCases.count)
   }
+
+  @Test func progressAccessibilityLabelNamesTheFileInEnglishAndHebrew() {
+    #expect(
+      DownloadAccessibility.progressLabel(filename: "report.zip", language: .english)
+        == "Download progress for report.zip")
+    #expect(
+      DownloadAccessibility.progressLabel(filename: "report.zip", language: .hebrew)
+        == "התקדמות הורדה עבור \u{2068}report.zip\u{2069}")
+  }
 }

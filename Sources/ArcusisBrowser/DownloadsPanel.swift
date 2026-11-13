@@ -5,6 +5,16 @@
 import BrowserCore
 import SwiftUI
 
+enum DownloadAccessibility {
+  static func progressLabel(
+    filename: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Download progress for %@", table: "Panels", language: language,
+      arguments: [.string(filename)])
+  }
+}
+
 struct DownloadsPanel: View {
   let store: BrowserStore
   let engine: BrowserEngine
@@ -65,8 +75,10 @@ struct DownloadsPanel: View {
         if item.state == .downloading && !item.dangerous {
           if let progress = item.progress {
             ProgressView(value: progress)
+              .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
           } else {
             ProgressView().controlSize(.small)
+              .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
           }
           Text(byteStatus(item)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }

@@ -149,7 +149,7 @@ test("a cached non-WOFF2 file falls back instead of being copied", async () => {
   }
 });
 
-test("valid WOFF2 downloads are cached and copied", async () => {
+test("valid WOFF2 assets are cached and copied", async () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
   const cache = join(root, "cache");
   const output = join(root, "output");

@@ -150,4 +150,21 @@ struct ShaarProfileAdapterTests {
     #expect(delivered == event)
     #expect(adapter.loadedProfileIDs.isEmpty)
   }
+
+  @Test @MainActor func malformedProfileDeletionEventDoesNotInvalidateHandle() async throws {
+    let fake = FakeProfileEngine()
+    var delivered: ShaarCopiedEvent?
+    let adapter = ShaarProfileAdapter(
+      engine: fake, implementation: .shaar, onProfileEvent: { delivered = $0 })
+    let id = "4a4d4885-d38a-4b4a-bc03-b12f634bff08"
+    try await adapter.open(profileID: id)
+    let malformed = ShaarCopiedEvent(
+      sequence: 9, kind: 2, profileID: Data(id.utf8), sessionID: Data(),
+      windowID: Data(), tabID: Data(),
+      payloadJSON: Data(#"{"kind":"deleted","schemaVersion":2}"#.utf8))
+
+    adapter.receive(malformed)
+    #expect(adapter.loadedProfileIDs == [id])
+    #expect(delivered == nil)
+  }
 }

@@ -58,6 +58,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
     guard event.kind == 2,
       let profileID = String(data: event.profileID, encoding: .utf8),
       let payload = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
+      payload["schemaVersion"] as? Int == 1,
       let kind = payload["kind"] as? String
     else { return }
     if kind == "deleted" || kind == "closed" { handles.removeValue(forKey: profileID) }

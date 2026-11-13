@@ -9,6 +9,30 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func browserImportPreviewCountBenchmark() {
+  let items = (0..<50_000).map { index in
+    BrowserImportItem(
+      kind: index.isMultiple(of: 2) ? .bookmark : .history,
+      title: "Item \(index)", address: "https://example.com/\(index)")
+  }
+  let filterStart = ContinuousClock.now
+  var filterCount = 0
+  for _ in 0..<10 {
+    filterCount += items.filter { $0.kind == .bookmark }.count
+    filterCount += items.filter { $0.kind == .history }.count
+  }
+  let filterDuration = filterStart.duration(to: .now)
+  let reduceStart = ContinuousClock.now
+  var reduceCount = 0
+  for _ in 0..<10 {
+    let counts = BrowserImportPreviewCounts.count(items)
+    reduceCount += counts.bookmarks + counts.history
+  }
+  let reduceDuration = reduceStart.duration(to: .now)
+  print("browserImportPreviewCountBenchmark: filters=\(filterDuration), reduce=\(reduceDuration)")
+  #expect(filterCount == reduceCount && reduceCount == 500_000)
+}
+
 @Test @MainActor func browserImportPreviewRendersReadyAndErrorStatesOffscreen() throws {
   let item = BrowserImportItem(title: "Research", address: "https://example.com", folder: "Work")
   let destination = FileManager.default.temporaryDirectory.appendingPathComponent(

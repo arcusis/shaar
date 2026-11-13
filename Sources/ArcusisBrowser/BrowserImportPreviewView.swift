@@ -5,6 +5,18 @@
 import BrowserCore
 import SwiftUI
 
+enum BrowserImportPreviewCounts {
+  static func count(_ items: [BrowserImportItem]) -> (bookmarks: Int, history: Int) {
+    items.reduce(into: (bookmarks: 0, history: 0)) { counts, item in
+      if item.kind == .bookmark {
+        counts.bookmarks += 1
+      } else {
+        counts.history += 1
+      }
+    }
+  }
+}
+
 struct BrowserImportPreviewView: View {
   let items: [BrowserImportItem]
   let source: BrowserImportSource
@@ -29,6 +41,9 @@ struct BrowserImportPreviewView: View {
   }
 
   var body: some View {
+    let counts =
+      error == nil ? BrowserImportPreviewCounts.count(items) : (bookmarks: 0, history: 0)
+
     VStack(alignment: .leading, spacing: 14) {
       Text(PanelsL10n.string("Import from another browser")).font(.title2.weight(.semibold))
       if let error {
@@ -39,8 +54,7 @@ struct BrowserImportPreviewView: View {
         Text(
           PanelsL10n.format(
             "%d bookmarks and %d history entries are ready to import into %@.",
-            .integer(items.filter { $0.kind == .bookmark }.count),
-            .integer(items.filter { $0.kind == .history }.count), .string(profileName)))
+            .integer(counts.bookmarks), .integer(counts.history), .string(profileName)))
         List(items.prefix(40)) { item in
           VStack(alignment: .leading) {
             HStack {

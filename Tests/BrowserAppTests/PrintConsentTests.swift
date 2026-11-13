@@ -237,6 +237,23 @@ struct PrintConsentTests {
     #expect(decision == true)
   }
 
+  @Test func duplicatePrintRequestIDIsRejectedWhileTheFirstIsQueued() throws {
+    let store = openedStore()
+    let print = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decisions: [(String, Bool)] = []
+    store.onPrintDecision = { id, accepted in decisions.append((id, accepted)) }
+
+    #expect(store.requestPrint(print))
+    #expect(!store.requestPrint(print))
+    #expect(store.sheet?.id == print.sheetID)
+
+    store.resolvePrint(print.id, accepted: true)
+    #expect(decisions.map(\.0) == [print.id])
+    #expect(decisions.map(\.1) == [true])
+  }
+
   @Test func rendererCrashCancelsPendingPrintConsent() throws {
     let store = openedStore()
     let print = try request(store)

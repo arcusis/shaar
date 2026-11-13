@@ -1123,7 +1123,7 @@ import Foundation
     return "fail"
   }
 
-  private static func playbackSettled(_ value: String?) -> Bool {
+  static func playbackSettled(_ value: String?) -> Bool {
     guard let value else { return false }
     if value.contains("\"error\":") && !value.contains("\"error\":0") { return true }
     return value.contains("\"paused\":false") && !value.contains("\"width\":0")

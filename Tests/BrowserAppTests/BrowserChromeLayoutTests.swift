@@ -8,6 +8,17 @@ import XCTest
 @testable import ArcusisBrowser
 
 final class BrowserChromeLayoutTests: XCTestCase {
+  func testReduceMotionOverrideCannotDisableTheSystemSetting() {
+    XCTAssertFalse(BrowserChromeAccessibilityOverrides().reduceMotionEnabled(systemSetting: false))
+    XCTAssertTrue(
+      BrowserChromeAccessibilityOverrides(reduceMotion: true)
+        .reduceMotionEnabled(systemSetting: false))
+    XCTAssertTrue(
+      BrowserChromeAccessibilityOverrides(reduceMotion: false)
+        .reduceMotionEnabled(systemSetting: true))
+    XCTAssertTrue(BrowserChromeAccessibilityOverrides().reduceMotionEnabled(systemSetting: true))
+  }
+
   func testLibraryWidthsPreservePageSliver() {
     XCTAssertEqual(BrowserChromeLayout.libraryWidth(windowWidth: 1200, spaces: false), 388)
     XCTAssertEqual(BrowserChromeLayout.libraryWidth(windowWidth: 1200, spaces: true), 1176)

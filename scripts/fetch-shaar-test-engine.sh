@@ -28,6 +28,10 @@ checksum=$(jq -er .sha256 "$pin")
 }
 archive="$cache/$asset"
 mkdir -p "$cache"
+if [[ -L "$archive" ]]; then
+  echo 'Shaar test archive cache path must not be a symlink.' >&2
+  exit 1
+fi
 verify() { [[ $(shasum -a 256 "$1" | cut -d ' ' -f 1) == "$checksum" ]]; }
 if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   gh release download "$tag" --repo "${GITHUB_REPOSITORY:-arcusis/shaar}" \

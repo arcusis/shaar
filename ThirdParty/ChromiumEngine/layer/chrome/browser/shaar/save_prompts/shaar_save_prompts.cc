@@ -107,7 +107,8 @@ bool IsFormattingCharacter(std::string_view bytes) {
   if (bytes.size() == 2 &&
       (bytes == "\xC2\xAD" || bytes == "\xD8\x9C"))
     return true;
-  if (bytes.size() == 3 && bytes[0] == '\xE2') {
+  if (bytes.size() == 3 &&
+      static_cast<unsigned char>(bytes[0]) == 0xE2) {
     const unsigned char second = static_cast<unsigned char>(bytes[1]);
     const unsigned char third = static_cast<unsigned char>(bytes[2]);
     if (second == 0x80 &&

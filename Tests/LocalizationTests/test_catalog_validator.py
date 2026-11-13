@@ -157,6 +157,13 @@ class CatalogValidatorTests(unittest.TestCase):
         source = (ROOT / "Sources/ArcusisBrowser/ProfileDeletionConfirmation.swift").read_text(encoding="utf-8")
         self.assertIn('deletionFailure = SettingsL10n.string("Could not delete the profile. Try again.")', source)
         self.assertNotIn('deletionFailure = error.localizedDescription', source)
+    def test_split_pane_loading_uses_hebrew_catalog_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/SplitPageView.swift").read_text(encoding="utf-8")
+        self.assertIn('ProgressView(ShellL10n.string("Loading profile…"))', source)
+        self.assertNotIn('ProgressView("Loading profile…")', source)
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(encoding="utf-8"))
+        hebrew = catalog["strings"]["Loading profile…"]["localizations"]["he"]["stringUnit"]["value"]
+        self.assertEqual(hebrew, "הפרופיל נטען…")
 
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"

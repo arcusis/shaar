@@ -292,7 +292,7 @@ struct BrowserSplitPageView: View {
         )
         .overlay { SplitDropZone(store: store, targetID: id) }
       } else {
-        ProgressView("Loading profile…")
+        ProgressView(ShellL10n.string("Loading profile…"))
       }
     }
     .padding(2)

@@ -780,6 +780,15 @@ class SupplyChainTests(unittest.TestCase):
             (actions / "action.yml").write_text(f"steps:\n  - uses: actions/checkout@{'a' * 40}\n")
             self.assertEqual(PINS.pin_errors(root), [])
 
+    def test_evidence_rejects_non_utf8_probe_markers_without_aborting_collection(self):
+        with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory, tempfile.TemporaryDirectory() as output:
+            root = Path(directory)
+            (root / ".arcusis-probe").write_bytes(b"\xff\xfe")
+            log = Path(output) / "probe.log"
+            log.write_text(f"Probe evidence: {root}\n")
+            with self.assertRaisesRegex(ValueError, "Refusing foreign probe evidence"):
+                EVIDENCE.collect(log, Path(output) / "evidence")
+
     def test_evidence_ignores_profiles_and_rejects_foreign_roots(self):
         with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory, tempfile.TemporaryDirectory() as output:
             root = Path(directory)

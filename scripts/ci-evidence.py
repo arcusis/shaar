@@ -31,7 +31,7 @@ def owned_probe_root(path: Path) -> bool:
             and path.name.startswith("arcusis-engine-probe-")
             and path.stat().st_uid == os.getuid()
             and not (path / ".arcusis-probe").is_symlink()
-            and (path / ".arcusis-probe").read_text() == "arcusis-engine-probe-v1\n"
+            and (path / ".arcusis-probe").read_bytes() == b"arcusis-engine-probe-v1\n"
         )
     except OSError:
         return False

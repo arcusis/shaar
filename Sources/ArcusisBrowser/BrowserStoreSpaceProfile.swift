@@ -10,6 +10,8 @@ struct SpaceMenuContent: View {
   let store: BrowserStore
   let space: BrowserSpace
 
+  static func canDeleteSpace(spaceCount: Int) -> Bool { spaceCount > 1 }
+
   var body: some View {
     Button(ShellL10n.string("Change Space Icon…")) { edit(.icon) }
     Button(ShellL10n.string("Rename Space…")) { edit(.name) }
@@ -39,7 +41,7 @@ struct SpaceMenuContent: View {
     Button(ShellL10n.string("Delete Space"), role: .destructive) {
       store.spacePendingDeletion = space.id
     }
-    .disabled(store.session.spaces.count <= 1)
+    .disabled(!Self.canDeleteSpace(spaceCount: store.session.spaces.count))
   }
 
   private func edit(_ focus: SpaceEditorFocus) {

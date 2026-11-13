@@ -54,6 +54,18 @@ class PipelineGateTests(unittest.TestCase):
         collector = action.split("    - name: Collect scoped native probe reports\n", 1)[1]
         collector = collector.split("    - name: Upload logs, reports and authored images", 1)[0]
         self.assertIn("if: ${{ !cancelled() }}", collector)
+    def test_python_junit_destination_is_validated_before_suite_execution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            parent_file = directory / "file"
+            parent_file.write_text("not a directory")
+            self.assertEqual(PYTHON_TESTS.junit_output_path(str(directory / "report.xml")),
+                             directory / "report.xml")
+            for path in (directory, parent_file / "report.xml"):
+                with self.subTest(path=path), self.assertRaises(
+                    PYTHON_TESTS.argparse.ArgumentTypeError
+                ):
+                    PYTHON_TESTS.junit_output_path(str(path))
 
     def test_evidence_directory_argument_requires_an_existing_directory(self):
         with tempfile.TemporaryDirectory() as temporary:

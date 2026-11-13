@@ -228,6 +228,14 @@ import Testing
   }
 }
 
+@Test func sqliteSnapshotReturnsNoRowsForEmptyResult() throws {
+  let profile = try profileDirectory(name: "SQLiteEmptyResult")
+  let database = profile.appending(path: "History")
+  try createDatabase(sqlFixture: "ChromiumHistory.sql", at: database)
+
+  #expect(try BrowserImportSQLite.rows(at: database, query: "SELECT 1 WHERE 0").isEmpty)
+}
+
 @Test func profileImportersRejectMissingOrMalformedProfileFiles() throws {
   let regularFile = FileManager.default.temporaryDirectory.appending(path: "Chrome-\(UUID())")
   try Data("not a profile".utf8).write(to: regularFile)

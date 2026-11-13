@@ -181,6 +181,13 @@ struct DeviceChooserConsent: View {
     isSelected ? [.isSelected] : []
   }
 
+  static func isOptionSelected(
+    _ optionIndex: Int, options: [DeviceChooserOption], selection: DeviceChooserSelection,
+    revision: UUID
+  ) -> Bool {
+    selection.selectedIndex(for: options, revision: revision) == optionIndex
+  }
+
   init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: Int? = nil) {
     self.store = store
     self.request = request
@@ -248,8 +255,9 @@ struct DeviceChooserConsent: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(
           Self.optionAccessibilityTraits(
-            isSelected: selection.selectedIndex(
-              for: presented.options, revision: presented.revision) == option.index))
+            isSelected: Self.isOptionSelected(
+              option.index, options: presented.options, selection: selection,
+              revision: presented.revision)))
       }
     }
   }

@@ -21,6 +21,12 @@ for (const path of paths) {
   assert.match(response.headers.get("content-type") ?? "", /text\/html/, path);
   assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self'/, path);
   assert.equal(response.headers.get("x-content-type-options"), "nosniff", path);
+  assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin", path);
+  assert.equal(
+    response.headers.get("permissions-policy"),
+    "camera=(), microphone=(), geolocation=()",
+    path,
+  );
   assert.match(await response.text(), /<h1[ >]/, path);
 }
 const redirect = await fetch(`${origin}/download`, { redirect: "manual" });

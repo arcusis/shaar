@@ -65,6 +65,29 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertTrue(incoming.pageView === page)
   }
 
+  func testMultiTabSelectionRoundTripRetainsOnlyLivePages() {
+    let firstID = UUID()
+    let secondID = UUID()
+    let firstPage = NSView()
+    let secondPage = NSView()
+    let container = ChromiumPageContainerView()
+
+    XCTAssertTrue(container.select(firstPage, tabID: firstID, liveTabs: [firstID, secondID]))
+    XCTAssertTrue(container.select(secondPage, tabID: secondID, liveTabs: [firstID, secondID]))
+    XCTAssertTrue(firstPage.isHidden)
+    XCTAssertFalse(secondPage.isHidden)
+
+    XCTAssertTrue(container.select(firstPage, tabID: firstID, liveTabs: [firstID, secondID]))
+    XCTAssertFalse(firstPage.isHidden)
+    XCTAssertTrue(secondPage.isHidden)
+    XCTAssertTrue(firstPage.superview === container)
+    XCTAssertTrue(secondPage.superview === container)
+
+    _ = container.select(firstPage, tabID: firstID, liveTabs: [firstID])
+    XCTAssertNil(secondPage.superview)
+    XCTAssertTrue(container.pageView === firstPage)
+  }
+
   func testContainerLayoutKeepsNativeDockClickAreaUncovered() {
     let tab = UUID()
     let frame = NSRect(x: 0, y: 0, width: 1000, height: 700)

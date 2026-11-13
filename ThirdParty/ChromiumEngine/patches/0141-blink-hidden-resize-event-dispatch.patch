@@ -1,7 +1,7 @@
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
-@@ -237,6 +237,19 @@
+@@ -237,6 +237,18 @@
    ScheduleAnimationIfNeeded();
  }
  
@@ -16,7 +16,6 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.c
 +    return event->type() == AtomicString("resize");
 +  }));
 +}
-+
 +
  void ScriptedAnimationController::ScheduleAnimationIfNeeded(
      cc::BeginMainFrameReason reason) {
@@ -65,11 +64,16 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
 diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/renderer/core/dom/document.h
 --- a/third_party/blink/renderer/core/dom/document.h
 +++ b/third_party/blink/renderer/core/dom/document.h
-@@ -3141,8 +3141,10 @@
-   Member<MediaQueryMatcher> media_query_matcher_;
-   bool write_recursion_is_too_deep_ = false;
-   unsigned write_recursion_depth_ = 0;
+@@ -1647,6 +1647,7 @@
+ 
+   void EnqueueMoveEvent();
+   void EnqueueResizeEvent();
 +  void DispatchHiddenResizeEventTask();
+   void EnqueueScrollEventForNode(Node*);
+   void EnqueueScrollEndEventForNode(Node*);
+   void EnqueueDisplayLockActivationTask(base::OnceClosure);
+@@ -3143,6 +3144,7 @@
+   unsigned write_recursion_depth_ = 0;
  
    Member<ScriptedAnimationController> scripted_animation_controller_;
 +  bool hidden_resize_event_task_pending_ = false;
@@ -79,27 +83,14 @@ diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
-@@ -6,6 +6,8 @@
- 
- #include <cmath>
- #include <memory>
-+
+@@ -20,1 +20,2 @@
 +#include "third_party/blink/renderer/core/frame/local_dom_window.h"
- 
- #include "base/memory/raw_ptr.h"
- #include "testing/gmock/include/gmock/gmock.h"
-@@ -179,6 +181,7 @@
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+@@ -177,6 +178,22 @@
+   EXPECT_EQ(2u, observer.Order().size());
+   EXPECT_EQ(2, observer.Order()[0]);
    EXPECT_EQ(1, observer.Order()[1]);
- }
- 
-+
- namespace {
- 
- class RunTaskCallback final : public FrameCallback {
-@@ -241,6 +244,23 @@
-                                           {{Controller(), false}});
-   EXPECT_FALSE(Controller().HasFrameCallback());
- }
++}
 +
 +TEST_F(ScriptedAnimationControllerTest,
 +       HiddenDocumentResizeEventDispatchesWithoutAnimationFrame) {
@@ -115,8 +106,6 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
 +
 +  task_environment_.RunUntilIdle();
 +  EXPECT_THAT(observer.Order(), testing::ElementsAre(1));
-+}
-+
+ }
  
- TEST_F(ScriptedAnimationControllerTest, TestIsInRequestAnimationFrame) {
-   EXPECT_FALSE(Controller().GetExecutionContext()->IsInRequestAnimationFrame());
+ namespace {

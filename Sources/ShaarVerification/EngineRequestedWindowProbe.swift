@@ -318,9 +318,9 @@ final class EngineRequestedWindowProbe {
       "moveExisting": moveExisting,
     ]
     let json = String(data: try JSONSerialization.data(withJSONObject: request), encoding: .utf8)!
-    runtime.evaluateProbePopupID(
-      popup.id, script: "(()=>{chrome.runtime.sendMessage(\(json)).catch(()=>{});return {};})()"
-    ) { _ in }
+    dispatchProbePopupEvaluation(
+      runtime, popupID: popup.id,
+      script: "(()=>{chrome.runtime.sendMessage(\(json)).catch(()=>{});return {};})()")
   }
 
   private func workerReport(_ token: String, tab: UUID) async throws -> [String: Any] {
@@ -485,4 +485,11 @@ private struct WindowProbeFailure: LocalizedError {
   let message: String
   init(_ message: String) { self.message = message }
   var errorDescription: String? { message }
+}
+
+@MainActor
+func dispatchProbePopupEvaluation(_ runtime: ARCChromiumRuntime, popupID: String, script: String) {
+  Task { @MainActor in
+    _ = await runtime.evaluateProbePopupID(popupID, script: script)
+  }
 }

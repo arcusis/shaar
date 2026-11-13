@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import CoreGraphics
+import AppKit
 import ScreenCaptureKit
 import SwiftUI
 
@@ -54,6 +55,7 @@ struct DesktopCapturePicker: View {
   @State private var loading = true
   @State private var error: String?
   @State private var note: String?
+  @State private var needsScreenRecordingAccess = false
 
   init(
     request: DesktopCaptureRequest,
@@ -87,6 +89,12 @@ struct DesktopCapturePicker: View {
       error: displayedError,
       note: displayedNote,
       onRetry: { await reloadSources() },
+      needsScreenRecordingAccess: needsScreenRecordingAccess,
+      onOpenSettings: {
+        if let url = MacPermission.screenRecording.settingsURL {
+          NSWorkspace.shared.open(url)
+        }
+      },
       onSelect: { store.resolveDesktopCapture(request.id, sourceID: $0) },
       onCancel: { store.resolveDesktopCapture(request.id, sourceID: nil) }
     )
@@ -130,6 +138,7 @@ struct DesktopCapturePicker: View {
       screens: DesktopCaptureCatalog.allowedSources(screens, for: request),
       screenAccessFailed: screenAccessFailed,
       screenEnumerationFailed: screenEnumerationFailed)
+    needsScreenRecordingAccess = screenAccessFailed
     sources = listing.sources
     store.setDesktopCaptureSources(listing.sources.map(\.id), for: request.id)
     error = listing.error.map(PanelsL10n.string)
@@ -178,6 +187,8 @@ struct DesktopCapturePickerContent: View {
   let error: String?
   var note: String? = nil
   var onRetry: () async -> Void = {}
+  var needsScreenRecordingAccess = false
+  var onOpenSettings: () -> Void = {}
   let onSelect: (String) -> Void
   let onCancel: () -> Void
 
@@ -197,6 +208,9 @@ struct DesktopCapturePickerContent: View {
           Task { await onRetry() }
         }
         .accessibilityIdentifier("desktop-capture-retry")
+      }
+      if needsScreenRecordingAccess {
+        Button(PanelsL10n.string("Open Settings"), action: onOpenSettings)
       }
       if loading {
         ProgressView(PanelsL10n.string("Looking for screens, windows, and tabs…"))

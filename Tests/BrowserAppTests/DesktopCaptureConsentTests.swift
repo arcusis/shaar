@@ -196,6 +196,28 @@ struct DesktopCaptureConsentTests {
     #expect(enumerationCount == 1)
   }
 
+  @Test func deniedScreenRecordingAccessOffersSystemSettings() throws {
+    #expect(
+      MacPermission.screenRecording.settingsURL?.absoluteString.contains("Privacy_ScreenCapture")
+        == true)
+    let capture = try request(store())
+    var openedSettings = false
+    let denied = DesktopCapturePickerContent(
+      request: capture,
+      sources: [],
+      loading: false,
+      error: DesktopCaptureCatalog.screenAccessNote,
+      needsScreenRecordingAccess: true,
+      onOpenSettings: { openedSettings = true },
+      onSelect: { _ in },
+      onCancel: {}
+    )
+
+    _ = denied.body
+    denied.onOpenSettings()
+    #expect(openedSettings)
+  }
+
   @Test func rejectsMalformedOrInsecureDesktopCapturePayloads() throws {
     let original = try request(store(), id: UUID().uuidString)
     let valid: [String: Any] = [

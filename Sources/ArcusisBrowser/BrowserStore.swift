@@ -1158,7 +1158,9 @@ final class BrowserStore {
 
   func updateDeviceChooser(_ request: DeviceChooserRequest) -> Bool {
     guard let index = consentRequests.firstIndex(where: { $0.id == request.sheetID }),
-      case .deviceChooser = consentRequests[index], request.matches(session)
+      case .deviceChooser(let current) = consentRequests[index],
+      current.matches(session), request.matches(session), current.transport == request.transport,
+      current.origin == request.origin
     else { return false }
     consentRequests[index] = .deviceChooser(request)
     if sheet?.id == request.sheetID { sheet = .deviceChooser(request) }

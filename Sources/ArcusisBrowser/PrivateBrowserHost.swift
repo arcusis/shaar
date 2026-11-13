@@ -308,6 +308,8 @@ final class PrivateBrowserHost {
     case .findNext, .findPrevious: store.pageFind?.canMove == true
     case .sharePage:
       !store.commandIsOpen && NativeBrowserHost.shareURL(for: store) != nil
+    case .pasteAndGo:
+      store.session.selectedPage != nil && NativeBrowserHost.pasteAndGoDestination(for: store) != nil
     default: true
     }
   }
@@ -368,6 +370,11 @@ final class PrivateBrowserHost {
       if let url = NativeBrowserHost.shareURL(for: store) {
         NativeBrowserHost.presentSharePicker(for: url, in: owner.window)
       }
+    case .pasteAndGo:
+      _ = PasteAndGoCommand.route(
+        in: .general,
+        searchEngine: preferences.searchEngine(for: store.session.selectedSpace.profileID),
+        navigate: owner.page.navigateCurrentPage(to:))
     case .find: store.showPageFind()
     case .findNext: store.movePageFind(forward: true)
     case .findPrevious: store.movePageFind(forward: false)

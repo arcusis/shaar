@@ -150,6 +150,8 @@ import Testing
   #expect(item(.closeWindow)?.menu?.title == "File")
   #expect(item(.sharePage)?.menu?.title == "File")
   #expect(item(.find)?.menu?.title == "Edit")
+  #expect(item(.pasteAndGo)?.menu?.title == "Edit")
+  #expect(item(.pasteAndGo)?.title == "Paste and Go")
   #expect(item(.reload)?.menu?.title == "View")
   #expect(item(.fullScreen)?.menu?.title == "View")
   #expect(item(.fullScreen)?.title == "Enter Full Screen")

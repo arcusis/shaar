@@ -55,7 +55,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     closeWindow,
     addFavorite
   case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history,
-    clearHistory, downloads
+    clearHistory, downloads, pasteAndGo
   case back, forward, find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload,
     hardReload, developerTools, chromiumDeveloperTools, zoomIn, zoomOut, actualSize
   case nextWindow, previousWindow
@@ -524,6 +524,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
     case .sharePage: return Self.shareURL(for: store) != nil
+    case .pasteAndGo:
+      return store.session.selectedPage != nil && Self.pasteAndGoDestination(for: store) != nil
     case .addFavorite:
       return afterLauncher ? store.currentPageAllowsFavorite : store.canFavoriteCurrentPage
     default: return true
@@ -701,6 +703,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     store.showRecentlyClosed()
   }
 
+  static func pasteAndGoDestination(for store: BrowserStore) -> URL? {
+    PasteAndGoCommand.destination(
+      in: .general,
+      searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID))
+  }
+
   static func presentSharePicker(for url: URL, in window: NSWindow) {
     guard let contentView = window.contentView else { return }
     let picker = NSSharingServicePicker(items: [url])
@@ -758,6 +766,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       if let url = Self.shareURL(for: store) {
         Self.presentSharePicker(for: url, in: context.window)
       }
+    case .pasteAndGo:
+      _ = PasteAndGoCommand.route(
+        in: .general,
+        searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID),
+        navigate: context.engine.navigateCurrentPage(to:))
     case .find: store.showPageFind()
     case .findNext: store.movePageFind(forward: true)
     case .findPrevious: store.movePageFind(forward: false)
@@ -1513,6 +1526,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     addStandard("Paste and Match Style", NSSelectorFromString("pasteAsPlainText:"), to: edit)
     addStandard(
       "Emoji & Symbols", #selector(NSApplication.orderFrontCharacterPalette(_:)), to: edit)
+    add(.pasteAndGo, "Paste and Go", to: edit)
     edit.addItem(.separator())
     add(.find, "Find in Page…", to: edit)
     add(.findNext, "Find Next", to: edit)

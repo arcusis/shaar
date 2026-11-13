@@ -27,3 +27,11 @@ test("every generated page has a language, title, description, canonical URL, an
     assert.equal(document.querySelectorAll("main").length, 1);
   }
 });
+
+test("preformatted text regions can receive keyboard focus", () => {
+  for (const page of Pages("License", "Notice", "Third-party notices")) {
+    const document = parseHTML(DocumentPage(page)).document;
+    for (const region of document.querySelectorAll("pre"))
+      assert.equal(region.getAttribute("tabindex"), "0", page.path);
+  }
+});

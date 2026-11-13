@@ -1186,7 +1186,8 @@ final class BrowserEngine {
         request.tabID, frameID: frameID, origin: request.requestingOrigin)
     }
     guard store.requestWebsitePermission(request) else {
-      store.forgetPermissionFrame(request.tabID, matching: request.frameID)
+      store.forgetPermissionFrame(
+        request.tabID, matching: request.frameID, preservingPendingPrints: true)
       events.resolveMedia(id, windowID: windowID, accepted: false)
       notice = ShellL10n.string(
         "This permission request is unavailable for the current page and profile.")

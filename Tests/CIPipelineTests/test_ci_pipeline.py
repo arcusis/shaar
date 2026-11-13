@@ -937,6 +937,16 @@ class SupplyChainTests(unittest.TestCase):
                 EVIDENCE.collect(log, Path(output) / "evidence")
             self.assertEqual(sentinel.read_text(), "preserve")
 
+    def test_evidence_rejects_malformed_utf8_probe_marker(self):
+        with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory, \
+                tempfile.TemporaryDirectory() as output:
+            root = Path(directory)
+            (root / ".arcusis-probe").write_bytes(b"\xff\xfe")
+            log = Path(output) / "probe.log"
+            log.write_text(f"Probe evidence: {root}\n")
+            with self.assertRaisesRegex(ValueError, "Refusing foreign probe evidence"):
+                EVIDENCE.collect(log, Path(output) / "evidence")
+
 
 class SwiftReportTests(unittest.TestCase):
     def transcript(self, state="passed"):

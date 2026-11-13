@@ -198,6 +198,29 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unlocalized Text.*Translated footer"):
                 VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
+    def test_rejects_direct_accessibility_strings_when_hebrew_translation_exists(self):
+        examples = (
+            ('.help("Translated tooltip")', "help", "Translated tooltip"),
+            ('.accessibilityLabel("Translated label")', "accessibilityLabel", "Translated label"),
+            ('.accessibilityHint("Translated hint")', "accessibilityHint", "Translated hint"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Sources/ArcusisBrowser/ExampleView.swift"
+            source.parent.mkdir(parents=True)
+            catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
+            catalog_path.parent.mkdir(parents=True)
+            catalog_path.write_text(json.dumps({"strings": {
+                key: {"localizations": {"he": unit("תרגום")}}
+                for _, _, key in examples
+            }}), encoding="utf-8")
+
+            for swift, modifier, key in examples:
+                source.write_text("Text(\"Example\")" + swift + "\n", encoding="utf-8")
+                with self.subTest(modifier=modifier):
+                    with self.assertRaisesRegex(ValueError, f"unlocalized {modifier}.*{key}"):
+                        VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -188,7 +188,6 @@ final class SiteControlsModel: Identifiable {
     } catch is CancellationError {
       permissionValues[permission] = previous
     } catch {
-      guard !Task.isCancelled else { return }
       permissionValues[permission] = previous
       guard !Task.isCancelled else { return }
       failure = ShellL10n.string("Could not update this permission. Try again.")

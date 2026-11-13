@@ -205,6 +205,22 @@ struct PrintConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func navigationMakesPendingPrintConsentStale() throws {
+    let store = openedStore()
+    let print = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decision: Bool?
+    store.onPrintDecision = { _, accepted in decision = accepted }
+
+    #expect(store.requestPrint(print))
+    store.perform(.open(URL(string: "https://example.com/another-page")!))
+    store.resolvePrint(print.id, accepted: true)
+
+    #expect(decision == false)
+    #expect(store.sheet == nil)
+  }
+
   @Test func privatePrintRequestsAreBoundAndUnboundRequestsAreDenied() throws {
     let privateStore = BrowserStore(privateSession: .fresh())
     privateStore.perform(.open(URL(string: "https://example.com/article")!))

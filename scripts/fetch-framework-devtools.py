@@ -163,7 +163,11 @@ def archive_directory(explicit):
 def archive_matches(name, archive):
     if not archive.is_file():
         return False
-    return hashlib.sha256(archive.read_bytes()).hexdigest() == PINS[name].sha256
+    with archive.open("rb") as source:
+        data = source.read(MAX_ARCHIVE_SIZE + 1)
+    if len(data) > MAX_ARCHIVE_SIZE:
+        return False
+    return hashlib.sha256(data).hexdigest() == PINS[name].sha256
 
 
 def install_pinned(name, archive_dir, download, source_label):

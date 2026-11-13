@@ -285,6 +285,29 @@ class PipelineGateTests(unittest.TestCase):
             self.assertIn("full=true", (root / "output").read_text())
             self.assertIn("base=" + "b" * 40, (root / "output").read_text())
 
+    def test_ci_git_path_inventories_preserve_non_utf8_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with (patch.object(PINS, "ROOT", root),
+                  patch.object(PINS.subprocess, "check_output", return_value=bytes([255]) + b"-script.sh\0")):
+                self.assertEqual(PINS.tracked_shell_files(), ["\udcff-script.sh"])
+            from ci_support import swift_source_files
+            with patch("ci_support.subprocess.check_output", return_value=b"Sources/\xff.swift\0"):
+                self.assertEqual(swift_source_files(root), {"Sources/\udcff.swift"})
+
+    def test_non_utf8_diff_paths_select_full_checks_instead_of_crashing_planning(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"merge_group": {"base_sha": "b" * 40}}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "merge_group",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with (patch.dict(os.environ, env), patch.object(PLAN.subprocess, "run") as command):
+                command.return_value.returncode = 0
+                command.return_value.stdout = b"unclassified-\xff.swift\0"
+                PLAN.main()
+            self.assertIn("full=true", (root / "output").read_text())
+
     def test_existing_branch_push_preserves_before_sha(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

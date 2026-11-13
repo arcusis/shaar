@@ -126,7 +126,7 @@ def main() -> None:
     if name in ("pull_request", "push", "merge_group") and re.fullmatch(r"[0-9a-f]{40}", base) and set(base) != {"0"}:
         result = subprocess.run(["git", "diff", "--name-only", "-z", base, "HEAD"], capture_output=True, check=False)
         if result.returncode == 0:
-            paths = [path for path in result.stdout.decode().split("\0") if path]
+            paths = [os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
     draft = name == "pull_request" and event.get("pull_request", {}).get("draft") is True
     full, website, swift = select_stages(paths, name, uses_fast_lane(name))
     shipping_guard = name == "pull_request" and not draft and needs_shipping_probe_guard(paths)

@@ -25,7 +25,8 @@ def swift_source_files(root: Path, scope: str = "full", *, tracked: bool = True,
         raise ValueError("Unknown Swift analysis scope")
     roots = (*SWIFT_SOURCE_ROOTS, *(("Package.swift", "Plugins") if include_build_inputs else ()))
     if tracked:
-        files = subprocess.check_output(["git", "ls-files", "-z", "--", *roots], cwd=root).decode().split("\0")
+        files = [os.fsdecode(name) for name in subprocess.check_output(
+            ["git", "ls-files", "-z", "--", *roots], cwd=root).split(b"\0") if name]
     else:
         files = []
         for name in roots:

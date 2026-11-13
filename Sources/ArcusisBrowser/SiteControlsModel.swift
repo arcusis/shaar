@@ -182,8 +182,11 @@ final class SiteControlsModel: Identifiable {
     defer { runningAction = nil }
     do {
       try await backend.perform(action, for: target)
+      guard !Task.isCancelled else { return false }
       failure = nil
       return true
+    } catch is CancellationError {
+      return false
     } catch {
       failure = error.localizedDescription
       return false

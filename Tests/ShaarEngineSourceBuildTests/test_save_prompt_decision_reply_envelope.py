@@ -33,6 +33,7 @@ class SavePromptDecisionReplyEnvelopeTests(unittest.TestCase):
         reply = complete.index("Reply({request_id, reply, reply_context}", decision)
         self.assertLess(schema, decision)
         self.assertLess(decision, reply)
+        self.assertEqual(complete[schema:reply].count("result.Set("), 2)
 
 
 if __name__ == "__main__":

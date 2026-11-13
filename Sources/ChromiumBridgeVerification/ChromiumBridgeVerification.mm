@@ -26,8 +26,8 @@
 namespace {
 // The testing-only operation is supplied by patch 0027 in the built engine.
 constexpr NSInteger kProbeNodeLiveOperation = 1094;
-std::string gProbeShareReplyID;
-int gProbeShareReplyOutcome = -1;
+thread_local std::string gProbeShareReplyID;
+thread_local int gProbeShareReplyOutcome = -1;
 
 shaar_error_code ProbeShareReply(const char *requestID, int shared) {
   gProbeShareReplyID = requestID ? requestID : "";

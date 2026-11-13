@@ -40,10 +40,12 @@ struct BrowserEngineDevToolsTests {
 
 @MainActor
 private final class DevToolsEngineRuntime: ARCChromiumRuntime {
-  var tabWindows: [String: String] = [:]
-  var openedTabs: [String] = []
+  nonisolated(unsafe) var tabWindows: [String: String] = [:]
+  nonisolated(unsafe) var openedTabs: [String] = []
 
-  override func windowID(forTabID tabID: String) -> String? { tabWindows[tabID] }
+  override func windowID(forTabID tabID: String) -> String? {
+    tabWindows[tabID]
+  }
 
   override func showDevTools(forTabID tabID: String) -> Bool {
     openedTabs.append(tabID)

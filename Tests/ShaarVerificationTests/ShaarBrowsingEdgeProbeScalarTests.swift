@@ -8,6 +8,16 @@ import Testing
 
 @Suite("Browsing edge report scalar parsing")
 struct ShaarBrowsingEdgeProbeScalarTests {
+  @Test @MainActor func jsonObjectParserRejectsScalarsAndMalformedInput() {
+    #expect(
+      ShaarBrowsingEdgeProbe.object(from: "{\"marker\":\"ready\"}")?["marker"] as? String
+        == "ready")
+    #expect(ShaarBrowsingEdgeProbe.object(from: "false") == nil)
+    #expect(ShaarBrowsingEdgeProbe.object(from: "[]") == nil)
+    #expect(ShaarBrowsingEdgeProbe.object(from: "not JSON") == nil)
+    #expect(ShaarBrowsingEdgeProbe.object(from: nil) == nil)
+  }
+
   @Test func integerParserRejectsBooleansFractionsAndOverflow() {
     #expect(ShaarBrowsingEdgeProbe.number(7) == 7)
     #expect(ShaarBrowsingEdgeProbe.number(-2) == -2)

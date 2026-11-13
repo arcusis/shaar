@@ -55,6 +55,7 @@ struct ShortcutCatalog {
     var displayKeys: String {
       if key.isEmpty { return "—" }
       var result = ""
+      if modifiers.contains(.function) { result += "fn-" }
       if modifiers.contains(.control) { result += "⌃" }
       if modifiers.contains(.option) { result += "⌥" }
       if modifiers.contains(.shift) || key != key.lowercased() { result += "⇧" }

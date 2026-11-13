@@ -169,6 +169,9 @@ import Testing
   #expect(item("Emoji & Symbols")?.keyEquivalent == "e")
   #expect(item("Emoji & Symbols")?.keyEquivalentModifierMask == .function)
   #expect(item("Emoji & Symbols")?.target == nil)
+  #expect(
+    ShortcutCatalog(menu: menu).entries.first { $0.title == "Emoji & Symbols" }?.displayKeys
+      == "fn-E")
 }
 
 @Test @MainActor func functionEStaysOnTheSystemResponderChainWithPageFocus() {

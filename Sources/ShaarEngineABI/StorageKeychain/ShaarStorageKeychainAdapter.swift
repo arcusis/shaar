@@ -2,7 +2,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
+
+private func storageKeychainInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
 
 public enum ShaarStorageKeychainIdentity: String, Equatable, Sendable {
   case shaar
@@ -50,7 +58,7 @@ public struct ShaarStorageKeychainAdapter: Sendable {
     guard
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       Set(object.keys) == Set(["schemaVersion", "identity"]),
-      let version = object["schemaVersion"] as? Int, version == 1,
+      storageKeychainInteger(object["schemaVersion"]) == 1,
       let name = object["identity"] as? String,
       let identity = ShaarStorageKeychainIdentity(rawValue: name)
     else { throw ShaarStorageKeychainError.malformedResponse }

@@ -169,6 +169,7 @@ struct StorageKeychainTests {
     for reply in [
       "not-json",
       #"{"schemaVersion":2,"identity":"shaar"}"#,
+      #"{"schemaVersion":true,"identity":"shaar"}"#,
       #"{"schemaVersion":1,"identity":7}"#,
     ] {
       let adapter = ShaarStorageKeychainAdapter(

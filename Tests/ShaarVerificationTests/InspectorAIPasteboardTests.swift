@@ -44,6 +44,22 @@ import Testing
         consoleMessages: console, requestStatuses: statuses, signalNames: signals))
   }
 
+  @Test func missingDetailedDiagnosticsReportsEveryAbsentSectionInStableOrder() {
+    let complete = """
+      Full computed styles:
+      Matched CSS rules:
+      AI fixture console error
+      request status 503
+      Inspector AI fixture
+      """
+    #expect(InspectorAICopyProbe.missingDetailedDiagnostics(failure: nil, text: complete).isEmpty)
+    #expect(
+      InspectorAICopyProbe.missingDetailedDiagnostics(failure: "copy failed", text: "") == [
+        "copy operation: copy failed", "computed styles", "matched CSS rules", "console errors",
+        "HTTP errors", "technology signals",
+      ])
+  }
+
   @Test func detailedCopyWaitsForCollectedContext() {
     var details = InspectorAIFormatter.Details()
     details.computed = [.init(name: "color", value: "red")]

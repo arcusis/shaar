@@ -24,7 +24,7 @@ def documentation_only(paths: list[str]) -> bool:
 
 
 def website_path(path: str) -> bool:
-    return (path.startswith(("website/", "Branding/", ".github/assets/"))
+    return (path.startswith(("website/", ".github/assets/")) or path == "Branding/shaar-logo.svg"
             or path in {"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "scripts/check-license-headers.py"}
             or path.startswith("Tests/LicenseHeaderTests/")
             or path.startswith(".github/workflows/website-") and path.endswith(".yml"))
@@ -32,14 +32,18 @@ def website_path(path: str) -> bool:
 
 def select_stages(paths: list[str] | None, event: str, draft: bool = False) -> tuple[bool, bool, bool]:
     if event == "pull_request" and draft:
-        website = (any(website_path(path) or path.startswith(".github/workflows/") for path in paths)
-                   if paths else True)
+        website = any(website_path(path) for path in paths) if paths else True
         return False, website, True
     if not paths or event in {"push", "schedule", "workflow_dispatch"}:
         return True, True, True
-    native = not all(documentation_only([path]) or path.startswith(("website/", ".github/assets/"))
-                     or path.startswith(".github/workflows/website-") and path.endswith(".yml") for path in paths)
-    website = any(website_path(path) or path.startswith(".github/workflows/") for path in paths)
+    native = not all(
+        documentation_only([path])
+        or path.startswith(("website/", ".github/assets/"))
+        or path == "Branding/shaar-logo.svg"
+        or path.startswith(".github/workflows/website-") and path.endswith(".yml")
+        for path in paths
+    )
+    website = any(website_path(path) for path in paths)
     return native, website, True
 
 

@@ -181,6 +181,23 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn("`Sources/A.swift:3`", body)
         self.assertIn("high", body)
 
+    def test_app_icon_changes_skip_website_jobs_but_logo_changes_keep_them(self):
+        self.assertEqual(PLAN.select_stages(["Branding/shaar-logo.svg"], "pull_request"),
+                         (False, True, True))
+        self.assertEqual(PLAN.select_stages(["Branding/shaar-app-icon.svg"], "pull_request"),
+                         (True, False, True))
+        self.assertEqual(PLAN.select_stages([".github/workflows/ci-codeql.yml"], "pull_request"),
+                         (True, False, True))
+        self.assertEqual(PLAN.select_stages([".github/workflows/website-checks.yml"], "pull_request"),
+                         (False, True, True))
+        self.assertEqual(PLAN.select_stages([".github/workflows/ci-codeql.yml"], "pull_request", draft=True),
+                         (False, False, True))
+        self.assertEqual(PLAN.select_stages([".github/workflows/website-deploy.yml"], "pull_request", draft=True),
+                         (False, True, True))
+        deploy = (ROOT / ".github/workflows/website-deploy.yml").read_text()
+        self.assertIn("Branding/shaar-logo.svg", deploy)
+        self.assertNotIn("Branding/**", deploy)
+
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
         for paths in (["Notebook/Note.md"], ["Notebook/probe.py"], ["README.md", "CONTRIBUTING.md"],
                       ["ThirdParty/Foo/README.md"]):

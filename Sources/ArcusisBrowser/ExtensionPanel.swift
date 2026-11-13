@@ -148,11 +148,11 @@ struct ExtensionManagerPanel: View {
   }
 }
 
-struct ExtensionRowActions {
-  let run: () -> Void
-  let setPinned: (Bool) -> Void
-  let setEnabled: (Bool) -> Void
-  let showDetails: () -> Void
+struct ExtensionRowActions: Sendable {
+  let run: @MainActor @Sendable () -> Void
+  let setPinned: @MainActor @Sendable (Bool) -> Void
+  let setEnabled: @MainActor @Sendable (Bool) -> Void
+  let showDetails: @MainActor @Sendable () -> Void
 }
 
 struct ExtensionRow: View {
@@ -195,7 +195,7 @@ struct ExtensionRow: View {
           ? PanelsL10n.format("Unpin %@", .string(item.name))
           : PanelsL10n.format("Pin %@", .string(item.name)))
       Toggle(
-        "", isOn: Binding(get: { item.enabled }, set: actions.setEnabled)
+        "", isOn: Binding(get: { item.enabled }, set: { actions.setEnabled($0) })
       )
       .toggleStyle(.switch)
       .controlSize(.mini)

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import CoreFoundation
 
 /// A password, card, or address save offer from Chromium. The payload never carries a
 /// password, a full card number, or a profile path.
@@ -27,7 +28,7 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
 
   public init?(payload: [String: Any]) {
     guard Self.hasOnlyAllowedKeys(payload),
-      payload["schemaVersion"] as? Int == 1,
+      Self.isSchemaVersionOne(payload["schemaVersion"]),
       payload["kind"] as? String == "savePromptRequested",
       let id = Self.identifier(payload["id"]),
       let kind = Self.kind(payload["prompt"]),
@@ -77,6 +78,15 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
 
   private static func hasOnlyAllowedKeys(_ payload: [String: Any]) -> Bool {
     Set(payload.keys).isSubset(of: allowedKeys)
+  }
+
+  private static func isSchemaVersionOne(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return false }
+    let type = String(cString: number.objCType)
+    guard type != "f", type != "d" else { return false }
+    return number.intValue == 1
   }
 
   private static func identifier(_ value: Any?) -> String? {

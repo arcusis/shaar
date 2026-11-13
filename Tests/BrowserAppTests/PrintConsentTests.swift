@@ -228,6 +228,7 @@ struct PrintConsentTests {
     store.rememberPermissionFrame(
       overflow.tabID, frameID: overflow.frameID, origin: overflow.requestingOrigin)
     #expect(!store.requestPrint(overflow))
+    #expect(store.sheet?.id != overflow.sheetID)
     store.forgetPermissionFrame(overflow.tabID, matching: overflow.frameID)
 
     var decision: Bool?

@@ -385,12 +385,14 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       })
     else { throw SessionError.invalidState }
     for space in spaces {
-      let splitIDs = space.splits.flatMap(\.tabIDs)
-      guard Set(splitIDs).count == splitIDs.count,
-        Set(space.splits.map(\.id)).count == space.splits.count,
-        space.splits.allSatisfy(\.isValid),
-        Set(splitIDs).isSubset(of: Set(space.tabs.map(\.id)))
-      else { throw SessionError.invalidState }
+      if !space.splits.isEmpty {
+        let splitIDs = space.splits.flatMap(\.tabIDs)
+        guard Set(splitIDs).count == splitIDs.count,
+          Set(space.splits.map(\.id)).count == space.splits.count,
+          space.splits.allSatisfy(\.isValid),
+          Set(splitIDs).isSubset(of: Set(space.tabs.map(\.id)))
+        else { throw SessionError.invalidState }
+      }
       guard
         space.folders.allSatisfy({ folder in
           !folder.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

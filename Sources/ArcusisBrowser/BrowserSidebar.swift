@@ -711,7 +711,7 @@ struct BrowserSidebar: View {
     return HStack(spacing: 8) {
       Image(systemName: "folder").font(.system(size: 12)).foregroundStyle(.secondary)
       TextField(
-        "Untitled",
+        ShellL10n.string("Untitled"),
         text: Binding(
           get: { folderDraft?.name ?? "" },
           set: { folderDraft?.name = $0 }

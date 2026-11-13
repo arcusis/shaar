@@ -473,6 +473,12 @@ class CatalogValidatorTests(unittest.TestCase):
                     ):
                         VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
+    def test_folder_name_field_uses_its_shell_catalog_translation(self):
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserSidebar.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('ShellL10n.string("Untitled")', source)
+
     def test_rejects_direct_accessibility_strings_when_hebrew_translation_exists(self):
         examples = (
             ('.help("Translated tooltip")', "help", "Translated tooltip"),

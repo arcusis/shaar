@@ -30,6 +30,52 @@ struct LibraryDownloadTests {
     #expect(count == 50_000)
   }
 
+  @Test func mediaGridValidationBenchmark() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let profile = UUID()
+    let model = DownloadsModel()
+    var rows: [[String: Any]] = []
+    for index in 0..<100 {
+      let url = root.appending(path: "media-\(index).png")
+      try Data([0x89, 0x50, 0x4e, 0x47]).write(to: url)
+      rows.append(record(
+        UUID().uuidString.lowercased(), filename: url.lastPathComponent, path: url.path))
+    }
+    model.restore(rows, profileID: profile)
+    let items = model.items(in: profile)
+
+    let beforeStart = ContinuousClock.now
+    var beforeCount = 0
+    var beforeItems: [BrowserDownload] = []
+    for _ in 0..<10 {
+      let visible = LibraryDownloadQuery.filtered(
+        items, search: "", mediaOnly: true, profileID: profile, currentProfileID: profile,
+        downloads: model)
+      beforeItems = visible
+      beforeCount += visible.compactMap {
+        LibraryDownloadQuery.mediaFile(
+          for: $0, profileID: profile, currentProfileID: profile, downloads: model)
+      }.count
+    }
+    let before = beforeStart.duration(to: .now)
+
+    let afterStart = ContinuousClock.now
+    var afterCount = 0
+    var afterItems: [LibraryMediaDownload] = []
+    for _ in 0..<10 {
+      afterItems = LibraryDownloadQuery.mediaResults(
+        items, search: "", kind: nil, profileID: profile, currentProfileID: profile,
+        downloads: model)
+      afterCount += afterItems.count
+    }
+    let after = afterStart.duration(to: .now)
+    print("mediaGridValidationBenchmark: before=\(before), after=\(after)")
+    #expect(beforeCount == 1_000 && beforeCount == afterCount)
+    #expect(beforeItems.map(\.id) == afterItems.map { $0.item.id })
+  }
+
   @Test func downloadDateGroupsBenchmark() {
     let profile = UUID()
     let model = DownloadsModel()

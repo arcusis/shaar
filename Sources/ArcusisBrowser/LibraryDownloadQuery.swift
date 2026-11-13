@@ -55,6 +55,13 @@ struct LibraryMediaFile: Equatable {
   let url: URL
 }
 
+struct LibraryMediaDownload: Identifiable {
+  let item: BrowserDownload
+  let file: LibraryMediaFile
+
+  var id: String { item.id }
+}
+
 struct LibraryDownloadDateGroup: Identifiable {
   let date: Date
   let items: [BrowserDownload]
@@ -123,6 +130,24 @@ enum LibraryDownloadQuery {
       }
       guard !query.isEmpty else { return true }
       return item.filename.localizedStandardContains(query)
+    }
+  }
+
+  static func mediaResults(
+    _ items: [BrowserDownload], search: String, kind: LibraryMediaKind?,
+    profileID: UUID, currentProfileID: UUID, downloads: DownloadsModel
+  ) -> [LibraryMediaDownload] {
+    guard profileID == currentProfileID else { return [] }
+    let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+    return items.compactMap { item in
+      guard item.profileID == profileID,
+        let file = mediaFile(
+          for: item, profileID: profileID, currentProfileID: currentProfileID,
+          downloads: downloads),
+        kind == nil || file.kind == kind,
+        query.isEmpty || item.filename.localizedStandardContains(query)
+      else { return nil }
+      return LibraryMediaDownload(item: item, file: file)
     }
   }
 

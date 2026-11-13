@@ -5,6 +5,7 @@
 """Sensitive path, object-size and symlink policy over indexed or committed bytes."""
 
 import os
+from collections import deque
 from pathlib import Path, PurePosixPath
 import posixpath
 import re
@@ -15,6 +16,30 @@ from git_content import git, object_id
 MAX_FILE_BYTES = 10 * 1024 * 1024
 PRIVATE_SUFFIXES = {".p8", ".pem", ".key", ".p12", ".pfx"}
 PRIVATE_NAMES = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", ".dev.vars"}
+
+
+def has_symlink_cycle(name: str, targets: dict[str, str]) -> bool:
+    pending = deque(name.split("/"))
+    resolved = []
+    expanded = set()
+    while pending:
+        component = pending.popleft()
+        if component in ("", "."):
+            continue
+        if component == "..":
+            if resolved:
+                resolved.pop()
+            continue
+        resolved.append(component)
+        prefix = "/".join(resolved)
+        if prefix in targets:
+            if prefix in expanded:
+                return True
+            expanded.add(prefix)
+            target = targets[prefix]
+            resolved.pop()
+            pending.extendleft(reversed(target.split("/")))
+    return False
 
 
 def blocked_name(name: str) -> bool:
@@ -81,12 +106,6 @@ def policy_errors(root: Path, revision: str | None = None, *, maximum: int = MAX
         if reason:
             errors.append(f"{name!r}: {reason}")
     for name in symlink_targets:
-        visited = set()
-        current = name
-        while current in symlink_targets:
-            if current in visited:
-                errors.append(f"{name!r}: symlink cycle")
-                break
-            visited.add(current)
-            current = symlink_targets[current]
+        if has_symlink_cycle(name, symlink_targets):
+            errors.append(f"{name!r}: symlink cycle")
     return errors

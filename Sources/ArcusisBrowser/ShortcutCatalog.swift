@@ -278,10 +278,17 @@ enum TabNumberShortcutRouting {
 @MainActor
 enum NextTabShortcutRouting {
   static func route(_ event: NSEvent, store: BrowserStore) -> Bool {
-    guard event.type == .keyDown, event.keyCode == 48,
-      event.modifierFlags.intersection([.command, .option, .control, .shift]) == .control
-    else { return false }
-    return store.selectAdjacentTab(by: 1)
+    guard event.type == .keyDown else { return false }
+    let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+    let offset: Int
+    if event.keyCode == 48 && modifiers == .control {
+      offset = 1
+    } else if event.keyCode == 124 && modifiers == [.command, .option] {
+      offset = 1
+    } else if event.keyCode == 123 && modifiers == [.command, .option] {
+      offset = -1
+    } else { return false }
+    return store.selectAdjacentTab(by: offset)
   }
 }
 

@@ -111,10 +111,15 @@ def scenario_result(report: dict, exit_code: int | None, timed_out: bool, crashe
         return "fail"
     if "passed" not in report:
         return "fail"
-    rows = report.get("rows") or []
-    if any(row.get("status") == "fail" for row in rows):
+    rows = report.get("rows")
+    if not isinstance(rows, list) or not rows:
         return "fail"
-    if not rows or report.get("passed") is not True or exit_code not in (0, None):
+    if any(
+        not isinstance(row, dict) or row.get("status") not in {"pass", "blocked"}
+        for row in rows
+    ):
+        return "fail"
+    if report.get("passed") is not True or exit_code not in (0, None):
         return "fail"
     if all(row.get("status") == "blocked" for row in rows):
         return "blocked"

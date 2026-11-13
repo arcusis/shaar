@@ -356,19 +356,27 @@ struct DesktopCaptureConsentTests {
     #expect(!DesktopCaptureSource.isValidToken("tab:not-a-uuid:0"))
   }
 
-  @Test func deniesCaptureWhenRememberedFrameOrOriginChanged() throws {
+  @Test func rejectsCaptureRequestWhenRememberedFrameOrOriginChanged() throws {
+    let store = store()
+    let capture = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.rememberPermissionFrame(
+      tab.id, frameID: capture.frameID,
+      origin: URL(string: "https://other.example")!)
+    #expect(!store.requestDesktopCapture(capture))
+    #expect(store.sheet == nil)
+  }
+
+  @Test func rejectsCaptureRequestFromReplacedFrame() throws {
     let store = store()
     let capture = try request(store)
     let tab = try #require(store.session.selectedSpace.selectedTab)
     store.rememberPermissionFrame(
       tab.id, frameID: "fedcba9876543210fedcba9876543210",
-      origin: URL(string: "https://other.example")!)
-    #expect(store.requestDesktopCapture(capture))
-    store.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
-    var decision: String?
-    store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID }
-    store.resolveDesktopCapture(capture.id, sourceID: "screen:1:0")
-    #expect(decision == nil)
+      origin: capture.requestingOrigin)
+
+    #expect(!store.requestDesktopCapture(capture))
+    #expect(store.sheet == nil)
   }
 
   @Test func privateWindowListsOnlyItsOwnTab() throws {

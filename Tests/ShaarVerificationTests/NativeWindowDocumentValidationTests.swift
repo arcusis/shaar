@@ -11,6 +11,7 @@ import Testing
     #expect(NativeWindowDocumentValidation.isReady(["fixture": "v1", "instance": "new"]))
     #expect(!NativeWindowDocumentValidation.isReady(["fixture": "v2", "instance": "new"]))
     #expect(!NativeWindowDocumentValidation.isReady(["fixture": "v1"]))
+    #expect(!NativeWindowDocumentValidation.isReady(["fixture": "v1", "instance": ""]))
   }
 
   @Test func reloadWaitRejectsThePreviousDocumentInstance() {

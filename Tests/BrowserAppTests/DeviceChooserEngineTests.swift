@@ -98,6 +98,43 @@ struct DeviceChooserEngineTests {
     #expect(store.deviceChooserRequests.map(\.id) == ["window-owned-chooser"])
   }
 
+  @Test func updateWithoutStoreCancelsThePendingChooser() throws {
+    let runtime = ARCChromiumRuntime()
+    let events = BrowserRuntimeEvents(runtime: runtime)
+    var store: BrowserStore? = BrowserStore()
+    let (engine, tabID, profileID, pageURL) = try {
+      let activeStore = try #require(store)
+      activeStore.perform(.open(try #require(URL(string: "https://devices.example/chooser"))))
+      let engine = try BrowserEngine(
+        events: events, windowID: "chooser-window", store: activeStore)
+      let tab = try #require(activeStore.session.selectedSpace.selectedTab)
+      return (engine, tab.id, activeStore.session.selectedSpace.profileID, tab.url)
+    }()
+    #expect(events.router.bindTab(tabID.uuidString, windowID: engine.windowID))
+
+    let payload = Self.event(
+      id: "chooser-store-released", kind: "deviceChooserRequested", tabID: tabID,
+      profileID: profileID, url: pageURL)
+    runtime.onDeviceChooserEvent?(payload)
+
+    var resolvedID: String?
+    var resolvedWindowID: String?
+    var resolvedIndex: Int??
+    events.onDeviceChooserResolution = { id, windowID, index in
+      resolvedID = id
+      resolvedWindowID = windowID
+      resolvedIndex = .some(index)
+    }
+    store = nil
+    runtime.onDeviceChooserEvent?(Self.event(
+      id: "chooser-store-released", kind: "deviceChooserUpdated", tabID: tabID,
+      profileID: profileID, url: pageURL))
+
+    #expect(resolvedID == "chooser-store-released")
+    #expect(resolvedWindowID == "chooser-window")
+    #expect(resolvedIndex == .some(nil))
+  }
+
   private static func event(
     id: String, kind: String, tabID: UUID, profileID: UUID, url: URL
   ) -> [String: Any] {

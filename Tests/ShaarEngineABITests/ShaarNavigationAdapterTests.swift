@@ -202,6 +202,19 @@ struct ShaarNavigationAdapterTests {
           netError: -105, isMainFrame: true, descriptionCode: "navigation_failed"))
   }
 
+  @Test func snapshotRejectsEmptyIDAndZeroGeneration() {
+    let valid =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"state","navigationID":"nav-1","generation":1,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
+    for payload in [
+      valid.replacingOccurrences(of: #""navigationID":"nav-1""#, with: #""navigationID":"""#),
+      valid.replacingOccurrences(of: #""generation":1"#, with: #""generation":0"#),
+    ] {
+      #expect(throws: ShaarEngineError.self) {
+        try ShaarNavigationSnapshot.decode(Data(payload.utf8))
+      }
+    }
+  }
+
   @Test func shippingChoiceUsesShaar() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)
     #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) != nil)

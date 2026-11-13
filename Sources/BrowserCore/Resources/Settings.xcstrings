@@ -1056,6 +1056,26 @@
         }
       }
     },
+    "Increase saturation": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגברת הרוויה"
+          }
+        }
+      }
+    },
+    "Decrease saturation": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפחתת הרוויה"
+          }
+        }
+      }
+    },
     "Theme color field": {
       "localizations": {
         "he": {

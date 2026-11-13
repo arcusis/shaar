@@ -20,6 +20,15 @@ ROOT = Path(__file__).resolve().parents[1]
 CRASHES = Path.home() / "Library/Logs/DiagnosticReports"
 
 
+def write_receipt(path: Path, receipt: dict) -> None:
+    if path.is_symlink():
+        raise ValueError(f"tab adoption receipt path must not be a symlink: {path}")
+    if path.exists() and not path.is_file():
+        raise ValueError(f"tab adoption receipt path is not a regular file: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(receipt, indent=2) + "\n")
+
+
 class Fixture(BaseHTTPRequestHandler):
     def do_GET(self):
         destination = f"http://localhost:{self.server.server_port}/cross-site-b"
@@ -93,8 +102,7 @@ def main():
         "rows": report.get("rows", []), "crashReports": crashes,
         "passed": result.returncode == 0 and report.get("passed") is True and not crashes,
     }
-    options.receipt.parent.mkdir(parents=True, exist_ok=True)
-    options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
+    write_receipt(options.receipt, receipt)
     print(json.dumps(receipt, indent=2))
     if not receipt["passed"]:
         if result.stderr:

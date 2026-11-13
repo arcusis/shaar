@@ -26,6 +26,7 @@ class WebShareProbeOutputPathTests(unittest.TestCase):
         self.assertIn("write_output(screenshot,", source)
         self.assertIn("write_output(options.receipt,", source)
         self.assertIn("process = run_probe(", source)
+        self.assertIn("evidence = read_evidence(report)", source)
 
     def assert_symlink_output_is_rejected(self, name, data):
         with tempfile.TemporaryDirectory() as temporary:
@@ -63,6 +64,13 @@ class WebShareProbeOutputPathTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 126)
         self.assertEqual(result.stderr, "cannot launch")
+
+    def test_partial_report_is_treated_as_missing_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            report = Path(temporary) / "report.json"
+            report.write_text('{"passed":')
+
+            self.assertIsNone(PROBE.read_evidence(report))
 
 
 if __name__ == "__main__":

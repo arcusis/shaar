@@ -89,6 +89,13 @@ def run_probe(command, environment, timeout):
         return subprocess.CompletedProcess(command, 126, "", str(error))
 
 
+def read_evidence(path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
@@ -124,10 +131,7 @@ def main():
                  "--probe-framework", str(framework),
                  "--probe-output", str(report), "--probe-data-dir", str(root),
                  "--probe-url", page], environment, timeout=90)
-            try:
-                evidence = json.loads(report.read_text()) if report.is_file() else None
-            except (OSError, json.JSONDecodeError):
-                evidence = None
+            evidence = read_evidence(report) if report.is_file() else None
             shots = {"share-sheet.png": (root / "share-sheet.png").is_file()}
             if evidence and evidence.get("passed"):
                 source = root / "share-sheet.png"

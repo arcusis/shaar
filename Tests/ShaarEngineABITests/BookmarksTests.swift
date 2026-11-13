@@ -114,6 +114,20 @@ struct BookmarksAdapterTests {
     #expect(rejected)
   }
 
+  @Test @MainActor func mutationRejectsBooleanSchemaVersion() {
+    let transport = FakeBookmarksTransport([
+      "schemaVersion": true, "applied": 1, "skipped": 0, "invalid": [Any](),
+    ])
+    let adapter = ShaarBookmarksAdapter(shaar: transport)
+    var rejected = false
+    adapter.apply(["op": "remove", "id": "00000000-0000-4000-8000-000000000001"]) {
+      if case .failure(ShaarBookmarksAdapterError.mutationNotConfirmed) = $0 {
+        rejected = true
+      }
+    }
+    #expect(rejected)
+  }
+
   @Test @MainActor func shaarTreeRejectsMalformedPayload() {
     let fake = FakeBookmarksTransport(["schemaVersion": 1, "bar": []])
     let adapter = ShaarBookmarksAdapter(shaar: fake)

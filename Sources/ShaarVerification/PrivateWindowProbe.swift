@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import CryptoKit
 import Foundation
 
@@ -1040,10 +1041,17 @@ struct PrivateWindowFailure: LocalizedError {
 }
 
 enum PrivateWindowOwnership {
+  private static func isTrueJSONBoolean(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) == CFBooleanGetTypeID()
+    else { return false }
+    return number.boolValue
+  }
+
   static func nativeFixtureIsOwned(_ audit: [String: Any]?) -> Bool {
-    audit?["allTabsInNativeProfileBrowser"] as? Bool == true
-      && audit?["allTabsDetachedFromHostView"] as? Bool == true
-      && audit?["allWindowsUsePrivateActiveProfile"] as? Bool == true
-      && audit?["allWindowsSelectOwnedWebContents"] as? Bool == true
+    isTrueJSONBoolean(audit?["allTabsInNativeProfileBrowser"])
+      && isTrueJSONBoolean(audit?["allTabsDetachedFromHostView"])
+      && isTrueJSONBoolean(audit?["allWindowsUsePrivateActiveProfile"])
+      && isTrueJSONBoolean(audit?["allWindowsSelectOwnedWebContents"])
   }
 }

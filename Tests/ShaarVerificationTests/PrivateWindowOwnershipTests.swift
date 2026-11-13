@@ -35,4 +35,14 @@ final class PrivateWindowOwnershipTests: XCTestCase {
     ]
     XCTAssertFalse(PrivateWindowOwnership.nativeFixtureIsOwned(audit))
   }
+
+  func testNativeFixtureRejectsNumericValuesForBooleanEvidence() {
+    let audit: [String: Any] = [
+      "allTabsInNativeProfileBrowser": NSNumber(value: 1),
+      "allTabsDetachedFromHostView": true,
+      "allWindowsUsePrivateActiveProfile": true,
+      "allWindowsSelectOwnedWebContents": true,
+    ]
+    XCTAssertFalse(PrivateWindowOwnership.nativeFixtureIsOwned(audit))
+  }
 }

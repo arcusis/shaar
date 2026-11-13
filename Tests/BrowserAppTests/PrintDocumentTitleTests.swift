@@ -20,6 +20,9 @@ struct PrintDocumentTitleTests {
     #expect(
       PrintDocumentTitle.make(pageTitle: "First\nSecond", productName: "Shaar") == "First Second")
     #expect(
+      PrintDocumentTitle.make(pageTitle: " First \n\t Second ", productName: "Shaar")
+        == "First Second")
+    #expect(
       PrintDocumentTitle.make(pageTitle: "First\u{2028}Second", productName: "Shaar")
         == "First Second")
     #expect(

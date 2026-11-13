@@ -19,7 +19,7 @@ enum PrintDocumentTitle {
       return scalar
     }
     let title = String(String.UnicodeScalarView(scalars))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     return title.isEmpty ? productName : String(title.prefix(120))
   }
 }

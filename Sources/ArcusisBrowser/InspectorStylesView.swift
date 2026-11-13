@@ -474,6 +474,7 @@ struct InspectorStylesView: View {
       ) {
         VStack(alignment: .leading, spacing: 3) {
           TextField(InspectorL10n.string("Filter properties"), text: $model.filter)
+            .accessibilityLabel(InspectorL10n.string("Filter properties"))
             .accessibilityIdentifier("shaar.devtools.computedFilter")
             .textFieldStyle(.roundedBorder).font(.system(size: 11)).padding(.vertical, 6)
           ForEach(visibleComputed) { row in

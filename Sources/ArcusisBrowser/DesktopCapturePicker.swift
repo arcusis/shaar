@@ -45,6 +45,7 @@ struct DesktopCapturePicker: View {
   let request: DesktopCaptureRequest
   let store: BrowserStore
   private let hasScreenRecordingAccess: () -> Bool
+  private let requestScreenRecordingAccess: () -> Bool
   private let shareableContent: () async throws -> SCShareableContent
   @State private var sources: [DesktopCaptureSource] = []
   @State private var loading = true
@@ -55,6 +56,7 @@ struct DesktopCapturePicker: View {
     request: DesktopCaptureRequest,
     store: BrowserStore,
     hasScreenRecordingAccess: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
+    requestScreenRecordingAccess: @escaping () -> Bool = { CGRequestScreenCaptureAccess() },
     shareableContent: @escaping () async throws -> SCShareableContent = {
       try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     }
@@ -62,6 +64,7 @@ struct DesktopCapturePicker: View {
     self.request = request
     self.store = store
     self.hasScreenRecordingAccess = hasScreenRecordingAccess
+    self.requestScreenRecordingAccess = requestScreenRecordingAccess
     self.shareableContent = shareableContent
   }
 
@@ -87,7 +90,8 @@ struct DesktopCapturePicker: View {
     ).filter { request.allows($0.kind) }
     var screens: [DesktopCaptureSource] = []
     let wantsScreen = request.allows(.display) || request.allows(.window)
-    var screenAccessFailed = wantsScreen && !hasScreenRecordingAccess()
+    var screenAccessFailed =
+      wantsScreen && !hasScreenRecordingAccess() && !requestScreenRecordingAccess()
     if wantsScreen && !screenAccessFailed {
       do {
         screens = try await screenSources(from: shareableContent())

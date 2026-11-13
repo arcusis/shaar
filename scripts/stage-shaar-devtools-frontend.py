@@ -20,11 +20,13 @@ OVERLAY = (
 def stage(overlay: Path, destination: Path) -> list[str]:
     if destination.name != "shaar" or destination.parent.name != "panels":
         raise SystemExit(f"Refusing to stage outside panels/shaar: {destination}")
-    if not overlay.is_dir():
+    if overlay.is_symlink() or not overlay.is_dir():
         raise SystemExit(f"Missing overlay: {overlay}")
     destination.mkdir(parents=True, exist_ok=True)
     staged = []
     for source in sorted(overlay.rglob("*")):
+        if source.is_symlink():
+            raise SystemExit(f"Refusing to stage overlay symlink: {source.relative_to(overlay)}")
         if not source.is_file():
             continue
         relative = source.relative_to(overlay)

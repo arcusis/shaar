@@ -271,7 +271,9 @@ def parse_main_thread_sample(text):
     }
 
 
-def measure_case(executable, port, tab_count, sample_seconds, eager, inspector, sample_copy=None):
+def measure_case(
+        executable, port, tab_count, sample_seconds, eager, inspector,
+        sleeping=False, sample_copy=None):
     with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as temporary:
         root = Path(temporary)
         (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
@@ -285,6 +287,8 @@ def measure_case(executable, port, tab_count, sample_seconds, eager, inspector, 
         ]
         if eager:
             command.append("--probe-measure-eager")
+        if sleeping:
+            command.append("--probe-measure-sleeping")
         if inspector:
             command.append("--probe-measure-inspector")
         started = time.monotonic()
@@ -310,10 +314,14 @@ def measure_case(executable, port, tab_count, sample_seconds, eager, inspector, 
             if ready.get("tabs") != tab_count:
                 raise RuntimeError(f"unexpected readiness report: {ready}")
             expected_live = tab_count if eager else 1
-            if (ready.get("mode") != ("eager" if eager else "lazy")
+            expected_mode = "sleeping" if sleeping else ("eager" if eager else "lazy")
+            if (ready.get("mode") != expected_mode
                     or ready.get("liveTabs") != expected_live
                     or ready.get("placeholders") != tab_count - expected_live):
                 raise RuntimeError(f"unexpected materialization report: {ready}")
+            expected_sleeping = tab_count - 1 if sleeping else 0
+            if ready.get("sleepingTabs") != expected_sleeping:
+                raise RuntimeError(f"unexpected sleeping-tab report: {ready}")
             if inspector and (
                 ready.get("inspector") is not True or ready.get("inspectorLocked") is not True
             ):
@@ -347,7 +355,8 @@ def measure_case(executable, port, tab_count, sample_seconds, eager, inspector, 
             }
             result = {
                 "tabs": tab_count,
-                "mode": "eager" if eager else "lazy",
+                "mode": expected_mode,
+                "sleepingTabs": expected_sleeping,
                 "coldLaunchToReadySeconds": round(cold_seconds, 3),
                 "readiness": "all-pages" if eager else "selected-page",
                 "processTreeRSSMiBMean": round(sum(rss_samples) / len(rss_samples), 1),
@@ -409,6 +418,30 @@ def annotate_marginal_rss(cases):
             (case["processTreeRSSMiBMean"] - base) / extra, 2)
 
 
+def compare_sleeping_rss(cases):
+    """Report the measured RSS reduction for sleeping tabs at matching tab counts."""
+    by_case = {(case["tabs"], case["mode"]): case for case in cases}
+    comparisons = []
+    counts = sorted({case["tabs"] for case in cases})
+    for count in counts:
+        awake = by_case.get((count, "eager"))
+        sleeping = by_case.get((count, "sleeping"))
+        if awake is None or sleeping is None:
+            continue
+        awake_rss = awake["processTreeRSSMiBMean"]
+        sleeping_rss = sleeping["processTreeRSSMiBMean"]
+        saved = awake_rss - sleeping_rss
+        comparisons.append({
+            "tabs": count,
+            "awakeProcessTreeRSSMiBMean": awake_rss,
+            "sleepingProcessTreeRSSMiBMean": sleeping_rss,
+            "processTreeRSSMiBSaved": round(saved, 1),
+            "processTreeRSSReductionPercent": round(100 * saved / awake_rss, 1)
+            if awake_rss else None,
+        })
+    return comparisons
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path, default=Path("build/Shaar Verification.app"))
@@ -417,10 +450,18 @@ def main():
     )
     parser.add_argument("--sample-seconds", type=positive_seconds, default=15)
     parser.add_argument(
-        "--tab-counts", default="1,10,30",
+        "--tab-counts", default=None,
         help="Comma-separated saved-tab counts. Allowed: 1, 10, 30, 50, 100.",
     )
     parser.add_argument("--eager", action="store_true", help="measure the former eager probe mode")
+    parser.add_argument(
+        "--sleeping", action="store_true",
+        help="eagerly load fixture tabs, then sleep every background tab before sampling RSS",
+    )
+    parser.add_argument(
+        "--compare-sleeping", action="store_true",
+        help="measure eager and sleeping tabs for each tab count and report RSS saved",
+    )
     parser.add_argument(
         "--inspector", action="store_true",
         help="open Inspector, lock the page, and record how often it reads",
@@ -430,7 +471,12 @@ def main():
         help="Directory where each case's raw main-thread sample is copied before it is deleted.",
     )
     args = parser.parse_args()
-    tab_counts = parse_tab_counts(args.tab_counts)
+    if args.sleeping and (args.compare_sleeping or args.eager or args.inspector):
+        parser.error("--sleeping cannot be combined with --eager, --inspector, or --compare-sleeping")
+    if args.compare_sleeping and (args.eager or args.inspector):
+        parser.error("--compare-sleeping cannot be combined with --eager or --inspector")
+    default_counts = "50,100" if args.compare_sleeping else "1,10,30"
+    tab_counts = parse_tab_counts(args.tab_counts or default_counts)
     executable = args.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
         raise SystemExit(f"verification executable not found: {executable}")
@@ -442,16 +488,25 @@ def main():
         for count in counts:
             copy = None
             if args.sample_out is not None:
-                mode = "eager" if args.eager else "lazy"
+                mode = "sleeping" if args.sleeping else ("eager" if args.eager else "lazy")
                 copy = args.sample_out / f"{count}-{mode}.txt"
-            cases.append(measure_case(
-                executable, server.server_port, count, args.sample_seconds,
-                args.eager, args.inspector, copy,
-            ))
+            if args.compare_sleeping:
+                for mode, sleeping in (("eager", False), ("sleeping", True)):
+                    cases.append(measure_case(
+                        executable, server.server_port, count, args.sample_seconds,
+                        True, False, sleeping,
+                        args.sample_out / f"{count}-{mode}.txt" if args.sample_out else None,
+                    ))
+            else:
+                cases.append(measure_case(
+                    executable, server.server_port, count, args.sample_seconds,
+                    args.eager or args.sleeping, args.inspector, args.sleeping, copy,
+                ))
     finally:
         server.shutdown()
         server.server_close()
     annotate_marginal_rss(cases)
+    sleeping_comparison = compare_sleeping_rss(cases) if args.compare_sleeping else None
     result = {
         "schema": 3,
         "scope": "Hidden verification app; fixed loopback fixture; app and descendant process RSS",
@@ -469,6 +524,8 @@ def main():
         ) * 1024,
         "cases": cases,
     }
+    if sleeping_comparison is not None:
+        result["sleepingComparison"] = sleeping_comparison
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

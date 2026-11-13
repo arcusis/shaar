@@ -420,6 +420,26 @@ struct PrintConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func closingRequestingTabCancelsQueuedPrintConsentsExactlyOnce() throws {
+    let store = openedStore()
+    let presented = try request(store)
+    let queued = try request(store)
+    store.rememberPermissionFrame(
+      presented.tabID, frameID: presented.frameID, origin: presented.requestingOrigin)
+    var decisions: [(String, Bool)] = []
+    store.onPrintDecision = { id, accepted in decisions.append((id, accepted)) }
+
+    #expect(store.requestPrint(presented))
+    #expect(store.requestPrint(queued))
+    #expect(store.sheet?.id == presented.sheetID)
+
+    store.closeTab(presented.tabID)
+
+    #expect(decisions.map(\.0) == [presented.id, queued.id])
+    #expect(decisions.map(\.1) == [false, false])
+    #expect(store.sheet == nil)
+  }
+
   @Test func privatePrintRequestsAreBoundAndUnboundRequestsAreDenied() throws {
     let privateStore = BrowserStore(privateSession: .fresh())
     privateStore.perform(.open(URL(string: "https://example.com/article")!))

@@ -15,7 +15,9 @@ class MediaTrackerPollingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.source = SOURCE.read_text()
-        cls.tracker = cls.source[cls.source.index("class MediaTracker final") :]
+        start = cls.source.index("class MediaTracker final")
+        end = cls.source.index("MediaTrackerPtr CreateMediaTracker", start)
+        cls.tracker = cls.source[start:end]
 
     def test_media_tracker_uses_one_shot_timer(self):
         self.assertIn("base::OneShotTimer timer_;", self.tracker)

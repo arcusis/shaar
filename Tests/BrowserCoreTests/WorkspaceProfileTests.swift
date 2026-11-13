@@ -7,6 +7,27 @@ import Foundation
 import Testing
 
 @Suite struct WorkspaceProfileTests {
+  @Test func workspacePinValidationBenchmark() throws {
+    let profile = BrowserProfile(name: "Scale")
+    let spaces = (0..<10).map { spaceIndex -> BrowserSpace in
+      let tabs = (0..<300).map { tabIndex in
+        BrowserTab(
+          url: URL(string: "https://example.test/\(spaceIndex)/\(tabIndex)")!,
+          isPinned: true)
+      }
+      return BrowserSpace(
+        profileID: profile.id, name: "Space \(spaceIndex)", symbol: "square.stack",
+        tint: .ocean, tabs: tabs, selectedTabID: tabs[0].id)
+    }
+    let session = try BrowserSession(
+      profiles: [profile], spaces: spaces, selectedSpaceID: spaces[0].id)
+    let workspace = try BrowserWorkspace(session: session)
+
+    let start = ContinuousClock.now
+    for _ in 0..<10 { try workspace.validate() }
+    print("workspacePinValidationBenchmark: \(start.duration(to: .now))")
+  }
+
   @Test func invalidProfileEditsAreTransactional() throws {
     var workspace = try BrowserWorkspace(session: .fresh())
     let original = workspace

@@ -260,6 +260,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     else { throw WorkspaceError.invalidState }
     let definitions = Dictionary(
       uniqueKeysWithValues: catalog.spaces.flatMap { space in space.tabs.map { ($0.id, space) } })
+    let definitionTabs = Dictionary(
+      uniqueKeysWithValues: catalog.spaces.flatMap { space in space.tabs.map { ($0.id, $0) } })
     let favorites = Dictionary(uniqueKeysWithValues: catalog.favorites.map { ($0.id, $0) })
     var claimed: Set<UUID> = []
     for window in windows {
@@ -295,7 +297,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
             == catalog.spaces.first(where: { $0.id == space.id })!.tabs.map(\.id),
           pins.allSatisfy({ tab in
             guard let pinID = bindings[tab.id], let owner = definitions[pinID],
-              let definition = owner.tabs.first(where: { $0.id == pinID })
+              let definition = definitionTabs[pinID]
             else { return false }
             return owner.id == space.id && owner.profileID == space.profileID
               && definition.folderID == tab.folderID

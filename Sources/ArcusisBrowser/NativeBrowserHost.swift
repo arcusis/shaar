@@ -8,7 +8,7 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
+  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
     closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
@@ -19,7 +19,7 @@ enum BrowserMenuCommand: String, CaseIterable {
   case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
 }
 
-/// AppKit otherwise falls back from unbound Command-N to the private-window menu item.
+/// AppKit otherwise falls back from unbound Command-N to a different window menu item.
 @MainActor
 final class NativeBrowserMenu: NSMenu {
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -336,6 +336,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if command == .newMiniWindow {
       return privateHost?.hasActiveWindow != true && miniWindowTarget != nil
     }
+    if command == .newWindow { return started }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
       return privateWindowSourceProfileID() != nil
@@ -403,7 +404,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Commands that act on the app rather than one window and need no window to be enabled.
   private static let appCommands: Set<BrowserMenuCommand> = [
-    .newPrivateWindow, .newMiniWindow, .quit,
+    .newWindow, .newPrivateWindow, .newMiniWindow, .quit,
   ]
 
   func perform(_ command: BrowserMenuCommand) {
@@ -429,6 +430,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private func performAppCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .quit: quit()
+    case .newWindow:
+      do { try newWindow(from: activeContext?.id) } catch { report(error) }
     case .newMiniWindow: openMiniWindow(url: nil)
     case .newPrivateWindow:
       do { try privateHost?.openWindow() } catch { report(error) }
@@ -588,7 +591,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newPrivateWindow, .newMiniWindow, .settings, .quit, .checkForUpdates: break
+    case .newWindow, .newPrivateWindow, .newMiniWindow, .settings, .quit, .checkForUpdates: break
     }
   }
 
@@ -1263,6 +1266,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     app.addItem(.separator())
     add(.quit, "Quit \(ProductIdentity.name)", to: app)
     let file = section("File")
+    add(.newWindow, "New window", to: file)
     add(.newPrivateWindow, "New Private Window", to: file)
     add(.newMiniWindow, "New Mini Window", to: file)
     add(.newTab, "New tab", to: file)

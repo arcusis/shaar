@@ -91,6 +91,7 @@ struct ShortcutCatalog {
     key: String, modifiers: NSEvent.ModifierFlags
   )? {
     switch command {
+    case .newWindow: ("n", .command)
     case .newPrivateWindow: ("n", [.command, .shift])
     case .newMiniWindow: ("n", [.command, .option])
     case .newTab: ("t", .command)

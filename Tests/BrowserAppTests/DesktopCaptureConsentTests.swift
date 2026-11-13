@@ -92,6 +92,7 @@ struct DesktopCaptureConsentTests {
       request: capture,
       store: store,
       hasScreenRecordingAccess: { false },
+      requestScreenRecordingAccess: { false },
       shareableContent: { throw CocoaError(.fileReadUnknown) }
     )
     await denied.loadSources()
@@ -103,6 +104,47 @@ struct DesktopCaptureConsentTests {
       shareableContent: { throw CocoaError(.fileReadUnknown) }
     )
     await unavailable.loadSources()
+  }
+
+  @Test func requestsScreenRecordingPermissionBeforeEnumeratingSources() async throws {
+    let store = store()
+    let capture = try request(store)
+    var requestCount = 0
+    var enumerationCount = 0
+    let denied = DesktopCapturePicker(
+      request: capture,
+      store: store,
+      hasScreenRecordingAccess: { false },
+      requestScreenRecordingAccess: {
+        requestCount += 1
+        return false
+      },
+      shareableContent: {
+        enumerationCount += 1
+        throw CocoaError(.fileReadUnknown)
+      }
+    )
+
+    await denied.loadSources()
+    #expect(requestCount == 1)
+    #expect(enumerationCount == 0)
+
+    let granted = DesktopCapturePicker(
+      request: capture,
+      store: store,
+      hasScreenRecordingAccess: { false },
+      requestScreenRecordingAccess: {
+        requestCount += 1
+        return true
+      },
+      shareableContent: {
+        enumerationCount += 1
+        throw CocoaError(.fileReadUnknown)
+      }
+    )
+    await granted.loadSources()
+    #expect(requestCount == 2)
+    #expect(enumerationCount == 1)
   }
 
   @Test func rejectsMalformedOrInsecureDesktopCapturePayloads() throws {

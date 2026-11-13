@@ -61,6 +61,7 @@ struct DownloadsPanel: View {
         Text(PanelsL10n.format("%@ · %@", .string(item.source), .string(status(item))))
           .font(.caption).foregroundStyle(.secondary)
           .lineLimit(1)
+          .accessibilityAddTraits(.updatesFrequently)
         if item.state == .downloading && !item.dangerous {
           if let progress = item.progress {
             ProgressView(value: progress)

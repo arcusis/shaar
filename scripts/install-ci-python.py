@@ -13,6 +13,7 @@ from typing import Callable
 
 
 INSTALL_ATTEMPTS = 3
+INSTALL_TIMEOUT_SECONDS = 180
 BACKOFF_SECONDS = (5, 15)
 RETRYABLE_MESSAGES = (
     "http status client error (408",
@@ -54,7 +55,19 @@ def install_python(
 ) -> int:
     command = ["uv", "python", "install", version]
     for attempt in range(1, INSTALL_ATTEMPTS + 1):
-        result = run(command, capture_output=True, text=True, check=False)
+        try:
+            result = run(command, capture_output=True, text=True, check=False,
+                         timeout=INSTALL_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as error:
+            stdout = error.stdout or ""
+            stderr = error.stderr or ""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode("utf-8", errors="replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", errors="replace")
+            message = f"uv Python install operation timed out after {INSTALL_TIMEOUT_SECONDS}s"
+            result = subprocess.CompletedProcess(
+                command, 124, stdout, "\n".join(part for part in (stderr, message) if part))
         if result.returncode == 0:
             write_output(result)
             return 0

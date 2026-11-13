@@ -143,6 +143,21 @@ class FetchEngineTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
 
+    def test_failed_framework_extraction_removes_staging_directory(self):
+        shutil.rmtree(self.destination)
+        with tarfile.open(self.archive, "w:xz", format=tarfile.PAX_FORMAT) as archive:
+            info = tarfile.TarInfo("unrelated.txt")
+            info.size = 7
+            archive.addfile(info, io.BytesIO(b"invalid"))
+        self.pin["sha256"] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        self._write_pin()
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Engine framework missing", result.stderr)
+        self.assertEqual(list(self.cache.glob("stage.*")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -46,6 +46,7 @@ if [[ ! -f "$destination/.verified-$checksum" ]]; then
     }
   fi
   staging=$(mktemp -d "$cache/stage.XXXXXXXX")
+  trap 'rm -rf "$staging"' EXIT
   tar -xf "$archive" -C "$staging"
   framework="$staging/Chromium Framework.framework"
   [[ -f "$framework/Versions/Current/Chromium Framework" ]] || {

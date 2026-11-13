@@ -68,6 +68,26 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   #expect(result[0].state == .failed)
 }
 
+@Test func downloadProgressFieldsRejectNegativeValues() async throws {
+  let base =
+    #"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/a.bin","state":"downloading","paused":false,"received":0,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}"#
+  let invalid = [
+    base.replacingOccurrences(of: #""received":0"#, with: #""received":-1"#),
+    base.replacingOccurrences(of: #""speed":0"#, with: #""speed":-1"#),
+    base.replacingOccurrences(of: #""startTime":0"#, with: #""startTime":-1"#),
+  ]
+  for payload in invalid {
+    let fake = FakeDownloadsTransport(replies: [400: Data(payload.utf8)])
+    await #expect(throws: (any Error).self) {
+      _ = try await ShaarDownloadsAdapter(transport: fake).list()
+    }
+  }
+
+  let unknownSize = base.replacingOccurrences(of: #""total":1"#, with: #""total":-1"#)
+  let fake = FakeDownloadsTransport(replies: [400: Data(unknownSize.utf8)])
+  #expect(try await ShaarDownloadsAdapter(transport: fake).list().first?.total == -1)
+}
+
 @Test func downloadIntegerFieldsRejectFractionsAndOverflow() async throws {
   for received in ["1.5", "9223372036854775808"] {
     let payload = Data(

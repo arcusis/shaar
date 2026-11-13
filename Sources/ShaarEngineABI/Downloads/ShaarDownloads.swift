@@ -66,14 +66,34 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
     path = try values.decode(String.self, forKey: .path)
     state = try values.decode(State.self, forKey: .state)
     paused = try values.decode(Bool.self, forKey: .paused)
-    received = try values.decodeInteger(forKey: .received)
-    total = try values.decodeInteger(forKey: .total)
-    speed = try values.decodeInteger(forKey: .speed)
+    let decodedReceived = try values.decodeInteger(forKey: .received)
+    guard decodedReceived >= 0 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .received, in: values, debugDescription: "Expected nonnegative bytes received")
+    }
+    received = decodedReceived
+    let decodedTotal = try values.decodeInteger(forKey: .total)
+    guard decodedTotal == -1 || decodedTotal >= 0 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .total, in: values, debugDescription: "Expected nonnegative total or unknown size")
+    }
+    total = decodedTotal
+    let decodedSpeed = try values.decodeInteger(forKey: .speed)
+    guard decodedSpeed >= 0 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .speed, in: values, debugDescription: "Expected nonnegative download speed")
+    }
+    speed = decodedSpeed
     mimeType = try values.decode(String.self, forKey: .mimeType)
     dangerous = try values.decode(Bool.self, forKey: .dangerous)
     offTheRecord = try values.decode(Bool.self, forKey: .offTheRecord)
     error = try values.decodeIfPresent(String.self, forKey: .error)
-    startTime = try values.decodeInteger(forKey: .startTime)
+    let decodedStartTime = try values.decodeInteger(forKey: .startTime)
+    guard decodedStartTime >= 0 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .startTime, in: values, debugDescription: "Expected nonnegative start time")
+    }
+    startTime = decodedStartTime
   }
 }
 

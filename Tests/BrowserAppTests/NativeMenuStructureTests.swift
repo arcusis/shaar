@@ -34,22 +34,6 @@ import Testing
       == workspace.workspace.catalog.spaces[0].profileID.uuidString)
 }
 
-@Test @MainActor func newWindowCommandRoutesThroughTheHostAndRollsBackFailedAttachment() throws {
-  let workspace = try BrowserWorkspaceStore()
-  let originalWindowIDs = workspace.workspace.windows.map(\.id)
-  let host = NativeBrowserHost(
-    events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), workspace: workspace,
-    presentation: .hiddenProbe, usesPrimaryWindow: false)
-  defer { host.detach() }
-
-  #expect(throws: (any Error).self) { try host.restore() }
-  #expect(host.canPerform(.newWindow))
-  host.perform(.newWindow)
-
-  #expect(host.lastError != nil)
-  #expect(workspace.workspace.windows.map(\.id) == originalWindowIDs)
-}
-
 @Test @MainActor func nextAndPreviousWindowCommandsCycleWithoutPresentingWindows() {
   let first = NSWindow(contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
   let second = NSWindow(contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
@@ -90,10 +74,6 @@ import Testing
     commandItems.first { $0.0 == command.rawValue }?.1
   }
   #expect(item(.newPrivateWindow)?.menu?.title == "File")
-  #expect(item(.newWindow)?.menu?.title == "File")
-  #expect(item(.newWindow)?.title == "New window")
-  #expect(item(.newWindow)?.keyEquivalent == "n")
-  #expect(item(.newWindow)?.keyEquivalentModifierMask == .command)
   #expect(item(.closeWindow)?.menu?.title == "File")
   #expect(item(.sharePage)?.menu?.title == "File")
   #expect(item(.find)?.menu?.title == "Edit")
@@ -155,8 +135,8 @@ import Testing
   let items = menu.items.compactMap(\.submenu).flatMap(\.items)
   func item(_ title: String) -> NSMenuItem? { items.first { $0.title == title } }
 
-  #expect(item("New window")?.keyEquivalent == "n")
-  #expect(item("New window")?.keyEquivalentModifierMask == .command)
+  #expect(item("New window") == nil)
+  #expect(!items.contains { $0.keyEquivalent == "n" && $0.keyEquivalentModifierMask == .command })
   #expect(item("New Private Window")?.keyEquivalent == "n")
   #expect(item("New Private Window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("New tab")?.keyEquivalent == "t")

@@ -175,12 +175,11 @@ def archive_directory(explicit):
     return ROOT / "build" / "cache" / "framework-devtools"
 
 
-def validate_archive_directory(path):
-    if path.is_symlink():
-        raise ValueError(f"cache directory must not be a symlink: {path}")
-    if path.exists() and not path.is_dir():
-        raise ValueError(f"cache path is not a directory: {path}")
-    return path
+def validate_archive_directory(archive_dir):
+    if archive_dir.is_symlink():
+        raise ValueError(f"archive cache directory must not be a symlink: {archive_dir}")
+    if archive_dir.exists() and not archive_dir.is_dir():
+        raise ValueError(f"archive cache path is not a directory: {archive_dir}")
 
 
 def archive_matches(name, archive):
@@ -191,13 +190,6 @@ def archive_matches(name, archive):
     if len(data) > MAX_ARCHIVE_SIZE:
         return False
     return hashlib.sha256(data).hexdigest() == PINS[name].sha256
-
-
-def validate_archive_directory(archive_dir):
-    if archive_dir.is_symlink():
-        raise ValueError(f"archive cache directory must not be a symlink: {archive_dir}")
-    if archive_dir.exists() and not archive_dir.is_dir():
-        raise ValueError(f"archive cache path is not a directory: {archive_dir}")
 
 
 def install_pinned(name, archive_dir, download, source_label):

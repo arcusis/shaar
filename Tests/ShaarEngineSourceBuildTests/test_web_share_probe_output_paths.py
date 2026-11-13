@@ -18,6 +18,13 @@ SPEC.loader.exec_module(PROBE)
 
 
 class WebShareProbeOutputPathTests(unittest.TestCase):
+    def test_probe_checks_and_uses_the_safe_output_writer(self):
+        source = SCRIPT.read_text()
+        self.assertIn("validate_output_destination(options.receipt)", source)
+        self.assertIn("validate_output_destination(screenshot)", source)
+        self.assertIn("write_output(screenshot,", source)
+        self.assertIn("write_output(options.receipt,", source)
+
     def assert_symlink_output_is_rejected(self, name, data):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

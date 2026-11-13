@@ -81,7 +81,7 @@ extension BrowserSession {
     guard !favorites.contains(where: { $0.id == tabID }) else { return nil }
     let favoriteID = UUID()
     let cleanTitle = source.title.trimmingCharacters(in: .whitespacesAndNewlines)
-    let title = cleanTitle.isEmpty ? source.url.host() ?? source.url.absoluteString : source.title
+    let title = cleanTitle.isEmpty ? source.url.host() ?? source.url.absoluteString : cleanTitle
     var tab = source
     tab.title = title
     tab.isPinned = false

@@ -363,6 +363,20 @@ import Testing
   try session.validate()
 }
 
+@Test func promotionTrimsNonemptyLegacyTitle() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let openedTabID = session.open(URL(string: "https://trim-title.example/current")!)
+  let tabID = try #require(openedTabID)
+  session.spaces[0].tabs[0].title = "  Project  "
+
+  let promotedFavoriteID = session.promoteTabToFavorite(tabID, in: spaceID)
+  let favoriteID = try #require(promotedFavoriteID)
+
+  #expect(session.favoritePages.first { $0.favoriteID == favoriteID }?.tab.title == "Project")
+  #expect(session.favorites.first { $0.id == favoriteID }?.title == "Project")
+}
+
 @Test func reopeningClosedOrdinaryTabClearsSelectedFavorite() throws {
   var session = BrowserSession.fresh()
   let spaceID = session.selectedSpaceID

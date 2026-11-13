@@ -201,7 +201,7 @@ private struct OnboardingFooter: View {
 
   var body: some View {
     HStack {
-      Button(SettingsL10n.string("Cancel")) { model.cancel() }
+      Button(SettingsL10n.string("Cancel"), role: .cancel) { model.cancel() }
         .keyboardShortcut(.cancelAction)
       Spacer()
       Button(SettingsL10n.string("Back")) { model.back() }

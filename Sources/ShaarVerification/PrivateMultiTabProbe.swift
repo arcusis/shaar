@@ -361,7 +361,7 @@ enum PrivateMultiTabEvidence {
     let ready = evidence?["ready"] as? String
     return evidence?["host"] as? String == host
       && (ready == "interactive" || ready == "complete")
-      && (evidence?["textLength"] as? Int ?? 0) > 100
+      && (integerEvidence(evidence?["textLength"]) ?? 0) > 100
   }
 
   static func lightSamples(_ bitmap: NSBitmapImageRep) -> Int? {

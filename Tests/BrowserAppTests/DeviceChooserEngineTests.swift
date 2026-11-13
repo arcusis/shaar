@@ -75,6 +75,29 @@ struct DeviceChooserEngineTests {
     #expect(store.deviceChooserRequests.isEmpty)
   }
 
+  @Test func foreignWindowCannotDismissTheOwnedChooser() throws {
+    let runtime = ARCChromiumRuntime()
+    let events = BrowserRuntimeEvents(runtime: runtime)
+    let store = BrowserStore()
+    store.perform(.open(try #require(URL(string: "https://devices.example/chooser"))))
+    let engine = try BrowserEngine(events: events, windowID: "chooser-window", store: store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    #expect(events.router.bindTab(tab.id.uuidString, windowID: engine.windowID))
+
+    var payload = Self.event(
+      id: "window-owned-chooser", kind: "deviceChooserRequested", tabID: tab.id,
+      profileID: store.session.selectedSpace.profileID, url: tab.url)
+    runtime.onDeviceChooserEvent?(payload)
+    #expect(store.sheet?.id == "chooser-window-owned-chooser")
+
+    payload["kind"] = "deviceChooserDismissed"
+    payload["windowID"] = "other-window"
+    runtime.onDeviceChooserEvent?(payload)
+
+    #expect(store.sheet?.id == "chooser-window-owned-chooser")
+    #expect(store.deviceChooserRequests.map(\.id) == ["window-owned-chooser"])
+  }
+
   private static func event(
     id: String, kind: String, tabID: UUID, profileID: UUID, url: URL
   ) -> [String: Any] {

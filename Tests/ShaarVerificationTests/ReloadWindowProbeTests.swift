@@ -12,19 +12,29 @@ import Foundation
     let source = UUID()
     let oldTab = UUID()
     let newTab = UUID()
+    let owner = UUID()
+    let otherOwner = UUID()
     let prior: Set<UUID> = [source, oldTab]
 
     #expect(
       !ReloadWindowProbe.isDestinationCandidate(
-        tabID: source, sourceID: source, prior: prior, requiresNewTab: true))
+        tabID: source, sourceID: source, prior: prior,
+        candidateOwnerID: owner, ownerID: owner, requiresNewTab: true))
     #expect(
       !ReloadWindowProbe.isDestinationCandidate(
-        tabID: oldTab, sourceID: source, prior: prior, requiresNewTab: true))
+        tabID: oldTab, sourceID: source, prior: prior,
+        candidateOwnerID: owner, ownerID: owner, requiresNewTab: true))
     #expect(
       ReloadWindowProbe.isDestinationCandidate(
-        tabID: newTab, sourceID: source, prior: prior, requiresNewTab: true))
+        tabID: newTab, sourceID: source, prior: prior,
+        candidateOwnerID: owner, ownerID: owner, requiresNewTab: true))
     #expect(
       ReloadWindowProbe.isDestinationCandidate(
-        tabID: source, sourceID: source, prior: prior, requiresNewTab: false))
+        tabID: source, sourceID: source, prior: prior,
+        candidateOwnerID: owner, ownerID: owner, requiresNewTab: false))
+    #expect(
+      !ReloadWindowProbe.isDestinationCandidate(
+        tabID: newTab, sourceID: source, prior: prior,
+        candidateOwnerID: otherOwner, ownerID: owner, requiresNewTab: true))
   }
 }

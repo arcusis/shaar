@@ -85,6 +85,34 @@ struct DesktopCaptureConsentTests {
     for state in states { _ = state.body }
   }
 
+  @Test func cancelledSourceDiscoveryDoesNotAuthorizeLateScreenResults() async throws {
+    let store = store()
+    let capture = try request(store)
+    #expect(store.requestDesktopCapture(capture))
+    var decision: String? = "not-resolved"
+    store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID }
+    var providerStarted = false
+    var providerContinuation: CheckedContinuation<[DesktopCaptureSource], Never>?
+    let picker = DesktopCapturePicker(
+      request: capture, store: store,
+      hasScreenRecordingAccess: { true },
+      screenSourcesProvider: {
+        providerStarted = true
+        return await withCheckedContinuation { providerContinuation = $0 }
+      })
+    let load = Task { await picker.loadSources() }
+    for _ in 0..<100 where !providerStarted { await Task.yield() }
+    #expect(providerStarted)
+
+    load.cancel()
+    let screen = DesktopCaptureSource(id: "screen:1:0", name: "Main Display", kind: .display)
+    providerContinuation?.resume(returning: [screen])
+    await load.value
+    store.resolveDesktopCapture(capture.id, sourceID: screen.id)
+
+    #expect(decision == nil)
+  }
+
   @Test func sourceDiscoveryHandlesDeniedAndUnavailableScreenAccess() async throws {
     let store = store()
     let capture = try request(store)

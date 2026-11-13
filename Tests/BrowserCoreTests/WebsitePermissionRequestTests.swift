@@ -146,6 +146,10 @@ private func permissionPayload(
       windowID: window, outstandingIDs: [], knownTabs: known) == nil)
   #expect(
     WebsitePermissionEvent.request(
+      from: permissionPayload(schema: 1.5, tabID: tab, windowID: window, profileID: profile),
+      windowID: window, outstandingIDs: [], knownTabs: known) == nil)
+  #expect(
+    WebsitePermissionEvent.request(
       from: permissionPayload(schema: "1", tabID: tab, windowID: window, profileID: profile),
       windowID: window, outstandingIDs: [], knownTabs: known) == nil)
   #expect(

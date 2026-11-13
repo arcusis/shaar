@@ -171,7 +171,9 @@ public enum WebsitePermissionEvent {
   private static func schemaVersion(_ payload: [String: Any]) -> Int? {
     guard let number = payload["schemaVersion"] as? NSNumber else { return nil }
     if CFGetTypeID(number) == CFBooleanGetTypeID() { return nil }
-    return number.intValue
+    let integer = number.intValue
+    guard number.doubleValue == Double(integer) else { return nil }
+    return integer
   }
 
   private static func suppliedFrameID(_ payload: [String: Any]) -> String? {

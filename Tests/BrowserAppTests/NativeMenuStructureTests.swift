@@ -184,6 +184,10 @@ import Testing
     commandItems.first { $0.0 == command.rawValue }?.1
   }
   #expect(item(.newPrivateWindow)?.menu?.title == "File")
+  #expect(item(.openFile)?.menu?.title == "File")
+  #expect(item(.openFile)?.title == "Open File…")
+  #expect(item(.openFile)?.keyEquivalent == "o")
+  #expect(item(.openFile)?.keyEquivalentModifierMask == .command)
   #expect(item(.closeWindow)?.menu?.title == "File")
   #expect(item(.sharePage)?.menu?.title == "File")
   #expect(item(.print)?.menu?.title == "File")

@@ -1286,6 +1286,17 @@ class EngineTransferTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "destination already exists"):
                 restore_bundle(root, evidence)
 
+    def test_bundle_metadata_rejects_valid_json_with_wrong_root_type(self):
+        from ci_engine import validate_bundle_archive
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            directory = root / "evidence"
+            directory.mkdir()
+            (directory / "bundle.json").write_text("[]")
+
+            with self.assertRaisesRegex(ValueError, "metadata is not an object"):
+                validate_bundle_archive(root, directory)
+
     def test_normal_browsing_restores_the_shared_exact_source_bundle(self):
         from ci_engine import BUNDLE_NAME, archive_bundle
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {

@@ -1481,6 +1481,22 @@
         }
       }
     },
+    "Show All History": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show All History"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת כל ההיסטוריה"
+          }
+        }
+      }
+    },
     "Library": {
       "localizations": {
         "en": {

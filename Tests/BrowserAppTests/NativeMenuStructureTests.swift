@@ -78,6 +78,8 @@ import Testing
   #expect(item(.bookmarks)?.menu?.title == "Bookmarks")
   #expect(item(.bookmarkPage)?.menu?.title == "Bookmarks")
   #expect(item(.history)?.menu?.title == "History")
+  #expect(item(.history)?.title == "Show All History")
+  #expect(item(.history)?.representedObject as? String == BrowserMenuCommand.history.rawValue)
   #expect(item(.recentlyClosed)?.menu?.title == "History")
   #expect(item(.downloads)?.menu?.title == "File")
   #expect(item(.extensions)?.menu?.title == "Extensions")

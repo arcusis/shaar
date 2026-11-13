@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Keep the extension install hook off the Chromium 155 patch list."""
+"""Keep the extension install hook on its assigned Chromium 157 patch number."""
 
 from pathlib import Path
 import hashlib
@@ -11,7 +11,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0067-shaar-extension-install.patch"
+PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0135-shaar-extension-install.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 LAYER = ROOT / "ThirdParty/ChromiumEngine/layer"
 INSTALL_FILES = (
@@ -49,7 +49,7 @@ class ExtensionInstallPatchTests(unittest.TestCase):
         patches = json.loads(MANIFEST.read_text())["patches"]
         names = [entry["file"] for entry in patches]
         self.assertNotIn(str(PATCH.relative_to(ROOT)), names)
-        self.assertFalse(any("0067-shaar-extension-install" in name for name in names))
+        self.assertNotIn(str(PATCH.relative_to(ROOT)), names)
 
     def test_install_layer_hashes_match_the_files(self):
         manifest = json.loads(MANIFEST.read_text())

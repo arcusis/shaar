@@ -76,7 +76,7 @@
       "chrome/browser/shaar/engine/shaar_event_bridge.cc": "a13f1ef9421cf6c822e7bb06c60e5644e7ab34564488ee21dc43ca6f0366bebf",
       "chrome/browser/shaar/engine/shaar_event_bridge.h": "b2c3a2dfa1ec6099494f1bf7cc32a34be7e9bbcbfc8031f23ad54b0c3d01d544",
       "chrome/browser/shaar/engine/shaar_module_registry.h": "4dcd0671137d4a4fdea9db5df13deadf69cd04bd6a5cbb2ab62dce127597d5c5",
-      "chrome/browser/shaar/extensions/shaar_extension_install.cc": "4d8a0c6ba20c1b3dba718696a2d0464219be311ff3ead014d905bc99cbe5a50a",
+      "chrome/browser/shaar/extensions/shaar_extension_install.cc": "48ce7795637d65ea15352d999437ed49ac10f7bc16b0f4a5b27c275e6c93ec92",
       "chrome/browser/shaar/extensions/shaar_extension_install.h": "3cdeb8b11ff5384617fce6b0e0a03832ed8f104ad41b042ef119c1bd3e0551e1",
       "chrome/browser/shaar/extensions/shaar_extension_views.mm": "039a977c60a4b2598dfff1eb800255756463dd5bcb9c4f5a7d4669d90b77d893",
       "chrome/browser/shaar/extensions/shaar_extensions.cc": "6276aca4498c66490c21b615d7f531ec1c55fe9aa63b747de4ec76a33cde79f9",

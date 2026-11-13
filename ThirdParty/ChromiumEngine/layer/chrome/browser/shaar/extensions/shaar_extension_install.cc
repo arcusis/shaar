@@ -730,7 +730,7 @@ shaar_error_code ResolveInstallDecision(ShaarEngineContext* context,
   return SHAAR_OK;
 }
 
-// Patch 0067 binds this when --shaar-embedder is set. The signature matches
+// Patch 0135 binds this when --shaar-embedder is set. The signature matches
 // ExtensionInstallPrompt::ShowDialogCallback.
 void ShaarShowInstallPrompt(
     std::unique_ptr<ExtensionInstallPromptShowParams> params,

@@ -25,6 +25,16 @@ import Testing
     #expect(InspectorBoxEdit.cssValue("   ") == "")
   }
 
+  @Test @MainActor func edgeAccessibilityLabelsIdentifyRegionAndSide() {
+    #expect(
+      InspectorBoxModel.edgeAccessibilityLabel(region: "margin", index: 0) == "Edit Margin Top")
+    #expect(
+      InspectorBoxModel.edgeAccessibilityLabel(region: "padding", index: 3) == "Edit Padding Left")
+    #expect(
+      InspectorBoxModel.edgeAccessibilityLabel(region: "border", index: 0)
+        != InspectorBoxModel.edgeAccessibilityLabel(region: "border", index: 1))
+  }
+
   @Test func editableTextStripsAPixelLength() {
     #expect(InspectorBoxEdit.editableText("10px") == "10")
     #expect(InspectorBoxEdit.editableText("0px") == "0")

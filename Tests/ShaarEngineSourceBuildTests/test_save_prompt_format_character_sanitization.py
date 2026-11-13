@@ -32,9 +32,15 @@ class SavePromptFormatCharacterSanitizationTests(unittest.TestCase):
         self.assertIn("third >= 0xAA && third <= 0xAE", helper)
         self.assertIn("third >= 0xA0 && third <= 0xAF", helper)
         self.assertIn("IsFormattingCharacter(character)", sanitizer)
+        self.assertLess(
+            sanitizer.index("if (IsFormattingCharacter(character))"),
+            sanitizer.index("cleaned.size() + length > kMaximumDetailBytes"),
+        )
         unit_test = UNIT_TEST.read_text()
         self.assertIn("DetailDropsUnicodeFormattingControls", unit_test)
         self.assertIn('"user\\xE2\\x80\\xAE" "admin"', unit_test)
+        self.assertIn("Repeat('a', 119) +", unit_test)
+        self.assertIn('"\\xE2\\x80\\xAE" "b"', unit_test)
 
 
 if __name__ == "__main__":

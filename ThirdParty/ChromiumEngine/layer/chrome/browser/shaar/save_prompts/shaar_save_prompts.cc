@@ -356,11 +356,14 @@ std::string SanitizeDetail(std::string_view raw) {
     }
     if (index + length > raw.size())
       break;
+    const std::string_view character = raw.substr(index, length);
+    if (IsFormattingCharacter(character)) {
+      index += length;
+      continue;
+    }
     if (cleaned.size() + length > kMaximumDetailBytes)
       break;
-    const std::string_view character = raw.substr(index, length);
-    if (!IsFormattingCharacter(character))
-      cleaned.append(character);
+    cleaned.append(character);
     index += length;
   }
   return cleaned;

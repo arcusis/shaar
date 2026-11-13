@@ -83,6 +83,9 @@ TEST(ShaarSavePromptTest, DetailDropsUnicodeFormattingControls) {
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("left\xE2\x81\xA6" "right"),
             "leftright");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("עברית"), "עברית");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail(Repeat('a', 119) +
+                                                 "\xE2\x80\xAE" "b"),
+            Repeat('a', 119) + "b");
 }
 
 TEST(ShaarSavePromptTest, RegistersItsModuleAndOperationHandler) {

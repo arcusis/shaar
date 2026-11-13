@@ -52,6 +52,8 @@ final class BrowserStore {
   var pendingSplitPlacement: SplitPlacement?
   var sidebarDrag: SidebarTransfer?
   var tabDrag: TabDrag?
+  @ObservationIgnored var sidebarDragCleanupTask: Task<Void, Never>?
+  @ObservationIgnored var tabDragCleanupTask: Task<Void, Never>?
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?

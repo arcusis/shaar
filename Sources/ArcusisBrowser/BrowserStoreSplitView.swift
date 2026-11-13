@@ -131,12 +131,15 @@ extension BrowserStore {
 
   func beginSidebarDrag(_ item: SidebarTransfer) -> SidebarTransfer {
     sidebarDrag = item
-    Task { @MainActor [weak self] in
+    sidebarDragCleanupTask?.cancel()
+    sidebarDragCleanupTask = Task { @MainActor [weak self] in
       while NSEvent.pressedMouseButtons & 1 != 0 {
-        try? await Task.sleep(for: .milliseconds(80))
+        do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
       }
-      try? await Task.sleep(for: .milliseconds(300))
-      if self?.sidebarDrag == item { self?.sidebarDrag = nil }
+      do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+      guard !Task.isCancelled, let self, self.sidebarDrag == item else { return }
+      self.sidebarDragCleanupTask = nil
+      self.sidebarDrag = nil
     }
     return item
   }
@@ -144,16 +147,17 @@ extension BrowserStore {
   /// Records the drag so page drop zones can appear; cleared once the mouse button is up.
   func beginTabDrag(_ tabID: UUID, spaceID: UUID, fromSplitPane: Bool) -> SidebarTransfer {
     let drag = TabDrag(tabID: tabID, fromSplitPane: fromSplitPane)
-    if tabDrag != drag {
-      tabDrag = drag
-      Task { @MainActor [weak self] in
-        while NSEvent.pressedMouseButtons & 1 != 0 {
-          try? await Task.sleep(for: .milliseconds(80))
-        }
-        // AppKit delivers the drop just after the button comes up; let it land first.
-        try? await Task.sleep(for: .milliseconds(300))
-        if self?.tabDrag == drag { self?.tabDrag = nil }
+    tabDrag = drag
+    tabDragCleanupTask?.cancel()
+    tabDragCleanupTask = Task { @MainActor [weak self] in
+      while NSEvent.pressedMouseButtons & 1 != 0 {
+        do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
       }
+      // AppKit delivers the drop just after the button comes up; let it land first.
+      do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+      guard !Task.isCancelled, let self, self.tabDrag == drag else { return }
+      self.tabDragCleanupTask = nil
+      self.tabDrag = nil
     }
     return beginSidebarDrag(.tab(sessionID: dragSessionID, sourceSpaceID: spaceID, tabID: tabID))
   }

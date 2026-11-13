@@ -175,6 +175,9 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
     var counters: [String: Int] = [:]
     for key in ["documents", "nodes", "jsEventListeners"] {
       if let value = root[key] {
+        if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+          return nil
+        }
         guard command.id == 14, let count = value as? Int, count >= 0 else { return nil }
         counters[key] = count
       }

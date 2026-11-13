@@ -221,6 +221,26 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(backend.values[.camera] == .allow)
 }
 
+@MainActor @Test func cancelledPermissionWriteDoesNotPublishItsLateFailure() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  await model.load()
+  backend.suspendFirstWrite = true
+  backend.failsWrites = true
+  let write = Task { await model.setPermission(.camera, allowed: true) }
+  for _ in 0..<100 where backend.finishFirstWrite == nil { await Task.yield() }
+  #expect(backend.finishFirstWrite != nil)
+  #expect(model.permissionValues[.camera] == .allow)
+
+  write.cancel()
+  backend.finishFirstWrite?.resume()
+  await write.value
+
+  #expect(model.permissionValues[.camera] == .allow)
+  #expect(model.failure == nil)
+  #expect(model.savingPermissions.isEmpty)
+}
+
 @MainActor @Test func siteControlsDoNotOverlapWritesToTheSamePermission() async {
   let backend = FakeSiteBackend()
   backend.suspendFirstWrite = true

@@ -37,18 +37,21 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
     }
     if (document.querySelectorAll("h1").length !== 1) errors.push(`${path}: expected one h1`);
     for (const element of document.querySelectorAll(
-      "a[href], link[href], img[src], script[src], img[srcset], source[srcset]",
+      "a[href], link[href], img[src], script[src], img[srcset], source[srcset], video[poster], video[src], audio[src], source[src]",
     )) {
-      const references = element.hasAttribute("srcset")
-        ? [
-            ...(element.localName === "img" && element.hasAttribute("src")
-              ? [element.getAttribute("src") ?? ""]
-              : []),
-            ...(element.getAttribute("srcset") ?? "")
-              .split(",")
-              .map((candidate) => candidate.trim().split(/\s+/, 1)[0]),
-          ]
-        : [element.getAttribute("href") ?? element.getAttribute("src") ?? ""];
+      const references = [
+        ...(element.hasAttribute("srcset")
+          ? [
+              ...(element.localName === "img" && element.hasAttribute("src")
+                ? [element.getAttribute("src") ?? ""]
+                : []),
+              ...(element.getAttribute("srcset") ?? "")
+                .split(",")
+                .map((candidate) => candidate.trim().split(/\s+/, 1)[0]),
+            ]
+          : [element.getAttribute("href") ?? element.getAttribute("src") ?? ""]),
+        ...(element.hasAttribute("poster") ? [element.getAttribute("poster") ?? ""] : []),
+      ];
       for (const value of references) {
         if (!value || value.startsWith("javascript:")) {
           errors.push(`${path}: empty or unsafe link`);

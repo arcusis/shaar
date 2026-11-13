@@ -53,7 +53,6 @@ test("link checker rejects unsafe schemes and duplicate ids", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
-
 test("link checker rejects whitespace-only image alternatives but allows decorative images", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {
@@ -99,6 +98,20 @@ test("link checker verifies image map associations", () => {
     assert.deepEqual(checkLinks(root).errors, [
       "index.html: image references missing map #missing",
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("link checker catches missing poster when video source exists", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><video src="/clip.mp4" poster="/missing-poster.png"></video>',
+    );
+    writeFileSync(join(root, "clip.mp4"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing-poster.png"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

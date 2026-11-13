@@ -36,4 +36,9 @@ test("mobile navigation opens and Escape closes it with focus restored", () => {
   assert.equal(button.getAttribute("aria-expanded"), "false");
   assert.equal(button.textContent, "Menu");
   assert.equal(focusCalls, 1);
+
+  button.click();
+  navigation.querySelector('a[aria-current="page"]')?.click();
+  assert.equal(navigation.dataset.open, undefined);
+  assert.equal(button.getAttribute("aria-expanded"), "false");
 });

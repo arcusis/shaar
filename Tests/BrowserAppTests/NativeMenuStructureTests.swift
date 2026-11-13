@@ -142,6 +142,9 @@ import Testing
   #expect(item(.back)?.menu?.title == "History")
   #expect(item(.back)?.keyEquivalent == "[")
   #expect(item(.back)?.keyEquivalentModifierMask == .command)
+  #expect(item(.forward)?.menu?.title == "History")
+  #expect(item(.forward)?.keyEquivalent == "]")
+  #expect(item(.forward)?.keyEquivalentModifierMask == .command)
   #expect(item(.clearHistory)?.menu?.title == "History")
   #expect(item(.clearHistory)?.title == "Clear History…")
   #expect(item(.recentlyClosed)?.menu?.title == "History")
@@ -194,6 +197,16 @@ import Testing
   #expect(routedTab == tabID.uuidString)
   #expect(!NativeBrowserHost.routeBack(tabID: tabID, canGoBack: false) { routedTab = $0 })
   #expect(!NativeBrowserHost.routeBack(tabID: nil, canGoBack: true) { routedTab = $0 })
+}
+
+@Test @MainActor func forwardMenuCommandRoutesOnlyWhenTheSelectedPageCanGoForward() {
+  let tabID = UUID()
+  var routedTab: String?
+  #expect(
+    NativeBrowserHost.routeForward(tabID: tabID, canGoForward: true) { routedTab = $0 })
+  #expect(routedTab == tabID.uuidString)
+  #expect(!NativeBrowserHost.routeForward(tabID: tabID, canGoForward: false) { routedTab = $0 })
+  #expect(!NativeBrowserHost.routeForward(tabID: nil, canGoForward: true) { routedTab = $0 })
   #expect(routedTab == tabID.uuidString)
 }
 

@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import SwiftUI
 
 @testable import ArcusisBrowser
@@ -255,7 +256,7 @@ final class OrderingProbe {
           throw OrderingFailure("Extension tab-order query failed: \(result)")
         }
         let actualTitles = tabs.compactMap { $0["title"] as? String }
-        let pins = tabs.map { pinnedFlag($0["pinned"]) }
+        let pins = tabs.map { Self.pinnedFlag($0["pinned"]) }
         try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
           .write(to: root.appending(path: "\(phase)-native-order.json"), options: .atomic)
         let expectedTitles = expected.map(\.title)
@@ -265,7 +266,7 @@ final class OrderingProbe {
             && pins == expectedPins, label)
         let selectedID = store.session.selectedSpace.selectedTabID
         let selectedTitle = expected.first { $0.id == selectedID }?.title
-        let activeTitle = tabs.first { pinnedFlag($0["active"]) }?["title"] as? String
+        let activeTitle = tabs.first { Self.pinnedFlag($0["active"]) }?["title"] as? String
         try expect(
           result["account"] as? String == "alpha",
           "ordering inspection stays in the owning extension profile")
@@ -309,10 +310,11 @@ final class OrderingProbe {
     try png.write(to: root.appending(path: name), options: .atomic)
   }
 
-  private func pinnedFlag(_ value: Any?) -> Bool {
-    if let pinned = value as? Bool { return pinned }
-    if let pinned = value as? NSNumber { return pinned.boolValue }
-    return false
+  static func pinnedFlag(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) == CFBooleanGetTypeID()
+    else { return false }
+    return number.boolValue
   }
 
   private func expect(_ condition: Bool, _ message: String) throws {

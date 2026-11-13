@@ -18,7 +18,7 @@ class HiddenResizeEventDispatchPatchTests(unittest.TestCase):
         content = PATCH.read_bytes()
         self.assertEqual(hashlib.sha256(content).hexdigest(), entry["sha256"])
         patch = content.decode()
-        self.assertIn("if (hidden())", patch)
+        self.assertIn("if (!hidden())", patch)
         self.assertIn("EnqueueHiddenResizeEvent", patch)
         self.assertIn("TaskType::kDOMManipulation", patch)
         self.assertIn("HiddenDocumentResizeEventDispatchesWithoutAnimationFrame", patch)

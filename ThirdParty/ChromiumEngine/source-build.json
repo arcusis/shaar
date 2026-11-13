@@ -550,7 +550,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0141-blink-hidden-resize-event-dispatch.patch",
-      "sha256": "2334200793eff0040c8d97fdfef63a147c733d1b34ad2238f91c80d9c5c4567a"
+      "sha256": "c3bede2129cfeed6048b918131af42d822e87d170de0012e2fec189499f77261"
     }
   ],
   "devtoolsFrontend157": {

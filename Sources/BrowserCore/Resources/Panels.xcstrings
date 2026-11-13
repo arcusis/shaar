@@ -1,6 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Could not update the Library. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not update the Library. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לעדכן את הספרייה. כדאי לנסות שוב." } }
+      }
+    },
     "%@ image": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תמונת %@"}}}},
     "%@ video": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"סרטון %@"}}}},
     "%@ audio file": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובץ שמע %@"}}}},

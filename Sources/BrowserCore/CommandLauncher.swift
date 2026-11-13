@@ -339,6 +339,13 @@ public enum CommandLauncher {
   /// Compares pages so "https://site.example" and "https://site.example/" are one page.
   static func pageKey(_ address: String) -> String {
     var components = URLComponents(string: address)
+    if let scheme = components?.scheme?.lowercased() {
+      components?.scheme = scheme
+      if (scheme == "https" && components?.port == 443)
+        || (scheme == "http" && components?.port == 80) {
+        components?.port = nil
+      }
+    }
     if let host = components?.host {
       let normalizedHost = host.lowercased()
       components?.host = normalizedHost.hasSuffix(".")

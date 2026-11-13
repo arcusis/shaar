@@ -94,6 +94,7 @@ struct ShortcutCatalog {
     case .newPrivateWindow: ("n", [.command, .shift])
     case .newMiniWindow: ("n", [.command, .option])
     case .newTab: ("t", .command)
+    case .back: ("[", .command)
     case .search: ("l", .command)
     case .closeWindow: ("w", [.command, .shift])
     case .find: ("f", .command)

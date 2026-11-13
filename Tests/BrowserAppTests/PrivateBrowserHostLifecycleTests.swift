@@ -15,13 +15,14 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var containers: [String: NSView] = [:]
   nonisolated(unsafe) var createdContexts: [String] = []
   nonisolated(unsafe) var releasedContexts: [String] = []
+  var contextCompletion: (@MainActor @Sendable (Bool, Error?) -> Void)?
 
   override func createPrivateContextID(
     _ contextID: String, sourceProfileID: String,
     completion: @escaping @MainActor @Sendable (Bool, Error?) -> Void
   ) {
     createdContexts.append(contextID)
-    completion(true, nil)
+    contextCompletion = completion
   }
 
   override func createPrivateWindowID(
@@ -55,6 +56,25 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
 
 @Suite @MainActor
 struct PrivateBrowserHostLifecycleTests {
+  @Test func completingContextCreationAfterDetachDoesNotCreateAWindow() throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    let sourceProfileID = UUID().uuidString
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+    try host.openWindow()
+    let contextID = try #require(runtime.createdContexts.first)
+    let completion = try #require(runtime.contextCompletion)
+
+    host.detach()
+    completion(true, nil)
+
+    #expect(host.windowCount == 0)
+    #expect(runtime.windows.isEmpty)
+    #expect(runtime.releasedContexts == [contextID])
+  }
+
   @Test func closingOneOfSeveralPrivateWindowsKeepsContextUntilTheLastWindowCloses() throws {
     let runtime = PrivateHostLifecycleRuntime()
     let sourceProfileID = UUID().uuidString
@@ -64,6 +84,7 @@ struct PrivateBrowserHostLifecycleTests {
     host.installCallbacks()
 
     try host.openWindow()
+    runtime.contextCompletion?(true, nil)
     try host.openWindow()
     let owners = host.ownedWindows
     #expect(owners.count == 2)

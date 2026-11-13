@@ -30,6 +30,7 @@ final class PrivateBrowserHost {
   private var contextsBySource: [String: String] = [:]
   private var windowsByContext: [String: Set<String>] = [:]
   private var pendingWindowRequests: [String: [(String, String)]] = [:]
+  private var isDetached = false
 
   init(
     runtime: ARCChromiumRuntime, presentsWindows: Bool = true,
@@ -140,6 +141,8 @@ final class PrivateBrowserHost {
   }
 
   func detach() {
+    guard !isDetached else { return }
+    isDetached = true
     runtime.onPrivateNavigationFailed = nil
     runtime.onPrivateTabChanged = nil
     runtime.onPrivateTabSelected = nil
@@ -175,7 +178,7 @@ final class PrivateBrowserHost {
   }
 
   func openWindow() throws {
-    guard !runtime.isQuitting, let source = sourceProfileID() else {
+    guard !isDetached, !runtime.isQuitting, let source = sourceProfileID() else {
       throw WorkspaceError.invalidState
     }
     let contextID = contextsBySource[source] ?? UUID().uuidString.uppercased()
@@ -192,8 +195,22 @@ final class PrivateBrowserHost {
     contextsBySource[source] = contextID
     windowsByContext[contextID] = []
     pendingWindowRequests[contextID] = [(windowID, tabID)]
-    runtime.createPrivateContextID(contextID, sourceProfileID: source) { [weak self] success, _ in
-      guard let self else { return }
+    let runtime = self.runtime
+    runtime.createPrivateContextID(contextID, sourceProfileID: source) {
+      [weak self, runtime] success, _ in
+      guard let self else {
+        if success { _ = runtime.releasePrivateContextID(contextID) }
+        return
+      }
+      if self.isDetached {
+        self.pendingWindowRequests.removeValue(forKey: contextID)
+        if self.contextsBySource[source] == contextID {
+          self.contextsBySource.removeValue(forKey: source)
+        }
+        self.windowsByContext.removeValue(forKey: contextID)
+        if success { _ = runtime.releasePrivateContextID(contextID) }
+        return
+      }
       guard success, !self.runtime.isQuitting, self.contextsBySource[source] == contextID,
         self.windowsByContext[contextID] != nil
       else {

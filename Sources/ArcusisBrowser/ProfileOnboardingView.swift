@@ -87,6 +87,7 @@ private struct ProfileDetailsStep: View {
       case .name:
         TextField(SettingsL10n.string("Profile name"), text: $model.name)
           .textFieldStyle(.roundedBorder)
+          .accessibilityLabel(SettingsL10n.string("Profile name"))
           .focused($nameFocused)
           .onSubmit { model.continueToNext() }
           .accessibilityIdentifier("onboarding.name")

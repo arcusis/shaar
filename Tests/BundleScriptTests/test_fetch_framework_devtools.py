@@ -4,6 +4,7 @@
 
 import importlib.util
 import io
+import hashlib
 import tempfile
 import unittest
 from unittest import mock
@@ -147,3 +148,20 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
 
             self.assertEqual(downloads, [])
             self.assertEqual(list(external.iterdir()), [sentinel])
+
+    def test_symlinked_pinned_cache_is_not_accepted(self):
+        fetcher = load_fetcher()
+        payload = b"verified pinned archive"
+        original = fetcher.PINS["react"]
+        pin = fetcher.PackagePin(
+            original.extension_id, original.version, hashlib.sha256(payload).hexdigest(),
+            original.devtools_page, original.page_script,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "outside.crx"
+            target.write_bytes(payload)
+            cache = root / "react.crx"
+            cache.symlink_to(target)
+            with patch.dict(fetcher.PINS, {"react": pin}):
+                self.assertFalse(fetcher.archive_matches("react", cache))

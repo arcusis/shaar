@@ -40,7 +40,7 @@ class SavePromptDecisionScopeTests(unittest.TestCase):
         self.assertIn("identity->window_id == pending.window_id", current)
         self.assertIn("identity->tab_id == pending.tab_id", current)
         self.assertIn(
-            "CleanPageURL(pending.contents->GetLastCommittedURL()) ==", current
+            "CleanPageURLForSavePrompt(pending.contents->GetLastCommittedURL()) ==", current
         )
 
     def test_decision_payload_rejects_unknown_fields_and_wrong_profile(self):

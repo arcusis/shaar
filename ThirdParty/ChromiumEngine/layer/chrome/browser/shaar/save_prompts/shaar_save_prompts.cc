@@ -30,6 +30,18 @@
 #include "url/origin.h"
 
 namespace shaar::save_prompts {
+
+GURL CleanPageURLForSavePrompt(const GURL& url) {
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
+    return GURL();
+  GURL::Replacements replacements;
+  replacements.ClearUsername();
+  replacements.ClearPassword();
+  replacements.ClearQuery();
+  replacements.ClearRef();
+  return url.ReplaceComponents(replacements);
+}
+
 namespace {
 
 constexpr size_t kMaximumArgumentsBytes = 1024;
@@ -82,17 +94,6 @@ bool KnownPrompt(const char* prompt) {
   return prompt && (std::strcmp(prompt, "password") == 0 ||
                     std::strcmp(prompt, "card") == 0 ||
                     std::strcmp(prompt, "address") == 0);
-}
-
-GURL CleanPageURL(const GURL& url) {
-  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
-    return GURL();
-  GURL::Replacements replacements;
-  replacements.ClearUsername();
-  replacements.ClearPassword();
-  replacements.ClearQuery();
-  replacements.ClearRef();
-  return url.ReplaceComponents(replacements);
 }
 
 GURL OriginURL(const GURL& page) {
@@ -232,7 +233,7 @@ bool IsCurrent(const PendingPrompt& pending) {
                         identity->window_id == pending.window_id &&
                         identity->tab_id == pending.tab_id;
   return same_tab &&
-         CleanPageURL(pending.contents->GetLastCommittedURL()) ==
+         CleanPageURLForSavePrompt(pending.contents->GetLastCommittedURL()) ==
              pending.page_url;
 }
 
@@ -354,7 +355,7 @@ bool OfferSavePrompt(content::WebContents* contents,
       identity->tab_id.empty())
     return decline();
 
-  const GURL page = CleanPageURL(contents->GetLastCommittedURL());
+  const GURL page = CleanPageURLForSavePrompt(contents->GetLastCommittedURL());
   const GURL origin = OriginURL(page);
   if (!page.is_valid() || !origin.is_valid() ||
       page.spec().size() > kMaximumPageBytes ||

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -47,6 +48,22 @@ TEST(ShaarSavePromptTest, DetailDropsControlsAndKeepsUtf8Boundaries) {
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(bounded), Repeat('a', 119));
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xC3\xA9"), "\xC3\xA9");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(""), "");
+}
+
+TEST(ShaarSavePromptTest, PageURLRemovesCredentialsQueryAndFragment) {
+  const GURL input(
+      "https://user:secret@example.com/login?next=%2Fhome#token");
+  EXPECT_EQ(shaar::save_prompts::CleanPageURLForSavePrompt(input),
+            GURL("https://example.com/login"));
+}
+
+TEST(ShaarSavePromptTest, PageURLRejectsNonWebSchemes) {
+  EXPECT_FALSE(shaar::save_prompts::CleanPageURLForSavePrompt(
+                   GURL("file:///tmp/page"))
+                   .is_valid());
+  EXPECT_FALSE(shaar::save_prompts::CleanPageURLForSavePrompt(
+                   GURL("javascript:alert(1)"))
+                   .is_valid());
 }
 
 TEST(ShaarSavePromptTest, RegistersItsModuleAndOperationHandler) {

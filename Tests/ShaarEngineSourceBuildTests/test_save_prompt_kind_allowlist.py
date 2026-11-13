@@ -19,7 +19,7 @@ class SavePromptKindAllowlistTests(unittest.TestCase):
     def test_only_password_card_and_address_offers_are_accepted(self):
         source = SOURCE.read_text()
         start = source.index("bool KnownPrompt(")
-        end = source.index("GURL CleanPageURL(", start)
+        end = source.index("GURL OriginURL(", start)
         known_prompt = source[start:end]
 
         for kind in ("password", "card", "address"):

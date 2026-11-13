@@ -138,3 +138,12 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         self.assertIn('window.__scrollEvents = 0', fixture)
         self.assertIn('window.__scrollEvents += 1', fixture)
         self.assertIn('addEventListener("scroll"', fixture)
+
+    def test_scroll_fixture_requires_scrollend_listener_delivery(self):
+        fixture = PROBE.SCROLL.decode()
+        self.assertIn('window.__scrollEndEvents = 0', fixture)
+        self.assertIn('window.__scrollEndEvents += 1', fixture)
+        self.assertIn('addEventListener("scrollend"', fixture)
+        source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
+        self.assertIn('let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0', source)
+        self.assertIn('scrollEvents > 0 && scrollEndEvents > 0', source)

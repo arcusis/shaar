@@ -462,6 +462,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let top = number(second?["top"]) ?? 0
     let frames = number(second?["frames"]) ?? 0
     let scrollEvents = number(second?["scrollEvents"]) ?? 0
+    let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0
     let scrollable = height > client + 40 && top > 0
     let grew = secondCount >= firstCount + 200
     guard frames > 0 else {
@@ -476,10 +477,11 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
         "Box did not scroll. rows \(firstCount), top \(top), height \(height), client \(client), frames \(frames)",
         proven: false)
     }
-    let passed = grew && scrollEvents > 0 && ping != nil && failure(context) == nil && windowsHidden()
+    let passed = grew && scrollEvents > 0 && scrollEndEvents > 0 && ping != nil
+      && failure(context) == nil && windowsHidden()
     return makeRow(
       "Infinite scroll", passed,
-      "rows \(firstCount) then \(secondCount), scroll events \(scrollEvents), top \(top), height \(height), client \(client), frames \(frames), responsive \(ping != nil)"
+      "rows \(firstCount) then \(secondCount), scroll events \(scrollEvents), scrollend events \(scrollEndEvents), top \(top), height \(height), client \(client), frames \(frames), responsive \(ping != nil)"
     )
   }
 
@@ -492,7 +494,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
         (()=>{const root=document.getElementById('root'); if(!root) return {count:0,top:0,height:0,client:0};
         const last=root.lastElementChild; if(last) last.scrollIntoView({block:'end'});
         root.scrollTop=root.scrollHeight;
-        return {count:root.children.length,top:root.scrollTop,height:root.scrollHeight,client:root.clientHeight,frames:window.__frames||0,scrollEvents:window.__scrollEvents||0};})()
+        return {count:root.children.length,top:root.scrollTop,height:root.scrollHeight,client:root.clientHeight,frames:window.__frames||0,scrollEvents:window.__scrollEvents||0,scrollEndEvents:window.__scrollEndEvents||0};})()
         """,
       seconds: 5)
     return object(from: json)

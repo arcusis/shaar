@@ -28,6 +28,8 @@ def install_hooks(root: Path) -> Path:
         raise ValueError("Worktree hook installation requires prior core.worktree/core.bare migration")
     git_directory = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
     destination = git_directory / "shaar-hooks"
+    if destination.is_symlink():
+        raise ValueError("Managed hook directory must not be a symlink")
     previous = config(root, "core.hooksPath", path_value=True)
     if previous and (root / previous).resolve() == destination.resolve():
         previous = config(root, "shaar.previousHooksPath", scope="--worktree", path_value=True)

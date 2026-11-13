@@ -190,6 +190,17 @@ class HookTests(unittest.TestCase):
         subprocess.run([str(installed / "pre-push"), "origin", "remote"], cwd=self.root, input=b"older checkout refs", check=True)
         self.assertEqual((self.root / "previous-input").read_bytes(), b"older checkout refs")
 
+    def test_installer_rejects_symlinked_managed_directory_before_writing(self):
+        self.stage(".githooks/run.sh", (ROOT / ".githooks/run.sh").read_bytes())
+        git_directory = Path(git_content.git(self.root, "rev-parse", "--absolute-git-dir").decode().strip())
+        with tempfile.TemporaryDirectory() as outside:
+            external = Path(outside)
+            managed = git_directory / "shaar-hooks"
+            managed.symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "Managed hook directory must not be a symlink"):
+                hook_support.install_hooks(self.root)
+            self.assertEqual(list(external.iterdir()), [])
+
     def test_prior_push_hook_receives_original_input_and_abort_stops_new_checks(self):
         prior, _ = self.install_fixture()
         data = b"original ref list\n"

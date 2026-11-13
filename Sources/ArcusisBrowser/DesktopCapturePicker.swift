@@ -242,6 +242,10 @@ struct DesktopCapturePickerContent: View {
         .listStyle(.inset)
         .frame(minHeight: 150, maxHeight: 330)
       }
+      if let action = DesktopCaptureCatalog.settingsAction(for: note ?? error) {
+        Link(action.title, destination: action.destination)
+          .font(.callout)
+      }
       HStack {
         Spacer()
         Button(PanelsL10n.string("Cancel"), role: .cancel) {

@@ -11,11 +11,23 @@ struct DesktopCaptureListing: Equatable {
   var error: String?
 }
 
+struct DesktopCaptureSettingsAction: Equatable {
+  let title: String
+  let destination: URL
+}
+
 enum DesktopCaptureCatalog {
   static let screenAccessNote =
     "Screen Recording access is unavailable. Check Privacy & Security settings."
   static let screenEnumerationNote = "Screen sources could not be loaded. Try again."
   static let emptySources = "No sharing sources match this request."
+
+  static func settingsAction(for message: String?) -> DesktopCaptureSettingsAction? {
+    guard message == screenAccessNote, let destination = MacPermission.screenRecording.settingsURL
+    else { return nil }
+    return DesktopCaptureSettingsAction(
+      title: PanelsL10n.string("Open Settings"), destination: destination)
+  }
 
   static func allowedSources(
     _ sources: [DesktopCaptureSource], for request: DesktopCaptureRequest

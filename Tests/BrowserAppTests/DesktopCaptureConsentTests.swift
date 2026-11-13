@@ -596,6 +596,16 @@ struct DesktopCaptureConsentTests {
     #expect(!DesktopCaptureCatalog.emptySources.contains("tabs"))
   }
 
+  @Test func screenRecordingFailureOffersSettingsLinkOnlyForThatFailure() throws {
+    let action = try #require(
+      DesktopCaptureCatalog.settingsAction(for: DesktopCaptureCatalog.screenAccessNote))
+    #expect(action.title == PanelsL10n.string("Open Settings"))
+    #expect(action.destination == MacPermission.screenRecording.settingsURL)
+    #expect(DesktopCaptureCatalog.settingsAction(for: "No screens available") == nil)
+    #expect(DesktopCaptureCatalog.settingsAction(for: nil) == nil)
+  }
+  }
+
   @Test func tabSourceFallsBackToPageHostWhenSavedTitleIsBlank() throws {
     let original = store().session
     let spaceIndex = try #require(

@@ -30,17 +30,21 @@ export interface SiteFont {
 const families: Record<string, string> = { "Clash Display": "clash-display", Satoshi: "satoshi" };
 
 function isSiteFontManifest(value: unknown): value is SiteFont[] {
+  if (!Array.isArray(value) || value.length !== Object.keys(families).length) return false;
+  const validFaces = value.every(
+    (face) =>
+      face !== null &&
+      typeof face === "object" &&
+      face.family in families &&
+      face.file === `${families[face.family]}.woff2` &&
+      typeof face.weight === "string" &&
+      /^\d{3} \d{3}$/.test(face.weight),
+  );
+  if (!validFaces) return false;
+  const faces = value as SiteFont[];
   return (
-    Array.isArray(value) &&
-    value.every(
-      (face) =>
-        face !== null &&
-        typeof face === "object" &&
-        face.family in families &&
-        face.file === `${families[face.family]}.woff2` &&
-        typeof face.weight === "string" &&
-        /^\d{3} \d{3}$/.test(face.weight),
-    )
+    new Set(faces.map((face) => face.family)).size === faces.length &&
+    Object.keys(families).every((family) => faces.some((face) => face.family === family))
   );
 }
 
@@ -94,6 +98,7 @@ export async function prepareFonts(
       console.warn(
         `Cached fonts unavailable, the site falls back to system fonts: ${String(error)}`,
       );
+      await rm(manifestPath, { force: true });
       return [];
     }
   } else {

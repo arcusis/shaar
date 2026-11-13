@@ -84,6 +84,19 @@ test("invalid cached font manifest falls back to system fonts", async () => {
   }
 });
 
+test("empty cached font manifest is removed so the next build can retry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  mkdirSync(cache);
+  writeFileSync(join(cache, "fonts.json"), "[]");
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("missing cached font file falls back to system fonts", async () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
   const cache = join(root, "cache");

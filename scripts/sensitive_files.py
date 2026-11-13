@@ -62,6 +62,7 @@ def policy_errors(root: Path, revision: str | None = None, *, maximum: int = MAX
     entries = indexed_entries(root, revision)
     sizes = object_sizes(root, entries)
     errors = []
+    symlink_targets = {}
     for mode, oid, name in entries:
         reason = None
         if blocked_name(name):
@@ -73,8 +74,19 @@ def policy_errors(root: Path, revision: str | None = None, *, maximum: int = MAX
             resolved = posixpath.normpath(str(PurePosixPath(name).parent / target))
             if target.startswith("/") or "\\" in target or resolved in (".", "..") or resolved.startswith("../"):
                 reason = "symlink escapes or cycles to the repository root"
+            else:
+                symlink_targets[name] = resolved
         elif mode not in ("100644", "100755"):
             reason = "unsupported indexed file mode"
         if reason:
             errors.append(f"{name!r}: {reason}")
+    for name in symlink_targets:
+        visited = set()
+        current = name
+        while current in symlink_targets:
+            if current in visited:
+                errors.append(f"{name!r}: symlink cycle")
+                break
+            visited.add(current)
+            current = symlink_targets[current]
     return errors

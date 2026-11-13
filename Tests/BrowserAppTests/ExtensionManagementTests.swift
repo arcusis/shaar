@@ -297,6 +297,28 @@ struct ExtensionManagementTests {
     #expect(listed.incognitoEnabled != true)
   }
 
+  @Test @MainActor func staleDeveloperModeFailureDoesNotReplaceNewerSuccess() throws {
+    let profileID = UUID()
+    let preferencesFile = FileManager.default.temporaryDirectory.appending(
+      path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: preferencesFile) }
+    let preferences = BrowserPreferencesStore(fileURL: preferencesFile)
+    let runtime = DelayedDeveloperModeRuntime()
+    let model = ExtensionManagerModel.shared(
+      runtime: runtime, preferences: preferences, profileID: profileID)
+
+    model.setDeveloperMode(true)
+    model.setDeveloperMode(false)
+    #expect(runtime.replies.count == 2)
+
+    runtime.complete(1, json: #"{"schemaVersion":1,"updated":true}"#, code: 0)
+    runtime.complete(0, json: nil, code: 1)
+
+    #expect(!model.developerMode)
+    #expect(model.status == nil)
+    #expect(!preferences.extensionDeveloperMode(for: profileID))
+  }
+
   @Test @MainActor func siteAccessOriginFollowsTheKeyWindowThenTheFocusedWindow() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -386,6 +408,21 @@ private final class ScriptedManageRuntime: ARCShaarRuntime {
     actions.append(payload["action"] as? String ?? "")
     let reply = replies.isEmpty ? (nil, 1) : replies.removeFirst()
     completion(reply.0, reply.1)
+  }
+}
+
+private final class DelayedDeveloperModeRuntime: ARCShaarRuntime {
+  var replies: [(String?, Int) -> Void] = []
+
+  override func submitExtensionManage(
+    forProfileID profileID: String, tabID: String?, payload: [String: Any],
+    completion: @escaping (String?, Int) -> Void
+  ) {
+    replies.append(completion)
+  }
+
+  func complete(_ index: Int, json: String?, code: Int) {
+    replies[index](json, code)
   }
 }
 

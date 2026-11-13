@@ -34,6 +34,7 @@ final class ExtensionManagerModel {
   private(set) var developerMode = false
   private(set) var status: String?
   private var requestID = UUID()
+  private var developerModeRequestID = UUID()
 
   static func shared(
     runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID
@@ -136,12 +137,14 @@ final class ExtensionManagerModel {
   }
 
   func setDeveloperMode(_ enabled: Bool) {
+    let request = UUID()
+    developerModeRequestID = request
     let previousValue = developerMode
     developerMode = enabled
     status = nil
     preferences?.setExtensionDeveloperMode(enabled, for: profileID)
     submitDeveloperMode(enabled) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -156,8 +159,10 @@ final class ExtensionManagerModel {
   }
 
   private func verifyStoredDeveloperMode() {
+    let request = UUID()
+    developerModeRequestID = request
     submitDeveloperMode(true) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -180,6 +185,8 @@ final class ExtensionManagerModel {
       status = SettingsL10n.string("Choose a folder that contains a Manifest V3 extension.")
       return
     }
+    let request = UUID()
+    developerModeRequestID = request
     status = nil
     var payload: [String: Any] = [
       "schemaVersion": 1, "action": "loadUnpacked", "path": path,
@@ -188,10 +195,10 @@ final class ExtensionManagerModel {
     submitManage(
       ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": true], tabID: nil
     ) { [weak self] modeReply in
-      guard let self else { return }
+      guard let self, self.developerModeRequestID == request else { return }
       switch modeReply {
       case .updated:
-        self.submitUnpackedLoad(payload, tabID: tabID)
+        self.submitUnpackedLoad(payload, tabID: tabID, request: request)
       case .unsupported:
         self.restoreDeveloperMode(false)
         self.status = ExtensionInstallNotice.needsNewerEngine
@@ -202,9 +209,9 @@ final class ExtensionManagerModel {
     }
   }
 
-  private func submitUnpackedLoad(_ payload: [String: Any], tabID: UUID?) {
+  private func submitUnpackedLoad(_ payload: [String: Any], tabID: UUID?, request: UUID) {
     submitManage(payload, tabID: tabID) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .prompted:
         self.status = nil

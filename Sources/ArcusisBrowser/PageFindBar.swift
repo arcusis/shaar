@@ -11,7 +11,9 @@ struct PageFindBar: View {
 
   var body: some View {
     HStack(spacing: 10) {
-      Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+      Image(systemName: "magnifyingglass")
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
       TextField(
         PanelsL10n.string("Find in page"),
         text: Binding(

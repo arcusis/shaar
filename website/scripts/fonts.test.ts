@@ -81,6 +81,12 @@ function fontshareFetch(body: string | ArrayBuffer): typeof fetch {
   };
 }
 
+test("font CSS only accepts HTTPS asset URLs", () => {
+  const css = (url: string) =>
+    `@font-face{font-family:'Satoshi';src:url('${url}');font-weight:300 900;font-style:normal;}`;
+  assert.deepEqual(parseFaces(css("http://fonts.test/font.woff2")), []);
+  assert.equal(parseFaces(css("//fonts.test/font.woff2"))[0]?.url, "https://fonts.test/font.woff2");
+});
 test("invalid cached font manifest falls back to system fonts", async () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
   const cache = join(root, "cache");

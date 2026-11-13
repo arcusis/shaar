@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import BrowserCore
+@testable import BrowserCore
 import Foundation
 import XCTest
 
@@ -54,6 +54,19 @@ final class SessionSplitTests: XCTestCase {
     XCTAssertTrue(session.moveTab(second, from: spaceID, to: destination))
     XCTAssertTrue(try XCTUnwrap(session.spaces.first { $0.id == spaceID }).splits.isEmpty)
     try session.validate()
+  }
+
+  func testMovingEmptyMalformedSplitReturnsFalseInsteadOfIndexingFirstTab() throws {
+    var session = BrowserSession.fresh()
+    let sourceID = session.selectedSpaceID
+    let destinationID = try XCTUnwrap(
+      session.addSpace(name: "Other", sharingProfile: session.selectedSpace.profileID))
+    let malformed = BrowserSplit(tabIDs: [])
+    session.spaces[try XCTUnwrap(session.spaces.firstIndex { $0.id == sourceID })].splits = [
+      malformed
+    ]
+
+    XCTAssertFalse(session.moveSplit(malformed.id, from: sourceID, to: destinationID))
   }
 
   func testReorderingTabWithinSpaceKeepsSplit() throws {

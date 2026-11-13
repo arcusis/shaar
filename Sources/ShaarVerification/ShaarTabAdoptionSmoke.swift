@@ -10,6 +10,26 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+struct ShaarTabAdoptionEvidence {
+  let clicked: Bool
+  let adopted: Bool
+  let expectedElementID: String
+  let clickedElementID: String?
+  let trustedGesture: String?
+  let destinationMarker: String?
+  let destinationHost: String?
+  let destinationBelongsToWindow: Bool
+  let rendererFailuresAreEmpty: Bool
+  let allWindowsHidden: Bool
+
+  var passed: Bool {
+    clicked && adopted && clickedElementID == expectedElementID && trustedGesture == "true"
+      && destinationMarker == "Cross-site destination loaded"
+      && destinationHost == "localhost" && destinationBelongsToWindow
+      && rendererFailuresAreEmpty && allWindowsHidden
+  }
+}
+
 /// Exercises page-created tabs in the hidden verification harness, using native trusted clicks.
 @MainActor enum ShaarTabAdoptionSmoke {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
@@ -98,15 +118,19 @@ import Foundation
     } else {
       destinationState = nil
     }
-    let passed =
-      clicked && adopted && sourceState?["clicked"] as? String == elementID
-      && sourceState?["trusted"] as? String == "true"
-      && destinationState?["marker"] as? String == "Cross-site destination loaded"
-      && destination?.url.host == "localhost"
-      && destination.map { runtime.windowID(forTabID: $0.id.uuidString) == context.nativeID }
-        == true
-      && host.contexts.values.allSatisfy { $0.store.rendererFailures.isEmpty }
-      && NSApp.windows.allSatisfy { !$0.isVisible }
+    let passed = ShaarTabAdoptionEvidence(
+      clicked: clicked, adopted: adopted, expectedElementID: elementID,
+      clickedElementID: sourceState?["clicked"] as? String,
+      trustedGesture: sourceState?["trusted"] as? String,
+      destinationMarker: destinationState?["marker"] as? String,
+      destinationHost: destination?.url.host,
+      destinationBelongsToWindow: destination.map {
+        runtime.windowID(forTabID: $0.id.uuidString) == context.nativeID
+      } == true,
+      rendererFailuresAreEmpty: host.contexts.values.allSatisfy {
+        $0.store.rendererFailures.isEmpty
+      },
+      allWindowsHidden: NSApp.windows.allSatisfy { !$0.isVisible }).passed
     return [
       "name": name, "passed": passed, "clicked": clicked, "adopted": adopted,
       "trusted": sourceState?["trusted"] ?? "",

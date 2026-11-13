@@ -262,8 +262,20 @@ test("link checker rejects empty alternative text on image map links", () => {
 test("link checker validates embedded page URLs", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {
-    writeFileSync(join(root, "index.html"), '<h1>Home</h1><iframe src="/missing-embed/"></iframe>');
+    writeFileSync(join(root, "index.html"), '<h1>Home</h1><iframe src="/missing-embed/" title="Embedded page"></iframe>');
     assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing-embed/"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("link checker requires titles for embedded pages", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    mkdirSync(join(root, "frame"));
+    writeFileSync(join(root, "frame/index.html"), "<h1>Frame</h1>");
+    writeFileSync(join(root, "index.html"), '<h1>Home</h1><iframe src="/frame/"></iframe>');
+    assert.deepEqual(checkLinks(root).errors, ["index.html: iframe missing title"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

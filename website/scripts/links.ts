@@ -202,6 +202,9 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
       if (!image.getAttribute("alt")?.trim())
         errors.push(`${path}: image submit control missing alt`);
     }
+    for (const frame of document.querySelectorAll("iframe[src]")) {
+      if (!frame.getAttribute("title")?.trim()) errors.push(`${path}: iframe missing title`);
+    }
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {
     for (const value of cssAssetURLs(readFileSync(file, "utf8"))) {

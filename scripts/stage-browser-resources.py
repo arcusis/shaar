@@ -137,6 +137,8 @@ def stage(
     if unexpected:
         raise ValueError(
             "SwiftPM resource bundle was not staged into the app: " + ", ".join(unexpected))
+    if resources.is_symlink() or (resources.exists() and not resources.is_dir()):
+        raise ValueError("resource staging destination is not a regular directory")
     resources.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=resources, prefix=".browser-resources-") as temporary:
         tmp = Path(temporary)

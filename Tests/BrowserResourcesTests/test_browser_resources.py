@@ -46,6 +46,18 @@ class ResourceStagingTests(unittest.TestCase):
         self.assertEqual((staged_audit / "axe.min.js").read_bytes(), b"axe")
         self.assertEqual((staged_audit / "runner.js").read_bytes(), b"runner")
 
+    def test_stage_rejects_symlinked_destination_directory(self):
+        outside = self.root / "outside-resources"
+        outside.mkdir()
+        sentinel = outside / "keep.txt"
+        sentinel.write_text("leave untouched", encoding="utf-8")
+        self.resources.parent.mkdir(parents=True)
+        self.resources.symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "destination is not a regular directory"):
+            staging.stage(self.binary, self.resources, self.pin)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "leave untouched")
+        self.assertEqual(list(outside.iterdir()), [sentinel])
+
     def test_invalid_inputs_rejected_before_replacing_existing_output(self):
         staging.stage(self.binary, self.resources, self.pin)
         output = self.resources / staging.BUNDLE / "Contents/Resources/public_suffix_list.dat"

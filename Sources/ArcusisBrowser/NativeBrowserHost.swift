@@ -744,6 +744,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID))
   }
 
+  static func showAllHistory(in store: BrowserStore) {
+    store.showLibrary(.history)
+  }
+
   static func presentSharePicker(for url: URL, in window: NSWindow) {
     guard let contentView = window.contentView else { return }
     let picker = NSSharingServicePicker(items: [url])
@@ -794,7 +798,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .recentlyClosed: store.showRecentlyClosed()
     case .bookmarkPage: Self.bookmarkCurrentPage(in: store)
     case .bookmarks: Self.showBookmarks(in: store)
-    case .history: store.showLibrary(.history)
+    case .history: Self.showAllHistory(in: store)
     case .clearHistory: break  // Routed through the settings controller above.
     case .downloads: store.showDownloads()
     case .sharePage:

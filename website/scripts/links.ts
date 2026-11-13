@@ -45,6 +45,7 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
             .map((candidate) => candidate.trim().split(/\s+/, 1)[0])
         : [element.getAttribute("href") ?? element.getAttribute("src") ?? ""];
       for (const value of references) {
+        if (element.localName === "img" && value.startsWith("data:image/")) continue;
         if (!value || value.startsWith("javascript:")) {
           errors.push(`${path}: empty or unsafe link`);
           continue;

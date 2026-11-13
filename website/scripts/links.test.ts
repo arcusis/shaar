@@ -70,3 +70,16 @@ test("link checker validates every responsive image source", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker accepts embedded image data URLs", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img alt="pixel" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">',
+    );
+    assert.deepEqual(checkLinks(root).errors, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

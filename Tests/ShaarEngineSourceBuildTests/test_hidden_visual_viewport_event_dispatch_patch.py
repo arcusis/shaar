@@ -27,6 +27,17 @@ class HiddenVisualViewportEventDispatchPatchTests(unittest.TestCase):
             patch,
         )
         self.assertIn("TaskType::kDOMManipulation", patch)
+        self.assertEqual(patch.count("+  if (!GetExecutionContext() || !domWindow())"), 4)
+        for event in (
+            "VisualViewportScrollEvent",
+            "VisualViewportScrollEndEvent",
+            "VisualViewportResizeEvent",
+        ):
+            self.assertIn(
+                "+  if (!GetExecutionContext() || !domWindow())\n"
+                "+    return;\n   " + event + "* event =",
+                patch,
+            )
         self.assertIn("event->target() == target", patch)
         self.assertIn("HiddenDocumentVisualViewportEventsDispatchWithoutAnimationFrame", patch)
         for event_type in ("scroll", "scrollend", "resize"):

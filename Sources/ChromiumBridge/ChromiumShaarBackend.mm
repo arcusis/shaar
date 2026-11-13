@@ -395,11 +395,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   // Desktop capture requests arrive with patch 0071. Minor 14 is that bump.
   _shaarDesktopCaptureAvailable = _symbols.abi_minor() >= 14;
   _shaarDeviceChooserAvailable = _symbols.abi_minor() >= kShaarDeviceChooserABIMinor;
-  _shaarWebShareAvailable = _symbols.abi_minor() >= 15;
   _symbols.tab_find = reinterpret_cast<decltype(_symbols.tab_find)>(
       dlsym(_shaarLibrary, "shaar_tab_find"));
   _shaarShareReply = reinterpret_cast<ShaarShareReplyFunction>(
       dlsym(_shaarLibrary, "shaar_share_reply"));
+  _shaarWebShareAvailable = _symbols.abi_minor() >= 15 && _shaarShareReply != nullptr;
   _shaarPrintReply = reinterpret_cast<ShaarPrintReplyFunction>(
       dlsym(_shaarLibrary, "shaar_print_reply"));
   _shaarPrintAvailable = _symbols.abi_minor() >= 16 && _shaarPrintReply != nullptr;

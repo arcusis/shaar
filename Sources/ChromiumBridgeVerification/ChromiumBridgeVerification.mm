@@ -198,7 +198,7 @@ NSDictionary *ARCProbeDesktopCaptureEventDispatch(NSDictionary *payload, BOOL va
 }
 
 NSDictionary *ARCProbeWebShareEventDispatch(NSDictionary *payload, uint32_t abiMinor,
-                                             BOOL validOwner) {
+                                             BOOL validOwner, BOOL replyAvailable) {
   ARCShaarRuntime *runtime = [ARCShaarRuntime new];
   __block NSDictionary *received = nil;
   runtime.onWebShareRequest = ^(NSDictionary *request) { received = request; };
@@ -211,10 +211,10 @@ NSDictionary *ARCProbeWebShareEventDispatch(NSDictionary *payload, uint32_t abiM
     void *address = (__bridge void *)runtime;
     std::memcpy(static_cast<uint8_t *>(address) + ivar_getOffset(ivar), value, size);
   };
-  BOOL available = abiMinor >= 15;
+  BOOL available = abiMinor >= 15 && replyAvailable;
   setIvar("_shaarWebShareAvailable", &available, sizeof(available));
   using ReplyFunction = shaar_error_code (*)(const char *, int);
-  ReplyFunction reply = ProbeShareReply;
+  ReplyFunction reply = replyAvailable ? ProbeShareReply : nullptr;
   setIvar("_shaarShareReply", &reply, sizeof(reply));
   object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabs"),
                  [@{tabID: [NSValue valueWithPointer:(void *)1]} mutableCopy]);

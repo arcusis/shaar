@@ -22,8 +22,11 @@ def size(path: Path) -> int:
 
 
 def trim_locales(resources: Path) -> dict:
-    locales = sorted(path for path in resources.iterdir() if path.is_dir()
-                     and path.name.endswith(".lproj"))
+    locale_entries = sorted(path for path in resources.iterdir() if path.name.endswith(".lproj"))
+    invalid = [path.name for path in locale_entries if path.is_symlink() or not path.is_dir()]
+    if invalid:
+        raise ValueError("Chromium locale entries must be real directories: " + ", ".join(invalid))
+    locales = locale_entries
     names = {path.name for path in locales}
     if not {"en.lproj", "he.lproj"} <= names:
         raise ValueError("Chromium framework must contain en.lproj and he.lproj")

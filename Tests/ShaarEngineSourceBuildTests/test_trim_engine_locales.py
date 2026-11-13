@@ -48,6 +48,24 @@ class TrimEngineLocalesTests(unittest.TestCase):
                 TRIM.trim_locales(resources)
             self.assertTrue((resources / "fr.lproj").exists())
 
+    def test_symlinked_locale_fails_before_removing_anything(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            resources = root / "Resources"
+            resources.mkdir()
+            (resources / "en.lproj").mkdir()
+            (resources / "he.lproj").mkdir()
+            outside = root / "outside"
+            outside.mkdir()
+            (resources / "fr.lproj").symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "real directories: fr.lproj"):
+                TRIM.trim_locales(resources)
+
+            self.assertTrue((resources / "fr.lproj").is_symlink())
+            self.assertTrue((resources / "en.lproj").is_dir())
+            self.assertTrue(outside.is_dir())
+
 
 if __name__ == "__main__":
     unittest.main()

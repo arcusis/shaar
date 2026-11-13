@@ -44,4 +44,34 @@ struct BrowserStoreLibraryTests {
     #expect(!store.deleteBookmark(otherID, profileID: profile))
     #expect(removed.isEmpty)
   }
+
+  @Test func deleteBookmarkFromLibraryConfirmationRemainsAvailable() {
+    let store = BrowserStore()
+    let profile = store.session.selectedSpace.profileID
+    let bookmarkID = UUID()
+    store.library.onLoad = { _, _, done in
+      done(
+        .success([
+          "bar": [
+            "id": "00000000-0000-4000-8000-000000000001", "k": "f", "t": "Bookmarks bar",
+            "c": [["id": bookmarkID.uuidString, "k": "u", "t": "Saved", "u": "https://saved.test"]],
+          ],
+          "other": [
+            "id": "00000000-0000-4000-8000-000000000002", "k": "f", "t": "Other bookmarks",
+            "c": [],
+          ],
+        ]))
+    }
+    store.showLibrary(.bookmarks)
+    var removed: [String] = []
+    store.library.onMutation = { _, mutation, done in
+      if case .bookmark(let operation) = mutation, operation["op"] as? String == "remove" {
+        removed.append(operation["id"] as? String ?? "")
+      }
+      done(nil)
+    }
+
+    #expect(store.deleteBookmark(bookmarkID, profileID: profile))
+    #expect(removed == [bookmarkID.uuidString.lowercased()])
+  }
 }

@@ -778,6 +778,17 @@ class CatalogValidatorTests(unittest.TestCase):
                     ):
                         VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
+            multiline_key = "Translated multiline prompt"
+            catalog_path.write_text(json.dumps({"strings": {
+                multiline_key: {"localizations": {"he": unit("הנחיה מתורגמת")}}
+            }}), encoding="utf-8")
+            source.write_text(
+                'TextField(\n  "Translated multiline prompt",\n  text: $value\n)\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "unlocalized TextField title.*Translated multiline prompt"):
+                VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+
     def test_rejects_direct_swiftui_text_when_hebrew_plural_catalog_exists(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

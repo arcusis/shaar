@@ -431,11 +431,7 @@ def validate_source_references(root, catalogs, include_app=False):
                     f"unlocalized {control} title for catalog key {key!r} "
                     f"({path.relative_to(root)}:{line})"
                 )
-<<<<<<< HEAD
         for match in direct_accessibility_text.finditer(cleaned):
-=======
-        for match in direct_accessibility_text.finditer(source):
->>>>>>> 7843065d0 (test: scan localized SwiftUI control titles)
             modifier, literal = match.groups()
             key = decode_swift_literal(literal)
             if key in translated_text_keys:

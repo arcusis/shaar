@@ -753,7 +753,11 @@ class CatalogValidatorTests(unittest.TestCase):
                 VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
     def test_rejects_direct_swiftui_control_titles_with_hebrew_catalog_translations(self):
-        controls = ("Button", "Label", "Menu", "Picker", "SecureField", "TextField", "Toggle")
+        controls = (
+            "Button", "ColorPicker", "DatePicker", "Label", "LabeledContent", "Menu",
+            "NavigationLink", "Picker", "ProgressView", "Section", "SecureField",
+            "TextField", "Toggle",
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "Sources/ArcusisBrowser/ExampleView.swift"

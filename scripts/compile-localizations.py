@@ -399,7 +399,12 @@ def validate_source_references(root, catalogs, include_app=False):
     call = re.compile(r"\b(" + "|".join(map(re.escape, wrappers)) + r")\.(?:string|text|format|plural)\s*\(")
     direct_text = re.compile(r'\b(Text)\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)')
     direct_control_text = re.compile(
-        r'\b(Button|Label|Menu|Picker|ProgressView|Section|SecureField|TextField|Toggle)'
+        r'\b(Button|ColorPicker|DatePicker|Label|LabeledContent|Menu|NavigationLink|Picker|'
+        r'ProgressView|Section|SecureField|TextField|Toggle)'
+        r'\s*\(\s*("(?:[^"\\]|\\.)*")'
+    )
+    direct_control_title = re.compile(
+        r'\b(Button|Label|Toggle|Picker|TextField|Section|Menu|NavigationLink)'
         r'\s*\(\s*("(?:[^"\\]|\\.)*")'
     )
     direct_accessibility_text = re.compile(
@@ -426,7 +431,11 @@ def validate_source_references(root, catalogs, include_app=False):
                     f"unlocalized {control} title for catalog key {key!r} "
                     f"({path.relative_to(root)}:{line})"
                 )
+<<<<<<< HEAD
         for match in direct_accessibility_text.finditer(cleaned):
+=======
+        for match in direct_accessibility_text.finditer(source):
+>>>>>>> 7843065d0 (test: scan localized SwiftUI control titles)
             modifier, literal = match.groups()
             key = decode_swift_literal(literal)
             if key in translated_text_keys:

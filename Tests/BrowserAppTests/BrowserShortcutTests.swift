@@ -163,10 +163,33 @@ import Testing
   #expect(movedFirst && movedSecond)
   #expect(session.selectedSpace.orderedTabs.map(\.id) == [first, second, third])
   session.selectTab(third, in: spaceID)
+}
+
+@Test @MainActor func controlTabCyclesFromTheSelectedFavoritePage() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let profileID = session.selectedSpace.profileID
+  let firstCandidate = session.open(URL(string: "https://cycle-first.example")!)
+  let first = try #require(firstCandidate)
+  let secondCandidate = session.open(URL(string: "https://cycle-second.example")!)
+  let second = try #require(secondCandidate)
+  session.selectTab(first, in: spaceID)
+  let favoriteCandidate = session.addFavorite(
+    profileID: profileID, originalURL: URL(string: "https://cycle-favorite.example")!)
+  let favorite = try #require(favoriteCandidate)
+  let didSelectFavorite = session.selectFavorite(favorite, in: spaceID)
+  #expect(didSelectFavorite)
   let store = BrowserStore(session: session)
 
   #expect(store.selectAdjacentTab(by: 1))
   #expect(store.session.selectedPage?.tab.id == first)
+}
+
+  #expect(store.session.selectedPage?.tab.id != second)
+  #expect(store.selectAdjacentTab(by: 1))
+  #expect(store.session.selectedPage?.tab.id == second)
+  #expect(store.selectAdjacentTab(by: 1))
+  #expect(store.session.selectedPage?.tab.id == store.session.favoritePage(for: favorite)?.tab.id)
 }
 
 @Test @MainActor func controlTabRejectsAdditionalModifiersAndKeyUp() throws {

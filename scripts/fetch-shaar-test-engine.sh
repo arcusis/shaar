@@ -27,6 +27,9 @@ checksum=$(jq -er .sha256 "$pin")
   echo 'Shaar test asset and tag do not match.' >&2; exit 1;
 }
 archive="$cache/$asset"
+[[ ! -L "$PWD/build" && ! -L "$cache" ]] || {
+  echo 'Refusing symlinked Shaar test engine cache directory.' >&2; exit 1;
+}
 mkdir -p "$cache"
 if [[ -L "$archive" ]]; then
   echo 'Shaar test archive cache path must not be a symlink.' >&2

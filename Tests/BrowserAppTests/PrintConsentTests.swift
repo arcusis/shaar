@@ -137,6 +137,27 @@ struct PrintConsentTests {
     #expect(try #require(PrintRequest(payload: longTitlePayload)).title.count == 256)
   }
 
+  @Test func consentURLRedactsEmbeddedCredentials() throws {
+    let store = openedStore()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let payload: [String: Any] = [
+      "schemaVersion": 1,
+      "id": UUID().uuidString,
+      "profileID": store.session.selectedSpace.profileID.uuidString,
+      "tabID": tab.id.uuidString,
+      "pageURL": "https://alice:secret@example.com/article",
+      "origin": "https://example.com",
+      "frameID": frameID,
+      "title": "Article",
+    ]
+    let printRequest = try #require(PrintRequest(payload: payload))
+
+    #expect(printRequest.pageURL.user() == "alice")
+    #expect(!printRequest.displayPageURL.contains("alice"))
+    #expect(!printRequest.displayPageURL.contains("secret"))
+    #expect(printRequest.displayPageURL == "https://example.com/article")
+  }
+
   @Test func rejectsMalformedPrintPayloads() throws {
     let store = openedStore()
     let print = try request(store)

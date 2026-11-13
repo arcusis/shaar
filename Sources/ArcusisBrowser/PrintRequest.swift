@@ -44,6 +44,15 @@ struct PrintRequest: Identifiable, Equatable {
 
   var sheetID: String { "print-\(id)" }
 
+  var displayPageURL: String {
+    guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
+      return pageURL.host() ?? ""
+    }
+    components.user = nil
+    components.password = nil
+    return components.string ?? pageURL.host() ?? ""
+  }
+
   var hostLabel: String {
     guard let rawHost = Self.serializedHost(requestingOrigin) ?? pageURL.host() else {
       return pageURL.absoluteString

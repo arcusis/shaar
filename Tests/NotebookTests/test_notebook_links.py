@@ -74,6 +74,22 @@ class NotebookLinksTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("New_Name.md", result.stderr)
 
+    def test_symlinked_note_cannot_satisfy_index_membership(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "Notebook"
+            notebook.mkdir()
+            outside = root / "Outside.md"
+            outside.write_text("# External note", encoding="utf-8")
+            (notebook / "_INDEX_Main.md").write_text("[[Linked]]", encoding="utf-8")
+            (notebook / "Linked.md").symlink_to(outside)
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--notebook", str(notebook)],
+                cwd=directory, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Notebook contains symlink: Linked.md", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

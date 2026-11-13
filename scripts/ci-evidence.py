@@ -33,7 +33,7 @@ def owned_probe_root(path: Path) -> bool:
             and not (path / ".arcusis-probe").is_symlink()
             and (path / ".arcusis-probe").read_bytes() == b"arcusis-engine-probe-v1\n"
         )
-    except OSError:
+    except (OSError, UnicodeError):
         return False
 
 

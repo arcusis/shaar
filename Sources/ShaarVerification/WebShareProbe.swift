@@ -183,14 +183,8 @@ final class WebShareProbe {
   private func boundRequest(id: String = UUID().uuidString) -> WebShareRequest? {
     guard let tab = store.session.page(forTabID: tabID)?.tab,
       let profile = store.session.profileID(forTabID: tabID),
-      var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false)
+      let origin = Self.originURL(for: pageURL)
     else { return nil }
-    components.path = ""
-    components.query = nil
-    components.fragment = nil
-    components.user = nil
-    components.password = nil
-    guard let origin = components.url else { return nil }
     return WebShareRequest(payload: [
       "id": id,
       "profileID": profile.uuidString,
@@ -203,6 +197,18 @@ final class WebShareProbe {
       "text": "A page worth sharing",
       "url": tab.url.absoluteString,
     ])
+  }
+
+  static func originURL(for pageURL: URL) -> URL? {
+    guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
+      return nil
+    }
+    components.path = ""
+    components.query = nil
+    components.fragment = nil
+    components.user = nil
+    components.password = nil
+    return components.url
   }
 
   private func evaluate(_ script: String) async -> String? {

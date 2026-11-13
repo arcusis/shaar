@@ -13,6 +13,10 @@ import Testing
 struct ExtensionManagementTests {
   private let validID = String(repeating: "b", count: 32)
 
+  @Test @MainActor func extensionManagerTitleIsAVoiceOverHeading() {
+    #expect(ExtensionManagerPanel.titleHeadingTraits == .isHeader)
+  }
+
   @Test @MainActor func enableSwitchNameIdentifiesTheExtension() {
     for enabled in [true, false] {
       let item = ManagedExtension(

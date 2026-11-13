@@ -73,8 +73,8 @@ def archive_members(archive: Path) -> tuple[set[str], str]:
     headers = sorted(member.name for member in members if Path(member.name).suffix == ".h")
     binaries = sorted(member.name for member in members
                       if member.isfile() and Path(member.name).name == "Chromium Framework")
-    if not binaries:
-        raise ContractError("pinned engine archive does not contain Chromium Framework")
+    if len(binaries) != 1:
+        raise ContractError("pinned engine archive must contain exactly one Chromium Framework binary")
     return set(headers), binaries[0]
 
 

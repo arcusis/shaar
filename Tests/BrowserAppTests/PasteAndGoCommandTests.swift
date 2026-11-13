@@ -51,12 +51,15 @@ import Testing
   let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoPrivateEmptySpaceTests"))
   pasteboard.clearContents()
   let destination = URL(string: "https://private-empty-tab.example/path")!
-  #expect(pasteboard.setString(destination.absoluteString, forType: .string))
   let session = try BrowserSession.privateWindow(sourceProfileID: UUID(), firstTabID: UUID())
   let store = BrowserStore(privateSession: session)
   store.session.closeTab(session.selectedSpace.tabs[0].id)
 
   #expect(store.session.selectedPage == nil)
+  #expect(
+    !PrivateBrowserHost.windowCanPerform(
+      .pasteAndGo, store: store, pasteboard: pasteboard, searchEngine: .google))
+  #expect(pasteboard.setString(destination.absoluteString, forType: .string))
   #expect(
     PrivateBrowserHost.windowCanPerform(
       .pasteAndGo, store: store, pasteboard: pasteboard, searchEngine: .google))

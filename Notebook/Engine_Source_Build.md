@@ -13,6 +13,8 @@ Passing `--run` prepares and builds under ignored, owner-only `build/EngineSourc
 
 The DevTools frontend overlay staging script rejects symlinked source files so staging cannot copy content from outside the pinned overlay.
 
+The ABI contract checker requires source-build patch paths to remain inside the repository before reading their pinned contents.
+
 The reviewed `patches/profile-download-directory.patch` adds `ac_downloads_directory_get` and `ac_downloads_directory_set` for exact loaded normal profiles. It rejects private/shutdown/policy-controlled profiles and unusable directory paths. Chromium `DownloadPrefs` and its `PrefService` remain the authority. This patch is not present in the prebuilt archive. Shaar now persists a per-profile folder choice and can scan it in Library, but the shipped engine still does not apply the choice to browser downloads. Compilation and runner tests do not prove per-profile runtime download isolation, restart persistence, UI behavior, signing or release readiness.
 
 Further source-build experiments on feature branches must be documented as pending until merged. The pinned engine's pending-navigation Quit crash is separate from this download-directory patch; see [[Quit_Exit_Verification]]. Upstream notices and detailed source inputs: [ArdiaCore README](../ThirdParty/ArdiaCore/README.md).

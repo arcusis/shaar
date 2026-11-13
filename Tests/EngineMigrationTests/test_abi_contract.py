@@ -134,6 +134,30 @@ class EngineABIContractTests(unittest.TestCase):
             self.assertEqual(operations, {"SHAAR_OP_MEDIA_CONTROL", "SHAAR_OP_ADDED_BY_PATCH"})
             self.assertIn("hash-verified source-build header", origin)
 
+    def test_source_build_header_rejects_patch_paths_outside_repository(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            header_path = root / "ThirdParty/ChromiumEngine/layer" / CONTRACT.PUBLIC_HEADER
+            header_path.parent.mkdir(parents=True)
+            header_path.write_text('''
+              typedef enum { SHAAR_EVENT_MEDIA = 15 } shaar_event_kind;
+              typedef enum { SHAAR_OP_MEDIA_CONTROL = 1200 } shaar_operation;
+            ''')
+            outside = root.parent / "outside-abi.patch"
+            outside.write_text("not an ABI patch")
+            relative_header = CONTRACT.PUBLIC_HEADER
+            manifest = {
+                "chromium": {"version": "157.0.8103.51"},
+                "layer": {"path": "ThirdParty/ChromiumEngine/layer", "files": {
+                    relative_header: hashlib.sha256(header_path.read_bytes()).hexdigest()
+                }},
+                "patches": [{"file": "../outside-abi.patch",
+                             "sha256": hashlib.sha256(outside.read_bytes()).hexdigest()}],
+            }
+            (root / "ThirdParty/ChromiumEngine/source-build.json").write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(CONTRACT.ContractError, "escapes the repository"):
+                CONTRACT.source_build_header(root, {"releaseTag": "engine-157.0.8103.51-shaar.32"})
+
 
 if __name__ == "__main__":
     unittest.main()

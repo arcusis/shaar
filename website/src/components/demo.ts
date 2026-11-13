@@ -83,7 +83,7 @@ function pages(): string {
     .flatMap((space, spaceIndex) =>
       space.tabs.map(
         (tab, tabIndex) =>
-          `<img class="demo-page-image" data-space="${spaceIndex}" data-tab="${tabIndex}" src="/assets/screens/page-${tab.page}.webp" width="1600" height="1086" alt="${escapeHtml(`${tab.title} at ${tab.host}`)}"${spaceIndex === 0 && tabIndex === 0 ? "" : ' hidden loading="lazy"'}>`,
+          `<img class="demo-page-image" data-space="${spaceIndex}" data-tab="${tabIndex}" src="/assets/screens/page-${tab.page}.webp" width="1600" height="1086" alt="${escapeHtml(`${tab.title} at ${tab.host}`)}" loading="lazy"${spaceIndex === 0 && tabIndex === 0 ? "" : " hidden"}>`,
       ),
     )
     .join("");

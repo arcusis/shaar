@@ -18,6 +18,7 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
   var holdsContextCreation = false
   var contextCompletion: (@MainActor @Sendable (Bool, Error?) -> Void)?
   var failedWindowCreations = 0
+  var failedContextReleases = 0
 
   override func createPrivateContextID(
     _ contextID: String, sourceProfileID: String,
@@ -60,6 +61,10 @@ private final class PrivateHostLifecycleRuntime: ARCChromiumRuntime {
 
   override func releasePrivateContextID(_ contextID: String) -> Bool {
     releasedContexts.append(contextID)
+    if failedContextReleases > 0 {
+      failedContextReleases -= 1
+      return false
+    }
     return true
   }
 }
@@ -86,6 +91,27 @@ struct PrivateBrowserHostLifecycleTests {
     #expect(runtime.releasedContexts == [contextID])
   }
 
+  @Test func failedContextReleaseAfterDetachIsRetriedImmediately() throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.holdsContextCreation = true
+    runtime.failedContextReleases = 1
+    let sourceProfileID = UUID().uuidString
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+    try host.openWindow()
+    let contextID = try #require(runtime.createdContexts.first)
+    let completion = try #require(runtime.contextCompletion)
+
+    host.detach()
+    completion(true, nil)
+
+    #expect(host.windowCount == 0)
+    #expect(runtime.windows.isEmpty)
+    #expect(runtime.releasedContexts == [contextID, contextID])
+  }
+
   @Test func failedQueuedWindowCreationDoesNotReleaseContextNeededByNextRequest() throws {
     let runtime = PrivateHostLifecycleRuntime()
     runtime.holdsContextCreation = true
@@ -109,6 +135,49 @@ struct PrivateBrowserHostLifecycleTests {
     let windowID = try #require(host.ownedWindows.first?.windowID)
     runtime.onPrivateWindowClosed?(contextID, windowID)
     #expect(runtime.releasedContexts == [contextID])
+    host.detach()
+  }
+
+  @Test func failedContextReleaseIsRetriedBeforeCreatingAnotherPrivateContext() throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.failedContextReleases = 1
+    let sourceProfileID = UUID().uuidString
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+
+    try host.openWindow()
+    let first = try #require(host.ownedWindows.first)
+    runtime.onPrivateWindowClosed?(first.contextID, first.windowID)
+    #expect(runtime.releasedContexts == [first.contextID])
+
+    try host.openWindow()
+
+    #expect(runtime.releasedContexts == [first.contextID, first.contextID])
+    #expect(runtime.createdContexts.count == 2)
+    #expect(runtime.createdContexts[1] != first.contextID)
+    host.detach()
+  }
+
+  @Test func failedContextReleaseRetriesWithoutAnotherWindowRequest() async throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.failedContextReleases = 1
+    let sourceProfileID = UUID().uuidString
+    let host = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host.installCallbacks()
+
+    try host.openWindow()
+    let owner = try #require(host.ownedWindows.first)
+    runtime.onPrivateWindowClosed?(owner.contextID, owner.windowID)
+
+    for _ in 0..<150 where runtime.releasedContexts.count < 2 {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(runtime.releasedContexts == [owner.contextID, owner.contextID])
+    #expect(host.windowCount == 0)
     host.detach()
   }
 

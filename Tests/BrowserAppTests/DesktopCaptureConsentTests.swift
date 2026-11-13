@@ -212,6 +212,8 @@ struct DesktopCaptureConsentTests {
       ("pageURL", "file:///tmp/page" as Any),
       ("origin", "http://meet.google.com" as Any),
       ("origin", "https://meet.google.com/path" as Any),
+      ("origin", "https://meet.google.com:99999" as Any),
+      ("origin", "http://localhost:99999" as Any),
       ("frameID", 4 as Any),
       ("frameID", "wrong-frame" as Any),
     ] {
@@ -426,12 +428,14 @@ struct DesktopCaptureConsentTests {
     var session = store().session
     let profileID = session.selectedSpace.profileID
     let requestingTabID = try #require(session.selectedSpace.selectedTab?.id)
-    #expect(session.insertNativeTab(
-      BrowserTab(url: URL(string: "about:blank")!), profileID: profileID,
-      openerID: requestingTabID, foreground: false) != nil)
-    #expect(session.insertNativeTab(
-      BrowserTab(url: URL(string: "devtools://devtools/bundled/js_app.html")!),
-      profileID: profileID, openerID: requestingTabID, foreground: false) != nil)
+    #expect(
+      session.insertNativeTab(
+        BrowserTab(url: URL(string: "about:blank")!), profileID: profileID,
+        openerID: requestingTabID, foreground: false) != nil)
+    #expect(
+      session.insertNativeTab(
+        BrowserTab(url: URL(string: "devtools://devtools/bundled/js_app.html")!),
+        profileID: profileID, openerID: requestingTabID, foreground: false) != nil)
 
     let sources = DesktopCaptureCatalog.tabSources(
       session: session,
@@ -444,9 +448,10 @@ struct DesktopCaptureConsentTests {
 
   @Test func tabSourceFallsBackToPageHostWhenSavedTitleIsBlank() throws {
     let original = store().session
-    let spaceIndex = try #require(original.spaces.firstIndex {
-      $0.profileID == original.selectedSpace.profileID
-    })
+    let spaceIndex = try #require(
+      original.spaces.firstIndex {
+        $0.profileID == original.selectedSpace.profileID
+      })
     var spaces = original.spaces
     let tabIndex = try #require(spaces[spaceIndex].tabs.indices.first)
     let tabID = spaces[spaceIndex].tabs[tabIndex].id

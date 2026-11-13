@@ -20,6 +20,7 @@ enum DownloadsPanelAccessibility {
 }
 
 struct DownloadsPanel: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let store: BrowserStore
   let engine: BrowserEngine
   let profileID: UUID
@@ -32,7 +33,7 @@ struct DownloadsPanel: View {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
           Text(PanelsL10n.string("Downloads")).font(.title2.weight(.semibold))
-            .accessibilityAddTraits(Self.titleAccessibilityTraits)
+            .accessibilityAddTraits(Self.headingTraits)
           Text(profileName).font(.callout).foregroundStyle(.secondary)
         }
         Spacer()

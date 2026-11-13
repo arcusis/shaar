@@ -71,11 +71,12 @@ final class AgentBridgeTests: XCTestCase {
 
     let disconnectModel = AgentBridgeModel(target: target) { operation, _, reply in
       if operation == .enable {
-        reply([
-          "schemaVersion": 1, "enabled": true, "port": 9222,
-          "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
-          "connectionCount": 0, "token": String(repeating: "a", count: 43),
-        ], nil)
+        reply(
+          [
+            "schemaVersion": 1, "enabled": true, "port": 9222,
+            "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
+            "connectionCount": 0, "token": String(repeating: "a", count: 43),
+          ], nil)
       } else {
         reply(nil, backendError)
       }

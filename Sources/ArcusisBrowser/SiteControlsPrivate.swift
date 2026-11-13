@@ -50,10 +50,14 @@ final class PrivateSiteControlsModel: Identifiable {
       let current = try await runtime.privateCookies(
         forTabID: tabID, windowID: windowID, contextID: contextID, origin: origin
       ).boolValue
-      guard currentRead == readRevision, currentChange == changeRevision else { return }
+      guard !Task.isCancelled, currentRead == readRevision, currentChange == changeRevision else {
+        return
+      }
       allowed = current
     } catch {
-      guard currentRead == readRevision, currentChange == changeRevision else { return }
+      guard !Task.isCancelled, currentRead == readRevision, currentChange == changeRevision else {
+        return
+      }
       failure = error.localizedDescription
     }
   }

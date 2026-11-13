@@ -238,6 +238,11 @@ struct BrowserSettingsView: View {
     _selectedSection = State(initialValue: initialSection)
   }
 
+  static func historyClearFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string(
+      "Could not clear history. Try again.", table: "Settings", language: language)
+  }
+
   var body: some View {
     HStack(spacing: 0) {
       categoryBar
@@ -526,8 +531,7 @@ struct BrowserSettingsView: View {
               try await clearHistory(id)
               historyMessage = SettingsL10n.string("History cleared.")
             } catch {
-              historyMessage = SettingsL10n.format(
-                "Could not clear history: %@", .string(error.localizedDescription))
+              historyMessage = Self.historyClearFailure()
             }
             clearingHistory = false
           }

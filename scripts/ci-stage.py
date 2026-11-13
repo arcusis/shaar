@@ -208,9 +208,26 @@ def restore_shared_verification_bundle() -> bool:
     return True
 
 
+def discard_shared_verification_bundle() -> None:
+    directory = ROOT / "build/ci/engine-build"
+    for name in ("bundle.json", "verification.tar.gz"):
+        (directory / name).unlink(missing_ok=True)
+    bundle = ROOT / "build" / BUNDLE_NAME
+    if bundle.is_symlink() or bundle.is_file():
+        bundle.unlink()
+    elif bundle.exists():
+        shutil.rmtree(bundle)
+
+
 def run_basic_browsing(checks: Commands) -> None:
     require_hosted_mac()
-    if not restore_shared_verification_bundle() and checks.run(
+    try:
+        restored = restore_shared_verification_bundle()
+    except (OSError, ValueError, tarfile.TarError, EOFError) as error:
+        print(f"Shared verification bundle could not be restored; rebuilding it: {error}")
+        discard_shared_verification_bundle()
+        restored = False
+    if not restored and checks.run(
         "verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]
     ):
         return

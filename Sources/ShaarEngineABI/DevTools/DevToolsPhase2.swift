@@ -5,6 +5,13 @@
 import CoreFoundation
 import Foundation
 
+private func phase2ReplyInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
+
 /// Fixed commands within the tab-scoped DevTools panel lease. Cookies and
 /// site-data clearing belong to the site-data adapter.
 public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
@@ -150,8 +157,8 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
     let replyLimit = command.id == 16 || command.id == 20 ? 32 * 1_048_576 : 1_050_624
     guard data.count <= replyLimit,
       let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      root["schemaVersion"] as? Int == 1,
-      root["commandID"] as? Int == command.id,
+      phase2ReplyInteger(root["schemaVersion"]) == 1,
+      phase2ReplyInteger(root["commandID"]) == command.id,
       let rawItems = root["items"] as? [[String: Any]], rawItems.count <= 50,
       let truncated = root["truncated"] as? Bool,
       Set(root.keys).isSubset(of: [
@@ -175,10 +182,9 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
     var counters: [String: Int] = [:]
     for key in ["documents", "nodes", "jsEventListeners"] {
       if let value = root[key] {
-        if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
-          return nil
-        }
-        guard command.id == 14, let count = value as? Int, count >= 0 else { return nil }
+        guard command.id == 14,
+          let count = phase2ReplyInteger(value), count >= 0
+        else { return nil }
         counters[key] = count
       }
     }

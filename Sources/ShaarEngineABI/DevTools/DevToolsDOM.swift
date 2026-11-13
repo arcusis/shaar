@@ -59,7 +59,16 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
     _ fields: [String: Any], parentID: Int?, relation: ShaarDOMRelation,
     childrenIDs: [Int] = []
   ) -> Self? {
-    let count = (fields["childNodeCount"] as? Int) ?? childrenIDs.count
+    let count: Int
+    if let rawCount = fields["childNodeCount"] {
+      if let number = rawCount as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+        return nil
+      }
+      guard let parsedCount = rawCount as? Int else { return nil }
+      count = parsedCount
+    } else {
+      count = childrenIDs.count
+    }
     guard let id = fields["nodeId"] as? Int, id > 0,
       let type = fields["nodeType"] as? Int, (1...12).contains(type),
       let name = fields["nodeName"] as? String, !name.isEmpty, name.utf8.count <= 128,

@@ -12,7 +12,7 @@ struct DefaultBrowserServiceTests {
   @Test func firstRunDefaultBrowserFailureUsesHebrewRecoveryCopy() {
     #expect(
       FirstRunSetupView.defaultBrowserFailure(language: .hebrew)
-        == "לא ניתן להגדיר את Shaar כדפדפן ברירת המחדל.")
+        == "לא ניתן להגדיר את האפליקציה כדפדפן ברירת המחדל.")
   }
 
   @Test func bundleWithoutAnIdentifierIsNeverReportedAsDefault() {

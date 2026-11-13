@@ -1,146 +1,1584 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Previous Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Previous Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הקודם"}}}},
-    "Next Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Next Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הבא"}}}},
-    "Show All History": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show All History"}},"he":{"stringUnit":{"state":"translated","value":"הצגת כל ההיסטוריה"}}}},
-    "Enter Full Screen": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Enter Full Screen"}},"he":{"stringUnit":{"state":"translated","value":"כניסה למסך מלא"}}}},
-    "Paste and Match Style": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Paste and Match Style"}},"he":{"stringUnit":{"state":"translated","value":"הדבקה והתאמת סגנון"}}}},
-    "Could not clear history. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not clear history. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב."}}}},
-    "Could not delete the profile. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not delete the profile. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן למחוק את הפרופיל. נסו שוב."}}}},
-    "Could not create this profile. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not create this profile. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן ליצור את הפרופיל. כדאי לנסות שוב."}}}},
-    "Share Page…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Share Page…"}},"he":{"stringUnit":{"state":"translated","value":"שיתוף העמוד…"}}}},
-    "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
-    "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},
-    "Developer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer"}},"he":{"stringUnit":{"state":"translated","value":"פיתוח"}}}},
-    "Sleeping tabs": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sleeping tabs"}},"he":{"stringUnit":{"state":"translated","value":"לשוניות רדומות"}}}},
-    "Sleep inactive tabs": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sleep inactive tabs"}},"he":{"stringUnit":{"state":"translated","value":"הרדמת לשוניות לא פעילות"}}}},
-    "Inactive tabs are discarded after": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Inactive tabs are discarded after"}},"he":{"stringUnit":{"state":"translated","value":"לשוניות לא פעילות מושלכות אחרי"}}}},
-    "5 minutes": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"5 minutes"}},"he":{"stringUnit":{"state":"translated","value":"5 דקות"}}}},
-    "15 minutes": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"15 minutes"}},"he":{"stringUnit":{"state":"translated","value":"15 דקות"}}}},
-    "30 minutes": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"30 minutes"}},"he":{"stringUnit":{"state":"translated","value":"30 דקות"}}}},
-    "1 hour": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"1 hour"}},"he":{"stringUnit":{"state":"translated","value":"שעה"}}}},
-    "2 hours": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"2 hours"}},"he":{"stringUnit":{"state":"translated","value":"שעתיים"}}}},
-    "6 hours": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"6 hours"}},"he":{"stringUnit":{"state":"translated","value":"6 שעות"}}}},
-    "Sites that never sleep": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sites that never sleep"}},"he":{"stringUnit":{"state":"translated","value":"אתרים שלעולם לא נרדמים"}}}},
-    "One site per line. Pinned and visible tabs, tabs playing sound or using camera, microphone, or screen capture, and tabs with unsaved form input stay awake.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"One site per line. Pinned and visible tabs, tabs playing sound or using camera, microphone, or screen capture, and tabs with unsaved form input stay awake."}},"he":{"stringUnit":{"state":"translated","value":"אתר אחד בכל שורה. לשוניות נעוצות וגלויות, לשוניות שמשמיעות צליל או משתמשות במצלמה, במיקרופון או בשיתוף מסך, ולשוניות עם קלט טופס שלא נשמר נשארות ערות."}}}},
-    "Shaar DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Shaar DevTools"}},"he":{"stringUnit":{"state":"translated","value":"כלי הפיתוח של שער"}}}},
-    "Open Chromium DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Chromium DevTools"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי הפיתוח של Chromium"}}}},
-    "Automatically turn on Dev Mode for local development pages": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Automatically turn on Dev Mode for local development pages"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה אוטומטית של מצב פיתוח בדפי פיתוח מקומיים"}}}},
-    "Welcome to %@": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"ברוכים הבאים אל %@"}}}},
-    "Bring your bookmarks": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הביאו את הסימניות שלכם"}}}},
-    "Make %@ your default": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הגדירו את %@ כדפדפן ברירת המחדל"}}}},
-    "Make your first Space yours": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"התאימו את המרחב הראשון שלכם"}}}},
-    "Your passwords stay protected": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הסיסמאות שלכם נשארות מוגנות"}}}},
-    "Ready to browse": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"אפשר להתחיל לגלוש"}}}},
-    "A gateway to your web.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"שער לאינטרנט שלכם."}}}},
-    "A calm place for your tabs, bookmarks, and Spaces.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מקום נעים ללשוניות, לסימניות ולמרחבים שלכם."}}}},
-    "Open your Library to import bookmarks and history from another browser. You can do this later, too.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"פתחו את הספרייה כדי לייבא סימניות והיסטוריה מדפדפן אחר. אפשר לעשות זאת גם אחר כך."}}}},
-    "Open Library Import…": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"פתיחת הייבוא בספרייה…"}}}},
-    "Choose %@ for links opened from other apps. You can change this in macOS Settings anytime.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"בחרו ב-%@ לפתיחת קישורים מיישומים אחרים. אפשר לשנות זאת בכל עת בהגדרות macOS."}}}},
-    "Move %@ to Applications before setting it as your default browser.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"העבירו את %@ לתיקיית היישומים לפני שתגדירו אותו כדפדפן ברירת המחדל."}}}},
-    "%@ is your default browser": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"%@ הוא דפדפן ברירת המחדל שלכם"}}}},
-    "Could not set the default browser.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא ניתן להגדיר את דפדפן ברירת המחדל."}}}},
-    "Could not set Shaar as the default browser.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא ניתן להגדיר את Shaar כדפדפן ברירת המחדל."}}}},
-    "Set as Default Browser": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הגדרה כדפדפן ברירת המחדל"}}}},
-    "Spaces keep different parts of your web in reach. Start with a name you recognize.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מרחבים שומרים על חלקים שונים של הגלישה בהישג יד. התחילו עם שם שתזהו."}}}},
-    "%@ uses macOS Keychain to protect saved website passwords. macOS may ask for Keychain access when a saved password is needed. You can manage passwords in Settings later.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"%@ משתמש בצרור המפתחות של macOS כדי להגן על סיסמאות אתרים שמורות. macOS עשוי לבקש גישה לצרור המפתחות כשנדרשת סיסמה שמורה. אפשר לנהל סיסמאות בהגדרות מאוחר יותר."}}}},
-    "Your browser is ready. You can revisit import, default browser, and Spaces anytime.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הדפדפן שלכם מוכן. אפשר לחזור לייבוא, לדפדפן ברירת המחדל ולמרחבים בכל עת."}}}},
-    "Finish installing %@": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"סיימו להתקין את %@"}}}},
-    "Drag %@ to Applications, then open it there. Your setup will resume on the next launch.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"גררו את %@ לתיקיית היישומים ואז פתחו אותו משם. ההגדרה תימשך בהפעלה הבאה."}}}},
-    "Show Applications Folder": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הצגת תיקיית היישומים"}}}},
-    "Skip Setup": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"דילוג על ההגדרה"}}}},
-    "Start Browsing": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מתחילים לגלוש"}}}},
-    "Private Windows": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"חלונות פרטיים"}}}},
-    "Cookies and site storage": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובצי Cookie ואחסון אתרים"}}}},
-    "Trackers": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"עוקבים"}}}},
-    "HTTPS-only browsing": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"גלישה ב-HTTPS בלבד"}}}},
-    "Always use secure connections": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תמיד להשתמש בחיבורים מאובטחים"}}}},
-    "Public pages use HTTPS. A site that does not support HTTPS shows a warning instead of loading.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"דפים ציבוריים נטענים ב-HTTPS. אתר שאינו תומך ב-HTTPS מציג אזהרה במקום להיטען."}}}},
-    "Public pages use HTTPS. A site that does not support HTTPS shows a warning instead of loading. This profile applies the change the next time it opens.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"דפים ציבוריים נטענים ב-HTTPS. אתר שאינו תומך ב-HTTPS מציג אזהרה במקום להיטען. הפרופיל הזה יחיל את השינוי בפתיחה הבאה."}}}},
-    "Referrers": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"פרטי הדף המפנה"}}}},
-    "WebRTC local IP exposure": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"חשיפת כתובת IP מקומית ב-WebRTC"}}}},
-    "Engine controlled": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"בשליטת המנוע"}}}},
-    "The private start page shows which protections are active. Use site controls to allow cookies for a specific site.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"דף הפתיחה הפרטי מציג אילו הגנות פעילות. השתמשו בבקרות האתר כדי לאפשר קובצי Cookie לאתר מסוים."}}}},
-    "The engine returned invalid site permission data.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע הדפדפן החזיר נתוני הרשאות אתר לא תקינים."}}}},
-    "If no Spaces remain, an empty Space is created for a remaining profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "אם לא נשארו מרחבים, ייווצר מרחב ריק לפרופיל שנותר."}}}},
-    "Favorites and profile preferences will be removed. Chromium will schedule deletion of cookies, site data, history, cache and extensions. This cannot be undone.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "המועדפים והעדפות הפרופיל יוסרו. Chromium יתזמן מחיקה של קובצי Cookie, נתוני אתרים, היסטוריה, מטמון ותוספים. לא ניתן לבטל פעולה זו."}}}},
-    "Move Spaces": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "העברת מרחבים"}}}},
-    "Remove Spaces and close their tabs": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הסרת מרחבים וסגירת הלשוניות שלהם"}}}},
-    "All Spaces using this profile and their tabs will be removed.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "כל המרחבים המשתמשים בפרופיל הזה והלשוניות שלהם יוסרו."}}}},
-    "Deleting…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מוחק…"}}}},
-    "Autoplay": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הפעלה אוטומטית"}}}},
-    "Images": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "תמונות"}}}},
-    "Clipboard": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לוח ההעתקה"}}}},
-    "Automatic Downloads": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הורדות אוטומטיות"}}}},
-    "Cookies": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "קובצי Cookie"}}}},
-    "Sensors": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חיישנים"}}}},
-    "Window Management": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניהול חלונות"}}}},
-    "Local Fonts": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "גופנים מקומיים"}}}},
-    "Idle Detection": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "זיהוי חוסר פעילות"}}}},
-    "Storage Access": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "גישה לאחסון"}}}},
-    "File System": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מערכת קבצים"}}}},
-    "Keyboard Lock": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "נעילת מקלדת"}}}},
-    "Pointer Lock": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "נעילת מצביע"}}}},
-    "Protocol Handlers": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מטפלי פרוטוקול"}}}},
-    "Camera Pan, Tilt and Zoom": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "תנועת מצלמה, הטיה וזום"}}}},
-    "Blocked": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חסום"}}}},
-    "Ask": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לשאול"}}}},
-    "Site data cleared.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "נתוני האתרים נוקו."}}}},
-    "Cache cleared.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "המטמון נוקה."}}}},
-    "Could not clear this profile's data. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לנקות את נתוני הפרופיל הזה. נסו שוב."}}}},
-    "Could not load profile privacy settings. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לטעון את הגדרות הפרטיות של הפרופיל. נסו שוב."}}}},
-    "Could not reset site permissions. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לאפס את הרשאות האתר. נסו שוב."}}}},
-    "Could not update the third-party cookie setting. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לשנות את הגדרת קובצי ה-Cookie של צד שלישי. נסו שוב."}}}},
-    "Site permissions reset to defaults.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות האתר אופסו לברירות המחדל."}}}},
-    "Site permissions for %@ reset to defaults.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות האתר עבור %@ אופסו לברירות המחדל."}}}},
-    "Cookies and Site Data": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "קובצי Cookie ונתוני אתרים"}}}},
-    "Clear Site Data…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניקוי נתוני אתרים…"}}}},
-    "Cached Files": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "קבצים במטמון"}}}},
-    "Clear Cache…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניקוי מטמון…"}}}},
-    "Website Data": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "נתוני אתרים"}}}},
-    "Reset permissions for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "איפוס ההרשאות עבור %@"}}}},
-    "Only the selected profile is affected. Clearing site data signs you out of websites. Cache clearing keeps your sign-ins.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הפעולה משפיעה רק על הפרופיל שנבחר. ניקוי נתוני אתרים מנתק אותך מאתרים. ניקוי המטמון שומר על החיבורים לחשבונות."}}}},
-    "Block Third-Party Cookies": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חסימת קובצי Cookie של צד שלישי"}}}},
-    "Unavailable in this engine": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא זמין במנוע הזה"}}}},
-    "This engine cannot read or change the third-party cookie policy. Your cookie policy has not been changed.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "המנוע הזה לא יכול לקרוא או לשנות את מדיניות קובצי ה-Cookie של צד שלישי. המדיניות שלך לא שונתה."}}}},
-    "This cookie policy is managed by your organization.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מדיניות קובצי ה-Cookie הזו מנוהלת על ידי הארגון שלך."}}}},
-    "Refresh": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "רענון"}}}},
-    "Clearing cache…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניקוי המטמון…"}}}},
-    "Clearing site data…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניקוי נתוני האתר…"}}}},
-    "Loading site permissions…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "טעינת הרשאות אתרים…"}}}},
-    "No site permission exceptions found.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא נמצאו חריגות בהרשאות אתרים."}}}},
-    "Reset Permissions…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "איפוס הרשאות…"}}}},
-    "Resetting site permissions…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "איפוס הרשאות האתר…"}}}},
-    "Updating third-party cookie setting…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "עדכון הגדרת קובצי Cookie של צד שלישי…"}}}},
-    "Site Permissions": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות אתרים"}}}},
-    "Loading site permissions": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "טעינת הרשאות אתרים"}}}},
-    "Review site exceptions for this profile. Resetting removes saved choices and restores defaults. Wildcard and managed rules are not listed by this engine.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "אפשר לבדוק חריגות של אתרים בפרופיל הזה. האיפוס מסיר בחירות שמורות ומשחזר ברירות מחדל. המנוע הזה לא מציג כללי תווים כלליים וכללים מנוהלים."}}}},
-    "Clear site data for this profile?": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לנקות את נתוני האתרים בפרופיל הזה?"}}}},
-    "Clear cache for this profile?": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לנקות את המטמון בפרופיל הזה?"}}}},
-    "Clear Site Data": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניקוי נתוני אתרים"}}}},
-    "Clear Cache": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניקוי מטמון"}}}},
-    "Reset this site's permissions?": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לאפס את הרשאות האתר הזה?"}}}},
-    "Reset Permissions": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "איפוס הרשאות"}}}},
-    "Later": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Later"}},"he":{"stringUnit":{"state":"translated","value":"מאוחר יותר"}}}},
-    "Restart Shaar": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Restart Shaar"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה מחדש של Shaar"}}}},
-    "Restart Shaar to apply": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Restart Shaar to apply"}},"he":{"stringUnit":{"state":"translated","value":"יש להפעיל מחדש את Shaar כדי להחיל את השינוי"}}}},
-    "Your tabs could not be saved. Shaar has not restarted.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Your tabs could not be saved. Shaar has not restarted."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשמור את הלשוניות שלך. Shaar לא הופעל מחדש."}}}},
-    "Your windows and tabs will be restored.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Your windows and tabs will be restored."}},"he":{"stringUnit":{"state":"translated","value":"החלונות והלשוניות שלך ישוחזרו."}}}},
-    "Microsoft — personal": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "Microsoft — אישי"}}}},
-    "Microsoft — work or school": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "Microsoft — עבודה או לימודים"}}}},
-
-    "Icon": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "סמל"}}}},
-    "Color": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "צבע"}}}},
-    "Account": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון"}}}},
-    "One primary account per profile. For another account, create another profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון ראשי אחד לכל פרופיל. כדי להשתמש בחשבון נוסף, יש ליצור פרופיל נוסף."}}}},
-    "Optional. Sign in on the provider’s own page, or connect later in Settings > Profiles.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא חובה. אפשר להתחבר בדף של ספק החשבון, או מאוחר יותר בהגדרות > פרופילים."}}}},
-    "Personal or Google Workspace": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון אישי או Google Workspace"}}}},
-    "Personal, work or school": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון אישי, עבודה או לימודים"}}}},
-    "Apple Account and iCloud": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון Apple ו-iCloud"}}}},
-
-    "Copy for AI": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for AI"}},"he":{"stringUnit":{"state":"translated","value":"העתקה ל-AI"}}}},
-    "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
+    "Previous Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Window"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "החלון הקודם"
+          }
+        }
+      }
+    },
+    "Next Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Window"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "החלון הבא"
+          }
+        }
+      }
+    },
+    "Show All History": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show All History"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת כל ההיסטוריה"
+          }
+        }
+      }
+    },
+    "Enter Full Screen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter Full Screen"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כניסה למסך מלא"
+          }
+        }
+      }
+    },
+    "Paste and Match Style": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste and Match Style"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדבקה והתאמת סגנון"
+          }
+        }
+      }
+    },
+    "Could not clear history. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not clear history. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
+    "Could not delete the profile. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not delete the profile. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן למחוק את הפרופיל. נסו שוב."
+          }
+        }
+      }
+    },
+    "Could not create this profile. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not create this profile. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
+    "Share Page…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Page…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שיתוף העמוד…"
+          }
+        }
+      }
+    },
+    "Open source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open source"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת קוד המקור"
+          }
+        }
+      }
+    },
+    "Copy for agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy for agent"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקה לסוכן"
+          }
+        }
+      }
+    },
+    "Developer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Developer"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פיתוח"
+          }
+        }
+      }
+    },
+    "Sleeping tabs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sleeping tabs"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשוניות רדומות"
+          }
+        }
+      }
+    },
+    "Sleep inactive tabs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sleep inactive tabs"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הרדמת לשוניות לא פעילות"
+          }
+        }
+      }
+    },
+    "Inactive tabs are discarded after": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inactive tabs are discarded after"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשוניות לא פעילות מושלכות אחרי"
+          }
+        }
+      }
+    },
+    "5 minutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 minutes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 דקות"
+          }
+        }
+      }
+    },
+    "15 minutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "15 minutes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "15 דקות"
+          }
+        }
+      }
+    },
+    "30 minutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 minutes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 דקות"
+          }
+        }
+      }
+    },
+    "1 hour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 hour"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שעה"
+          }
+        }
+      }
+    },
+    "2 hours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 hours"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שעתיים"
+          }
+        }
+      }
+    },
+    "6 hours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "6 hours"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "6 שעות"
+          }
+        }
+      }
+    },
+    "Sites that never sleep": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sites that never sleep"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אתרים שלעולם לא נרדמים"
+          }
+        }
+      }
+    },
+    "One site per line. Pinned and visible tabs, tabs playing sound or using camera, microphone, or screen capture, and tabs with unsaved form input stay awake.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One site per line. Pinned and visible tabs, tabs playing sound or using camera, microphone, or screen capture, and tabs with unsaved form input stay awake."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אתר אחד בכל שורה. לשוניות נעוצות וגלויות, לשוניות שמשמיעות צליל או משתמשות במצלמה, במיקרופון או בשיתוף מסך, ולשוניות עם קלט טופס שלא נשמר נשארות ערות."
+          }
+        }
+      }
+    },
+    "Shaar DevTools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shaar DevTools"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כלי הפיתוח של שער"
+          }
+        }
+      }
+    },
+    "Open Chromium DevTools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Chromium DevTools"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת כלי הפיתוח של Chromium"
+          }
+        }
+      }
+    },
+    "Automatically turn on Dev Mode for local development pages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically turn on Dev Mode for local development pages"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעלה אוטומטית של מצב פיתוח בדפי פיתוח מקומיים"
+          }
+        }
+      }
+    },
+    "Welcome to %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ברוכים הבאים אל %@"
+          }
+        }
+      }
+    },
+    "Bring your bookmarks": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הביאו את הסימניות שלכם"
+          }
+        }
+      }
+    },
+    "Make %@ your default": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגדירו את %@ כדפדפן ברירת המחדל"
+          }
+        }
+      }
+    },
+    "Make your first Space yours": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התאימו את המרחב הראשון שלכם"
+          }
+        }
+      }
+    },
+    "Your passwords stay protected": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הסיסמאות שלכם נשארות מוגנות"
+          }
+        }
+      }
+    },
+    "Ready to browse": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אפשר להתחיל לגלוש"
+          }
+        }
+      }
+    },
+    "A gateway to your web.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שער לאינטרנט שלכם."
+          }
+        }
+      }
+    },
+    "A calm place for your tabs, bookmarks, and Spaces.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מקום נעים ללשוניות, לסימניות ולמרחבים שלכם."
+          }
+        }
+      }
+    },
+    "Open your Library to import bookmarks and history from another browser. You can do this later, too.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתחו את הספרייה כדי לייבא סימניות והיסטוריה מדפדפן אחר. אפשר לעשות זאת גם אחר כך."
+          }
+        }
+      }
+    },
+    "Open Library Import…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת הייבוא בספרייה…"
+          }
+        }
+      }
+    },
+    "Choose %@ for links opened from other apps. You can change this in macOS Settings anytime.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בחרו ב-%@ לפתיחת קישורים מיישומים אחרים. אפשר לשנות זאת בכל עת בהגדרות macOS."
+          }
+        }
+      }
+    },
+    "Move %@ to Applications before setting it as your default browser.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העבירו את %@ לתיקיית היישומים לפני שתגדירו אותו כדפדפן ברירת המחדל."
+          }
+        }
+      }
+    },
+    "%@ is your default browser": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ הוא דפדפן ברירת המחדל שלכם"
+          }
+        }
+      }
+    },
+    "Could not set the default browser.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להגדיר את דפדפן ברירת המחדל."
+          }
+        }
+      }
+    },
+    "Could not set Shaar as the default browser.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להגדיר את Shaar כדפדפן ברירת המחדל."
+          }
+        }
+      }
+    },
+    "Set as Default Browser": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגדרה כדפדפן ברירת המחדל"
+          }
+        }
+      }
+    },
+    "Spaces keep different parts of your web in reach. Start with a name you recognize.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מרחבים שומרים על חלקים שונים של הגלישה בהישג יד. התחילו עם שם שתזהו."
+          }
+        }
+      }
+    },
+    "%@ uses macOS Keychain to protect saved website passwords. macOS may ask for Keychain access when a saved password is needed. You can manage passwords in Settings later.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ משתמש בצרור המפתחות של macOS כדי להגן על סיסמאות אתרים שמורות. macOS עשוי לבקש גישה לצרור המפתחות כשנדרשת סיסמה שמורה. אפשר לנהל סיסמאות בהגדרות מאוחר יותר."
+          }
+        }
+      }
+    },
+    "Your browser is ready. You can revisit import, default browser, and Spaces anytime.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדפדפן שלכם מוכן. אפשר לחזור לייבוא, לדפדפן ברירת המחדל ולמרחבים בכל עת."
+          }
+        }
+      }
+    },
+    "Finish installing %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סיימו להתקין את %@"
+          }
+        }
+      }
+    },
+    "Drag %@ to Applications, then open it there. Your setup will resume on the next launch.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גררו את %@ לתיקיית היישומים ואז פתחו אותו משם. ההגדרה תימשך בהפעלה הבאה."
+          }
+        }
+      }
+    },
+    "Show Applications Folder": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת תיקיית היישומים"
+          }
+        }
+      }
+    },
+    "Skip Setup": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דילוג על ההגדרה"
+          }
+        }
+      }
+    },
+    "Start Browsing": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מתחילים לגלוש"
+          }
+        }
+      }
+    },
+    "Private Windows": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלונות פרטיים"
+          }
+        }
+      }
+    },
+    "Cookies and site storage": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובצי Cookie ואחסון אתרים"
+          }
+        }
+      }
+    },
+    "Trackers": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עוקבים"
+          }
+        }
+      }
+    },
+    "HTTPS-only browsing": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גלישה ב-HTTPS בלבד"
+          }
+        }
+      }
+    },
+    "Always use secure connections": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תמיד להשתמש בחיבורים מאובטחים"
+          }
+        }
+      }
+    },
+    "Public pages use HTTPS. A site that does not support HTTPS shows a warning instead of loading.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דפים ציבוריים נטענים ב-HTTPS. אתר שאינו תומך ב-HTTPS מציג אזהרה במקום להיטען."
+          }
+        }
+      }
+    },
+    "Public pages use HTTPS. A site that does not support HTTPS shows a warning instead of loading. This profile applies the change the next time it opens.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דפים ציבוריים נטענים ב-HTTPS. אתר שאינו תומך ב-HTTPS מציג אזהרה במקום להיטען. הפרופיל הזה יחיל את השינוי בפתיחה הבאה."
+          }
+        }
+      }
+    },
+    "Referrers": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרטי הדף המפנה"
+          }
+        }
+      }
+    },
+    "WebRTC local IP exposure": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חשיפת כתובת IP מקומית ב-WebRTC"
+          }
+        }
+      }
+    },
+    "Engine controlled": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בשליטת המנוע"
+          }
+        }
+      }
+    },
+    "The private start page shows which protections are active. Use site controls to allow cookies for a specific site.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דף הפתיחה הפרטי מציג אילו הגנות פעילות. השתמשו בבקרות האתר כדי לאפשר קובצי Cookie לאתר מסוים."
+          }
+        }
+      }
+    },
+    "The engine returned invalid site permission data.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מנוע הדפדפן החזיר נתוני הרשאות אתר לא תקינים."
+          }
+        }
+      }
+    },
+    "If no Spaces remain, an empty Space is created for a remaining profile.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אם לא נשארו מרחבים, ייווצר מרחב ריק לפרופיל שנותר."
+          }
+        }
+      }
+    },
+    "Favorites and profile preferences will be removed. Chromium will schedule deletion of cookies, site data, history, cache and extensions. This cannot be undone.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המועדפים והעדפות הפרופיל יוסרו. Chromium יתזמן מחיקה של קובצי Cookie, נתוני אתרים, היסטוריה, מטמון ותוספים. לא ניתן לבטל פעולה זו."
+          }
+        }
+      }
+    },
+    "Move Spaces": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העברת מרחבים"
+          }
+        }
+      }
+    },
+    "Remove Spaces and close their tabs": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הסרת מרחבים וסגירת הלשוניות שלהם"
+          }
+        }
+      }
+    },
+    "All Spaces using this profile and their tabs will be removed.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כל המרחבים המשתמשים בפרופיל הזה והלשוניות שלהם יוסרו."
+          }
+        }
+      }
+    },
+    "Deleting…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מוחק…"
+          }
+        }
+      }
+    },
+    "Autoplay": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעלה אוטומטית"
+          }
+        }
+      }
+    },
+    "Images": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תמונות"
+          }
+        }
+      }
+    },
+    "Clipboard": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לוח ההעתקה"
+          }
+        }
+      }
+    },
+    "Automatic Downloads": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הורדות אוטומטיות"
+          }
+        }
+      }
+    },
+    "Cookies": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובצי Cookie"
+          }
+        }
+      }
+    },
+    "Sensors": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיישנים"
+          }
+        }
+      }
+    },
+    "Window Management": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניהול חלונות"
+          }
+        }
+      }
+    },
+    "Local Fonts": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גופנים מקומיים"
+          }
+        }
+      }
+    },
+    "Idle Detection": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "זיהוי חוסר פעילות"
+          }
+        }
+      }
+    },
+    "Storage Access": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גישה לאחסון"
+          }
+        }
+      }
+    },
+    "File System": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מערכת קבצים"
+          }
+        }
+      }
+    },
+    "Keyboard Lock": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נעילת מקלדת"
+          }
+        }
+      }
+    },
+    "Pointer Lock": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נעילת מצביע"
+          }
+        }
+      }
+    },
+    "Protocol Handlers": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מטפלי פרוטוקול"
+          }
+        }
+      }
+    },
+    "Camera Pan, Tilt and Zoom": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תנועת מצלמה, הטיה וזום"
+          }
+        }
+      }
+    },
+    "Blocked": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חסום"
+          }
+        }
+      }
+    },
+    "Ask": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשאול"
+          }
+        }
+      }
+    },
+    "Site data cleared.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני האתרים נוקו."
+          }
+        }
+      }
+    },
+    "Cache cleared.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המטמון נוקה."
+          }
+        }
+      }
+    },
+    "Could not clear this profile's data. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לנקות את נתוני הפרופיל הזה. נסו שוב."
+          }
+        }
+      }
+    },
+    "Could not load profile privacy settings. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לטעון את הגדרות הפרטיות של הפרופיל. נסו שוב."
+          }
+        }
+      }
+    },
+    "Could not reset site permissions. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לאפס את הרשאות האתר. נסו שוב."
+          }
+        }
+      }
+    },
+    "Could not update the third-party cookie setting. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשנות את הגדרת קובצי ה-Cookie של צד שלישי. נסו שוב."
+          }
+        }
+      }
+    },
+    "Site permissions reset to defaults.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הרשאות האתר אופסו לברירות המחדל."
+          }
+        }
+      }
+    },
+    "Site permissions for %@ reset to defaults.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הרשאות האתר עבור %@ אופסו לברירות המחדל."
+          }
+        }
+      }
+    },
+    "Cookies and Site Data": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובצי Cookie ונתוני אתרים"
+          }
+        }
+      }
+    },
+    "Clear Site Data…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניקוי נתוני אתרים…"
+          }
+        }
+      }
+    },
+    "Cached Files": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קבצים במטמון"
+          }
+        }
+      }
+    },
+    "Clear Cache…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניקוי מטמון…"
+          }
+        }
+      }
+    },
+    "Website Data": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני אתרים"
+          }
+        }
+      }
+    },
+    "Reset permissions for %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "איפוס ההרשאות עבור %@"
+          }
+        }
+      }
+    },
+    "Only the selected profile is affected. Clearing site data signs you out of websites. Cache clearing keeps your sign-ins.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעולה משפיעה רק על הפרופיל שנבחר. ניקוי נתוני אתרים מנתק אותך מאתרים. ניקוי המטמון שומר על החיבורים לחשבונות."
+          }
+        }
+      }
+    },
+    "Block Third-Party Cookies": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חסימת קובצי Cookie של צד שלישי"
+          }
+        }
+      }
+    },
+    "Unavailable in this engine": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא זמין במנוע הזה"
+          }
+        }
+      }
+    },
+    "This engine cannot read or change the third-party cookie policy. Your cookie policy has not been changed.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המנוע הזה לא יכול לקרוא או לשנות את מדיניות קובצי ה-Cookie של צד שלישי. המדיניות שלך לא שונתה."
+          }
+        }
+      }
+    },
+    "This cookie policy is managed by your organization.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מדיניות קובצי ה-Cookie הזו מנוהלת על ידי הארגון שלך."
+          }
+        }
+      }
+    },
+    "Refresh": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רענון"
+          }
+        }
+      }
+    },
+    "Clearing cache…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניקוי המטמון…"
+          }
+        }
+      }
+    },
+    "Clearing site data…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניקוי נתוני האתר…"
+          }
+        }
+      }
+    },
+    "Loading site permissions…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טעינת הרשאות אתרים…"
+          }
+        }
+      }
+    },
+    "No site permission exceptions found.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא נמצאו חריגות בהרשאות אתרים."
+          }
+        }
+      }
+    },
+    "Reset Permissions…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "איפוס הרשאות…"
+          }
+        }
+      }
+    },
+    "Resetting site permissions…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "איפוס הרשאות האתר…"
+          }
+        }
+      }
+    },
+    "Updating third-party cookie setting…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עדכון הגדרת קובצי Cookie של צד שלישי…"
+          }
+        }
+      }
+    },
+    "Site Permissions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הרשאות אתרים"
+          }
+        }
+      }
+    },
+    "Loading site permissions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טעינת הרשאות אתרים"
+          }
+        }
+      }
+    },
+    "Review site exceptions for this profile. Resetting removes saved choices and restores defaults. Wildcard and managed rules are not listed by this engine.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אפשר לבדוק חריגות של אתרים בפרופיל הזה. האיפוס מסיר בחירות שמורות ומשחזר ברירות מחדל. המנוע הזה לא מציג כללי תווים כלליים וכללים מנוהלים."
+          }
+        }
+      }
+    },
+    "Clear site data for this profile?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לנקות את נתוני האתרים בפרופיל הזה?"
+          }
+        }
+      }
+    },
+    "Clear cache for this profile?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לנקות את המטמון בפרופיל הזה?"
+          }
+        }
+      }
+    },
+    "Clear Site Data": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניקוי נתוני אתרים"
+          }
+        }
+      }
+    },
+    "Clear Cache": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניקוי מטמון"
+          }
+        }
+      }
+    },
+    "Reset this site's permissions?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לאפס את הרשאות האתר הזה?"
+          }
+        }
+      }
+    },
+    "Reset Permissions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "איפוס הרשאות"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מאוחר יותר"
+          }
+        }
+      }
+    },
+    "Restart Shaar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart Shaar"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעלה מחדש של Shaar"
+          }
+        }
+      }
+    },
+    "Restart Shaar to apply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart Shaar to apply"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יש להפעיל מחדש את Shaar כדי להחיל את השינוי"
+          }
+        }
+      }
+    },
+    "Your tabs could not be saved. Shaar has not restarted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your tabs could not be saved. Shaar has not restarted."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשמור את הלשוניות שלך. Shaar לא הופעל מחדש."
+          }
+        }
+      }
+    },
+    "Your windows and tabs will be restored.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your windows and tabs will be restored."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "החלונות והלשוניות שלך ישוחזרו."
+          }
+        }
+      }
+    },
+    "Microsoft — personal": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft — אישי"
+          }
+        }
+      }
+    },
+    "Microsoft — work or school": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft — עבודה או לימודים"
+          }
+        }
+      }
+    },
+    "Icon": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמל"
+          }
+        }
+      }
+    },
+    "Color": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צבע"
+          }
+        }
+      }
+    },
+    "Account": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חשבון"
+          }
+        }
+      }
+    },
+    "One primary account per profile. For another account, create another profile.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חשבון ראשי אחד לכל פרופיל. כדי להשתמש בחשבון נוסף, יש ליצור פרופיל נוסף."
+          }
+        }
+      }
+    },
+    "Optional. Sign in on the provider’s own page, or connect later in Settings > Profiles.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא חובה. אפשר להתחבר בדף של ספק החשבון, או מאוחר יותר בהגדרות > פרופילים."
+          }
+        }
+      }
+    },
+    "Personal or Google Workspace": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חשבון אישי או Google Workspace"
+          }
+        }
+      }
+    },
+    "Personal, work or school": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חשבון אישי, עבודה או לימודים"
+          }
+        }
+      }
+    },
+    "Apple Account and iCloud": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חשבון Apple ו-iCloud"
+          }
+        }
+      }
+    },
+    "Copy for AI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy for AI"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקה ל-AI"
+          }
+        }
+      }
+    },
+    "Developer Tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Developer Tools"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כלים למפתחים"
+          }
+        }
+      }
+    },
     "General": {
       "localizations": {
         "he": {
@@ -171,15 +1609,96 @@
         }
       }
     },
-    "Download folder": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תיקיית הורדות"}}}},
-    "Current folder": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תיקייה נוכחית"}}}},
-    "Unavailable": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא זמין"}}}},
-    "Choose Folder…": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"בחירת תיקייה…"}}}},
-    "Use Default": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"שימוש בברירת המחדל"}}}},
-    "Choose": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"בחירה"}}}},
-    "Choose a download folder for this profile.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"יש לבחור תיקיית הורדות לפרופיל הזה."}}}},
-    "The download folder could not be changed. Try again.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשנות את תיקיית ההורדות. נסו שוב."}}}},
-    "This folder is saved for this profile. Browser downloads will use it when engine support is available.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"התיקייה נשמרת לפרופיל הזה. הדפדפן ישתמש בה להורדות כשהמנוע יתמוך בכך."}}}},
+    "Download folder": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תיקיית הורדות"
+          }
+        }
+      }
+    },
+    "Current folder": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תיקייה נוכחית"
+          }
+        }
+      }
+    },
+    "Unavailable": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא זמין"
+          }
+        }
+      }
+    },
+    "Choose Folder…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בחירת תיקייה…"
+          }
+        }
+      }
+    },
+    "Use Default": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שימוש בברירת המחדל"
+          }
+        }
+      }
+    },
+    "Choose": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בחירה"
+          }
+        }
+      }
+    },
+    "Choose a download folder for this profile.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יש לבחור תיקיית הורדות לפרופיל הזה."
+          }
+        }
+      }
+    },
+    "The download folder could not be changed. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשנות את תיקיית ההורדות. נסו שוב."
+          }
+        }
+      }
+    },
+    "This folder is saved for this profile. Browser downloads will use it when engine support is available.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התיקייה נשמרת לפרופיל הזה. הדפדפן ישתמש בה להורדות כשהמנוע יתמוך בכך."
+          }
+        }
+      }
+    },
     "Profiles": {
       "localizations": {
         "he": {
@@ -610,7 +2129,16 @@
         }
       }
     },
-    "Open %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "פתיחת המרחב %@"}}}},
+    "Open %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת המרחב %@"
+          }
+        }
+      }
+    },
     "Accounts": {
       "localizations": {
         "he": {
@@ -661,7 +2189,16 @@
         }
       }
     },
-    "Disconnect %@ from %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניתוק %@ מ-%@"}}}},
+    "Disconnect %@ from %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניתוק %@ מ-%@"
+          }
+        }
+      }
+    },
     "Open Settings": {
       "localizations": {
         "he": {
@@ -672,7 +2209,16 @@
         }
       }
     },
-    "Open %@ Settings": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "פתיחת הגדרות %@"}}}},
+    "Open %@ Settings": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת הגדרות %@"
+          }
+        }
+      }
+    },
     "macOS Permissions": {
       "localizations": {
         "he": {
@@ -753,17 +2299,116 @@
         }
       }
     },
-    "Installing…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מתקין…"}}}},
-    "Install failed": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ההתקנה נכשלה"}}}},
-    "Could not update the extension. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לעדכן את התוסף. נסו שוב."}}}},
-    "Enable %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הפעלת התוסף %@ בפרופיל %@"}}}},
-    "Disable %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "השבתת התוסף %@ בפרופיל %@"}}}},
-    "Extension %@ for profile %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "התוסף %@ בפרופיל %@"}}}},
-    "Extensions unavailable": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "התוספים אינם זמינים"}}}},
-    "Could not load extensions. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לטעון את התוספים. נסו שוב."}}}},
-    "Not installed": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא מותקן"}}}},
-    "Retry": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניסיון חוזר"}}}},
-    "Retry installing %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניסיון חוזר להתקנת התוסף %@ בפרופיל %@"}}}},
+    "Installing…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מתקין…"
+          }
+        }
+      }
+    },
+    "Install failed": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההתקנה נכשלה"
+          }
+        }
+      }
+    },
+    "Could not update the extension. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לעדכן את התוסף. נסו שוב."
+          }
+        }
+      }
+    },
+    "Enable %@ for %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעלת התוסף %@ בפרופיל %@"
+          }
+        }
+      }
+    },
+    "Disable %@ for %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "השבתת התוסף %@ בפרופיל %@"
+          }
+        }
+      }
+    },
+    "Extension %@ for profile %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התוסף %@ בפרופיל %@"
+          }
+        }
+      }
+    },
+    "Extensions unavailable": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התוספים אינם זמינים"
+          }
+        }
+      }
+    },
+    "Could not load extensions. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לטעון את התוספים. נסו שוב."
+          }
+        }
+      }
+    },
+    "Not installed": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא מותקן"
+          }
+        }
+      }
+    },
+    "Retry": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניסיון חוזר"
+          }
+        }
+      }
+    },
+    "Retry installing %@ for %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניסיון חוזר להתקנת התוסף %@ בפרופיל %@"
+          }
+        }
+      }
+    },
     "Add Extensions…": {
       "localizations": {
         "he": {
@@ -774,22 +2419,166 @@
         }
       }
     },
-    "Developer mode": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מצב מפתח"}}}},
-    "Load unpacked…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "טעינת תוסף לא ארוז…"}}}},
-    "Load an unpacked Manifest V3 extension from a folder on this Mac.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "טענו תוסף Manifest V3 לא ארוז מתיקייה במק הזה."}}}},
-    "Turn on Developer mode to load an unpacked extension.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הפעילו מצב מפתח כדי לטעון תוסף לא ארוז."}}}},
-    "Choose a folder that contains a Manifest V3 extension.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בחרו תיקייה שמכילה תוסף Manifest V3."}}}},
-    "Choose an unpacked extension folder.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בחרו תיקייה של תוסף לא ארוז."}}}},
-    "This Shaar engine cannot install extensions yet.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar הזה עדיין אינו יכול להתקין תוספים."}}}},
-    "This feature needs a newer Shaar engine.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "התכונה הזו דורשת מנוע Shaar חדש יותר."}}}},
-    "This Shaar engine cannot change extension site access yet.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar הזה עדיין אינו יכול לשנות את גישת התוסף לאתרים."}}}},
-    "The extension could not be installed.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן להתקין את התוסף."}}}},
-    "Developer mode could not be changed.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לשנות את מצב המפתח."}}}},
-    "Allow in private windows": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "אפשר בחלונות פרטיים"}}}},
-    "This Shaar engine cannot change private-window access yet.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar הזה עדיין אינו יכול לשנות גישה בחלונות פרטיים."}}}},
-    "On click": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בלחיצה"}}}},
-    "On this site": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "באתר הזה"}}}},
-    "On all sites": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בכל האתרים"}}}},
+    "Developer mode": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מצב מפתח"
+          }
+        }
+      }
+    },
+    "Load unpacked…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טעינת תוסף לא ארוז…"
+          }
+        }
+      }
+    },
+    "Load an unpacked Manifest V3 extension from a folder on this Mac.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טענו תוסף Manifest V3 לא ארוז מתיקייה במק הזה."
+          }
+        }
+      }
+    },
+    "Turn on Developer mode to load an unpacked extension.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעילו מצב מפתח כדי לטעון תוסף לא ארוז."
+          }
+        }
+      }
+    },
+    "Choose a folder that contains a Manifest V3 extension.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בחרו תיקייה שמכילה תוסף Manifest V3."
+          }
+        }
+      }
+    },
+    "Choose an unpacked extension folder.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בחרו תיקייה של תוסף לא ארוז."
+          }
+        }
+      }
+    },
+    "This Shaar engine cannot install extensions yet.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מנוע Shaar הזה עדיין אינו יכול להתקין תוספים."
+          }
+        }
+      }
+    },
+    "This feature needs a newer Shaar engine.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התכונה הזו דורשת מנוע Shaar חדש יותר."
+          }
+        }
+      }
+    },
+    "This Shaar engine cannot change extension site access yet.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מנוע Shaar הזה עדיין אינו יכול לשנות את גישת התוסף לאתרים."
+          }
+        }
+      }
+    },
+    "The extension could not be installed.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להתקין את התוסף."
+          }
+        }
+      }
+    },
+    "Developer mode could not be changed.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשנות את מצב המפתח."
+          }
+        }
+      }
+    },
+    "Allow in private windows": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אפשר בחלונות פרטיים"
+          }
+        }
+      }
+    },
+    "This Shaar engine cannot change private-window access yet.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מנוע Shaar הזה עדיין אינו יכול לשנות גישה בחלונות פרטיים."
+          }
+        }
+      }
+    },
+    "On click": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בלחיצה"
+          }
+        }
+      }
+    },
+    "On this site": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "באתר הזה"
+          }
+        }
+      }
+    },
+    "On all sites": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בכל האתרים"
+          }
+        }
+      }
+    },
     "Version %@": {
       "localizations": {
         "he": {
@@ -1498,8 +3287,18 @@
     },
     "The profile could not be created. Try again.": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "The profile could not be created. Try again." } },
-        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The profile could not be created. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב."
+          }
+        }
       }
     },
     "The profile could not be created. %@": {
@@ -2564,20 +4363,50 @@
     },
     "Actual Size": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Actual Size" } },
-        "he": { "stringUnit": { "state": "translated", "value": "גודל בפועל" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actual Size"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גודל בפועל"
+          }
+        }
       }
     },
     "Zoom In": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Zoom In" } },
-        "he": { "stringUnit": { "state": "translated", "value": "הגדלה" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom In"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגדלה"
+          }
+        }
       }
     },
     "Zoom Out": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Zoom Out" } },
-        "he": { "stringUnit": { "state": "translated", "value": "הקטנה" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom Out"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הקטנה"
+          }
+        }
       }
     },
     "Zoom": {
@@ -2827,7 +4656,33 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "בדיקת פריסה, טיפוגרפיה וצבעים (\u2066⌥⌘C\u2069)"
+            "value": "בדיקת פריסה, טיפוגרפיה וצבעים (⁦⌥⌘C⁩)"
+          }
+        }
+      }
+    },
+    "Could not set this app as the default browser.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not set this app as the default browser."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להגדיר את האפליקציה כדפדפן ברירת המחדל."
+          }
+        }
+      }
+    },
+    "Could not clear history: %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן למחוק את ההיסטוריה: %@"
           }
         }
       }

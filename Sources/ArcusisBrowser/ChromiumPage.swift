@@ -63,7 +63,13 @@ final class ChromiumPageContainerView: NSView {
         view.removeFromSuperview()
       }
     }
-    guard let page else { return attach(nil) }
+    guard let page else {
+      for view in retainedPages.values where view.superview === self {
+        view.isHidden = true
+      }
+      pageView = nil
+      return false
+    }
     let changed = pageView !== page || page.superview !== self
     for view in retainedPages.values where view.superview === self {
       view.isHidden = view !== page

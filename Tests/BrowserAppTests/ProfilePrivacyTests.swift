@@ -43,6 +43,27 @@ struct ProfilePrivacyTests {
     #expect(runtime.loadedProfileID == id.uuidString)
   }
 
+  @Test func cancellingProfileLoadResumesWithoutRuntimeReply() async throws {
+    let runtime = PendingProfileLoadRuntime()
+    let backend = EngineProfileSettings(runtime: runtime) { _ in nil }
+    let load = Task { try await backend.loadProfile(UUID()) }
+    for _ in 0..<100 where runtime.completion == nil { await Task.yield() }
+    try #require(runtime.completion != nil)
+
+    var returned = false
+    let observer = Task {
+      _ = await load.result
+      returned = true
+    }
+    load.cancel()
+    for _ in 0..<100 where !returned { await Task.yield() }
+    let resumedOnCancellation = returned
+    runtime.completion?(nil)
+    await observer.value
+
+    #expect(resumedOnCancellation)
+  }
+
   @Test func readableStoreWithoutAnHttpsOnlyKeyStillAppliesOn() async throws {
     let store = BrowserPreferencesStore()
     let id = UUID()
@@ -351,6 +372,14 @@ private final class HttpsOnlyLoadSpy: ARCShaarRuntime {
   override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {
     loadedProfileID = profileID
     completion(nil)
+  }
+}
+
+@MainActor
+private final class PendingProfileLoadRuntime: ARCChromiumRuntime {
+  var completion: ((Error?) -> Void)?
+  override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {
+    self.completion = completion
   }
 }
 

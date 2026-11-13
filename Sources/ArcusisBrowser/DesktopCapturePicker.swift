@@ -47,6 +47,7 @@ struct DesktopCapturePicker: View {
   private let hasScreenRecordingAccess: () -> Bool
   private let requestScreenRecordingAccess: () -> Bool
   private let shareableContent: () async throws -> SCShareableContent
+  private let screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])?
   @State private var sources: [DesktopCaptureSource] = []
   @State private var loading = true
   @State private var error: String?
@@ -59,13 +60,15 @@ struct DesktopCapturePicker: View {
     requestScreenRecordingAccess: @escaping () -> Bool = { CGRequestScreenCaptureAccess() },
     shareableContent: @escaping () async throws -> SCShareableContent = {
       try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-    }
+    },
+    screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])? = nil
   ) {
     self.request = request
     self.store = store
     self.hasScreenRecordingAccess = hasScreenRecordingAccess
     self.requestScreenRecordingAccess = requestScreenRecordingAccess
     self.shareableContent = shareableContent
+    self.screenSourcesProvider = screenSourcesProvider
   }
 
   var body: some View {
@@ -85,6 +88,7 @@ struct DesktopCapturePicker: View {
   }
 
   func loadSources() async {
+    guard !Task.isCancelled else { return }
     let tabs = DesktopCaptureCatalog.tabSources(
       session: store.session, profileID: request.profileID, requestingTabID: request.tabID
     )
@@ -94,11 +98,18 @@ struct DesktopCapturePicker: View {
       wantsScreen && !hasScreenRecordingAccess() && !requestScreenRecordingAccess()
     if wantsScreen && !screenAccessFailed {
       do {
-        screens = try await screenSources(from: shareableContent())
+        if let screenSourcesProvider {
+          screens = try await screenSourcesProvider()
+        } else {
+          screens = try await screenSources(from: shareableContent())
+        }
+        guard !Task.isCancelled else { return }
       } catch {
+        guard !Task.isCancelled else { return }
         screenAccessFailed = true
       }
     }
+    guard !Task.isCancelled else { return }
     let listing = DesktopCaptureCatalog.listing(
       tabs: DesktopCaptureCatalog.allowedSources(tabs, for: request),
       screens: DesktopCaptureCatalog.allowedSources(screens, for: request),

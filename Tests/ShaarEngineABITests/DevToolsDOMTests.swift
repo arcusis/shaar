@@ -54,6 +54,33 @@ struct DevToolsDOMTests {
     }
   }
 
+  @Test func DOMIntegerFieldsRejectBooleanValues() throws {
+    #expect(
+      ShaarDOMNode.decode(
+        ["nodeId": true, "nodeType": 1, "nodeName": "BODY", "nodeValue": ""],
+        parentID: nil, relation: .child) == nil)
+
+    for (eventID, input) in [
+      (22, ["parentNodeId": true, "nodeId": 3] as [String: Any]),
+      (22, ["parentNodeId": 2, "nodeId": true] as [String: Any]),
+      (28, ["nodeId": 3, "childNodeCount": true] as [String: Any]),
+    ] {
+      var fields = input
+      fields["truncated"] = false
+      let envelope: [String: Any] = [
+        "schemaVersion": 1, "kind": "panelEvent", "eventID": eventID,
+        "leaseID": 7, "data": fields,
+      ]
+      let event = ShaarCopiedEvent(
+        sequence: 9, kind: 14, profileID: Data("profile-a".utf8), sessionID: Data(),
+        windowID: Data("window-a".utf8), tabID: Data("tab-a".utf8),
+        payloadJSON: try JSONSerialization.data(withJSONObject: envelope))
+      #expect(
+        ShaarDOMEventRouter.decode(
+          event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7) == nil)
+    }
+  }
+
   @Test func documentAcceptsBoundedLongInlineStyle() throws {
     func document(_ style: String) -> [String: Any] {
       [

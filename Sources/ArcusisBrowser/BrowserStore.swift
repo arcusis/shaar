@@ -1315,6 +1315,10 @@ final class BrowserStore {
     switch item {
     case .tab(let sessionID, let source, let tab):
       if sessionID != dragSessionID {
+        if isPrivate {
+          sidebarNotice = ShellL10n.string("Tabs cannot move to or from a private window.")
+          return false
+        }
         guard
           onTransferTabFromAnotherWindow?(
             sessionID, tab, source, space, targetTab, pinned, folderID) == true

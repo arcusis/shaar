@@ -54,6 +54,16 @@ test("link checker rejects unsafe schemes and duplicate ids", () => {
   }
 });
 
+test("link checker reports malformed percent escapes without aborting", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), '<h1>Home</h1><a href="/%E0%A4%A">Broken path</a>');
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /%E0%A4%A"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("link checker validates every responsive image source", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

@@ -15,7 +15,13 @@ export function listFiles(root: string): string[] {
 }
 
 export function localTarget(root: string, url: URL): string | undefined {
-  const path = resolve(root, `.${decodeURIComponent(url.pathname)}`);
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    return undefined;
+  }
+  const path = resolve(root, `.${pathname}`);
   if (path !== root && !path.startsWith(`${root}${sep}`)) return undefined;
   const options = url.pathname.endsWith("/")
     ? [resolve(path, "index.html")]

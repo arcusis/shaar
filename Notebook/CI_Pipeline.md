@@ -36,7 +36,7 @@ Shipping-probe guard selection includes `.inc` source changes, matching the scan
 
 Python/Actions CodeQL remains in Source checks and `CI required`. Swift runs independently in `swift-security.yml` on every PR/push/merge group, with the production compiler/extraction strategy restored after the slower full-source trial. Its PR result does not delay `CI required`. Production pushes and nightly require `Swift security required`; release validation requires both successful production workflows on the exact tag commit and zero open code-scanning alerts. See [[CI_Parallel_Verification]]. Swift retains its 60-minute job budget. Python/Actions have 20-minute budgets. Dependency review checks PR, merge-group and manual-validation diffs at high severity. Scorecard is a separate production-push/weekly assessment with SARIF artifacts; it does not publish a badge or change repository settings. Nightly/manual validation also runs Address and Thread Sanitizer tests in distinct scratch directories and Periphery. Sanitizer findings fail. Periphery execution errors fail; existing unused-declaration findings are a report, with public API, Objective-C/runtime, SwiftUI preview and Codable retention options.
 
-The pinned CI-tool installer rejects symbolic-link members in ZIP and tar archives before installing binaries. It also rejects a symlinked archive-cache root before reading or writing cached downloads.
+The pinned CI-tool installer rejects symbolic-link members in ZIP and tar archives before installing binaries. It also rejects a symlinked archive-cache root before reading or writing cached downloads. The verification-engine fetcher rejects symlinked build and test-cache roots before extracting the pinned test payload.
 
 ## Selection, caches and required check
 

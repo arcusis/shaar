@@ -112,47 +112,84 @@ printf 'downloaded' > "$directory/$asset"
             self.assertEqual(sentinel.read_text(), "preserve")
             self.assertFalse(gh_log.exists())
 
+    def _fixture(self, root):
+        scripts = root / "scripts"
+        scripts.mkdir()
+        shutil.copy2(REPO / "scripts/fetch-shaar-test-engine.sh", scripts)
+        shutil.copy2(REPO / "scripts/engine_payload.py", scripts)
+        pin_path = root / "ThirdParty/ChromiumEngine/ci-test-pin.json"
+        pin_path.parent.mkdir(parents=True)
+        cache = root / "build/ShaarEngineTestCache"
+        cache.mkdir(parents=True)
+        tag = "engine-155.0.8059.84-shaar.1"
+        asset = "ShaarEngine-155.0.8059.84-shaar.1.tar.xz"
+        archive_path = cache / asset
+        with tarfile.open(archive_path, "w:xz", format=tarfile.PAX_FORMAT) as archive:
+            info = tarfile.TarInfo("unrelated.txt")
+            info.size = 7
+            archive.addfile(info, io.BytesIO(b"invalid"))
+        pin_path.write_text(json.dumps({
+            "schemaVersion": 1,
+            "sourceKind": "shaar",
+            "releaseTag": tag,
+            "asset": asset,
+            "sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+        }))
+        tools = root / "tools"
+        tools.mkdir()
+        uname = tools / "uname"
+        uname.write_text("#!/bin/sh\nprintf 'arm64\\n'\n")
+        uname.chmod(0o755)
+        environment = dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}")
+        return cache, environment
 
     def test_failed_framework_extraction_removes_staging_directory(self):
         with tempfile.TemporaryDirectory(prefix="fetch-shaar-test-engine-") as temporary:
             root = Path(temporary)
-            scripts = root / "scripts"
-            scripts.mkdir()
-            shutil.copy2(REPO / "scripts/fetch-shaar-test-engine.sh", scripts)
-            shutil.copy2(REPO / "scripts/engine_payload.py", scripts)
-            pin_path = root / "ThirdParty/ChromiumEngine/ci-test-pin.json"
-            pin_path.parent.mkdir(parents=True)
-            cache = root / "build/ShaarEngineTestCache"
-            cache.mkdir(parents=True)
-            tag = "engine-155.0.8059.84-shaar.1"
-            asset = "ShaarEngine-155.0.8059.84-shaar.1.tar.xz"
-            archive_path = cache / asset
-            with tarfile.open(archive_path, "w:xz", format=tarfile.PAX_FORMAT) as archive:
-                info = tarfile.TarInfo("unrelated.txt")
-                info.size = 7
-                archive.addfile(info, io.BytesIO(b"invalid"))
-            pin_path.write_text(json.dumps({
-                "schemaVersion": 1,
-                "sourceKind": "shaar",
-                "releaseTag": tag,
-                "asset": asset,
-                "sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
-            }))
-            tools = root / "tools"
-            tools.mkdir()
-            uname = tools / "uname"
-            uname.write_text("#!/bin/sh\nprintf 'arm64\\n'\n")
-            uname.chmod(0o755)
-            environment = dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}")
-
+            cache, environment = self._fixture(root)
             result = subprocess.run(
-                ["bash", str(scripts / "fetch-shaar-test-engine.sh")],
+                ["bash", str(root / "scripts/fetch-shaar-test-engine.sh")],
                 cwd=root, env=environment, capture_output=True, text=True,
             )
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Shaar test framework missing", result.stderr)
             self.assertEqual(list(cache.glob("stage.*")), [])
+
+    def test_symlinked_cache_root_is_rejected_before_extraction(self):
+        with tempfile.TemporaryDirectory(prefix="fetch-shaar-test-engine-") as temporary:
+            root = Path(temporary)
+            cache, environment = self._fixture(root)
+            external = root / "external-cache"
+            cache.rename(external)
+            cache.symlink_to(external, target_is_directory=True)
+
+            result = subprocess.run(
+                ["bash", str(root / "scripts/fetch-shaar-test-engine.sh")],
+                cwd=root, env=environment, capture_output=True, text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Shaar test engine cache root must not be a symlink", result.stderr)
+            self.assertEqual(list(external.glob("stage.*")), [])
+
+    def test_symlinked_build_root_is_rejected_before_extraction(self):
+        with tempfile.TemporaryDirectory(prefix="fetch-shaar-test-engine-") as temporary:
+            root = Path(temporary)
+            self._fixture(root)
+            build = root / "build"
+            external = root / "external-build"
+            build.rename(external)
+            build.symlink_to(external, target_is_directory=True)
+
+            result = subprocess.run(
+                ["bash", str(root / "scripts/fetch-shaar-test-engine.sh")],
+                cwd=root, env=dict(os.environ, PATH=f"{root / 'tools'}:{os.environ['PATH']}"),
+                capture_output=True, text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Shaar test engine cache root must not be a symlink", result.stderr)
 
 
 if __name__ == "__main__":

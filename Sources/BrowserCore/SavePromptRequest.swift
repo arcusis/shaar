@@ -90,7 +90,12 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
   }
 
   private static func identifier(_ value: Any?) -> String? {
-    guard let id = value as? String, !id.isEmpty, id.utf8.count <= 128 else { return nil }
+    guard let id = value as? String else { return nil }
+    let bytes = id.utf8
+    guard !bytes.isEmpty, bytes.count <= 20,
+      bytes.allSatisfy({ $0 >= 48 && $0 <= 57 }),
+      let numericID = UInt64(id), String(numericID) == id
+    else { return nil }
     return id
   }
 

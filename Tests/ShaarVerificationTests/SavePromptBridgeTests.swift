@@ -7,7 +7,7 @@ import Foundation
 import Testing
 
 private func offer(
-  id: String = "prompt-1", detail: String = "parity-user", extra: [String: Any] = [:]
+  id: String = "1", detail: String = "parity-user", extra: [String: Any] = [:]
 ) -> [String: Any] {
   var payload: [String: Any] = [
     "schemaVersion": 1,
@@ -26,7 +26,7 @@ private func offer(
 @Test func savePromptBridgeAcceptsOneOfferForTheOwnedTab() {
   let result = ARCProbeShaarSavePromptDispatch([offer()], "OWNED-TAB", true)
   #expect(result["requestCount"] as? Int == 1)
-  #expect(result["id"] as? String == "prompt-1")
+  #expect(result["id"] as? String == "1")
 }
 
 @Test func savePromptBridgeDropsRejectedKeysDuplicatesAndOtherTabs() {
@@ -39,7 +39,7 @@ private func offer(
   #expect(bidi["requestCount"] as? Int == 0)
 
   let duplicate = ARCProbeShaarSavePromptDispatch(
-    [offer(), offer(id: "prompt-1")], "OWNED-TAB", true)
+    [offer(), offer(id: "1")], "OWNED-TAB", true)
   #expect(duplicate["requestCount"] as? Int == 1)
 
   let otherTab = ARCProbeShaarSavePromptDispatch([offer()], "OTHER-TAB", true)

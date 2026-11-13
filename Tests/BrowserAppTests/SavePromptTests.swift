@@ -18,7 +18,7 @@ struct SavePromptTests {
   }
 
   private func request(
-    _ store: BrowserStore, id: String = "prompt-1", kind: SavePromptRequest.Kind = .password,
+    _ store: BrowserStore, id: String = "1", kind: SavePromptRequest.Kind = .password,
     update: Bool = false, detail: String = "parity-user"
   ) throws -> SavePromptRequest {
     let tab = try #require(store.session.selectedSpace.selectedTab)
@@ -41,7 +41,7 @@ struct SavePromptTests {
   @Test func onePromptIsShownAndASecondIsRejected() throws {
     let store = store()
     let first = try request(store)
-    let second = try request(store, id: "prompt-2", kind: .card, detail: "Visa •••• 1111")
+    let second = try request(store, id: "2", kind: .card, detail: "Visa •••• 1111")
     var decisions: [String] = []
     store.onSavePromptDecision = { id, decision in decisions.append("\(id):\(decision.rawValue)") }
     #expect(store.requestSavePrompt(first))
@@ -50,10 +50,10 @@ struct SavePromptTests {
     #expect(!store.requestSavePrompt(second))
     #expect(store.savePrompt == first)
     store.resolveSavePrompt(first.id, decision: .save)
-    #expect(decisions == ["prompt-1:save"])
+    #expect(decisions == ["1:save"])
     #expect(store.savePrompt == nil)
     store.resolveSavePrompt(first.id, decision: .save)
-    #expect(decisions == ["prompt-1:save"])
+    #expect(decisions == ["1:save"])
   }
 
   @Test func duplicateIDWithDifferentDetailsIsRejected() throws {
@@ -163,7 +163,7 @@ struct SavePromptTests {
     #expect(decision == .save)
     panel.orderOut(nil)
 
-    let card = try request(store, id: "card", kind: .card, detail: "Visa •••• 1111")
+    let card = try request(store, id: "3", kind: .card, detail: "Visa •••• 1111")
     panel.show(card) { _ in }
     #expect(
       SavePromptButtons.find(panel.contentView, identifier: ShaarSavePromptPanel.neverIdentifier)
@@ -177,12 +177,12 @@ struct SavePromptTests {
     let store = store()
     let offers: [(String, SavePromptRequest)] = [
       ("password", try request(store)),
-      ("password-update", try request(store, id: "update", update: true)),
-      ("card", try request(store, id: "card", kind: .card, detail: "Visa •••• 1111")),
+      ("password-update", try request(store, id: "4", update: true)),
+      ("card", try request(store, id: "5", kind: .card, detail: "Visa •••• 1111")),
       (
         "address",
         try request(
-          store, id: "address", kind: .address, detail: "Parity Probe, 1 Loopback Road, Local")
+          store, id: "6", kind: .address, detail: "Parity Probe, 1 Loopback Road, Local")
       ),
     ]
     let directory = ProcessInfo.processInfo.environment["SHAAR_SAVE_PROMPT_EVIDENCE"]

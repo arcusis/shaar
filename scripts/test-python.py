@@ -20,6 +20,15 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 TESTS_ROOT = REPOSITORY_ROOT / "Tests"
 
 
+def junit_output_path(value: str) -> Path:
+    path = Path(value)
+    if path.exists() and path.is_dir():
+        raise argparse.ArgumentTypeError("must name a file, not a directory")
+    if path.parent.exists() and not path.parent.is_dir():
+        raise argparse.ArgumentTypeError(f"parent is not a directory: {path.parent}")
+    return path
+
+
 class ReportResult(unittest.TextTestResult):
     """Record per-test JUnit results, including failures in unittest subtests."""
 
@@ -93,7 +102,7 @@ class ImportFailureTest(unittest.TestCase):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--junit", type=Path)
+    parser.add_argument("--junit", type=junit_output_path)
     options = parser.parse_args()
     sys.path.insert(0, str(REPOSITORY_ROOT))
     test_directories = sorted(path for path in TESTS_ROOT.iterdir() if path.is_dir())

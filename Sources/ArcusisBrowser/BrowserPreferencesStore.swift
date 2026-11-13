@@ -200,6 +200,14 @@ final class BrowserPreferencesStore {
     guard let fileURL, FileManager.default.fileExists(atPath: fileURL.path) else { return }
 
     do {
+      let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+      guard values.isRegularFile == true, values.isSymbolicLink != true else {
+        preserveWithNotice(
+          SettingsL10n.string("Saved preferences are not a regular file; original file preserved."))
+        return
+      }
+      try FileManager.default.setAttributes(
+        [.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
       let handle = try FileHandle(forReadingFrom: fileURL)
       defer { try? handle.close() }
       let data = try handle.read(upToCount: Self.maximumFileSize + 1) ?? Data()

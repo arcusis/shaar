@@ -5,12 +5,17 @@
 import AppKit
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct WebShareConsentTests {
+  @Test func webShareSheetTitleIsVoiceOverHeading() {
+    #expect(WebShareSheetContent.headingTraits == .isHeader)
+  }
+
   private func openedStore() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com/article")!))

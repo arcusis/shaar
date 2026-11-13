@@ -5,6 +5,8 @@
 import SwiftUI
 
 struct FailedPageView: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
+
   let store: BrowserStore
   let failure: RendererFailure
 
@@ -15,6 +17,7 @@ struct FailedPageView: View {
         .accessibilityHidden(true)
       Text(PanelsL10n.string("This page stopped working"))
         .font(.system(size: 24, weight: .medium, design: .rounded))
+        .accessibilityAddTraits(Self.headingTraits)
       Text(failure.pageURL.host() ?? PanelsL10n.string("This page"))
         .font(.callout).foregroundStyle(.secondary).lineLimit(2)
       Text(failure.message).foregroundStyle(.secondary).multilineTextAlignment(.center)

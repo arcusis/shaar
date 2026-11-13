@@ -398,8 +398,8 @@ final class DevToolsRouteProbe {
   }
 
   private func readGrantedTab(_ client: ScopedAgentClient, session: String) async throws {
-    _ = try protocolResult(try await client.call("DOM.enable", session: session))
-    let document = try protocolResult(
+    _ = try Self.protocolResult(try await client.call("DOM.enable", session: session))
+    let document = try Self.protocolResult(
       try await client.call("DOM.getDocument", session: session, params: ["depth": 0]))
     guard let root = document["root"] as? [String: Any],
       let documentURL = root["documentURL"] as? String,
@@ -407,14 +407,14 @@ final class DevToolsRouteProbe {
       let rootID = root["nodeId"] as? Int
     else { throw Failure("Agent bridge DOM was not the granted tab") }
     checks.append("agent bridge reads the granted tab document")
-    let query = try protocolResult(
+    let query = try Self.protocolResult(
       try await client.call(
         "DOM.querySelector", session: session,
         params: ["nodeId": rootID, "selector": "#shaar-agent-dom"]))
     guard let nodeID = query["nodeId"] as? Int, nodeID > 0 else {
       throw Failure("Agent bridge could not find the granted tab marker")
     }
-    let outer = try protocolResult(
+    let outer = try Self.protocolResult(
       try await client.call("DOM.getOuterHTML", session: session, params: ["nodeId": nodeID]))
     guard let html = outer["outerHTML"] as? String, html.contains("data-role=\"granted\""),
       !html.contains("data-role=\"other\"")
@@ -430,8 +430,8 @@ final class DevToolsRouteProbe {
         client, session: session, expression: "window.__shaarAgent.network")
         == "shaar-agent-network-granted",
       "agent bridge reads the granted tab network body")
-    _ = try protocolResult(try await client.call("Network.enable", session: session))
-    _ = try protocolResult(try await client.call("Log.enable", session: session))
+    _ = try Self.protocolResult(try await client.call("Network.enable", session: session))
+    _ = try Self.protocolResult(try await client.call("Log.enable", session: session))
     checks.append("agent bridge enables Network and Log on the granted tab")
   }
 
@@ -460,7 +460,7 @@ final class DevToolsRouteProbe {
   private func evaluatedString(
     _ client: ScopedAgentClient, session: String, expression: String
   ) async throws -> String {
-    let result = try protocolResult(
+    let result = try Self.protocolResult(
       try await client.call(
         "Runtime.evaluate", session: session,
         params: ["expression": expression, "returnByValue": true]))
@@ -470,7 +470,7 @@ final class DevToolsRouteProbe {
     return value
   }
 
-  private func protocolResult(_ reply: [String: Any]) throws -> [String: Any] {
+  static func protocolResult(_ reply: [String: Any]) throws -> [String: Any] {
     guard reply["error"] == nil, let result = reply["result"] as? [String: Any] else {
       let detail = String(describing: reply).prefix(500)
       throw Failure("Agent bridge command failed: \(detail)")

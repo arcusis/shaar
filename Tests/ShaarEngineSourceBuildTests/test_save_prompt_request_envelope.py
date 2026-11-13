@@ -34,6 +34,7 @@ class SavePromptRequestEnvelopeTests(unittest.TestCase):
         ):
             with self.subTest(field=field):
                 self.assertIn(f'payload.Set("{field}"', offer)
+        self.assertEqual(offer.count("payload.Set("), 8)
         self.assertIn('payload.Set("schemaVersion", 1)', offer)
         self.assertIn('payload.Set("kind", "savePromptRequested")', offer)
         self.assertIn('payload.Set("detail", safe_detail)', offer)

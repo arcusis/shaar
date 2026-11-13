@@ -37,8 +37,7 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
     }
     if (document.querySelectorAll("h1").length !== 1) errors.push(`${path}: expected one h1`);
     for (const element of document.querySelectorAll(
-      'a[href], area[href], link[href], img[src], script[src], img[srcset], source[srcset], video[poster], video[src], audio[src], source[src], meta[property="og:image"], meta[name="twitter:image"]',
-      + ', input[type="image"][src]',
+      'a[href], area[href], link[href], img[src], input[type="image"][src], script[src], img[srcset], source[srcset], video[poster], video[src], audio[src], source[src], meta[property="og:image"], meta[name="twitter:image"]',
     )) {
       const references = [
         ...(element.hasAttribute("srcset")
@@ -117,7 +116,8 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
       if (!area.getAttribute("alt")?.trim()) errors.push(`${path}: image map area missing alt`);
     }
     for (const image of document.querySelectorAll('input[type="image"]')) {
-      if (!image.hasAttribute("alt")) errors.push(`${path}: image missing alt`);
+      if (!image.getAttribute("alt")?.trim())
+        errors.push(`${path}: image submit control missing alt`);
     }
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {

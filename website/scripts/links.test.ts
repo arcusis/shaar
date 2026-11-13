@@ -199,8 +199,22 @@ test("link checker validates image submit controls and their alternative text", 
     writeFileSync(join(root, "index.html"), '<h1>Home</h1><input type="image" src="/submit.png">');
     assert.deepEqual(checkLinks(root).errors, [
       "index.html: missing target /submit.png",
-      "index.html: image missing alt",
+      "index.html: image submit control missing alt",
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("link checker rejects empty alternative text on image submit controls", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><input type="image" src="/submit.png" alt="  ">',
+    );
+    writeFileSync(join(root, "submit.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, ["index.html: image submit control missing alt"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

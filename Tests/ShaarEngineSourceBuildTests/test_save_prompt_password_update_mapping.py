@@ -23,6 +23,8 @@ class SavePromptPasswordUpdateMappingTests(unittest.TestCase):
         self.assertIn("OnNotNowClicked()", password_hook)
         self.assertIn("OnNopeUpdateClicked()", password_hook)
         self.assertIn("PENDING_PASSWORD_UPDATE_STATE", password_hook)
+        self.assertIn('OfferSavePrompt(web_contents(), "password"', password_hook)
+        self.assertIn("detail.c_str(), is_update", password_hook)
 
 
 if __name__ == "__main__":

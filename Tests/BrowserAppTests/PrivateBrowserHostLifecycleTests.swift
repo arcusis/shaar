@@ -163,6 +163,54 @@ struct PrivateBrowserHostLifecycleTests {
     #expect(runtime.releasedContexts == [contextID, contextID])
   }
 
+  @Test func contextReleaseKeepsRetryingAfterDetachedHostCreationCompletes() async throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.holdsContextCreation = true
+    runtime.failedContextReleases = 2
+    let sourceProfileID = UUID().uuidString
+    var host: PrivateBrowserHost? = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host?.installCallbacks()
+    try host?.openWindow()
+    let contextID = try #require(runtime.createdContexts.first)
+    let completion = try #require(runtime.contextCompletion)
+
+    host?.detach()
+    host = nil
+    completion(true, nil)
+    for _ in 0..<300 where runtime.releasedContexts.count < 3 {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(runtime.windows.isEmpty)
+    #expect(runtime.releasedContexts == [contextID, contextID, contextID])
+  }
+
+  @Test func pendingReleaseRetrySurvivesHostDeallocation() async throws {
+    let runtime = PrivateHostLifecycleRuntime()
+    runtime.holdsContextCreation = true
+    runtime.failedContextReleases = 2
+    let sourceProfileID = UUID().uuidString
+    var host: PrivateBrowserHost? = PrivateBrowserHost(
+      runtime: runtime, presentsWindows: false,
+      sourceProfileID: { sourceProfileID })
+    host?.installCallbacks()
+    try host?.openWindow()
+    let contextID = try #require(runtime.createdContexts.first)
+    let completion = try #require(runtime.contextCompletion)
+
+    host?.detach()
+    completion(true, nil)
+    host = nil
+    for _ in 0..<300 where runtime.releasedContexts.count < 3 {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(runtime.windows.isEmpty)
+    #expect(runtime.releasedContexts == [contextID, contextID, contextID])
+  }
+
   @Test func failedQueuedWindowCreationDoesNotReleaseContextNeededByNextRequest() throws {
     let runtime = PrivateHostLifecycleRuntime()
     runtime.holdsContextCreation = true

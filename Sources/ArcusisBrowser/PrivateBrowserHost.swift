@@ -214,9 +214,7 @@ final class PrivateBrowserHost {
     runtime.createPrivateContextID(contextID, sourceProfileID: source) {
       [weak self, runtime] success, error in
       guard let self else {
-        if success, !runtime.releasePrivateContextID(contextID) {
-          _ = runtime.releasePrivateContextID(contextID)
-        }
+        if success { Self.retryContextRelease(contextID, runtime: runtime) }
         return
       }
       if self.isDetached {
@@ -506,6 +504,15 @@ final class PrivateBrowserHost {
     for context in Array(contextsAwaitingRelease) { releaseContext(context) }
   }
 
+  private static func retryContextRelease(_ context: String, runtime: ARCChromiumRuntime) {
+    guard !runtime.isQuitting else { return }
+    guard !runtime.releasePrivateContextID(context) else { return }
+    Task { @MainActor in
+      do { try await Task.sleep(for: .seconds(1)) } catch { return }
+      retryContextRelease(context, runtime: runtime)
+    }
+  }
+
   private func releaseContext(_ context: String) {
     if runtime.releasePrivateContextID(context) {
       contextsAwaitingRelease.remove(context)
@@ -520,16 +527,15 @@ final class PrivateBrowserHost {
   }
 
   private func scheduleContextReleaseRetry() {
-    guard !isDetached, !runtime.isQuitting, !contextsAwaitingRelease.isEmpty,
+    guard !runtime.isQuitting, !contextsAwaitingRelease.isEmpty,
       contextReleaseRetryTask == nil
     else { return }
-    contextReleaseRetryTask = Task { @MainActor [weak self] in
+    contextReleaseRetryTask = Task { @MainActor in
       do {
         try await Task.sleep(for: .seconds(1))
       } catch {
         return
       }
-      guard let self else { return }
       self.contextReleaseRetryTask = nil
       self.retryPendingContextReleases()
     }

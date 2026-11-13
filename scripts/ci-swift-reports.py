@@ -66,8 +66,11 @@ def write_reports(log: Path, directory: Path) -> None:
     native = sorted(directory.glob("swift*-swift-testing.xml"))
     if "Test run with " in text and not native:
         raise ValueError("Swift Testing ran without producing its native JUnit XML")
+    native_case_count = 0
     for report in native:
-        ET.parse(report)
+        native_case_count += sum(1 for _ in ET.parse(report).iter("testcase"))
+    if "Test run with " in text and native_case_count == 0:
+        raise ValueError("Swift Testing ran but its native JUnit XML contains no test cases")
     failures = sum(case.find("failure") is not None for case in cases)
     skipped = sum(case.find("skipped") is not None for case in cases)
     suite = ET.Element("testsuite", name="XCTest", tests=str(len(cases)),

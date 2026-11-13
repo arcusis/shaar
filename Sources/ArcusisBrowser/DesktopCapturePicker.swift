@@ -68,16 +68,27 @@ struct DesktopCapturePicker: View {
     self.shareableContent = shareableContent
   }
 
-  var body: some View {
+  var pickerContent: DesktopCapturePickerContent {
+    pickerContent(error: error, note: note)
+  }
+
+  func pickerContent(error displayedError: String?, note displayedNote: String?)
+    -> DesktopCapturePickerContent
+  {
     DesktopCapturePickerContent(
       request: request,
       sources: sources,
       loading: loading,
-      error: error,
-      note: note,
+      error: displayedError,
+      note: displayedNote,
+      onRetry: { await reloadSources() },
       onSelect: { store.resolveDesktopCapture(request.id, sourceID: $0) },
       onCancel: { store.resolveDesktopCapture(request.id, sourceID: nil) }
     )
+  }
+
+  var body: some View {
+    pickerContent
     .padding(24)
     .frame(width: 480)
     .task { await loadSources() }
@@ -108,6 +119,13 @@ struct DesktopCapturePicker: View {
     error = listing.error.map(PanelsL10n.string)
     note = listing.note.map(PanelsL10n.string)
     loading = false
+  }
+
+  private func reloadSources() async {
+    loading = true
+    error = nil
+    note = nil
+    await loadSources()
   }
 
   private func screenSources(from content: SCShareableContent) -> [DesktopCaptureSource] {
@@ -143,6 +161,7 @@ struct DesktopCapturePickerContent: View {
   let loading: Bool
   let error: String?
   var note: String? = nil
+  var onRetry: () async -> Void = {}
   let onSelect: (String) -> Void
   let onCancel: () -> Void
 
@@ -158,6 +177,12 @@ struct DesktopCapturePickerContent: View {
       .textSelection(.enabled)
       if let note {
         Text(note).font(.callout).foregroundStyle(.secondary)
+      }
+      if error != nil || note != nil {
+        Button(PanelsL10n.string("Retry")) {
+          Task { await onRetry() }
+        }
+        .accessibilityIdentifier("desktop-capture-retry")
       }
       if loading {
         ProgressView(PanelsL10n.string("Looking for screens, windows, and tabs…"))

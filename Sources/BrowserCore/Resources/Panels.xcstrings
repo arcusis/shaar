@@ -1428,6 +1428,16 @@
         }
       }
     },
+    "Retry": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניסיון חוזר"
+          }
+        }
+      }
+    },
     "Resume": {
       "localizations": {
         "he": {

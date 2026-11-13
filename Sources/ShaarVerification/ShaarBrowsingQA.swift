@@ -464,11 +464,13 @@ import Foundation
       })
     let finalPath = context.store.session.selectedPage?.tab.url.path ?? ""
     let profileNow = context.store.session.spaces.first { $0.id == personal }?.profileID
+    let profileSwitchPassed = profileSwitchNavigationPassed(
+      switched: switched, settled: switchedPage, profileMatched: profileNow == otherProfile,
+      landedPath: finalPath, rendererFailures: context.store.rendererFailures.count)
     rows.append(
       row(
         "windows-profile",
-        switched && switchedPage && profileNow == otherProfile
-          && context.store.rendererFailures.isEmpty ? "pass" : "fail",
+        profileSwitchPassed ? "pass" : "fail",
         "Mid-load profile switch accepted=\(switched), settled=\(switchedPage), failures=\(context.store.rendererFailures.count), ended on \(finalPath)."
       ))
     _ = keepHidden(&rows, "windows-done")
@@ -1021,6 +1023,13 @@ import Foundation
       components.user == nil, components.password == nil
     else { return false }
     return true
+  }
+
+  static func profileSwitchNavigationPassed(
+    switched: Bool, settled: Bool, profileMatched: Bool, landedPath: String,
+    rendererFailures: Int
+  ) -> Bool {
+    switched && settled && profileMatched && landedPath == "/slow" && rendererFailures == 0
   }
 
   static func playbackStarted(_ value: String?) -> Bool {

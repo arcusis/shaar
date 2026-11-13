@@ -386,6 +386,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     else { throw SessionError.invalidState }
     for space in spaces {
       let splitIDs = space.splits.flatMap(\.tabIDs)
+      let folderPinnedByID = Dictionary(
+        uniqueKeysWithValues: space.folders.map { ($0.id, $0.isPinned) })
       guard Set(splitIDs).count == splitIDs.count,
         Set(space.splits.map(\.id)).count == space.splits.count,
         space.splits.allSatisfy(\.isValid),
@@ -395,15 +397,11 @@ public struct BrowserSession: Codable, Equatable, Sendable {
         space.folders.allSatisfy({ folder in
           !folder.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (folder.parentID == nil
-              || space.folders.contains(where: {
-                $0.id == folder.parentID && $0.isPinned == folder.isPinned
-              }))
+              || folder.parentID.map { folderPinnedByID[$0] == folder.isPinned } == true)
         }),
         space.tabs.allSatisfy({ tab in
           tab.folderID == nil
-            || space.folders.contains(where: {
-              $0.id == tab.folderID && $0.isPinned == tab.isPinned
-            })
+            || tab.folderID.map { folderPinnedByID[$0] == tab.isPinned } == true
         }),
         (space.items(isPinned: true, includingCollapsed: true)
           + space.items(isPinned: false, includingCollapsed: true)).filter({

@@ -2,7 +2,27 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
+
+private func historyInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
+
+private func historyTimestamps(_ value: Any?) -> [Int64]? {
+  guard let values = value as? [Any] else { return nil }
+  let timestamps = values.map { value -> Int64? in
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return nil }
+    return Int64(exactly: number.doubleValue)
+  }
+  guard timestamps.allSatisfy({ $0 != nil }) else { return nil }
+  return timestamps.compactMap { $0 }
+}
 
 public enum ShaarHistoryOperation: UInt32, Sendable {
   case query = 600
@@ -110,8 +130,8 @@ public struct ShaarHistoryAdapter: Sendable {
         let rawURL = row["url"] as? String, let url = URL(string: rawURL),
         ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
         let title = row["title"] as? String,
-        let count = row["visitCount"] as? Int, count >= 0,
-        let visits = row["visits"] as? [Int64], visits.count <= maxVisitsPerURL,
+        let count = historyInteger(row["visitCount"]), count >= 0,
+        let visits = historyTimestamps(row["visits"]), visits.count <= maxVisitsPerURL,
         visits.allSatisfy({ $0 >= 0 }), seen.insert(rawURL).inserted
       else { throw ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row") }
       return ShaarHistoryEntry(url: url, title: title, visitCount: count, visits: visits)
@@ -130,7 +150,7 @@ public struct ShaarHistoryAdapter: Sendable {
       argsJSON: try json(["schemaVersion": 1, "urls": strings]))
     let root = try object(data, required: ["schemaVersion", "deleted"], optional: [])
     try version(root)
-    guard let count = root["deleted"] as? Int, (0...urls.count).contains(count) else {
+    guard let count = historyInteger(root["deleted"]), (0...urls.count).contains(count) else {
       throw ShaarHistoryAdapterError.invalidResponse("invalid delete result")
     }
     return count
@@ -158,16 +178,16 @@ public struct ShaarHistoryAdapter: Sendable {
       required: ["schemaVersion", "accepted", "insertedVisits", "duplicateVisits", "rejected"],
       optional: [])
     try version(root)
-    guard let accepted = root["accepted"] as? Int, accepted >= 0,
-      let inserted = root["insertedVisits"] as? Int, inserted >= 0,
-      let duplicates = root["duplicateVisits"] as? Int, duplicates >= 0,
+    guard let accepted = historyInteger(root["accepted"]), accepted >= 0,
+      let inserted = historyInteger(root["insertedVisits"]), inserted >= 0,
+      let duplicates = historyInteger(root["duplicateVisits"]), duplicates >= 0,
       let rawRejected = root["rejected"] as? [[String: Any]]
     else {
       throw ShaarHistoryAdapterError.invalidResponse("malformed insert result")
     }
     var rejectedIndexes = Set<Int>()
     let rejected = try rawRejected.map { item -> ShaarHistoryInsertResult.Rejection in
-      guard Set(item.keys) == Set(["index", "code"]), let index = item["index"] as? Int,
+      guard Set(item.keys) == Set(["index", "code"]), let index = historyInteger(item["index"]),
         pages.indices.contains(index), rejectedIndexes.insert(index).inserted,
         let code = item["code"] as? String, !code.isEmpty
       else {
@@ -219,7 +239,7 @@ public struct ShaarHistoryAdapter: Sendable {
     return root
   }
   private func version(_ root: [String: Any]) throws {
-    guard root["schemaVersion"] as? Int == 1 else {
+    guard historyInteger(root["schemaVersion"]) == 1 else {
       throw ShaarHistoryAdapterError.invalidResponse("unsupported schema version")
     }
   }

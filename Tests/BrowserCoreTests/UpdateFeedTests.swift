@@ -37,7 +37,10 @@ private let key = Data(repeating: 7, count: 32).base64EncodedString()
 }
 
 @Test func insecureOrMalformedFeedKeepsUpdaterInert() {
-  for candidate in ["http://arcusis.github.io/shaar/appcast.xml", "appcast.xml", ""] {
+  for candidate in [
+    "http://arcusis.github.io/shaar/appcast.xml", "https://arcusis.github.io:99999/appcast.xml",
+    "appcast.xml", "",
+  ] {
     #expect(!UpdateFeed.isConfigured(in: ["SUFeedURL": candidate, "SUPublicEDKey": key]))
   }
 }

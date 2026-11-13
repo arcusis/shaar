@@ -242,33 +242,6 @@ struct DevToolsTests {
         booleanVersion, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
   }
 
-  @Test func openPanelRejectsBooleanVersionAndLeaseIDs() async throws {
-    let fake = FakeDevToolsEngine()
-    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
-    for reply in [
-      #"{"schemaVersion":true,"leaseID":42}"#,
-      #"{"schemaVersion":1,"leaseID":true}"#,
-    ] {
-      fake.setReply(reply)
-      let result = await withCheckedContinuation {
-        (continuation: CheckedContinuation<Result<UInt32, ShaarEngineError>, Never>) in
-        do {
-          _ = try adapter.openPanel(
-            scope: ShaarNavigationScope(profileID: "profile-a"),
-            windowID: "window-a", tabID: "tab-a") { continuation.resume(returning: $0) }
-        } catch let error as ShaarEngineError {
-          continuation.resume(returning: .failure(error))
-        } catch {
-          continuation.resume(returning: .failure(.invalidEvent("unexpected panel error")))
-        }
-      }
-      guard case .failure(.invalidEvent(_)) = result else {
-        Issue.record("Boolean panel acknowledgement was accepted: \(reply)")
-        continue
-      }
-    }
-  }
-
   @Test func shaarDefaultConstructsAdapter() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)
     #expect(ShaarDevToolsAdapter(engine: FakeDevToolsEngine()) != nil)

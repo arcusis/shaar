@@ -61,6 +61,10 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
   public init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
     id = try values.decode(String.self, forKey: .id)
+    guard !id.isEmpty else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .id, in: values, debugDescription: "Expected a non-empty download ID")
+    }
     url = try values.decode(String.self, forKey: .url)
     filename = try values.decode(String.self, forKey: .filename)
     path = try values.decode(String.self, forKey: .path)
@@ -174,7 +178,9 @@ public struct ShaarDownloadsAdapter: Sendable {
     let data = try await transport.submit(
       operation: Self.listOperation, arguments: Self.json(["schemaVersion": 1]))
     let envelope = try JSONDecoder().decode(ListReply.self, from: data)
-    guard envelope.schemaVersion == 1 else { throw ShaarDownloadsError.malformedResponse }
+    guard envelope.schemaVersion == 1,
+      Set(envelope.downloads.map(\.id)).count == envelope.downloads.count
+    else { throw ShaarDownloadsError.malformedResponse }
     return envelope.downloads
   }
 

@@ -202,7 +202,7 @@ final class InspectorStylesModel {
       failure = nil
     } catch {
       if inspector.documentGeneration == generation, !(error is CancellationError) {
-        failure = InspectorL10n.display(error.localizedDescription)
+        failure = Self.failureMessage(for: error)
       }
     }
   }
@@ -463,7 +463,7 @@ final class InspectorStylesModel {
       await refresh(force: true)
     } catch {
       if turningOn, inspector.isOpen, inspector.selection?.id == selection.id {
-        failure = InspectorL10n.display(error.localizedDescription)
+        failure = Self.failureMessage(for: error)
       }
     }
   }
@@ -486,7 +486,7 @@ final class InspectorStylesModel {
       }
       await refresh(force: true)
       await inspector.refresh()
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
 
   func editRule(
@@ -546,7 +546,7 @@ final class InspectorStylesModel {
       }
       await refresh(force: true)
       await inspector.refresh()
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
 
   func undo() async {
@@ -560,7 +560,7 @@ final class InspectorStylesModel {
       }
       await refresh(force: true)
       await inspector.refresh()
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
 
   func clearOverlay(generation: Int? = nil) async {
@@ -630,7 +630,7 @@ final class InspectorStylesModel {
         inspector.selection?.id == identity
       else { throw CancellationError() }
       overlay = true
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
 
   func screenshot() async throws -> Data {
@@ -698,7 +698,14 @@ final class InspectorStylesModel {
       panel.nameFieldStringValue = "element@2x.png"
       guard await panel.begin() == .OK, let url = panel.url else { return }
       try data.write(to: url, options: .atomic)
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return InspectorL10n.display(error.localizedDescription)
+    }
+    return InspectorL10n.string("Could not complete the page style change. Try again.")
   }
 
   var exported: [InspectorDeclaration] {

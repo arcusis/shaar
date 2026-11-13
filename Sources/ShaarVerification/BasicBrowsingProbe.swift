@@ -124,18 +124,20 @@ struct BasicBrowsingProbe {
     guard let data, let bitmap = NSBitmapImageRep(data: data),
       bitmap.pixelsWide > 0, bitmap.pixelsHigh > 0
     else { throw Failure("Live page \(id) produced no renderer capture.") }
-    var nonBlack = false
+    try expect(
+      Self.containsNonBlackPixels(bitmap), "renderer capture for \(id) contains non-black page pixels")
+  }
+
+  static func containsNonBlackPixels(_ bitmap: NSBitmapImageRep) -> Bool {
     for x in stride(from: 0, to: bitmap.pixelsWide, by: max(1, bitmap.pixelsWide / 12)) {
       for y in stride(from: 0, to: bitmap.pixelsHigh, by: max(1, bitmap.pixelsHigh / 12)) {
         guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
         if color.redComponent > 0.03 || color.greenComponent > 0.03 || color.blueComponent > 0.03 {
-          nonBlack = true
-          break
+          return true
         }
       }
-      if nonBlack { break }
     }
-    try expect(nonBlack, "renderer capture for \(id) contains non-black page pixels")
+    return false
   }
 
   private func evaluate(_ id: String) async -> Any? {

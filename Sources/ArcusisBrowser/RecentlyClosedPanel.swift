@@ -30,7 +30,8 @@ struct RecentlyClosedPanel: View {
           }
         }
         Spacer()
-        Button(PanelsL10n.string("Done")) { dismiss() }.keyboardShortcut(.cancelAction)
+        Button(PanelsL10n.string("Done"), role: .cancel) { dismiss() }
+          .keyboardShortcut(.cancelAction)
       }
       if !ownsContext {
         ContentUnavailableView(PanelsL10n.string("Space changed"), systemImage: "square.stack")

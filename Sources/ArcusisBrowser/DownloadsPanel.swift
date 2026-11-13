@@ -37,7 +37,8 @@ struct DownloadsPanel: View {
           Text(profileName).font(.callout).foregroundStyle(.secondary)
         }
         Spacer()
-        Button(PanelsL10n.string("Done")) { dismiss() }.keyboardShortcut(.cancelAction)
+        Button(PanelsL10n.string("Done"), role: .cancel) { dismiss() }
+          .keyboardShortcut(.cancelAction)
       }
       if store.session.selectedSpace.profileID != profileID {
         ContentUnavailableView(

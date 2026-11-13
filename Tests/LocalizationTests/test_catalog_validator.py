@@ -605,6 +605,17 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertIn('historyMessage = SettingsL10n.string("Could not clear history. Try again.")', source)
         self.assertNotIn('error.localizedDescription))', source)
 
+    def test_inspector_recent_counts_keep_recent_meaning_in_hebrew(self):
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(encoding="utf-8"))
+        expected = {
+            "%d recent requests": ("בקשה אחת שנשלחה לאחרונה", "שתי בקשות שנשלחו לאחרונה", "%d בקשות שנשלחו לאחרונה"),
+            "%d recent messages": ("הודעה אחת שנרשמה לאחרונה", "שתי הודעות שנרשמו לאחרונה", "%d הודעות שנרשמו לאחרונה"),
+        }
+        for key, values in expected.items():
+            forms = catalog["strings"][key]["localizations"]["he"]["variations"]["plural"]
+            with self.subTest(key=key):
+                self.assertEqual(tuple(forms[c]["stringUnit"]["value"] for c in ("one", "two", "other")), values)
+
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"
         data = json.loads(path.read_text(encoding="utf-8"))

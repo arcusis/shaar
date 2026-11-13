@@ -49,6 +49,27 @@ TEST_F(ShaarTabVisibilityTest, SelectionShowsRendererAndDeselectionHidesIt) {
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
 }
 
+TEST_F(ShaarTabVisibilityTest, FallbackSelectionTracksOwningWindowVisibility) {
+  ShaarVisibilityProbeWindow* window = [[ShaarVisibilityProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  [window.contentView addSubview:web_contents()->GetNativeView().GetNativeNSView()];
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  window.probeVisible = YES;
+  window.probeOcclusion = NSWindowOcclusionStateVisible;
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
+  window.probeOcclusion = 0;
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::OCCLUDED);
+  window.probeMiniaturized = YES;
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+}
+
 TEST_F(ShaarTabVisibilityTest, HostTracksWindowOcclusionWithoutOrderingIt) {
   web_contents()->WasHidden();
   ShaarVisibilityProbeWindow* window = [[ShaarVisibilityProbeWindow alloc]

@@ -119,8 +119,17 @@ void ShowSelectedWebContents(content::WebContents* previous,
                              content::WebContents* selected) {
   if (previous && previous != selected)
     previous->UpdateWebContentsVisibility(content::Visibility::HIDDEN);
-  if (selected)
-    selected->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
+  if (selected) {
+    NSWindow* window = selected->GetNativeView().GetNativeNSView().window;
+    content::Visibility visibility = content::Visibility::VISIBLE;
+    if (window && (!window.isVisible || window.isMiniaturized)) {
+      visibility = content::Visibility::HIDDEN;
+    } else if (window &&
+               !(window.occlusionState & NSWindowOcclusionStateVisible)) {
+      visibility = content::Visibility::OCCLUDED;
+    }
+    selected->UpdateWebContentsVisibility(visibility);
+  }
 }
 
 void ActivatePageHost(shaar_window* window, Browser* browser,

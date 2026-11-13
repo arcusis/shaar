@@ -632,15 +632,15 @@ index 0000000..9f716ed
 +  extra.Set("transport", "usb");
 +  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(extra));
 +
-+  base::DictValue indexed = Decision("cancel");
-+  indexed.Set("optionId", "abcdef0123456789abcdef0123456789");
-+  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(indexed));
++  base::DictValue index_only = Decision("select");
++  index_only.Set("index", 0);
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(index_only));
 +
 +  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(Decision("select")));
 +
-+  base::DictValue negative = Decision("select");
-+  negative.Set("index", -1);
-+  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(negative));
++  base::DictValue bad_option = Decision("select");
++  bad_option.Set("optionId", "not an id");
++  EXPECT_FALSE(shaar::chooser::ParseDeviceChooserDecision(bad_option));
 +
 +  base::DictValue bad_id = Decision("cancel");
 +  bad_id.Set("id", "not an id");
@@ -830,4 +830,4 @@ index 87ccddf..24c11ce 100644
 +  const char* shaar_transport_ = "device";
    std::u16string title_;
    raw_ptr<View> view_ = nullptr;
- };
+ };index 0000000..3bba05f 100644

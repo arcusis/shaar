@@ -39,6 +39,8 @@ class DeviceChooserPatchTests(unittest.TestCase):
         self.assertIn("void DidFinishNavigation(content::NavigationHandle* navigation)", source)
         self.assertIn(
             "shown->second >= std::min(controller_->NumOptions(), kMaximumOptions)", source)
+        self.assertIn('index_only.Set("index", 0)', source)
+        self.assertIn('bad_option.Set("optionId", "not an id")', source)
         self.assertNotIn("optionID", source)
 
     def test_patch_digest_is_pinned_in_source_build(self):

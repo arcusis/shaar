@@ -24,6 +24,7 @@ SHIPPING_SOURCE_ROOTS = (
 )
 MODULE_TOKEN = re.compile(r"Bundle\.module|(?<![\w.])\.module\b")
 FALLBACK_CLOSURE = re.compile(r"\{\s*\.module\s*\}")
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 
 def code_portion(line: str, block_comment_depth: list[int] | None = None) -> str:
@@ -121,13 +122,13 @@ def code_lines(lines: list[str]) -> list[str]:
 
 
 def violations_in_source(text: str, path: str) -> list[str]:
-    lines = text.splitlines()
-    code = code_lines(lines)
+    original_lines = text.splitlines()
+    lines = code_lines(original_lines)
     errors = []
-    for index, line in enumerate(code):
+    for index, line in enumerate(lines):
         if not MODULE_TOKEN.search(line):
             continue
-        if "Bundle.module" in line or not fallback_only(line, code, index):
+        if "Bundle.module" in line or not fallback_only(line, lines, index):
             errors.append(
                 f"{path}:{index + 1}: Bundle.module in a shipping target must be the "
                 "development fallback passed to PackagedResourceBundle.resolve"

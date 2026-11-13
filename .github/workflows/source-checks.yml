@@ -414,19 +414,65 @@ jobs:
           SHAAR_TEST_SHAAR_ENGINE: '1'
         run: bash scripts/bundle-app.sh --configuration release --with-engine --verification
       - name: Open the first tab through the Shaar backend
+        id: first_tab
         run: |
           app="$PWD/build/Shaar Verification.app"
           evidence="$PWD/build/ci/shaar-engine-simulation"
           mkdir -p "$evidence"
+          date +%s > "$RUNNER_TEMP/shaar-engine-first-tab-start"
           "$app/Contents/MacOS/ShaarVerification" \
             --probe-shaar-first-tab \
             --probe-framework "$app/Contents/Frameworks/Chromium Framework.framework" \
             --probe-output "$evidence/first-tab.json" \
             --probe-data-dir "$RUNNER_TEMP/shaar-engine-first-tab" \
-            > "$evidence/first-tab.log" 2>&1
+            > "$evidence/first-tab.stdout.log" \
+            2> "$evidence/first-tab.stderr.log"
           jq -e '.passed == true and .backend == "shaar" and .nativeView == true and
             .navigationObserved == true and .allWindowsHidden == true' \
             "$evidence/first-tab.json" >/dev/null
+      - name: Collect first-tab crash reports and stderr
+        if: failure() && steps.first_tab.outcome == 'failure'
+        run: |
+          evidence="$PWD/build/ci/shaar-engine-simulation"
+          reports="$evidence/first-tab-crash-reports"
+          mkdir -p "$reports"
+          cp "$evidence/first-tab.stderr.log" "$reports/" 2>/dev/null || true
+          cp "$evidence/first-tab.stdout.log" "$reports/" 2>/dev/null || true
+          {
+            sw_vers
+            xcodebuild -version
+            swift --version
+            echo '--- ci-test-pin.json ---'
+            cat ThirdParty/ChromiumEngine/ci-test-pin.json
+            echo '--- production pin.json ---'
+            cat ThirdParty/ChromiumEngine/pin.json
+            echo '--- cached test engine archive digests ---'
+            if [ -d build/ShaarEngineTestCache ]; then
+              find build/ShaarEngineTestCache -type f -name '*.tar.xz' -exec shasum -a 256 {} \;
+            fi
+            echo '--- cached production engine archive digests ---'
+            if [ -d build/EngineCache ]; then
+              find build/EngineCache -type f -name '*.tar.xz' -exec shasum -a 256 {} \;
+            else
+              echo 'No production pinned archive is fetched by this first-tab job.'
+            fi
+          } > "$reports/runner-environment.txt" 2>&1
+          report_dir="$HOME/Library/Logs/DiagnosticReports"
+          if [ -d "$report_dir" ]; then
+            find "$report_dir" -type f -name '*.ips' \
+              -newer "$RUNNER_TEMP/shaar-engine-first-tab-start" \
+              \( -iname 'Shaar*.ips' -o -iname 'Chromium*.ips' \) \
+              -exec cp {} "$reports/" \;
+          fi
+      - name: Upload first-tab crash diagnostics
+        if: failure() && steps.first_tab.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ci-shaar-first-tab-crash-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/ci/shaar-engine-simulation/first-tab-crash-reports/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
       - name: Verify Shaar private policy readback in an OTR session
         run: |
           app="$PWD/build/Shaar Verification.app"

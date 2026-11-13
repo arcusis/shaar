@@ -120,7 +120,19 @@ def context(root: Path) -> dict:
             "engine": pin["sha256"]}
 
 
+def validate_archive_outputs(directory: Path) -> None:
+    if directory.is_symlink() or not directory.is_dir():
+        raise ValueError(f"Verification archive output directory is not a regular directory: {directory}")
+    for name in ("verification.tar.gz", "bundle.json"):
+        path = directory / name
+        if path.is_symlink():
+            raise ValueError(f"Verification archive output must not be a symlink: {path}")
+        if path.exists() and not path.is_file():
+            raise ValueError(f"Verification archive output is not a regular file: {path}")
+
+
 def archive_bundle(root: Path, directory: Path) -> None:
+    validate_archive_outputs(directory)
     bundle = root / "build" / BUNDLE_NAME
     if not bundle.is_dir() or bundle.is_symlink():
         raise ValueError("Verification bundle is missing")

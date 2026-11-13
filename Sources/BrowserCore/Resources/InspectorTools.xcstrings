@@ -1741,6 +1741,12 @@
         }
       }
     },
+    "The bug report could not be saved. Check available storage and try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The bug report could not be saved. Check available storage and try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לשמור את דוח הבאגים. בדקו שיש מספיק מקום אחסון ונסו שוב." } }
+      }
+    },
     "The report exceeds its supported size.": {
       "localizations": {
         "en": {

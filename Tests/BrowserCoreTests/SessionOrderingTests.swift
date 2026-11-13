@@ -25,6 +25,30 @@ private func orderedSession() throws -> BrowserSession {
   return try BrowserSession(profiles: [a, b], spaces: spaces, selectedSpaceID: spaces[0].id)
 }
 
+@Test func orderedTabsIndexBuildBenchmark() {
+  let profileID = UUID()
+  let folderIDs = (0..<500).map { _ in UUID() }
+  let folders = folderIDs.enumerated().map { index, id in
+    BrowserFolder(
+      id: id, name: "Folder \(index)", parentID: index == 0 ? nil : folderIDs[index - 1],
+      isPinned: false)
+  }
+  let tabs = (0..<5_000).map { index in
+    BrowserTab(
+      url: URL(string: "https://example.com/\(index)")!, title: "Tab \(index)",
+      isPinned: false, folderID: folderIDs[index % folderIDs.count])
+  }
+  let space = BrowserSpace(
+    profileID: profileID, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs, folders: folders)
+
+  let start = ContinuousClock.now
+  var resultCount = 0
+  for _ in 0..<40 { resultCount += space.orderedTabs.count }
+  print("orderedTabsIndexBuildBenchmark: \(start.duration(to: .now))")
+  #expect(resultCount == 200_000)
+}
+
 @Test func selectedTabMoveFollowsItsLiveIdentityWithinTheSameProfile() throws {
   var session = try orderedSession()
   let source = session.spaces[0]

@@ -8,6 +8,35 @@ import { parseHTML } from "linkedom";
 import { ShaarDemo } from "../src/components/demo";
 import { initializeDemo } from "../src/demo";
 
+test("opening address search clears the closed Site controls state", () => {
+  const dom = parseHTML(ShaarDemo());
+  Object.assign(globalThis, {
+    document: dom.document,
+    Element: dom.Element,
+    HTMLElement: dom.HTMLElement,
+    HTMLButtonElement: dom.HTMLButtonElement,
+    HTMLImageElement: dom.HTMLImageElement,
+    HTMLInputElement: dom.HTMLInputElement,
+  });
+  const controlsButton = dom.document.querySelector<HTMLButtonElement>("[data-controls]");
+  const addressButton = dom.document.querySelector<HTMLButtonElement>(".demo-address");
+  const popover = dom.document.querySelector<HTMLElement>(".demo-popover");
+  const launcher = dom.document.querySelector<HTMLElement>(".demo-launcher");
+  assert.ok(controlsButton);
+  assert.ok(addressButton);
+  assert.ok(popover);
+  assert.ok(launcher);
+
+  initializeDemo();
+  controlsButton.click();
+  assert.equal(controlsButton.getAttribute("aria-expanded"), "true");
+  addressButton.click();
+
+  assert.equal(popover.hidden, true);
+  assert.equal(launcher.hidden, false);
+  assert.equal(controlsButton.getAttribute("aria-expanded"), "false");
+});
+
 test("Escape closes Site controls and restores focus to its button", () => {
   const dom = parseHTML(ShaarDemo());
   Object.assign(globalThis, {

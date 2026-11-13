@@ -220,6 +220,7 @@ struct InspectorStylesView: View {
     if showNewRule {
       VStack(alignment: .leading, spacing: 6) {
         TextField(InspectorL10n.string("Selector"), text: $newSelector)
+          .accessibilityLabel(InspectorL10n.string("CSS selector"))
           .textFieldStyle(.roundedBorder)
           .font(.system(size: 11, design: .monospaced))
           .environment(\.layoutDirection, .leftToRight)

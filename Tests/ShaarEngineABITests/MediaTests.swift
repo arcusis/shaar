@@ -123,14 +123,23 @@ private actor FakeMediaTransport: ShaarMediaTransport {
 
 @Test func stateEventsRejectInvalidNativeStateFields() throws {
   let adapter = ShaarMediaAdapter(implementation: .shaar, transport: FakeMediaTransport("{}"))
-  let event = ShaarCopiedEvent(
-    sequence: 2, kind: 15, profileID: Data("p".utf8), sessionID: Data(),
-    windowID: Data(), tabID: Data("t".utf8),
-    payloadJSON: Data(
-      #"{"schemaVersion":1,"kind":"state_changed","state":{"schemaVersion":1,"playbackState":"playing","title":"","artist":"","album":"","supportedActions":[0],"canSeek":false,"hasVideo":false,"tabMuted":false,"pageVolume":1.5}}"#
-        .utf8))
-  #expect(throws: ShaarMediaAdapterError.malformedResponse) {
-    try adapter.decodeEvent(event, scope: .init(profileID: "p", tabID: "t"))
+  let validFields =
+    #""schemaVersion":1,"playbackState":"playing","title":"","artist":"","album":"","supportedActions":[0],"canSeek":false,"hasVideo":false,"tabMuted":false,"pageVolume":0.5"#
+  let invalidFields = [
+    validFields.replacingOccurrences(
+      of: #""supportedActions":[0]"#, with: #""supportedActions":[99]"#),
+    validFields.replacingOccurrences(of: #""pageVolume":0.5"#, with: #""pageVolume":1.5"#),
+    validFields.replacingOccurrences(
+      of: #""tabMuted":false"#, with: #""tabMuted":false,"videoWidth":1920"#),
+  ]
+  for (index, fields) in invalidFields.enumerated() {
+    let payload = "{\"schemaVersion\":1,\"kind\":\"state_changed\",\"state\":{" + fields + "}}"
+    let event = ShaarCopiedEvent(
+      sequence: UInt64(index + 2), kind: 15, profileID: Data("p".utf8), sessionID: Data(),
+      windowID: Data(), tabID: Data("t".utf8), payloadJSON: Data(payload.utf8))
+    #expect(throws: ShaarMediaAdapterError.malformedResponse) {
+      try adapter.decodeEvent(event, scope: .init(profileID: "p", tabID: "t"))
+    }
   }
 }
 

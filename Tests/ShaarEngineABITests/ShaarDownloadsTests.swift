@@ -68,6 +68,19 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   #expect(result[0].state == .failed)
 }
 
+@Test func downloadIntegerFieldsRejectFractionsAndOverflow() async throws {
+  for received in ["1.5", "9223372036854775808"] {
+    let payload = Data(
+      """
+      {"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/a.bin","state":"downloading","paused":false,"received":\(received),"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}
+      """.utf8)
+    let fake = FakeDownloadsTransport(replies: [400: payload])
+    await #expect(throws: (any Error).self) {
+      _ = try await ShaarDownloadsAdapter(transport: fake).list()
+    }
+  }
+}
+
 @Test func controlSendsTheScopedOperationSchema() async throws {
   let fake = FakeDownloadsTransport(replies: [401: Data("{}".utf8)])
   try await ShaarDownloadsAdapter(transport: fake).control(.pause, id: "guid-2")

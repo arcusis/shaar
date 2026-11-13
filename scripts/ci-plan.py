@@ -9,6 +9,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -127,6 +128,12 @@ def main() -> None:
         result = subprocess.run(["git", "diff", "--name-only", "-z", base, "HEAD"], capture_output=True, check=False)
         if result.returncode == 0:
             paths = [os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
+        else:
+            print(
+                f"::warning::Could not classify changed paths (git diff exited {result.returncode}); "
+                "selecting the full CI plan.",
+                file=sys.stderr,
+            )
     draft = name == "pull_request" and event.get("pull_request", {}).get("draft") is True
     full, website, swift = select_stages(paths, name, uses_fast_lane(name))
     shipping_guard = name == "pull_request" and not draft and needs_shipping_probe_guard(paths)

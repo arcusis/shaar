@@ -365,6 +365,21 @@ class PipelineGateTests(unittest.TestCase):
             self.assertIn("full=true", (root / "output").read_text())
             self.assertIn("base=" + "a" * 40, (root / "output").read_text())
 
+    def test_diff_failure_warns_when_falling_back_to_full_ci(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"before": "a" * 40}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "push",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with (patch.dict(os.environ, env),
+                  patch.object(PLAN.subprocess, "run", return_value=SimpleNamespace(returncode=128)),
+                  patch("sys.stderr", new=io.StringIO()) as errors):
+                PLAN.main()
+            self.assertIn("git diff exited 128", errors.getvalue())
+            self.assertIn("selecting the full CI plan", errors.getvalue())
+            self.assertIn("full=true", (root / "output").read_text())
+
     def test_probe_count_normalizes_dispatch_strings_before_typed_workflow_call(self):
         for value in (1, "1", 10, "10"):
             self.assertEqual(PLAN.iteration_count({"inputs": {"probe_iterations": value}}, "workflow_dispatch"), int(value))

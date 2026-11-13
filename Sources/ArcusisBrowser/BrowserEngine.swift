@@ -29,6 +29,7 @@ private struct NativeTabPlacement: Equatable {
 /// Owns one window's live tabs independently of its selected SwiftUI space.
 @MainActor @Observable
 final class BrowserEngine {
+  static let extensionInstallRefreshDelaysMilliseconds = [250, 750, 1_500, 3_000, 4_500]
   let runtime: ARCChromiumRuntime
   let events: BrowserRuntimeEvents
   let downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
@@ -482,12 +483,12 @@ final class BrowserEngine {
     }
     store.onInstallDecision = { [weak self] id, accepted in
       guard let self else { return }
-      self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
-      if accepted {
-        Task { [weak self] in
-          for _ in 0..<20 {
-            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
-            guard let self else { return }
+        self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
+        if accepted {
+          Task { [weak self] in
+            for delay in Self.extensionInstallRefreshDelaysMilliseconds {
+              do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
+              guard let self else { return }
             self.refreshExtensions()
             ExtensionManagerModel.refreshInstalled()
           }

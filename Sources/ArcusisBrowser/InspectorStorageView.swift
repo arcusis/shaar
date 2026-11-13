@@ -91,10 +91,12 @@ struct InspectorStorageView: View {
               \.layoutDirection, .leftToRight
             ).textFieldStyle(.roundedBorder)
               .disabled(selected != nil)
+              .accessibilityLabel(InspectorToolsL10n.string("Key"))
             TextEditor(text: $value).environment(\.layoutDirection, .leftToRight).font(
               .system(size: 11, design: .monospaced)
             )
             .frame(height: 120).border(.secondary.opacity(0.2))
+            .accessibilityLabel(InspectorToolsL10n.string("Value"))
             if let cookie {
               Text(
                 cookie.editable

@@ -56,7 +56,7 @@ struct DesktopCaptureConsentTests {
     #expect(sheet.matches(store.session))
   }
 
-  @Test func capturePromptShowsTheCompleteOriginIncludingPort() throws {
+  @Test func capturePromptShowsTheCompleteFrameOriginIncludingPort() throws {
     let store = store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
     let capture = try #require(
@@ -64,11 +64,12 @@ struct DesktopCaptureConsentTests {
         "id": UUID().uuidString,
         "profileID": store.session.selectedSpace.profileID.uuidString,
         "tabID": tab.id.uuidString,
-        "pageURL": "https://meet.google.com:8443/call",
+        "pageURL": "https://portal.example/meeting",
         "origin": "https://meet.google.com:8443",
         "frameID": "0123456789abcdef0123456789abcdef",
       ]))
 
+    #expect(capture.pageURL.host() == "portal.example")
     #expect(capture.displayOrigin == "https://meet.google.com:8443")
   }
 

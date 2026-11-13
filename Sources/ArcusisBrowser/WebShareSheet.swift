@@ -56,7 +56,7 @@ struct WebShareSheetContent: View {
     VStack(alignment: .leading, spacing: 12) {
       Text(PanelsL10n.string("Share"))
         .font(.title2.weight(.semibold))
-      Text(request.hostLabel)
+      Text(request.originLabel)
         .font(.callout)
         .foregroundStyle(.secondary)
         .textSelection(.enabled)

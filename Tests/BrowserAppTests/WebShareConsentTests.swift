@@ -46,7 +46,7 @@ struct WebShareConsentTests {
     #expect(share.pageURL == URL(string: "https://example.com/article"))
     #expect(share.requestingOrigin == URL(string: "https://example.com"))
     #expect(share.sheetID == "web-share-\(share.id)")
-    #expect(share.hostLabel == "example.com")
+    #expect(share.originLabel == "https://example.com")
     #expect(share.matches(store.session))
     #expect(
       !share.matches(

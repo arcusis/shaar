@@ -54,8 +54,9 @@ struct WebShareRequest: Identifiable, Equatable {
 
   var sheetID: String { "web-share-\(id)" }
 
-  var hostLabel: String {
-    requestingOrigin.host() ?? pageURL.host() ?? pageURL.absoluteString
+  var originLabel: String {
+    let origin = requestingOrigin.absoluteString
+    return origin.hasSuffix("/") ? String(origin.dropLast()) : origin
   }
 
   var sharingItems: [Any] {

@@ -319,7 +319,9 @@ def validate_source_references(root, catalogs, include_app=False):
                 "InspectorL10n": "Inspector", "InspectorDetailsL10n": "InspectorDetails",
                 "InspectorToolsL10n": "InspectorTools"}
     call = re.compile(r"\b(" + "|".join(map(re.escape, wrappers)) + r")\.(?:string|text|format|plural)\s*\(")
-    direct_text = re.compile(r'\bText\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)')
+    direct_text = re.compile(
+        r'\b(Text|Menu|Picker|Toggle|Section)\s*\(\s*("(?:[^"\\]|\\.)*")'
+    )
     direct_accessibility_text = re.compile(
         r'\.(help|accessibilityLabel|accessibilityHint)\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)'
     )
@@ -327,11 +329,12 @@ def validate_source_references(root, catalogs, include_app=False):
     for path in sorted(source_root.rglob("*.swift")):
         source = path.read_text(encoding="utf-8")
         for match in direct_text.finditer(source):
-            key = decode_swift_literal(match.group(1))
+            control, literal = match.groups()
+            key = decode_swift_literal(literal)
             if key in translated_text_keys:
                 line = source.count("\n", 0, match.start()) + 1
                 raise ValueError(
-                    f"unlocalized Text for catalog key {key!r} ({path.relative_to(root)}:{line})"
+                    f"unlocalized {control} for catalog key {key!r} ({path.relative_to(root)}:{line})"
                 )
         for match in direct_accessibility_text.finditer(source):
             modifier, literal = match.groups()

@@ -157,17 +157,29 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
       try engine.openTab(id: id, windowID: windowID, url: url, foreground: foreground)
     } catch {
       if needsProfileSwitch {
-        try? engine.setActiveProfile(id: previousProfileID, windowID: windowID)
+        do {
+          try engine.setActiveProfile(id: previousProfileID, windowID: windowID)
+        } catch {
+          state.activeProfileID = scope.profileID
+          windows[windowID] = state
+        }
       }
       throw error
-    }
-    if needsProfileSwitch && !foreground {
-      try engine.setActiveProfile(id: previousProfileID, windowID: windowID)
     }
     state.tabIDsByProfile[scope.profileID, default: []].append(id)
     if foreground {
       state.activeProfileID = scope.profileID
       state.activeTabByProfile[scope.profileID] = id
+    }
+    if needsProfileSwitch && !foreground {
+      do {
+        try engine.setActiveProfile(id: previousProfileID, windowID: windowID)
+      } catch {
+        state.activeProfileID = scope.profileID
+        windows[windowID] = state
+        tabOwners[id] = TabOwner(windowID: windowID, profileID: scope.profileID)
+        throw error
+      }
     }
     windows[windowID] = state
     tabOwners[id] = TabOwner(windowID: windowID, profileID: scope.profileID)

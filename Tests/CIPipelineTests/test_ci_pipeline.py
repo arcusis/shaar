@@ -1145,6 +1145,17 @@ class ProbeSoakTests(unittest.TestCase):
                 self.assertEqual(suite.attrib["failures"], "1")
                 self.assertIn("Could not validate swift.xml: invalid tests count", summary.read_text())
 
+    def test_junit_non_numeric_counts_are_reported_without_raising(self):
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            summary = root / "summary.md"
+            with patch("ci_support.ROOT", root), patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+                checks = Commands("invalid-counts")
+                (checks.directory / "swift.xml").write_text('<testsuite tests="many" failures="0"/>')
+                self.assertEqual(checks.finish(), 1)
+                self.assertIn("Could not validate swift.xml: invalid tests count 'many'", summary.read_text())
+
     def test_python_junit_records_subtest_failure_and_skip(self):
         class Example(unittest.TestCase):
             def test_subtests(self):

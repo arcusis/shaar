@@ -33,6 +33,10 @@ final class AgentBridgeTests: XCTestCase {
     XCTAssertTrue(model.isConnected)
   }
 
+  func testAgentBridgeSectionTitlesAreVoiceOverHeadings() {
+    XCTAssertEqual(AgentBridgeAccessibility.headingTraits, .isHeader)
+  }
+
   func testStatusRejectsSecretsAndInvalidPorts() throws {
     XCTAssertThrowsError(
       try AgentBridgeStatus.decode([

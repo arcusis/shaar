@@ -2,7 +2,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
+
+private func domEventInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
 
 public enum ShaarDOMRelation: String, Sendable {
   case child
@@ -215,10 +223,11 @@ public enum ShaarDOMEventRouter {
       event.payloadJSON.count <= 65_536,
       let root = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       Set(root.keys) == ["schemaVersion", "kind", "eventID", "leaseID", "data"],
-      root["schemaVersion"] as? Int == 1,
+      domEventInteger(root["schemaVersion"]) == 1,
       root["kind"] as? String == "panelEvent",
-      root["leaseID"] as? UInt32 == leaseID,
-      let id = root["eventID"] as? Int, (20...28).contains(id),
+      let rawLeaseID = domEventInteger(root["leaseID"]), rawLeaseID >= 0,
+      rawLeaseID <= Int(UInt32.max), UInt32(rawLeaseID) == leaseID,
+      let id = domEventInteger(root["eventID"]), (20...28).contains(id),
       let fields = root["data"] as? [String: Any],
       let truncated = fields["truncated"] as? Bool,
       let mutation = decodeMutation(id, fields)

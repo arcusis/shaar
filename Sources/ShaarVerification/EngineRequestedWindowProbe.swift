@@ -327,13 +327,17 @@ final class EngineRequestedWindowProbe {
     for _ in 0..<100 {
       if let value = await value(
         tab, script: "JSON.parse(document.documentElement.dataset.arcusisWindowProbe || '{}')"),
-        value["token"] as? String == token
+        Self.matchesWorkerReport(value, token: token)
       {
         return value
       }
       try await Task.sleep(for: .milliseconds(100))
     }
     throw WindowProbeFailure("Window worker report did not arrive.")
+  }
+
+  static func matchesWorkerReport(_ report: [String: Any], token: String) -> Bool {
+    report["token"] as? String == token
   }
 
   private func nativeOrderMatches(

@@ -300,6 +300,14 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
                     "--xunit-output", str(checks.directory / "swift.xml")], env=environment)
 
 
+def record_stage_error(checks: Commands, error: Exception) -> None:
+    message = str(error)
+    (checks.directory / "error.txt").write_text(message + "\n")
+    checks.results.append(dict(name="stage-error", command=["report CI stage exception"],
+                               status=1, seconds=0.0))
+    print(message, file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("unit", "coverage-base", "coverage-compare", "abi-contract", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "localization-captures", "shipping", "sanitize", "dead-code"))
@@ -358,8 +366,7 @@ def main() -> int:
                 if not any(item["status"] for item in checks.results):
                     checks.run("sparkle-update", [sys.executable, "scripts/ci-sparkle.py"])
     except Exception as error:
-        (checks.directory / "error.txt").write_text(str(error) + "\n")
-        print(error, file=sys.stderr)
+        record_stage_error(checks, error)
         checks.finish()
         return 1
     return checks.finish()

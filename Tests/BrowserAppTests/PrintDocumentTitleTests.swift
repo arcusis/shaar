@@ -46,6 +46,11 @@ struct PrintDocumentTitleTests {
     #expect(PrintDocumentTitle.make(pageTitle: persian, productName: "Shaar") == persian)
   }
 
+  @Test func preservesEmojiTagSequencesInPDFNames() {
+    let englandFlag = "🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}"
+    #expect(PrintDocumentTitle.make(pageTitle: englandFlag, productName: "Shaar") == englandFlag)
+  }
+
   @Test func capsPageTitleLength() {
     let result = PrintDocumentTitle.make(
       pageTitle: String(repeating: "a", count: 200), productName: "Shaar")

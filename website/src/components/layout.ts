@@ -15,6 +15,7 @@ file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light"><title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeHtml(page.description)}"><link rel="canonical" href="${siteOrigin}${page.path}">
+${page.path === "/404.html" ? '<meta name="robots" content="noindex">' : ""}
 <meta property="og:type" content="website"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(page.description)}"><meta property="og:url" content="${siteOrigin}${page.path}"><meta property="og:image" content="${siteOrigin}/assets/shaar-icon.png">
 <meta name="twitter:card" content="summary"><link rel="icon" href="/assets/shaar-logo.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/fonts/clash-display.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/assets/fonts/satoshi.woff2" as="font" type="font/woff2" crossorigin>

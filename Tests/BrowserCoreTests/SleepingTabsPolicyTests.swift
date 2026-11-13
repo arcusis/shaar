@@ -72,6 +72,28 @@ import Testing
     #expect(policy.memoryPressureTabs(tied) == tied.map(\.id))
   }
 
+  @Test func memoryPressureRespectsEverySleepExemption() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let eligible = facts(lastActive: now)
+    let exempt = [
+      facts(isPinned: true, lastActive: now),
+      facts(keepAlive: true, lastActive: now),
+      facts(isVisible: true, lastActive: now),
+      facts(isPrivateActive: true, lastActive: now),
+      facts(isPlaying: true, lastActive: now),
+      facts(isCapturing: true, lastActive: now),
+      facts(formEdited: true, lastActive: now),
+      facts(hasInspector: true, lastActive: now),
+      facts(hasDeveloperTools: true, lastActive: now),
+      facts(profileIsDownloading: true, lastActive: now),
+      facts(host: "mail.bank.test", lastActive: now),
+    ]
+
+    let policy = SleepingTabsPolicy(neverSleepHosts: ["bank.test"])
+
+    #expect(policy.memoryPressureTabs([eligible] + exempt) == [eligible.id])
+  }
+
   @Test func preferencesDefaultToTwoHoursAndParseNeverSleepHosts() {
     let name = "sleeping-tabs-policy-\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: name)!

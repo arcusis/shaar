@@ -81,34 +81,67 @@ struct ShaarEngineABITests {
     var delivered: ShaarCopiedEvent?
     let dispatcher = ShaarEventDispatcher { delivered = $0 }
     let profile = Array("profile".utf8)
+    let session = Array("private-session".utf8)
+    let window = Array("window-\0id".utf8)
+    let tab = Array("tab-東京".utf8)
     let payload = Array("{\"kind\":\"tab\",\"schemaVersion\":1}".utf8)
     profile.withUnsafeBufferPointer { profileBuffer in
-      payload.withUnsafeBufferPointer { payloadBuffer in
-        var event = shaar_event()
-        event.size = UInt32(MemoryLayout<shaar_event>.size)
-        event.sequence = 42
-        event.kind = shaar_event_kind(rawValue: 5)
+      session.withUnsafeBufferPointer { sessionBuffer in
+        window.withUnsafeBufferPointer { windowBuffer in
+          tab.withUnsafeBufferPointer { tabBuffer in
+            payload.withUnsafeBufferPointer { payloadBuffer in
+              var event = shaar_event()
+              event.size = UInt32(MemoryLayout<shaar_event>.size)
+              event.sequence = 42
+              event.kind = shaar_event_kind(rawValue: 5)
 
-        var profileBytes = shaar_bytes()
-        profileBytes.data = profileBuffer.baseAddress.map {
-          UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+              var profileBytes = shaar_bytes()
+              profileBytes.data = profileBuffer.baseAddress.map {
+                UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+              }
+              profileBytes.size = profile.count
+              event.profile_id = profileBytes
+
+              var sessionBytes = shaar_bytes()
+              sessionBytes.data = sessionBuffer.baseAddress.map {
+                UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+              }
+              sessionBytes.size = session.count
+              event.session_id = sessionBytes
+
+              var windowBytes = shaar_bytes()
+              windowBytes.data = windowBuffer.baseAddress.map {
+                UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+              }
+              windowBytes.size = window.count
+              event.window_id = windowBytes
+
+              var tabBytes = shaar_bytes()
+              tabBytes.data = tabBuffer.baseAddress.map {
+                UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+              }
+              tabBytes.size = tab.count
+              event.tab_id = tabBytes
+
+              var payloadBytes = shaar_bytes()
+              payloadBytes.data = payloadBuffer.baseAddress.map {
+                UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+              }
+              payloadBytes.size = payload.count
+              event.payload_json = payloadBytes
+
+              dispatcher.receive(event)
+            }
+          }
         }
-        profileBytes.size = profile.count
-        event.profile_id = profileBytes
-
-        var payloadBytes = shaar_bytes()
-        payloadBytes.data = payloadBuffer.baseAddress.map {
-          UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
-        }
-        payloadBytes.size = payload.count
-        event.payload_json = payloadBytes
-
-        dispatcher.receive(event)
       }
     }
     for _ in 0..<20 where delivered == nil { await Task.yield() }
     #expect(delivered?.sequence == 42)
     #expect(delivered?.profileID == Data(profile))
+    #expect(delivered?.sessionID == Data(session))
+    #expect(delivered?.windowID == Data(window))
+    #expect(delivered?.tabID == Data(tab))
     #expect(delivered?.payloadJSON == Data(payload))
   }
 

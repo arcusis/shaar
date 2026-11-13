@@ -107,6 +107,15 @@ struct PrintConsentTests {
     ]
     #expect(PrintRequest(payload: valid) != nil)
 
+    for unsupportedVersion: Any in [2, "1", true, NSNumber(value: 1.0), NSNull()] {
+      var unsupported = valid
+      unsupported["schemaVersion"] = unsupportedVersion
+      #expect(PrintRequest(payload: unsupported) == nil)
+    }
+    var missingVersion = valid
+    missingVersion.removeValue(forKey: "schemaVersion")
+    #expect(PrintRequest(payload: missingVersion) == nil)
+
     for (key, value) in [
       ("id", "not-a-uuid" as Any),
       ("pageURL", "file:///tmp/page" as Any),

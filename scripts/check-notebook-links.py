@@ -51,6 +51,11 @@ def linked_notes(indexes: list[Path]) -> set[Path]:
 
 def check_notebook(notebook: Path) -> int:
     notes = sorted(notebook.rglob("*.md"))
+    symlinks = sorted(path for path in notebook.rglob("*") if path.is_symlink())
+    if symlinks:
+        for path in symlinks:
+            print(f"Notebook contains symlink: {path.relative_to(notebook)}", file=sys.stderr)
+        return 1
     indexes = [path for path in notes if path.name.startswith("_INDEX_")]
     if not indexes:
         print(f"No _INDEX_*.md files found in {notebook}", file=sys.stderr)

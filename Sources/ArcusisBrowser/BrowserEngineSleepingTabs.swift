@@ -94,6 +94,17 @@ extension BrowserEngine {
   }
 
   func sleepingCandidates(in store: BrowserStore) -> [SleepingTabScheduler.Candidate] {
+    let session = store.session
+    var profileByTabID: [UUID: UUID] = [:]
+    for space in session.spaces {
+      for tab in space.tabs { profileByTabID[tab.id] = space.profileID }
+    }
+    let favoriteProfiles = Dictionary(
+      uniqueKeysWithValues: session.favorites.map { ($0.id, $0.profileID) })
+    for page in session.favoritePages {
+      if let profileID = favoriteProfiles[page.favoriteID] { profileByTabID[page.tab.id] = profileID }
+    }
+    var downloadingByProfile: [UUID: Bool] = [:]
     return SleepingTabScheduler.candidates(
       in: store, liveTabs: liveTabs,
       isPlaying: { store.media.sessions[$0]?.isPlaying == true },
@@ -104,9 +115,11 @@ extension BrowserEngine {
       },
       hasAgentConnection: { self.developerModels[$0]?.agentBridge.isConnected == true },
       profileIsDownloading: { id in
-        store.session.profileID(forTabID: id).map { profile in
-          self.downloads.items(in: profile).contains { $0.state == .downloading }
-        } ?? false
+        guard let profileID = profileByTabID[id] else { return false }
+        if let cached = downloadingByProfile[profileID] { return cached }
+        let isDownloading = self.downloads.hasActiveDownload(in: profileID)
+        downloadingByProfile[profileID] = isDownloading
+        return isDownloading
       })
   }
 }

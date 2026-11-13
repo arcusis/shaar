@@ -43,6 +43,30 @@ struct TabSuspensionTests {
     #expect(!runtime.evaluatedScripts[0].contains("scrollTo"))
   }
 
+  @Test func sleepingCandidateDownloadLookupFocusedBenchmark() throws {
+    let tabs = (0..<1_000).map { index in
+      BrowserTab(url: URL(string: "https://tab-\(index).example")!)
+    }
+    let (store, engine, _) = try makeEngine(tabs: tabs)
+    defer { engine.suspensionTask?.cancel() }
+    let profileID = store.session.selectedSpace.profileID
+    for index in 0..<1_000 {
+      engine.downloads.changed([
+        "id": UUID().uuidString, "filename": "file-\(index)", "path": "",
+        "url": "https://download.example/file", "state": DownloadState.downloading.rawValue,
+        "paused": false, "dangerous": false, "offTheRecord": false,
+        "received": 0.0, "total": -1.0, "startTime": Double(index),
+      ], profileID: profileID)
+    }
+
+    let start = ContinuousClock.now
+    let candidates = engine.sleepingCandidates(in: store)
+    print("sleepingCandidateDownloadLookupFocusedBenchmark: \(start.duration(to: .now))")
+    #expect(candidates.count == tabs.count)
+    let allProfilesDownloading = candidates.allSatisfy { $0.profileIsDownloading }
+    #expect(allProfilesDownloading)
+  }
+
   @Test func anEditedFormStaysAwake() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let edited = BrowserTab(url: URL(string: "https://edited.example")!)

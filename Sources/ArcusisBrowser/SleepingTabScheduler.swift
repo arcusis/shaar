@@ -64,6 +64,7 @@ final class SleepingTabScheduler {
     }
     noteSignal(id, audible: isAudible, capturing: isCapturing)
     if state == "active" || isAudible || isCapturing {
+      inactiveSince[id] = nil
       store.noteTabAwake(id)
       return
     }

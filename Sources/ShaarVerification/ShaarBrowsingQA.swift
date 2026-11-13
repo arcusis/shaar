@@ -1114,7 +1114,7 @@ import Foundation
     return (prompted, false, false)
   }
 
-  private static func beforeUnloadStatus(
+  static func beforeUnloadStatus(
     armed: Bool, armedState: String?, prompted: Bool, cancelled: Bool, sawVisibleDialog: Bool,
     dismissed: Bool
   ) -> String {

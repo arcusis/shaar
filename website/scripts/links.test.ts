@@ -103,7 +103,6 @@ test("link checker verifies image map associations", () => {
   }
 });
 
-<<<<<<< HEAD
 test("link checker reports images that target a missing map", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {
@@ -210,7 +209,6 @@ test("link checker validates social preview image targets", () => {
   }
 });
 
-<<<<<<< HEAD
 test("link checker validates image submit controls and their alternative text", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {
@@ -238,7 +236,6 @@ test("link checker rejects empty alternative text on image submit controls", () 
   }
 });
 
-<<<<<<< HEAD
 test("link checker reports malformed quoted CSS imports", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {
@@ -256,7 +253,7 @@ test("link checker ignores CSS URLs inside comments", () => {
     writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
     writeFileSync(
       join(root, "styles.css"),
-      '/* url("/removed-image.png") */ body { color: black; }',
+      `/* url("/removed-image.png") */ body::before { content: "url('/also-not-a-resource.png')"; }`,
     );
     assert.deepEqual(checkLinks(root).errors, []);
   } finally {

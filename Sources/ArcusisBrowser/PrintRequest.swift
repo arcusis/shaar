@@ -85,12 +85,18 @@ struct PrintRequest: Identifiable, Equatable {
     guard let title = value as? String, title.utf8.count <= 2048 else { return nil }
     let scalars = title.unicodeScalars.map { scalar -> Unicode.Scalar in
       switch scalar.properties.generalCategory {
-      case .control, .format, .lineSeparator, .paragraphSeparator: return " "
-      default: return scalar
+      case .control, .lineSeparator, .paragraphSeparator: return " "
+      default: return Self.isBidirectionalControl(scalar) ? " " : scalar
       }
     }
     let sanitized = String(String.UnicodeScalarView(scalars))
       .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     return String(sanitized.prefix(256))
+  }
+
+  private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x061C || value == 0x200E || value == 0x200F
+      || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
   }
 }

@@ -88,6 +88,9 @@ struct PrintConsentTests {
     ]
 
     #expect(try #require(PrintRequest(payload: payload)).title == "Report Next")
+    var emojiPayload = payload
+    emojiPayload["title"] = "Family 👨‍👩‍👧‍👦"
+    #expect(try #require(PrintRequest(payload: emojiPayload)).title == "Family 👨‍👩‍👧‍👦")
     var longTitlePayload = payload
     longTitlePayload["title"] = String(repeating: "A", count: 512)
     #expect(try #require(PrintRequest(payload: longTitlePayload)).title.count == 256)

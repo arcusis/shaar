@@ -224,7 +224,18 @@ struct DeviceChooserTests {
   }
 
   @Test func selectedDeviceOptionHasASelectedAccessibilityTrait() {
-    #expect(DeviceChooserConsent.optionAccessibilityTraits(isSelected: true).contains(.isSelected))
+    let options = [DeviceChooserOption(index: 0, title: "Adapter", detail: "")]
+    let revision = UUID()
+    var selection = DeviceChooserSelection(options: options, revision: revision, selectedIndex: 0)
+    selection.select(0, from: options, revision: revision)
+
+    let currentTrait = DeviceChooserConsent.optionAccessibilityTraits(
+      isSelected: selection.selectedIndex(for: options, revision: revision) == 0)
+    let staleTrait = DeviceChooserConsent.optionAccessibilityTraits(
+      isSelected: selection.selectedIndex(for: options, revision: UUID()) == 0)
+
+    #expect(currentTrait.contains(.isSelected))
+    #expect(!staleTrait.contains(.isSelected))
     #expect(!DeviceChooserConsent.optionAccessibilityTraits(isSelected: false).contains(.isSelected))
   }
 

@@ -255,7 +255,7 @@ final class DeveloperPageModel {
       call.resume(.failure(CancellationError()))
     }
     .value
-    guard destination == target && generation == documentGeneration else {
+    guard !closed, destination == target && generation == documentGeneration else {
       throw DeveloperModeFailure(InspectorToolsL10n.string("The page changed. Try again."))
     }
     return result

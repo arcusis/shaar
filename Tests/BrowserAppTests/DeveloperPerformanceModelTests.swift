@@ -87,6 +87,38 @@ struct DeveloperPerformanceModelTests {
     runtime.complete(with: ["result": ["value": "fixture-agent"]])
     engine.suspensionTask?.cancel()
   }
+
+  @Test func developerCallRejectsReplyAfterModelClose() async throws {
+    var session = BrowserSession.fresh()
+    let tabID = try #require(session.open(URL(string: "https://example.test")!))
+    let page = try #require(session.page(forTabID: tabID)?.tab)
+    let store = BrowserStore(session: session)
+    let runtime = PendingDeveloperCallRuntime()
+    let engine = try BrowserEngine(events: BrowserRuntimeEvents(runtime: runtime), store: store)
+    defer { engine.suspensionTask?.cancel() }
+    runtime.tabWindows[tabID.uuidString] = engine.windowID
+    let target = SiteControlTarget(
+      tabID: page.id, profileID: try #require(store.session.profileID(forTabID: page.id)),
+      url: page.url)
+    let model = DeveloperPageModel(target: target, engine: engine)
+    let call = Task {
+      do {
+        _ = try await model.call("Runtime.evaluate")
+        return false
+      } catch is DeveloperModeFailure {
+        return true
+      } catch {
+        return false
+      }
+    }
+    for _ in 0..<100 where runtime.pending == nil { await Task.yield() }
+    try #require(runtime.pending != nil)
+
+    model.close()
+    runtime.complete(with: ["result": [:]])
+
+    #expect(await call.value)
+  }
 }
 
 @MainActor

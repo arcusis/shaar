@@ -18,6 +18,7 @@ class HiddenScrollRelatedEventDispatchPatchTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(content).hexdigest(), entry["sha256"])
         patch = content.decode()
         self.assertIn("EnqueueHiddenScrollRelatedEvent", patch)
+        self.assertIn("if (!GetExecutionContext())", patch)
         self.assertIn('AtomicString("overscroll")', patch)
         self.assertIn("EnqueueOverscrollEvent", patch)
         self.assertIn("HiddenDocumentScrollRelatedEventsDispatchWithoutAnimationFrame", patch)

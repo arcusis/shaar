@@ -1229,6 +1229,21 @@ class EngineTransferTests(unittest.TestCase):
         lookup = lookup.split("      - name: Download the verified bundle artifact", 1)[0]
         self.assertIn("continue-on-error: true", lookup)
         self.assertIn("timeout-minutes: 2", lookup)
+    def test_bundle_metadata_errors_identify_missing_invalid_and_wrong_shape_inputs(self):
+        from ci_engine import validate_bundle_archive
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            with self.assertRaisesRegex(ValueError, "metadata is missing or invalid"):
+                validate_bundle_archive(root, evidence)
+            metadata = evidence / "bundle.json"
+            metadata.write_text("not json")
+            with self.assertRaisesRegex(ValueError, "metadata is missing or invalid"):
+                validate_bundle_archive(root, evidence)
+            metadata.write_text("[]")
+            with self.assertRaisesRegex(ValueError, "must be a JSON object"):
+                validate_bundle_archive(root, evidence)
 
     def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle

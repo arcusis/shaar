@@ -125,10 +125,11 @@ test("link checker validates quoted CSS imports outside comments", () => {
     writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
     writeFileSync(
       join(root, "styles.css"),
-      '@import "/missing-import.css"; /* @import "/commented.css"; */ .x { content: "@import \'/string.css\'"; }',
+      '@import "/missing-import.css"; @import/**/"/missing-comment-separated.css"; /* @import "/commented.css"; */ .x { content: "@import \'/string.css\'"; }',
     );
     assert.deepEqual(checkLinks(root).errors, [
       "styles.css: missing/nonlocal CSS asset /missing-import.css",
+      "styles.css: missing/nonlocal CSS asset /missing-comment-separated.css",
     ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -148,7 +149,6 @@ test("link checker catches missing poster when video source exists", () => {
   }
 });
 
-<<<<<<< HEAD
 test("link checker validates image map destinations", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

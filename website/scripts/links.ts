@@ -43,7 +43,18 @@ function cssImportURLs(css: string): string[] {
     }
     if (css.slice(position, position + 7).toLowerCase() === "@import") {
       let argument = position + 7;
-      while (/\s/.test(css[argument] ?? "")) argument++;
+      while (argument < css.length) {
+        if (/\s/.test(css[argument] ?? "")) {
+          argument++;
+          continue;
+        }
+        if (css.startsWith("/*", argument)) {
+          const end = css.indexOf("*/", argument + 2);
+          argument = end === -1 ? css.length : end + 2;
+          continue;
+        }
+        break;
+      }
       const quote = css[argument];
       if (quote === "'" || quote === '"') {
         const start = ++argument;

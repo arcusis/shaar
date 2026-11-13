@@ -60,6 +60,21 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.subTest(data=data), self.assertRaisesRegex(ValueError, "catalog|entry|map"):
                 self.validate(data)
 
+    def test_rejects_duplicate_string_catalog_keys(self):
+        entry = catalog("Open %@", "פתיחה של %@")["strings"]["Open %@"]
+        key = json.dumps("Open %@")
+        encoded_entry = json.dumps(entry, ensure_ascii=False)
+        source = (
+            '{"sourceLanguage":"en","strings":{'
+            + f"{key}:{encoded_entry},{key}:{encoded_entry}"
+            + "}}"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "Fixture.xcstrings"
+            path.write_text(source, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "duplicate JSON key 'Open %@'"):
+                VALIDATOR.validate_catalog(path)
+
     def test_rejects_missing_hebrew_translation_cleanly(self):
         self.validate_missing_hebrew()
 

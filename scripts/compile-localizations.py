@@ -49,8 +49,21 @@ def localized_forms(value, catalog, key, language):
     return forms
 
 
+def reject_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        result[key] = value
+    return result
+
+
+def load_json_without_duplicate_keys(text):
+    return json.loads(text, object_pairs_hook=reject_duplicate_keys)
+
+
 def validate_catalog(path):
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = load_json_without_duplicate_keys(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{path.name}: catalog root must be an object")
     if data.get("sourceLanguage") != "en":

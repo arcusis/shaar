@@ -131,8 +131,6 @@
     "Apple Account and iCloud": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון Apple ו-iCloud"}}}},
 
     "Copy for AI": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for AI"}},"he":{"stringUnit":{"state":"translated","value":"העתקה ל-AI"}}}},
-    "Automatically turn on Dev Mode for local development pages": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Automatically turn on Dev Mode for local development pages"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה אוטומטית של מצב מפתח עבור דפי פיתוח מקומיים"}}}},
-    "Developer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer"}},"he":{"stringUnit":{"state":"translated","value":"מפתחים"}}}},
     "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
     "General": {
       "localizations": {

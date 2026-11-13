@@ -23,7 +23,8 @@ class HiddenScrollEventDispatchPatchTests(unittest.TestCase):
         self.assertIn("if (hidden())", patch)
         self.assertIn("EnqueueHiddenScrollEvent", patch)
         self.assertIn("TaskType::kDOMManipulation", patch)
-        self.assertIn("HiddenDocumentScrollEventDispatchesWithoutAnimationFrame", patch)
+        self.assertIn("event_type_names::kScrollend", patch)
+        self.assertIn("HiddenDocumentScrollEventsDispatchWithoutAnimationFrame", patch)
 
 
 if __name__ == "__main__":

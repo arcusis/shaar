@@ -23,7 +23,7 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.c
  #include "third_party/blink/renderer/platform/wtf/functional.h"
  #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
  
-@@ -225,6 +228,28 @@
+@@ -225,6 +228,29 @@
    EnqueueEvent(event);
  }
  
@@ -45,7 +45,8 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.c
 +  if (!GetExecutionContext())
 +    return;
 +  DispatchEvents(base::BindRepeating([](Event* event) {
-+    return event->type() == event_type_names::kScroll;
++    return event->type() == event_type_names::kScroll ||
++           event->type() == event_type_names::kScrollend;
 +  }));
 +}
 +
@@ -76,7 +77,7 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
 diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
 --- a/third_party/blink/renderer/core/dom/document.cc
 +++ b/third_party/blink/renderer/core/dom/document.cc
-@@ -6678,7 +6678,10 @@
+@@ -6678,5 +6678,8 @@
                              ? Event::CreateBubble(event_type_names::kScroll)
                              : Event::Create(event_type_names::kScroll);
    scroll_event->SetTarget(target);
@@ -86,8 +87,21 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
 +  else
 +    scripted_animation_controller_->EnqueuePerFrameEvent(scroll_event);
  }
- 
+@@ -6684,10 +6687,13 @@
  void Document::EnqueueScrollEndEventForNode(Node* target) {
+   // Mimic bubbling behavior of scroll event for consistency.
+   overscroll_accumulated_delta_x_ = overscroll_accumulated_delta_y_ = 0;
+   Event* scroll_end_event =
+       target->IsDocumentNode()
+           ? Event::CreateBubble(event_type_names::kScrollend)
+           : Event::Create(event_type_names::kScrollend);
+   scroll_end_event->SetTarget(target);
+-  scripted_animation_controller_->EnqueuePerFrameEvent(scroll_end_event);
++  if (hidden())
++    scripted_animation_controller_->EnqueueHiddenScrollEvent(scroll_end_event);
++  else
++    scripted_animation_controller_->EnqueuePerFrameEvent(scroll_end_event);
+ }
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
@@ -99,24 +113,28 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
  #include "third_party/blink/renderer/core/execution_context/execution_context.h"
  #include "third_party/blink/renderer/core/frame/local_frame.h"
  #include "third_party/blink/renderer/core/loader/document_loader.h"
-@@ -160,6 +161,22 @@
+@@ -160,6 +161,26 @@
  
  // Tasks should be run after events are dispatched, even if they were enqueued
  // first.
 +TEST_F(ScriptedAnimationControllerTest,
-+       HiddenDocumentScrollEventDispatchesWithoutAnimationFrame) {
++       HiddenDocumentScrollEventsDispatchWithoutAnimationFrame) {
 +  GetPage().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
 +                               /*is_initial_state=*/false);
 +  TaskOrderObserver observer;
 +  GetDocument().addEventListener(
 +      event_type_names::kScroll,
 +      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(1)));
++  GetDocument().addEventListener(
++      event_type_names::kScrollend,
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(2)));
 +
 +  GetDocument().EnqueueScrollEventForNode(&GetDocument());
++  GetDocument().EnqueueScrollEndEventForNode(&GetDocument());
 +  EXPECT_TRUE(observer.Order().empty());
 +
 +  task_environment_.RunUntilIdle();
-+  EXPECT_THAT(observer.Order(), testing::ElementsAre(1));
++  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2));
 +}
 +
  TEST_F(ScriptedAnimationControllerTest, EnqueueTaskAndEvent) {

@@ -162,7 +162,7 @@ struct BrowserStoreTests {
     let original = Data("{damaged".utf8)
     try original.write(to: file.url)
     let store = BrowserStore(sessionFile: file)
-    #expect(store.storageNotice != nil)
+    #expect(store.storageNotice == ShellL10n.string("Changes could not be saved. Try again."))
     store.perform(.open(URL(string: "https://example.com")!))
     store.cycleSpace(by: 1)
     #expect(try Data(contentsOf: file.url) == original)

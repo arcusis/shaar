@@ -3493,6 +3493,12 @@
         "he": { "stringUnit": { "state": "translated", "value": "שינוי החלון נדחה. %@" } }
       }
     },
+    "Changes could not be saved. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Changes could not be saved. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לשמור את השינויים. כדאי לנסות שוב." } }
+      }
+    },
     "Changes could not be saved. %@": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Changes could not be saved. %@" } },

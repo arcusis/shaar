@@ -180,7 +180,7 @@ import Testing
       workspace.workspace.windows.first?.session.profiles.contains { $0.id == addedID } == true)
     try workspace.workspace.validate()
     #expect(throws: (any Error).self) { try workspace.flushSaves() }
-    #expect(workspace.storageNotice?.contains("could not be saved") == true)
+    #expect(workspace.storageNotice == ShellL10n.string("Changes could not be saved. Try again."))
     #expect(workspace.stores[windowID]?.storageNotice == workspace.storageNotice)
     #expect(settings.selectedProfileID == addedID)
     settings.close()

@@ -40,6 +40,21 @@ class CatalogValidatorTests(unittest.TestCase):
             path.write_text(json.dumps(data), encoding="utf-8")
             VALIDATOR.validate_catalog(path)
 
+    def test_storage_save_failures_use_generic_hebrew_notice(self):
+        expected = 'ShellL10n.string("Changes could not be saved. Try again.")'
+        for name in ("BrowserStore.swift", "BrowserWorkspaceStore.swift"):
+            source = (ROOT / "Sources/ArcusisBrowser" / name).read_text(encoding="utf-8")
+            with self.subTest(source=name):
+                self.assertIn(expected, source)
+        catalog_data = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        key = "Changes could not be saved. Try again."
+        value = catalog_data["strings"][key]["localizations"]["he"]["stringUnit"]["value"]
+        self.assertNotEqual(value, key)
+
     def test_default_browser_failure_uses_hebrew_settings_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(
             encoding="utf-8"

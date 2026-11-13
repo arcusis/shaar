@@ -55,8 +55,10 @@ class PipelineGateTests(unittest.TestCase):
             self.assertEqual(EVIDENCE.existing_directory(str(directory)), directory)
             missing = directory / "missing"
             regular_file = directory / "file"
+            symlink = directory / "linked-directory"
             regular_file.write_text("not a directory")
-            for path in (missing, regular_file):
+            symlink.symlink_to(directory, target_is_directory=True)
+            for path in (missing, regular_file, symlink):
                 with self.subTest(path=path), self.assertRaisesRegex(
                     EVIDENCE.argparse.ArgumentTypeError,
                     "does not exist or is not a directory",
@@ -715,6 +717,23 @@ class SupplyChainTests(unittest.TestCase):
             (root / ".arcusis-probe").unlink()
             with self.assertRaises(ValueError):
                 EVIDENCE.collect(log, Path(output) / "evidence")
+
+    def test_evidence_rejects_symlinked_output_directory(self):
+        with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory, \
+                tempfile.TemporaryDirectory() as output, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
+            (root / "initial.json").write_text("{}")
+            log = Path(output) / "probe.log"
+            log.write_text(f"Probe evidence: {root}\n")
+            destination = Path(output) / "evidence"
+            external = Path(outside)
+            sentinel = external / "keep.txt"
+            sentinel.write_text("leave untouched")
+            destination.symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "evidence destination"):
+                EVIDENCE.collect(log, destination)
+            self.assertEqual(list(external.iterdir()), [sentinel])
 
 
 class SwiftReportTests(unittest.TestCase):

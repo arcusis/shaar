@@ -68,6 +68,26 @@ struct ExtensionManagerModelTests {
     #expect(model.status == ExtensionInstallNotice.privateAccessRefused)
   }
 
+  @Test func staleSettingsReplyCannotReplaceDeveloperModeNotice() {
+    let runtime = SiteAccessRuntime()
+    runtime.holdReplies = true
+    let profileID = UUID()
+    let preferences = BrowserPreferencesStore(
+      fileURL: FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json"))
+    let model = ExtensionManagerModel.shared(
+      runtime: runtime, preferences: preferences, profileID: profileID)
+    let extensionID = String(repeating: "a", count: 32)
+
+    model.setSiteAccess(
+      .onSite, extensionID: extensionID, origin: "https://example.test", tabID: nil)
+    model.setDeveloperMode(true)
+    #expect(runtime.replies.count == 2)
+
+    runtime.replies[1](nil, 0)
+    #expect(model.status == ExtensionInstallNotice.developerModeFailed)
+    runtime.replies[0](nil, 1)
+    #expect(model.status == ExtensionInstallNotice.developerModeFailed)
+  }
 }
 
 @MainActor

@@ -30,6 +30,22 @@ struct LibraryDownloadTests {
     #expect(count == 50_000)
   }
 
+  @Test func downloadDateGroupsBenchmark() {
+    let profile = UUID()
+    let model = DownloadsModel()
+    model.restore((0..<5_000).map { index in
+      record(UUID().uuidString.lowercased(), filename: "download-\(index)")
+    }, profileID: profile)
+    let items = model.items(in: profile)
+    let start = ContinuousClock.now
+    var count = 0
+    for _ in 0..<10 {
+      count += LibraryDownloadQuery.dateGroups(items).reduce(0) { $0 + $1.items.count }
+    }
+    print("downloadDateGroupsBenchmark: \(start.duration(to: .now))")
+    #expect(count == 50_000)
+  }
+
   @Test func downloadSourceSubtitleUsesSelectedLanguage() {
     let hebrew = LibraryDownloadsView.subtitle(
       kind: "PDF", source: "example.test", language: .hebrew

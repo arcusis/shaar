@@ -150,16 +150,21 @@ enum LibraryDownloadQuery {
       $0.startTime == $1.startTime ? $0.id < $1.id : $0.startTime > $1.startTime
     }
     var groups: [LibraryDownloadDateGroup] = []
+    var lastDate: Date?
+    var lastDateLabel = ""
+    var lastGroupLabel: String?
     for item in sorted {
       let date = calendar.startOfDay(for: Date(timeIntervalSince1970: item.startTime))
-      if let last = groups.last,
-        relativeDay(last.date, now: now, calendar: calendar)
-          == relativeDay(date, now: now, calendar: calendar)
-      {
+      if date != lastDate {
+        lastDate = date
+        lastDateLabel = relativeDay(date, now: now, calendar: calendar)
+      }
+      if lastGroupLabel == lastDateLabel, let last = groups.last {
         groups[groups.count - 1] = LibraryDownloadDateGroup(
           date: last.date, items: last.items + [item])
       } else {
         groups.append(LibraryDownloadDateGroup(date: date, items: [item]))
+        lastGroupLabel = lastDateLabel
       }
     }
     return groups

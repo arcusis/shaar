@@ -7,6 +7,45 @@ import Testing
 
 @testable import BrowserCore
 
+@Test func mostVisitedOpenPageKeysIncludeTabsAndSelectedFavoritePages() throws {
+  var fixture = try LauncherFixture()
+  let selected = fixture.session.selectFavorite(fixture.favoriteID, in: fixture.spaceID)
+  #expect(selected)
+
+  let keys = CommandLauncher.openPageKeys(
+    in: fixture.session, favoriteIDs: Set([fixture.favoriteID]))
+
+  #expect(
+    keys == Set([
+      "https://open.example", "https://pinned.example", "https://closed.example",
+      "https://favorite.example",
+    ]))
+}
+
+@Test func mostVisitedOpenPageSetFocusedBenchmark() throws {
+  let profile = BrowserProfile(name: "Benchmark")
+  let tabs = (0..<1_000).map { index in
+    BrowserTab(url: URL(string: "https://open-\(index).example/")!, title: "Open \(index)")
+  }
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs, selectedTabID: tabs[0].id)
+  let session = try BrowserSession(
+    profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+  let history = try (0..<2_000).map { index in
+    try entry(
+      "https://history-\(index).example/", visits: index + 1, profile: profile.id)
+  }
+
+  let start = ContinuousClock.now
+  var checksum = 0
+  for _ in 0..<10 {
+    checksum += CommandLauncher.mostVisited(in: session, history: history).count
+  }
+  print("mostVisitedOpenPageSetFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(checksum == CommandLauncher.mostVisitedLimit * 10)
+}
+
 @Test func emptyQueryShowsSuggestionSectionsInOrder() throws {
   var fixture = try LauncherFixture()
   fixture.session.closeTab(fixture.closedTabID)

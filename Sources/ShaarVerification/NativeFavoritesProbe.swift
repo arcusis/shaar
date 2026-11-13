@@ -9,13 +9,13 @@ import Foundation
 
 @testable import ArcusisBrowser
 
-private struct NativeFavoritePageProof: Codable, Equatable {
+struct NativeFavoritePageProof: Codable, Equatable {
   let favoriteID: UUID
   let tabID: UUID
   let url: String
 }
 
-private struct NativeFavoritesCheckpoint: Codable {
+struct NativeFavoritesCheckpoint: Codable {
   let profileIDs: [UUID]
   let windowIDs: [UUID]
   let favoriteIDs: [UUID]
@@ -25,6 +25,10 @@ private struct NativeFavoritesCheckpoint: Codable {
   let firstWindowFavoriteOrder: [UUID]
   let workspaceVersion: Int
   let sessionVersions: [Int]
+
+  static func hasValidWindowIDs(_ windowIDs: [UUID]) -> Bool {
+    windowIDs.count == 2 && Set(windowIDs).count == 2
+  }
 }
 
 /// Exercises shared Favorite definitions against production native windows in a disposable workspace.
@@ -426,6 +430,9 @@ final class NativeFavoritesProbe {
     let checkpoint = try JSONDecoder().decode(
       NativeFavoritesCheckpoint.self,
       from: Data(contentsOf: root.appending(path: "native-favorites-identities.json")))
+    guard NativeFavoritesCheckpoint.hasValidWindowIDs(checkpoint.windowIDs) else {
+      throw NativeFavoritesFailure("Restart Favorite checkpoint has invalid window identities.")
+    }
     let windows = Dictionary(uniqueKeysWithValues: host.contexts.map { ($0.key, $0.value) })
     let originalStates = windows.mapValues { context in
       (

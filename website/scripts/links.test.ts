@@ -70,3 +70,14 @@ test("link checker validates every responsive image source", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker reports malformed CSS asset URLs without crashing", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
+    writeFileSync(join(root, "styles.css"), 'body { background: url("http://[::1"); }');
+    assert.deepEqual(checkLinks(root).errors, ["styles.css: invalid CSS asset URL http://[::1"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -83,7 +83,13 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {
     for (const match of readFileSync(file, "utf8").matchAll(/url\(["']?([^"')]+)["']?\)/g)) {
-      const url = new URL(match[1], siteOrigin);
+      let url: URL;
+      try {
+        url = new URL(match[1], siteOrigin);
+      } catch {
+        errors.push(`${relative(root, file)}: invalid CSS asset URL ${match[1]}`);
+        continue;
+      }
       if (url.origin !== siteOrigin || !localTarget(root, url))
         errors.push(`${relative(root, file)}: missing/nonlocal CSS asset ${match[1]}`);
     }

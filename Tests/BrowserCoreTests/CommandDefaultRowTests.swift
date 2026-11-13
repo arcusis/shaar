@@ -60,6 +60,22 @@ private func sessionWithGmailFavoriteAndGitHubTab() throws -> (BrowserSession, U
   #expect(results.first?.action == .tab(space: session.selectedSpaceID, tab: tabID))
 }
 
+@Test func typedAddressSelectsOpenTabWithExplicitDefaultPort() throws {
+  let typedAddress = URL(string: "https://example.com/docs")!
+  let profile = BrowserProfile(name: "Personal")
+  let spaceID = UUID()
+  let tab = BrowserTab(
+    url: URL(string: "https://example.com:443/docs")!, title: typedAddress.absoluteString)
+  let space = BrowserSpace(
+    id: spaceID, profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+    tabs: [tab])
+  let session = try BrowserSession(profiles: [profile], spaces: [space], selectedSpaceID: spaceID)
+
+  let results = CommandSearch.results(for: typedAddress.absoluteString, in: session)
+
+  #expect(results.first?.action == .tab(space: spaceID, tab: tab.id))
+}
+
 @Test func typedAddressKeepsPathCaseWhenMatchingOpenTabs() throws {
   var session = BrowserSession.fresh()
   let openTab = session.open(URL(string: "https://EXAMPLE.com/EXAMPLE.com")!)

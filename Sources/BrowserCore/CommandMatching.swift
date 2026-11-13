@@ -33,7 +33,18 @@ enum CommandText {
     guard let url else { return false }
     func key(_ value: URL) -> String {
       var components = URLComponents(url: value, resolvingAgainstBaseURL: false)
-      if let host = components?.host { components?.host = host.lowercased() }
+      if let scheme = components?.scheme?.lowercased() {
+        components?.scheme = scheme
+        if (scheme == "https" && components?.port == 443)
+          || (scheme == "http" && components?.port == 80) {
+          components?.port = nil
+        }
+      }
+      if let host = components?.host {
+        let normalizedHost = host.lowercased()
+        components?.host = normalizedHost.hasSuffix(".")
+          ? String(normalizedHost.dropLast()) : normalizedHost
+      }
       let text = components?.string ?? value.absoluteString
       let hasRootSlash = value.path == "/" && value.query == nil && value.fragment == nil
       return hasRootSlash && text.hasSuffix("/") ? String(text.dropLast()) : text

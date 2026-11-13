@@ -742,15 +742,22 @@ class CatalogValidatorTests(unittest.TestCase):
             root = Path(directory)
             source = root / "Sources/ArcusisBrowser/ExampleView.swift"
             source.parent.mkdir(parents=True)
-            source.write_text('Text("Translated footer")\n', encoding="utf-8")
             catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
             catalog_path.parent.mkdir(parents=True)
             catalog_path.write_text(
                 json.dumps({"strings": {"Translated footer": {
                     "localizations": {"he": unit("כותרת תחתונה מתורגמת")}
                 }}}), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "unlocalized Text.*Translated footer"):
-                VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+            for swift in (
+                'Text("Translated footer")',
+                'Text("Translated footer", comment: "localized footer")',
+            ):
+                source.write_text(swift + "\n", encoding="utf-8")
+                with self.subTest(swift=swift):
+                    with self.assertRaisesRegex(
+                        ValueError, "unlocalized Text.*Translated footer"
+                    ):
+                        VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
     def test_rejects_direct_swiftui_control_titles_when_hebrew_translation_exists(self):
         examples = (

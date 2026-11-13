@@ -9,6 +9,10 @@ import SwiftUI
 
 struct DesktopCaptureSource: Identifiable, Equatable {
   private static let maximumDisplayNameLength = 120
+  private static let bidirectionalFormattingScalars: Set<UInt32> = [
+    0x061C, 0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E,
+    0x2066, 0x2067, 0x2068, 0x2069,
+  ]
 
   enum Kind: Equatable { case display, window, tab }
   let id: String
@@ -45,7 +49,10 @@ struct DesktopCaptureSource: Identifiable, Equatable {
   }
 
   private var displayName: String {
-    let singleLine = name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    let visibleScalars = String.UnicodeScalarView(
+      name.unicodeScalars.filter { !Self.bidirectionalFormattingScalars.contains($0.value) })
+    let singleLine = String(visibleScalars).split(whereSeparator: \.isWhitespace).joined(
+      separator: " ")
     guard singleLine.count > Self.maximumDisplayNameLength else { return singleLine }
     return String(singleLine.prefix(Self.maximumDisplayNameLength - 1)) + "…"
   }

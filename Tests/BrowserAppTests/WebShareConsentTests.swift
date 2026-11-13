@@ -229,6 +229,18 @@ struct WebShareConsentTests {
     #expect(outcomes == [false])
   }
 
+  @Test func sharingPickerAssignsItsServiceOutcomeDelegateBeforeExecution() {
+    let systemPicker = WebShareSystemPicker(items: ["Shared item"])
+    let service = NSSharingService(
+      title: "Test", image: NSImage(size: NSSize(width: 1, height: 1)),
+      alternateImage: nil, handler: {})
+
+    let delegate = systemPicker.sharingServicePicker(
+      systemPicker.picker, delegateFor: service)
+
+    #expect(delegate === systemPicker)
+  }
+
   @Test func onlyOneSystemPickerCanBePresentedForAShareRequest() {
     let gate = WebSharePresentationGate()
 

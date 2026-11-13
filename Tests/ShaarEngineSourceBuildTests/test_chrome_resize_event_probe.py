@@ -28,6 +28,15 @@ class ChromeResizeEventProbeTests(unittest.TestCase):
         self.assertIn("from: sidebarShown.resizeEventCount, to: findOpen.resizeEventCount", source)
         self.assertIn("from: findOpen.resizeEventCount, to: findClosed.resizeEventCount", source)
 
+    def test_hidden_viewport_resize_requires_media_query_listener_delivery(self):
+        source = (ROOT / "Sources/ShaarVerification/NativeHostProbe.swift").read_text()
+        self.assertIn("hiddenViewportResizeDeliversMediaQueryChange", source)
+        self.assertIn("installMediaQueryChangeProbe", source)
+        self.assertIn("window.__arcusisMediaQueryChangeEvents++", source)
+        self.assertIn("waitForMediaQueryChangeEvent", source)
+        self.assertIn('firstMinimum.pageVisibilityState == "hidden"', source)
+        self.assertIn('firstNormalBeforeChrome.pageVisibilityState == "hidden"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

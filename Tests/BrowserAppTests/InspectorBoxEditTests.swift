@@ -33,6 +33,8 @@ import Testing
     #expect(
       InspectorBoxModel.edgeAccessibilityLabel(region: "border", index: 0)
         != InspectorBoxModel.edgeAccessibilityLabel(region: "border", index: 1))
+    #expect(InspectorBoxModel.edgeAccessibilityLabel(region: "content", index: 0) == "Edit Width")
+    #expect(InspectorBoxModel.edgeAccessibilityLabel(region: "content", index: 1) == "Edit Height")
   }
 
   @Test func editableTextStripsAPixelLength() {

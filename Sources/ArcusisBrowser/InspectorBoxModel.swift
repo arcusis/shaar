@@ -218,6 +218,10 @@ struct InspectorBoxModel: View {
   }
 
   static func edgeAccessibilityLabel(region: String, index: Int) -> String {
+    if region == "content" {
+      let dimension = InspectorL10n.string(index == 0 ? "Width" : "Height")
+      return InspectorL10n.format("Edit %@", arguments: [.string(dimension)])
+    }
     let side = ["top", "right", "bottom", "left"][index]
     return InspectorL10n.format(
       "Edit %@ %@",

@@ -66,7 +66,7 @@ struct ProfileDeletionConfirmation: View {
               try await onDeleteProfile(profile.id, destination)
               onDismiss()
             } catch {
-              deletionFailure = error.localizedDescription
+              deletionFailure = SettingsL10n.string("Could not delete the profile. Try again.")
             }
             deleting = false
           }

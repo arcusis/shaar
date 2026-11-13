@@ -46,6 +46,15 @@ struct PrivateParityTests {
     #expect(store.session.selectedSpace.tabs.count == 2)
   }
 
+  @Test func foreignTabDropExplainsPrivateWindowBoundary() throws {
+    let store = try makeStore()
+    let payload = SidebarTransfer.tab(
+      sessionID: UUID(), sourceSpaceID: UUID(), tabID: UUID())
+
+    #expect(!store.acceptSidebarDrop(payload, into: store.session.selectedSpaceID))
+    #expect(store.sidebarNotice == "Tabs cannot move to or from a private window.")
+  }
+
   @Test func splitMemberFavoriteActionRejectsNonWebPages() throws {
     let store = try makeStore()
     let blank = try #require(store.session.selectedSpace.selectedTabID)

@@ -267,8 +267,9 @@ final class PrivatePageSession {
       windowID: windowID, contextID: contextID
     ) { [weak self] error in
       guard let self else { return }
-      if let error {
-        self.failure = error.localizedDescription
+      if error != nil {
+        self.failure = ShellL10n.string(
+          "Could not open developer tools in this private window. Try again.")
       } else if self.privateDeveloperTools.contains(target.tabID) {
         self.privateDeveloperTools.remove(target.tabID)
       } else {

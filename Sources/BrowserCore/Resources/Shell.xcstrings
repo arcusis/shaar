@@ -1513,6 +1513,12 @@
         }
       }
     },
+    "Could not open developer tools in this private window. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not open developer tools in this private window. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את כלי הפיתוח בחלון הפרטי. כדאי לנסות שוב." } }
+      }
+    },
     "Loading profile…": {
       "localizations": {
         "en": {

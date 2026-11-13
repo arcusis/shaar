@@ -16,6 +16,7 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
   var expressions: [String] = []
   var ended: [String] = []
   var opened = false
+  var toggleError: Error?
 
   override func view(forPrivateTabID tabID: String, windowID: String, contextID: String) -> NSView?
   {
@@ -51,11 +52,31 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
     completion: @escaping @MainActor @Sendable (Error?) -> Void
   ) {
     opened = view(forPrivateTabID: tabID, windowID: windowID, contextID: contextID) != nil
-    completion(nil)
+    completion(toggleError)
   }
 }
 
 @Suite @MainActor struct PrivateInspectorTests {
+  @Test func privateDeveloperToolsFailureUsesLocalizedNotice() throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PrivateInspectorRuntime()
+    runtime.tabID = tabID.uuidString
+    runtime.pageView = NSView()
+    runtime.toggleError = NSError(
+      domain: "DevTools", code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "private-context", windowID: "private-window",
+      firstTabID: tabID, store: store)
+
+    session.toggleChromiumDeveloperTools()
+
+    #expect(session.failure == ShellL10n.string(
+      "Could not open developer tools in this private window. Try again."))
+  }
+
   @Test func closingReleasedInspectorStillRemovesRendererShield() async throws {
     let tabID = UUID()
     let store = BrowserStore(

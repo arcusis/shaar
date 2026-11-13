@@ -388,8 +388,13 @@ bool OfferSavePrompt(content::WebContents* contents,
   Pending().emplace(id, PendingPrompt{engine, contents, window, tab, profile_id,
                                       window_id, tab_id, prompt, page, update,
                                       std::move(decision)});
-  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-      FROM_HERE, base::BindOnce(&Expire, id), base::Minutes(2));
+  const bool expiry_scheduled =
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE, base::BindOnce(&Expire, id), base::Minutes(2));
+  if (!expiry_scheduled) {
+    Finish(id, kDecisionDismiss);
+    return false;
+  }
   const shaar_error_code emitted = shaar::EmitEvent(
       engine, SHAAR_EVENT_SAVE_PROMPT, {profile_id.data(), profile_id.size()},
       {}, {window_id.data(), window_id.size()}, {tab_id.data(), tab_id.size()},

@@ -64,6 +64,34 @@ struct BrowserWorkspaceStoreTests {
     #expect(source.sidebarDrag == nil)
   }
 
+  @Test func roundTripTransferCannotReuseTheOriginalPermissionFrame() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let tab = try #require(source.session.selectedSpace.selectedTab)
+    let origin = try #require(URL(string: "https://example.com"))
+    let frameID = String(repeating: "a", count: 32)
+    source.rememberPermissionFrame(tab.id, frameID: frameID, origin: origin)
+    let request = try #require(
+      WebsitePermissionRequest(
+        id: "old-window-frame", profileID: source.session.selectedSpace.profileID,
+        tabID: tab.id, pageURL: tab.url, requestingOrigin: origin, kinds: [.camera],
+        frameID: frameID))
+
+    let toDestination = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID,
+      tabID: tab.id)
+    #expect(
+      destination.acceptSidebarDrop(toDestination, into: destination.session.selectedSpaceID))
+    let backToSource = SidebarTransfer.tab(
+      sessionID: destination.dragSessionID, sourceSpaceID: destination.session.selectedSpaceID,
+      tabID: tab.id)
+    #expect(source.acceptSidebarDrop(backToSource, into: source.session.selectedSpaceID))
+    #expect(!source.websitePermissionIsCurrent(request))
+  }
+
   @Test func pinnedAndPrivateWindowTransfersAreRefusedWithNotices() throws {
     let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let sourceID = manager.workspace.windows[0].id

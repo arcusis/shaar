@@ -2005,6 +2005,8 @@ final class BrowserStore {
     if let pendingSplitPlacement, !liveTabIDs.contains(pendingSplitPlacement.target) {
       dismissCommand()
     }
+    permissionFrames = permissionFrames.filter { liveTabIDs.contains($0.key) }
+    permissionFrameOrigins = permissionFrameOrigins.filter { liveTabIDs.contains($0.key) }
     rendererFailures = rendererFailures.filter { $0.value.belongs(to: session) }
     if !canUseLibraryDrawer {
       closeLibraryDrawer()

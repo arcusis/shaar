@@ -26,6 +26,7 @@ ENUM = re.compile(r"typedef\s+enum\s*\{(?P<body>.*?)\}\s*(?P<name>\w+)\s*;", re.
 ENUM_VALUE = re.compile(r"\b(SHAAR_(?:EVENT|OP)_[A-Z0-9_]+)\s*=")
 PATCH_ENUM_VALUE = re.compile(r"^\s*(SHAAR_(?:EVENT|OP)_[A-Z0-9_]+)\s*=")
 PUBLIC_HEADER = "chrome/browser/shaar/public/shaar_engine.h"
+ENGINE_VERSION_TAG = re.compile(r"engine-(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*-shaar\.[1-9][0-9]*\Z")
 
 
 class ContractError(ValueError):
@@ -175,17 +176,17 @@ def optional_symbols(root: Path) -> dict[str, str]:
     for symbol, minimum in data["symbols"].items():
         if (not re.fullmatch(r"shaar_[A-Za-z0-9_]+", symbol)
                 or not isinstance(minimum, str)
-                or not re.fullmatch(r"engine-[0-9.]+-shaar\.[0-9]+", minimum)):
+                or not ENGINE_VERSION_TAG.fullmatch(minimum)):
             raise ContractError(f"invalid optional ABI symbol entry: {symbol!r}")
         result[symbol] = minimum
     return result
 
 
 def release_version(tag: str) -> tuple[int, ...]:
-    match = re.fullmatch(r"engine-([0-9.]+)-shaar\.([0-9]+)", tag)
-    if not match:
+    if not ENGINE_VERSION_TAG.fullmatch(tag):
         raise ContractError(f"invalid pinned engine release tag: {tag!r}")
-    return tuple(int(part) for part in match.group(1).split(".")) + (int(match.group(2)),)
+    version, shaar_release = tag.removeprefix("engine-").split("-shaar.")
+    return tuple(int(part) for part in version.split(".")) + (int(shaar_release),)
 
 
 def check_contract(root: Path, archive: Path, *, nm=exported_symbols) -> tuple[int, int, int, str]:

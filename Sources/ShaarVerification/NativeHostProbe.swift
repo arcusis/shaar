@@ -62,6 +62,8 @@ private struct HostViewportSample: Codable {
   let innerWidthCSSPixels: Double
   let innerHeightCSSPixels: Double
   let resizeEventCount: Int
+  let pageFocusEventCount: Int
+  let pageBlurEventCount: Int
   let devicePixelRatio: Double
   let backingScaleFactor: Double
   let sidebarVisible: Bool
@@ -966,6 +968,8 @@ final class NativeHostProbe {
       let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
       let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
       let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,
+      let pageFocusEventCount = (document["pageFocusEventCount"] as? NSNumber)?.intValue,
+      let pageBlurEventCount = (document["pageBlurEventCount"] as? NSNumber)?.intValue,
       let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue,
       let page = primary.runtime.view(forTabID: tabID.uuidString),
       let container = pageContainer(in: context.hosting, page: page),
@@ -1000,6 +1004,7 @@ final class NativeHostProbe {
       accountID: accountID, documentInstance: instance,
       innerWidthCSSPixels: cssWidth, innerHeightCSSPixels: cssHeight,
       resizeEventCount: resizeEventCount,
+      pageFocusEventCount: pageFocusEventCount, pageBlurEventCount: pageBlurEventCount,
       devicePixelRatio: devicePixelRatio,
       backingScaleFactor: Double(context.window.backingScaleFactor),
       sidebarVisible: context.store.sidebarIsVisible,
@@ -1198,7 +1203,9 @@ final class NativeHostProbe {
               session:sessionStorage.getItem('arcusisProfileMutation'),
               innerWidth:window.innerWidth,innerHeight:window.innerHeight,
               devicePixelRatio:window.devicePixelRatio,
-              resizeEventCount:window.__arcusisResizeEvents||0})
+              resizeEventCount:window.__arcusisResizeEvents||0,
+              pageFocusEventCount:window.__shaarPageFocusEvents?.focus,
+              pageBlurEventCount:window.__shaarPageFocusEvents?.blur})
             """
         ) { continuation.resume(returning: $0) }
       }

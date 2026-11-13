@@ -253,6 +253,7 @@
     "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
     "More Spaces": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"More Spaces"}},"he":{"stringUnit":{"state":"translated","value":"מרחבים נוספים"}}}},
     "Show site controls for this page": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show site controls for this page"}},"he":{"stringUnit":{"state":"translated","value":"הצגת בקרות האתר עבור הדף הזה"}}}},
+    "In progress": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"In progress"}},"he":{"stringUnit":{"state":"translated","value":"בתהליך"}}}},
     "Add extensions from the Chrome Web Store": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Add extensions from the Chrome Web Store"}},"he":{"stringUnit":{"state":"translated","value":"הוספת תוספים מחנות Chrome Web Store"}}}},
     "Allow or block microphone access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block microphone access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למיקרופון באתר הזה"}}}},
     "Allow or block camera access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block camera access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למצלמה באתר הזה"}}}},

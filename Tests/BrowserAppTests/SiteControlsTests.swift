@@ -10,6 +10,13 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func runningSiteActionStatusIsLocalized() {
+  #expect(
+    BrowserLocalization.string("In progress", table: "Shell", language: .english) == "In progress")
+  #expect(
+    BrowserLocalization.string("In progress", table: "Shell", language: .hebrew) == "בתהליך")
+}
+
 private struct FakeFailure: LocalizedError {
   var errorDescription: String? { "The engine refused." }
 }

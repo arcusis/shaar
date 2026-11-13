@@ -46,10 +46,11 @@ final class MediaPlaybackModelTests: XCTestCase {
     XCTAssertNil(state?.pictureInPicture, "no video in picture-in-picture")
   }
 
-  func testArtworkRejectsEmbeddedAuthenticationCredentials() {
+  func testArtworkRejectsInvalidAuthorities() {
     for artwork in [
       "https://user:secret@music.example/cover.png",
       "https://user@music.example/cover.png",
+      "https://music.example:65536/cover.png",
     ] {
       let state = MediaSessionState(payload: ["playbackState": "playing", "artwork": artwork])
       XCTAssertNil(state?.artwork, artwork)

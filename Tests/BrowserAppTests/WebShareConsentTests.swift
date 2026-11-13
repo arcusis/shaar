@@ -229,6 +229,21 @@ struct WebShareConsentTests {
     #expect(outcomes == [true])
   }
 
+  @Test func choosingASharingServiceWaitsForItsCompletionCallback() {
+    let systemPicker = WebShareSystemPicker(items: ["Shared item"])
+    let service = NSSharingService(
+      title: "Test", image: NSImage(size: NSSize(width: 1, height: 1)),
+      alternateImage: nil, handler: {})
+    var outcomes: [Bool] = []
+    systemPicker.outcome.onFinish = { outcomes.append($0) }
+
+    systemPicker.sharingServicePicker(systemPicker.picker, didChoose: service)
+    #expect(outcomes.isEmpty)
+
+    systemPicker.sharingService(service, didShareItems: ["Shared item"])
+    #expect(outcomes == [true])
+  }
+
   @Test func serviceFailureCancelsAndFinishesTheShareOnce() {
     let systemPicker = WebShareSystemPicker(items: ["Shared item"])
     let service = NSSharingService(

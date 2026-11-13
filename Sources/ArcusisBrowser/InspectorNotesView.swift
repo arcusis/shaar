@@ -101,7 +101,10 @@ struct InspectorNotesView: View {
         Text(InspectorL10n.string("Notes stay in this tab across page navigation."))
           .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(
             horizontal: false, vertical: true)
-        if model.busy { ProgressView().controlSize(.small) }
+        if model.busy {
+          ProgressView().controlSize(.small)
+            .accessibilityLabel(InspectorL10n.string("Working…"))
+        }
         if let value = model.status,
           ![
             "Copied element to clipboard", "Copied image to clipboard", "Copied notes to clipboard",

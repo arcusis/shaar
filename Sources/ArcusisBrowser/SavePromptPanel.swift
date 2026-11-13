@@ -29,16 +29,34 @@ enum SavePromptPlacement {
     return NSScreen.screens.contains { $0.frame.intersects(window.frame) }
   }
 
+  static func clampedOrigin(
+    _ origin: NSPoint, panelSize: NSSize, visibleFrame: NSRect
+  ) -> NSPoint {
+    let maxX = max(visibleFrame.minX, visibleFrame.maxX - panelSize.width)
+    let maxY = max(visibleFrame.minY, visibleFrame.maxY - panelSize.height)
+    return NSPoint(
+      x: min(max(origin.x, visibleFrame.minX), maxX),
+      y: min(max(origin.y, visibleFrame.minY), maxY))
+  }
+
   static func place(_ panel: NSPanel, relativeTo window: NSWindow?) {
     guard browserIsOnScreen(window), let window, let content = window.contentView else {
       panel.setFrameOrigin(offscreen)
       return
     }
+    guard
+      let screen = window.screen
+        ?? NSScreen.screens.first(where: { $0.frame.intersects(window.frame) })
+    else {
+      panel.setFrameOrigin(offscreen)
+      return
+    }
     let page = content.convert(content.bounds, to: nil)
-    let screen = window.convertToScreen(page)
+    let screenFrame = window.convertToScreen(page)
     let size = panel.frame.size
-    panel.setFrameOrigin(
-      NSPoint(x: screen.maxX - size.width - 16, y: screen.maxY - size.height - 72))
+    let origin = NSPoint(
+      x: screenFrame.maxX - size.width - 16, y: screenFrame.maxY - size.height - 72)
+    panel.setFrameOrigin(clampedOrigin(origin, panelSize: size, visibleFrame: screen.visibleFrame))
   }
 }
 

@@ -174,13 +174,26 @@ struct DeviceChooserTests {
   @Test func anUpdatedOptionListInvalidatesThePreviousSelection() {
     let previous = [DeviceChooserOption(index: 0, title: "Adapter A", detail: "")]
     let updated = [DeviceChooserOption(index: 0, title: "Adapter B", detail: "")]
-    var selection = DeviceChooserSelection(options: previous)
-    selection.select(0, from: previous)
+    let revision = UUID()
+    let updatedRevision = UUID()
+    var selection = DeviceChooserSelection(options: previous, revision: revision)
+    selection.select(0, from: previous, revision: revision)
 
-    #expect(selection.selectedIndex(for: previous) == 0)
-    #expect(selection.selectedIndex(for: updated) == nil)
-    selection.select(0, from: updated)
-    #expect(selection.selectedIndex(for: updated) == 0)
+    #expect(selection.selectedIndex(for: previous, revision: revision) == 0)
+    #expect(selection.selectedIndex(for: updated, revision: updatedRevision) == nil)
+    selection.select(0, from: updated, revision: updatedRevision)
+    #expect(selection.selectedIndex(for: updated, revision: updatedRevision) == 0)
+  }
+
+  @Test func anIdenticalOptionRefreshInvalidatesThePreviousSelection() {
+    let options = [DeviceChooserOption(index: 0, title: "Same adapter", detail: "")]
+    let revision = UUID()
+    let refreshedRevision = UUID()
+    var selection = DeviceChooserSelection(options: options, revision: revision)
+    selection.select(0, from: options, revision: revision)
+
+    #expect(selection.selectedIndex(for: options, revision: revision) == 0)
+    #expect(selection.selectedIndex(for: options, revision: refreshedRevision) == nil)
   }
 
   private func store() throws -> BrowserStore {

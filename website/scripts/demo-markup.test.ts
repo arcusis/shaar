@@ -7,10 +7,10 @@ import test from "node:test";
 import { parseHTML } from "linkedom";
 import { ShaarDemo } from "../src/components/demo";
 
-test("search launcher triggers expose their dialog popup type", () => {
+test("demo dialog triggers expose their popup type", () => {
   const document = parseHTML(ShaarDemo()).document;
-  const triggers = document.querySelectorAll("[data-launcher]");
+  const triggers = document.querySelectorAll("[data-launcher], [data-controls]");
 
-  assert.equal(triggers.length, 4);
+  assert.equal(triggers.length, 5);
   for (const trigger of triggers) assert.equal(trigger.getAttribute("aria-haspopup"), "dialog");
 });

@@ -124,7 +124,7 @@ export function ShaarDemo(): string {
         <div class="demo-toolbar">
           <span class="demo-icon" aria-hidden="true">${icon.back}</span><span class="demo-icon" aria-hidden="true">${icon.forward}</span><span class="demo-icon" aria-hidden="true">${icon.reload}</span>
           <button type="button" class="demo-address" data-launcher aria-label="Open ${commandInterfaceName}" aria-haspopup="dialog">${icon.lock}<span data-host>arcusis.com</span></button>
-          <button type="button" class="demo-icon demo-controls-button" data-controls aria-label="Site controls" aria-expanded="false">${icon.sliders}</button>
+          <button type="button" class="demo-icon demo-controls-button" data-controls aria-label="Site controls" aria-expanded="false" aria-haspopup="dialog">${icon.sliders}</button>
         </div>
         <div class="demo-page">${pages()}</div>
         ${launcher()}${siteControls()}

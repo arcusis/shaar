@@ -163,6 +163,7 @@ struct MiniBrowserWindow: View {
         TextField(PanelsL10n.string("Enter address"), text: $address)
           .textFieldStyle(.roundedBorder)
           .environment(\.layoutDirection, .leftToRight)
+          .accessibilityLabel(PanelsL10n.string("Enter address"))
           .onSubmit { onNavigate(address) }
         Picker(
           PanelsL10n.string("Space"),

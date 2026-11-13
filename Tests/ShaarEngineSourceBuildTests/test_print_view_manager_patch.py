@@ -58,6 +58,18 @@ class PrintViewManagerPatchTests(unittest.TestCase):
             failure.index("OnPrintPreviewRequestRejected(rfh_id);"),
         )
 
+    def test_embedder_route_returns_before_chromium_preview_for_other_builds(self):
+        patch = PATCH.read_text()
+        route = patch.split(
+            'if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder"))', 1
+        )[1]
+        route = route.split(
+            "  auto* dialog_controller = PrintPreviewDialogController::GetInstance();", 1
+        )[0]
+
+        self.assertIn("\n+    return;\n+  }", route)
+        self.assertIn("PrintPreviewDialogController::GetInstance();", patch)
+
 
 if __name__ == "__main__":
     unittest.main()

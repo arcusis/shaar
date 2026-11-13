@@ -79,7 +79,7 @@ def archive_payload(pin: dict, cache_directory: Optional[Path] = None) -> bytes:
 
 
 DOWNLOAD_ATTEMPTS = 5
-RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 
 
 def download(url: str, sleep=time.sleep) -> bytes:

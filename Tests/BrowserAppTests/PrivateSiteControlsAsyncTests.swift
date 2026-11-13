@@ -27,6 +27,10 @@ private final class PrivateCookieAsyncRuntime: ARCChromiumRuntime {
       return
     }
     let snapshot = actualAllowed
+    if let readError {
+      completion(nil, readError)
+      return
+    }
     if delayNextRead {
       delayNextRead = false
       finishRead = { completion(NSNumber(value: snapshot), nil) }
@@ -82,6 +86,27 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
   runtime.finishRead?()
   await refresh.value
   #expect(model.allowed == true)
+}
+
+@MainActor @Test func privateCookieFailuresUseLocalizedRecoveryCopy() async throws {
+  let readRuntime = PrivateCookieAsyncRuntime()
+  readRuntime.readError = NSError(domain: "PrivateCookie", code: 1)
+  let readModel = try privateCookieModel(readRuntime)
+  await readModel.load()
+  #expect(readModel.failure == PrivateSiteControlsModel.loadFailure())
+  #expect(
+    PrivateSiteControlsModel.loadFailure(language: .hebrew)
+      == "לא ניתן לטעון את הרשאות האתר. כדאי לנסות שוב.")
+
+  let writeRuntime = PrivateCookieAsyncRuntime()
+  let writeModel = try privateCookieModel(writeRuntime)
+  await writeModel.load()
+  writeRuntime.writeError = NSError(domain: "PrivateCookie", code: 2)
+  await writeModel.setAllowed(true)
+  #expect(writeModel.failure == PrivateSiteControlsModel.updateFailure())
+  #expect(
+    PrivateSiteControlsModel.updateFailure(language: .hebrew)
+      == "לא ניתן לעדכן את ההרשאה הזו. כדאי לנסות שוב.")
 }
 
 @MainActor @Test func cancelledPrivateCookieReadDoesNotPublishLateState() async throws {

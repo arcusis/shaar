@@ -132,3 +132,9 @@ class BrowsingEdgeReportTests(unittest.TestCase):
     def test_note_cap_passes_when_the_row_failed(self):
         rows = [{"name": "Hidden windows", "passed": False, "proven": True}]
         self.assertTrue(PROBE.note_cap_fails_its_row(rows, True))
+
+    def test_scroll_fixture_records_page_listener_delivery(self):
+        fixture = PROBE.SCROLL.decode()
+        self.assertIn('window.__scrollEvents = 0', fixture)
+        self.assertIn('window.__scrollEvents += 1', fixture)
+        self.assertIn('addEventListener("scroll"', fixture)

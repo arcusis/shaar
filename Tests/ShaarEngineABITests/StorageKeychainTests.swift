@@ -164,6 +164,21 @@ struct StorageKeychainTests {
     }
   }
 
+  @Test func rejectsMalformedOrUnsupportedIdentityReplies() async {
+    let profile = UUID()
+    for reply in [
+      "not-json",
+      #"{"schemaVersion":2,"identity":"shaar"}"#,
+      #"{"schemaVersion":1,"identity":7}"#,
+    ] {
+      let adapter = ShaarStorageKeychainAdapter(
+        transport: FakeStorageKeychainTransport(reply: reply))
+      await #expect(throws: ShaarStorageKeychainError.malformedResponse) {
+        try await adapter.configuredIdentity(for: profile)
+      }
+    }
+  }
+
   @Test func loaderWiresSelectedAdapterThroughProfileOnlySubmitABI() async throws {
     let profileHandle = OpaquePointer(bitPattern: 0x11)!
     let resolver = FakeStorageKeychainProfileResolver(

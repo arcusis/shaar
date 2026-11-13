@@ -159,9 +159,10 @@ import Testing
   let batch = try BrowserImport.readProfile(at: database, source: .firefox)
 
   #expect(batch.bookmarks.map(\.title) == ["One", "Two"])
-  #expect(batch.bookmarks.map(\.address) == [
-    "https://duplicate.example/one", "https://duplicate.example/two",
-  ])
+  #expect(
+    batch.bookmarks.map(\.address) == [
+      "https://duplicate.example/one", "https://duplicate.example/two",
+    ])
 }
 
 @Test func firefoxImportKeepsNestedFoldersNamedLikeRootFolders() throws {

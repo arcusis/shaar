@@ -28,6 +28,8 @@ class DeviceChooserPatchTests(unittest.TestCase):
         self.assertIn('"deviceChooserUpdated"', source)
         self.assertIn('"deviceChooserDismissed"', source)
         self.assertIn("shaar_device_chooser_register", source)
+        self.assertIn("base::UnguessableToken::Create().ToString()", source)
+        self.assertNotIn("NextID()", source)
         self.assertIn('option.Set("index", static_cast<int>(index))', source)
         self.assertNotIn("optionID", source)
 

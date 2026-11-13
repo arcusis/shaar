@@ -36,7 +36,7 @@ new file mode 100644
 index 0000000..94a7abe
 --- /dev/null
 +++ b/chrome/browser/shaar/chooser/shaar_device_chooser.cc
-@@ -0,0 +1,460 @@
+@@ -0,0 +1,456 @@
 +// This Source Code Form is subject to the terms of the Mozilla Public
 +// License, v. 2.0. If a copy of the MPL was not distributed with this
 +// file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -60,6 +60,7 @@ index 0000000..94a7abe
 +#include "base/task/current_thread.h"
 +#include "base/task/sequenced_task_runner.h"
 +#include "base/time/time.h"
++#include "base/unguessable_token.h"
 +#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 +#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
 +#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
@@ -319,11 +320,6 @@ index 0000000..94a7abe
 +  return *sessions;
 +}
 +
-+uint64_t& NextID() {
-+  static base::NoDestructor<uint64_t> next(0);
-+  return *next;
-+}
-+
 +void DismissById(std::string id) {
 +  auto found = Sessions().find(id);
 +  if (found == Sessions().end())
@@ -404,7 +400,7 @@ index 0000000..94a7abe
 +  if (!page_url.SchemeIsHTTPOrHTTPS() || !origin.SchemeIsHTTPOrHTTPS())
 +    return base::DoNothing();
 +
-+  const std::string id = std::to_string(++NextID());
++  const std::string id = base::UnguessableToken::Create().ToString();
 +  const std::string transport = controller->shaar_transport();
 +  auto session = std::make_unique<DeviceChooserSession>(
 +      id, engine, contents, identity->window, identity->tab,

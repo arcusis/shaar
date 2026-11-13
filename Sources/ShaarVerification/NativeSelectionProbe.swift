@@ -10,6 +10,12 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum NativeSelectionActivationReportValidation {
+  static func isForToken(_ report: [String: Any], _ token: String) -> Bool {
+    report["token"] as? String == token
+  }
+}
+
 /// Real MV3 activation of authored pages, using hidden windows and disposable profiles only.
 @MainActor
 final class NativeSelectionProbe {
@@ -278,7 +284,7 @@ final class NativeSelectionProbe {
       }
       if let data = json?.data(using: .utf8),
         let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["token"] as? String == token
+        NativeSelectionActivationReportValidation.isForToken(value, token)
       {
         return value
       }

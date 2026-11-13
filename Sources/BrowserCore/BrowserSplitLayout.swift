@@ -121,7 +121,7 @@ public indirect enum SplitNode: Equatable, Sendable {
     }
     let scaled = weights.map { $0 / maximum }
     let total = scaled.reduce(0, +)
-    return scaled.map { $0 / total }
+    return scaled.map { max($0 / total, Double.leastNonzeroMagnitude) }
   }
 }
 

@@ -6,6 +6,7 @@
     "Show All History": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show All History"}},"he":{"stringUnit":{"state":"translated","value":"הצגת כל ההיסטוריה"}}}},
     "Enter Full Screen": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Enter Full Screen"}},"he":{"stringUnit":{"state":"translated","value":"כניסה למסך מלא"}}}},
     "Paste and Match Style": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Paste and Match Style"}},"he":{"stringUnit":{"state":"translated","value":"הדבקה והתאמת סגנון"}}}},
+    "Could not clear history. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not clear history. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב."}}}},
     "Could not delete the profile. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not delete the profile. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן למחוק את הפרופיל. נסו שוב."}}}},
     "Share Page…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Share Page…"}},"he":{"stringUnit":{"state":"translated","value":"שיתוף העמוד…"}}}},
     "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},

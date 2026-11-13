@@ -535,7 +535,7 @@ struct BrowserSettingsView: View {
               try await clearHistory(id)
               historyMessage = SettingsL10n.string("History cleared.")
             } catch {
-              historyMessage = Self.historyClearFailure()
+              historyMessage = SettingsL10n.string("Could not clear history. Try again.")
             }
             clearingHistory = false
           }

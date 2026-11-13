@@ -61,6 +61,21 @@ struct HebrewPanelsTests {
       BrowserLocalization.string("History", table: "Panels", language: .hebrew) == "היסטוריה")
   }
 
+  @Test func captureIndicatorHebrewLabelDescribesActiveMediaCapture() {
+    #expect(
+      BrowserLocalization.plural(
+        "%d active capture tabs", count: 1, table: "Panels", language: .hebrew)
+        == "לכידת מדיה פעילה בלשונית אחת")
+    #expect(
+      BrowserLocalization.plural(
+        "%d active capture tabs", count: 2, table: "Panels", language: .hebrew)
+        == "לכידת מדיה פעילה בשתי לשוניות")
+    #expect(
+      BrowserLocalization.plural(
+        "%d active capture tabs", count: 3, table: "Panels", language: .hebrew)
+        == "לכידת מדיה פעילה ב־3 לשוניות")
+  }
+
   @Test func pipCornerChromeMirrorsWhileTransportStaysCentered() {
     let ltr = PictureInPictureControlsView.cornerFrames(width: 356, rightToLeft: false)
     let rtl = PictureInPictureControlsView.cornerFrames(width: 356, rightToLeft: true)

@@ -636,6 +636,7 @@ struct BrowserSettingsView: View {
             symbol: profileSymbolBinding(profile), isPresented: $profileSymbolPickerIsPresented,
             accessibilityLabel: SettingsL10n.string("Change Profile Icon"))
           TextField(SettingsL10n.string("Name"), text: profileNameBinding(profile))
+            .accessibilityLabel(SettingsL10n.string("Profile name"))
             .accessibilityIdentifier("settings.renameProfile")
             .onSubmit { saveProfileName(profile) }
           Button(SettingsL10n.string("Save")) { saveProfileName(profile) }

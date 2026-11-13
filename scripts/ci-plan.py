@@ -64,7 +64,7 @@ def needs_shipping_probe_guard(paths: list[str] | None) -> bool:
         path in {"Package.swift", "scripts/bundle-app.sh"}
         or (path.startswith("Sources/")
             and not path.startswith(("Sources/ShaarVerification/", "Sources/ChromiumBridgeVerification/"))
-            and path.endswith((".swift", ".m", ".mm", ".c", ".cc", ".cpp", ".h")))
+            and path.endswith((".swift", ".m", ".mm", ".c", ".cc", ".cpp", ".h", ".inc")))
         for path in paths
     )
 

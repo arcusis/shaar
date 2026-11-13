@@ -73,6 +73,7 @@ class PipelineGateTests(unittest.TestCase):
     def test_shipping_probe_guard_runs_for_shipping_sources_on_pull_requests(self):
         self.assertTrue(PLAN.needs_shipping_probe_guard(["Sources/ChromiumBridge/ChromiumPictureInPicture.mm"]))
         self.assertTrue(PLAN.needs_shipping_probe_guard(["Sources/ArcusisBrowser/BrowserEngine.swift"]))
+        self.assertTrue(PLAN.needs_shipping_probe_guard(["Sources/ChromiumBridge/PrivateAPI.inc"]))
         self.assertTrue(PLAN.needs_shipping_probe_guard(["Package.swift"]))
         self.assertFalse(PLAN.needs_shipping_probe_guard(["Sources/ChromiumBridgeVerification/ChromiumBridgeVerification.mm"]))
         self.assertFalse(PLAN.needs_shipping_probe_guard(["Notebook/Engine_Shaar_Layer_Design.md"]))

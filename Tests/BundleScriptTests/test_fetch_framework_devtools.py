@@ -21,6 +21,22 @@ def load_fetcher():
 
 
 class FetchFrameworkDevToolsTests(unittest.TestCase):
+    def test_output_path_rejects_roots_symlinks_and_non_directories(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid = root / "FrameworkDevTools"
+            self.assertEqual(fetcher.validate_output_path(valid), valid.resolve())
+            file_path = root / "file"
+            file_path.write_text("not a directory")
+            link = root / "link"
+            link.symlink_to(root, target_is_directory=True)
+            invalid = (Path("/"), fetcher.ROOT, fetcher.ROOT.parent,
+                       Path(tempfile.gettempdir()), file_path, link)
+            for path in invalid:
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    fetcher.validate_output_path(path)
+
     def test_release_url_names_the_pinned_github_asset(self):
         fetcher = load_fetcher()
 

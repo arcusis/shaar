@@ -257,21 +257,37 @@ def main():
         help="fetch the current Chrome Web Store packages to review a pin update",
     )
     args = parser.parse_args()
+    try:
+        output = validate_output_path(args.output)
+    except ValueError as error:
+        parser.error(str(error))
     archive_dir = archive_directory(args.archive_dir)
     for name in PINS:
         ensure_archive(name, archive_dir, args.download)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=args.output.parent) as staging:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=output.parent) as staging:
         staged = Path(staging) / "FrameworkDevTools"
         staged.mkdir()
         for name in PINS:
             unpack(name, archive_dir / f"{name}.crx", staged / name)
         shutil.copytree(ROOT / "ThirdParty/FrameworkDevTools/licenses", staged / "licenses")
-        if args.output.exists():
-            shutil.rmtree(args.output)
-        os.replace(staged, args.output)
+        if output.exists():
+            shutil.rmtree(output)
+        os.replace(staged, output)
     for name, pin in PINS.items():
-        print(f"{name} {pin.version}: {args.output / name}")
+        print(f"{name} {pin.version}: {output / name}")
+
+
+def validate_output_path(path: Path) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"output must not be a symlink: {path}")
+    output = path.resolve()
+    protected_roots = (ROOT.resolve(), Path(tempfile.gettempdir()).resolve())
+    if output == output.parent or any(root == output or output in root.parents for root in protected_roots):
+        raise ValueError(f"refusing unsafe output directory: {path}")
+    if output.exists() and not output.is_dir():
+        raise ValueError(f"output exists and is not a directory: {path}")
+    return output
 
 
 if __name__ == "__main__":

@@ -23,4 +23,27 @@ import Testing
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"])
     #expect(complete)
   }
+
+  @Test func passedRequiresEveryMediaAndHiddenSurfaceCheck() {
+    let prompts = ["media", "geolocation", "notifications", "midi", "protocol"]
+    for failingCheck in ["error", "mediaPrompted", "mediaTracks", "hidden", "surface"] {
+      let result = WebsitePermissionProbeVerdict.passed(
+        error: failingCheck == "error" ? "fixture failed" : nil,
+        mediaPrompted: failingCheck != "mediaPrompted",
+        mediaTracks: failingCheck != "mediaTracks",
+        hidden: failingCheck != "hidden",
+        unexpectedSurfaces: failingCheck == "surface" ? ["NSOpenPanel"] : [],
+        promptedNames: prompts)
+      #expect(!result, "\(failingCheck) must prevent a pass")
+    }
+  }
+
+  @Test func extraPromptNamesDoNotSubstituteForARequiredPrompt() {
+    let result = WebsitePermissionProbeVerdict.passed(
+      error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
+      unexpectedSurfaces: [],
+      promptedNames: ["media", "geolocation", "notifications", "midi", "protocol", "clipboard"]
+        .filter { $0 != "midi" })
+    #expect(!result)
+  }
 }

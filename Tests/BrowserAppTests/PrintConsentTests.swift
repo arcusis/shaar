@@ -73,6 +73,24 @@ struct PrintConsentTests {
     #expect(print.hostLabel == "example.com:8443")
   }
 
+  @Test func printConsentOriginBracketsIPv6AndKeepsItsPort() throws {
+    let store = openedStore()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let print = try #require(
+      PrintRequest(payload: [
+        "schemaVersion": 1,
+        "id": UUID().uuidString,
+        "profileID": store.session.selectedSpace.profileID.uuidString,
+        "tabID": tab.id.uuidString,
+        "pageURL": "https://[2001:db8::1]:8443/article",
+        "origin": "https://[2001:db8::1]:8443",
+        "frameID": frameID,
+        "title": "Article title",
+      ]))
+
+    #expect(print.hostLabel == "[2001:db8::1]:8443")
+  }
+
   @Test func rejectsMalformedPrintPayloads() throws {
     let store = openedStore()
     let print = try request(store)

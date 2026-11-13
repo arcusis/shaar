@@ -211,7 +211,7 @@ private enum FirefoxHistoryReader {
         id: id, type: type, parent: parent, title: row["title"]?.string ?? "Untitled",
         address: row["url"]?.string)
     }
-    let byID = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
+    let byID = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     var result: [BrowserImportItem] = []
     for node in nodes where node.type == 1 {
       guard let address = node.address, LibraryAddress.destination(address) != nil else { continue }

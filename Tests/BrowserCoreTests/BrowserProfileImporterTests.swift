@@ -134,6 +134,36 @@ import Testing
   #expect(batch.items.allSatisfy { $0.source == .firefox })
 }
 
+@Test func firefoxImportHandlesDuplicateBookmarkIDsInMalformedProfiles() throws {
+  let database = try databaseURLProfile(name: "FirefoxDuplicateIDs", databaseName: "places.sqlite")
+  defer { try? FileManager.default.removeItem(at: database.deletingLastPathComponent()) }
+  let sql = """
+    CREATE TABLE moz_places(id INTEGER, url TEXT, title TEXT);
+    CREATE TABLE moz_historyvisits(place_id INTEGER, visit_date INTEGER, visit_type INTEGER);
+    CREATE TABLE moz_bookmarks(id INTEGER, type INTEGER, fk INTEGER, parent INTEGER,
+                               position INTEGER, title TEXT);
+    INSERT INTO moz_places VALUES(1, 'https://duplicate.example/one', 'One');
+    INSERT INTO moz_places VALUES(2, 'https://duplicate.example/two', 'Two');
+    INSERT INTO moz_bookmarks VALUES(7, 1, 1, 99, 0, 'One');
+    INSERT INTO moz_bookmarks VALUES(7, 1, 2, 99, 1, 'Two');
+    """
+  var handle: OpaquePointer?
+  guard sqlite3_open(database.path, &handle) == SQLITE_OK, let handle else {
+    throw BrowserImport.ImportError.databaseUnavailable("fixture setup")
+  }
+  defer { sqlite3_close(handle) }
+  guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else {
+    throw BrowserImport.ImportError.databaseUnavailable("fixture setup")
+  }
+
+  let batch = try BrowserImport.readProfile(at: database, source: .firefox)
+
+  #expect(batch.bookmarks.map(\.title) == ["One", "Two"])
+  #expect(batch.bookmarks.map(\.address) == [
+    "https://duplicate.example/one", "https://duplicate.example/two",
+  ])
+}
+
 @Test func firefoxImportKeepsNestedFoldersNamedLikeRootFolders() throws {
   let database = try databaseURLProfile(name: "Firefox", databaseName: "places.sqlite")
   try createDatabase(

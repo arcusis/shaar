@@ -5,6 +5,9 @@ The implementation for #334 uses `source-checks.yml` as its orchestration workfl
 ## Stages
 
 The shipping resource guard recognizes `//` comment markers only outside ordinary quoted Swift strings, so URL text cannot hide a later `Bundle.module` reference on the same line.
+The Python test runner validates its optional JUnit output path during argument parsing, before discovering or running tests.
+
+`scripts/ci-evidence.py --directory` requires an existing directory and reports invalid paths before collecting evidence.
 
 `scripts/ci-evidence.py --directory` requires an existing directory and reports invalid paths before collecting evidence.
 The coverage gate names unreadable or malformed base and candidate reports directly in its error output.

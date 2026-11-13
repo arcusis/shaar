@@ -13,7 +13,7 @@ import Foundation
 /// The page script reads `isUserVerifyingPlatformAuthenticatorAvailable` only.
 @MainActor enum ShaarPasskeyAvailabilitySmoke {
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
-    guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else { return 2 }
+    guard let pageURL, acceptsPageURL(pageURL) else { return 2 }
     let root = outputURL.deletingLastPathComponent().appending(path: "profile")
     do {
       let workspace = try BrowserWorkspaceStore(
@@ -41,6 +41,11 @@ import Foundation
       write(["passed": false, "error": error.localizedDescription], to: outputURL)
       return 1
     }
+  }
+
+  static func acceptsPageURL(_ pageURL: URL) -> Bool {
+    pageURL.scheme == "http" && pageURL.host == "127.0.0.1"
+      && pageURL.user == nil && pageURL.password == nil
   }
 
   private static func exercise(

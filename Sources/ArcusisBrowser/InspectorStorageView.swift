@@ -166,13 +166,16 @@ struct InspectorStorageView: View {
         let full = try await model.storageValue(key: row.key)
         guard generation == document, area == model.storageArea, selected == row.id else { return }
         value = full
-      } catch { self.error = error.localizedDescription }
+      } catch { self.error = InspectorToolsL10n.backendError(error.localizedDescription) }
       if generation == document, area == model.storageArea, selected == row.id { reading = false }
     }
   }
 
   private func refresh() {
-    Task { do { try await model.loadStorage() } catch { self.error = error.localizedDescription } }
+    Task {
+      do { try await model.loadStorage() }
+      catch { self.error = InspectorToolsL10n.backendError(error.localizedDescription) }
+    }
   }
 
   private func save(deleting: Bool) {

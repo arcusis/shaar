@@ -28,6 +28,21 @@ struct DeviceChooserTests {
         payload: ["title": "Docs"]) == nil)
   }
 
+  @Test func chooserDisplaysTheRequestingFrameOrigin() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    var payload = event(transport: "usb", id: "embedded", page: tab.url)
+    payload["origin"] = "https://device-frame.example:8443/chooser"
+
+    let request = try #require(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: payload))
+
+    #expect(request.pageURL.host() == "devices.example")
+    #expect(request.displayOrigin == "device-frame.example:8443")
+  }
+
   @Test func emptyChooserEventsCannotBeGranted() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
@@ -70,13 +85,14 @@ struct DeviceChooserTests {
     _ = DeviceChooserConsent(store: store, request: request).body
     let populated = DeviceChooserRequest(
       id: "9", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-      transport: .usb,
+      origin: tab.url, transport: .usb,
       options: [DeviceChooserOption(index: 0, title: "Adapter", detail: "USB")],
       bluetoothUnavailable: false, canGrant: true)
     _ = DeviceChooserConsent(store: store, request: populated, initialSelection: 0).body
     let unavailable = DeviceChooserRequest(
       id: "8", tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
-      transport: .bluetooth, options: [], bluetoothUnavailable: true, canGrant: false)
+      origin: tab.url, transport: .bluetooth, options: [], bluetoothUnavailable: true,
+      canGrant: false)
     _ = DeviceChooserConsent(store: store, request: unavailable).body
   }
 

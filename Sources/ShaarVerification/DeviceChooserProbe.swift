@@ -201,7 +201,8 @@ final class DeviceChooserProbe {
         canGrant = false
         let preview = DeviceChooserRequest(
           id: "shot-\(transport)", tabID: tab.id, profileID: profile, pageURL: tab.url,
-          transport: kind, options: [], bluetoothUnavailable: unavailable, canGrant: false)
+          origin: tab.url, transport: kind, options: [], bluetoothUnavailable: unavailable,
+          canGrant: false)
         do {
           let name = "\(transport)-chooser.png"
           try render(preview, store: context.store, name: name)
@@ -225,7 +226,7 @@ final class DeviceChooserProbe {
       return
     }
     let preview = DeviceChooserRequest(
-      id: "preview", tabID: tab.id, profileID: profile, pageURL: tab.url,
+      id: "preview", tabID: tab.id, profileID: profile, pageURL: tab.url, origin: tab.url,
       transport: .usb,
       options: [
         DeviceChooserOption(index: 0, title: "USB serial adapter", detail: "Example vendor"),

@@ -162,6 +162,10 @@ struct ExtensionRow: View {
   let canRun: Bool
   let actions: ExtensionRowActions
 
+  static func toggleAccessibilityLabel(for item: ManagedExtension) -> String {
+    item.name
+  }
+
   var body: some View {
     HStack(spacing: 10) {
       Button(action: actions.run) {
@@ -201,10 +205,7 @@ struct ExtensionRow: View {
       .controlSize(.mini)
       .labelsHidden()
       .disabled(!item.mayDisable)
-      .accessibilityLabel(
-        item.enabled
-          ? PanelsL10n.format("Turn off %@", .string(item.name))
-          : PanelsL10n.format("Turn on %@", .string(item.name)))
+      .accessibilityLabel(Self.toggleAccessibilityLabel(for: item))
       Button(action: actions.showDetails) {
         Image(systemName: "info.circle").foregroundStyle(.secondary)
       }

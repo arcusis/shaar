@@ -13,6 +13,15 @@ import Testing
 struct ExtensionManagementTests {
   private let validID = String(repeating: "b", count: 32)
 
+  @Test @MainActor func enableSwitchNameIdentifiesTheExtension() {
+    for enabled in [true, false] {
+      let item = ManagedExtension(
+        id: validID, name: "Password Manager", version: "1", description: "",
+        enabled: enabled, mayDisable: true, permissions: [], hostPermissions: [])
+      #expect(ExtensionRow.toggleAccessibilityLabel(for: item) == "Password Manager")
+    }
+  }
+
   @Test @MainActor func rowCallbacksAreSendableForSwiftUIBindings() {
     var enabled = false
     let actions = ExtensionRowActions(

@@ -146,10 +146,8 @@ final class ProfileAccountSignIn {
   }
 
   private func evaluate(_ script: String, tab: UUID) async -> String? {
-    let json: String? = await withCheckedContinuation { continuation in
-      engine.runtime.evaluate(inTabID: tab.uuidString, script: script) {
-        continuation.resume(returning: $0)
-      }
+    let json = await AccountSignInEvaluation.evaluate { completion in
+      engine.runtime.evaluate(inTabID: tab.uuidString, script: script) { completion($0) }
     }
     guard let data = json?.data(using: .utf8) else { return nil }
     return try? JSONDecoder().decode(String.self, from: data)
@@ -210,6 +208,74 @@ final class ProfileAccountSignIn {
     popups.removeAll()
     engine.runtime.closeWindowID(engine.windowID)
     onFinished?(account)
+  }
+}
+
+enum AccountSignInEvaluation {
+  typealias Completion = @Sendable (String?) -> Void
+  typealias Start = @MainActor (@escaping Completion) -> Void
+
+  @MainActor
+  static func evaluate(start: Start) async -> String? {
+    let completion = AccountSignInContinuation()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        completion.install(continuation)
+        guard !Task.isCancelled else {
+          completion.resume(nil)
+          return
+        }
+        start { completion.resume($0) }
+      }
+    } onCancel: {
+      completion.resume(nil)
+    }
+  }
+}
+
+private final class AccountSignInContinuation: @unchecked Sendable {
+  private enum State {
+    case waiting
+    case installed(CheckedContinuation<String?, Never>)
+    case finished(String?)
+  }
+
+  private let lock = NSLock()
+  private var state = State.waiting
+
+  func install(_ continuation: CheckedContinuation<String?, Never>) {
+    lock.lock()
+    let result: State
+    switch state {
+    case .waiting:
+      state = .installed(continuation)
+      lock.unlock()
+      return
+    case .installed:
+      lock.unlock()
+      preconditionFailure("An account sign-in continuation can only be installed once.")
+    case .finished(let value):
+      result = .finished(value)
+    }
+    lock.unlock()
+    if case .finished(let value) = result { continuation.resume(returning: value) }
+  }
+
+  func resume(_ value: String?) {
+    lock.lock()
+    let continuation: CheckedContinuation<String?, Never>?
+    switch state {
+    case .waiting:
+      state = .finished(value)
+      continuation = nil
+    case .installed(let installed):
+      state = .finished(value)
+      continuation = installed
+    case .finished:
+      continuation = nil
+    }
+    lock.unlock()
+    continuation?.resume(returning: value)
   }
 }
 

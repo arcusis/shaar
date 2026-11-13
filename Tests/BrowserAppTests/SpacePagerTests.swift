@@ -25,6 +25,15 @@ struct SpacePagerTests {
         == 2)
   }
 
+  @Test func extremeDragVelocityClampsBeforeIntegerConversion() {
+    #expect(
+      SpacePagerDecision.targetIndex(
+        index: 1, count: 3, offset: 0, velocity: .greatestFiniteMagnitude, width: 100) == 0)
+    #expect(
+      SpacePagerDecision.targetIndex(
+        index: 1, count: 3, offset: 0, velocity: -.greatestFiniteMagnitude, width: 100) == 2)
+  }
+
   @Test func rubberBandResistsBeyondEdges() {
     #expect(SpacePagerDecision.rubberBand(50, index: 1, count: 3, width: 100) == 50)
     let first = SpacePagerDecision.rubberBand(100, index: 0, count: 3, width: 100)

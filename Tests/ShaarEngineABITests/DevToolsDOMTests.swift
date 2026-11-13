@@ -44,6 +44,42 @@ struct DevToolsDOMTests {
     #expect(without?.backendNodeID == nil)
   }
 
+  @Test func nodeRejectsBooleanIdentifiersAndTypes() {
+    let base: [String: Any] = [
+      "nodeId": 4, "nodeType": 1, "nodeName": "BODY", "nodeValue": "",
+    ]
+    for fields in [
+      base.merging(["nodeId": true as Any]) { _, replacement in replacement },
+      base.merging(["nodeType": true as Any]) { _, replacement in replacement },
+    ] {
+      #expect(ShaarDOMNode.decode(fields, parentID: nil, relation: .child) == nil)
+    }
+    let invalidBackendID = base.merging(["backendNodeId": true as Any]) { _, replacement in
+      replacement
+    }
+    #expect(
+      ShaarDOMNode.decode(invalidBackendID, parentID: nil, relation: .child)?.backendNodeID == nil)
+  }
+
+  @Test func projectedMutationRejectsBooleanNodeIdentifiers() {
+    let base =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":21,"leaseID":7,"data":{"parentNodeId":2,"previousNodeId":0,"node":{"nodeId":3,"nodeType":1,"nodeName":"DIV","nodeValue":""},"truncated":false}}"#
+    for (sequence, payload) in [
+      (UInt64(10), base.replacingOccurrences(
+        of: #""parentNodeId":2"#, with: #""parentNodeId":true"#)),
+      (UInt64(11), base.replacingOccurrences(
+        of: #""nodeId":3"#, with: #""nodeId":true"#)),
+    ] {
+      let event = ShaarCopiedEvent(
+        sequence: sequence, kind: 14, profileID: Data("profile-a".utf8), sessionID: Data(),
+        windowID: Data("window-a".utf8), tabID: Data("tab-a".utf8),
+        payloadJSON: Data(payload.utf8))
+      #expect(
+        ShaarDOMEventRouter.decode(
+          event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7) == nil)
+    }
+  }
+
   @Test func nodeRejectsMalformedExplicitChildCount() {
     for invalidCount in ["unknown" as Any, true as Any] {
       let fields: [String: Any] = [

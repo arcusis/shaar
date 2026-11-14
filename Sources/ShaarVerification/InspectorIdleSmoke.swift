@@ -127,9 +127,16 @@ import Foundation
   }
 
   static func pollCallCount(from value: Any?) -> Int? {
-    if let calls = value as? Int { return calls }
-    if let calls = value as? Double { return Int(exactly: calls) }
-    return nil
+    let calls: Int?
+    if let value = value as? Int {
+      calls = value
+    } else if let value = value as? Double {
+      calls = Int(exactly: value)
+    } else {
+      calls = nil
+    }
+    guard let calls, calls >= 0 else { return nil }
+    return calls
   }
 
   private static let pollCounter = """

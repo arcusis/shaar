@@ -42,6 +42,12 @@ struct DeviceChooserOption: Identifiable, Equatable, Sendable {
   var id: Int { index }
 }
 
+enum DeviceChooserOptionPresentation {
+  static func isSelected(optionIndex: Int, selectedIndex: Int?) -> Bool {
+    selectedIndex == optionIndex
+  }
+}
+
 struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
   let id: String
   let tabID: UUID
@@ -299,21 +305,31 @@ struct DeviceChooserConsent: View {
     }
   }
 
-  private func optionLabel(_ option: DeviceChooserOption, options: [DeviceChooserOption])
-    -> some View
-  {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(option.title)
-      if !option.detail.isEmpty {
-        Text(option.detail).font(.callout).foregroundStyle(.secondary)
+  private func optionLabel(
+    _ option: DeviceChooserOption, options: [DeviceChooserOption]
+  ) -> some View {
+    let selected = DeviceChooserOptionPresentation.isSelected(
+      optionIndex: option.index,
+      selectedIndex: selection.selectedIndex(for: options, revision: liveRequest.revision))
+    return VStack(alignment: .leading, spacing: 2) {
+      HStack {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(option.title)
+          if !option.detail.isEmpty {
+            Text(option.detail).font(.callout).foregroundStyle(.secondary)
+          }
+        }
+        Spacer(minLength: 8)
+        if selected {
+          Image(systemName: "checkmark")
+            .foregroundStyle(Color.accentColor)
+            .accessibilityHidden(true)
+        }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(8)
-    .background(
-      selection.selectedIndex(for: options, revision: liveRequest.revision) == option.index
-        ? Color.accentColor.opacity(0.15) : Color.clear
-    )
+    .background(selected ? Color.accentColor.opacity(0.15) : Color.clear)
     .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 

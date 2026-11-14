@@ -248,6 +248,16 @@ class CatalogValidatorTests(unittest.TestCase):
         bridge = (ROOT / "Sources/ChromiumBridge/ChromiumBridge.mm").read_text(encoding="utf-8")
         self.assertEqual(bridge.count('Closing the browser will cancel 1 active download.'), 2)
 
+    def test_library_import_summary_uses_hebrew_plural_categories(self):
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(encoding="utf-8"))["strings"]
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserImportPreviewView.swift").read_text(encoding="utf-8")
+        self.assertIn("BrowserImportPreviewCounts.summary(", source)
+        for key, dual in (("%d bookmark", "שתי סימניות"),
+                          ("%d history entry", "שני פריטי היסטוריה")):
+            with self.subTest(key=key):
+                self.assertEqual(set(catalog[key]["localizations"]["he"]["variations"]["plural"]), {"one", "two", "other"})
+                self.assertEqual(catalog[key]["localizations"]["he"]["variations"]["plural"]["two"]["stringUnit"]["value"], dual)
+
     def test_inspector_storage_view_localizes_known_backend_errors(self):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorStorageView.swift").read_text(
             encoding="utf-8")

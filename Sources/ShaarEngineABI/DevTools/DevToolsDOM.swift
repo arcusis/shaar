@@ -12,6 +12,13 @@ private func domEventInteger(_ value: Any?) -> Int? {
   return Int(exactly: number.doubleValue)
 }
 
+private func domEventBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
 public enum ShaarDOMRelation: String, Sendable {
   case child
   case shadowRoot
@@ -229,7 +236,7 @@ public enum ShaarDOMEventRouter {
       rawLeaseID <= Int(UInt32.max), UInt32(rawLeaseID) == leaseID,
       let id = domEventInteger(root["eventID"]), (20...28).contains(id),
       let fields = root["data"] as? [String: Any],
-      let truncated = fields["truncated"] as? Bool,
+      let truncated = domEventBoolean(fields["truncated"]),
       let mutation = decodeMutation(id, fields)
     else { return nil }
     return ShaarDOMEvent(

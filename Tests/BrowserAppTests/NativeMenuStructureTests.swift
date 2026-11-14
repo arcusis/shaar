@@ -159,6 +159,23 @@ import Testing
   #expect(workspace.workspace.windows.map(\.id) == windowIDs)
 }
 
+@Test @MainActor func bringAllToFrontDoesNotMakeAWindowKeyWhenItIsNotVisible() {
+  let staleKeyWindow = NSWindow(
+    contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
+  let visibleWindow = NSWindow(
+    contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
+  var ordered: [NSWindow] = []
+  var keyed: NSWindow?
+
+  NativeBrowserHost.bringAllWindowsToFront(
+    [visibleWindow], keyWindow: staleKeyWindow, orderFront: { ordered.append($0) },
+    makeKey: { keyed = $0 })
+
+  #expect(ordered.count == 1 && ordered[0] === visibleWindow)
+  #expect(keyed == nil)
+  #expect(!staleKeyWindow.isVisible && !visibleWindow.isVisible)
+}
+
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared
   let menu = NativeBrowserHost.makeMenu(target: application)

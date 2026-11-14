@@ -8,6 +8,8 @@ struct InspectorPageToolsView: View {
   let inspector: InspectorModel
   @Bindable var model: InspectorPageToolsModel
 
+  static var titleAccessibilityTraits: AccessibilityTraits { .isHeader }
+
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 0) {
@@ -29,6 +31,7 @@ struct InspectorPageToolsView: View {
       }.padding(.horizontal, 8).padding(.vertical, 5)
       HStack {
         Text(model.tool.title).font(.system(size: 12, weight: .semibold))
+          .accessibilityAddTraits(Self.titleAccessibilityTraits)
         Spacer()
         Text(inspector.target.url.host ?? InspectorToolsL10n.string("Page"))
           .font(.system(size: 11, design: .monospaced))

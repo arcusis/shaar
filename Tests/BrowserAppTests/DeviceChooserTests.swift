@@ -385,16 +385,16 @@ struct DeviceChooserTests {
     let queued = try #require(
       self.request(
         store, transport: "usb", id: "queued-next",
-        options: [["index": 0, "name": "Adapter"]], canGrant: true))
-    var decided: Int??
-    store.onDeviceChooserDecision = { request, index in
-      if request.id == queued.id { decided = .some(index) }
+        options: [["optionId": "queued-next-option", "name": "Adapter"]], canGrant: true))
+    var decided: String??
+    store.onDeviceChooserDecision = { request, optionID in
+      if request.id == queued.id { decided = .some(optionID) }
     }
 
     #expect(store.requestDeviceChooser(first))
     #expect(store.requestDeviceChooser(queued))
     #expect(store.sheet?.id == first.sheetID)
-    store.resolveDeviceChooser(queued.id, optionIndex: 0)
+    store.resolveDeviceChooser(queued.id, optionID: "queued-next-option")
 
     #expect(decided == .some(nil))
     #expect(store.sheet?.id == first.sheetID)

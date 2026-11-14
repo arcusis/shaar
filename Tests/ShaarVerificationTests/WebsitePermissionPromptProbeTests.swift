@@ -15,12 +15,13 @@ import Testing
   @Test func passedRequiresTheFourWebsitePrompts() {
     let ready = WebsitePermissionProbeVerdict.passed(
       error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
-      unexpectedSurfaces: [], promptedNames: ["media"], openedProtocols: [])
+      unexpectedSurfaces: [], promptedNames: ["media"], rememberedKinds: [], openedProtocols: [])
     #expect(!ready)
     let complete = WebsitePermissionProbeVerdict.passed(
       error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
       unexpectedSurfaces: [],
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
+      rememberedKinds: ["geolocation", "notifications", "midi"],
       openedProtocols: ["web+shaarparity", "mailto"])
     #expect(complete)
   }
@@ -34,7 +35,8 @@ import Testing
         mediaTracks: failingCheck != "mediaTracks",
         hidden: failingCheck != "hidden",
         unexpectedSurfaces: failingCheck == "surface" ? ["NSOpenPanel"] : [],
-        promptedNames: prompts, openedProtocols: [])
+        promptedNames: prompts, rememberedKinds: ["geolocation", "notifications", "midi"],
+        openedProtocols: [])
       #expect(!result, "\(failingCheck) must prevent a pass")
     }
   }
@@ -45,7 +47,8 @@ import Testing
       unexpectedSurfaces: [],
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol", "clipboard"]
         .filter { $0 != "midi" },
-      openedProtocols: [])
+      rememberedKinds: ["geolocation", "notifications", "midi"],
+      openedProtocols: ["web+shaarparity", "mailto"])
     #expect(!result)
   }
 
@@ -54,6 +57,32 @@ import Testing
       error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
       unexpectedSurfaces: [],
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
+      rememberedKinds: ["geolocation", "notifications", "midi"],
       openedProtocols: ["web+shaarparity"]))
+  }
+
+  @Test(arguments: ["geolocation", "notifications", "midi"])
+  func passedFailsWhenAnyRequestedPromptIsMissing(_ missing: String) {
+    let prompted = ["media", "geolocation", "notifications", "midi", "protocol"]
+      .filter { $0 != missing }
+    #expect(
+      !WebsitePermissionProbeVerdict.passed(
+        error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
+        unexpectedSurfaces: [], promptedNames: prompted,
+        rememberedKinds: ["geolocation", "notifications", "midi"],
+        openedProtocols: ["web+shaarparity", "mailto"]))
+  }
+
+  @Test(arguments: ["geolocation", "notifications", "midi"])
+  func passedRequiresEachDecisionToBeRemembered(_ missing: String) {
+    let remembered = ["geolocation", "notifications", "midi"].filter { $0 != missing }
+    #expect(
+      !WebsitePermissionProbeVerdict.passed(
+        error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
+        unexpectedSurfaces: [],
+        promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
+        rememberedKinds: remembered,
+        openedProtocols: ["web+shaarparity", "mailto"]))
+
   }
 }

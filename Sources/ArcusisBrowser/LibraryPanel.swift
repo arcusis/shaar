@@ -254,7 +254,6 @@ struct LibraryPanel: View {
           showingImportPreview = true
         }
       }
-      }
     }
     .sheet(
       isPresented: $showingImportPreview,

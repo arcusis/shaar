@@ -185,6 +185,19 @@ import Testing
     #expect(try FileManager.default.contentsOfDirectory(atPath: target.path).isEmpty)
   }
 
+  @Test func screenshotCacheTightensExistingDirectoryPermissions() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+
+    _ = try InspectorScreenshotCache(directory: root).save(Data([1, 2, 3]), tag: "private")
+
+    let permissions =
+      try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber
+    #expect(permissions?.intValue == 0o700)
+  }
+
   @Test func unavailableOrClosedSelectionFailsWithoutTouchingClipboard() async throws {
     let model = inspector()
     defer { model.close() }

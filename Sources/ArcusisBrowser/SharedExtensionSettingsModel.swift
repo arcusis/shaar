@@ -127,6 +127,8 @@ final class SharedExtensionSettingsModel {
         profileID: profileID, action: .setEnabled(extensionID, enabled))
       error = nil
       await reload()
+    } catch is CancellationError {
+      return
     } catch {
       self.error = SettingsL10n.string("Could not update the extension. Try again.")
     }

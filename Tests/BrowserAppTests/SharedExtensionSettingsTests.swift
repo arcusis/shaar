@@ -92,6 +92,18 @@ private actor DelayedSettingsExtensionsTransport: ShaarExtensionsTransport {
   }
 }
 
+private actor CancelledManageSettingsTransport: ShaarExtensionsTransport {
+  func submitExtensions(
+    profileID: UUID, operation: ShaarExtensionsOperation, arguments: Data
+  ) async throws -> Data {
+    if operation == .list {
+      return Data(
+        #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.2","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#.utf8)
+    }
+    throw CancellationError()
+  }
+}
+
 @Suite("Shared extension Settings")
 struct SharedExtensionSettingsTests {
   @Test @MainActor func olderExtensionReloadCannotReplaceNewerState() async throws {
@@ -136,6 +148,30 @@ struct SharedExtensionSettingsTests {
     await model.setEnabled(false, extensionID: row.id, profileID: profileID)
     #expect(model.rows.first?.profiles[profileID]?.enabled == true)
     #expect(model.error == SettingsL10n.string("Could not update the extension. Try again."))
+  }
+
+  @Test @MainActor func cancelledToggleDoesNotShowFailure() async throws {
+    let profileID = UUID()
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+    ).write(to: file)
+    let transport = CancelledManageSettingsTransport()
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter, profiles: { [profileID: "Work"] })
+    await model.reload()
+    let row = try #require(model.rows.first)
+
+    let toggle = Task { @MainActor in
+      await model.setEnabled(false, extensionID: row.id, profileID: profileID)
+    }
+    toggle.cancel()
+    await toggle.value
+
+    #expect(model.error == nil)
   }
 
   @Test @MainActor func listFailureExplainsWhyExtensionsAreMissing() async throws {

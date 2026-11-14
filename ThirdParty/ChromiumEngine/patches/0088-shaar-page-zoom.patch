@@ -83,7 +83,7 @@ diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/p
 index d59e67b2..28491fb2 100644
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -81,9 +81,12 @@ typedef enum {
+@@ -81,8 +81,12 @@ typedef enum {
    SHAAR_EVENT_DEVTOOLS = 14,
    SHAAR_EVENT_MEDIA = 15,
    // BEGIN save_prompts

@@ -84,8 +84,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--notebook", type=Path, default=DEFAULT_NOTEBOOK)
     args = parser.parse_args()
-    if args.notebook.is_symlink():
-        print(f"Notebook root must not be a symlink: {args.notebook}", file=sys.stderr)
+    if args.notebook.is_symlink() or args.notebook.parent.is_symlink():
+        print(f"Notebook root and its parent must not be symlinks: {args.notebook}", file=sys.stderr)
         return 1
     if not args.notebook.is_dir():
         print(f"Notebook path is not a directory: {args.notebook}", file=sys.stderr)

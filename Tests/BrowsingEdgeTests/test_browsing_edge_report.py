@@ -17,6 +17,13 @@ SPEC.loader.exec_module(PROBE)
 
 
 class BrowsingEdgeReportTests(unittest.TestCase):
+    def test_dialog_fixture_reports_the_selected_file_name_and_contents(self):
+        fixture = PROBE.DIALOGS.decode("utf-8")
+        self.assertIn('input id="blank" type="file"', fixture)
+        self.assertIn('addEventListener("change"', fixture)
+        self.assertIn("file.text()", fixture)
+        self.assertIn("dataset.fileUpload", fixture)
+
     def test_unproven_row_fails_even_when_marked_passed(self):
         self.assertFalse(PROBE.row_accepted({"passed": True, "proven": False}))
 

@@ -45,6 +45,15 @@ struct BrowserLibraryTests {
     #expect(model.notice(profile, section: .bookmarks) != "Raw bookmark read error.")
   }
 
+  @Test func importReadErrorsUseLocalizedFallbackAndKeepKnownImporterMessages() {
+    let fallback = "The selected file could not be read. Try another file."
+    #expect(
+      LibraryPanel.importErrorMessage(CocoaError(.fileReadNoPermission)) == PanelsL10n.string(fallback))
+    let knownError = BrowserImport.ImportError.unsupported
+    #expect(LibraryPanel.importErrorMessage(knownError) == knownError.localizedDescription)
+  }
+  }
+
   @Test func bookmarkAndHistorySearchFindsTitlesWithoutTypingAccents() {
     #expect(LibraryPanelSearch.matches("Résumé https://example.test", query: "resume"))
     #expect(LibraryPanelSearch.matches("Café https://example.test", query: "cafe"))

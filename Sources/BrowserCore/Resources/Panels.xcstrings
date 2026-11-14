@@ -14,6 +14,12 @@
         "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להפעיל את התוסף. כדאי לנסות שוב." } }
       }
     },
+    "The selected file could not be read. Try another file.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The selected file could not be read. Try another file." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לקרוא את הקובץ שנבחר. כדאי לנסות קובץ אחר." } }
+      }
+    },
     "%@ image": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תמונת %@"}}}},
     "%@ video": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"סרטון %@"}}}},
     "%@ audio file": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובץ שמע %@"}}}},

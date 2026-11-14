@@ -36,8 +36,10 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
 diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
 --- a/third_party/blink/renderer/core/dom/document.cc
 +++ b/third_party/blink/renderer/core/dom/document.cc
-@@ -6742,7 +6742,24 @@
+@@ -6742,10 +6742,45 @@
  void Document::EnqueueResizeEvent() {
++  if (!GetExecutionContext())
++    return;
    Event* event = Event::Create(event_type_names::kResize);
    event->SetTarget(domWindow());
 -  scripted_animation_controller_->EnqueuePerFrameEvent(event);
@@ -62,28 +64,50 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
  }
  
  void Document::EnqueueMediaQueryChangeListeners(
+   HeapVector<Member<MediaQueryListListener>>& listeners) {
++  if (!GetExecutionContext())
++    return;
+   scripted_animation_controller_->EnqueueMediaQueryChangeListeners(listeners);
++  if (!hidden() || hidden_media_query_change_task_pending_)
++    return;
++  hidden_media_query_change_task_pending_ = true;
++  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
++      FROM_HERE,
++      BindOnce(&Document::DispatchHiddenMediaQueryChangeTask,
++               WrapPersistent(this)));
++}
++
++void Document::DispatchHiddenMediaQueryChangeTask() {
++  hidden_media_query_change_task_pending_ = false;
++  if (!GetExecutionContext())
++    return;
++  scripted_animation_controller_->DispatchMediaQueryListEventsAndCallbacks();
+ }
 diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/renderer/core/dom/document.h
 --- a/third_party/blink/renderer/core/dom/document.h
 +++ b/third_party/blink/renderer/core/dom/document.h
-@@ -3141,8 +3141,10 @@
+@@ -3141,8 +3141,12 @@
    Member<MediaQueryMatcher> media_query_matcher_;
    bool write_recursion_is_too_deep_ = false;
    unsigned write_recursion_depth_ = 0;
 +  void DispatchHiddenResizeEventTask();
++  void DispatchHiddenMediaQueryChangeTask();
  
    Member<ScriptedAnimationController> scripted_animation_controller_;
 +  bool hidden_resize_event_task_pending_ = false;
++  bool hidden_media_query_change_task_pending_ = false;
    void ElementDataCacheClearTimerFired(TimerBase*);
    HeapTaskRunnerTimer<Document> element_data_cache_clear_timer_;
  
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
-@@ -6,6 +6,8 @@
+@@ -6,6 +6,9 @@
  
  #include <cmath>
  #include <memory>
 +
++#include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 +#include "third_party/blink/renderer/core/frame/local_dom_window.h"
  
  #include "base/memory/raw_ptr.h"
@@ -96,7 +120,7 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
  namespace {
  
  class RunTaskCallback final : public FrameCallback {
-@@ -241,6 +244,23 @@
+@@ -241,6 +244,47 @@
                                            {{Controller(), false}});
    EXPECT_FALSE(Controller().HasFrameCallback());
  }
@@ -111,6 +135,30 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
 +      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(1)));
 +
 +  GetDocument().EnqueueResizeEvent();
++  EXPECT_TRUE(observer.Order().empty());
++
++  task_environment_.RunUntilIdle();
++  EXPECT_THAT(observer.Order(), testing::ElementsAre(1));
++}
++
++TEST_F(ScriptedAnimationControllerTest,
++       HiddenDocumentMediaQueryListListenersDispatchWithoutAnimationFrame) {
++  GetPage().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
++                               /*is_initial_state=*/false);
++  TaskOrderObserver observer;
++  class Listener final : public MediaQueryListListener {
++   public:
++    explicit Listener(base::RepeatingClosure task) : task_(std::move(task)) {}
++    void NotifyMediaQueryChanged() override { task_.Run(); }
++
++   private:
++    base::RepeatingClosure task_;
++  };
++  HeapVector<Member<MediaQueryListListener>> listeners;
++  listeners.push_back(
++      MakeGarbageCollected<Listener>(observer.CreateTask(1)));
++
++  GetDocument().EnqueueMediaQueryChangeListeners(listeners);
 +  EXPECT_TRUE(observer.Order().empty());
 +
 +  task_environment_.RunUntilIdle();

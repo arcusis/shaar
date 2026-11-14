@@ -619,7 +619,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0141-blink-hidden-resize-event-dispatch.patch",
-      "sha256": "c41d3f1870ed73a9854ccf09bd993a1cc1dcc1c89b0276ee9e7053a4973cebd8"
+      "sha256": "bda664c49c3abc43271c1e49c7e424e95b97fb58e7f2651a6660212e1911a651"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0143-blink-hidden-scroll-snap-event-dispatch.patch",

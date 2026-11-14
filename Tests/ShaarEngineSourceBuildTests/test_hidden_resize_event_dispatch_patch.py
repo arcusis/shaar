@@ -20,6 +20,10 @@ class HiddenResizeEventDispatchPatchTests(unittest.TestCase):
         patch = content.decode()
         self.assertIn("if (!hidden())", patch)
         self.assertIn("EnqueueHiddenResizeEvent", patch)
+        self.assertIn(
+            " void Document::EnqueueResizeEvent() {\n+  if (!GetExecutionContext())\n+    return;",
+            patch,
+        )
         self.assertIn("TaskType::kDOMManipulation", patch)
         self.assertIn("HiddenDocumentResizeEventDispatchesWithoutAnimationFrame", patch)
 

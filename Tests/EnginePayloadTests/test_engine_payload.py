@@ -278,6 +278,30 @@ class EnginePayloadTests(unittest.TestCase):
                 self.assertFalse(report["payload_match"])
                 self.assertIn("CodeResources", report["reason"])
 
+    def test_codesign_resources_rejects_duplicate_plist_dictionary_keys(self):
+        path = "Versions/155.0.8059.84/_CodeSignature/CodeResources"
+        helper = "Versions/155.0.8059.84/Helpers/app_mode_loader"
+        envelope = {"files": {}, "files2": {helper: {"cdhash": b"new"}},
+                    "rules": {}, "rules2": {}}
+        self.fixture(files={"Chromium Framework": b"engine", helper: b"helper",
+                            path: plistlib.dumps(envelope, fmt=plistlib.FMT_XML)}, links={})
+        duplicate = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>files</key><dict/>
+<key>files2</key><dict>
+<key>{helper}</key><dict><key>cdhash</key><data>b2xk</data></dict>
+<key>{helper}</key><dict><key>cdhash</key><data>bmV3</data></dict>
+</dict>
+<key>rules</key><dict/><key>rules2</key><dict/>
+</dict></plist>'''.encode()
+        (self.framework / path).write_bytes(duplicate)
+
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+
+        self.assertFalse(report["payload_match"], report["reason"])
+
     def test_codesign_resources_rejects_files2_known_field_additions_and_removals(self):
         version = "Versions/155.0.8059.84"
         helper = "Helpers/app_mode_loader"

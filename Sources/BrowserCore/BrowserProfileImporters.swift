@@ -248,15 +248,29 @@ private func isFirefoxRootFolder(
   return nodes[folder.parent]?.parent == 0
 }
 
+struct BrowserImportAddressCache {
+  private var lastAddress: String?
+  private var lastAddressIsValid = false
+
+  mutating func accepts(_ address: String) -> Bool {
+    guard lastAddress != address else { return lastAddressIsValid }
+    lastAddress = address
+    lastAddressIsValid = LibraryAddress.destination(address) != nil
+    return lastAddressIsValid
+  }
+}
+
 private func groupedHistory(
   _ rows: [[String: BrowserImportSQLite.Value]], source: BrowserImportSource,
   date: (BrowserImportSQLite.Value) -> Date?
 ) -> [BrowserImportItem] {
   var grouped: [String: (String, [Date])] = [:]
   var order: [String] = []
+  var addressCache = BrowserImportAddressCache()
   for row in rows {
-    guard let address = row["url"]?.string, LibraryAddress.destination(address) != nil,
-      let rawVisit = row["visit_time"], let visit = date(rawVisit)
+    guard let address = row["url"]?.string,
+      let rawVisit = row["visit_time"], let visit = date(rawVisit),
+      addressCache.accepts(address)
     else { continue }
     if grouped[address] == nil {
       order.append(address)

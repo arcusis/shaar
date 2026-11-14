@@ -417,6 +417,37 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   #expect(batch.history[0].visitTimes.count == 30_002)
 }
 
+@Test func repeatedHistoryAddressValidationBenchmark() {
+  let address = "https://example.com/repeated-history-entry"
+  var validationCache = BrowserImportAddressCache()
+  let rejectsInvalidAddress = validationCache.accepts("not a valid web address")
+  let acceptsValidAddress = validationCache.accepts(address)
+  let acceptsRepeatedAddress = validationCache.accepts(address)
+  #expect(!rejectsInvalidAddress && acceptsValidAddress && acceptsRepeatedAddress)
+  var beforeSamples: [Duration] = []
+  var afterSamples: [Duration] = []
+  var beforeAccepted = 0
+  var afterAccepted = 0
+  for _ in 0..<5 {
+    let beforeStart = ContinuousClock.now
+    for _ in 0..<30_000 {
+      if LibraryAddress.destination(address) != nil { beforeAccepted += 1 }
+    }
+    beforeSamples.append(beforeStart.duration(to: .now))
+    var cache = BrowserImportAddressCache()
+    let afterStart = ContinuousClock.now
+    for _ in 0..<30_000 {
+      if cache.accepts(address) { afterAccepted += 1 }
+    }
+    afterSamples.append(afterStart.duration(to: .now))
+  }
+  #expect(beforeAccepted == afterAccepted && afterAccepted == 150_000)
+  let before = beforeSamples.sorted()[beforeSamples.count / 2]
+  let after = afterSamples.sorted()[afterSamples.count / 2]
+  print("repeatedHistoryAddressValidationBenchmark: before=\(before), after=\(after)")
+  #expect(after < before * 0.5)
+}
+
 @Test func sqliteSnapshotRejectsMissingSourcesAndInvalidQueries() throws {
   let absent = FileManager.default.temporaryDirectory.appending(path: "missing-\(UUID()).sqlite")
   #expect(throws: BrowserImport.ImportError.self) {

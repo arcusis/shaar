@@ -10,6 +10,10 @@ import XCTest
 
 @MainActor
 final class SettingsVisualTests: XCTestCase {
+  func testProfileDeletionTitleIsVoiceOverHeading() {
+    XCTAssertEqual(ProfileDeletionConfirmation.headingTraits, .isHeader)
+  }
+
   func testPrivacyControls() async throws {
     try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires opt-in")
     let output = try SidebarVisualCaptureSupport.prepare()

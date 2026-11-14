@@ -124,6 +124,30 @@ struct BrowserLibraryTests {
     #expect(model.bookmarks[profile]?.items.contains { $0.title == "Confirmed" } == true)
   }
 
+  @Test func duplicateMutationReplyDoesNotRefreshOrCompleteTwice() {
+    let model = BrowserLibraryModel()
+    let profile = UUID()
+    var writeReply: (@MainActor (String?) -> Void)?
+    var refreshCount = 0
+    var completionCount = 0
+    model.onMutation = { _, _, done in writeReply = done }
+    model.onLoad = { _, _, done in
+      refreshCount += 1
+      done(.success(tree(title: "Saved")))
+    }
+
+    let accepted = model.mutate(.bookmark(["op": "remove"]), profile: profile) { succeeded in
+      #expect(succeeded)
+      completionCount += 1
+    }
+    #expect(accepted)
+    writeReply?(nil)
+    writeReply?(nil)
+
+    #expect(refreshCount == 1)
+    #expect(completionCount == 1)
+  }
+
   @Test func importedBookmarkBatchRefreshesOnlyAfterEveryOperationIsAcknowledged() {
     let model = BrowserLibraryModel()
     let profile = UUID()

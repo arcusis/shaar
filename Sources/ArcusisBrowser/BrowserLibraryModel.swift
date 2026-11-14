@@ -204,11 +204,12 @@ final class BrowserLibraryModel {
     mutating.insert(key)
     pendingRefresh.removeValue(forKey: key)?.cancel()
     dirty.remove(key)
-    generations[key] = UUID()
+    let token = UUID()
+    generations[key] = token
     loading.remove(key)
     notices[key] = nil
     onMutation(profile, mutation) { [weak self] error in
-      guard let self else { return }
+      guard let self, self.generations[key] == token else { return }
       self.mutating.remove(key)
       // The pinned bookmark apply endpoint does not emit change events for its own writes.
       self.refresh(profile, section: mutation.section)

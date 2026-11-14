@@ -47,6 +47,18 @@ def valid_profile():
 
 
 class PasskeySigningTests(unittest.TestCase):
+    def test_release_base_entitlements_are_minimal(self):
+        entitlements = plistlib.loads(BASE.read_bytes())
+        self.assertEqual(
+            set(entitlements),
+            {
+                "com.apple.security.device.audio-input",
+                "com.apple.security.device.camera",
+                "com.apple.security.personal-information.location",
+            },
+        )
+        self.assertTrue(all(value is True for value in entitlements.values()))
+
     def test_passkeys_plist_matches_the_release_contract(self):
         plist = plistlib.loads(PASSKEYS.read_bytes())
         self.assertEqual(plist, passkey_signing.required_entitlements())

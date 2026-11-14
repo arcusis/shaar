@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import io
 import os
 from pathlib import Path
 import random
@@ -158,6 +159,18 @@ class HookTests(unittest.TestCase):
                 HISTORY.scan_history(self.root, "a" * 40, "b" * 40, report)
             scan.assert_not_called()
         self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_history_gitleaks_timeout_is_bounded_and_reported(self):
+        command = ["gitleaks", "git"]
+        with patch.object(HISTORY, "history_commits", return_value=[]), \
+                patch.object(HISTORY.subprocess, "run",
+                             side_effect=subprocess.TimeoutExpired(command, HISTORY.GITLEAKS_TIMEOUT_SECONDS)) as scan, \
+                patch("sys.stderr", new=io.StringIO()) as stderr:
+            self.assertEqual(
+                HISTORY.scan_history(self.root, "a" * 40, "b" * 40, self.root / "report.json"), 124
+            )
+        self.assertEqual(scan.call_args.kwargs["timeout"], HISTORY.GITLEAKS_TIMEOUT_SECONDS)
+        self.assertIn("Gitleaks history scan exceeded 300s", stderr.getvalue())
 
     def test_missing_ci_baseline_fails_closed(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}, clear=True), \

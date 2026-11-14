@@ -18,6 +18,8 @@
 #import <CoreFoundation/CoreFoundation.h>
 
 #include <dlfcn.h>
+#include <climits>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -301,6 +303,16 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 static BOOL ARCInfoBool(id value) {
   return [value respondsToSelector:@selector(boolValue)] && [value boolValue];
+}
+
+static BOOL ARCReadJSONInteger(id value, int *result) {
+  if (![value isKindOfClass:NSNumber.class] ||
+      CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) return NO;
+  double number = [value doubleValue];
+  if (!std::isfinite(number) || std::trunc(number) != number ||
+      number < INT_MIN || number > INT_MAX) return NO;
+  *result = static_cast<int>(number);
+  return YES;
 }
 
 static BOOL ARCEnvironmentRequestsMockKeychain(void) {
@@ -646,10 +658,17 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     id nativeRequestID = payload[@"requestID"];
     NSString *token = [nativeRequestID isKindOfClass:NSString.class]
         ? _shaarFindTokens[nativeRequestID] : nil;
-    if (token && [_shaarFindRequests[tabID] isEqualToString:nativeRequestID] &&
+    int schemaVersion = 0, matchCount = 0, activeMatch = 0;
+    id finalValue = payload[@"final"];
+    if ([payload[@"kind"] isEqual:@"result"] &&
+        ARCReadJSONInteger(payload[@"schemaVersion"], &schemaVersion) && schemaVersion == 1 &&
+        ARCReadJSONInteger(payload[@"matchCount"], &matchCount) && matchCount >= 0 &&
+        ARCReadJSONInteger(payload[@"activeMatch"], &activeMatch) && activeMatch >= -1 &&
+        [finalValue isKindOfClass:NSNumber.class] &&
+        CFGetTypeID((__bridge CFTypeRef)finalValue) == CFBooleanGetTypeID() &&
+        token && [_shaarFindRequests[tabID] isEqualToString:nativeRequestID] &&
         _shaarTabs[tabID] && self.onFindResult)
-      self.onFindResult(tabID, token, [payload[@"matchCount"] intValue],
-                        [payload[@"activeMatch"] intValue], [payload[@"final"] boolValue]);
+      self.onFindResult(tabID, token, matchCount, activeMatch, [finalValue boolValue]);
     return;
   }
   if (event->kind == SHAAR_EVENT_BOOKMARK && !event->session_id.size &&

@@ -33,6 +33,10 @@ final class ProfileExtensionsSectionTests: XCTestCase {
     XCTAssertEqual(ExtensionDetails.detailsHeadingTraits, .isHeader)
   }
 
+  func testExtensionPopupNameIsVoiceOverHeading() {
+    XCTAssertTrue(ExtensionToolbar.popupTitleTraits.contains(.isHeader))
+  }
+
   func testProfileNamesFollowShaarsSelectedLanguageOrder() {
     let english = UUID()
     let hebrew = UUID()

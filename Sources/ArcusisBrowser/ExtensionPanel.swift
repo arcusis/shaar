@@ -40,6 +40,8 @@ struct ExtensionToolbar: View {
       arguments: [.string(profileName)])
   }
 
+  static let popupTitleTraits: AccessibilityTraits = .isHeader
+
   @Bindable var engine: BrowserEngine
   let store: BrowserStore
 
@@ -83,7 +85,10 @@ struct ExtensionToolbar: View {
       case .popup(let context):
         VStack(spacing: 0) {
           HStack {
-            Text(context.name).font(.headline).lineLimit(1)
+            Text(context.name)
+              .font(.headline)
+              .lineLimit(1)
+              .accessibilityAddTraits(Self.popupTitleTraits)
             Spacer()
             Button {
               engine.extensionPanel = nil

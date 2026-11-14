@@ -5,6 +5,7 @@
     "Next Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Next Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הבא"}}}},
     "Browser sidebar": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Browser sidebar"}},"he":{"stringUnit":{"state":"translated","value":"סרגל הצד של הדפדפן"}}}},
     "Enter Full Screen": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Enter Full Screen"}},"he":{"stringUnit":{"state":"translated","value":"כניסה למסך מלא"}}}},
+    "Emoji & Symbols": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Emoji & Symbols"}},"he":{"stringUnit":{"state":"translated","value":"אימוג׳י וסמלים"}}}},
     "Paste and Match Style": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Paste and Match Style"}},"he":{"stringUnit":{"state":"translated","value":"הדבקה והתאמת סגנון"}}}},
     "Could not complete the browser window action. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not complete the browser window action. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להשלים את הפעולה בחלון הדפדפן. כדאי לנסות שוב."}}}},
     "Could not complete the site action. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not complete the site action. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להשלים את הפעולה באתר. כדאי לנסות שוב."}}}},
@@ -2469,6 +2470,24 @@
             "value": "ביצוע מחדש"
           }
         }
+      }
+    },
+    "Actual Size": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Actual Size" } },
+        "he": { "stringUnit": { "state": "translated", "value": "גודל בפועל" } }
+      }
+    },
+    "Zoom In": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Zoom In" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הגדלה" } }
+      }
+    },
+    "Zoom Out": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Zoom Out" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הקטנה" } }
       }
     },
     "Reload": {

@@ -303,6 +303,7 @@ final class PrivateBrowserHost {
     case .addFavorite: store.canFavoriteCurrentPage
     case .nextSpace, .previousSpace: store.canCycleSpace
     case .reload, .hardReload: store.canReloadCurrentPage
+    case .zoomIn, .zoomOut, .actualSize: store.session.selectedPage != nil
     case .find: store.canFindCurrentPage
     case .findNext, .findPrevious: store.pageFind?.canMove == true
     case .sharePage:
@@ -357,6 +358,12 @@ final class PrivateBrowserHost {
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: _ = store.reloadCurrentPage()
     case .hardReload: _ = store.reloadCurrentPage(.bypassingCache)
+    case .zoomIn, .zoomOut, .actualSize:
+      _ = PageZoomMenuRouter.route(command, focusedTabID: store.session.selectedPage?.tab.id) {
+        action, tab in
+        runtime.performPrivatePageZoomAction(
+          action, tabID: tab.uuidString, windowID: owner.windowID, contextID: owner.contextID)
+      }
     case .sharePage:
       if let url = NativeBrowserHost.shareURL(for: store) {
         NativeBrowserHost.presentSharePicker(for: url, in: owner.window)

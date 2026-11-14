@@ -89,6 +89,8 @@ source_set("engine") {
     "find/shaar_find.cc",
     "find/shaar_find.h",
     "find/shaar_find_lifecycle_adapter.cc",
+    "find/shaar_page_zoom.cc",
+    "find/shaar_page_zoom.h",
     # END find
     # BEGIN devtools
     "devtools/shaar_devtools.cc",
@@ -172,6 +174,7 @@ source_set("engine") {
     # END site_data
     # BEGIN find
     "//components/find_in_page",
+    "//components/zoom",
     # END find
     # BEGIN storage_keychain
     "//components/os_crypt/common:keychain_password_mac",
@@ -319,7 +322,7 @@ test("shaar_extensions_unittests") {
 # END extensions
 # BEGIN find
 test("shaar_find_unittests") {
-  sources = [ "find/shaar_find_unittest.cc" ]
+  sources = [ "find/shaar_find_unittest.cc", "find/shaar_page_zoom_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END find
@@ -366,6 +369,7 @@ test("shaar_layer_unittests") {
     "downloads/shaar_downloads_unittest.cc",
     "extensions/shaar_extensions_unittest.cc",
     "find/shaar_find_unittest.cc",
+    "find/shaar_page_zoom_unittest.cc",
     "history/shaar_history_unittest.cc",
     "lifecycle/shaar_module_registry_unittest.cc",
     "login/shaar_login_unittest.cc",

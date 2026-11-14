@@ -105,6 +105,9 @@ struct ShortcutCatalog {
     case .findPrevious: ("g", [.command, .shift])
     case .sidebar: ("s", .command)
     case .reload: ("r", .command)
+    case .zoomIn: ("=", .command)
+    case .zoomOut: ("-", .command)
+    case .actualSize: ("0", .command)
     case .hardReload: ("r", [.command, .shift])
     case .developerTools: ("i", [.command, .option])
     // The View menu has one Developer Tools item. This chord stays on the key

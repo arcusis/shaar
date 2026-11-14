@@ -9,4 +9,6 @@ extern "C" void shaar_find_register(ShaarModuleRegistry* registry) {
     return;
   registry->Register(SHAAR_OP_TAB_FIND, SHAAR_OP_TAB_STOP_FIND,
                      &HandleFindOperation);
+  registry->Register(SHAAR_OP_TAB_ZOOM, SHAAR_OP_TAB_ZOOM,
+                     &HandlePageZoomOperation);
 }

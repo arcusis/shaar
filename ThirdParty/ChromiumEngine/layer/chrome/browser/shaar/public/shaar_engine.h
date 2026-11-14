@@ -83,7 +83,10 @@ typedef enum {
   // BEGIN save_prompts
   SHAAR_EVENT_SAVE_PROMPT = 16,
   // END save_prompts
-  SHAAR_EVENT_JAVASCRIPT_DIALOG = 17
+  SHAAR_EVENT_JAVASCRIPT_DIALOG = 17,
+  // BEGIN page_zoom
+  SHAAR_EVENT_ZOOM = 18
+  // END page_zoom
 } shaar_event_kind;
 typedef struct {
   uint32_t size;
@@ -190,6 +193,7 @@ typedef enum {
   // BEGIN find
   SHAAR_OP_TAB_FIND = 900,
   SHAAR_OP_TAB_STOP_FIND = 901,
+  SHAAR_OP_TAB_ZOOM = 902,
   // END find
 
   // BEGIN devtools operation IDs.

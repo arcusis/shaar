@@ -246,6 +246,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID mode:(ARCPageReloadMode)mode;
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
               text:(NSString *)text forward:(BOOL)forward;
+- (BOOL)performPageZoomAction:(NSString *)action tabID:(NSString *)tabID
+                     profileID:(NSString *)profileID;
 - (void)stopFindingInTabID:(NSString *)tabID;
 - (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
             completion:(void (^)(NSError * _Nullable))completion;
@@ -466,6 +468,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
              requestID:(NSString *)requestID text:(NSString *)text forward:(BOOL)forward;
 - (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
+- (BOOL)performPrivatePageZoomAction:(NSString *)action tabID:(NSString *)tabID
+                            windowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSWindow *)windowForPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSView *)hostViewForPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSView *)viewForPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;

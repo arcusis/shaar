@@ -316,6 +316,14 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
       operation, payload, ^(NSDictionary *reply) {});
 }
 
+- (BOOL)performPrivatePageZoomAction:(NSString *)action tabID:(NSString *)tabID
+                            windowID:(NSString *)windowID contextID:(NSString *)contextID {
+  if (![@[@"get", @"in", @"out", @"reset"] containsObject:action]) return NO;
+  return [self privateTabOperation:SHAAR_OP_TAB_ZOOM tabID:tabID windowID:windowID
+                         contextID:contextID
+                           payload:@{@"schemaVersion": @1, @"action": action}];
+}
+
 - (void)probePrivateTabLifecycleForTabID:(NSString *)tabID windowID:(NSString *)windowID
                               contextID:(NSString *)contextID
                              completion:(void (^)(BOOL))completion {

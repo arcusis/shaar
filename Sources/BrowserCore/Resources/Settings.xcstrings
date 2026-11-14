@@ -12,6 +12,7 @@
     "Could not set this app as the default browser.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not set this app as the default browser."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להגדיר את האפליקציה כדפדפן ברירת המחדל."}}}},
     "Share Page…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Share Page…"}},"he":{"stringUnit":{"state":"translated","value":"שיתוף העמוד…"}}}},
     "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
+    "Open File…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open File…"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קובץ…"}}}},
     "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},
     "Developer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer"}},"he":{"stringUnit":{"state":"translated","value":"פיתוח"}}}},
     "Sleeping tabs": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sleeping tabs"}},"he":{"stringUnit":{"state":"translated","value":"לשוניות רדומות"}}}},

@@ -384,7 +384,6 @@ struct LibraryDownloadsView: View {
   static func fileType(for url: URL?, language: BrowserLanguage) -> String {
     let fallback = BrowserLocalization.string("File", table: "Panels", language: language)
     guard let url, let type = UTType(filenameExtension: url.pathExtension) else { return fallback }
-    guard language.resolved == .hebrew else { return type.localizedDescription ?? fallback }
 
     let template: String
     if type.conforms(to: .image) {

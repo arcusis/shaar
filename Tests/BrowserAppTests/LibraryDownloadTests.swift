@@ -185,6 +185,19 @@ struct LibraryDownloadTests {
     #expect(readable("bundle.zip") == "ארכיון ZIP")
     #expect(
       LibraryDownloadsView.fileType(for: nil, language: .hebrew) == "קובץ")
+    #expect(
+      LibraryDownloadsView.fileType(for: URL(filePath: "/tmp/report.pdf"), language: .english)
+        == "PDF document")
+    #expect(
+      LibraryDownloadsView.fileType(for: URL(filePath: "/tmp/photo.png"), language: .english)
+        == "PNG image")
+    #expect(
+      LibraryDownloadsView.fileType(for: URL(filePath: "/tmp/clip.mp4"), language: .english)
+        == "MP4 video")
+    #expect(
+      LibraryDownloadsView.fileType(for: URL(filePath: "/tmp/bundle.zip"), language: .english)
+        == "ZIP archive")
+    #expect(LibraryDownloadsView.fileType(for: nil, language: .english) == "File")
   }
 
   @Test func quickLookSelectionRequiresTheCurrentReadableDownload() throws {

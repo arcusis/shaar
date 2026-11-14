@@ -93,13 +93,54 @@ struct LibraryDownloadTests {
       }, profileID: profile)
 
     let items = model.items(in: profile)
-    let start = ContinuousClock.now
-    var count = 0
-    for _ in 0..<10 {
-      count += LibraryDownloadQuery.dateGroups(items).reduce(0) { $0 + $1.items.count }
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let calendar = Calendar(identifier: .gregorian)
+    let expected = legacyDateGroups(items, calendar: calendar, now: now)
+    let actual = LibraryDownloadQuery.dateGroups(items, calendar: calendar, now: now)
+    let actualDates = actual.map(\.date)
+    let expectedDates = expected.map(\.date)
+    let actualIDs = actual.map { $0.items.map(\.id) }
+    let expectedIDs = expected.map { $0.items.map(\.id) }
+    #expect(actualDates == expectedDates)
+    #expect(actualIDs == expectedIDs)
+
+    _ = legacyDateGroups(items, calendar: calendar, now: now)
+    _ = LibraryDownloadQuery.dateGroups(items, calendar: calendar, now: now)
+    var beforeSamples: [Duration] = []
+    var afterSamples: [Duration] = []
+    for _ in 0..<5 {
+      let beforeStart = ContinuousClock.now
+      for _ in 0..<10 { _ = legacyDateGroups(items, calendar: calendar, now: now) }
+      beforeSamples.append(beforeStart.duration(to: .now))
+      let afterStart = ContinuousClock.now
+      for _ in 0..<10 {
+        _ = LibraryDownloadQuery.dateGroups(items, calendar: calendar, now: now)
+      }
+      afterSamples.append(afterStart.duration(to: .now))
     }
-    print("downloadDateGroupsBenchmark: \(start.duration(to: .now))")
-    #expect(count == 50_000)
+    let before = beforeSamples.sorted()[beforeSamples.count / 2]
+    let after = afterSamples.sorted()[afterSamples.count / 2]
+    print("downloadDateGroupsBenchmark: before=\(before), after=\(after)")
+    #expect(after < before * 0.75)
+  }
+
+  private func legacyDateGroups(
+    _ items: [BrowserDownload], calendar: Calendar, now: Date
+  ) -> [LibraryDownloadDateGroup] {
+    let sorted = items.sorted {
+      $0.startTime == $1.startTime ? $0.id < $1.id : $0.startTime > $1.startTime
+    }
+    var groupedItems: [(date: Date, label: String, items: [BrowserDownload])] = []
+    for item in sorted {
+      let date = calendar.startOfDay(for: Date(timeIntervalSince1970: item.startTime))
+      let label = LibraryDownloadQuery.relativeDay(date, now: now, calendar: calendar)
+      if groupedItems.last?.label == label {
+        groupedItems[groupedItems.count - 1].items.append(item)
+      } else {
+        groupedItems.append((date: date, label: label, items: [item]))
+      }
+    }
+    return groupedItems.map { LibraryDownloadDateGroup(date: $0.date, items: $0.items) }
   }
 
   @Test func downloadSourceSubtitleUsesSelectedLanguage() {

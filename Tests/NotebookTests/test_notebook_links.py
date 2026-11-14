@@ -52,6 +52,14 @@ class NotebookLinksTests(unittest.TestCase):
         for name in ("One", "Two", "Three", "Four"):
             self.assertIn(f"Note not linked from any index: {name}.md", result.stderr)
 
+    def test_unclosed_html_comment_does_not_hide_orphan(self):
+        result = self.run_check({
+            "_INDEX_Main.md": "<!-- [[Note]]",
+            "Note.md": "# Note",
+        })
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Note not linked from any index: Note.md", result.stderr)
+
     def test_wrong_case_or_missing_target_does_not_count(self):
         result = self.run_check({"_INDEX_Main.md": "[[note]]\n[[Missing]]", "Note.md": ""})
         self.assertEqual(result.returncode, 1)

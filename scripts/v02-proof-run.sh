@@ -54,6 +54,27 @@ run_engine_fixture() {
   SHAAR_VERIFICATION_APP="$PWD/build/Shaar Verification.app" \
     python3 scripts/engine_fixture.py "$@"
 }
+run_device_chooser_check() {
+  local receipt="$run_root/device-choosers.json"
+  python3 scripts/test-device-choosers.py --app "$verification_app" >"$receipt" 2>&1 || true
+  cat "$receipt"
+  python3 - "$receipt" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+raw = Path(sys.argv[1]).read_text().lstrip()
+receipt, _ = json.JSONDecoder().raw_decode(raw)
+rows = {row.get("transport"): row for row in receipt.get("rows", [])}
+required = ("serial", "bluetooth")
+failed = [transport for transport in required
+          if transport not in rows or rows[transport].get("passed") is not True]
+if failed or receipt.get("newCrashes"):
+    print(json.dumps({"failedNoHangRows": failed,
+                      "newCrashes": receipt.get("newCrashes", [])}, indent=2))
+    raise SystemExit(1)
+PY
+}
 run_platform_parity() {
   local receipt="$run_root/platform-parity.json"
   python3 scripts/test-platform-parity.py --app "$verification_app" --receipt "$receipt" || return
@@ -63,8 +84,15 @@ import sys
 from pathlib import Path
 
 receipt = json.loads(Path(sys.argv[1]).read_text())
-items = {"Protocol handlers", "Downloads", "Extensions (MV3) basics",
-         "Media Session", "Picture in Picture"}
+# Bluetooth and Serial are gated by the dedicated no-hang probe below; parity
+# also requires a visible chooser, which is not possible without a paired device.
+items = {
+    "Camera permission", "Microphone permission", "Geolocation permission",
+    "Notifications permission", "MIDI permission", "Autofill addresses",
+    "Autofill cards", "Autofill passwords", "EME/Widevine",
+    "Picture in Picture", "Media Session", "Protocol handlers", "Downloads",
+    "Extensions (MV3) basics", "WebAuthn/passkeys",
+}
 rows = {row.get("item"): row.get("result") for row in receipt.get("rows", [])}
 missing = sorted(items - rows.keys())
 failed = sorted(item for item in items if rows.get(item) != "pass")
@@ -94,7 +122,9 @@ if [[ -x "$verification_app/Contents/MacOS/ShaarVerification" ]]; then
   run_step 'Tab/window adoption' python3 scripts/test-tab-adoption-shipping.py \
     --app "$verification_app" --receipt "$run_root/tab-adoption.json"
   run_step 'Bookmarks/history and browser import' run_engine_fixture
+  run_step 'Chrome Web Store extension install' run_engine_fixture --bitwarden
   run_step 'Local MV3 extension install' run_engine_fixture --local-extension-install
+  run_step 'Bluetooth and Serial chooser no-hang' run_device_chooser_check
   run_step 'Private window isolation' run_engine_fixture --private-window
   run_step 'Private multi-tab isolation' run_engine_fixture --private-multitab
   run_step 'Basic browsing' run_engine_fixture --basic-browsing
@@ -105,16 +135,17 @@ if [[ -x "$verification_app/Contents/MacOS/ShaarVerification" ]]; then
     --app "$verification_app" --evidence "$run_root/permission-prompts"
   run_step 'Save prompts' python3 scripts/test-shaar-save-prompt.py \
     --app "$verification_app" --receipt "$run_root/save-prompts.json"
-  run_step 'Platform parity, protocol, downloads, MV3 and media' run_platform_parity
+  run_step 'Platform parity for v0.2 web items' run_platform_parity
   run_step 'Media and picture-in-picture' python3 scripts/test-shaar-media.py \
     --app "$verification_app" --receipt "$run_root/media.json"
 else
   for label in 'Browsing, dialogs, Basic auth, file upload, downloads, restore' \
     'Browsing QA, dialogs, downloads, session restore' 'Tab/window adoption' \
-    'Bookmarks/history and browser import' 'Local MV3 extension install' \
+    'Bookmarks/history and browser import' 'Chrome Web Store extension install' \
+    'Local MV3 extension install' 'Bluetooth and Serial chooser no-hang' \
     'Private window isolation' 'Private multi-tab isolation' 'Basic browsing' \
     'Reload and closed-window recovery' 'Session recovery' 'External protocol handler consent' \
-    'Permission and protocol prompts' 'Save prompts' 'Platform parity, protocol and downloads' \
+    'Permission and protocol prompts' 'Save prompts' 'Platform parity for v0.2 web items' \
     'Media and picture-in-picture'; do
     record "$label" SKIP 'verification bundle executable unavailable'
   done

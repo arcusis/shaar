@@ -42,12 +42,12 @@ struct ProfileExtensionsSection: View {
     }
   }
 
-  static func toggleLabel(
-    extensionName: String, profileName: String, enabled: Bool,
+  static func toggleAccessibilityLabel(
+    extensionName: String, profileName: String,
     language: BrowserLanguage = .currentLaunchLanguage
   ) -> String {
     BrowserLocalization.format(
-      enabled ? "Disable %@ for %@" : "Enable %@ for %@", table: "Settings", language: language,
+      "Extension %@ for profile %@", table: "Settings", language: language,
       arguments: [.string(extensionName), .string(profileName)])
   }
 
@@ -145,8 +145,8 @@ private struct SharedExtensionSettingsSection: View {
                       })
                   )
                   .accessibilityLabel(
-                    ProfileExtensionsSection.toggleLabel(
-                      extensionName: row.name, profileName: state.name, enabled: enabled))
+                    ProfileExtensionsSection.toggleAccessibilityLabel(
+                      extensionName: row.name, profileName: state.name))
                 } else if state.failed {
                   HStack {
                     Text(state.name)

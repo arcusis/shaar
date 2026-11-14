@@ -161,6 +161,22 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn('SettingsL10n.string("Could not clear history. Try again.")', source)
         self.assertNotIn('SettingsL10n.format("Could not clear history: %"', source)
+
+    def test_extension_execution_failure_uses_localized_recovery_copy(self):
+        key = "Could not run the extension. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן להפעיל את התוסף. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('PanelsL10n.string("Could not run the extension. Try again.")', source)
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Fixture.xcstrings"
@@ -481,6 +497,20 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], translation)
                 self.assertIn(f'InspectorL10n.string("{key}")', source)
+    def test_native_menu_title_is_present_in_settings_fallback_catalog(self):
+        shell = json.loads((ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(encoding="utf-8"))
+        settings = json.loads((ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(encoding="utf-8"))
+        self.assertEqual(
+            settings["strings"]["Show All History"]["localizations"]["he"]["stringUnit"]["value"],
+            shell["strings"]["Show All History"]["localizations"]["he"]["stringUnit"]["value"],
+        )
+    def test_workspace_save_failure_uses_localized_recovery_copy(self):
+        key = "Window changes could not be saved. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן לשמור את השינויים בחלון. נסו שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserWorkspaceStore.swift").read_text(encoding="utf-8")
+        self.assertIn('ShellL10n.string("Window changes could not be saved. Try again.")', source)
+        self.assertNotIn('ShellL10n.format("Window changes could not be saved. %@"', source)
 
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"
@@ -556,6 +586,12 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertEqual(catalog[key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן להשלים את הבקשה מכלי הדף. כדאי לנסות שוב.")
         source = (ROOT / "Sources/ArcusisBrowser/InspectorPageToolsModel.swift").read_text(encoding="utf-8")
         self.assertEqual(source.count("Self.failureMessage(for: error)"), 4)
+    def test_inspector_audit_backend_failures_use_hebrew_recovery_copy(self):
+        key = "Could not complete the page audit. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Inspector.xcstrings").read_text(encoding="utf-8"))["strings"]
+        self.assertEqual(catalog[key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן להשלים את בדיקת הדף. כדאי לנסות שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorAudit.swift").read_text(encoding="utf-8")
+        self.assertIn("Self.failureMessage(for: error)", source)
 
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:

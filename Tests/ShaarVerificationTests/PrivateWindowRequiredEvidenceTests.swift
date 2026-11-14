@@ -27,6 +27,12 @@ import Testing
     #expect(!PrivateWindowProbe.evidencePassed(checks: missing, expectedFailures: [:]))
   }
 
+  @Test func privateHostMustRemainAttachedAfterTabClose() {
+    #expect(
+      PrivateWindowProbe.checkNames.contains(
+        "productPrivateHostRemainsAttachedAfterTabClose"))
+  }
+
   @Test func onlyTheDocumentedSecondPrivateTabFailureIsAllowed() {
     var checks = completeChecks()
     checks["productSecondPrivateTabRenders"] = false

@@ -254,15 +254,19 @@ import Foundation
 
     let slowStarted = Date()
     let reloadPath = "/slow-reload/\(UUID().uuidString)"
-    guard context.engine.navigateCurrentPage(to: url(base, path: reloadPath)) else {
+    let reloadTarget = url(base, path: reloadPath, query: "reloadTarget=1")
+    guard context.engine.navigateCurrentPage(to: reloadTarget) else {
       rows.append(row("churn-reload-during-load", "fail", "The slow navigation was rejected."))
       return rows
     }
     let inFlight = await until(attempts: 40, condition: { pageIsLoading(context) })
     let stillLoading = pageIsLoading(context)
     let reloaded = inFlight && stillLoading && context.store.reloadCurrentPage()
-    let settledSlow = await until(
-      attempts: 200, condition: { settled(context, path: reloadPath) })
+    let settledSlow = await until(attempts: 200) {
+      settled(context, path: reloadPath)
+        && matchesReloadTarget(
+          context.store.session.selectedPage?.tab.url.absoluteString, expected: reloadTarget)
+    }
     let reloadRequests = await evaluate(
       runtime, tab: current,
       script: "document.documentElement.dataset.reloadRequest || ''")
@@ -278,9 +282,10 @@ import Foundation
     let backPath = await until(attempts: 100, condition: { settled(context, path: "/nav/1") })
       ? context.store.session.selectedPage?.tab.url.path : nil
     runtime.goForward(inTabID: current.uuidString)
-    let forwardPath = await until(attempts: 100, condition: { settled(context, path: "/slow-reload") })
+    let forwardPath = await until(attempts: 100, condition: { settled(context, path: reloadPath) })
       ? context.store.session.selectedPage?.tab.url.path : nil
-    let reloadHistoryOK = reloadHistoryPreserved(backPath: backPath, forwardPath: forwardPath)
+    let reloadHistoryOK = reloadHistoryPreserved(
+      backPath: backPath, forwardPath: forwardPath, expectedReloadPath: reloadPath)
     rows.append(
       row(
         "churn-reload-history", reloadHistoryOK ? "pass" : "fail",
@@ -556,10 +561,24 @@ import Foundation
     let deliveredScroll = await untilReady(attempts: 20) {
       (wholeNumber(await evaluate(runtime, tab: scrollID, script: "window.__scrollEvents||0")) ?? 0) > 0
     }
+    var reachedLoadThreshold = false
+    if deliveredScroll {
+      reachedLoadThreshold = await untilReady(attempts: 20) {
+        (wholeNumber(await evaluate(
+          runtime, tab: scrollID,
+          script: "window.__scrollLoadThresholdReached?1:0"
+        )) ?? 0) == 1
+      }
+    }
     if !deliveredScroll {
       rows.append(row(
         "heavy-scroll", "blocked",
         "The hidden scroll did not deliver a scroll event to the page; row growth was not attributable."
+      ))
+    } else if !reachedLoadThreshold {
+      rows.append(row(
+        "heavy-scroll", "blocked",
+        "A page scroll event arrived, but the feed did not reach its lazy-load threshold."
       ))
     } else {
       var after = before
@@ -937,6 +956,11 @@ import Foundation
     return context.engine.pages[id]?.loading == false && context.engine.liveTabs.contains(id)
   }
 
+  static func matchesReloadTarget(_ value: String?, expected: URL) -> Bool {
+    guard let value, let actual = URL(string: value) else { return false }
+    return actual == expected
+  }
+
   private static func tabCount(_ context: NativeBrowserContext, space: UUID) -> Int {
     context.store.session.spaces.first { $0.id == space }?.tabs.count ?? 0
   }
@@ -985,8 +1009,10 @@ import Foundation
     return requestCount >= 2
   }
 
-  static func reloadHistoryPreserved(backPath: String?, forwardPath: String?) -> Bool {
-    backPath == "/nav/1" && forwardPath == "/slow-reload"
+  static func reloadHistoryPreserved(
+    backPath: String?, forwardPath: String?, expectedReloadPath: String
+  ) -> Bool {
+    backPath == "/nav/1" && forwardPath == expectedReloadPath
   }
 
   static func isLoopbackFixtureURL(_ value: URL?) -> Bool {

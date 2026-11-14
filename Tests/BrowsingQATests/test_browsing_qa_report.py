@@ -90,6 +90,16 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertIn('script: "window.__scrollEvents||0"', source)
         self.assertIn('row(\n        "heavy-scroll", "blocked",', source)
 
+    def test_heavy_scroll_requires_lazy_load_threshold_before_attributing_no_growth(self):
+        fixture = (ROOT / "scripts/test-browsing-qa.py").read_text()
+        source = (ROOT / "Sources/ShaarVerification/ShaarBrowsingQA.swift").read_text()
+        self.assertIn("window.__scrollLoadThresholdReached=false", fixture)
+        self.assertIn(
+            "window.__scrollLoadThresholdReached=true;if(feed.children.length<200)add(100)",
+            fixture)
+        self.assertIn('script: "window.__scrollLoadThresholdReached?1:0"', source)
+        self.assertIn("the feed did not reach its lazy-load threshold", source)
+
     def test_fifty_tabs_always_run(self):
         allowed, reason = PROBE.allow_overload(50, None, None, None)
         self.assertTrue(allowed)
@@ -237,7 +247,7 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => source += chunk);
 process.stdin.on('end', () => {
   const feed = {
-    children: [], listeners: {},
+    children: [], listeners: {}, scrollTop: 80, clientHeight: 100, scrollHeight: 180,
     appendChild(row) { this.children.push(row); },
     addEventListener(name, callback) { this.listeners[name] = callback; },
   };

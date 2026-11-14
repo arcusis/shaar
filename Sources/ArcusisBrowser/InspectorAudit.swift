@@ -164,8 +164,15 @@ final class InspectorAuditModel {
       return
     } catch {
       guard !Task.isCancelled, inspector.documentGeneration == generation else { return }
-      failure = InspectorL10n.display(error.localizedDescription)
+      failure = Self.failureMessage(for: error)
     }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return InspectorL10n.display(error.localizedDescription)
+    }
+    return InspectorL10n.string("Could not complete the page audit. Try again.")
   }
 
   private func selectTarget(

@@ -239,7 +239,10 @@ struct BrowserSidebar: View {
 
   private func tabList(_ space: BrowserSpace) -> some View {
     let tabIndex = SidebarTabIndex(tabs: space.tabs)
+    let folderRowIndex = SidebarFolderRowIndex(
+      space: space, activeFolderID: store.session.selectedPage?.tab.folderID)
     let folderSiblingIndex = SidebarFolderSiblingIndex(folders: space.folders)
+    let itemSections = space.sidebarItemSections()
     return ScrollViewReader { tabScroll in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
@@ -259,21 +262,22 @@ struct BrowserSidebar: View {
           }
           sectionDropTarget(
             pinned: true,
-            height: space.pinnedItems().isEmpty ? 8 : 12,
-            hint: space.pinnedItems().isEmpty
+            height: itemSections.pinned.isEmpty ? 8 : 12,
+            hint: itemSections.pinned.isEmpty
               ? ShellL10n.string("Drop to pin in this Space") : nil)
           if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil,
             folderDraft.editingFolderID == nil
           {
             folderDraftRow(depth: 0)
           }
-          ForEach(space.pinnedItems()) { item in
+          ForEach(itemSections.pinned) { item in
             switch item {
             case .folder(let folder, let depth):
               if folderDraft?.editingFolderID == folder.id {
                 folderDraftRow(depth: depth)
               } else {
-                folderRow(folder, depth: depth, siblingIndex: folderSiblingIndex)
+                folderRow(
+                  folder, depth: depth, index: folderRowIndex, siblingIndex: folderSiblingIndex)
               }
               if let folderDraft, folderDraft.editingFolderID == nil,
                 folderDraft.parentID == folder.id
@@ -357,13 +361,14 @@ struct BrowserSidebar: View {
             {
               folderDraftRow(depth: 0)
             }
-            ForEach(space.items(isPinned: false)) { item in
+            ForEach(itemSections.unpinned) { item in
               switch item {
               case .folder(let folder, let depth):
                 if folderDraft?.editingFolderID == folder.id {
                   folderDraftRow(depth: depth)
                 } else {
-                  folderRow(folder, depth: depth, siblingIndex: folderSiblingIndex)
+                  folderRow(
+                    folder, depth: depth, index: folderRowIndex, siblingIndex: folderSiblingIndex)
                 }
                 if let folderDraft, folderDraft.editingFolderID == nil,
                   folderDraft.parentID == folder.id
@@ -1110,13 +1115,11 @@ struct BrowserSidebar: View {
   }
 
   private func folderRow(
-    _ folder: BrowserFolder, depth: Int, siblingIndex: SidebarFolderSiblingIndex
+    _ folder: BrowserFolder, depth: Int, index: SidebarFolderRowIndex,
+    siblingIndex: SidebarFolderSiblingIndex
   ) -> some View {
     let space = store.session.selectedSpace
-    let active =
-      space.folderPath(to: store.session.selectedPage?.tab.folderID).contains {
-        $0.id == folder.id
-      }
+    let active = index.isActive(folder.id)
     let siblings = siblingIndex.siblings(of: folder)
     return Button {
       store.toggleFolder(folder.id, in: space.id)
@@ -1130,9 +1133,7 @@ struct BrowserSidebar: View {
         VStack(alignment: .leading, spacing: 2) {
           Text(folder.name).font(.system(size: 13, weight: active ? .semibold : .regular))
             .lineLimit(1)
-          if !space.tabs.contains(where: { $0.folderID == folder.id }),
-            !space.folders.contains(where: { $0.parentID == folder.id })
-          {
+          if !index.hasContents(folder.id) {
             ShellL10n.text("Drop tabs here").font(.system(size: 10)).foregroundStyle(.secondary)
           }
         }
@@ -1152,7 +1153,7 @@ struct BrowserSidebar: View {
           .string(ShellL10n.string(folder.isCollapsed ? "collapsed" : "expanded")),
         ])
     )
-    .help(folderLabel(folder.id, in: space))
+    .help(index.pathLabel(to: folder.id))
     .draggable(
       store.beginSidebarDrag(
         .folder(

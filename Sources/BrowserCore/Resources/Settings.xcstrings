@@ -113,6 +113,7 @@
     "Resetting site permissions…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "איפוס הרשאות האתר…"}}}},
     "Updating third-party cookie setting…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "עדכון הגדרת קובצי Cookie של צד שלישי…"}}}},
     "Site Permissions": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות אתרים"}}}},
+    "Loading site permissions": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "טעינת הרשאות אתרים"}}}},
     "Review site exceptions for this profile. Resetting removes saved choices and restores defaults. Wildcard and managed rules are not listed by this engine.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "אפשר לבדוק חריגות של אתרים בפרופיל הזה. האיפוס מסיר בחירות שמורות ומשחזר ברירות מחדל. המנוע הזה לא מציג כללי תווים כלליים וכללים מנוהלים."}}}},
     "Clear site data for this profile?": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לנקות את נתוני האתרים בפרופיל הזה?"}}}},
     "Clear cache for this profile?": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לנקות את המטמון בפרופיל הזה?"}}}},

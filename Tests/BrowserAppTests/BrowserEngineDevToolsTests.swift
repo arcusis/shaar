@@ -78,10 +78,10 @@ struct BrowserEngineDevToolsTests {
 
     engine.executeExtension("extension-id")
 
-    #expect(engine.notice == "Could not run this extension. Try again.")
+    #expect(engine.notice == "Could not run the extension. Try again.")
     #expect(
       BrowserLocalization.string(
-        "Could not run this extension. Try again.", table: "Shell", language: .hebrew)
+        "Could not run the extension. Try again.", table: "Panels", language: .hebrew)
         == "לא ניתן להפעיל את התוסף. כדאי לנסות שוב.")
   }
 

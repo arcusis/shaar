@@ -127,11 +127,15 @@ struct SiteDataTests {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
     let cookie =
-      #"{"name":"sid","value":"abc","domain":"example.com","path":"/","secure":true,"httpOnly":true,"sameSite":"Lax","expiresUnixMs":null,"partitionSite":null,"partitionCrossSite":null,"sourceScheme":2,"sourcePort":443}"#
+      #"{"name":"sid","value":"abc","domain":"example.com","path":"/","secure":true,"httpOnly":true,"sameSite":"Lax","expiresUnixMs":null,"partitionSite":"https://example.com","partitionCrossSite":true,"sourceScheme":2,"sourcePort":443}"#
     for invalid in [
       cookie.replacingOccurrences(of: #""sourcePort":443"#, with: #""sourcePort":true"#),
       cookie.replacingOccurrences(of: #""sourceScheme":2"#, with: #""sourceScheme":true"#),
       cookie.replacingOccurrences(of: #""expiresUnixMs":null"#, with: #""expiresUnixMs":true"#),
+      cookie.replacingOccurrences(of: #""secure":true"#, with: #""secure":1"#),
+      cookie.replacingOccurrences(of: #""httpOnly":true"#, with: #""httpOnly":0"#),
+      cookie.replacingOccurrences(
+        of: #""partitionCrossSite":true"#, with: #""partitionCrossSite":1"#),
     ] {
       await fake.setResponse("{\"schemaVersion\":1,\"cookies\":[\(invalid)]}")
       await #expect(throws: ShaarSiteDataError.malformedResponse) {

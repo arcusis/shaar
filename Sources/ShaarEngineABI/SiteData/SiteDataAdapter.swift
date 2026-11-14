@@ -63,7 +63,9 @@ public struct ShaarSiteCookie: Equatable, Sendable, Identifiable {
       let value = dictionary["value"] as? String, value.count <= 4096,
       let domain = dictionary["domain"] as? String, !domain.isEmpty, domain.count <= 256,
       let path = dictionary["path"] as? String, path.hasPrefix("/"), path.count <= 1024,
+      isJSONBoolean(dictionary["secure"]),
       let secure = dictionary["secure"] as? Bool,
+      isJSONBoolean(dictionary["httpOnly"]),
       let httpOnly = dictionary["httpOnly"] as? Bool,
       let rawSameSite = dictionary["sameSite"] as? String,
       let sameSite = ShaarCookieSameSite(rawValue: rawSameSite),
@@ -77,7 +79,7 @@ public struct ShaarSiteCookie: Equatable, Sendable, Identifiable {
     let crossSite = dictionary["partitionCrossSite"]
     guard expires is NSNull || (!isJSONBoolean(expires) && expires as? Int64 != nil),
       partition is NSNull || partition as? String != nil,
-      crossSite is NSNull || crossSite as? Bool != nil,
+      crossSite is NSNull || (isJSONBoolean(crossSite) && crossSite as? Bool != nil),
       (partition is NSNull) == (crossSite is NSNull)
     else { return nil }
     self.name = name

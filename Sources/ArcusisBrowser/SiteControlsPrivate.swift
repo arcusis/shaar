@@ -21,6 +21,16 @@ final class PrivateSiteControlsModel: Identifiable {
   @ObservationIgnored private var changeRevision = 0
   @ObservationIgnored private var readRevision = 0
 
+  static func loadFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string(
+      "Could not load private site cookie settings. Try again.", table: "Shell", language: language)
+  }
+
+  static func updateFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string(
+      "Could not update private site cookie settings. Try again.", table: "Shell", language: language)
+  }
+
   init?(
     tabID: String, windowID: String, contextID: String, url: URL,
     runtime: ARCChromiumRuntime
@@ -58,7 +68,7 @@ final class PrivateSiteControlsModel: Identifiable {
       guard !Task.isCancelled, currentRead == readRevision, currentChange == changeRevision else {
         return
       }
-      failure = error.localizedDescription
+      failure = Self.loadFailure()
     }
   }
 
@@ -81,7 +91,7 @@ final class PrivateSiteControlsModel: Identifiable {
         applied == value
         ? nil
         : ARCBridgeLocalizedString("The private cookie setting was not applied.")
-    } catch { failure = error.localizedDescription }
+    } catch { failure = Self.updateFailure() }
   }
 }
 

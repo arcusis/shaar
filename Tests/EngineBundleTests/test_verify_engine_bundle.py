@@ -340,6 +340,17 @@ class EngineBundleVerifierTests(unittest.TestCase):
         with self.assertRaises(verifier.VerifyError):
             verifier._atomic_report(self.archive, failed, [self.repo, self.archive, self.app])
 
+    def test_report_accepts_standard_macos_tmp_alias(self):
+        if not Path("/tmp").is_symlink():
+            self.skipTest("macOS /tmp alias is not present")
+        with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
+            report = Path(temporary) / "report.json"
+            result = {"verification": "passed"}
+
+            verifier._atomic_report(report, result, [self.repo, self.archive, self.app])
+
+            self.assertEqual(json.loads(report.read_text()), result)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -25,6 +25,10 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 SCRIPT_REPO = Path(__file__).resolve().parents[1]
+SYSTEM_DIRECTORY_SYMLINKS = {
+    Path("/var"): Path("/private/var"),
+    Path("/tmp"): Path("/private/tmp"),
+}
 MAX_PIN_BYTES = 64 * 1024
 MAX_METADATA_BYTES = 8 * 1024 * 1024
 MAX_TOOL_OUTPUT = 32 * 1024
@@ -545,8 +549,14 @@ def _atomic_report(path: Path, report: dict[str, Any], inputs: list[Path]) -> No
             continue
         except OSError as error:
             raise VerifyError("report_path_unsafe") from error
-        if stat.S_ISLNK(info.st_mode) and candidate != Path("/var"):
-            raise VerifyError("report_path_unsafe")
+        if stat.S_ISLNK(info.st_mode):
+            expected_target = SYSTEM_DIRECTORY_SYMLINKS.get(candidate)
+            try:
+                is_standard_alias = expected_target is not None and candidate.resolve(strict=True) == expected_target
+            except (OSError, RuntimeError):
+                is_standard_alias = False
+            if not is_standard_alias:
+                raise VerifyError("report_path_unsafe")
     if not absolute.parent.is_dir():
         raise VerifyError("report_path_unsafe")
     for source in inputs:

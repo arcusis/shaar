@@ -88,6 +88,23 @@ import Testing
         !PrivateMultiTabEvidence.liveShellAudit(
           try jsonObject(malformed), stage: "tab-0"))
     }
+
+    let blank: [String: Any] = [
+      "stage": "first-blank", "nativeViewPresent": 1,
+      "containerCount": 1, "layerBacked": [true], "attached": true,
+      "attachedInWindow": true, "nativeHidden": false, "rawWindowSibling": false,
+    ]
+    #expect(!PrivateMultiTabEvidence.blankShellAudit(try jsonObject(blank)))
+
+    var split = base
+    split["stage"] = "split"
+    split["containerCount"] = 2
+    split["layerBacked"] = [true, true]
+    split["attachedContainerCount"] = 2
+    split["attachedPagesInWindowCount"] = 2
+    split["visiblePagesInWindowCount"] = 2
+    split["attached"] = 1
+    #expect(!PrivateMultiTabEvidence.splitShellAudit(try jsonObject(split)))
   }
 
   @Test func liveTabCountsRejectBooleansFractionsAndStrings() {

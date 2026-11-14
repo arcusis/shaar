@@ -533,7 +533,7 @@ final class InspectorStylesModel {
   }
 
   private func applyStyleResult(_ name: String, arguments: [Any]) async {
-    guard let inspector else { return }
+    guard !Task.isCancelled, let inspector else { return }
     do {
       let literal = String(
         data: try JSONSerialization.data(withJSONObject: arguments), encoding: .utf8)!

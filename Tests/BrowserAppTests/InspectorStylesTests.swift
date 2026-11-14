@@ -142,6 +142,19 @@ import Testing
     #expect(inspector.styles.failure == nil)
   }
 
+  @Test func cancelledRuleAdditionDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let addition = Task { @MainActor in await inspector.styles.addRule(selector: ".new-rule") }
+    addition.cancel()
+    await addition.value
+
+    #expect(inspector.styles.failure == nil)
+  }
+
   @Test func nativeCSSPanelRendersGridFlexAndSourceLimitStates() async throws {
     let inspector = makeInspector()
     inspector.open()

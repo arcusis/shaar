@@ -11,6 +11,18 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum BitwardenProbeEvidence {
+  static func hasEnabledAddToChromeButton(_ buttons: [[String: Any]]) -> Bool {
+    buttons.contains { button in
+      guard let text = button["text"] as? String,
+        text.lowercased() == "add to chrome",
+        let disabled = button["disabled"] as? Bool
+      else { return false }
+      return !disabled
+    }
+  }
+}
+
 /// Opt-in public-store compatibility test in an empty disposable profile.
 @MainActor
 final class BitwardenProbe {
@@ -86,10 +98,7 @@ final class BitwardenProbe {
                 ({text:(b.innerText || b.getAttribute('aria-label') || '').trim(), disabled:b.disabled || b.getAttribute('aria-disabled')==='true'}))})
             """) ?? [:]
         if let buttons = page["buttons"] as? [[String: Any]],
-          buttons.contains(where: {
-            ($0["text"] as? String)?.lowercased() == "add to chrome"
-              && $0["disabled"] as? Bool != true
-          })
+          BitwardenProbeEvidence.hasEnabledAddToChromeButton(buttons)
         {
           buttonReady = true
           break

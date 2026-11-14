@@ -121,6 +121,7 @@ struct PinnedTabRecoveryTests {
     for _ in 0..<100 where runtime.opened.isEmpty {
       try await Task.sleep(for: .milliseconds(10))
     }
+    #expect(engine.notice == ShellL10n.string("This tab could not be opened. Try reloading it."))
     #expect(runtime.opened == [tab.id.uuidString])
     #expect(store.session.selectedPage?.tab == tab)
     #expect(store.session.closedTabs.isEmpty)

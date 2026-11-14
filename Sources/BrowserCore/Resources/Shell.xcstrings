@@ -469,6 +469,12 @@
         }
       }
     },
+    "This tab could not be opened. Try reloading it.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This tab could not be opened. Try reloading it." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את הלשונית. כדאי לנסות לטעון אותה מחדש." } }
+      }
+    },
     "This tab could not be reopened after its profile changed.": {
       "localizations": {
         "en": {

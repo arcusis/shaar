@@ -81,13 +81,18 @@ enum BrowserImportSQLite {
       defer { sqlite3_finalize(statement) }
 
       let columnCount = Int(sqlite3_column_count(statement))
+      let columnNames = (0..<columnCount).map { index -> String? in
+        guard let name = sqlite3_column_name(statement, Int32(index)) else { return nil }
+        return String(cString: name)
+      }
       var result: [[String: Value]] = []
       var stepResult = sqlite3_step(statement)
       while stepResult == SQLITE_ROW {
         guard result.count < limit else { throw BrowserImport.ImportError.tooManyRows }
         var row: [String: Value] = [:]
+        row.reserveCapacity(columnCount)
         for index in 0..<columnCount {
-          guard let name = sqlite3_column_name(statement, Int32(index)) else { continue }
+          guard let name = columnNames[index] else { continue }
           switch sqlite3_column_type(statement, Int32(index)) {
           case SQLITE_INTEGER:
             row[String(cString: name)] = .integer(sqlite3_column_int64(statement, Int32(index)))

@@ -193,6 +193,13 @@ def archive_matches(name, archive):
     return hashlib.sha256(data).hexdigest() == PINS[name].sha256
 
 
+def validate_archive_directory(archive_dir):
+    if archive_dir.is_symlink():
+        raise ValueError(f"archive cache directory must not be a symlink: {archive_dir}")
+    if archive_dir.exists() and not archive_dir.is_dir():
+        raise ValueError(f"archive cache path is not a directory: {archive_dir}")
+
+
 def install_pinned(name, archive_dir, download, source_label):
     validate_archive_directory(archive_dir)
     archive_dir.mkdir(parents=True, exist_ok=True)

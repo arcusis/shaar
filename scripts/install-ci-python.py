@@ -6,6 +6,7 @@
 """Install a pinned uv-managed Python, retrying transient release failures."""
 
 import argparse
+import re
 import subprocess
 import sys
 import time
@@ -30,6 +31,13 @@ RETRYABLE_MESSAGES = (
     "unexpected eof",
     "dns error",
 )
+PYTHON_VERSION = re.compile(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?\Z")
+
+
+def parse_python_version(value: str) -> str:
+    if not PYTHON_VERSION.fullmatch(value):
+        raise argparse.ArgumentTypeError("expected a pinned Python version like 3.13 or 3.13.2")
+    return value
 
 
 def failure_text(result) -> str:
@@ -88,7 +96,7 @@ def install_python(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("version", help="Pinned Python version passed to uv")
+    parser.add_argument("version", type=parse_python_version, help="Pinned Python version passed to uv")
     options = parser.parse_args()
     raise SystemExit(install_python(options.version))
 

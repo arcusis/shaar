@@ -360,7 +360,8 @@ final class PrivateProductHostProbe {
       windowID: first.windowID, contextID: first.contextID)
     let privateContainer = runtime.hostView(
       forPrivateWindowID: first.windowID, contextID: first.contextID)
-    var hostingRemainedAttached = Self.hostingViewIsAttached(first.hosting, to: privateContainer)
+    var hostingRemainedAttached = Self.hostingViewIsAttached(
+      first.hosting, to: privateContainer, in: first.window)
     checks["productHostOwnsPrivateNativeWindow"] =
       first.store.windowID == first.windowID
       && first.store.contextID == first.contextID
@@ -409,7 +410,7 @@ final class PrivateProductHostProbe {
     first.store.openTab()
     try await waitForTabs(first.store, count: 2)
     hostingRemainedAttached = hostingRemainedAttached
-      && Self.hostingViewIsAttached(first.hosting, to: privateContainer)
+      && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
     guard let secondTab = first.store.selectedTab else {
       throw PrivateWindowFailure("Private Command-T did not select transient tab.")
     }
@@ -419,10 +420,10 @@ final class PrivateProductHostProbe {
     if let firstTabID {
       first.store.selectTab(firstTabID)
       hostingRemainedAttached = hostingRemainedAttached
-        && Self.hostingViewIsAttached(first.hosting, to: privateContainer)
+        && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
       first.store.selectTab(secondTab.id)
       hostingRemainedAttached = hostingRemainedAttached
-        && Self.hostingViewIsAttached(first.hosting, to: privateContainer)
+        && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
     }
     first.store.navigate(firstPath)
     first.store.confirmHTTP(useHTTPS: false)
@@ -451,7 +452,7 @@ final class PrivateProductHostProbe {
     first.store.openTab()
     try await waitForTabs(first.store, count: 3)
     hostingRemainedAttached = hostingRemainedAttached
-      && Self.hostingViewIsAttached(first.hosting, to: privateContainer)
+      && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
     guard let commandTab = first.store.selectedTab else {
       throw PrivateWindowFailure("Private Command-T did not create a selected native tab.")
     }
@@ -475,7 +476,7 @@ final class PrivateProductHostProbe {
       let path = "private-product-\(runID.lowercased())-smoke-\(index + 1)"
       first.store.selectTab(tabID)
       hostingRemainedAttached = hostingRemainedAttached
-        && Self.hostingViewIsAttached(first.hosting, to: privateContainer)
+        && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
       first.store.navigate(fixture.appending(path: path).absoluteString)
       first.store.confirmHTTP(useHTTPS: false)
       try await waitForURL(first.store, tabID: tabID, contains: path)
@@ -543,9 +544,12 @@ final class PrivateProductHostProbe {
     owner.window.appearance = nil
   }
 
-  static func hostingViewIsAttached(_ hostingView: NSView, to container: NSView?) -> Bool {
+  static func hostingViewIsAttached(
+    _ hostingView: NSView, to container: NSView?, in window: NSWindow
+  ) -> Bool {
     guard let container else { return false }
-    return hostingView.superview === container
+    return hostingView.superview === container && container.window === window
+      && hostingView.window === window
   }
 
   private func typeInAddressField(

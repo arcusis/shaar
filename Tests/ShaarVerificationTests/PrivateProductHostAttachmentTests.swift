@@ -11,12 +11,20 @@ import Testing
   @Test func privateHostingViewMustRemainInItsNativeContainer() {
     let container = NSView()
     let hostingView = NSView()
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 300, height: 200),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = container
     container.addSubview(hostingView)
 
-    #expect(PrivateProductHostProbe.hostingViewIsAttached(hostingView, to: container))
+    #expect(PrivateProductHostProbe.hostingViewIsAttached(hostingView, to: container, in: window))
+
+    window.contentView = NSView()
+    #expect(!PrivateProductHostProbe.hostingViewIsAttached(hostingView, to: container, in: window))
 
     hostingView.removeFromSuperview()
-    #expect(!PrivateProductHostProbe.hostingViewIsAttached(hostingView, to: container))
-    #expect(!PrivateProductHostProbe.hostingViewIsAttached(hostingView, to: nil))
+    window.contentView = container
+    #expect(!PrivateProductHostProbe.hostingViewIsAttached(hostingView, to: container, in: window))
+    #expect(!PrivateProductHostProbe.hostingViewIsAttached(hostingView, to: nil, in: window))
   }
 }

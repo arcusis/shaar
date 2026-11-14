@@ -4,12 +4,17 @@
 
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct JavaScriptDialogTests {
+  @Test func dialogTitleIsVoiceOverHeading() {
+    #expect(JavaScriptDialogSheet.titleAccessibilityTraits == .isHeader)
+  }
+
   private func openedStore() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com/dialog")!))

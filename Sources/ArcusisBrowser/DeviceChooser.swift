@@ -133,7 +133,7 @@ enum DeviceChooserIntake {
       let eventPage = URL(string: pageText), eventPage == pageURL,
       let originText = payload["origin"] as? String,
       let origin = URL(string: originText),
-      origin.scheme == "http" || origin.scheme == "https",
+      isSerializedOrigin(origin),
       let originHost = origin.host(), !originHost.isEmpty,
       origin.user == nil, origin.password == nil,
       origin.port.map({ (0...65535).contains($0) }) ?? true,
@@ -193,6 +193,15 @@ enum DeviceChooserIntake {
       }
     }
     return String(scalars)
+  }
+
+  private static func isSerializedOrigin(_ origin: URL) -> Bool {
+    guard let components = URLComponents(url: origin, resolvingAgainstBaseURL: false),
+      components.scheme == "http" || components.scheme == "https",
+      components.host != nil, components.user == nil, components.password == nil,
+      components.query == nil, components.fragment == nil
+    else { return false }
+    return components.path.isEmpty || components.path == "/"
   }
 }
 

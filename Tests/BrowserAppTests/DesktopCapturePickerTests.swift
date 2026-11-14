@@ -32,6 +32,8 @@ struct DesktopCapturePickerTests {
         "frameID": "0123456789abcdef0123456789abcdef",
         "sourceTypes": ["tab"],
       ]))
+    store.rememberPermissionFrame(
+      tab.id, frameID: request.frameID, origin: request.requestingOrigin)
     #expect(store.requestDesktopCapture(request))
 
     var preflightCalls = 0

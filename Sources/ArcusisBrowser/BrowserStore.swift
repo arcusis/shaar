@@ -1077,12 +1077,12 @@ final class BrowserStore {
 
   @discardableResult
   func requestDesktopCapture(_ request: DesktopCaptureRequest) -> Bool {
-    if let frameID = permissionFrames[request.tabID], frameID != request.frameID {
-      return false
-    }
-    if let origin = permissionFrameOrigins[request.tabID], origin != request.requestingOrigin {
-      return false
-    }
+    guard request.matches(session),
+      permissionFrames[request.tabID] == nil || permissionFrames[request.tabID] == request.frameID,
+      permissionFrameOrigins[request.tabID] == nil
+        || permissionFrameOrigins[request.tabID] == request.requestingOrigin,
+      rendererFailures[request.tabID] == nil
+    else { return false }
     guard enqueueConsent(.desktopCapture(request)) else { return false }
     rememberPermissionFrame(
       request.tabID, frameID: request.frameID, origin: request.requestingOrigin)

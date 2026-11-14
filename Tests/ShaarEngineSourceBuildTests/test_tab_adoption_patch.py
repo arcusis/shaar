@@ -6,16 +6,38 @@
 
 from pathlib import Path
 import hashlib
+import importlib.util
 import json
+import sys
+import tempfile
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
 PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0047-shaar-tab-adoption.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
+SPEC = importlib.util.spec_from_file_location(
+    "test_tab_adoption_shipping", ROOT / "scripts/test-tab-adoption-shipping.py"
+)
+TAB_ADOPTION = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = TAB_ADOPTION
+SPEC.loader.exec_module(TAB_ADOPTION)
 
 
 class TabAdoptionPatchTests(unittest.TestCase):
+    def test_receipt_writer_rejects_symlink_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "outside.json"
+            target.write_text("preserve this", encoding="utf-8")
+            receipt = root / "receipt.json"
+            receipt.symlink_to(target)
+
+            with self.assertRaisesRegex(ValueError, "tab adoption receipt path must not be a symlink"):
+                TAB_ADOPTION.write_receipt(receipt, {"passed": True})
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
     def test_page_open_becomes_a_shaar_tab(self):
         source = PATCH.read_text()
         self.assertIn("SHAAR_ENGINE_ABI_MINOR 9u", source)

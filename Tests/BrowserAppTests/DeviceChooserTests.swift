@@ -379,6 +379,27 @@ struct DeviceChooserTests {
     #expect(store.deviceChooserRequests.isEmpty)
   }
 
+  @Test func queuedChooserCannotGrantBeforeItsSheetIsPresented() throws {
+    let store = try store()
+    let first = try #require(self.request(store, transport: "usb", id: "shown-first"))
+    let queued = try #require(
+      self.request(
+        store, transport: "usb", id: "queued-next",
+        options: [["index": 0, "name": "Adapter"]], canGrant: true))
+    var decided: Int??
+    store.onDeviceChooserDecision = { request, index in
+      if request.id == queued.id { decided = .some(index) }
+    }
+
+    #expect(store.requestDeviceChooser(first))
+    #expect(store.requestDeviceChooser(queued))
+    #expect(store.sheet?.id == first.sheetID)
+    store.resolveDeviceChooser(queued.id, optionIndex: 0)
+
+    #expect(decided == .some(nil))
+    #expect(store.sheet?.id == first.sheetID)
+  }
+
   @Test func anUpdateReplacesTheOpenDeviceList() throws {
     let store = try store()
     let opened = try #require(self.request(store, transport: "usb", id: "7"))

@@ -133,6 +133,18 @@ struct SavePromptTests {
     #expect(store.savePrompt == nil)
   }
 
+  @Test func closingTheRequestingTabDismissesItsSavePrompt() throws {
+    let store = store()
+    let request = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    var decisions: [SavePromptRequest.Decision] = []
+    store.onSavePromptDecision = { _, decision in decisions.append(decision) }
+    #expect(store.requestSavePrompt(request))
+    store.closeTab(tab.id)
+    #expect(store.savePrompt == nil)
+    #expect(decisions == [.dismiss])
+  }
+
   @Test func neverForACardIsDismissed() throws {
     let store = store()
     let card = try request(store, kind: .card, detail: "Visa •••• 1111")

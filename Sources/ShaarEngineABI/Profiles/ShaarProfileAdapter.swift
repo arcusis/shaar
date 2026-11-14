@@ -79,6 +79,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
     if handles[id] != nil { return }
     if let existing = pending[id] {
       let handle = try await existing.value
+      guard handle != 0 else { throw ShaarProfileError.staleHandle }
       if handles[id] == nil { handles[id] = handle }
       return
     }
@@ -93,6 +94,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
       pending.removeValue(forKey: id)
       throw error
     }
+    guard handle != 0 else { throw ShaarProfileError.staleHandle }
     guard handles[id] == nil else {
       try? engine.closeProfile(handle)
       return
@@ -118,6 +120,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
       pending.removeValue(forKey: id)
       throw error
     }
+    guard handle != 0 else { throw ShaarProfileError.staleHandle }
     guard handles[id] == nil else {
       try? engine.closeProfile(handle)
       return

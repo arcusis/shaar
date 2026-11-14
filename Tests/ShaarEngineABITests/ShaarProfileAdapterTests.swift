@@ -121,6 +121,25 @@ struct ShaarProfileAdapterTests {
     #expect(adapter.loadedProfileIDs == [id])
   }
 
+  @Test @MainActor func zeroNativeHandlesAreRejectedForOpenAndCreate() async {
+    let fake = FakeProfileEngine()
+    let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
+    let openedID = "4a4d4885-d38a-4b4a-bc03-b12f634bff09"
+    let createdID = "4a4d4885-d38a-4b4a-bc03-b12f634bff10"
+
+    fake.nextHandle = 0
+    await #expect(throws: ShaarProfileError.staleHandle) {
+      try await adapter.open(profileID: openedID)
+    }
+    #expect(adapter.loadedProfileIDs.isEmpty)
+
+    fake.nextHandle = 0
+    await #expect(throws: ShaarProfileError.staleHandle) {
+      try await adapter.create(profileID: createdID, displayName: "Work")
+    }
+    #expect(adapter.loadedProfileIDs.isEmpty)
+  }
+
   @Test @MainActor func closeReleasesTheOpaqueHandleAndRejectsLaterCalls() async throws {
     let fake = FakeProfileEngine()
     let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)

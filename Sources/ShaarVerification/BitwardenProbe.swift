@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 import SwiftUI
 
@@ -16,9 +17,10 @@ enum BitwardenProbeEvidence {
     buttons.contains { button in
       guard let text = button["text"] as? String,
         text.lowercased() == "add to chrome",
-        let disabled = button["disabled"] as? Bool
+        let disabled = button["disabled"] as? NSNumber,
+        CFGetTypeID(disabled) == CFBooleanGetTypeID()
       else { return false }
-      return !disabled
+      return !disabled.boolValue
     }
   }
 }

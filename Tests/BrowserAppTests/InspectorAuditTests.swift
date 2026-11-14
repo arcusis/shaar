@@ -48,6 +48,44 @@ private final class PendingInspectorSelectionRuntime: ARCChromiumRuntime {
   }
 }
 
+@MainActor
+private final class PendingInspectorAuditRuntime: ARCChromiumRuntime {
+  private(set) var replies: [@MainActor @Sendable ([String: Any]?, (any Error)?) -> Void] = []
+  private let pageView = NSView()
+
+  override func view(
+    forPrivateTabID tabID: String, windowID: String, contextID: String
+  ) -> NSView? { pageView }
+
+  override func beginInspector(
+    forPrivateTabID tabID: String, windowID: String, contextID: String
+  ) -> Bool { true }
+
+  override func endInspector(forTabID tabID: String) {}
+
+  override func privateInspectorCall(
+    _ method: String, params: [AnyHashable: Any], tabID: String, windowID: String,
+    contextID: String,
+    completion: @escaping @MainActor @Sendable ([String: Any]?, (any Error)?) -> Void
+  ) {
+    let expression = params["expression"] as? String ?? ""
+    if expression.contains("__shaarInspectorV2?.stop()") {
+      completion(["result": ["value": true]], nil)
+    } else {
+      replies.append(completion)
+    }
+  }
+
+  func complete(_ index: Int) {
+    replies[index]([
+      "result": [
+        "value": ["scope": "page", "violations": 0, "incomplete": 0, "findings": [],
+          "truncated": false],
+      ]
+    ], nil)
+  }
+}
+
 @Suite @MainActor struct InspectorAuditTests {
   @Test func cancelledSelectionDoesNotRefreshInspectorWhenReplyArrives() async throws {
     let tabID = UUID()
@@ -105,6 +143,38 @@ private final class PendingInspectorSelectionRuntime: ARCChromiumRuntime {
         == InspectorL10n.string("Could not complete the page audit. Try again."))
     let known = InspectorFailure("Audit results exceeded supported limits.")
     #expect(InspectorAuditModel.failureMessage(for: known) == known.localizedDescription)
+  }
+
+  @Test func cancelledRunCompletionCannotClearNewerRunState() async throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PendingInspectorAuditRuntime()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "audit-context", windowID: "audit-window",
+      firstTabID: tabID, store: store)
+    let target = try #require(session.inspectorTarget)
+    let inspector = InspectorModel(target: target, privateSession: session)
+    inspector.open()
+    defer { inspector.close() }
+    let audit = inspector.details.audit
+
+    audit.run()
+    for _ in 0..<100 where runtime.replies.count < 1 { await Task.yield() }
+    try #require(runtime.replies.count == 1)
+    audit.cancel()
+    audit.run()
+    for _ in 0..<100 where runtime.replies.count < 2 { await Task.yield() }
+    try #require(runtime.replies.count == 2)
+
+    runtime.complete(0)
+    for _ in 0..<100 where audit.busy { await Task.yield() }
+    #expect(audit.busy)
+
+    runtime.complete(1)
+    for _ in 0..<100 where audit.report == nil { await Task.yield() }
+    #expect(!audit.busy)
+    #expect(audit.report?.violations == 0)
   }
 
   @Test func boundedAuditReportsRejectStaleDocuments() throws {

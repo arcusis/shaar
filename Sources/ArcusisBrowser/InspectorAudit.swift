@@ -79,18 +79,18 @@ final class InspectorAuditModel {
     let generation = inspector.documentGeneration
     let selectionID = scope == .selected ? inspector.selection?.id : nil
     let requestedScope = scope
+    let requestID = UUID()
+    operationID = requestID
     busy = true
     failure = nil
-    let operationID = UUID()
-    self.operationID = operationID
     operation = Task { [weak self] in
       await self?.perform(
-        requestedScope, generation: generation, selectionID: selectionID,
-        operationID: operationID)
+        requestedScope, generation: generation, selectionID: selectionID, requestID: requestID)
     }
   }
 
   func cancel() {
+    operationID = UUID()
     operation?.cancel()
     operation = nil
     operationID = nil
@@ -143,9 +143,9 @@ final class InspectorAuditModel {
   }
 
   private func perform(
-    _ scope: Scope, generation: Int, selectionID: Int?, operationID: UUID
+    _ scope: Scope, generation: Int, selectionID: Int?, requestID: UUID
   ) async {
-    defer { finishOperation(operationID) }
+    defer { finishOperation(requestID) }
     guard let inspector else { return }
     do {
       let source = try Self.resourceText("axe.min", extension: "js")

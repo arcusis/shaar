@@ -21,6 +21,23 @@ struct SidebarSplitRow: View {
     key == .return || key == .space
   }
 
+  static func reduceMotionEnabled(systemSetting: Bool, override: Bool?) -> Bool {
+    systemSetting || override == true
+  }
+
+  static func hoverAnimation(reduceMotion: Bool) -> Animation? {
+    reduceMotion ? nil : .easeOut(duration: 0.12)
+  }
+
+  static func hoverAnimation(systemSetting: Bool, override: Bool?) -> Animation? {
+    hoverAnimation(
+      reduceMotion: reduceMotionEnabled(systemSetting: systemSetting, override: override))
+  }
+
+  static func keyboardActivationAction(_ action: @escaping () -> Void) -> () -> KeyPress.Result {
+    { action(); return .handled }
+  }
+
   static func showsTitles(
     totalWidth: CGFloat, segmentCount: Int, hasStackDragHandle: Bool
   ) -> Bool {
@@ -70,7 +87,10 @@ struct SidebarSplitRow: View {
     .overlay(
       RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
     )
-    .animation(.easeOut(duration: 0.12), value: hoveredID)
+    .animation(
+      Self.hoverAnimation(
+        systemSetting: reduceMotion, override: accessibilityOverrides.reduceMotion),
+      value: hoveredID)
     .accessibilityElement(children: .contain)
     .accessibilityLabel(ShellL10n.plural("Split View, %d tabs", count: segments.count))
   }
@@ -112,8 +132,13 @@ struct SidebarSplitRow: View {
     .accessibilityAddTraits(raised ? [.isButton, .isSelected] : .isButton)
     .accessibilityAction { onSelect(segment.id) }
     .accessibilityAction(named: ShellL10n.text("Close tab")) { onClose(segment.id) }
+    .focusable()
+    .onKeyPress(.return, action: Self.keyboardActivationAction { onSelect(segment.id) })
+    .onKeyPress(.space, action: Self.keyboardActivationAction { onSelect(segment.id) })
     .sidebarPageMotion(
-      id: segment.id, reduceMotion: reduceMotion || accessibilityOverrides.reduceMotion == true
+      id: segment.id,
+      reduceMotion: Self.reduceMotionEnabled(
+        systemSetting: reduceMotion, override: accessibilityOverrides.reduceMotion)
     )
     .draggable(onDrag(segment.id))
     .contextMenu { if let memberMenu { memberMenu(segment.id) } }

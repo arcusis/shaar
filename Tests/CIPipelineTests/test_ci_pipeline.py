@@ -1912,6 +1912,24 @@ class EngineTransferTests(unittest.TestCase):
             self.assertFalse((evidence / "bundle.json").exists())
             self.assertFalse(partial_bundle.exists())
 
+    def test_normal_browsing_rebuilds_after_invalid_shared_bundle_restore(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "build/ci/engine-build"
+            evidence.mkdir(parents=True)
+            (evidence / "bundle.json").write_text("[]")
+            (evidence / "verification.tar.gz").write_bytes(b"partial archive")
+            checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
+            with patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"):
+                STAGES.run_basic_browsing(checks)
+
+            self.assertEqual(
+                [call.args[0] for call in checks.run.call_args_list],
+                ["verification-build", "normal-window-browsing"],
+            )
+            self.assertFalse((evidence / "bundle.json").exists())
+            self.assertFalse((evidence / "verification.tar.gz").exists())
+
     def test_normal_browsing_continues_when_shared_bundle_artifact_download_fails(self):
         workflow = (ROOT / ".github/workflows/source-checks.yml").read_text()
         basic_browsing = workflow.split("  basic-browsing:\n", 1)[1].split("\n  coverage:\n", 1)[0]

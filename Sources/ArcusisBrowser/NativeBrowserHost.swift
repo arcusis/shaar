@@ -52,9 +52,8 @@ private final class DownloadDirectoryContinuation: @unchecked Sendable {
 
 enum BrowserMenuCommand: String, CaseIterable {
   case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
-    print,
-    closeWindow,
-    addFavorite
+    print, closeWindow, addFavorite
+  case openFile
   case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history,
     clearHistory, downloads, pasteAndGo
   case back, forward, find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload,
@@ -440,6 +439,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if command == .quit { return true }
     if command == .reopenClosedWindow { return lastClosedWindowSnapshot != nil }
     if command == .bringAllToFront { return true }
+    if command == .openFile { return true }
     if command == .newMiniWindow {
       return privateHost?.hasActiveWindow != true && miniWindowTarget != nil
     }
@@ -554,8 +554,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Commands that act on the app rather than one window and need no window to be enabled.
   private static let appCommands: Set<BrowserMenuCommand> = [
-    .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .bringAllToFront, .nextWindow,
-    .previousWindow, .quit,
+    .openFile, .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .bringAllToFront,
+    .nextWindow, .previousWindow, .quit,
   ]
 
   func perform(_ command: BrowserMenuCommand) {
@@ -604,6 +604,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       Self.bringAllWindowsToFront(
         windows, keyWindow: NSApp.keyWindow,
         orderFront: { $0.orderFront(nil) }, makeKey: { $0.makeKey() })
+    case .openFile:
+      let panel = NSOpenPanel()
+      panel.canChooseFiles = true
+      panel.canChooseDirectories = false
+      panel.allowsMultipleSelection = true
+      guard panel.runModal() == .OK else { break }
+      Self.routeOpenFileSelection(panel.urls, open: openReadableFileURL)
     case .newMiniWindow: openMiniWindow(url: nil)
     case .newPrivateWindow:
       do { try privateHost?.openWindow() } catch { report(error) }
@@ -866,7 +873,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
     case .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .nextWindow, .previousWindow,
-      .settings, .quit, .checkForUpdates:
+      .openFile, .settings, .quit, .checkForUpdates:
       break
     case .fullScreen: context.window.toggleFullScreen(nil)
     }
@@ -1076,7 +1083,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   private func openFileURL(_ url: URL) {
-    guard let fileURL = IncomingFileOpenPolicy.readableFileURL(url) else { return }
+    Self.routeOpenFileSelection([url], open: openReadableFileURL)
+  }
+
+  static func routeOpenFileSelection(_ urls: [URL], open: (URL) -> Void) {
+    for url in urls {
+      guard let fileURL = IncomingFileOpenPolicy.readableFileURL(url) else { continue }
+      open(fileURL)
+    }
+  }
+
+  private func openReadableFileURL(_ fileURL: URL) {
     let context: NativeBrowserContext
     if let existing = activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
       ?? contexts.values.first
@@ -1578,6 +1595,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let file = section("File")
     add(.newPrivateWindow, "New Private Window", to: file)
     add(.newMiniWindow, "New Mini Window", to: file)
+    add(.openFile, "Open File…", to: file)
     add(.newTab, "New tab", to: file)
     add(.search, CommandPanel.searchPrompt, to: file)
     add(.print, "Print…", to: file)

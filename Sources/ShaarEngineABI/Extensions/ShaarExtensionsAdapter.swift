@@ -122,7 +122,8 @@ public struct ShaarExtensionsAdapter: Sendable {
         row["description"] == nil || row["description"] is String,
         row["permissions"] == nil || row["permissions"] is [String],
         row["hostPermissions"] == nil || row["hostPermissions"] is [String],
-        row["fromWebStore"] == nil || Self.isJSONBoolean(row["fromWebStore"])
+        row["fromWebStore"] == nil
+          || (Self.isJSONBoolean(row["fromWebStore"]) && row["fromWebStore"] is Bool)
       else { throw ShaarExtensionsAdapterError.invalidResponse("malformed extension row") }
       return ShaarExtensionSummary(
         id: id, name: name, version: version, enabled: enabled,

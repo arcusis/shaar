@@ -267,40 +267,47 @@ private func groupedHistory(
   _ rows: [[String: BrowserImportSQLite.Value]], source: BrowserImportSource,
   date: (BrowserImportSQLite.Value) -> Date?
 ) -> [BrowserImportItem] {
-  var grouped: [String: (title: String, visits: [Date], needsSort: Bool, lastVisit: Date?)] = [:]
-  var order: [String] = []
+  var groupIndexes: [String: Int] = [:]
+  var groups: [(
+    address: String, title: String, visits: [Date], needsSort: Bool, lastVisit: Date?
+  )] = []
   var addressCache = BrowserImportAddressCache()
   for row in rows {
     guard let address = row["url"]?.string else { continue }
-    let isExistingGroup = grouped[address] != nil
-    guard isExistingGroup || addressCache.accepts(address),
+    let existingIndex = groupIndexes[address]
+    guard existingIndex != nil || addressCache.accepts(address),
       let rawVisit = row["visit_time"], let visit = date(rawVisit)
     else { continue }
-    if !isExistingGroup {
-      order.append(address)
-      grouped[address] = (
-        title: row["title"]?.string ?? "", visits: [], needsSort: false, lastVisit: nil)
+    let index: Int
+    if let existingIndex {
+      index = existingIndex
+    } else {
+      index = groups.count
+      groupIndexes[address] = index
+      groups.append((
+        address: address, title: row["title"]?.string ?? "", visits: [], needsSort: false,
+        lastVisit: nil))
     }
     let title = row["title"]?.string ?? ""
-    var group = grouped[address]!
     if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      group.title = title
+      groups[index].title = title
     }
-    if let lastVisit = group.lastVisit, visit < lastVisit { group.needsSort = true }
-    group.lastVisit = visit
-    group.visits.append(visit)
-    grouped[address] = group
+    if let lastVisit = groups[index].lastVisit, visit < lastVisit {
+      groups[index].needsSort = true
+    }
+    groups[index].lastVisit = visit
+    groups[index].visits.append(visit)
   }
-  return order.compactMap { address in
-    guard let group = grouped[address], !group.visits.isEmpty else { return nil }
+  return groups.compactMap { group in
+    guard !group.visits.isEmpty else { return nil }
     let displayTitle: String
     if group.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      displayTitle = URL(string: address)?.host() ?? address
+      displayTitle = URL(string: group.address)?.host() ?? group.address
     } else {
       displayTitle = group.title
     }
     return BrowserImportItem(
-      kind: .history, source: source, title: displayTitle, address: address,
+      kind: .history, source: source, title: displayTitle, address: group.address,
       visitTimes: group.needsSort ? group.visits.sorted() : group.visits)
   }
 }

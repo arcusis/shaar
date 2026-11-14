@@ -133,7 +133,7 @@ final class InspectorModel {
     pollWait?.cancel()
   }
 
-  private func endPoll() {
+  func endPoll() {
     pollWait?.cancel()
     pollWait = nil
     pollTask?.cancel()

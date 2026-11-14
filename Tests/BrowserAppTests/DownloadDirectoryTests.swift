@@ -26,7 +26,7 @@ private final class PendingDownloadDirectoryRuntime: ARCShaarRuntime {
 }
 
 private actor DownloadDirectoryCompletionSignal {
-  private(set) var cancelled = false
+  private(set) var cancelled: Bool?
   func finish(cancelled: Bool) { self.cancelled = cancelled }
 }
 
@@ -248,11 +248,14 @@ struct DownloadDirectoryTests {
     for _ in 0..<100 where runtime.completion == nil { await Task.yield() }
     try #require(runtime.completion != nil)
     task.cancel()
-    try await Task.sleep(for: .milliseconds(50))
+    for _ in 0..<100 {
+      if await signal.cancelled != nil { break }
+      try await Task.sleep(for: .milliseconds(10))
+    }
     let cancelledBeforeReply = await signal.cancelled
     runtime.completion?(URL(fileURLWithPath: "/tmp"), nil)
     await task.value
 
-    #expect(cancelledBeforeReply)
+    #expect(cancelledBeforeReply == true)
   }
 }

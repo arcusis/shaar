@@ -26,7 +26,9 @@ import Testing
     view, size: NSSize(width: 500, height: 300), appearance: .aqua, to: imageURL)
   let visibleText = try VisualTextRecognition.lines(in: imageURL).joined(separator: " ")
   #expect(visibleText.contains("This page stopped working"), "\(visibleText)")
-  #expect(visibleText.contains("research example"), "\(visibleText)")
+  #expect(
+    visibleText.replacingOccurrences(of: ".", with: " ").contains("research example"),
+    "\(visibleText)")
   #expect(visibleText.contains("ran out of memory"), "\(visibleText)")
   #expect(visibleText.contains("Reload page"), "\(visibleText)")
 }

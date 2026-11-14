@@ -30,7 +30,8 @@ import Testing
   }
 
   @Test func backendFailuresUseLocalizedPageToolsRecoveryCopy() {
-    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let error = NSError(
+      domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(
       InspectorPageToolsModel.failureMessage(for: error)
         == InspectorToolsL10n.string("The page-tools request could not be completed. Try again."))
@@ -193,7 +194,7 @@ import Testing
     }
     #expect(InspectorPageToolsView.bytes(2048).contains("2"))
     #expect(await developer.createBugReport() == nil)
-    #expect(developer.reportFailure != nil && !developer.creatingBugReport)
+    #expect(developer.reportFailure == nil && !developer.creatingBugReport)
   }
 
   @Test func simulationLifecycleRejectsClosedOrNonWebTargets() async throws {

@@ -22,12 +22,13 @@ GIBIBYTE = 1024 ** 3
 
 
 class BrowsingQAReportTests(unittest.TestCase):
-    def test_slow_reload_fixture_assigns_distinct_request_numbers(self):
+    def test_slow_reload_fixture_numbers_requests_per_run_path(self):
         original = PROBE.Fixture.slow_reload_requests
-        PROBE.Fixture.slow_reload_requests = 0
+        PROBE.Fixture.slow_reload_requests = {}
         try:
-            self.assertEqual(PROBE.Fixture.next_slow_reload_request(), 1)
-            self.assertEqual(PROBE.Fixture.next_slow_reload_request(), 2)
+            self.assertEqual(PROBE.Fixture.next_slow_reload_request("/run-a"), 1)
+            self.assertEqual(PROBE.Fixture.next_slow_reload_request("/run-a"), 2)
+            self.assertEqual(PROBE.Fixture.next_slow_reload_request("/run-b"), 1)
         finally:
             PROBE.Fixture.slow_reload_requests = original
     }

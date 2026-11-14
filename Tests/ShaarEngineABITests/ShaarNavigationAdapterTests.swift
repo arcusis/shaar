@@ -278,6 +278,17 @@ struct ShaarNavigationAdapterTests {
     }
   }
 
+  @Test func snapshotPreservesLargeIntegerFieldsExactly() throws {
+    let rawInteger = 9_007_199_254_740_993
+    let rawGeneration = UInt64(rawInteger)
+    let payload = Data(
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":9007199254740993,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":9007199254740993,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#.utf8)
+
+    let snapshot = try ShaarNavigationSnapshot.decode(payload)
+    #expect(snapshot.generation == rawGeneration)
+    #expect(snapshot.failure?.netError == rawInteger)
+  }
+
   @Test func shippingChoiceUsesShaar() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)
     #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) != nil)

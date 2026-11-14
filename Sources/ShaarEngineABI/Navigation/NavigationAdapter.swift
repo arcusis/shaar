@@ -10,14 +10,14 @@ private func navigationInteger(_ value: Any?) -> Int? {
   guard let number = value as? NSNumber,
     CFGetTypeID(number) != CFBooleanGetTypeID()
   else { return nil }
-  return Int(exactly: number.doubleValue)
+  return Int(number.stringValue) ?? Int(exactly: number.doubleValue)
 }
 
 private func navigationGeneration(_ value: Any?) -> UInt64? {
   guard let number = value as? NSNumber,
     CFGetTypeID(number) != CFBooleanGetTypeID()
   else { return nil }
-  return UInt64(exactly: number.doubleValue)
+  return UInt64(number.stringValue) ?? UInt64(exactly: number.doubleValue)
 }
 
 private func navigationBoolean(_ value: Any?) -> Bool? {

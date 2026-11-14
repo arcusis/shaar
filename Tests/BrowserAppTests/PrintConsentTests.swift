@@ -137,6 +137,12 @@ struct PrintConsentTests {
     var withoutTitle = valid
     withoutTitle.removeValue(forKey: "title")
     #expect(try #require(PrintRequest(payload: withoutTitle)).title.isEmpty)
+    let oversizedOrigin = "https://" + String(repeating: "a.", count: 1020) + "com"
+    #expect(oversizedOrigin.utf8.count > 2048)
+    #expect(URL(string: oversizedOrigin)?.host != nil)
+    var oversizedOriginPayload = valid
+    oversizedOriginPayload["origin"] = oversizedOrigin
+    #expect(PrintRequest(payload: oversizedOriginPayload) == nil)
 
     for unsupportedVersion: Any in [2, "1", true, NSNumber(value: 1.0), NSNull()] {
       var unsupported = valid

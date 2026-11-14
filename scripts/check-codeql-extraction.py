@@ -55,6 +55,8 @@ def missing_sources(document: dict, expected: set[str], root: Path) -> list[str]
 
 def write_coverage_report(report_path: Path, result: dict) -> None:
     output = report_path.with_name("coverage.json")
+    if output.parent.is_symlink():
+        raise ValueError(f"coverage output directory must not be a symlink: {output.parent}")
     if output.resolve() == report_path.resolve():
         raise ValueError("extraction input and coverage output paths must differ")
     if output.is_symlink():

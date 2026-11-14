@@ -9,6 +9,12 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct BrowserSettingsProfileTests {
+  @Test func historyClearFailureUsesHebrewRecoveryCopy() {
+    #expect(
+      BrowserSettingsView.historyClearFailure(language: .hebrew)
+        == "לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב.")
+  }
+
   @Test func creatingProfileSelectsSettingsOnlyAndPreservesEveryBrowserSelection() throws {
     let session = BrowserSession.fresh()
     let workspace = try BrowserWorkspaceStore(initialSession: session)

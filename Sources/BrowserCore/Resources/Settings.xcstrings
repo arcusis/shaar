@@ -1283,12 +1283,12 @@
         }
       }
     },
-    "Could not clear history: %@": {
+    "Could not clear history. Try again.": {
       "localizations": {
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "לא ניתן למחוק את ההיסטוריה: %@"
+            "value": "לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב."
           }
         }
       }

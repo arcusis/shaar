@@ -72,6 +72,17 @@ shaar_error EmptyError() {
 
 void IgnoreReply(void *, const shaar_result *) {}
 
+BOOL ShaarEventHasValidSlices(const shaar_event *event) {
+  if (!event || event->size < sizeof(*event)) return NO;
+  const shaar_bytes slices[] = {
+      event->profile_id, event->session_id, event->window_id,
+      event->tab_id, event->payload_json};
+  for (const shaar_bytes slice : slices) {
+    if (slice.size && !slice.data) return NO;
+  }
+  return YES;
+}
+
 // Camera and microphone keep the websiteMedia* names. Later prompts use
 // websitePermission* with the same payload, so one sheet can answer both.
 BOOL ShaarWebsitePermissionEvent(NSString *kind, BOOL *dismissed) {
@@ -482,7 +493,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (void)receiveEvent:(const shaar_event *)event {
-  if (!event) return;
+  if (!ShaarEventHasValidSlices(event)) return;
   NSData *data = [NSData dataWithBytes:event->payload_json.data ?: ""
                                 length:event->payload_json.size];
   NSDictionary *payload = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];

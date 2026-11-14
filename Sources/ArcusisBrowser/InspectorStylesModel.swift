@@ -577,7 +577,9 @@ final class InspectorStylesModel {
   }
 
   func toggleOverlay() async {
-    guard let inspector, canOverlay, inspector.isOpen, selectedID == inspector.selection?.id else {
+    guard !Task.isCancelled, let inspector, canOverlay, inspector.isOpen,
+      selectedID == inspector.selection?.id
+    else {
       return
     }
     let generation = inspector.documentGeneration

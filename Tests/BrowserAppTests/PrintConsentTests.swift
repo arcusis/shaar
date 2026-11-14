@@ -278,12 +278,29 @@ struct PrintConsentTests {
       print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
     var decision: Bool?
     store.onPrintDecision = { _, accepted in decision = accepted }
-
     #expect(store.requestPrint(print))
     store.perform(.open(URL(string: "https://example.com/another-page")!))
     store.resolvePrint(print.id, accepted: true)
-
     #expect(decision == false)
+    #expect(store.sheet == nil)
+  }
+
+  @Test func printConsentRequestsArePresentedInOrder() throws {
+    let store = openedStore()
+    let first = try request(store)
+    let second = try request(store)
+    store.rememberPermissionFrame(
+      first.tabID, frameID: first.frameID, origin: first.requestingOrigin)
+    var decisions: [(String, Bool)] = []
+    store.onPrintDecision = { id, accepted in decisions.append((id, accepted)) }
+    #expect(store.requestPrint(first))
+    #expect(store.requestPrint(second))
+    #expect(store.sheet?.id == first.sheetID)
+    store.resolvePrint(first.id, accepted: false)
+    #expect(store.sheet?.id == second.sheetID)
+    store.resolvePrint(second.id, accepted: true)
+    #expect(decisions.map(\.0) == [first.id, second.id])
+    #expect(decisions.map(\.1) == [false, true])
     #expect(store.sheet == nil)
   }
 

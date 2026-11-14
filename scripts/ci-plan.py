@@ -26,6 +26,10 @@ def documentation_only(paths: list[str]) -> bool:
     )
 
 
+def decode_changed_paths(output: bytes) -> list[str]:
+    return [os.fsdecode(path) for path in output.split(b"\0") if path]
+
+
 def website_path(path: str) -> bool:
     return (path.startswith(("website/", ".github/assets/")) or path == "Branding/shaar-logo.svg"
             or path in {"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "scripts/check-license-headers.py"}
@@ -146,7 +150,7 @@ def main() -> int:
     if name in ("pull_request", "push", "merge_group") and re.fullmatch(r"[0-9a-f]{40}", base) and set(base) != {"0"}:
         result = subprocess.run(["git", "diff", "--name-only", "-z", base, "HEAD"], capture_output=True, check=False)
         if result.returncode == 0:
-            paths = [os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
+            paths = decode_changed_paths(result.stdout)
         else:
             print(
                 f"::warning::Could not classify changed paths (git diff exited {result.returncode}); "

@@ -88,6 +88,10 @@ class PipelineGateTests(unittest.TestCase):
                 ):
                     PYTHON_TESTS.junit_output_path(str(path))
 
+    def test_ci_plan_decodes_changed_paths_with_filesystem_surrogate_escapes(self):
+        raw_path = b"Notebook/odd-\xff.md"
+        self.assertEqual(PLAN.decode_changed_paths(raw_path + b"\0"), [os.fsdecode(raw_path)])
+
     def test_evidence_directory_argument_requires_an_existing_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

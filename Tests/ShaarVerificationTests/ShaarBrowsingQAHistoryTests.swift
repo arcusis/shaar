@@ -8,10 +8,21 @@ import Testing
 
 @Suite @MainActor struct ShaarBrowsingQAHistoryTests {
   @Test func reloadDuringNavigationPreservesThePriorHistoryEntry() {
-    #expect(ShaarBrowsingQA.reloadHistoryPreserved(backPath: "/nav/1", forwardPath: "/slow-reload"))
-    #expect(!ShaarBrowsingQA.reloadHistoryPreserved(backPath: "/nav/0", forwardPath: "/slow-reload"))
-    #expect(!ShaarBrowsingQA.reloadHistoryPreserved(backPath: nil, forwardPath: "/slow-reload"))
-    #expect(!ShaarBrowsingQA.reloadHistoryPreserved(backPath: "/nav/1", forwardPath: "/nav/2"))
-    #expect(!ShaarBrowsingQA.reloadHistoryPreserved(backPath: "/nav/1", forwardPath: nil))
+    let reloadPath = "/slow-reload/run-id"
+    #expect(
+      ShaarBrowsingQA.reloadHistoryPreserved(
+        backPath: "/nav/1", forwardPath: reloadPath, expectedReloadPath: reloadPath))
+    #expect(
+      !ShaarBrowsingQA.reloadHistoryPreserved(
+        backPath: "/nav/0", forwardPath: reloadPath, expectedReloadPath: reloadPath))
+    #expect(
+      !ShaarBrowsingQA.reloadHistoryPreserved(
+        backPath: nil, forwardPath: reloadPath, expectedReloadPath: reloadPath))
+    #expect(
+      !ShaarBrowsingQA.reloadHistoryPreserved(
+        backPath: "/nav/1", forwardPath: "/nav/2", expectedReloadPath: reloadPath))
+    #expect(
+      !ShaarBrowsingQA.reloadHistoryPreserved(
+        backPath: "/nav/1", forwardPath: nil, expectedReloadPath: reloadPath))
   }
 }

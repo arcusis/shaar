@@ -40,6 +40,8 @@ def owned_probe_root(path: Path) -> bool:
 def collect(log: Path, destination: Path) -> None:
     if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
         raise ValueError("evidence destination is not a regular directory")
+    if any(parent.is_symlink() for parent in destination.parents[:2]):
+        raise ValueError("evidence destination has a symlinked parent")
     for line in log.read_text(errors="replace").splitlines():
         if not line.startswith("Probe evidence: "):
             continue

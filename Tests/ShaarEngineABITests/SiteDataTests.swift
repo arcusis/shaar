@@ -237,6 +237,23 @@ struct SiteDataTests {
     }
   }
 
+  @Test func cookieDecoderRejectsNumericBooleanFields() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    let cookie =
+      #"{"name":"sid","value":"abc","domain":"example.com","path":"/","secure":true,"httpOnly":true,"sameSite":"Lax","expiresUnixMs":null,"partitionSite":"https://example.com","partitionCrossSite":false,"sourceScheme":2,"sourcePort":443}"#
+    for invalid in [
+      cookie.replacingOccurrences(of: #""secure":true"#, with: #""secure":1"#),
+      cookie.replacingOccurrences(of: #""httpOnly":true"#, with: #""httpOnly":0"#),
+      cookie.replacingOccurrences(of: #""partitionCrossSite":false"#, with: #""partitionCrossSite":1"#),
+    ] {
+      await fake.setResponse("{\"schemaVersion\":1,\"cookies\":[\(invalid)]}")
+      await #expect(throws: ShaarSiteDataError.malformedResponse) {
+        _ = try await adapter.cookies(origin: "https://example.com")
+      }
+    }
+  }
+
   @Test func resetRejectsBooleanCount() async throws {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)

@@ -1315,6 +1315,13 @@ class SwiftReportTests(unittest.TestCase):
 
             self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
 
+    def test_xctest_report_rejects_malformed_and_non_finite_durations(self):
+        for duration in ("1..2", "inf", "-0.1"):
+            with self.subTest(duration=duration), self.assertRaisesRegex(
+                 ValueError, "Invalid XCTest duration for -\\[Fixture.Cases sample\\]"
+             ):
+                 SWIFT_REPORTS.xctest_cases(self.transcript().replace("0.125", duration))
+
     def test_truncated_unpaired_and_mismatched_xctest_logs_fail(self):
         malformed = (self.transcript().split("Test Case", 1)[0],
                      self.transcript().replace(" started.\n", "\n"),

@@ -14,6 +14,8 @@ import Testing
 
     #expect(
       NativeHostProbe.parseDocumentJSON("{\"fixture\":\"v2\",\"instance\":\"x\"}") == nil)
+    #expect(
+      NativeHostProbe.parseDocumentJSON("{\"fixture\":\"v1\",\"instance\":\"\"}") == nil)
     #expect(NativeHostProbe.parseDocumentJSON("{\"fixture\":\"v1\"}") == nil)
     #expect(NativeHostProbe.parseDocumentJSON("false") == nil)
     #expect(NativeHostProbe.parseDocumentJSON("not JSON") == nil)

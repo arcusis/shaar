@@ -192,6 +192,20 @@ import Testing
     #expect(!inspector.styles.capturing)
   }
 
+  @Test func cancelledPseudoToggleDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let toggle = Task { @MainActor in await inspector.styles.togglePseudo("hover") }
+    toggle.cancel()
+    await toggle.value
+
+    #expect(inspector.styles.forcedPseudos.isEmpty)
+    #expect(inspector.styles.failure == nil)
+  }
+
   @Test func nativeCSSPanelRendersGridFlexAndSourceLimitStates() async throws {
     let inspector = makeInspector()
     inspector.open()

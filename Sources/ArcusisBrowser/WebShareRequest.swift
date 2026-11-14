@@ -33,6 +33,7 @@ struct WebShareRequest: Identifiable, Equatable {
       frameID.count >= 1, frameID.count <= 256,
       Self.isTrueBoolean(payload["userActivated"]),
       NavigationInput.isWebURL(pageURL),
+      !Self.hasEmptyExplicitPort(pageURL),
       Self.secureOrigin(requestingOrigin),
       let title = Self.boundedText(payload["title"], maxUTF8: 2048, required: false),
       let text = Self.boundedText(payload["text"], maxUTF8: 4096, required: false),
@@ -80,6 +81,7 @@ struct WebShareRequest: Identifiable, Equatable {
 
   private static func secureOrigin(_ origin: URL) -> Bool {
     guard NavigationInput.isWebURL(origin),
+      !hasEmptyExplicitPort(origin),
       origin.path.isEmpty || origin.path == "/",
       origin.query == nil,
       origin.fragment == nil,
@@ -94,6 +96,14 @@ struct WebShareRequest: Identifiable, Equatable {
       || host.hasSuffix(".localhost") || host.hasSuffix(".localhost.")
       || host == "::1" || host == "[::1]"
       || Self.isIPv4Loopback(host)
+  }
+
+  private static func hasEmptyExplicitPort(_ origin: URL) -> Bool {
+    let absolute = origin.absoluteString
+    guard let schemeEnd = absolute.range(of: "://")?.upperBound else { return false }
+    let authorityEnd = absolute[schemeEnd...].firstIndex(where: { "/?#".contains($0) })
+      ?? absolute.endIndex
+    return absolute[schemeEnd..<authorityEnd].hasSuffix(":")
   }
 
   private static func isIPv4Loopback(_ host: String) -> Bool {
@@ -117,7 +127,8 @@ struct WebShareRequest: Identifiable, Equatable {
     guard let text = value as? String, text.utf8.count <= 4096 else { return nil }
     if text.isEmpty { return .absent }
     guard let url = URL(string: text, relativeTo: baseURL)?.absoluteURL,
-      NavigationInput.isWebURL(url), url.user == nil, url.password == nil
+      NavigationInput.isWebURL(url), url.user == nil, url.password == nil,
+      !hasEmptyExplicitPort(url)
     else { return nil }
     return .page(url)
   }

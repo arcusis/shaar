@@ -46,6 +46,12 @@ import Testing
   }
 }
 
+@Test func webShareRequestRejectsAnEmptyExplicitOriginPort() {
+  for origin in ["https://example.com:", "http://localhost:"] {
+    #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
+  }
+}
+
 @Test func webShareRequestRequiresRealBooleanActivationAndContent() {
   var payload = sharePayload()
   payload["userActivated"] = 1
@@ -87,6 +93,18 @@ import Testing
   #expect(WebShareRequest(payload: payload) != nil)
 
   payload["url"] = "https://example.com/" + String(repeating: "é", count: 2040)
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
+@Test func webShareRequestRejectsAnEmptyExplicitSharedURLPort() {
+  var payload = sharePayload()
+  payload["url"] = "https://shared.example:"
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
+@Test func webShareRequestRejectsAnEmptyExplicitPageURLPort() {
+  var payload = sharePayload()
+  payload["pageURL"] = "https://example.com:"
   #expect(WebShareRequest(payload: payload) == nil)
 }
 

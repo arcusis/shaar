@@ -5,6 +5,21 @@
 import BrowserCore
 import Foundation
 
+struct SidebarSplitMenuCandidateRanges {
+  let before: Range<Int>
+  let after: Range<Int>
+
+  init(tabs: [BrowserTab], excluding tabID: UUID) {
+    if let omittedIndex = tabs.firstIndex(where: { $0.id == tabID }) {
+      before = 0..<omittedIndex
+      after = (omittedIndex + 1)..<tabs.count
+    } else {
+      before = 0..<tabs.count
+      after = tabs.count..<tabs.count
+    }
+  }
+}
+
 struct SidebarTabMoveBoundary: Equatable {
   let isFirst: Bool
   let isLast: Bool

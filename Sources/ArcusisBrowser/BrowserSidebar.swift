@@ -863,8 +863,14 @@ struct BrowserSidebar: View {
       }
       .disabled(store.selectedSplitIsFull)
     }
+    let candidateRanges = SidebarSplitMenuCandidateRanges(tabs: space.tabs, excluding: tab.id)
     Menu(ShellL10n.string("Split View with…")) {
-      ForEach(space.tabs.filter { $0.id != tab.id }) { candidate in
+      ForEach(candidateRanges.before, id: \.self) { index in
+        let candidate = space.tabs[index]
+        Button(candidate.title) { store.splitTabs(tab.id, candidate.id) }
+      }
+      ForEach(candidateRanges.after, id: \.self) { index in
+        let candidate = space.tabs[index]
         Button(candidate.title) { store.splitTabs(tab.id, candidate.id) }
       }
     }

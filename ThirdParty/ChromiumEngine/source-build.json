@@ -680,6 +680,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0148-shaar-devtools-websocket-projection.patch",
       "sha256": "13556ac30468cc7161919a6003bbbe47bd3456b05216b7ea566f0ff50d17be74"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0149-shaar-http-basic-embedder-scope.patch",
+      "sha256": "476d01482e4916dcaac4a01aa9c443ed7c29e86420fededc930d7334e00ee759"
     }
   ],
   "devtoolsFrontend157": {

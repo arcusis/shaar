@@ -260,6 +260,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     else { throw WorkspaceError.invalidState }
     let definitions = Dictionary(
       uniqueKeysWithValues: catalog.spaces.flatMap { space in space.tabs.map { ($0.id, space) } })
+    let pinIDsBySpace = Dictionary(
+      uniqueKeysWithValues: catalog.spaces.map { space in (space.id, space.tabs.map(\.id)) })
     let definitionTabs = Dictionary(
       uniqueKeysWithValues: catalog.spaces.flatMap { space in space.tabs.map { ($0.id, $0) } })
     let favorites = Dictionary(uniqueKeysWithValues: catalog.favorites.map { ($0.id, $0) })
@@ -295,7 +297,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         let pins = space.tabs.filter(\.isPinned)
         guard
           pins.compactMap({ bindings[$0.id] })
-            == catalog.spaces.first(where: { $0.id == space.id })!.tabs.map(\.id),
+            == pinIDsBySpace[space.id],
           pins.allSatisfy({ tab in
             guard let pinID = bindings[tab.id], let owner = definitions[pinID],
               let definition = definitionTabs[pinID]

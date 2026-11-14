@@ -142,6 +142,8 @@ shaar_error_code Reload(content::NavigationController* controller,
   if (const content::NavigationEntry* pending = controller->GetPendingEntry()) {
     content::NavigationController::LoadURLParams params(pending->GetURL());
     params.transition_type = ui::PAGE_TRANSITION_RELOAD;
+    params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE
+                                      : content::ReloadType::NORMAL;
     controller->LoadURLWithParams(params);
     return SHAAR_OK;
   }

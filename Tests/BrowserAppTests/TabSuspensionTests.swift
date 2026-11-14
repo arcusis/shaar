@@ -31,6 +31,28 @@ struct TabSuspensionTests {
     #expect(task.isCancelled)
   }
 
+  @Test func deinitializingPrivateSessionCancelsItsBackgroundSuspensionTask() throws {
+    let tabID = UUID()
+    var store: BrowserStore? = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    var session: PrivatePageSession? = nil
+    if let store {
+      session = PrivatePageSession(
+        runtime: SuspensionTestRuntime(), contextID: "private-context",
+        windowID: "private-window", firstTabID: tabID, store: store)
+    }
+    let task = try #require(session?.suspensionTask)
+    session?.memoryPressureSource?.cancel()
+    session?.memoryPressureSource = nil
+    weak var releasedSession: PrivatePageSession? = session
+
+    store?.privatePage = nil
+    session = nil
+
+    #expect(releasedSession == nil)
+    #expect(task.isCancelled)
+  }
+
   @Test func idleTabsAreDiscardedWithoutClosingOrRestoringScroll() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let pinned = BrowserTab(url: URL(string: "https://pinned.example")!, isPinned: true)

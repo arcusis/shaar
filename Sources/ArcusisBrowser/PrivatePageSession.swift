@@ -42,6 +42,11 @@ final class PrivatePageSession {
   @ObservationIgnored var onEmpty: (() -> Void)?
   @ObservationIgnored let profileIsDownloading: (UUID) -> Bool
 
+  isolated deinit {
+    suspensionTask?.cancel()
+    memoryPressureSource?.cancel()
+  }
+
   init(
     runtime: ARCChromiumRuntime, contextID: String, windowID: String,
     firstTabID: UUID, store: BrowserStore,

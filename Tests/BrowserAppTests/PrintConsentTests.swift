@@ -243,4 +243,20 @@ struct PrintConsentTests {
     #expect(!store.requestPrint(unbound))
     #expect(store.sheet == nil)
   }
+
+  @Test func closingPrivatePrintTabCancelsItsPendingConsent() throws {
+    let store = BrowserStore(privateSession: .fresh())
+    store.perform(.open(URL(string: "https://example.com/article")!))
+    let print = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decision: Bool?
+    store.onPrintDecision = { _, accepted in decision = accepted }
+
+    #expect(store.requestPrint(print))
+    store.closeTab(print.tabID)
+
+    #expect(decision == false)
+    #expect(store.sheet == nil)
+  }
 }

@@ -149,7 +149,8 @@ extension DeveloperPageModel {
       if let engine,
         canCompleteBugReport(for: destination, generation: generation, engine: engine)
       {
-        reportFailure = InspectorToolsL10n.string("Could not create the bug report. Try again.")
+        reportFailure = InspectorToolsL10n.string(
+          "The bug report could not be saved. Check available storage and try again.")
       }
       return nil
     }

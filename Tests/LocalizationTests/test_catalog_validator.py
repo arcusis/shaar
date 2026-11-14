@@ -371,6 +371,23 @@ class CatalogValidatorTests(unittest.TestCase):
             "localizations"]["he"]["stringUnit"]["value"]
         self.assertEqual(translation, "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב.")
 
+    def test_bug_report_save_failure_uses_hebrew_inspector_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/DeveloperBugReportModel.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("canCompleteBugReport(for: destination, generation: generation, engine: engine)", source)
+        self.assertIn(
+            '"The bug report could not be saved. Check available storage and try again."', source
+        )
+        catalog_data = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        key = "The bug report could not be saved. Check available storage and try again."
+        value = catalog_data["strings"][key]["localizations"]["he"]["stringUnit"]["value"]
+        self.assertNotEqual(value, key)
+
     def test_rejects_null_catalog_and_localization_maps_cleanly(self):
         for data in (None, {"sourceLanguage": "en", "strings": {"x": None}},
                      {"sourceLanguage": "en", "strings": {"x": {"localizations": None}}}):

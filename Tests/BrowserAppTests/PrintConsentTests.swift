@@ -125,6 +125,8 @@ struct PrintConsentTests {
       ("pageURL", ("https://example.com/" + String(repeating: "a", count: 4096)) as Any),
       ("origin", "file:///tmp/page" as Any),
       ("origin", "https://example.com/path" as Any),
+      ("origin", "https://example.com?unexpected=query" as Any),
+      ("origin", "https://example.com#unexpected-fragment" as Any),
       ("frameID", "short" as Any),
       ("title", NSNull() as Any),
       ("title", String(repeating: "a", count: 2049) as Any),

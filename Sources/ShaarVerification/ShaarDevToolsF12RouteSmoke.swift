@@ -24,7 +24,8 @@ import Foundation
   }
 
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
-    guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else { return 2 }
+    guard isValidFixtureURL(pageURL) else { return 2 }
+    guard let pageURL else { return 2 }
     let root = outputURL.deletingLastPathComponent().appending(path: "profile")
     do {
       let workspace = try BrowserWorkspaceStore(
@@ -55,6 +56,16 @@ import Foundation
       write(["passed": false, "error": error.localizedDescription], to: outputURL)
       return 1
     }
+  }
+
+  static func isValidFixtureURL(_ url: URL?) -> Bool {
+    guard let url,
+      let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      components.scheme == "http", components.host == "127.0.0.1",
+      let port = components.port, (1...65_535).contains(port),
+      components.user == nil, components.password == nil
+    else { return false }
+    return true
   }
 
   private static func exercise(

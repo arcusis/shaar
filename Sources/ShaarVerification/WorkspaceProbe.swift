@@ -9,6 +9,19 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum WorkspaceProbeEvidence {
+  static func fixtureDocument(_ json: String?, address: String? = nil) -> [String: Any]? {
+    guard let data = json?.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      value["fixture"] as? String == "v1",
+      let instance = value["instance"] as? String,
+      !instance.isEmpty,
+      address == nil || value["url"] as? String == address
+    else { return nil }
+    return value
+  }
+}
+
 private struct WorkspaceProbeIdentity: Codable {
   let first: UUID
   let second: UUID
@@ -302,11 +315,7 @@ final class WorkspaceProbe {
             "({fixture:document.documentElement.dataset.arcusisFixture,url:location.href,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('account')})"
         ) { continuation.resume(returning: $0) }
       }
-      if let data = json?.data(using: .utf8),
-        let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["fixture"] as? String == "v1", value["instance"] as? String != nil,
-        address == nil || value["url"] as? String == address
-      {
+      if let value = WorkspaceProbeEvidence.fixtureDocument(json, address: address) {
         return value
       }
       try await Task.sleep(for: .milliseconds(100))

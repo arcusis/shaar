@@ -14,6 +14,10 @@ struct InspectorDetailsView: View {
   @Bindable var inspector: InspectorModel
   @Bindable var model: InspectorDetailsModel
 
+  static func componentSelectionTraits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
+
   var body: some View {
     ScrollView {
       VStack(spacing: 0) {
@@ -78,8 +82,7 @@ struct InspectorDetailsView: View {
               "Inspect %1$@ data", arguments: [.string(branch.entry.name)]
             ))
             .accessibilityAddTraits(
-              InspectorComponentRowAccessibility.traits(
-                isSelected: model.selectedComponent == branch.id))
+              Self.componentSelectionTraits(isSelected: model.selectedComponent == branch.id))
         }
         if let limit = tree.limit {
           Text(InspectorDetailsL10n.string(limit)).font(.system(size: 10))

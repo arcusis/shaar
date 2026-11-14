@@ -22,7 +22,7 @@ final class DeveloperPageModel {
   private(set) var failure: String?
   @ObservationIgnored weak var engine: BrowserEngine?
   @ObservationIgnored private var revision = 0
-  @ObservationIgnored private var closed = false
+  @ObservationIgnored private(set) var closed = false
   private(set) var overridesMayBeActive = false
   var hasActiveSimulation: Bool { simulation.isActive || overridesMayBeActive }
   @ObservationIgnored private var userAgent: String?

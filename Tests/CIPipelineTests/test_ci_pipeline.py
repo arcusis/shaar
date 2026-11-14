@@ -166,6 +166,10 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn(
             "key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Tests/InspectorContractTests/pnpm-lock.yaml') }}",
             inspector)
+        playwright_cache = inspector.split("      - name: Cache Playwright Chromium shell", 1)[1].split(
+            "\n      - name:", 1)[0]
+        self.assertIn("restore-keys: |", playwright_cache)
+        self.assertIn("playwright-${{ runner.os }}-${{ runner.arch }}-", playwright_cache)
         self.assertIn("playwright install chromium --with-deps --only-shell", inspector)
 
     def test_pnpm_store_caches_fall_back_after_lockfile_changes(self):

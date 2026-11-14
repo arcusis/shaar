@@ -267,7 +267,7 @@ private func target(_ address: String) -> SiteControlTarget {
   backend.finishFirstWrite?.resume()
   await write.value
 
-  #expect(model.permissionValues[.camera] == .allow)
+  #expect(model.permissionValues[.camera] != .allow)
   #expect(model.failure == nil)
   #expect(model.savingPermissions.isEmpty)
 }

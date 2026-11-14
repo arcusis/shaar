@@ -185,6 +185,14 @@ import Testing
   #expect(missingReply["replyOutcome"] as? Int == -1)
 }
 
+@Test func closingAWindowCancelsOnlyItsPendingWebShareRequests() throws {
+  let result = ARCProbeWebShareWindowCloseDispatch()
+
+  #expect(result["replyID"] as? String == result["closedRequestID"] as? String)
+  #expect(result["replyOutcome"] as? Int == 0)
+  #expect(result["pendingRequestCount"] as? Int == 1)
+}
+
 @Test func printRequestsRequireABI16AndOwnedLiveTabOnTheObjectiveCReceivePath() throws {
   let id = UUID().uuidString
   let payload: [String: Any] = [

@@ -19,6 +19,10 @@
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 
+@interface ARCShaarRuntime (WebShareWindowProbe)
+- (void)finishWindowID:(NSString *)windowID;
+@end
+
 @interface ARCShaarRuntime (DesktopCaptureProbeResolution)
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID;
 @end
@@ -272,6 +276,52 @@ NSDictionary *ARCProbeWebShareEventDispatch(NSDictionary *payload, uint32_t abiM
     @"received": received ?: @{},
     @"replyID": [NSString stringWithUTF8String:gProbeShareReplyID.c_str()] ?: @"",
     @"replyOutcome": @(gProbeShareReplyOutcome),
+  };
+}
+
+NSDictionary *ARCProbeWebShareWindowCloseDispatch(void) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  NSString *closedWindowID = NSUUID.UUID.UUIDString;
+  NSString *otherWindowID = NSUUID.UUID.UUIDString;
+  NSString *closedTabID = NSUUID.UUID.UUIDString;
+  NSString *otherTabID = NSUUID.UUID.UUIDString;
+  NSString *closedRequestID = NSUUID.UUID.UUIDString;
+  NSString *otherRequestID = NSUUID.UUID.UUIDString;
+  auto setIvar = ^(const char *name, const void *value, size_t size) {
+    Ivar ivar = class_getInstanceVariable(runtime.class, name);
+    if (!ivar) return;
+    void *address = (__bridge void *)runtime;
+    std::memcpy(static_cast<uint8_t *>(address) + ivar_getOffset(ivar), value, size);
+  };
+  BOOL available = YES;
+  setIvar("_shaarWebShareAvailable", &available, sizeof(available));
+  using ReplyFunction = shaar_error_code (*)(const char *, int);
+  ReplyFunction reply = ProbeShareReply;
+  setIvar("_shaarShareReply", &reply, sizeof(reply));
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarWindows"),
+                 [@{
+                   closedWindowID: [NSValue valueWithPointer:(void *)1],
+                   otherWindowID: [NSValue valueWithPointer:(void *)2],
+                 } mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
+                 [@{closedTabID: closedWindowID, otherTabID: otherWindowID} mutableCopy]);
+  NSMutableDictionary *pending = [@{
+    closedRequestID: closedTabID,
+    otherRequestID: otherTabID,
+  } mutableCopy];
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarShareRequests"),
+                 pending);
+  gProbeShareReplyID.clear();
+  gProbeShareReplyOutcome = -1;
+
+  [runtime finishWindowID:closedWindowID];
+
+  return @{
+    @"closedRequestID": closedRequestID,
+    @"otherRequestID": otherRequestID,
+    @"replyID": [NSString stringWithUTF8String:gProbeShareReplyID.c_str()] ?: @"",
+    @"replyOutcome": @(gProbeShareReplyOutcome),
+    @"pendingRequestCount": @(pending.count),
   };
 }
 

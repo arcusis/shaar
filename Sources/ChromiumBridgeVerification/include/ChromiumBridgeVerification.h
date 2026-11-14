@@ -83,6 +83,8 @@ FOUNDATION_EXPORT NSDictionary *ARCProbeDesktopCaptureEventDispatch(
     NSDictionary *payload, BOOL validOwner);
 FOUNDATION_EXPORT NSDictionary *ARCProbeWebShareEventDispatch(
     NSDictionary *payload, uint32_t abiMinor, BOOL validOwner, BOOL replyAvailable);
+/// Verifies closing one native window cancels only the web shares owned by its tabs.
+FOUNDATION_EXPORT NSDictionary *ARCProbeWebShareWindowCloseDispatch(void);
 FOUNDATION_EXPORT NSDictionary *ARCProbePrintEventDispatch(
     NSDictionary *payload, uint32_t abiMinor, BOOL validOwner);
 /// Injects a DevTools open-URL event and records its validated app callback.

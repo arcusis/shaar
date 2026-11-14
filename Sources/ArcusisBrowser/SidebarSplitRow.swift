@@ -30,8 +30,8 @@ struct SidebarSplitRow: View {
   }
 
   static func hoverAnimation(systemSetting: Bool, override: Bool?) -> Animation? {
-    reduceMotionEnabled(systemSetting: systemSetting, override: override)
-      ? nil : .easeOut(duration: 0.12)
+    hoverAnimation(
+      reduceMotion: reduceMotionEnabled(systemSetting: systemSetting, override: override))
   }
 
   static func keyboardActivationAction(_ action: @escaping () -> Void) -> () -> KeyPress.Result {

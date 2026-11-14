@@ -656,6 +656,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       return makeRow("Download", false, "Opening an attachment URL did not start a download")
     }
     var pauseDetail = "pause not reached"
+    var pauseVerified = false
     if item.state == .downloading && !item.paused {
       let asked = context.engine.downloads.perform(
         .pause, id: item.id, profileID: profile, selectedProfileID: profile)
@@ -663,6 +664,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
         context.engine.runtime.refreshDownloads(forProfileID: profile.uuidString)
         return downloadItems(context, profile).first { $0.id == item.id }?.paused == true
       }
+      pauseVerified = Self.downloadPauseWasVerified(asked: asked, held: held)
       let pausedBytes =
         downloadItems(context, profile).first { $0.id == item.id }?.receivedBytes ?? 0
       try? await Task.sleep(for: .milliseconds(800))
@@ -690,7 +692,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let good =
       bytes?.starts(with: Data("edge-download-ok\n".utf8)) == true && bytes?.count == 256 * 1024
     removeOwnedDownload(item.fileURL)
-    let passed = finished && showed && good && !item.dangerous && windowsHidden()
+    let passed = pauseVerified && finished && showed && good && !item.dangerous && windowsHidden()
     return makeRow(
       "Download", passed,
       "\(pauseDetail); sheet \(showed); finished \(finished); bytes \(bytes?.count ?? -1); dangerous \(item.dangerous); path \(item.fileURL?.path ?? "")"
@@ -1395,6 +1397,11 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     pixel.count == 4 && pixel.allSatisfy { (0...255).contains($0) }
       && pixel[3] > 0 && pixel[0..<3].contains { $0 > 0 }
   }
+
+  nonisolated static func downloadPauseWasVerified(asked: Bool, held: Bool) -> Bool {
+    asked && held
+  }
+
   nonisolated static func numbers(_ value: Any?) -> [Int] {
     if let values = value as? [Any] { return values.compactMap { number($0) } }
     if let values = value as? NSArray { return values.compactMap { number($0) } }

@@ -149,7 +149,7 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
 
     def test_unknown_or_missing_row_status_cannot_pass_the_scenario(self):
-        for row in ({"status": "unknown"}, {}):
+        for row in ({"status": "unknown"}, {}, {"status": ["pass"]}):
             with self.subTest(row=row):
                 report = {"passed": True, "rows": [row]}
                 self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")

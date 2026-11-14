@@ -172,6 +172,24 @@ enum NativeHostIdentityCheckpointEvidence {
   }
 }
 
+struct NativeHostClosedWindowRecoveryEvidence: Codable, Equatable {
+  let closedWindowID: UUID
+  let restoredWindowID: UUID
+  let closedWindowWasRemoved: Bool
+  let reopenCommandWasEnabled: Bool
+  let selectedURL: String
+  let expectedURL: String
+  let selectedTabWasLive: Bool
+  let recoverySnapshotWasConsumed: Bool
+
+  var passed: Bool {
+    closedWindowID != restoredWindowID && closedWindowWasRemoved && reopenCommandWasEnabled
+      && selectedURL == expectedURL && selectedURL.hasPrefix("http://127.0.0.1:")
+      && selectedTabWasLive
+      && recoverySnapshotWasConsumed
+  }
+}
+
 /// Exercises the production host class without ordering windows onscreen or sending OS input.
 @MainActor
 final class NativeHostProbe {
@@ -300,6 +318,34 @@ final class NativeHostProbe {
       try expect(
         manager.workspace.window(secondID) == nil && closures[secondID] == false,
         "ordinary native window close removes only its confirmed managed record")
+      let commandWasEnabled = host.canPerform(.reopenClosedWindow)
+      try send(.reopenClosedWindow)
+      guard
+        let restoredWindowID = host.contexts.keys.first(where: { $0 != firstID }),
+        let restoredWindow = host.contexts[restoredWindowID],
+        let restoredTab = restoredWindow.store.session.selectedSpace.selectedTab
+      else { throw HostProbeFailure("Reopening the last closed window did not restore its page.") }
+      _ = try await document(restoredTab.id)
+      let evidence = NativeHostClosedWindowRecoveryEvidence(
+        closedWindowID: secondID, restoredWindowID: restoredWindowID,
+        closedWindowWasRemoved: host.contexts[secondID] == nil
+          && manager.workspace.window(secondID) == nil,
+        reopenCommandWasEnabled: commandWasEnabled,
+        selectedURL: restoredTab.url.absoluteString,
+        expectedURL: fixture.appending(path: "host-second-temporary").absoluteString,
+        selectedTabWasLive: primary.runtime.nativeTabID(forID: restoredTab.id.uuidString) >= 0,
+        recoverySnapshotWasConsumed: host.lastClosedWindowSnapshot == nil)
+      let evidenceData = try JSONEncoder().encode(evidence)
+      try evidenceData.write(
+        to: root.appending(path: "\(phase)-native-closed-window-recovery.json"),
+        options: .atomic)
+      try expect(
+        evidence.passed
+          && restoredTab.url == fixture.appending(path: "host-second-temporary"),
+        "History reopens the last closed window with its selected page live")
+      focus(restoredWindowID)
+      try send(.closeWindow)
+      try await wait("reopened host window closure") { host.contexts[restoredWindowID] == nil }
       focus(firstID)
       try send(.closeWindow)
       try await wait("last managed host window closure") { host.contexts.isEmpty }
@@ -307,7 +353,7 @@ final class NativeHostProbe {
         manager.workspace.windows.isEmpty && !primary.runtime.isQuitting,
         "closing all managed host windows retains the catalog and leaves the test runtime available"
       )
-      closedIDs = [firstID, secondID]
+      closedIDs = [firstID, secondID, restoredWindowID]
       focused = nil
       host.preferences.setSidebarInitiallyVisible(false)
       let reopen = NSAppleEventDescriptor(

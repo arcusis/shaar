@@ -1282,6 +1282,15 @@ import Foundation
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
   }
 
+  private static func playbackInteger(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID(),
+      number.doubleValue.isFinite,
+      let exact = Int(exactly: number.doubleValue)
+    else { return nil }
+    return exact
+  }
+
   private static func row(
     _ name: String, _ status: String, _ detail: String, _ extra: [String: Any] = [:]
   ) -> [String: Any] {

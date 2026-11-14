@@ -85,6 +85,8 @@ runs:
       with:
         path: build/ci-tool-archives
         key: ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci-tools.json') }}
+        restore-keys: |
+          ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Install verified fast-check binaries
       if: inputs.tools == 'true'
       shell: bash

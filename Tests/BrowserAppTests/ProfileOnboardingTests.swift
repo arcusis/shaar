@@ -200,9 +200,6 @@ private struct CreationFailure: Error {}
     advanceToAccount(model)
     model.skip()
     model.continueToNext()
-    #expect(
-      model.failure == SettingsL10n.string("Could not create the profile. Try again.")
-        && model.outcome == nil && recorder.outcomes.isEmpty)
     #expect(model.failure == SettingsL10n.string("Could not create this profile. Try again."))
     #expect(model.outcome == nil && recorder.outcomes.isEmpty)
     #expect(

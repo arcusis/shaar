@@ -19,7 +19,7 @@ WIKI_LINK = re.compile(r"(?<!\\)\[\[([^\]\n]+)\]\]")
 
 def index_text(path: Path) -> str:
     """Exclude comments and fenced examples, which are not navigation links."""
-    text = re.sub(r"<!--.*?-->", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
+    text = re.sub(r"<!--.*?(?:-->|$)", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
     lines = []
     fence = None
     for line in text.splitlines():

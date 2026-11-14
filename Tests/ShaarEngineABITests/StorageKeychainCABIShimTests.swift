@@ -67,3 +67,23 @@ private let fakeStorageKeychainSubmitSuccess: @convention(c) (
   }
   #expect(status == UInt32(shaar_error_code(rawValue: 1).rawValue))
 }
+
+@Test func storageKeychainCShimRejectsShortImmediateErrorOutput() {
+  let invalidArgument = UInt32(SHAAR_INVALID_ARGUMENT.rawValue)
+  let symbol = UnsafeRawPointer(bitPattern: 1)
+  let engine = OpaquePointer(bitPattern: 2)
+  var scope = shaar_scope(
+    size: UInt32(MemoryLayout<shaar_scope>.size),
+    profile: OpaquePointer(bitPattern: 3), private_session: nil)
+  var error = shaar_error(
+    size: UInt32(MemoryLayout<shaar_error>.size - 1), code: SHAAR_OK, platform_code: 0,
+    message: shaar_bytes(data: nil, size: 0))
+
+  let result = withUnsafePointer(to: &scope) { scopePointer in
+    shaar_storage_keychain_submit_invoke(
+      symbol, engine, scopePointer, 0, shaar_bytes(data: nil, size: 0), 1,
+      noOpStorageKeychainReply, nil, &error)
+  }
+
+  #expect(result == invalidArgument)
+}

@@ -222,7 +222,7 @@ class BundleAppTests(unittest.TestCase):
             "אתרים שתאשרו יוכלו להשתמש במיקום, למשל באתרי מפות ומשלוחים.")
         self.assertEqual(
             hebrew_info["NSBluetoothAlwaysUsageDescription"],
-            "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים לכניסה עם מפתח גישה.")
+            "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים שמשמשים לכניסה באמצעות מפתח גישה.")
         for name in ("LICENSE", "pin.json"):
             self.assertEqual(
                 (resources / "PublicSuffix" / name).read_bytes(),

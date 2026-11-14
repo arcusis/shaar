@@ -820,10 +820,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let left =
       (snap["ready"] as? String) == "find" || (snap["href"] as? String ?? "").contains("/find")
     let exercised = clicked && isArmed
-    let passed = exercised && !fresh.isEmpty && windowsHidden()
+    let hidden = windowsHidden()
+    let passed = beforeUnloadProbePassed(
+      exercised: exercised, dialogCount: fresh.count, navigated: left, windowsHidden: hidden)
     return makeRow(
       "beforeunload", passed,
-      "clicked \(clicked), armed \(isArmed), dialog \(fresh.count), navigated \(left), \(describe(fresh))",
+      "clicked \(clicked), armed \(isArmed), dialog \(fresh.count), navigated \(left), hidden \(hidden), \(describe(fresh))",
       proven: exercised)
   }
 
@@ -1311,6 +1313,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
 
   private static func write(_ value: [String: Any], to url: URL) {
     edgeProbeWrite(value, to: url)
+  }
+
+  nonisolated static func beforeUnloadProbePassed(
+    exercised: Bool, dialogCount: Int, navigated: Bool, windowsHidden: Bool
+  ) -> Bool {
+    exercised && dialogCount > 0 && navigated && windowsHidden
   }
 
   nonisolated static func number(_ value: Any?) -> Int? {

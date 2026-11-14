@@ -44,11 +44,31 @@ private func fakeDevToolsSubmitShortErrorStruct(
   return SHAAR_OK
 }
 
+@_cdecl("fake_devtools_submit_short_immediate_error")
+private func fakeDevToolsSubmitShortImmediateError(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ arguments: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard engine != nil, let immediateError else { return shaar_error_code(rawValue: 1) }
+  immediateError.pointee.size = 0
+  immediateError.pointee.code = shaar_error_code(rawValue: 4)
+  return shaar_error_code(rawValue: 4)
+}
+
 private struct FakeDevToolsABISymbols: ShaarSymbolResolving {
+  var shortImmediateError = false
+
   func symbol(named: String) -> UnsafeRawPointer? {
     guard named == "shaar_submit" else { return nil }
-    return unsafeBitCast(fakeDevToolsSubmitShortErrorStruct as DevToolsShimSubmit,
-                         to: UnsafeRawPointer.self)
+    if shortImmediateError {
+      return unsafeBitCast(
+        fakeDevToolsSubmitShortImmediateError as DevToolsShimSubmit,
+        to: UnsafeRawPointer.self)
+    }
+    return unsafeBitCast(
+      fakeDevToolsSubmitShortErrorStruct as DevToolsShimSubmit, to: UnsafeRawPointer.self)
   }
 }
 
@@ -82,4 +102,16 @@ private struct FakeDevToolsABIHandleResolver: ShaarNavigationHandleResolving {
     }
   }
   #expect(result == .failure(.invalidEvent("short DevTools error")))
+}
+
+@Test func devToolsTransportRejectsShortImmediateErrorStruct() throws {
+  let transport = try ShaarDevToolsABITransport(
+    resolver: FakeDevToolsABISymbols(shortImmediateError: true),
+    handleResolver: FakeDevToolsABIHandleResolver())
+  let request = ShaarDevToolsRequest(
+    operation: .call, scope: ShaarNavigationScope(profileID: "profile"),
+    windowID: "window", tabID: "tab", payload: Data(#"{"schemaVersion":1}"#.utf8))
+  #expect(throws: ShaarEngineError.invalidEvent("short DevTools error")) {
+    try transport.submit(request) { _ in Issue.record("unexpected asynchronous reply") }
+  }
 }

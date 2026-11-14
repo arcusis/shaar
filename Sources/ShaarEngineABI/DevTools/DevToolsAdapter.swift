@@ -263,6 +263,9 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
     }
     guard status == 0 else {
       Unmanaged<ShaarDevToolsReplyBox>.fromOpaque(context).release()
+      guard immediateError.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+        throw ShaarEngineError.invalidEvent("short DevTools error")
+      }
       try ShaarStatusCode.decode(
         status, platformCode: immediateError.platform_code,
         message: String(decoding: try copyDevToolsBytes(immediateError.message), as: UTF8.self))

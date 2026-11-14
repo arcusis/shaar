@@ -17,6 +17,17 @@ struct RecentDownloadsPopover: View {
   let backdrop: Color
   private let referenceDate: Date
 
+  static func progressAccessibilityValue(
+    for item: BrowserDownload, language: BrowserLanguage
+  ) -> String? {
+    guard item.state == .downloading, !item.dangerous, let progress = item.progress else {
+      return nil
+    }
+    return BrowserLocalization.plural(
+      "%d percent", count: Int((progress * 100).rounded()),
+      table: "Panels", language: language)
+  }
+
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var revealed = false
   @State private var thumbnails: [String: NSImage] = [:]
@@ -160,9 +171,9 @@ struct RecentDownloadsPopover: View {
   }
 
   private func accessibilityLabel(for item: BrowserDownload, stateLabel: String) -> String {
+    let progress = Self.progressAccessibilityValue(for: item, language: .currentLaunchLanguage)
     let details = item.state == .downloading && !item.dangerous
-      ? [Self.progressLabel(for: item.progress), byteStatus(item)].compactMap { $0 }
-      : []
+      ? [progress, byteStatus(item)].compactMap { $0 } : []
     let formatter = ListFormatter()
     formatter.locale = PanelsL10n.formattingLocale()
     return formatter.string(from: [item.filename, stateLabel] + details + [relativeAge(item)])

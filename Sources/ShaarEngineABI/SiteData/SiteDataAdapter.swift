@@ -168,6 +168,7 @@ public struct ShaarSiteDataAdapter: Sendable {
     for (name, value) in values {
       guard let raw = value["value"] as? String,
         let setting = ShaarSiteSettingValue(rawValue: raw),
+        isJSONBoolean(value["isDefault"]),
         let isDefault = value["isDefault"] as? Bool,
         Set(value.keys) == ["value", "isDefault"]
       else { throw ShaarSiteDataError.malformedResponse }
@@ -189,6 +190,7 @@ public struct ShaarSiteDataAdapter: Sendable {
       ])
     guard Set(root.keys) == ["schemaVersion", "value", "isDefault"],
       let raw = root["value"] as? String, let setting = ShaarSiteSettingValue(rawValue: raw),
+      isJSONBoolean(root["isDefault"]),
       let isDefault = root["isDefault"] as? Bool
     else { throw ShaarSiteDataError.malformedResponse }
     return ShaarSiteSetting(value: setting, isDefault: isDefault)
@@ -227,6 +229,7 @@ public struct ShaarSiteDataAdapter: Sendable {
         "includeStorage": includeStorage,
       ])
     guard Set(root.keys) == ["schemaVersion", "complete"],
+      isJSONBoolean(root["complete"]),
       root["complete"] as? Bool == true
     else { throw ShaarSiteDataError.malformedResponse }
   }
@@ -242,6 +245,7 @@ public struct ShaarSiteDataAdapter: Sendable {
     if let sinceUnixMs { args["sinceUnixMs"] = sinceUnixMs }
     let root = try await submit(.browsingDataClear, args)
     guard Set(root.keys) == ["schemaVersion", "clearedTypes", "complete"],
+      isJSONBoolean(root["complete"]),
       let cleared = root["clearedTypes"] as? [String], root["complete"] as? Bool == true,
       cleared == types.sorted()
     else { throw ShaarSiteDataError.malformedResponse }
@@ -255,6 +259,7 @@ public struct ShaarSiteDataAdapter: Sendable {
         "origin": try Self.canonicalOrigin(origin)
       ])
     guard Set(root.keys) == ["schemaVersion", "complete"],
+      isJSONBoolean(root["complete"]),
       root["complete"] as? Bool == true
     else { throw ShaarSiteDataError.malformedResponse }
   }
@@ -304,6 +309,7 @@ public struct ShaarSiteDataAdapter: Sendable {
   {
     let root = try await submit(operation, arguments)
     guard Set(root.keys) == ["schemaVersion", "complete"],
+      isJSONBoolean(root["complete"]),
       root["complete"] as? Bool == true
     else { throw ShaarSiteDataError.malformedResponse }
   }
@@ -323,6 +329,7 @@ public struct ShaarSiteDataAdapter: Sendable {
     -> ShaarThirdPartyCookiePolicy
   {
     guard Set(root.keys) == ["schemaVersion", "blocked", "managed"],
+      isJSONBoolean(root["blocked"]), isJSONBoolean(root["managed"]),
       let blocked = root["blocked"] as? Bool, let managed = root["managed"] as? Bool
     else { throw ShaarSiteDataError.malformedResponse }
     return ShaarThirdPartyCookiePolicy(blocked: blocked, managed: managed)

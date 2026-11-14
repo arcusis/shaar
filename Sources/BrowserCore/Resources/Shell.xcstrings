@@ -2566,6 +2566,22 @@
         }
       }
     },
+    "Reopen Last Closed Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen Last Closed Window"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת החלון האחרון שנסגר מחדש"
+          }
+        }
+      }
+    },
     "Restart Page": {
       "localizations": {
         "en": {

@@ -49,6 +49,14 @@ final class BrowserWorkspaceStore {
     return id
   }
 
+  @discardableResult
+  func restoreWindow(_ closedWindow: WorkspaceWindow, from sourceID: UUID? = nil) throws -> UUID {
+    let id = try workspace.restoreWindow(closedWindow, from: sourceID)
+    attach(workspace.window(id)!)
+    saveAndBroadcast()
+    return id
+  }
+
   func removeWindow(_ id: UUID) throws {
     try workspace.removeWindow(id)
     stores[id] = nil

@@ -347,6 +347,75 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     return id
   }
 
+  /// Restores a closed window's local browsing state against the workspace's current shared data.
+  @discardableResult
+  public mutating func restoreWindow(
+    _ closedWindow: WorkspaceWindow, from sourceID: UUID? = nil
+  ) throws -> UUID {
+    var draft = self
+    let id = try draft.addWindow(from: sourceID)
+    guard let current = draft.window(id) else { throw WorkspaceError.invalidState }
+    let saved = closedWindow.session
+    var restored = current.session
+    let currentPins = Dictionary(uniqueKeysWithValues: current.pins.map { ($0.pinID, $0.tabID) })
+    let savedPins = Dictionary(uniqueKeysWithValues: closedWindow.pins.map { ($0.tabID, $0.pinID) })
+    var tabIDs: [UUID: UUID] = [:]
+    for (tabID, pinID) in savedPins {
+      if let newID = currentPins[pinID] { tabIDs[tabID] = newID }
+    }
+    for space in saved.spaces {
+      for tab in space.tabs where !tab.isPinned { tabIDs[tab.id] = tab.id }
+    }
+    let savedSpaces = Dictionary(uniqueKeysWithValues: saved.spaces.map { ($0.id, $0) })
+    restored.spaces = restored.spaces.map { source in
+      guard let previous = savedSpaces[source.id] else { return source }
+      var space = source
+      space.tabs += previous.tabs.filter { !$0.isPinned }
+      let tabIDsInSpace = Set(space.tabs.map(\.id))
+      space.selectedTabID = previous.selectedTabID.flatMap { tabIDs[$0] }
+        .flatMap { tabIDsInSpace.contains($0) ? $0 : nil }
+      space.selectedFavoriteID = previous.selectedFavoriteID.flatMap { favoriteID in
+        restored.favorites.contains { $0.id == favoriteID } ? favoriteID : nil
+      }
+      let collapsed = Dictionary(
+        uniqueKeysWithValues: previous.folders.map { ($0.id, $0.isCollapsed) })
+      space.folders = space.folders.map { folder in
+        var restoredFolder = folder
+        restoredFolder.isCollapsed = collapsed[folder.id] ?? folder.isCollapsed
+        return restoredFolder
+      }
+      let mappedSplits = previous.splits.compactMap { split -> BrowserSplit? in
+        guard let root = split.root.mappingPanes(tabIDs),
+          Set(root.paneIDs).isSubset(of: tabIDsInSpace)
+        else { return nil }
+        return BrowserSplit(id: split.id, root: root)
+      }
+      let existingSplitIDs = Set(space.splits.map(\.id))
+      space.splits += mappedSplits.filter { !existingSplitIDs.contains($0.id) }
+      space.reconcileSplits()
+      return space
+    }
+    if restored.spaces.contains(where: { $0.id == saved.selectedSpaceID }) {
+      restored.selectedSpaceID = saved.selectedSpaceID
+    }
+    restored.closedTabs = saved.closedTabs.filter { closed in
+      restored.spaces.contains { $0.id == closed.spaceID }
+    }
+    let savedFavoritePages = Dictionary(
+      uniqueKeysWithValues: saved.favoritePages.map { ($0.favoriteID, $0) })
+    restored.favoritePages = restored.favoritePages.map { page in
+      savedFavoritePages[page.favoriteID] ?? page
+    }
+    try draft.updateWindow(id, session: restored)
+    guard let restoredIndex = draft.windows.firstIndex(where: { $0.id == id }) else {
+      throw WorkspaceError.invalidState
+    }
+    draft.windows[restoredIndex].geometry = closedWindow.geometry
+    try draft.validate()
+    self = draft
+    return id
+  }
+
   public mutating func focusWindow(_ id: UUID) throws {
     guard window(id) != nil else { throw WorkspaceError.unknownWindow }
     focusedWindowID = id

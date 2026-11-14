@@ -131,6 +131,29 @@ private func workspaceFixture() throws -> BrowserSession {
   try workspace.validate()
 }
 
+@Test func restoringClosedWindowRestoresItsLocalTabsAndRecoveryState() throws {
+  var workspace = try BrowserWorkspace(session: workspaceFixture())
+  let original = try #require(workspace.windows.first)
+  let geometry = WorkspaceWindowGeometry(x: 40, y: 60, width: 900, height: 700)
+  try workspace.setGeometry(geometry, for: original.id)
+  let closedWindow = try #require(workspace.window(original.id))
+  try workspace.removeWindow(original.id)
+
+  let restoredID = try workspace.restoreWindow(closedWindow)
+  let restored = try #require(workspace.window(restoredID))
+  let originalSpace = try #require(closedWindow.session.spaces.first)
+  let restoredSpace = try #require(restored.session.spaces.first { $0.id == originalSpace.id })
+  let originalPinIDs = Set(originalSpace.tabs.filter(\.isPinned).map(\.id))
+  let restoredPinIDs = Set(restoredSpace.tabs.filter(\.isPinned).map(\.id))
+
+  #expect(restored.geometry == geometry)
+  #expect(restoredSpace.tabs.filter { !$0.isPinned } == originalSpace.tabs.filter { !$0.isPinned })
+  #expect(restoredSpace.selectedTabID == originalSpace.selectedTabID)
+  #expect(restored.session.closedTabs == closedWindow.session.closedTabs)
+  #expect(restoredPinIDs.isDisjoint(with: originalPinIDs))
+  try workspace.validate()
+}
+
 @Test func keepAlivePinnedDefinitionReachesNewWindows() throws {
   var session = try workspaceFixture()
   let firstPin = session.selectedSpace.tabs.first { $0.isPinned }

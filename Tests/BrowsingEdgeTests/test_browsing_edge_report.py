@@ -183,7 +183,8 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
         self.assertIn('let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0', source)
         self.assertIn('scrollEvents > 0 && scrollEndEvents > 0', source)
-        self.assertIn('window.scrollTo(0, document.documentElement.scrollHeight)', fixture)
+        self.assertIn(
+            'window.scrollTo(0, document.documentElement.scrollHeight)', source)
         self.assertIn('let pageScrollEvents = number(second?["pageScrollEvents"]) ?? 0', source)
         self.assertIn('scrollEvents > 0 && scrollEndEvents > 0 && pageScrollEvents > 0', source)
 

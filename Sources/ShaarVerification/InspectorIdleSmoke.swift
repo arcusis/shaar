@@ -16,6 +16,12 @@ enum InspectorIdleSmokeEvidence {
   }
 }
 
+enum InspectorIdlePollEvidence {
+  static func stayedBackedOff(_ calls: Int) -> Bool {
+    (2...12).contains(calls)
+  }
+}
+
 /// Opens Inspector on one loopback page in the hidden verification app and counts
 /// how often it reads the page once the selection has stopped changing.
 @MainActor enum InspectorIdleSmoke {
@@ -77,7 +83,7 @@ enum InspectorIdleSmokeEvidence {
       try await Task.sleep(for: .seconds(5))
       let calls = try await pollCalls(model)
       let hidden = host.contexts.values.allSatisfy { !$0.window.isVisible }
-      let backedOff = (2...12).contains(calls)
+      let backedOff = InspectorIdlePollEvidence.stayedBackedOff(calls)
       verdictPassed = backedOff && hidden && model.isOpen
       write(
         [

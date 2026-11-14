@@ -48,6 +48,7 @@ final class BrowserEngine {
   var developmentPageURLs: [UUID: URL] = [:]
   var developmentProbedURLs: [UUID: URL] = [:]
   var developmentProbeRequests: [UUID: UUID] = [:]
+  var developmentProbeTasks: [UUID: Task<Void, Never>] = [:]
   let downloads: DownloadsModel
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -96,6 +97,7 @@ final class BrowserEngine {
     suspensionTask?.cancel()
     memoryPressureSource?.cancel()
     delayedRefreshTasks.values.forEach { $0.cancel() }
+    developmentProbeTasks.values.forEach { $0.cancel() }
   }
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
@@ -250,6 +252,7 @@ final class BrowserEngine {
       self.developmentPageURLs.removeAll()
       self.developmentProbedURLs.removeAll()
       self.developmentProbeRequests.removeAll()
+      self.cancelDevelopmentProbeTasks()
       self.extensionPanel = nil
       self.store?.dismissPageFind()
       self.liveTabs.removeAll()
@@ -649,6 +652,7 @@ final class BrowserEngine {
       self.store?.dismissHTTPAuth(forTabID: id)
       if self.tabsAwaitingProfileReassignment.remove(id) != nil {
         self.pages[id] = nil
+        self.cancelDevelopmentProbe(tabID: id)
         DispatchQueue.main.async { [weak self] in self?.reconcile() }
         return
       }
@@ -665,6 +669,7 @@ final class BrowserEngine {
       self.developmentPageURLs[id] = nil
       self.developmentProbedURLs[id] = nil
       self.developmentProbeRequests[id] = nil
+      self.cancelDevelopmentProbe(tabID: id)
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
       self.clearFavicon(id)
@@ -902,6 +907,7 @@ final class BrowserEngine {
       developmentPageURLs[removed] = nil
       developmentProbedURLs[removed] = nil
       developmentProbeRequests[removed] = nil
+      cancelDevelopmentProbe(tabID: removed)
       mediaAccess[removed] = nil
       forgetMedia(removed)
       clearFavicon(removed)

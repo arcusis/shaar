@@ -23,7 +23,10 @@ extension BrowserEngine {
   func updateDevelopmentPage(tabID: UUID, url: URL, loading: Bool) {
     let page = DevelopmentPage.detect(url: url)
     let previousURL = developmentPageURLs[tabID]
-    if loading || previousURL != url { developmentProbeRequests[tabID] = UUID() }
+    if loading || previousURL != url {
+      cancelDevelopmentProbe(tabID: tabID)
+      developmentProbeRequests[tabID] = UUID()
+    }
     if loading || developmentProbedURLs[tabID] != url { developmentPages[tabID] = page }
     developmentPageURLs[tabID] = url
     if loading { developmentProbedURLs[tabID] = nil }
@@ -34,24 +37,26 @@ extension BrowserEngine {
     developmentProbedURLs[tabID] = url
     let request = developmentProbeRequests[tabID] ?? UUID()
     developmentProbeRequests[tabID] = request
-    Task { [weak self] in
-      guard let self else { return }
+    developmentProbeTasks[tabID] = Task { [weak self] in
       // The navigation callback may arrive before the document exposes its framework markers.
-      try? await Task.sleep(for: .milliseconds(250))
-      guard !Task.isCancelled,
-        self.developmentProbeRequests[tabID] == request,
-        self.store?.session.page(forTabID: tabID)?.tab.url == url,
-        let model = self.developerModels[tabID], model.target.url == url
+      do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+      guard !Task.isCancelled else { return }
+      defer { self?.finishDevelopmentProbe(tabID: tabID, request: request) }
+      guard
+        self?.developmentProbeRequests[tabID] == request,
+        self?.store?.session.page(forTabID: tabID)?.tab.url == url,
+        let model = self?.developerModels[tabID], model.target.url == url
       else { return }
       do {
         let value = try await model.evaluate(Self.frameworkMarkerScript)
         guard let text = value as? String, let data = text.data(using: .utf8),
           let markers = try? JSONDecoder().decode(PageMarkerSnapshot.self, from: data),
-          self.developmentProbeRequests[tabID] == request,
-          self.store?.session.profileID(forTabID: tabID) == profileID,
-          self.store?.session.page(forTabID: tabID)?.tab.url == url
+          !Task.isCancelled,
+          self?.developmentProbeRequests[tabID] == request,
+          self?.store?.session.profileID(forTabID: tabID) == profileID,
+          self?.store?.session.page(forTabID: tabID)?.tab.url == url
         else { return }
-        self.developmentPages[tabID] = DevelopmentPage.detect(
+        self?.developmentPages[tabID] = DevelopmentPage.detect(
           url: url,
           markers: DevelopmentPageMarkers(
             resourcePaths: markers.resourcePaths, documentMarkers: markers.documentMarkers))
@@ -59,6 +64,20 @@ extension BrowserEngine {
         // The local page can navigate while the probe runs; URL eligibility remains valid.
       }
     }
+  }
+
+  private func finishDevelopmentProbe(tabID: UUID, request: UUID) {
+    guard developmentProbeRequests[tabID] == request else { return }
+    developmentProbeTasks[tabID] = nil
+  }
+
+  func cancelDevelopmentProbe(tabID: UUID) {
+    developmentProbeTasks.removeValue(forKey: tabID)?.cancel()
+  }
+
+  func cancelDevelopmentProbeTasks() {
+    developmentProbeTasks.values.forEach { $0.cancel() }
+    developmentProbeTasks.removeAll()
   }
 
   private static let frameworkMarkerScript = """

@@ -44,7 +44,25 @@ struct BrowserEngineDevelopmentPageTests {
     try await Task.sleep(for: .milliseconds(10))
     #expect(engine.developmentPages[tabID]?.detectedFramework == .nextJS)
     engine.developerModels.removeValue(forKey: tabID)?.close()
+    engine.cancelDevelopmentProbeTasks()
     engine.suspensionTask?.cancel()
+  }
+
+  @Test func startingANavigationCancelsThePendingFrameworkProbe() throws {
+    let store = BrowserStore()
+    let url = try #require(URL(string: "http://localhost:5173/app"))
+    store.perform(.open(url))
+    let tabID = try #require(store.session.selectedSpace.selectedTab?.id)
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+
+    engine.updateDevelopmentPage(tabID: tabID, url: url, loading: false)
+    let pending = try #require(engine.developmentProbeTasks[tabID])
+    engine.updateDevelopmentPage(tabID: tabID, url: url, loading: true)
+
+    #expect(pending.isCancelled)
+    #expect(engine.developmentProbeTasks[tabID] == nil)
+    engine.cancelDevelopmentProbeTasks()
   }
 
   @Test func completedLocalPageIsProbedOnceWithoutDiscardingEnrichment() throws {

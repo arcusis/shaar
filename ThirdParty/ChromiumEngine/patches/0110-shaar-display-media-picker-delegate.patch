@@ -1,0 +1,30 @@
+diff --git a/chrome/browser/media/webrtc/desktop_media_picker_factory_impl.cc b/chrome/browser/media/webrtc/desktop_media_picker_factory_impl.cc
+index 52a81ecef2..efe1fb73ee 100644
+--- a/chrome/browser/media/webrtc/desktop_media_picker_factory_impl.cc
++++ b/chrome/browser/media/webrtc/desktop_media_picker_factory_impl.cc
+@@ -12,6 +12,9 @@
+ #include "chrome/browser/media/webrtc/desktop_capturer_wrapper.h"
+ #include "chrome/browser/media/webrtc/native_desktop_media_list.h"
+ #include "chrome/browser/media/webrtc/tab_desktop_media_list.h"
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/shaar/media/shaar_desktop_capture.h"
++#endif
+ #include "content/public/browser/desktop_capture.h"
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+@@ -75,6 +78,15 @@ DesktopMediaPickerFactoryImpl* DesktopMediaPickerFactoryImpl::GetInstance() {
+ 
+ std::unique_ptr<DesktopMediaPicker> DesktopMediaPickerFactoryImpl::CreatePicker(
+     const content::MediaStreamRequest* request) {
++#if BUILDFLAG(IS_MAC)
++  if (request && shaar::desktop_capture::IsActive() &&
++      (request->video_type ==
++           blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE ||
++       request->video_type ==
++           blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_SET)) {
++    return shaar::desktop_capture::CreatePicker(*request);
++  }
++#endif
+   // DesktopMediaPicker is implemented only for Windows, OSX, Aura Linux, and
+   // desktop Android builds.
+ #if defined(TOOLKIT_VIEWS)

@@ -72,7 +72,32 @@ void Finish(std::string_view prompt_id, PickerResult result) {
   std::move(callback).Run(std::move(result));
 }
 
+void NotifyDismissal(const PendingCapture& pending, std::string_view prompt_id) {
+  if (!lifecycle::EngineIsReady(pending.engine)) {
+    return;
+  }
+  base::DictValue payload;
+  payload.Set("schemaVersion", 1);
+  payload.Set("kind", "desktopCaptureDismissed");
+  payload.Set("id", prompt_id);
+  std::string json;
+  if (!base::JSONWriter::Write(payload, &json)) {
+    return;
+  }
+  shaar::EmitEvent(
+      pending.engine, SHAAR_EVENT_PERMISSION,
+      {pending.profile_id.data(), pending.profile_id.size()}, {},
+      {pending.window_id.data(), pending.window_id.size()},
+      {pending.tab_id.data(), pending.tab_id.size()},
+      {json.data(), json.size()});
+}
+
 void Cancel(std::string prompt_id) {
+  auto found = Pending().find(prompt_id);
+  if (found == Pending().end()) {
+    return;
+  }
+  NotifyDismissal(found->second, prompt_id);
   Finish(prompt_id, base::unexpected(CaptureError::PERMISSION_DENIED_BY_USER));
 }
 
@@ -131,7 +156,6 @@ bool ParseSourceToken(std::string_view token,
     if (!uuid.is_valid()) {
       return false;
     }
-    *value = uuid.AsLowercaseString();
     return true;
   }
   uint32_t native_id = 0;
@@ -139,7 +163,8 @@ bool ParseSourceToken(std::string_view token,
   const auto [end, error] =
       std::from_chars(digits.data(), digits.data() + digits.size(), native_id);
   return (*type == "screen" || *type == "window") && error == std::errc() &&
-         end == digits.data() + digits.size() && native_id > 0;
+         end == digits.data() + digits.size() && native_id > 0 &&
+         std::to_string(native_id) == digits;
 }
 
 bool MakeMediaID(PendingCapture& pending,
@@ -299,6 +324,7 @@ shaar_error_code Resolve(shaar_engine* engine,
     return SHAAR_OK;
   }
   if (decision != "approve" || source_token.empty()) {
+    Cancel(std::string(prompt_id));
     return SHAAR_INVALID_ARGUMENT;
   }
   content::DesktopMediaID media_id;

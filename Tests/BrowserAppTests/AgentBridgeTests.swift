@@ -56,6 +56,21 @@ final class AgentBridgeTests: XCTestCase {
       ]))
   }
 
+  func testStatusRejectsNestedAndTraversalWebSocketPaths() {
+    for path in ["/devtools/browser/../json/version", "/devtools/browser/id/extra"] {
+      XCTAssertThrowsError(
+        try AgentBridgeStatus.decode([
+          "schemaVersion": 1, "enabled": true, "port": 9222,
+          "wsEndpoint": "ws://127.0.0.1:9222\(path)", "connectionCount": 1,
+        ]))
+    }
+    XCTAssertNoThrow(
+      try AgentBridgeStatus.decode([
+        "schemaVersion": 1, "enabled": true, "port": 9222,
+        "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id_123-abc", "connectionCount": 1,
+      ]))
+  }
+
   func testConnectionStateAndTargetChangeClearCredential() throws {
     let first = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/a")!)

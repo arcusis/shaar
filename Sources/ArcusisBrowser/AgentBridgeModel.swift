@@ -97,7 +97,7 @@ struct AgentBridgeStatus: Equatable {
         components.port == port, components.user == nil, components.password == nil,
         components.query == nil, components.fragment == nil,
         components.path.hasPrefix("/devtools/browser/"),
-        components.path.count > "/devtools/browser/".count,
+        Self.isBrowserEndpointPath(components.path),
         endpoint.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || ":/.-_[]".contains($0)) }
         )
       else {
@@ -111,6 +111,17 @@ struct AgentBridgeStatus: Equatable {
       throw AgentBridgeFailure.invalidReply
     }
     return .disabled
+  }
+
+  private static func isBrowserEndpointPath(_ path: String) -> Bool {
+    let prefix = "/devtools/browser/"
+    guard path.hasPrefix(prefix) else { return false }
+    let identifier = path.dropFirst(prefix.count).utf8
+    return (1...128).contains(identifier.count)
+      && identifier.allSatisfy {
+        ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122)
+          || $0 == 45 || $0 == 95
+      }
   }
 }
 

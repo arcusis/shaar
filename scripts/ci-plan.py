@@ -111,8 +111,22 @@ def merge_group_pr_number(event: dict, name: str) -> str:
     return match.group(1)
 
 
-def main() -> None:
-    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+def load_event(path: Path) -> dict:
+    try:
+        event = json.loads(path.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read workflow event JSON from {path}: {error}") from error
+    if not isinstance(event, dict):
+        raise ValueError(f"workflow event JSON must be an object: {path}")
+    return event
+
+
+def main() -> int:
+    try:
+        event = load_event(Path(os.environ["GITHUB_EVENT_PATH"]))
+    except (KeyError, ValueError) as error:
+        print(f"CI plan error: {error}", file=sys.stderr)
+        return 1
     name = os.environ["GITHUB_EVENT_NAME"]
     iterations = iteration_count(event, name)
     base = (event.get("pull_request", {}).get("base", {}).get("sha")
@@ -147,6 +161,7 @@ def main() -> None:
         output.write(f"### CI selection\n\nFull native pipeline: **{full}**. Draft pull request: **{draft}**. "
                      f"Immutable baseline: `{base}`. "
                      f"Website checks: **{website}**. Swift CodeQL: **{swift}**. Requested probe repetitions: **{iterations}**; private/Quit minimum: **3**.\n")
+    return 0
 
 
 if __name__ == "__main__":

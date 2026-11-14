@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import sys
 import time
 import unittest
@@ -82,6 +83,12 @@ class ReportResult(unittest.TextTestResult):
         path = Path(path)
         if path.is_symlink():
             raise ValueError(f"JUnit report path must not be a symlink: {path}")
+        absolute = Path(os.path.abspath(path))
+        system_aliases = {Path("/var"): Path("/private/var"),
+                          Path("/tmp"): Path("/private/tmp")}
+        for parent in absolute.parents:
+            if parent.is_symlink() and system_aliases.get(parent) != parent.resolve():
+                raise ValueError(f"JUnit report parent must not be a symlink: {parent}")
         if path.exists() and not path.is_file():
             raise ValueError(f"JUnit report path is not a regular file: {path}")
         self.report.set("tests", str(len(self.report)))

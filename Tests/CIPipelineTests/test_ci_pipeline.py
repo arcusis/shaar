@@ -1417,6 +1417,25 @@ class ProbeSoakTests(unittest.TestCase):
 
             self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
 
+    def test_python_junit_rejects_symlinked_report_parent_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outside = root / "outside"
+            outside.mkdir()
+            target = outside / "report.xml"
+            target.write_text("preserve this", encoding="utf-8")
+            parent = root / "linked-parent"
+            parent.symlink_to(outside, target_is_directory=True)
+            report = parent / "report.xml"
+            result = unittest.TextTestRunner(
+                stream=io.StringIO(), resultclass=PYTHON_TESTS.ReportResult
+            ).run(unittest.TestSuite())
+
+            with self.assertRaisesRegex(ValueError, "JUnit report parent must not be a symlink"):
+                result.write_report(report)
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
     def test_python_module_import_error_is_reported_without_skipping_other_modules(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

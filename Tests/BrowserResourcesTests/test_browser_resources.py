@@ -54,7 +54,7 @@ class ResourceStagingTests(unittest.TestCase):
         sentinel.write_text("leave untouched", encoding="utf-8")
         self.resources.parent.mkdir(parents=True)
         self.resources.symlink_to(outside, target_is_directory=True)
-        with self.assertRaisesRegex(ValueError, "destination is not a regular directory"):
+        with self.assertRaisesRegex(ValueError, "resource output directory must not be a symlink"):
             staging.stage(self.binary, self.resources, self.pin)
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "leave untouched")
         self.assertEqual(list(outside.iterdir()), [sentinel])
@@ -74,12 +74,11 @@ class ResourceStagingTests(unittest.TestCase):
                 localized.mkdir(parents=True, exist_ok=True)
                 (localized / "Localizable.strings").write_text("\"key\" = \"value\";\n")
 
-        with self.assertRaisesRegex(ValueError, "symlinked parent"):
+        with self.assertRaisesRegex(ValueError, "resource output parent must not be a symlink"):
             with patch.object(staging, "compile_catalog", side_effect=compile_catalog):
                 staging.stage(self.binary, self.resources, self.pin)
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "leave untouched")
         self.assertFalse((resources / staging.BUNDLE).exists())
-    }
 
     def test_symlinked_resources_parent_is_rejected_before_staging(self):
         external = self.root / "external-contents"

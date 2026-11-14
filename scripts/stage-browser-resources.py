@@ -145,7 +145,7 @@ def stage(
             "SwiftPM resource bundle was not staged into the app: " + ", ".join(unexpected))
     if resources.is_symlink() or (resources.exists() and not resources.is_dir()):
         raise ValueError("resource staging destination is not a regular directory")
-    if any(parent.is_symlink() for parent in resources.parents[:2]):
+    if any(parent.is_symlink() for parent in list(resources.parents)[:2]):
         raise ValueError("resource staging destination has a symlinked parent")
     resources.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=resources, prefix=".browser-resources-") as temporary:

@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -24,6 +25,10 @@ import Testing
       BrowserImportPreviewCounts.summary(
         bookmarks: 2, history: 2, profileName: "Work", language: .hebrew))
       == "שתי סימניות ו־שני פריטי היסטוריה מוכנים לייבוא לפרופיל Work.")
+}
+
+@MainActor @Test func browserImportPreviewTitleIsVoiceOverHeading() {
+  #expect(BrowserImportPreviewView.headingTraits == .isHeader)
 }
 
 @Test func browserImportPreviewCountBenchmark() {

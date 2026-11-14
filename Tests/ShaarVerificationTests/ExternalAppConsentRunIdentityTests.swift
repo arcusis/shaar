@@ -35,8 +35,11 @@ import Testing
     ] {
       let root = try root()
       defer { try? FileManager.default.removeItem(at: root) }
+      let runID = metadata["runID"] as! String
       try JSONSerialization.data(withJSONObject: metadata).write(
         to: root.appending(path: "external-app-consent-run.json"))
+      try JSONSerialization.data(withJSONObject: ["runID": runID]).write(
+        to: root.appending(path: "initial-external-app-consent.json"))
       #expect(throws: (any Error).self) {
         try ExternalAppConsentProbe.loadRunIdentity(root: root, phase: "restart")
       }

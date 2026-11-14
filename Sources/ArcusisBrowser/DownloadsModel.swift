@@ -29,6 +29,13 @@ final class DownloadsModel {
   @ObservationIgnored var onCommand:
     ((DownloadAction, String, UUID, @escaping @MainActor @Sendable (String?) -> Void) -> Void)?
 
+  static func commandFailure(
+    for error: Error?, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String? {
+    guard error != nil else { return nil }
+    return PanelsL10n.string("Could not complete this download action. Try again.", language: language)
+  }
+
   func items(in profileID: UUID) -> [BrowserDownload] {
     (records[profileID] ?? [:]).values.sorted {
       $0.startTime == $1.startTime ? $0.id < $1.id : $0.startTime > $1.startTime

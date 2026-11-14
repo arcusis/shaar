@@ -126,6 +126,19 @@ struct DownloadsTests {
   }
 }
 
+@Suite @MainActor
+struct DownloadFailureLocalizationTests {
+  @Test func runtimeCommandFailuresUseHebrewRecoveryCopy() {
+    let error = NSError(
+      domain: "Chromium", code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "The system refused the command."])
+    #expect(
+      DownloadsModel.commandFailure(for: error, language: .hebrew)
+        == "לא ניתן לבצע את הפעולה על ההורדה. כדאי לנסות שוב.")
+    #expect(DownloadsModel.commandFailure(for: nil, language: .hebrew) == nil)
+  }
+}
+
 extension DownloadsTests {
   @Test func commandsWithoutAnEngineExplainWhyNothingHappened() {
     let model = DownloadsModel()

@@ -375,7 +375,7 @@ final class BrowserEngine {
       }
       self.runtime.downloadCommand(action.rawValue, downloadID: id, profileID: profile.uuidString) {
         error in
-        MainActor.assumeIsolated { completion(error?.localizedDescription) }
+        MainActor.assumeIsolated { completion(DownloadsModel.commandFailure(for: error)) }
       }
     }
     callbacks.onDownloadChanged = { [weak self] owner, record in

@@ -70,6 +70,14 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn("CI_NEEDS must be a JSON object", errors.getvalue())
         self.assertNotIn("Traceback", errors.getvalue())
 
+    def test_ci_checks_rejects_options_ignored_by_pins_only(self):
+        for option in ("--snapshot-only", "--docs-only", "--skip-python"):
+            with self.subTest(option=option), patch.object(
+                sys, "argv", ["ci-checks.py", "--pins-only", option]
+            ), self.assertRaises(SystemExit) as caught:
+                PINS.main()
+            self.assertEqual(caught.exception.code, 2)
+
     def test_ci_evidence_collection_runs_after_failure_but_not_cancellation(self):
         action = (ROOT / ".github/actions/ci-evidence/action.yml").read_text()
         collector = action.split("    - name: Collect scoped native probe reports\n", 1)[1]

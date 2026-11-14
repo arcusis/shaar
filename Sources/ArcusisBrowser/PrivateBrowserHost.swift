@@ -290,6 +290,8 @@ final class PrivateBrowserHost {
     return switch command {
     case .back:
       store.session.selectedPage.flatMap { store.privatePage?.pages[$0.tab.id] }?.canGoBack == true
+    case .forward:
+      store.session.selectedPage.flatMap { store.privatePage?.pages[$0.tab.id] }?.canGoForward == true
     case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
     case .developerTools, .chromiumDeveloperTools, .inspector:
       !store.commandIsOpen && store.privatePage?.inspectorTarget != nil
@@ -315,6 +317,8 @@ final class PrivateBrowserHost {
     switch command {
     case .back:
       if let id = store.session.selectedPage?.tab.id { owner.page.goBack(id) }
+    case .forward:
+      if let id = store.session.selectedPage?.tab.id { owner.page.goForward(id) }
     case .developerTools: owner.page.toggleChromiumDeveloperTools()
     case .chromiumDeveloperTools: owner.page.toggleChromiumDeveloperTools()
     case .inspector: owner.page.toggleInspector()

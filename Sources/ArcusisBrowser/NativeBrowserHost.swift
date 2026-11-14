@@ -55,7 +55,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, clearHistory, downloads
-  case back, find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
+  case back, forward, find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
     developerTools, chromiumDeveloperTools
   case nextWindow, previousWindow
   case splitView
@@ -239,6 +239,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   static func routeBack(tabID: UUID?, canGoBack: Bool, goBack: (String) -> Void) -> Bool {
     guard canGoBack, let tabID else { return false }
     goBack(tabID.uuidString)
+    return true
+  }
+
+  static func routeForward(tabID: UUID?, canGoForward: Bool, goForward: (String) -> Void) -> Bool {
+    guard canGoForward, let tabID else { return false }
+    goForward(tabID.uuidString)
     return true
   }
 
@@ -443,6 +449,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .back:
       guard let id = store.session.selectedPage?.tab.id else { return false }
       return context.engine.pages[id]?.canGoBack == true
+    case .forward:
+      guard let id = store.session.selectedPage?.tab.id else { return false }
+      return context.engine.pages[id]?.canGoForward == true
     case .closeTab:
       return !store.commandIsOpen || store.session.selectedPage == nil
     case .find: return store.canFindCurrentPage
@@ -650,6 +659,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       _ = Self.routeBack(
         tabID: id, canGoBack: id.flatMap { context.engine.pages[$0]?.canGoBack } == true
       ) { context.engine.runtime.goBack(inTabID: $0) }
+    case .forward:
+      let id = store.session.selectedPage?.tab.id
+      _ = Self.routeForward(
+        tabID: id, canGoForward: id.flatMap { context.engine.pages[$0]?.canGoForward } == true
+      ) { context.engine.runtime.goForward(inTabID: $0) }
     case .addFavorite: _ = store.addCurrentPageAsFavorite()
     case .closeWindow: requestCloseWindow(context)
     case .reopenClosed: store.reopenLastClosedTab()
@@ -1445,6 +1459,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.reopenClosed, "Reopen last closed tab", to: tabs)
     let history = section("History")
     add(.back, "Back", to: history)
+    add(.forward, "Forward", to: history)
     add(.recentlyClosed, "Recently closed…", to: history)
     add(.history, "Show All History", to: history)
     add(.clearHistory, "Clear History…", to: history)

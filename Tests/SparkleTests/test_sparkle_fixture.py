@@ -33,6 +33,17 @@ class SparkleFixtureTests(unittest.TestCase):
             self.assertEqual(open_url.call_count, 2)
             sleep.assert_called_once_with(1)
 
+    def test_previous_release_download_retries_request_timeout(self):
+        timeout_error = urllib.error.HTTPError("https://example.test/previous.zip", 408, "Request Timeout", {}, None)
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(fixture.urllib.request, "urlopen", side_effect=[timeout_error, io.BytesIO(b"complete")]) as open_url, \
+                patch.object(fixture.time, "sleep") as sleep:
+            previous = Path(temporary) / "previous.zip"
+            fixture.download_previous_release("https://example.test/previous.zip", previous)
+            self.assertEqual(previous.read_bytes(), b"complete")
+            self.assertEqual(open_url.call_count, 2)
+            sleep.assert_called_once_with(1)
+
     def test_previous_release_download_fails_fast_on_404(self):
         missing = urllib.error.HTTPError("https://example.test/previous.zip", 404, "Not Found", {}, None)
         with tempfile.TemporaryDirectory() as temporary, \

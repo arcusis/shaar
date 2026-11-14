@@ -53,6 +53,8 @@ TEST(ShaarSavePromptTest, DetailDropsControlsAndKeepsUtf8Boundaries) {
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("a\nb\x7f" "c"), "abc");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("a\xC2\x85" "b"), "ab");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xC2\x9F"), "");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("user\xC2\x85" "name"),
+            "username");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(Repeat('a', 121)).size(), 120u);
   const std::string bounded =
       Repeat('a', 119) + "\xC3\xA9";

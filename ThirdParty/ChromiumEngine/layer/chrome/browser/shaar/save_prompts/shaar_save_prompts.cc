@@ -318,9 +318,12 @@ std::string SanitizeDetail(std::string_view raw) {
       ++index;
       continue;
     }
+    // UTF-8 encodes C1 controls U+0080..U+009F as C2 80..C2 9F. The native
+    // request parser rejects Unicode controls, so strip them here to preserve
+    // the offer while keeping control characters out of displayed detail.
     if (lead == 0xC2 && index + 1 < raw.size()) {
-      const auto second = static_cast<unsigned char>(raw[index + 1]);
-      if (second >= 0x80 && second <= 0x9F) {
+      const auto continuation = static_cast<unsigned char>(raw[index + 1]);
+      if (continuation >= 0x80 && continuation <= 0x9F) {
         index += 2;
         continue;
       }

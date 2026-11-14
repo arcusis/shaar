@@ -19,6 +19,7 @@ import Testing
     #expect(result.passed == 4)
     #expect(result.failed == 0)
     #expect(result.unavailable == 1)
+    #expect(result.accessibilityDescription == "Route budget: 4 passed, 0 over, 1 unavailable")
     #expect(result.metrics.first { $0.name == "JavaScript" }?.status == .unavailable)
     let report = ShaarPerformanceBudgetReport(result: result)
     #expect(report.route == "/dashboard" && report.passed == 4 && report.unavailable == 1)

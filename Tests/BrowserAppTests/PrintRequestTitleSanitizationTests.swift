@@ -39,4 +39,11 @@ struct PrintRequestTitleSanitizationTests {
     #expect(try title(persian) == persian)
     #expect(try title(blackFlagEngland) == blackFlagEngland)
   }
+
+  @Test func returnsEmptyTitleWhenOnlyInvisibleScalarsRemain() throws {
+    let tagOnly = "\u{E0067}\u{E0062}\u{E007F}"
+    #expect(try title("\u{200C}\u{200D}") == "")
+    #expect(try title(tagOnly) == "")
+    #expect(try title("\u{FE0F}") == "")
+  }
 }

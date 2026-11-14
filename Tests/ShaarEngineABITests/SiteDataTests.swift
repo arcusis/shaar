@@ -150,6 +150,15 @@ struct SiteDataTests {
     }
   }
 
+  @Test func cookiePolicyRejectsNumericBooleanSubstitutes() async throws {
+    let fake = FakeSiteDataEngine()
+    await fake.setResponse("{\"schemaVersion\":1,\"blocked\":1,\"managed\":0}")
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      _ = try await adapter.thirdPartyCookiePolicy()
+    }
+  }
+
   @Test func individualCookieOperationsUseSiteDataAndValidateIdentity() async throws {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)

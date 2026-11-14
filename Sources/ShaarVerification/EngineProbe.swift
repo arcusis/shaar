@@ -27,6 +27,22 @@ enum EngineProbeMeasurementArguments {
     guard let count = tabCount(in: arguments) else { return false }
     return supportedCounts.contains(count)
   }
+
+  static func conflictsWithOtherMode(arguments: [String], conflictingFlags: [String]) -> Bool {
+    conflictingFlags.filter { $0 != flag }.contains(where: arguments.contains)
+  }
+
+  static func modeDependencyFailure(arguments: [String], tabCount: Int?) -> String? {
+    let eager = arguments.contains("--probe-measure-eager")
+    let sleeping = arguments.contains("--probe-measure-sleeping")
+    let inspector = arguments.contains("--probe-measure-inspector")
+    if eager && tabCount == nil { return "Eager measurement requires --probe-measure-tabs." }
+    if inspector && tabCount == nil { return "Inspector measurement requires --probe-measure-tabs." }
+    if sleeping && (tabCount == nil || !eager) {
+      return "Sleeping measurement requires eagerly loaded measurement tabs."
+    }
+    return nil
+  }
 }
 
 /// Uses only a marked, disposable directory and an authored loopback fixture.
@@ -258,14 +274,10 @@ final class EngineProbe {
       let measurementEager = arguments.contains("--probe-measure-eager")
       let measurementSleeping = arguments.contains("--probe-measure-sleeping")
       let measurementInspector = arguments.contains("--probe-measure-inspector")
-      guard !measurementEager || measurementTabCount != nil else {
-        throw ProbeFailure("Eager measurement requires --probe-measure-tabs.")
-      }
-      guard !measurementInspector || measurementTabCount != nil else {
-        throw ProbeFailure("Inspector measurement requires --probe-measure-tabs.")
-      }
-      guard !measurementSleeping || (measurementTabCount != nil && measurementEager) else {
-        throw ProbeFailure("Sleeping measurement requires eagerly loaded measurement tabs.")
+      if let failure = EngineProbeMeasurementArguments.modeDependencyFailure(
+        arguments: arguments, tabCount: measurementTabCount)
+      {
+        throw ProbeFailure(failure)
       }
       guard EngineProbeMeasurementArguments.hasValidTabCount(in: arguments) else {
         throw ProbeFailure("Measurement tab count must be 1, 10, 30, 50, or 100.")
@@ -329,8 +341,8 @@ final class EngineProbe {
           || !conflictingFlags.filter({ $0 != "--probe-devtools-route-only" }).contains(
             where: arguments.contains),
         measurementTabCount == nil
-          || !conflictingFlags.filter({ $0 != "--probe-measure-tabs" }).contains(
-            where: arguments.contains),
+          || !EngineProbeMeasurementArguments.conflictsWithOtherMode(
+            arguments: arguments, conflictingFlags: conflictingFlags),
         !localizationMode
           || !conflictingFlags.filter({ $0 != "--probe-localization" }).contains(
             where: arguments.contains)

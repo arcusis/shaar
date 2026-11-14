@@ -343,12 +343,12 @@ struct PrivateBrowserPage: NSViewRepresentable {
     let native = session.runtime.view(
       forPrivateTabID: tabID.uuidString, windowID: session.windowID,
       contextID: session.contextID)
-    _ = view.attach(native)
+    _ = view.select(native, tabID: tabID, liveTabs: session.liveTabs)
     if inSplit { native?.isHidden = false }
   }
 
   static func dismantleNSView(_ view: ChromiumPageContainerView, coordinator: ()) {
-    view.attach(nil)
+    ChromiumPageContainerView.dismantlePrivatePage(view)
   }
 }
 

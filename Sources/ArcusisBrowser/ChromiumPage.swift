@@ -56,6 +56,11 @@ final class ChromiumPageContainerView: NSView {
   private var shownTabID: UUID?
   private var selectionOrder: UInt64 = 0
 
+  /// Tears down a private representable while allowing another live container to reclaim its page.
+  static func dismantlePrivatePage(_ container: ChromiumPageContainerView) {
+    container.dismantle()
+  }
+
   @discardableResult
   func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
     Self.live.add(self)

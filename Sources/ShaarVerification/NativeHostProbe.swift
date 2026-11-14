@@ -105,6 +105,14 @@ private struct HostViewportWindowState {
 }
 
 enum NativeHostViewportValidation {
+  static func accountID(fromCookie cookie: String) -> String? {
+    cookie.split(separator: ";").compactMap { item -> String? in
+      let pair = item.trimmingCharacters(in: .whitespaces).split(separator: "=", maxSplits: 1)
+      return pair.count == 2 && pair[0] == "account" && !pair[1].isEmpty
+        ? String(pair[1]) : nil
+    }.first
+  }
+
   static func sameCSSSize(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
     abs(lhs.width - rhs.width) <= 1 && abs(lhs.height - rhs.height) <= 1
   }
@@ -973,10 +981,7 @@ final class NativeHostProbe {
     guard document["fixture"] as? String == "v1",
       let instance = document["instance"] as? String,
       let cookie = document["cookie"] as? String,
-      let accountID = cookie.split(separator: ";").compactMap({ item -> String? in
-        let pair = item.trimmingCharacters(in: .whitespaces).split(separator: "=", maxSplits: 1)
-        return pair.count == 2 && pair[0] == "account" ? String(pair[1]) : nil
-      }).first,
+      let accountID = NativeHostViewportValidation.accountID(fromCookie: cookie),
       let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
       let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
       let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,

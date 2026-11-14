@@ -6,9 +6,26 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE' >&2; exit 2; }
-[[ $# == 1 ]] || usage
-archive=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)/$(basename "$1") || usage
+usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he]' >&2; exit 2; }
+archive_path=
+locale=en
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --locale)
+      [[ $# -ge 2 ]] || usage
+      locale=$2
+      shift 2
+      ;;
+    -* ) usage ;;
+    *)
+      [[ -z $archive_path ]] || usage
+      archive_path=$1
+      shift
+      ;;
+  esac
+done
+[[ -n $archive_path && ( $locale == en || $locale == he ) ]] || usage
+archive=$(cd "$(dirname "$archive_path")" 2>/dev/null && pwd -P)/$(basename "$archive_path") || usage
 [[ -f "$archive" && ! -L "$archive" ]] || { echo 'Engine archive must be a regular, non-symlink file.' >&2; exit 2; }
 dry_run=${SHAAR_V02_PROOF_DRY_RUN:-0}
 case "$dry_run" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_DRY_RUN must be 0 or 1.' >&2; exit 2 ;; esac
@@ -61,6 +78,31 @@ run_engine_fixture() {
   SHAAR_VERIFICATION_APP="$PWD/build/Shaar Verification.app" \
     python3 scripts/engine_fixture.py "$@"
 }
+run_he_engine_fixture() {
+  local mode=${1:-}
+  mode=${mode#--}
+  [[ -n $mode ]] || mode=downloads
+  SHAAR_V02_PROOF_LOCALE=he \
+    SHAAR_V02_PROOF_SCREENSHOT_DIR="$run_root/hebrew/screenshots/$mode" \
+    run_engine_fixture "$@"
+}
+record_screenshot_evidence() {
+  local label=$1 directory=$2 count
+  count=$(find "$directory" -type f -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
+  if [[ $count -gt 0 ]]; then
+    record "$label screenshot" PASS "$count PNG(s): ${directory#"$PWD"/}/"
+  else
+    record "$label screenshot" FAIL "no PNG in ${directory#"$PWD"/}/"
+  fi
+}
+record_named_screenshot() {
+  local label=$1 path=$2
+  if [[ -s $path ]]; then
+    record "$label screenshot" PASS "${path#"$PWD"/}"
+  else
+    record "$label screenshot" FAIL "missing ${path#"$PWD"/}"
+  fi
+}
 run_device_chooser_check() {
   local receipt="$run_root/device-choosers.json"
   python3 scripts/test-device-choosers.py --app "$verification_app" >"$receipt" 2>&1 || true
@@ -110,17 +152,17 @@ PY
 }
 
 bundle_env=(env "SHAAR_ENGINE_ARCHIVE_PATH=$archive")
-widevine_bundle_flag=()
-if [[ $widevine == 1 ]]; then
-  widevine_bundle_flag=(--with-widevine-cdm)
-fi
 if [[ $dry_run == 1 ]]; then
   bundle_env+=("SHAAR_V02_PROOF_DRY_RUN=1")
 fi
-run_step 'Shipping bundle build' "$HOME/bin/shaar-heavy" "${bundle_env[@]}" \
-  bash scripts/bundle-app.sh --with-engine "${widevine_bundle_flag[@]}"
-run_step 'Verification bundle build' "$HOME/bin/shaar-heavy" "${bundle_env[@]}" \
-  bash scripts/bundle-app.sh --with-engine --verification "${widevine_bundle_flag[@]}"
+build_bundle() {
+  local args=(--with-engine)
+  [[ $widevine == 1 ]] && args+=(--with-widevine-cdm)
+  [[ ${1:-} == verification ]] && args+=(--verification)
+  "$HOME/bin/shaar-heavy" "${bundle_env[@]}" bash scripts/bundle-app.sh "${args[@]}"
+}
+run_step 'Shipping bundle build' build_bundle shipping
+run_step 'Verification bundle build' build_bundle verification
 
 verification_app="$PWD/build/Shaar Verification.app"
 if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
@@ -156,6 +198,44 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
   run_step 'Platform parity for v0.2 web items' run_platform_parity
   run_step 'Media and picture-in-picture' python3 scripts/test-shaar-media.py \
     --app "$verification_app" --receipt "$run_root/media.json"
+  if [[ $locale == he ]]; then
+    he_root="$run_root/hebrew"
+    mkdir -p "$he_root/screenshots"
+    run_step 'Hebrew dialogs and Basic auth' env SHAAR_V02_PROOF_LOCALE=he \
+      python3 scripts/test-browsing-edge-probe.py --app "$verification_app" \
+      --receipt "$he_root/dialogs-basic-auth.json" --screenshot-dir "$he_root/screenshots"
+    run_step 'Hebrew browsing dialogs and downloads' env SHAAR_V02_PROOF_LOCALE=he \
+      python3 scripts/test-browsing-qa.py --app "$verification_app" \
+      --receipt "$he_root/browsing-qa.json" --markdown "$he_root/browsing-qa.md" \
+      --screenshot-dir "$he_root/screenshots"
+    run_step 'Hebrew permission prompts' env SHAAR_V02_PROOF_LOCALE=he \
+      python3 scripts/test-shaar-permission-prompt.py --app "$verification_app" \
+      --evidence "$he_root/permission-prompts"
+    run_step 'Hebrew save prompts' env SHAAR_V02_PROOF_LOCALE=he \
+      python3 scripts/test-shaar-save-prompt.py --app "$verification_app" \
+      --receipt "$he_root/save-prompts.json"
+    run_step 'Hebrew downloads and Chrome Web Store extension' run_he_engine_fixture --bitwarden
+    run_step 'Hebrew local MV3 extensions' run_he_engine_fixture --local-extension-install
+    run_step 'Hebrew protocol handler' run_he_engine_fixture --external-app-consent
+    run_step 'Hebrew device pickers' env SHAAR_V02_PROOF_LOCALE=he \
+      python3 scripts/test-device-choosers.py --app "$verification_app" \
+      --screenshot-dir "$he_root/screenshots/device-pickers"
+    run_he_engine_fixture
+    cp "$he_root"/browsing-*.png "$he_root/screenshots/" 2>/dev/null || true
+    cp "$he_root"/save-prompt-*.png "$he_root/screenshots/" 2>/dev/null || true
+    cp "$he_root"/permission-prompts/*.png "$he_root/screenshots/" 2>/dev/null || true
+    record_named_screenshot 'Dialogs' "$he_root/screenshots/browsing-dialogs.png"
+    record_named_screenshot 'Basic auth' "$he_root/screenshots/browsing-edge.png"
+    record_screenshot_evidence 'Permission prompts' "$he_root/permission-prompts"
+    record_named_screenshot 'Password save prompt' "$he_root/screenshots/save-prompt-password.png"
+    record_named_screenshot 'Card save prompt' "$he_root/screenshots/save-prompt-card.png"
+    record_named_screenshot 'Address save prompt' "$he_root/screenshots/save-prompt-address.png"
+    record_screenshot_evidence 'Downloads' "$he_root/screenshots/downloads"
+    record_screenshot_evidence 'Chrome Web Store extension' "$he_root/screenshots/bitwarden"
+    record_screenshot_evidence 'Local MV3 extension' "$he_root/screenshots/local-extension-install"
+    record_screenshot_evidence 'Protocol handler' "$he_root/screenshots/external-app-consent"
+    record_screenshot_evidence 'Device pickers' "$he_root/screenshots/device-pickers"
+  fi
   if [[ $widevine == 1 ]]; then
     run_step 'Widevine EME, ClearKey, Shaka playback' \
       python3 scripts/test-platform-parity.py --widevine-only --app "$verification_app" \
@@ -179,6 +259,7 @@ else
   if [[ $widevine == 1 ]]; then
     record 'Widevine EME, ClearKey, Shaka playback' SKIP 'shipping or verification bundle build did not pass'
   fi
+  [[ $locale == he ]] && record 'Hebrew UI locale pass' SKIP 'shipping or verification bundle build did not pass'
 fi
 
 crash_snapshot > "$crashes_after"

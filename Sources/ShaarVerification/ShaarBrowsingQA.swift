@@ -98,13 +98,14 @@ import os
     scenario: String
   ) async {
     var rows: [[String: Any]] = []
+    var screenshotCaptured = false
     defer {
       let hidden = windowsHidden()
       let failed = rows.contains { $0["status"] as? String == "fail" }
       write(
         [
           "passed": !failed && hidden, "scenario": scenario, "rows": rows,
-          "allWindowsHidden": hidden,
+          "allWindowsHidden": hidden, "screenshotCaptured": screenshotCaptured,
         ], to: outputURL)
       host.events.quit()
     }
@@ -114,6 +115,21 @@ import os
       rows = try await run(
         scenario, host: host, context: context, runtime: runtime, base: pageURL,
         root: outputURL.deletingLastPathComponent())
+      let view = context.hosting
+      let bitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: max(1, Int(view.bounds.width * 2)),
+        pixelsHigh: max(1, Int(view.bounds.height * 2)), bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+        bitsPerPixel: 0)
+      if let bitmap {
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        if let png = bitmap.representation(using: .png, properties: [:]) {
+          let destination = outputURL.deletingLastPathComponent().appending(
+            path: "browsing-\(scenario).png")
+          try? png.write(to: destination, options: .atomic)
+          screenshotCaptured = FileManager.default.fileExists(atPath: destination.path)
+        }
+      }
     } catch {
       rows.append(row("setup", "fail", error.localizedDescription))
     }

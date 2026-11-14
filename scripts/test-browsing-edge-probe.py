@@ -492,6 +492,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/browsing-edge/receipt.json")
+    parser.add_argument("--screenshot-dir", type=Path)
     options = parser.parse_args()
     try:
         validate_receipt_path(options.receipt, options.app)
@@ -526,7 +527,9 @@ def main():
             environment["SHAAR_ENGINE_TESTING"] = "1"
             environment["SHAAR_MOCK_KEYCHAIN"] = "1"
             process = subprocess.Popen(
-                [str(executable), "--browsing-edge-probe", str(report_path), page_url],
+                [str(executable), "--browsing-edge-probe", str(report_path), page_url]
+                + (["-AppleLanguages", "(he)"]
+                   if os.environ.get("SHAAR_V02_PROOF_LOCALE") == "he" else []),
                 env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 start_new_session=True,
             )
@@ -580,6 +583,11 @@ def main():
             "stderrTail": (stderr or "")[-4000:],
             "passed": gate,
         }
+        screenshot = root / "browsing-edge.png" if root is not None else None
+        if options.screenshot_dir is not None and screenshot and screenshot.is_file():
+            options.screenshot_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(screenshot, options.screenshot_dir / screenshot.name)
+            receipt["screenshot"] = str(options.screenshot_dir / screenshot.name)
         write_receipt(options.receipt, receipt, options.app)
         print(markdown_table(rows))
         print()

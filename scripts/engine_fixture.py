@@ -1060,6 +1060,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
+    if os.environ.get('SHAAR_V02_PROOF_LOCALE') == 'he':
+        arguments.extend(('-AppleLanguages', '(he)'))
     if include_bitwarden:
         arguments.append("--bitwarden")
     if onboarding_control:
@@ -2130,6 +2132,12 @@ def main(argv=None):
             summary = record_session_recovery_summary(root)
             print(f"session recovery: {'passed' if summary['passed'] else 'FAILED'}", flush=True)
     finally:
+        screenshot_directory = os.environ.get('SHAAR_V02_PROOF_SCREENSHOT_DIR')
+        if screenshot_directory:
+            destination = Path(screenshot_directory)
+            destination.mkdir(parents=True, exist_ok=True)
+            for screenshot in root.glob('*.png'):
+                shutil.copy2(screenshot, destination / screenshot.name)
         STALL_RELEASE.set()
         server.shutdown()
         server.server_close()

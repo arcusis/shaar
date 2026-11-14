@@ -598,6 +598,8 @@ def launch_scenario(executable: Path, root: Path, page_url: str, scenario: str) 
     started = time.monotonic()
     environment = probe_environment(root)
     command = [str(executable), "--browsing-qa", str(report_path), page_url, scenario]
+    if os.environ.get("SHAAR_V02_PROOF_LOCALE") == "he":
+        command.extend(["-AppleLanguages", "(he)"])
     timed_out = False
     with stderr_path.open("w") as stderr:
         process = subprocess.Popen(
@@ -648,7 +650,8 @@ def launch_scenario(executable: Path, root: Path, page_url: str, scenario: str) 
 
 
 def run_suite(
-    executable: Path, scenarios: list[str], page_url: str, on_result=None
+    executable: Path, scenarios: list[str], page_url: str, on_result=None,
+    screenshot_dir: Path | None = None,
 ) -> list[dict]:
     results = []
     samples: dict[int, int] = {}
@@ -693,6 +696,10 @@ def run_suite(
             delete_after = scenario != "restore-seed"
             print(f"running {scenario}", flush=True)
             item = launch_scenario(executable, root, page_url, scenario)
+            if screenshot_dir is not None:
+                screenshot_dir.mkdir(parents=True, exist_ok=True)
+                for screenshot in root.glob("browsing-*.png"):
+                    shutil.copy2(screenshot, screenshot_dir / screenshot.name)
         except Exception as error:
             item = blocked_scenario(scenario, "")
             item["result"] = "fail"
@@ -737,6 +744,7 @@ def main() -> None:
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/browsing-qa/receipt.json")
     parser.add_argument("--markdown", type=Path, default=ROOT / "build/browsing-qa/table.md")
     parser.add_argument("--scenarios", default="")
+    parser.add_argument("--screenshot-dir", type=Path)
     options = parser.parse_args()
     try:
         scenarios = parse_scenarios(options.scenarios)
@@ -764,7 +772,7 @@ def main() -> None:
 
             results = []
             try:
-                results = run_suite(executable, scenarios, page_url, publish)
+                results = run_suite(executable, scenarios, page_url, publish, options.screenshot_dir)
             finally:
                 server.shutdown()
     write_receipt(options.receipt, options.markdown, executable, results)

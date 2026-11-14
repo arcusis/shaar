@@ -253,7 +253,8 @@ import Foundation
       ))
 
     let slowStarted = Date()
-    guard context.engine.navigateCurrentPage(to: url(base, path: "/slow-reload")) else {
+    let reloadPath = "/slow-reload/\(UUID().uuidString)"
+    guard context.engine.navigateCurrentPage(to: url(base, path: reloadPath)) else {
       rows.append(row("churn-reload-during-load", "fail", "The slow navigation was rejected."))
       return rows
     }
@@ -261,7 +262,7 @@ import Foundation
     let stillLoading = pageIsLoading(context)
     let reloaded = inFlight && stillLoading && context.store.reloadCurrentPage()
     let settledSlow = await until(
-      attempts: 200, condition: { settled(context, path: "/slow-reload") })
+      attempts: 200, condition: { settled(context, path: reloadPath) })
     let reloadRequests = await evaluate(
       runtime, tab: current,
       script: "document.documentElement.dataset.reloadRequest || ''")

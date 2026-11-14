@@ -196,17 +196,22 @@ struct DesktopCaptureConsentTests {
     #expect(enumerationCount == 1)
   }
 
-  @Test func deniedScreenRecordingAccessWiresSettingsButtonToSystemSettings() throws {
+  @Test func deniedScreenRecordingAccessWiresSettingsButtonToSystemSettings() async throws {
     let browserStore = store()
     let capture = try request(browserStore)
     var openedURL: URL?
     let picker = DesktopCapturePicker(
       request: capture,
       store: browserStore,
+      hasScreenRecordingAccess: { false },
+      requestScreenRecordingAccess: { false },
       openSettings: { openedURL = $0 }
     )
 
-    let button = try #require(picker.settingsButton(for: true))
+    await picker.loadSources()
+    let content = picker.pickerContent
+    #expect(content.needsScreenRecordingAccess)
+    let button = try #require(content.settingsButton)
     #expect(button.title == "Open Settings")
     #expect(button.title == PanelsL10n.string("Open Settings"))
     #expect(
@@ -214,16 +219,6 @@ struct DesktopCaptureConsentTests {
         == true)
     button.action()
     #expect(openedURL == MacPermission.screenRecording.settingsURL)
-    let content = DesktopCapturePickerContent(
-      request: capture,
-      sources: [],
-      loading: false,
-      error: DesktopCaptureCatalog.screenAccessNote,
-      needsScreenRecordingAccess: true,
-      settingsButton: button,
-      onSelect: { _ in },
-      onCancel: {}
-    )
     _ = content.body
   }
 

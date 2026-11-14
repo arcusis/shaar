@@ -4,6 +4,18 @@
 
 import Foundation
 
+enum SessionFolderValidation {
+  static func membershipIsValid(folders: [BrowserFolder], tabs: [BrowserTab]) -> Bool {
+    let pinStateByFolderID = Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0.isPinned) })
+    return folders.allSatisfy { folder in
+      !folder.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && (folder.parentID.map { pinStateByFolderID[$0] == folder.isPinned } ?? true)
+    } && tabs.allSatisfy { tab in
+      tab.folderID.map { pinStateByFolderID[$0] == tab.isPinned } ?? true
+    }
+  }
+}
+
 public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
   public let id: UUID
   public var name: String
@@ -386,25 +398,18 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     else { throw SessionError.invalidState }
     for space in spaces {
       let splitIDs = space.splits.flatMap(\.tabIDs)
-      let folderPinnedByID = Dictionary(
-        uniqueKeysWithValues: space.folders.map { ($0.id, $0.isPinned) })
       guard Set(splitIDs).count == splitIDs.count,
         Set(space.splits.map(\.id)).count == space.splits.count,
         space.splits.allSatisfy(\.isValid),
         Set(splitIDs).isSubset(of: Set(space.tabs.map(\.id)))
       else { throw SessionError.invalidState }
       guard
-        space.folders.allSatisfy({ folder in
-          !folder.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (folder.parentID == nil
-              || folder.parentID.map { folderPinnedByID[$0] == folder.isPinned } == true)
-        }),
-        space.tabs.allSatisfy({ tab in
-          tab.folderID == nil
-            || tab.folderID.map { folderPinnedByID[$0] == tab.isPinned } == true
-        }),
-        space.reachableFolderCount(isPinned: true)
-          + space.reachableFolderCount(isPinned: false) == space.folders.count
+        SessionFolderValidation.membershipIsValid(folders: space.folders, tabs: space.tabs),
+        (space.items(isPinned: true, includingCollapsed: true)
+          + space.items(isPinned: false, includingCollapsed: true)).filter({
+            if case .folder = $0 { return true }
+            return false
+          }).count == space.folders.count
       else { throw SessionError.invalidState }
     }
   }

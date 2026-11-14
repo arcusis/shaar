@@ -24,6 +24,18 @@ import Testing
   try session.validate()
 }
 
+@Test func folderMembershipLookupValidatesParentsAndTabs() {
+  let root = BrowserFolder(name: "Root", isPinned: true)
+  let child = BrowserFolder(name: "Child", parentID: root.id, isPinned: true)
+  let tab = BrowserTab(url: URL(string: "https://example.test")!, isPinned: true, folderID: child.id)
+
+  #expect(SessionFolderValidation.membershipIsValid(folders: [root, child], tabs: [tab]))
+  #expect(!SessionFolderValidation.membershipIsValid(
+    folders: [root, BrowserFolder(name: "Child", parentID: root.id)], tabs: [tab]))
+  #expect(!SessionFolderValidation.membershipIsValid(
+    folders: [root], tabs: [BrowserTab(url: tab.url, isPinned: true, folderID: child.id)]))
+}
+
 private let legacySession = Data(
   """
   {"version":1,"profiles":[{"id":"AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA","name":"Company"}],

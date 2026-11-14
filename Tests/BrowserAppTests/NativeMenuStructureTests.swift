@@ -64,6 +64,28 @@ import Testing
   #expect(!first.isVisible && !second.isVisible && !third.isVisible)
 }
 
+@Test @MainActor func bringAllToFrontRoutesAcrossAppWindowsWithoutPresentingThem() throws {
+  let workspace = try BrowserWorkspaceStore()
+  let host = NativeBrowserHost(
+    events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), workspace: workspace,
+    presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
+  let settings = NSWindow(
+    contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
+  let mini = NSWindow(
+    contentRect: .zero, styleMask: .titled, backing: .buffered, defer: true)
+  var ordered: [NSWindow] = []
+  var keyed: NSWindow?
+
+  #expect(host.canPerform(.bringAllToFront))
+  NativeBrowserHost.bringAllWindowsToFront(
+    [settings, mini], keyWindow: settings, orderFront: { ordered.append($0) },
+    makeKey: { keyed = $0 })
+
+  #expect(ordered.count == 2 && ordered[0] === settings && ordered[1] === mini)
+  #expect(keyed === settings)
+  #expect(!settings.isVisible && !mini.isVisible)
+}
+
 @Test @MainActor func nativeMenuTitlesResolveToHebrewCatalogEntries() {
   let menu = NativeBrowserHost.makeMenu(target: NSApplication.shared)
   let groups = menu.items.compactMap(\.submenu)

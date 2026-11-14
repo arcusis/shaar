@@ -81,6 +81,20 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   }
 }
 
+@Test func downloadRecordRejectsNegativeProgressAndTimeValues() async throws {
+  let validRow = #"{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/a.bin","state":"downloading","paused":false,"received":1,"total":1,"speed":1,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":1}"#
+  for (field, value) in [("received", "-1"), ("total", "-2"), ("speed", "-1"),
+    ("startTime", "-1")]
+  {
+    let row = validRow.replacingOccurrences(of: "\"\(field)\":1", with: "\"\(field)\":\(value)")
+    let payload = Data("{\"schemaVersion\":1,\"downloads\":[\(row)]}".utf8)
+    let fake = FakeDownloadsTransport(replies: [400: payload])
+    await #expect(throws: (any Error).self) {
+      _ = try await ShaarDownloadsAdapter(transport: fake).list()
+    }
+  }
+}
+
 @Test func controlSendsTheScopedOperationSchema() async throws {
   let fake = FakeDownloadsTransport(replies: [401: Data("{}".utf8)])
   try await ShaarDownloadsAdapter(transport: fake).control(.pause, id: "guid-2")

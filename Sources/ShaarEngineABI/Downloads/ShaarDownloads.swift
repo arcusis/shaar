@@ -66,28 +66,37 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
     path = try values.decode(String.self, forKey: .path)
     state = try values.decode(State.self, forKey: .state)
     paused = try values.decode(Bool.self, forKey: .paused)
-    received = try values.decodeInteger(forKey: .received)
-    total = try values.decodeInteger(forKey: .total)
-    speed = try values.decodeInteger(forKey: .speed)
+    received = try values.decodeInteger(forKey: .received, minimum: 0)
+    total = try values.decodeInteger(forKey: .total, minimum: -1)
+    speed = try values.decodeInteger(forKey: .speed, minimum: 0)
     mimeType = try values.decode(String.self, forKey: .mimeType)
     dangerous = try values.decode(Bool.self, forKey: .dangerous)
     offTheRecord = try values.decode(Bool.self, forKey: .offTheRecord)
     error = try values.decodeIfPresent(String.self, forKey: .error)
-    startTime = try values.decodeInteger(forKey: .startTime)
+    startTime = try values.decodeInteger(forKey: .startTime, minimum: 0)
   }
 }
 
 extension KeyedDecodingContainer {
-  fileprivate func decodeInteger(forKey key: Key) throws -> Int64 {
-    if let integer = try? decode(Int64.self, forKey: key) { return integer }
-    let number = try decode(Double.self, forKey: key)
-    guard number.isFinite, number.rounded(.towardZero) == number,
-      number >= Double(Int64.min), number < Double(Int64.max)
-    else {
-      throw DecodingError.dataCorruptedError(
-        forKey: key, in: self, debugDescription: "Expected an integer")
+  fileprivate func decodeInteger(forKey key: Key, minimum: Int64) throws -> Int64 {
+    let integer: Int64
+    if let exact = try? decode(Int64.self, forKey: key) {
+      integer = exact
+    } else {
+      let number = try decode(Double.self, forKey: key)
+      guard number.isFinite, number.rounded(.towardZero) == number,
+        number >= Double(Int64.min), number < Double(Int64.max)
+      else {
+        throw DecodingError.dataCorruptedError(
+          forKey: key, in: self, debugDescription: "Expected an integer")
+      }
+      integer = Int64(number)
     }
-    return Int64(number)
+    guard integer >= minimum else {
+      throw DecodingError.dataCorruptedError(
+        forKey: key, in: self, debugDescription: "Integer is below the supported minimum")
+    }
+    return integer
   }
 }
 

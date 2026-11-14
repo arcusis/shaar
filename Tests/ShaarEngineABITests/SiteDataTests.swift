@@ -141,12 +141,10 @@ struct SiteDataTests {
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       try await adapter.settings(origin: "https://example.com")
     }
-
     await fake.setResponse(#"{"schemaVersion":1,"value":"allow","isDefault":0}"#)
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       try await adapter.set(origin: "https://example.com", type: "camera", value: .allow)
     }
-
     await fake.setResponse(#"{"schemaVersion":1,"blocked":1,"managed":true}"#)
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       try await adapter.thirdPartyCookiePolicy()
@@ -155,7 +153,6 @@ struct SiteDataTests {
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       try await adapter.thirdPartyCookiePolicy()
     }
-
     await fake.setResponse(#"{"schemaVersion":1,"complete":1}"#)
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       try await adapter.clearSiteData(origin: "https://example.com")
@@ -169,7 +166,6 @@ struct SiteDataTests {
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       try await adapter.clearSelectedTabCookies(origin: "https://example.com")
     }
-
     let cookie = try #require(ShaarSiteCookie(dictionary: [
       "name": "sid", "value": "abc", "domain": "example.com", "path": "/",
       "secure": true, "httpOnly": true, "sameSite": "Lax",
@@ -187,6 +183,24 @@ struct SiteDataTests {
     let fake = FakeSiteDataEngine()
     await fake.setResponse("{\"schemaVersion\":1,\"blocked\":1,\"managed\":0}")
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      _ = try await adapter.thirdPartyCookiePolicy()
+    }
+  }
+
+  @Test func siteDataBooleanContractsRejectNumericJSONValues() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await fake.setResponse(
+      #"{"schemaVersion":1,"settings":{"camera":{"value":"ask","isDefault":1}}}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      _ = try await adapter.settings(origin: "https://example.com")
+    }
+    await fake.setResponse(#"{"schemaVersion":1,"value":"allow","isDefault":0}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      _ = try await adapter.set(origin: "https://example.com", type: "camera", value: .allow)
+    }
+    await fake.setResponse(#"{"schemaVersion":1,"blocked":1,"managed":false}"#)
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       _ = try await adapter.thirdPartyCookiePolicy()
     }

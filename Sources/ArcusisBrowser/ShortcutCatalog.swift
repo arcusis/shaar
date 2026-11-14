@@ -55,6 +55,7 @@ struct ShortcutCatalog {
     var displayKeys: String {
       if key.isEmpty { return "—" }
       var result = ""
+      if modifiers.contains(.function) { result += "fn-" }
       if modifiers.contains(.control) { result += "⌃" }
       if modifiers.contains(.option) { result += "⌥" }
       if modifiers.contains(.shift) || key != key.lowercased() { result += "⇧" }
@@ -160,6 +161,7 @@ struct ShortcutCatalog {
     case "Copy": ("c", .command)
     case "Paste": ("v", .command)
     case "Paste and Match Style": ("V", [.command, .option])
+    case "Emoji & Symbols": ("e", .function)
     case "Select All": ("a", .command)
     case "Copy URL": ("c", [.command, .option, .shift])
     default: nil

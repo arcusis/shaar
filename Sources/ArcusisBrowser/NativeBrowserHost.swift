@@ -622,9 +622,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         orderFront: { $0.orderFront(nil) }, makeKey: { $0.makeKey() })
     case .openFile:
       let panel = NSOpenPanel()
-      panel.canChooseFiles = true
-      panel.canChooseDirectories = false
-      panel.allowsMultipleSelection = true
+      Self.configureFileUploadPanel(panel)
       guard panel.runModal() == .OK else { break }
       Self.routeOpenFileSelection(panel.urls, open: openReadableFileURL)
     case .newMiniWindow: openMiniWindow(url: nil)
@@ -1107,6 +1105,26 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       guard let fileURL = IncomingFileOpenPolicy.readableFileURL(url) else { continue }
       open(fileURL)
     }
+  }
+
+  static func fileUploadPanelCopy(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> (title: String, prompt: String) {
+    (
+      BrowserLocalization.string("Choose files to upload", table: "Shell", language: language),
+      BrowserLocalization.string("Upload", table: "Shell", language: language)
+    )
+  }
+
+  static func configureFileUploadPanel(
+    _ panel: NSOpenPanel, language: BrowserLanguage = .currentLaunchLanguage
+  ) {
+    let copy = fileUploadPanelCopy(language: language)
+    panel.title = copy.title
+    panel.prompt = copy.prompt
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = true
   }
 
   private func openReadableFileURL(_ fileURL: URL) {

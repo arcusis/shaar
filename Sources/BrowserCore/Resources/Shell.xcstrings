@@ -85,6 +85,8 @@
     "Error": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Error"}},"he":{"stringUnit":{"state":"translated","value":"שגיאה"}}}},
     "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
     "Open File…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open File…"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קובץ…"}}}},
+    "Choose files to upload": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Choose files to upload"}},"he":{"stringUnit":{"state":"translated","value":"בחירת קבצים להעלאה"}}}},
+    "Upload": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Upload"}},"he":{"stringUnit":{"state":"translated","value":"העלאה"}}}},
     "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},
     "Open DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open DevTools"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי הפיתוח"}}}},
     "Could not run this extension. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not run this extension. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להפעיל את התוסף. כדאי לנסות שוב."}}}},

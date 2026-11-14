@@ -1011,10 +1011,16 @@ final class BrowserEngine {
         if let directory = store?.preferences.downloadDirectory(for: profile),
           let downloadDirectoryApplier
         {
-          guard let acknowledged = try await downloadDirectoryApplier(profile, directory) else {
-            throw CocoaError(.fileWriteUnknown)
+          do {
+            let acknowledged = try await downloadDirectoryApplier(profile, directory)
+            if store?.preferences.downloadDirectory(for: profile) == directory {
+              guard let acknowledged else { throw CocoaError(.fileWriteUnknown) }
+              recordDownloadDirectoryAcknowledgement(
+                acknowledged, requested: directory, for: profile)
+            }
+          } catch {
+            if store?.preferences.downloadDirectory(for: profile) == directory { throw error }
           }
-          store?.preferences.setDownloadDirectory(acknowledged, for: profile)
         }
         loadedProfiles.insert(profile)
         store?.library.refresh(profile, section: .bookmarks)
@@ -1033,6 +1039,11 @@ final class BrowserEngine {
       }
     }
     DispatchQueue.main.async { [weak self] in self?.reconcile() }
+  }
+
+  func recordDownloadDirectoryAcknowledgement(_ acknowledged: URL, requested: URL, for profile: UUID) {
+    guard store?.preferences.downloadDirectory(for: profile) == requested else { return }
+    store?.preferences.setDownloadDirectory(acknowledged, for: profile)
   }
 
   func refreshExtensions() {

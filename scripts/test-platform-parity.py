@@ -13,6 +13,7 @@ No external accounts or public sites. Launch through shaar-heavy.
 """
 
 import argparse
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -101,6 +102,7 @@ def pdf():
 class Handler(BaseHTTPRequestHandler):
     seen = []
     seen_lock = threading.Lock()
+    shaka_js = b""
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0") or "0")
@@ -141,6 +143,8 @@ class Handler(BaseHTTPRequestHandler):
     def route(self, route, query, other):
         html = "text/html; charset=utf-8"
         script = "text/javascript; charset=utf-8"
+        if route == "/shaka-player.js" and self.shaka_js:
+            return self.shaka_js, script, []
         if route == "/ready":
             return page("ready", "", "finish({outcome:'ready'});"), html, []
         if route == "/media":
@@ -365,6 +369,38 @@ class Handler(BaseHTTPRequestHandler):
               }
               Promise.all([access('com.widevine.alpha'), access('org.w3.clearkey')])
                 .then(([widevine, clearkey]) => finish({outcome:'checked', widevine, clearkey}));
+            """), html, []
+        if route == "/widevine-playback":
+            return page("widevine-playback", """
+              <video id="widevine-video" muted playsinline></video>
+              <script src="/shaka-player.js"></script>
+            """, """
+              (async () => {
+                try {
+                  if (!window.shaka) throw new Error('Shaka Player script missing');
+                  shaka.polyfill.installAll();
+                  await navigator.requestMediaKeySystemAccess(
+                    'com.widevine.alpha', [{initDataTypes:['cenc'],
+                      videoCapabilities:[{contentType:'video/mp4; codecs="avc1.42E01E"'}]}]);
+                  const video = document.getElementById('widevine-video');
+                  const player = new shaka.Player();
+                  await player.attach(video);
+                  player.configure({drm:{servers:{'com.widevine.alpha':
+                    'https://cwip-shaka-proxy.appspot.com/no_auth'}}});
+                  player.addEventListener('error', event => fail(event.detail));
+                  await player.load('https://storage.googleapis.com/shaka-demo-assets/sintel-widevine/dash.mpd');
+                  const keySystem = player.keySystem();
+                  if (keySystem !== 'com.widevine.alpha') throw new Error('Wrong DRM key system: ' + keySystem);
+                  await video.play();
+                  const deadline = Date.now() + 20000;
+                  while (Date.now() < deadline && (video.paused || video.currentTime <= 0)) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                  }
+                  finish({outcome:video.paused ? 'paused' : 'playing', keySystem,
+                    currentTimeMilliseconds:Math.round(video.currentTime * 1000),
+                    readyState:video.readyState});
+                } catch (error) { fail(error); }
+              })();
             """), html, []
         if route == "/pip":
             return page("pip", BUTTON, """
@@ -829,14 +865,29 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--receipt", type=receipt_output_path,
                         default=ROOT / "build/platform-parity/receipt.json")
     parser.add_argument("--fixtures-only", action="store_true")
+    parser.add_argument("--widevine-only", action="store_true",
+                        help="run only hidden Widevine access, ClearKey, and Shaka playback checks")
     return parser
 
 
 def main():
-    options = argument_parser().parse_args()
+    parser = argument_parser()
+    options = parser.parse_args()
     executable = options.app / "Contents/MacOS/ShaarVerification"
     if not options.fixtures_only and not executable.is_file():
         parser.error(f"Missing verification app: {executable}")
+    if options.widevine_only:
+        url = "https://cdn.jsdelivr.net/npm/shaka-player@5.1.8/dist/shaka-player.compiled.min.js"
+        download = subprocess.run(
+            ["curl", "--fail", "--silent", "--show-error", "--location",
+             "--connect-timeout", "10", "--max-time", "45", url],
+            capture_output=True, check=False)
+        if download.returncode:
+            raise SystemExit(f"Shaka Player fixture download failed: {download.stderr.decode(errors='replace')}")
+        Handler.shaka_js = download.stdout
+        if hashlib.sha256(Handler.shaka_js).hexdigest() != (
+                "fe7895978d420a22ce5d89faad7d58406a5b5e7d0772cc3bf0323636b752a449"):
+            raise SystemExit("Shaka Player fixture hash mismatch")
     before = crash_names()
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     report_path = root / "report.json"
@@ -876,7 +927,8 @@ def main():
             err_path = root / "stderr.txt"
             err_file = err_path.open("w")
             process = subprocess.Popen(
-                [str(executable), "--platform-parity-probe", str(report_path), http_base, https_base],
+                [str(executable), "--platform-parity-probe", str(report_path), http_base,
+                 https_base] + (["--widevine-only"] if options.widevine_only else []),
                 env=environment, stdout=subprocess.DEVNULL, stderr=err_file, start_new_session=True)
             probe_pid = process.pid
             deadline = time.monotonic() + 600
@@ -914,6 +966,10 @@ def main():
     pin = json.loads(pin_path.read_text()) if pin_path.is_file() else {}
     rows = list(report.get("rows", []))
     completed = run_completed(report, crashes, exit_code)
+    if options.widevine_only:
+        verdicts = {row.get("item"): row.get("result") for row in rows}
+        completed = (completed and verdicts.get("EME/Widevine") == "pass"
+                     and verdicts.get("Widevine test stream") == "pass")
     receipt = {
         "verificationExecutable": str(executable),
         "engineRelease": pin.get("releaseTag", ""),

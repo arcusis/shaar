@@ -63,7 +63,7 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
     id = try values.decode(String.self, forKey: .id)
     guard !id.isEmpty else {
       throw DecodingError.dataCorruptedError(
-        forKey: .id, in: values, debugDescription: "Expected a non-empty download ID")
+        forKey: .id, in: values, debugDescription: "Expected a nonempty download ID")
     }
     url = try values.decode(String.self, forKey: .url)
     filename = try values.decode(String.self, forKey: .filename)
@@ -120,8 +120,8 @@ public enum ShaarDownloadAction: String, Codable, Sendable {
 }
 
 public enum ShaarDownloadsError: Error, Equatable, Sendable {
-  case malformedResponse
   case invalidControl
+  case malformedResponse
   case unsafeTarget
   case engine(ShaarStatusCode, message: String)
 }

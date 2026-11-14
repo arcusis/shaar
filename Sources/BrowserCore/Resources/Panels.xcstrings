@@ -1798,6 +1798,16 @@
         }
       }
     },
+    "Updating bookmarks…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מעדכן סימניות…"
+          }
+        }
+      }
+    },
     "Unknown website": {
       "localizations": {
         "he": {

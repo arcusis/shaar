@@ -5,6 +5,12 @@
 import BrowserCore
 import SwiftUI
 
+enum BookmarkEditorAccessibility {
+  static func busyLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string("Updating bookmarks…", table: "Panels", language: language)
+  }
+}
+
 struct BookmarkEditor: View {
   let store: BrowserStore
   let route: BookmarkEditorRoute
@@ -111,7 +117,10 @@ struct BookmarkEditor: View {
             busy || !route.matches(store))
         }
         Spacer()
-        if busy { ProgressView().controlSize(.small) }
+        if busy {
+          ProgressView().controlSize(.small)
+            .accessibilityLabel(BookmarkEditorAccessibility.busyLabel())
+        }
         Button(PanelsL10n.string("Cancel"), role: .cancel) { dismiss() }
         Button(PanelsL10n.string("Save")) { submit() }.keyboardShortcut(.defaultAction).disabled(
           !canSave)

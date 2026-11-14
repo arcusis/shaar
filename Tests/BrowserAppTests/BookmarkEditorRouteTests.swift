@@ -10,6 +10,11 @@ import Testing
 
 @Suite @MainActor
 struct BookmarkEditorRouteTests {
+  @Test func busyProgressLabelIsLocalized() {
+    #expect(BookmarkEditorAccessibility.busyLabel(language: .english) == "Updating bookmarks…")
+    #expect(BookmarkEditorAccessibility.busyLabel(language: .hebrew) == "מעדכן סימניות…")
+  }
+
   @Test func newBookmarkRouteRequiresItsProfileAndAnExistingFolderParent() throws {
     let store = BrowserStore()
     let profile = store.session.selectedSpace.profileID

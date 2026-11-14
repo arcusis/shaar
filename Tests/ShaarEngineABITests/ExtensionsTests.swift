@@ -260,6 +260,22 @@ struct ShaarExtensionsAdapterTests {
     }
   }
 
+  @Test func extensionListRejectsNumericBooleanFields() async throws {
+    let row =
+      #"{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Extension","version":"1","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}"#
+    for invalidRow in [
+      row.replacingOccurrences(of: #""enabled":true"#, with: #""enabled":1"#),
+      row.replacingOccurrences(of: #""mayDisable":true"#, with: #""mayDisable":0"#),
+      row.replacingOccurrences(of: #""incognitoEnabled":false"#, with: #""incognitoEnabled":1"#),
+      row.replacingOccurrences(of: #""fromWebStore":true"#, with: #""fromWebStore":0"#),
+    ] {
+      let fake = FakeExtensionsTransport("{\"schemaVersion\":1,\"extensions\":[\(invalidRow)]}")
+      await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+        _ = try await ShaarExtensionsAdapter(shaar: fake).list(profileID: UUID())
+      }
+    }
+  }
+
   @Test func extensionListRejectsBooleanSchemaVersion() async throws {
     let fake = FakeExtensionsTransport(#"{"schemaVersion":true,"extensions":[]}"#)
     await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("unsupported schema version"))

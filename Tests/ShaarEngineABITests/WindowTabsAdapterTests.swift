@@ -9,13 +9,17 @@ import Testing
 
 @MainActor private final class FakeWindowTabsEngine: ShaarWindowTabsEngine {
   var calls: [String] = []
+  var failingProfile: String?
   func openWindow(id: String, scope: ShaarTabScope) throws { calls.append("window+\(id)") }
   func borrowedWindowHostView(id: String) throws -> UnsafeMutableRawPointer? {
     calls.append("view-window:\(id)")
     return UnsafeMutableRawPointer(bitPattern: 0x1234)
   }
   func bindProfile(id: String, windowID: String) throws { calls.append("bind:\(id)") }
-  func setActiveProfile(id: String, windowID: String) throws { calls.append("profile:\(id)") }
+  func setActiveProfile(id: String, windowID: String) throws {
+    calls.append("profile:\(id)")
+    if id == failingProfile { throw ShaarEngineError.invalidEvent("profile activation failed") }
+  }
   func closeWindow(id: String) throws { calls.append("window-\(id)") }
   func openTab(id: String, windowID: String, url: URL, foreground: Bool) throws {
     calls.append("tab+\(id):\(foreground)")
@@ -176,6 +180,59 @@ struct WindowTabsAdapterTests {
     #expect(adapter.snapshot(windowID: "window-a")?.orderedTabIDs == [])
     try adapter.setActiveProfile(id: "profile-b", windowID: "window-a")
     #expect(adapter.snapshot(windowID: "window-a")?.activeTabID == "tab-b")
+  }
+
+  @Test @MainActor func backgroundTabOpensInItsBoundProfileAndRestoresActiveProfile() throws {
+    let fake = FakeWindowTabsEngine()
+    let adapter = makeShaarAdapter(fake)
+    try adapter.openWindow(id: "window-a", scope: .profile("profile-a"))
+    try adapter.bindProfile(id: "profile-b", windowID: "window-a")
+    fake.calls.removeAll()
+
+    try adapter.openTab(
+      id: "tab-b", windowID: "window-a", scope: .profile("profile-b"),
+      url: URL(string: "https://b.example")!, foreground: false)
+
+    #expect(fake.calls == ["profile:profile-b", "tab+tab-b:false", "profile:profile-a"])
+    #expect(adapter.snapshot(windowID: "window-a")?.activeProfileID == "profile-a")
+    #expect(adapter.snapshot(windowID: "window-a")?.orderedTabIDs == [])
+    try adapter.setActiveProfile(id: "profile-b", windowID: "window-a")
+    #expect(adapter.snapshot(windowID: "window-a")?.orderedTabIDs == ["tab-b"])
+  }
+
+  @Test @MainActor func foregroundTabOpensAfterSelectingItsBoundProfile() throws {
+    let fake = FakeWindowTabsEngine()
+    let adapter = makeShaarAdapter(fake)
+    try adapter.openWindow(id: "window-a", scope: .profile("profile-a"))
+    try adapter.bindProfile(id: "profile-b", windowID: "window-a")
+    fake.calls.removeAll()
+
+    try adapter.openTab(
+      id: "tab-b", windowID: "window-a", scope: .profile("profile-b"),
+      url: URL(string: "https://b.example")!, foreground: true)
+
+    #expect(fake.calls == ["profile:profile-b", "tab+tab-b:true"])
+    #expect(adapter.snapshot(windowID: "window-a")?.activeProfileID == "profile-b")
+    #expect(adapter.snapshot(windowID: "window-a")?.activeTabID == "tab-b")
+  }
+
+  @Test @MainActor func backgroundTabRemainsTrackedWhenProfileRestoreFails() throws {
+    let fake = FakeWindowTabsEngine()
+    let adapter = makeShaarAdapter(fake)
+    try adapter.openWindow(id: "window-a", scope: .profile("profile-a"))
+    try adapter.bindProfile(id: "profile-b", windowID: "window-a")
+    fake.calls.removeAll()
+    fake.failingProfile = "profile-a"
+
+    #expect(throws: ShaarEngineError.invalidEvent("profile activation failed")) {
+      try adapter.openTab(
+        id: "tab-b", windowID: "window-a", scope: .profile("profile-b"),
+        url: URL(string: "https://b.example")!, foreground: false)
+    }
+
+    #expect(fake.calls == ["profile:profile-b", "tab+tab-b:false", "profile:profile-a"])
+    #expect(adapter.snapshot(windowID: "window-a")?.activeProfileID == "profile-b")
+    #expect(adapter.snapshot(windowID: "window-a")?.orderedTabIDs == ["tab-b"])
   }
 
   @Test @MainActor func requestRepliesRequireLiveScopedTargets() throws {

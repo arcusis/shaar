@@ -261,6 +261,14 @@ final class HebrewLocalizationVisualTests: XCTestCase {
         Text(fileMenuTitle).padding(8)
       },
       name: "v02-file-upload-menu.png", size: NSSize(width: 260, height: 100), appearance: light)
+    let fileUploadCopy = NativeBrowserHost.fileUploadPanelCopy(language: language)
+    try capture(
+      VStack(alignment: .leading, spacing: 12) {
+        Text(fileUploadCopy.title).font(.headline)
+        Button(fileUploadCopy.prompt) {}
+      }.padding(20),
+      name: "v02-file-upload-panel-copy.png", size: NSSize(width: 360, height: 130),
+      appearance: light)
 
     for kind in [JavaScriptDialogKind.alert, .confirm, .prompt] {
       let javascript = try XCTUnwrap(JavaScriptDialogRequest(payload: [

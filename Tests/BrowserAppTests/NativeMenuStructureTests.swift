@@ -125,6 +125,12 @@ import Testing
   #expect(
     BrowserLocalization.string("Open File…", table: "Settings", language: .hebrew)
       == "פתיחת קובץ…")
+  #expect(
+    NativeBrowserHost.fileUploadPanelCopy(language: .english).title == "Choose files to upload")
+  #expect(NativeBrowserHost.fileUploadPanelCopy(language: .english).prompt == "Upload")
+  #expect(
+    NativeBrowserHost.fileUploadPanelCopy(language: .hebrew).title == "בחירת קבצים להעלאה")
+  #expect(NativeBrowserHost.fileUploadPanelCopy(language: .hebrew).prompt == "העלאה")
 }
 
 @Test @MainActor func reopenClosedShortcutPrefersATabThenFallsBackToAWindow() {

@@ -65,6 +65,7 @@ def expected_captures():
              "v02-tabs-windows.png", "v02-session-restore.png", "v02-downloads.png",
              "v02-bookmarks.png", "v02-history.png", "v02-import.png",
              "v02-file-upload-menu.png", "v02-javascript-alert.png",
+             "v02-file-upload-panel-copy.png",
              "v02-javascript-confirm.png", "v02-javascript-prompt.png", "v02-basic-auth.png",
              "v02-permission-prompts.png", "v02-protocol-registration.png",
              "v02-save-password.png", "v02-save-card.png", "v02-save-address.png",

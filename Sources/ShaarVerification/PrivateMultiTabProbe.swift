@@ -296,6 +296,12 @@ struct PrivateMultiTabProbe {
       "rawWindowSibling": native?.superview === owner.hosting.superview,
       "nativeFrame": NSStringFromRect(native?.frame ?? .zero),
       "containerFrames": containers.map { NSStringFromRect($0.frame) },
+      "nativeFrameInHost": native.map {
+        NSStringFromRect(owner.hosting.convert($0.bounds, from: $0))
+      } ?? NSStringFromRect(.zero),
+      "containerFramesInHost": containers.map {
+        NSStringFromRect(owner.hosting.convert($0.bounds, from: $0))
+      },
       "layerBacked": containers.map(\.wantsLayer),
       "attached": containers.contains {
         PrivateMultiTabEvidence.pageIsAttached(native, to: $0, retainedPage: $0.pageView)
@@ -380,13 +386,21 @@ enum PrivateMultiTabEvidence {
   }
 
   static func liveShellAudit(_ audit: [String: Any], stage: String) -> Bool {
-    audit["stage"] as? String == stage
-      && integerEvidence(audit["containerCount"]) == 1
-      && booleanArrayEvidence(audit["layerBacked"]) == [true]
-      && booleanEvidence(audit["attached"]) == true
-      && booleanEvidence(audit["attachedInWindow"]) == true
-      && booleanEvidence(audit["nativeHidden"]) == false
-      && booleanEvidence(audit["rawWindowSibling"]) == false
+    guard
+      audit["stage"] as? String == stage,
+      integerEvidence(audit["containerCount"]) == 1,
+      booleanArrayEvidence(audit["layerBacked"]) == [true],
+      booleanEvidence(audit["attached"]) == true,
+      booleanEvidence(audit["attachedInWindow"]) == true,
+      booleanEvidence(audit["nativeHidden"]) == false,
+      booleanEvidence(audit["rawWindowSibling"]) == false,
+      let nativeFrame = audit["nativeFrameInHost"] as? String,
+      let containerFrames = audit["containerFramesInHost"] as? [String],
+      containerFrames.count == 1
+    else { return false }
+    let page = NSRectFromString(nativeFrame)
+    let container = NSRectFromString(containerFrames[0])
+    return !page.isEmpty && container.contains(page)
   }
 
   static func splitShellAudit(_ audit: [String: Any]) -> Bool {

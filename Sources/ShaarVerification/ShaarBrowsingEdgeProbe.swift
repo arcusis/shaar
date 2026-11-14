@@ -460,11 +460,18 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       return makeRow("Infinite scroll", false, "Scroll page did not become ready")
     }
     let first = await scrollState(runtime, context, triggerScroll: false)
-    _ = await scrollState(runtime, context, triggerScroll: true)
-    try? await Task.sleep(for: .milliseconds(400))
-    let second = await scrollState(runtime, context, triggerScroll: false)
-    let ping = await evaluate(runtime, tab: selectedID(context), script: "({ok:true})", seconds: 3)
     let firstCount = number(first?["count"]) ?? 0
+    _ = await scrollState(runtime, context, triggerScroll: true)
+    var second = await scrollState(runtime, context, triggerScroll: false)
+    let growthDeadline = Date().addingTimeInterval(2)
+    while Date() < growthDeadline
+      && !scrollRowsHaveGrown(
+        beforeCount: firstCount, afterCount: number(second?["count"]) ?? 0)
+    {
+      try? await Task.sleep(for: .milliseconds(50))
+      second = await scrollState(runtime, context, triggerScroll: false)
+    }
+    let ping = await evaluate(runtime, tab: selectedID(context), script: "({ok:true})", seconds: 3)
     let secondCount = number(second?["count"]) ?? 0
     let height = number(second?["height"]) ?? 0
     let client = number(second?["client"]) ?? 0
@@ -474,7 +481,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0
     let pageScrollEvents = number(second?["pageScrollEvents"]) ?? 0
     let scrollable = height > client + 40 && top > 0
-    let grew = secondCount >= firstCount + 200
+    let grew = scrollRowsHaveGrown(beforeCount: firstCount, afterCount: secondCount)
     guard frames > 0 else {
       return makeRow(
         "Infinite scroll", false,
@@ -504,7 +511,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let json = await evaluate(
       runtime, tab: selectedID(context),
       script: scrollStateScript(triggerScroll: triggerScroll),
-      seconds: 5)
+      seconds: 1)
     return object(from: json)
   }
 
@@ -1416,6 +1423,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
 
   nonisolated static func scrollFailureIsAttributable(scrollEvents: Int) -> Bool {
     scrollEvents > 0
+  }
+
+  nonisolated static func scrollRowsHaveGrown(beforeCount: Int, afterCount: Int) -> Bool {
+    afterCount >= beforeCount + 200
   }
 }
 

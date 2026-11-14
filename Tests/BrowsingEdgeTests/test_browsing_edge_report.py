@@ -183,7 +183,8 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
         self.assertIn('let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0', source)
         self.assertIn('scrollEvents > 0 && scrollEndEvents > 0', source)
-        self.assertIn('window.scrollTo(0, document.documentElement.scrollHeight)', fixture)
+        self.assertIn(
+            'window.scrollTo(0, document.documentElement.scrollHeight)', source)
         self.assertIn('let pageScrollEvents = number(second?["pageScrollEvents"]) ?? 0', source)
         self.assertIn('scrollEvents > 0 && scrollEndEvents > 0 && pageScrollEvents > 0', source)
 
@@ -198,7 +199,17 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         trigger = source.index('_ = await scrollState(runtime, context, triggerScroll: true)')
         self.assertLess(baseline, trigger)
         self.assertIn(
-            'let second = await scrollState(runtime, context, triggerScroll: false)', source)
+            'var second = await scrollState(runtime, context, triggerScroll: false)', source)
+
+    def test_scroll_probe_waits_for_delayed_fixture_rows(self):
+        fixture = PROBE.SCROLL.decode()
+        self.assertIn('setTimeout(function () { add(400); }, 600)', fixture)
+        source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
+        self.assertIn('let growthDeadline = Date().addingTimeInterval(2)', source)
+        self.assertIn('while Date() < growthDeadline', source)
+        self.assertIn(
+            'scrollRowsHaveGrown(\n        beforeCount: firstCount, afterCount: number(second?["count"]) ?? 0)',
+            source)
 
     def test_media_fixture_rejects_a_paused_video_with_dimensions(self):
         fixture = PROBE.MEDIA.decode()

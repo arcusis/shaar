@@ -73,4 +73,10 @@ struct ShaarBrowsingEdgeProbeScalarTests {
     #expect(trigger.contains("scrollIntoView"))
     #expect(trigger.contains("root.scrollTop=root.scrollHeight"))
   }
+
+  @Test func infiniteScrollGrowthRequiresTheConfiguredRowIncrease() {
+    #expect(!ShaarBrowsingEdgeProbe.scrollRowsHaveGrown(beforeCount: 40, afterCount: 239))
+    #expect(ShaarBrowsingEdgeProbe.scrollRowsHaveGrown(beforeCount: 40, afterCount: 240))
+    #expect(ShaarBrowsingEdgeProbe.scrollRowsHaveGrown(beforeCount: 440, afterCount: 640))
+  }
 }

@@ -89,6 +89,9 @@ private typealias WindowResize =
   }
 
   private func decode(_ status: shaar_error_code, error: shaar_error) throws {
+    guard error.message.size == 0 || error.message.data != nil else {
+      throw ShaarEngineError.invalidEvent("invalid page-view error message")
+    }
     let message: String
     if let data = error.message.data, error.message.size > 0 {
       message = String(decoding: Data(bytes: data, count: error.message.size), as: UTF8.self)

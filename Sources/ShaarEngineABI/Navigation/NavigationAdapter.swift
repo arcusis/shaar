@@ -119,6 +119,9 @@ private let shaarNavigationReply: shaar_reply_fn = { context, result in
     guard result.request_id == box.expectedRequestID else {
       throw ShaarEngineError.invalidEvent("navigation result request ID mismatch")
     }
+    guard result.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+      throw ShaarEngineError.invalidEvent("short navigation error")
+    }
     try ShaarStatusCode.decode(
       UInt32(result.error.code.rawValue), platformCode: result.error.platform_code,
       message: String(decoding: try copyABISlice(result.error.message), as: UTF8.self))

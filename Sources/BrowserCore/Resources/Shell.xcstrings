@@ -1571,6 +1571,12 @@
         "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את כלי הפיתוח בחלון הפרטי. כדאי לנסות שוב." } }
       }
     },
+    "Could not open developer tools. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not open developer tools. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את כלי הפיתוח. כדאי לנסות שוב." } }
+      }
+    },
     "Loading profile…": {
       "localizations": {
         "en": {

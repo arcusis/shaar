@@ -84,6 +84,22 @@ struct BrowserEngineDevToolsTests {
         "Could not run this extension. Try again.", table: "Shell", language: .hebrew)
         == "לא ניתן להפעיל את התוסף. כדאי לנסות שוב.")
   }
+
+  @Test func developerToolsFailureUsesLocalizedNotice() throws {
+    let store = BrowserStore()
+    store.perform(.open(try #require(URL(string: "https://inspect.example/page"))))
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let runtime = DevToolsEngineRuntime()
+    runtime.tabWindows[tab.id.uuidString] = "inspect-window"
+    runtime.toggleError = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), windowID: "inspect-window", store: store)
+    engine.liveTabs.insert(tab.id)
+
+    engine.toggleChromiumDeveloperTools()
+
+    #expect(engine.notice == ShellL10n.string("Could not open developer tools. Try again."))
+  }
 }
 
 @MainActor
@@ -91,6 +107,7 @@ private final class DevToolsEngineRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var tabWindows: [String: String] = [:]
   nonisolated(unsafe) var openedTabs: [String] = []
   nonisolated(unsafe) var extensionExecutionError: Error?
+  var toggleError: Error?
 
   override func windowID(forTabID tabID: String) -> String? {
     tabWindows[tabID]
@@ -103,5 +120,11 @@ private final class DevToolsEngineRuntime: ARCChromiumRuntime {
 
   override func executeExtensionID(_ extensionID: String, tabID: String) throws {
     if let extensionExecutionError { throw extensionExecutionError }
+  }
+
+  @MainActor override func toggleDevTools(
+    forTabID tabID: String, completion: @escaping @MainActor @Sendable (Error?) -> Void
+  ) {
+    completion(toggleError)
   }
 }

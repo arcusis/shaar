@@ -26,14 +26,31 @@ struct SidebarTabIndex {
     var lastID: UUID
   }
 
+  private struct GroupPosition {
+    let group: Group
+    let index: Int
+  }
+
   private let boundariesByTabID: [UUID: SidebarTabMoveBoundary]
   private let tabs: [BrowserTab]
+  private let tabsByID: [UUID: BrowserTab]
+  private let idsByGroup: [Group: [UUID]]
+  private let positionsByTabID: [UUID: GroupPosition]
 
   init(tabs: [BrowserTab]) {
     self.tabs = tabs
+    var tabsByID: [UUID: BrowserTab] = [:]
     var endsByGroup: [Group: Ends] = [:]
+    var idsByGroup: [Group: [UUID]] = [:]
+    var positionsByTabID: [UUID: GroupPosition] = [:]
     for tab in tabs {
       let group = Group(isPinned: tab.isPinned, folderID: tab.folderID)
+      if tabsByID[tab.id] == nil { tabsByID[tab.id] = tab }
+      let groupIndex = idsByGroup[group, default: []].count
+      idsByGroup[group, default: []].append(tab.id)
+      if positionsByTabID[tab.id] == nil {
+        positionsByTabID[tab.id] = GroupPosition(group: group, index: groupIndex)
+      }
       if var ends = endsByGroup[group] {
         ends.lastID = tab.id
         endsByGroup[group] = ends
@@ -41,6 +58,9 @@ struct SidebarTabIndex {
         endsByGroup[group] = Ends(firstID: tab.id, lastID: tab.id)
       }
     }
+    self.tabsByID = tabsByID
+    self.idsByGroup = idsByGroup
+    self.positionsByTabID = positionsByTabID
 
     var boundaries: [UUID: SidebarTabMoveBoundary] = [:]
     for tab in tabs {
@@ -58,15 +78,16 @@ struct SidebarTabIndex {
   }
 
   func dropSlot(targetID: UUID, sourceID: UUID, after: Bool) -> DropSlot? {
-    guard targetID != sourceID, let target = tabs.first(where: { $0.id == targetID }) else {
+    guard targetID != sourceID, tabsByID[targetID] != nil,
+      let position = positionsByTabID[targetID],
+      let groupIDs = idsByGroup[position.group]
+    else {
       return nil
     }
     guard after else { return .before(targetID) }
-    let siblings = tabs.filter {
-      $0.id != sourceID && $0.isPinned == target.isPinned && $0.folderID == target.folderID
+    for index in (position.index + 1)..<groupIDs.endIndex where groupIDs[index] != sourceID {
+      return .before(groupIDs[index])
     }
-    guard let index = siblings.firstIndex(where: { $0.id == targetID }) else { return nil }
-    let next = siblings.index(after: index)
-    return next < siblings.endIndex ? .before(siblings[next].id) : .end
+    return .end
   }
 }

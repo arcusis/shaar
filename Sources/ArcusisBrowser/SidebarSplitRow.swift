@@ -17,6 +17,10 @@ struct SidebarSplitRow: View {
 
   static let titleMinimumWidth: CGFloat = 64
 
+  static func isActivationKey(_ key: KeyEquivalent) -> Bool {
+    key == .return || key == .space
+  }
+
   static func showsTitles(
     totalWidth: CGFloat, segmentCount: Int, hasStackDragHandle: Bool
   ) -> Bool {
@@ -93,6 +97,12 @@ struct SidebarSplitRow: View {
     }
     .contentShape(RoundedRectangle(cornerRadius: 7))
     .simultaneousGesture(TapGesture().onEnded { onSelect(segment.id) })
+    .focusable()
+    .onKeyPress(keys: [.return, .space]) { press in
+      guard Self.isActivationKey(press.key) else { return .ignored }
+      onSelect(segment.id)
+      return .handled
+    }
     .onHover { inside in
       hoveredID = hoveredID.updatingTarget(segment.id, isActive: inside)
     }

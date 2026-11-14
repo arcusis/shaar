@@ -42,15 +42,17 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
   /// Chromium frame token for prompts that name a frame. Camera and microphone may omit it.
   public let frameID: String?
 
+  /// Returns whether an HTTP or HTTPS origin is potentially trustworthy for browser prompts.
+  public static func isSecureWebOrigin(_ origin: URL) -> Bool {
+    let scheme = origin.scheme?.lowercased()
+    return scheme == "https"
+      || (scheme == "http" && isLocalHTTPHost(origin.host()?.lowercased() ?? ""))
+  }
+
   public init?(
     id: String, profileID: UUID, tabID: UUID, pageURL: URL,
     requestingOrigin: URL, kinds: [WebsitePermissionKind], frameID: String? = nil
   ) {
-    let scheme = requestingOrigin.scheme?.lowercased()
-    let secureOrigin =
-      scheme == "https"
-      || (scheme == "http"
-        && Self.isLocalHTTPHost(requestingOrigin.host()?.lowercased() ?? ""))
     let storedFrame: String?
     if let frameID {
       guard let normalized = Self.normalizedFrameID(frameID) else { return nil }
@@ -63,7 +65,7 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
       requestingOrigin.password == nil, requestingOrigin.query == nil,
       requestingOrigin.fragment == nil,
       requestingOrigin.path.isEmpty || requestingOrigin.path == "/",
-      secureOrigin, !kinds.isEmpty, Set(kinds).count == kinds.count
+      Self.isSecureWebOrigin(requestingOrigin), !kinds.isEmpty, Set(kinds).count == kinds.count
     else { return nil }
     self.id = id
     self.profileID = profileID

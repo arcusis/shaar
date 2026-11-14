@@ -231,9 +231,12 @@ struct DesktopCaptureConsentTests {
       #expect(DesktopCaptureRequest(payload: missing) == nil)
     }
 
-    var localHTTP = valid
-    localHTTP["origin"] = "http://localhost:3000"
-    #expect(DesktopCaptureRequest(payload: localHTTP) != nil)
+    for host in ["localhost", "video.localhost", "127.0.0.2", "[::1]"] {
+      var localHTTP = valid
+      localHTTP["pageURL"] = "http://\(host):3000/call"
+      localHTTP["origin"] = "http://\(host):3000"
+      #expect(DesktopCaptureRequest(payload: localHTTP) != nil)
+    }
   }
 
   @Test func resolvesOnlyPresentedCurrentRequestAndCancelsDismissedRequest() throws {

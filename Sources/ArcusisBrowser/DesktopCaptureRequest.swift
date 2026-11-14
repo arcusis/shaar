@@ -31,13 +31,7 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
       requestingOrigin.user == nil,
       requestingOrigin.password == nil
     else { return nil }
-    let scheme = requestingOrigin.scheme?.lowercased()
-    let secureOrigin =
-      scheme == "https"
-      || (scheme == "http"
-        && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(
-          requestingOrigin.host()?.lowercased() ?? ""))
-    guard secureOrigin else { return nil }
+    guard WebsitePermissionRequest.isSecureWebOrigin(requestingOrigin) else { return nil }
     guard let allowedKinds = Self.allowedKinds(from: payload["sourceTypes"]) else { return nil }
     self.id = id
     self.profileID = profileID

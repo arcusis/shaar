@@ -14,6 +14,13 @@ import Testing
 struct RecentDownloadsTests {
   private let id = "8ce51349-a188-4bad-bd1c-011b48e48ca6"
 
+  @Test func recentDownloadProgressAccessibilityLabelIncludesPercentageWhenKnown() {
+    #expect(
+      RecentDownloadsPopover.progressLabel(for: 0.42)
+        == PanelsL10n.plural("%d percent", count: 42))
+    #expect(RecentDownloadsPopover.progressLabel(for: nil) == nil)
+  }
+
   @Test func finishedDownloadRetriesThumbnailAfterCardStateChanges() async throws {
     final class Calls { var count = 0 }
     let calls = Calls()

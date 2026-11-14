@@ -90,7 +90,6 @@ struct DeviceChooserTests {
           payload: payload) == nil)
     }
   }
-
   @Test func chooserOriginFormattingOmitsDefaultPortsAndBracketsIPv6() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
@@ -100,6 +99,28 @@ struct DeviceChooserTests {
       transport: .usb, options: [], bluetoothUnavailable: false, canGrant: false)
 
     #expect(request.displayOrigin == "https://[2001:db8::1]")
+
+    let nondefaultPortOrigin = DeviceChooserRequest(
+      id: "ipv6-origin-port", tabID: tab.id, profileID: store.session.selectedSpace.profileID,
+      pageURL: tab.url, origin: try #require(URL(string: "https://[2001:db8::1]:8443/chooser")),
+      transport: .usb, options: [], bluetoothUnavailable: false, canGrant: false)
+
+    #expect(nondefaultPortOrigin.displayOrigin == "https://[2001:db8::1]:8443")
+
+    let mixedCaseOrigin = DeviceChooserRequest(
+      id: "mixed-case-origin", tabID: tab.id, profileID: store.session.selectedSpace.profileID,
+      pageURL: tab.url, origin: try #require(URL(string: "https://DEVICE-FRAME.EXAMPLE:8443")),
+      transport: .usb, options: [], bluetoothUnavailable: false, canGrant: false)
+
+    #expect(mixedCaseOrigin.displayOrigin == "https://device-frame.example:8443")
+
+    let mixedCaseSchemeOrigin = DeviceChooserRequest(
+      id: "mixed-case-scheme-origin", tabID: tab.id,
+      profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+      origin: try #require(URL(string: "HTTPS://device-frame.example:8443")), transport: .usb,
+      options: [], bluetoothUnavailable: false, canGrant: false)
+
+    #expect(mixedCaseSchemeOrigin.displayOrigin == "https://device-frame.example:8443")
 
     let httpOrigin = DeviceChooserRequest(
       id: "http-origin", tabID: tab.id, profileID: store.session.selectedSpace.profileID,

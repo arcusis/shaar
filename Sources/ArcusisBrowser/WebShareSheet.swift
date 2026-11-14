@@ -48,6 +48,7 @@ struct WebShareSheet: View {
 }
 
 struct WebShareSheetContent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let request: WebShareRequest
   let onCancel: () -> Void
   let onShare: () -> Void
@@ -56,6 +57,7 @@ struct WebShareSheetContent: View {
     VStack(alignment: .leading, spacing: 12) {
       Text(PanelsL10n.string("Share"))
         .font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.headingTraits)
       Text(request.originLabel)
         .font(.callout)
         .foregroundStyle(.secondary)

@@ -88,6 +88,29 @@ struct PrivateSessionsTests {
     #expect(delivered)
   }
 
+  @Test @MainActor func activationRejectsZeroRequestIDBeforeCallingEngine() throws {
+    let engine = FakePrivateSessionsEngine()
+    let adapter = ShaarPrivateSessionsAdapter(engine: engine)
+    let profile = Data("profile-a".utf8)
+    let session = Data("session-a".utf8)
+    _ = try adapter.openSession(profileID: profile, sessionID: session)
+    _ = try adapter.openWindow(sessionID: session, windowID: Data("window-a".utf8))
+    try adapter.openTab(
+      sessionID: session, windowID: Data("window-a".utf8), tabID: Data("tab-a".utf8),
+      url: Data("about:blank".utf8), foreground: true)
+    let callsBeforeActivation = engine.calls
+
+    #expect(
+      throws: ShaarEngineError.status(
+        .invalidArgument, platformCode: 0, message: "private activation request ID must be nonzero")
+    ) {
+      try adapter.activateTab(
+        sessionID: session, windowID: Data("window-a".utf8), tabID: Data("tab-a".utf8),
+        requestID: 0)
+    }
+    #expect(engine.calls == callsBeforeActivation)
+  }
+
   @Test @MainActor func eventRoutingRejectsOwnerLevelKindsEvenWithMatchingObjectIDs() {
     let adapter = ShaarPrivateSessionsAdapter(engine: FakePrivateSessionsEngine())
     let event = ShaarCopiedEvent(

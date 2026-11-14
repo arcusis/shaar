@@ -147,6 +147,11 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
   }
 
   public func activateTab(sessionID: Data, windowID: Data, tabID: Data, requestID: UInt64) throws {
+    guard requestID > 0 else {
+      throw ShaarEngineError.status(
+        .invalidArgument, platformCode: 0,
+        message: "private activation request ID must be nonzero")
+    }
     guard let window = windows[windowID], window.0.session == sessionID,
       let tab = tabs[tabID], tab.0 == window.0, tab.1 == window.1,
       let session = sessions[window.0]

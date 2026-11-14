@@ -1792,6 +1792,18 @@ final class BrowserStore {
   }
 
   private func reconcileTransientState() {
+    let liveTabIDs = Set(
+      session.spaces.flatMap(\.tabs).map(\.id) + session.favoritePages.map { $0.tab.id })
+    splitTabRecency.removeAll { !liveTabIDs.contains($0) }
+    sleepingTabIDs.formIntersection(liveTabIDs)
+    requestedTabCloses.formIntersection(liveTabIDs)
+    if let tabDrag, !liveTabIDs.contains(tabDrag.tabID) { self.tabDrag = nil }
+    if case .tab(_, _, let tabID) = sidebarDrag, !liveTabIDs.contains(tabID) {
+      sidebarDrag = nil
+    }
+    if let pendingSplitPlacement, !liveTabIDs.contains(pendingSplitPlacement.target) {
+      dismissCommand()
+    }
     rendererFailures = rendererFailures.filter { $0.value.belongs(to: session) }
     if !canUseLibraryDrawer {
       closeLibraryDrawer()

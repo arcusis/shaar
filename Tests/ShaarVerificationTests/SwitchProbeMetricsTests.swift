@@ -204,6 +204,46 @@ import Testing
     #expect(!incomplete.profileSwitchWithinBudget)
   }
 
+  @Test func decoderRejectsTamperedMetadataSummariesAndSamples() throws {
+    var recorder = SwitchProbeMetricsRecorder()
+    try recordSpaceWarmups(&recorder, latencies: [0.01, 0.02, 0.03, 0.04])
+    for iteration in 1...SwitchProbeMetrics.expectedSwitchCount {
+      try recorder.record(
+        kind: .space, iteration: iteration, latencySeconds: 0.01,
+        residentMemoryBytes: UInt64(iteration))
+      try recorder.record(
+        kind: .profile, iteration: iteration, latencySeconds: 0.02,
+        residentMemoryBytes: UInt64(iteration))
+    }
+    let data = try JSONEncoder().encode(recorder.report(phase: "initial"))
+    let original = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+    var wrongSchema = original
+    wrongSchema["schema"] = 4
+    #expect(throws: DecodingError.self) {
+      try JSONDecoder().decode(
+        SwitchProbeMetrics.self, from: JSONSerialization.data(withJSONObject: wrongSchema))
+    }
+
+    var wrongSummary = original
+    var summary = try #require(wrongSummary["spaceSwitchLatency"] as? [String: Any])
+    summary["p95Milliseconds"] = 999
+    wrongSummary["spaceSwitchLatency"] = summary
+    #expect(throws: DecodingError.self) {
+      try JSONDecoder().decode(
+        SwitchProbeMetrics.self, from: JSONSerialization.data(withJSONObject: wrongSummary))
+    }
+
+    var wrongSamples = original
+    var samples = try #require(wrongSamples["spaceSwitchSamples"] as? [[String: Any]])
+    samples[0]["iteration"] = 2
+    wrongSamples["spaceSwitchSamples"] = samples
+    #expect(throws: DecodingError.self) {
+      try JSONDecoder().decode(
+        SwitchProbeMetrics.self, from: JSONSerialization.data(withJSONObject: wrongSamples))
+    }
+  }
+
   private func recordSpaceWarmups(
     _ recorder: inout SwitchProbeMetricsRecorder, latencies: [Double]
   ) throws {

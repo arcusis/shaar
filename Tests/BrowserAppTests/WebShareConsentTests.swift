@@ -11,6 +11,10 @@ import Testing
 
 @Suite @MainActor
 struct WebShareConsentTests {
+  @Test func webShareTitleIsAHeading() {
+    #expect(WebShareSheetContent.titleAccessibilityTraits.contains(.isHeader))
+  }
+
   private func openedStore() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com/article")!))

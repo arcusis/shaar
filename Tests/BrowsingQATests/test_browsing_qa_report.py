@@ -170,7 +170,9 @@ process.stdin.on('end', () => {
     getElementById(id) { assert.equal(id, 'feed'); return feed; },
     createElement(tag) { assert.equal(tag, 'div'); return {textContent: ''}; },
   };
-  vm.runInNewContext(source, {document});
+  const page = {document};
+  page.window = page;
+  vm.runInNewContext(source, page);
   assert.equal(feed.children.length, 100, 'initial rows');
   feed.listeners.scroll();
   assert.equal(feed.children.length, 200, 'rows after first scroll');

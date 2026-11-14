@@ -168,6 +168,12 @@ struct ShaarProfileAdapterTests {
       adapter.receive(malformed)
       #expect(adapter.loadedProfileIDs == [id])
     }
+    let childScopedProfileEvent = ShaarCopiedEvent(
+      sequence: 11, kind: 2, profileID: Data(id.utf8), sessionID: Data("private".utf8),
+      windowID: Data("window".utf8), tabID: Data("tab".utf8),
+      payloadJSON: Data(#"{"kind":"deleted","schemaVersion":1}"#.utf8))
+    adapter.receive(childScopedProfileEvent)
+    #expect(adapter.loadedProfileIDs == [id])
     #expect(delivered == nil)
   }
 }

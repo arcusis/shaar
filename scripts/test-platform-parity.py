@@ -43,6 +43,7 @@ function finish(result) { window.parityResult = result; }
 function fail(error) {
   finish({
     outcome: 'rejected',
+    stage: window.parityStage || '',
     name: error && error.name ? error.name : 'Error',
     message: error && error.message ? String(error.message) : String(error)
   });
@@ -373,25 +374,36 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/widevine-playback":
             return page("widevine-playback", """
               <video id="widevine-video" muted playsinline></video>
+              <script>window.parityStage='loading-shaka-script';window.parityResult={stage:window.parityStage};</script>
               <script src="/shaka-player.js"></script>
             """, """
               (async () => {
                 try {
+                  const progress = stage => {
+                    window.parityStage = stage;
+                    finish({stage});
+                  };
+                  progress('shaka-script-loaded');
                   if (!window.shaka) throw new Error('Shaka Player script missing');
-                  shaka.polyfill.installAll();
-                  await navigator.requestMediaKeySystemAccess(
-                    'com.widevine.alpha', [{initDataTypes:['cenc'],
-                      videoCapabilities:[{contentType:'video/mp4; codecs="avc1.42E01E"'}]}]);
                   const video = document.getElementById('widevine-video');
+                  progress('creating-player');
                   const player = new shaka.Player();
-                  await player.attach(video);
+                  progress('attaching-video');
+                  await player.attach(video, false);
+                  const manifestUrl = 'https://storage.googleapis.com/shaka-demo-assets/sintel-widevine/dash.mpd';
                   player.configure({drm:{servers:{'com.widevine.alpha':
                     'https://cwip-shaka-proxy.appspot.com/no_auth'}}});
                   player.addEventListener('error', event => fail(event.detail));
-                  await player.load('https://storage.googleapis.com/shaka-demo-assets/sintel-widevine/dash.mpd');
+                  progress('fetching-manifest');
+                  const response = await fetch(manifestUrl);
+                  if (!response.ok) throw new Error('Manifest HTTP ' + response.status);
+                  progress('loading-manifest');
+                  await player.load(manifestUrl);
+                  progress('manifest-loaded');
                   const keySystem = player.keySystem();
                   if (keySystem !== 'com.widevine.alpha') throw new Error('Wrong DRM key system: ' + keySystem);
                   await video.play();
+                  progress('video-play-requested');
                   const deadline = Date.now() + 20000;
                   while (Date.now() < deadline && (video.paused || video.currentTime <= 0)) {
                     await new Promise(resolve => setTimeout(resolve, 200));
@@ -877,17 +889,27 @@ def main():
     if not options.fixtures_only and not executable.is_file():
         parser.error(f"Missing verification app: {executable}")
     if options.widevine_only:
-        url = "https://cdn.jsdelivr.net/npm/shaka-player@5.1.8/dist/shaka-player.compiled.min.js"
-        download = subprocess.run(
-            ["curl", "--fail", "--silent", "--show-error", "--location",
-             "--connect-timeout", "10", "--max-time", "45", url],
-            capture_output=True, check=False)
-        if download.returncode:
-            raise SystemExit(f"Shaka Player fixture download failed: {download.stderr.decode(errors='replace')}")
-        Handler.shaka_js = download.stdout
+        fixture_hash = "2b70304a562ab1056900ced9d323016cc008b819cc41bb9f4b1dd1789ff45248"
+        cached = ROOT / "build/widevine-probe/shaka-player-4.10.26.js"
+        if cached.is_symlink() or cached.parent.is_symlink():
+            raise SystemExit("Shaka Player fixture cache must not be symlinked")
+        Handler.shaka_js = cached.read_bytes() if cached.is_file() else b""
+        downloaded = hashlib.sha256(Handler.shaka_js).hexdigest() != fixture_hash
+        if downloaded:
+            url = "https://cdn.jsdelivr.net/npm/shaka-player@4.10.26/dist/shaka-player.compiled.min.js"
+            download = subprocess.run(
+                ["curl", "--fail", "--silent", "--show-error", "--location",
+                 "--connect-timeout", "10", "--max-time", "45", url],
+                capture_output=True, check=False)
+            if download.returncode:
+                raise SystemExit(f"Shaka Player fixture download failed: {download.stderr.decode(errors='replace')}")
+            Handler.shaka_js = download.stdout
         if hashlib.sha256(Handler.shaka_js).hexdigest() != (
-                "fe7895978d420a22ce5d89faad7d58406a5b5e7d0772cc3bf0323636b752a449"):
+                fixture_hash):
             raise SystemExit("Shaka Player fixture hash mismatch")
+        if downloaded:
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(Handler.shaka_js)
     before = crash_names()
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     report_path = root / "report.json"

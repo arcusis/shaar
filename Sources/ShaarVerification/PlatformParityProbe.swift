@@ -260,7 +260,7 @@ private struct ParitySnapshot {
       allowMedia: false, tolerateErrorPage: false)
     let playback = ParityCheck(
       item: "Widevine test stream", path: "/widevine-playback", base: .http,
-      click: false, seconds: 35, allowMedia: false, tolerateErrorPage: false)
+      click: false, seconds: 60, allowMedia: false, tolerateErrorPage: false)
     if widevineOnly { return [eme, playback] }
     let media = ParityCheck(
       item: "Camera and microphone", path: "/media", base: .http, click: true, seconds: 8,
@@ -988,7 +988,7 @@ private struct ParitySnapshot {
     let outcome = text(snapshot.result["outcome"])
     if !outcome.isEmpty { parts.append("outcome \(outcome)") }
     for key in [
-      "name", "message", "state", "widevine", "clearkey", "code", "title", "create", "peer",
+      "name", "message", "stage", "state", "widevine", "clearkey", "code", "title", "create", "peer",
     ] {
       let value = text(snapshot.result[key])
       if !value.isEmpty { parts.append("\(key) \(value)") }

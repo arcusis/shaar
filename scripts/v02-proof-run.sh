@@ -14,6 +14,11 @@ dry_run=${SHAAR_V02_PROOF_DRY_RUN:-0}
 case "$dry_run" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_DRY_RUN must be 0 or 1.' >&2; exit 2 ;; esac
 widevine=${SHAAR_V02_PROOF_WIDEVINE:-0}
 case "$widevine" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_WIDEVINE must be 0 or 1.' >&2; exit 2 ;; esac
+widevine_only=${SHAAR_V02_PROOF_WIDEVINE_ONLY:-0}
+case "$widevine_only" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_WIDEVINE_ONLY must be 0 or 1.' >&2; exit 2 ;; esac
+if [[ $widevine_only == 1 && $widevine != 1 ]]; then
+  echo 'SHAAR_V02_PROOF_WIDEVINE_ONLY requires SHAAR_V02_PROOF_WIDEVINE=1.' >&2; exit 2
+fi
 
 run_id=$(date -u +%Y%m%dT%H%M%SZ)-$$
 run_root="$PWD/build/v02-proof/$run_id"
@@ -120,6 +125,11 @@ run_step 'Verification bundle build' "$HOME/bin/shaar-heavy" "${bundle_env[@]}" 
 verification_app="$PWD/build/Shaar Verification.app"
 if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
       -x "$verification_app/Contents/MacOS/ShaarVerification" ]]; then
+  if [[ $widevine_only == 1 ]]; then
+    run_step 'Widevine EME, ClearKey, Shaka playback' \
+      python3 scripts/test-platform-parity.py --widevine-only --app "$verification_app" \
+      --receipt "$run_root/widevine-drm.json"
+  else
   run_step 'Browsing, dialogs, Basic auth, file upload, downloads, restore' \
     python3 scripts/test-browsing-edge-probe.py --app "$verification_app" \
     --receipt "$run_root/browsing-edge.json"
@@ -150,7 +160,9 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
       python3 scripts/test-platform-parity.py --widevine-only --app "$verification_app" \
       --receipt "$run_root/widevine-drm.json"
   fi
+  fi
 else
+  if [[ $widevine_only != 1 ]]; then
   for label in 'Browsing, dialogs, Basic auth, file upload, downloads, restore' \
     'Browsing QA, dialogs, downloads, session restore' 'Tab/window adoption' \
     'Bookmarks/history and browser import' 'Chrome Web Store extension install' \
@@ -161,6 +173,7 @@ else
     'Media and picture-in-picture'; do
     record "$label" SKIP 'shipping or verification bundle build did not pass'
   done
+  fi
   if [[ $widevine == 1 ]]; then
     record 'Widevine EME, ClearKey, Shaka playback' SKIP 'shipping or verification bundle build did not pass'
   fi

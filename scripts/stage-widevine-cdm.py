@@ -23,6 +23,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import zipfile
 
 
@@ -136,9 +137,16 @@ def get(url: str) -> bytes:
 
 
 def component_url() -> tuple[str, str, str, int]:
+    # Keep each generated ID stable throughout this single update transaction.
+    session_id = "{" + str(uuid.uuid4()) + "}"
+    request_id = "{" + str(uuid.uuid4()) + "}"
     request = {"request": {
-        "@os": "mac", "@updater": "Shaar", "acceptformat": "crx3",
-        "protocol": "3.1", "updaterversion": "157.0.8103.51",
+        "@os": "mac", "@arch": "arm64", "@updater": "chrome",
+        "acceptformat": "crx3,download,puff", "protocol": "3.1",
+        "prodversion": "157.0.8103.51", "prodchannel": "stable",
+        "nacl_arch": "arm64", "updaterchannel": "stable",
+        "updaterversion": "157.0.8103.51",
+        "sessionid": session_id, "requestid": request_id,
         "os": {"platform": "mac", "arch": "arm64", "version": platform.mac_ver()[0]},
         "app": [{"appid": COMPONENT_ID, "version": "0.0.0.0", "updatecheck": {}}],
     }}
@@ -147,7 +155,7 @@ def component_url() -> tuple[str, str, str, int]:
         UPDATE_URL, data=body,
         headers={"Content-Type": "application/json", "X-Goog-Update-AppId": COMPONENT_ID,
                  "X-Goog-Update-Interactivity": "fg",
-                 "X-Goog-Update-Updater": "Shaar-157.0.8103.51"})
+                 "X-Goog-Update-Updater": "chrome-157.0.8103.51"})
     with urllib.request.urlopen(http_request, timeout=60) as response:
         raw = response.read(1024 * 1024 + 1)
     if len(raw) > 1024 * 1024:
@@ -171,7 +179,8 @@ def component_url() -> tuple[str, str, str, int]:
     name = package.get("name", "")
     if not name or Path(name).name != name or name in (".", ".."):
         raise ValueError("unsafe component package name")
-    codebases = [item.get("codebase", "") for item in urls if item.get("codebase")]
+    codebases = [item.get("codebase", "") for item in urls
+                 if item.get("codebase", "").startswith("https://")]
     if not codebases:
         raise ValueError("Widevine update has no full download URL")
     url = codebases[0] + name

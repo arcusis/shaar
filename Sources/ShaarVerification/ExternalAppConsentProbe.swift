@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 import SwiftUI
 
@@ -32,6 +33,21 @@ final class ExternalAppConsentProbe {
     var targetByApproval: [String] = []
     var cleanup: [String: Any] = [:]
     var complete = false
+  }
+
+  static func isComplete(_ evidence: Evidence) -> Bool {
+    evidence.checks.allSatisfy { $0 }
+      && evidence.approvedRequests == 2
+      && evidence.launchCount == 2
+      && evidence.deniedRequests >= 6
+      && isTrueJSONBoolean(evidence.cleanup["passed"])
+  }
+
+  private static func isTrueJSONBoolean(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+      return false
+    }
+    return number.boolValue
   }
 
   private let engine: BrowserEngine
@@ -100,11 +116,7 @@ final class ExternalAppConsentProbe {
       quitDenied && engineClosed && primaryWindowClosed && pending == 0
       && audits.count == 2 && audits.allSatisfy { $0.count == 2 }
     evidence.checks[14] = audits.count == 2 && audits.allSatisfy(\.allUnremembered)
-    evidence.complete =
-      evidence.checks.allSatisfy { $0 }
-      && evidence.approvedRequests == 2 && evidence.launchCount == 2
-      && evidence.deniedRequests >= 6
-      && (evidence.cleanup["passed"] as? Bool == true)
+    evidence.complete = Self.isComplete(evidence)
     return evidence
   }
 

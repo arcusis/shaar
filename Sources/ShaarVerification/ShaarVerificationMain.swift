@@ -16,7 +16,8 @@ enum VerificationHarnessArguments {
   static func launch(
     _ flag: String, arguments: [String], frameworksURL: URL?
   ) -> VerificationHarnessLaunch? {
-    guard let index = arguments.firstIndex(of: flag),
+    guard arguments.filter({ $0 == flag }).count == 1,
+      let index = arguments.firstIndex(of: flag),
       arguments.indices.contains(index + 2),
       let frameworksURL
     else { return nil }

@@ -1453,12 +1453,12 @@
         }
       }
     },
-    "The profile could not be created. %@": {
+    "Could not create the profile. Try again.": {
       "localizations": {
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "לא ניתן ליצור את הפרופיל. %@"
+            "value": "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב."
           }
         }
       }

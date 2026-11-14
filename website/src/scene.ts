@@ -79,6 +79,15 @@ export function updateSceneVisibility(
   return state.inViewport && state.documentVisible;
 }
 
+export function refreshSceneAfterResize(
+  reducedMotion: boolean,
+  wake: () => void,
+  redraw: () => void,
+): void {
+  if (reducedMotion) redraw();
+  else wake();
+}
+
 const bladeShades = ["#4f8a2c", "#5c9733", "#6aa53b", "#3f7726", "#7cb247", "#8fbf55"];
 const flowerShades = ["#f7d54a", "#f6f2e4", "#ea8fb4", "#b39be2", "#f2a65a"];
 
@@ -604,8 +613,7 @@ export function startScene(
   });
   new ResizeObserver(() => {
     resize();
-    wake();
-    if (reducedMotion) draw(performance.now());
+    refreshSceneAfterResize(reducedMotion, wake, () => draw(performance.now()));
   }).observe(canvas);
 
   resize();

@@ -6,6 +6,7 @@ import BrowserCore
 import SwiftUI
 
 struct ExtensionConsent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let store: BrowserStore
   let request: ExtensionInstallRequest
   @Environment(\.dismiss) private var dismiss
@@ -22,6 +23,7 @@ struct ExtensionConsent: View {
         systemImage: "puzzlepiece.extension"
       )
       .font(.title2.weight(.semibold))
+      .accessibilityAddTraits(Self.headingTraits)
       VStack(alignment: .leading, spacing: 5) {
         Text(request.browserExtension.name).font(.headline)
         Text(PanelsL10n.format("Version %@", .string(request.browserExtension.version)))
@@ -39,6 +41,7 @@ struct ExtensionConsent: View {
       }
       Divider()
       Text(PanelsL10n.string("This extension can:")).font(.headline)
+        .accessibilityAddTraits(Self.headingTraits)
       ScrollView {
         VStack(alignment: .leading, spacing: 12) {
           if request.permissions.isEmpty {
@@ -61,6 +64,7 @@ struct ExtensionConsent: View {
         VStack(alignment: .leading, spacing: 8) {
           Label(PanelsL10n.string("Unknown access"), systemImage: "exclamationmark.triangle.fill")
             .font(.headline).foregroundStyle(.orange)
+            .accessibilityAddTraits(Self.headingTraits)
           Text(
             PanelsL10n.string(
               "Browser engine did not provide a complete site access list. Extension may access sites not listed above."

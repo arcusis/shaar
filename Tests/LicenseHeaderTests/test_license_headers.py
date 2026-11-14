@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import io
 import os
 import sys
 import tempfile
@@ -83,6 +84,16 @@ class LicenseHeaderTests(unittest.TestCase):
         with patch.object(check_license_headers.subprocess, "run", return_value=completed):
             paths = check_license_headers.tracked_files(self.root)
         self.assertEqual(paths, [Path(os.fsdecode(raw_name))])
+
+    def test_unreadable_tracked_file_reports_its_path_without_traceback(self):
+        source = self.root / "broken.py"
+        source.write_bytes(b"\xff")
+        errors = io.StringIO()
+        with (patch.object(check_license_headers, "REPOSITORY_ROOT", self.root),
+              patch.object(check_license_headers, "tracked_files", return_value=[Path("broken.py")]),
+              patch("sys.stderr", errors)):
+            self.assertEqual(check_license_headers.main(), 1)
+        self.assertIn("Cannot read tracked file for MPL-2.0 header check: broken.py", errors.getvalue())
 
 
 if __name__ == "__main__":

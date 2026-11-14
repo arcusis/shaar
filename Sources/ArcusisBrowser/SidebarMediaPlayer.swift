@@ -8,11 +8,17 @@ import SwiftUI
 /// Compact controls for media playing in a tab that is not on screen. Track and play/pause
 /// buttons appear only for actions the page supports; mute uses the engine's tab mute.
 struct SidebarMediaPlayer: View {
+  private enum FocusedControl: Hashable {
+    case mute
+    case volume
+  }
+
   @Environment(\.colorScheme) private var colorScheme
   @State var volumeIsVisible = false
   @State private var pointerIsInside = false
   @State private var editingVolume = false
   @State private var draftVolume: Double?
+  @FocusState private var focusedControl: FocusedControl?
   let item: MiniPlayerItem
   let onSelect: () -> Void
   let onCommand: (MediaCommand) -> Void
@@ -77,10 +83,15 @@ struct SidebarMediaPlayer: View {
           volumeIsVisible = true
           onCommand(.setMuted(!state.muted))
         }
+        .focused($focusedControl, equals: .mute)
         .onHover { if $0 { volumeIsVisible = true } }
       }
       .environment(\.layoutDirection, .leftToRight)
-      if volumeIsVisible { volumeControl }
+      if Self.showsVolumeControl(
+        pointerRevealed: volumeIsVisible, keyboardFocused: focusedControl != nil)
+      {
+        volumeControl
+      }
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 6)
@@ -128,6 +139,11 @@ struct SidebarMediaPlayer: View {
     .accessibilityValue(volumeAccessibilityValue)
     .accessibilityIdentifier("sidebar-media-volume")
     .environment(\.layoutDirection, .leftToRight)
+    .focused($focusedControl, equals: .volume)
+  }
+
+  static func showsVolumeControl(pointerRevealed: Bool, keyboardFocused: Bool) -> Bool {
+    pointerRevealed || keyboardFocused
   }
 
   private var volumeAccessibilityValue: String {

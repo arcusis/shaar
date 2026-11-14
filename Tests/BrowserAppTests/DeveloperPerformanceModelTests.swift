@@ -88,6 +88,19 @@ struct DeveloperPerformanceModelTests {
     engine.suspensionTask?.cancel()
   }
 
+  @Test func cancelledRefreshStopsBeforeAcquiringDeveloperSession() async throws {
+    let model = DeveloperPageModel(
+      target: SiteControlTarget(
+        tabID: UUID(), profileID: UUID(), url: try #require(URL(string: "https://example.test"))),
+      engine: nil)
+    model.performanceEnabled = true
+
+    let refresh = Task { @MainActor in try await model.refreshPerformance() }
+    refresh.cancel()
+
+    await #expect(throws: CancellationError.self) { try await refresh.value }
+  }
+
   @Test func developerCallRejectsReplyAfterModelClose() async throws {
     var session = BrowserSession.fresh()
     let openedTabID = session.open(URL(string: "https://example.test")!)

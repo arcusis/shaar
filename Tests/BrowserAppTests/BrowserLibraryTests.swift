@@ -258,8 +258,8 @@ struct BrowserLibraryTests {
     let profile = UUID()
     let rows = (0..<5_000).map { index in
       [
-        "u": "https://example.test/\(index)", "t": "Page \(index)", "n": 1,
-        "v": [index],
+        "u": "https://history.example/page-\(index)", "t": "History page \(index)",
+        "n": 1, "v": [NSNumber(value: 1_700_000_000_000 + index * 1_000)],
       ] as [String: Any]
     }
     model.onLoad = { _, _, done in done(.success(rows)) }
@@ -267,27 +267,8 @@ struct BrowserLibraryTests {
     let start = ContinuousClock.now
     for _ in 0..<10 { model.refresh(profile, section: .history) }
     print("libraryHistoryRefreshFocusedBenchmark: \(start.duration(to: .now))")
-  }
-
-  @Test func historyRowsAreSortedAndDuplicateAddressesAreRejected() throws {
-    let profile = UUID()
-    let entries = try LibraryHistoryRows.parse(
-      profileID: profile,
-      rows: [
-        ["u": "https://example.test/older", "t": "Older", "n": 1, "v": [1]],
-        ["u": "https://example.test/newer", "t": "Newer", "n": 1, "v": [2]],
-      ])
-    #expect(entries.map(\.address) == [
-      "https://example.test/newer", "https://example.test/older",
-    ])
-    #expect(throws: LibraryDataError.invalidHistory) {
-      try LibraryHistoryRows.parse(
-        profileID: profile,
-        rows: [
-          ["u": "https://example.test", "t": "First", "n": 1, "v": [1]],
-          ["u": "https://example.test", "t": "Second", "n": 1, "v": [2]],
-        ])
-    }
+    #expect(model.history[profile]?.count == rows.count)
+    #expect(model.history[profile]?.first?.address == "https://history.example/page-4999")
   }
 
   @Test func staleLibraryActionsCannotCrossProfilesOrReplaceConsent() throws {

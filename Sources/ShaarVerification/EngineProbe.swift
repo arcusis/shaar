@@ -11,6 +11,24 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum EngineProbeMeasurementArguments {
+  static let flag = "--probe-measure-tabs"
+  static let supportedCounts: Set<Int> = [1, 10, 30, 50, 100]
+
+  static func tabCount(in arguments: [String]) -> Int? {
+    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
+      return nil
+    }
+    return Int(arguments[index + 1])
+  }
+
+  static func hasValidTabCount(in arguments: [String]) -> Bool {
+    guard arguments.contains(flag) else { return true }
+    guard let count = tabCount(in: arguments) else { return false }
+    return supportedCounts.contains(count)
+  }
+}
+
 /// Uses only a marked, disposable directory and an authored loopback fixture.
 /// No window is ordered onscreen and no existing browser profiles are opened.
 @MainActor
@@ -36,9 +54,6 @@ final class EngineProbe {
   private let devModeOnly: Bool
   private let mediaSessionOnlyMode: Bool
   private let devtoolsRouteOnlyMode: Bool
-  /// Counts the hidden footprint runner is allowed to open. 50 and 100 exist so
-  /// #1058 and #1467 can measure the same bundle without a one-off probe.
-  private static let measurementTabCounts: Set<Int> = [1, 10, 30, 50, 100]
   private let measurementTabCount: Int?
   private let measurementEager: Bool
   private let measurementSleeping: Bool
@@ -239,12 +254,7 @@ final class EngineProbe {
       let devModeOnly = arguments.contains("--probe-dev-mode-only")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
       let devtoolsRouteOnlyMode = arguments.contains("--probe-devtools-route-only")
-      let measurementTabCount: Int? = {
-        guard let index = arguments.firstIndex(of: "--probe-measure-tabs"),
-          arguments.indices.contains(index + 1)
-        else { return nil }
-        return Int(arguments[index + 1])
-      }()
+      let measurementTabCount = EngineProbeMeasurementArguments.tabCount(in: arguments)
       let measurementEager = arguments.contains("--probe-measure-eager")
       let measurementSleeping = arguments.contains("--probe-measure-sleeping")
       let measurementInspector = arguments.contains("--probe-measure-inspector")
@@ -257,10 +267,9 @@ final class EngineProbe {
       guard !measurementSleeping || (measurementTabCount != nil && measurementEager) else {
         throw ProbeFailure("Sleeping measurement requires eagerly loaded measurement tabs.")
       }
-      guard
-        measurementTabCount.map({ measurementTabCounts.contains($0) }) ?? !arguments.contains(
-          "--probe-measure-tabs")
-      else { throw ProbeFailure("Measurement tab count must be 1, 10, 30, 50, or 100.") }
+      guard EngineProbeMeasurementArguments.hasValidTabCount(in: arguments) else {
+        throw ProbeFailure("Measurement tab count must be 1, 10, 30, 50, or 100.")
+      }
       guard localizationMode == arguments.contains("--probe-localization") else {
         throw ProbeFailure("Localization mode dispatch mismatch.")
       }

@@ -313,6 +313,18 @@ import Testing
   #expect(spaceID == activeSpaceID)
 }
 
+@Test @MainActor func showAllHistoryCommandOpensTheHistoryLibrarySection() {
+  let store = BrowserStore()
+
+  NativeBrowserHost.showAllHistory(in: store)
+
+  guard case .library(_, let section) = store.sheet else {
+    Issue.record("Show All History did not open the library")
+    return
+  }
+  #expect(section == .history)
+}
+
 @Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: false) == "Enter Full Screen")
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: true) == "Exit Full Screen")

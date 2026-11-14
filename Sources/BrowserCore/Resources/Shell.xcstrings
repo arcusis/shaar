@@ -2644,22 +2644,6 @@
         }
       }
     },
-    "Secure": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Secure"
-          }
-        },
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "מאובטח"
-          }
-        }
-      }
-    },
     "Select All": {
       "localizations": {
         "en": {

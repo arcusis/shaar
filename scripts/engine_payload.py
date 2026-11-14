@@ -948,7 +948,7 @@ def main(argv: list[str] | None = None) -> int:
         if len(pin_bytes) > MAX_PIN_FILE_SIZE:
             raise ValueError("pin file exceeds size cap")
         pin = json.loads(pin_bytes.decode("utf-8"))
-    except (OSError, UnicodeError, ValueError):
+    except (OSError, UnicodeError, ValueError, RecursionError):
         report = {"schema": 1, "archive_metadata_verified": False, "payload_match": False,
                   "source_provenance_unverified": True, "signature_verification_not_performed": True,
                   "archive_sha256": None, "members": [], "reason": "pin file unavailable or malformed"}

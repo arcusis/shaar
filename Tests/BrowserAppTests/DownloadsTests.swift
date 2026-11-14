@@ -10,6 +10,10 @@ import Testing
 
 @Suite @MainActor
 struct DownloadsTests {
+  @Test func downloadsPanelTitleIsAHeading() {
+    #expect(DownloadsPanel.titleAccessibilityTraits.contains(.isHeader))
+  }
+
   private let id = "8ce51349-a188-4bad-bd1c-011b48e48ca6"
   private func record(
     state: String = "downloading", paused: Bool = false, privateItem: Bool = false

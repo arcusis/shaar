@@ -11,11 +11,14 @@ struct DownloadsPanel: View {
   let profileID: UUID
   @Environment(\.dismiss) private var dismiss
 
+  static var titleAccessibilityTraits: AccessibilityTraits { .isHeader }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
           Text(PanelsL10n.string("Downloads")).font(.title2.weight(.semibold))
+            .accessibilityAddTraits(Self.titleAccessibilityTraits)
           Text(profileName).font(.callout).foregroundStyle(.secondary)
         }
         Spacer()

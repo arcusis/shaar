@@ -45,7 +45,7 @@ struct PrintConsentContent: View {
           .font(.headline)
           .textSelection(.enabled)
       }
-      Text(request.pageURL.absoluteString)
+      Text(request.displayPageURL)
         .font(.callout)
         .foregroundStyle(.secondary)
         .textSelection(.enabled)

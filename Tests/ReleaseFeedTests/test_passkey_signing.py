@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -88,6 +89,20 @@ class PasskeySigningTests(unittest.TestCase):
 
     def test_check_accepts_a_decoded_developer_id_profile(self):
         self.assertEqual(passkey_signing.profile_problems(valid_profile()), [])
+
+    def test_decode_profile_reports_cms_failure_output(self):
+        result = subprocess.CompletedProcess(
+            args=["security", "cms"], returncode=1, stdout=b"", stderr=b"profile rejected")
+        with patch("passkey_signing.subprocess.run", return_value=result):
+            with self.assertRaisesRegex(ValueError, "profile rejected"):
+                passkey_signing.decode_profile(Path("profile.mobileprovision"))
+
+    def test_decode_profile_rejects_non_plist_cms_output(self):
+        result = subprocess.CompletedProcess(
+            args=["security", "cms"], returncode=0, stdout=b"not a plist", stderr=b"")
+        with patch("passkey_signing.subprocess.run", return_value=result):
+            with self.assertRaisesRegex(ValueError, "decoded profile is not a plist"):
+                passkey_signing.decode_profile(Path("profile.mobileprovision"))
 
     def test_rejections(self):
         cases = {

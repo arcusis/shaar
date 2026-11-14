@@ -46,9 +46,21 @@ def verify_archive(payload: bytes, digest: str, name: str) -> None:
         raise ValueError(f"Checksum mismatch for {name}")
 
 
-def write_binary(destination: Path, binary: bytes, executable: bool) -> None:
+def write_binary(
+    destination: Path, binary: bytes, executable: bool, output_root: Path | None = None
+) -> None:
+    output_root = output_root or destination.parent
+    parent = destination.parent
     if destination.is_symlink():
         raise ValueError(f"Refusing symlinked tool output: {destination}")
+    while True:
+        if parent.is_symlink():
+            raise ValueError(f"Refusing symlinked tool output: {destination}")
+        if parent == output_root:
+            break
+        if output_root not in parent.parents:
+            raise ValueError(f"Tool output is outside destination directory: {destination}")
+        parent = parent.parent
     destination.write_bytes(binary)
     destination.chmod(0o755 if executable else 0o644)
 
@@ -161,7 +173,7 @@ def main() -> None:
         for member in (name, *pin.get("companions", [])):
             binary = binary_from_archive(payload, member, pin["sha256"])
             destination = options.destination / member
-            write_binary(destination, binary, member == name)
+            write_binary(destination, binary, member == name, options.destination)
         print(f"Installed {name} from {pin['url']} ({pin['sha256']})")
 
 

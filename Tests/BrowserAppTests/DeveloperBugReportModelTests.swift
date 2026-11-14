@@ -22,6 +22,20 @@ struct DeveloperBugReportModelTests {
     #expect(model.reportFailure == nil)
   }
 
+  @Test func cancelledReportDoesNotPublishFailure() async {
+    let model = DeveloperPageModel(
+      target: .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!),
+      engine: nil)
+
+    let report = Task { @MainActor in await model.createBugReport() }
+    report.cancel()
+    let result = await report.value
+
+    #expect(result == nil)
+    #expect(model.reportFailure == nil)
+    #expect(!model.creatingBugReport)
+  }
+
   @Test func reportPageURLRemovesCredentialsQueryAndFragment() {
     let raw =
       "https://report-user:fixture-password@report.localhost/page?token=fixture-token#fixture-fragment"

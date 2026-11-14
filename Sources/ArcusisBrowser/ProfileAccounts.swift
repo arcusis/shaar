@@ -197,7 +197,10 @@ enum GoogleAccountList {
   /// addresses are kept.
   static func photoURL(from value: String) -> URL? {
     let address = value.hasPrefix("//") ? "https:" + value : value
-    guard let url = URL(string: address), url.scheme == "https", url.host() != nil else {
+    guard let url = URL(string: address), url.scheme == "https", url.host() != nil,
+      url.user == nil, url.password == nil,
+      url.port.map({ (0...65535).contains($0) }) ?? true
+    else {
       return nil
     }
     return url

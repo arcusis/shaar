@@ -11,6 +11,15 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum WebsitePermissionProbeArguments {
+  static func value(after flag: String, in arguments: [String]) -> String? {
+    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
+      return nil
+    }
+    return arguments[index + 1]
+  }
+}
+
 /// The run passes only when camera and microphone work and the four website prompts appear.
 enum WebsitePermissionProbeVerdict {
   static let websitePrompts = ["geolocation", "notifications", "midi", "protocol"]
@@ -49,9 +58,10 @@ final class WebsitePermissionPromptProbe {
 
   private init(arguments: [String]) throws {
     func value(after flag: String) throws -> String {
-      guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
-      else { throw Failure("Missing \(flag).") }
-      return arguments[index + 1]
+      guard let value = WebsitePermissionProbeArguments.value(after: flag, in: arguments) else {
+        throw Failure("Missing \(flag).")
+      }
+      return value
     }
 
     let framework = URL(filePath: try value(after: "--probe-framework"))

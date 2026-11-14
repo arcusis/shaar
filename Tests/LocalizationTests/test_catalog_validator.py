@@ -262,6 +262,22 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn('PanelsL10n.string("Could not update the Library. Try again.")', source)
 
+    def test_profile_load_failure_uses_localized_recovery_copy(self):
+        key = "Could not load this profile. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן לטעון את הפרופיל. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('ShellL10n.string("Could not load this profile. Try again.")', source)
+
     def test_default_browser_failure_uses_hebrew_settings_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(
             encoding="utf-8"

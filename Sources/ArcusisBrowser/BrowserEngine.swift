@@ -1085,9 +1085,9 @@ final class BrowserEngine {
   private func finishLoadingProfile(_ profile: UUID, error: Error?) async {
     loadingProfiles.remove(profile)
     guard !isClosed else { return }
-    if let error {
+    if error != nil {
       failedProfiles.insert(profile)
-      notice = error.localizedDescription
+      notice = ShellL10n.string("Could not load this profile. Try again.")
     } else {
       do {
         if let directory = store?.preferences.downloadDirectory(for: profile),
@@ -1114,7 +1114,7 @@ final class BrowserEngine {
         }
       } catch {
         failedProfiles.insert(profile)
-        notice = error.localizedDescription
+        notice = ShellL10n.string("Could not load this profile. Try again.")
       }
     }
     DispatchQueue.main.async { [weak self] in self?.reconcile() }

@@ -31,4 +31,30 @@ struct BrowserEngineProfileLoadTests {
 
     #expect(store.preferences.downloadDirectory(for: profile) == latest)
   }
+  @Test func profileLoadFailureUsesLocalizedRecoveryNotice() async throws {
+    let store = BrowserStore()
+    let runtime = ProfileLoadFailureRuntime()
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime),
+      windowID: "profile-load-failure-window", store: store)
+    defer { engine.suspensionTask?.cancel() }
+
+    engine.reconcile()
+    for _ in 0..<100 {
+      if engine.notice != nil { break }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(engine.notice == ShellL10n.string("Could not load this profile. Try again."))
+  }
+}
+
+@MainActor
+private final class ProfileLoadFailureRuntime: ARCChromiumRuntime {
+  override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {
+    completion(
+      NSError(
+        domain: "ProfileLoadFailureTest", code: 7,
+        userInfo: [NSLocalizedDescriptionKey: "Raw engine profile error."]))
+  }
 }

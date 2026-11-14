@@ -9,6 +9,13 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+enum InspectorIdleSmokeEvidence {
+  static func acceptsPageURL(_ pageURL: URL?) -> Bool {
+    guard let pageURL else { return false }
+    return pageURL.scheme == "http" && pageURL.host == "127.0.0.1"
+  }
+}
+
 /// Opens Inspector on one loopback page in the hidden verification app and counts
 /// how often it reads the page once the selection has stopped changing.
 @MainActor enum InspectorIdleSmoke {
@@ -16,7 +23,7 @@ import Foundation
 
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
     verdictPassed = false
-    guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else { return 2 }
+    guard let pageURL, InspectorIdleSmokeEvidence.acceptsPageURL(pageURL) else { return 2 }
     let root = outputURL.deletingLastPathComponent().appending(path: "profile")
     do {
       let workspace = try BrowserWorkspaceStore(

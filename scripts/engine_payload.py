@@ -23,6 +23,7 @@ from typing import BinaryIO
 
 CHUNK_SIZE = 1024 * 1024
 MAX_ARCHIVE_SIZE = 2 * 1024 * 1024 * 1024
+MAX_PIN_FILE_SIZE = 64 * 1024
 MAX_TOTAL_MEMBER_SIZE = 4 * 1024 * 1024 * 1024
 MAX_FRAMEWORK_TOTAL_SIZE = MAX_TOTAL_MEMBER_SIZE
 MAX_DECOMPRESSED_ARCHIVE_SIZE = 5 * 1024 * 1024 * 1024
@@ -942,8 +943,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pin", type=Path, default=Path("ThirdParty/ChromiumEngine/pin.json"))
     args = parser.parse_args(argv)
     try:
-        pin = json.loads(args.pin.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+        with args.pin.open("rb") as pin_file:
+            pin_bytes = pin_file.read(MAX_PIN_FILE_SIZE + 1)
+        if len(pin_bytes) > MAX_PIN_FILE_SIZE:
+            raise ValueError("pin file exceeds size cap")
+        pin = json.loads(pin_bytes.decode("utf-8"))
+    except (OSError, UnicodeError, ValueError):
         report = {"schema": 1, "archive_metadata_verified": False, "payload_match": False,
                   "source_provenance_unverified": True, "signature_verification_not_performed": True,
                   "archive_sha256": None, "members": [], "reason": "pin file unavailable or malformed"}

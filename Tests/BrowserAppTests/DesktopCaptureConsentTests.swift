@@ -611,7 +611,6 @@ struct DesktopCaptureConsentTests {
       tabs: [], screens: [], screenAccessFailed: false)
     #expect(DesktopCaptureCatalog.settingsAction(for: noPermissionIssue) == nil)
   }
-  }
 
   @Test func tabSourceFallsBackToPageHostWhenSavedTitleIsBlank() throws {
     let original = store().session

@@ -608,6 +608,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0150-shaar-pinned-build-tools.patch",
       "sha256": "b7cd039deb5cb662abc308a685d4e2ed63450c00e232d0ed70bf57841a39348e"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0151-shaar-headless-cgwindow-registry-quit.patch",
+      "sha256": "bc409d50da0b05d5ada4c45df5bd9aa2de46a58e069d3d0a91359b1aa37bcb66"
     }
   ],
   "devtoolsFrontend157": {

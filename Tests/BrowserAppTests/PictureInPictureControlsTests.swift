@@ -103,6 +103,29 @@ final class PictureInPictureControlsTests: XCTestCase {
     XCTAssertEqual(commands.last, .close)
   }
 
+  func testPendingAttachmentStopsPollingWhenControlsDeinitialize() async throws {
+    var lookups = 0
+    weak var weakControls: PictureInPictureControls?
+    do {
+      let controls = PictureInPictureControls()
+      weakControls = controls
+      controls.attach(
+        tabID: UUID(),
+        finding: {
+          lookups += 1
+          return nil
+        },
+        video: { nil })
+      await Task.yield()
+      XCTAssertEqual(lookups, 1)
+    }
+
+    XCTAssertNil(weakControls)
+    let lookupsAtDeinitialization = lookups
+    try await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(lookups, lookupsAtDeinitialization)
+  }
+
   func testCaptureControlsOverVideo() throws {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let cases: [(String, PictureInPictureControlsView.Presentation, Int)] = [

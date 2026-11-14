@@ -19,7 +19,6 @@ struct InspectorSection<Content: View>: View {
   @ViewBuilder let content: () -> Content
   @Environment(\.inspectorPresentation) private var presentation
   @Environment(\.inspectorSectionScope) private var scope
-  @Environment(\.layoutDirection) private var layoutDirection
   @State private var collapsed = false
   @State private var showingCode = false
   @State private var hovered = false
@@ -29,9 +28,9 @@ struct InspectorSection<Content: View>: View {
   private var isCollapsed: Bool { presentation?.collapsedSections.contains(key) ?? collapsed }
   private var isCode: Bool { presentation?.codeSections.contains(key) ?? showingCode }
 
-  static func disclosureSymbol(isCollapsed: Bool, rightToLeft: Bool) -> String {
+  static func disclosureSymbol(isCollapsed: Bool) -> String {
     guard isCollapsed else { return "chevron.down" }
-    return rightToLeft ? "chevron.left" : "chevron.right"
+    return "chevron.forward"
   }
 
   init(
@@ -58,8 +57,7 @@ struct InspectorSection<Content: View>: View {
         } label: {
           HStack(spacing: 6) {
             Image(
-              systemName: Self.disclosureSymbol(
-                isCollapsed: isCollapsed, rightToLeft: layoutDirection == .rightToLeft))
+              systemName: Self.disclosureSymbol(isCollapsed: isCollapsed))
               .font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary).frame(width: 9)
             Text(title).font(.system(size: 11, weight: .semibold))
             Spacer(minLength: 0)

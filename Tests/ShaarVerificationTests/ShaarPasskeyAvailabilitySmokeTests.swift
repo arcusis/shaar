@@ -47,6 +47,15 @@ struct ShaarPasskeyAvailabilityReportTests {
     #expect(report["rendererQuiet"] as? Bool == true)
   }
 
+  @Test func conditionalMediationIsReportedButIsNotARequiredCapability() {
+    var state = availableAPIs
+    state["conditionalMediation"] = false
+
+    let report = ShaarPasskeyAvailabilitySmoke.availabilityReport(state: state, quiet: true)
+    #expect(report["passed"] as? Bool == true)
+    #expect(report["conditionalMediation"] as? Bool == false)
+  }
+
   @Test func rejectsUnexpectedPasskeyAvailabilityAndMissingPrerequisites() {
     for (key, value) in [
       ("passkey", "true"),

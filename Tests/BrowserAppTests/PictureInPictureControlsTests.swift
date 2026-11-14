@@ -126,6 +126,20 @@ final class PictureInPictureControlsTests: XCTestCase {
     XCTAssertEqual(lookups, lookupsAtDeinitialization)
   }
 
+  func testDetachBeforePendingAttachmentStartsPreventsLateReattach() async {
+    let video = transparentWindow()
+    defer { video.close() }
+    let controls = PictureInPictureControls()
+    let tab = UUID()
+
+    controls.attach(tabID: tab, finding: { video }, video: { nil })
+    controls.detach()
+    await Task.yield()
+
+    XCTAssertFalse(controls.isAttached)
+    XCTAssertNil(controls.tabID)
+  }
+
   func testCaptureControlsOverVideo() throws {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let cases: [(String, PictureInPictureControlsView.Presentation, Int)] = [

@@ -50,6 +50,7 @@ final class PictureInPictureControls {
     self.tabID = tabID
     pendingAttachment = Task { [weak self] in
       for _ in 0..<50 {
+        guard !Task.isCancelled else { return }
         if let window = find() {
           self?.attach(to: window, tabID: tabID, video: video())
           return

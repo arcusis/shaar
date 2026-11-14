@@ -436,6 +436,20 @@ class PipelineGateTests(unittest.TestCase):
         self.assertEqual(PLAN.iteration_count({}, "schedule"), 3)
         self.assertEqual(PLAN.iteration_count({}, "pull_request"), 1)
 
+    def test_invalid_probe_iteration_inputs_report_ci_plan_error(self):
+        for inputs in ({"probe_iterations": "invalid"}, [], "invalid"):
+            with self.subTest(inputs=inputs), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "event.json").write_text(json.dumps({"inputs": inputs}))
+                env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "workflow_dispatch",
+                       "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                       "GITHUB_STEP_SUMMARY": str(root / "summary")}
+                with patch.dict(os.environ, env), patch("sys.stderr", new=io.StringIO()) as errors:
+                    self.assertEqual(PLAN.main(), 1)
+                self.assertIn("CI plan error:", errors.getvalue())
+                self.assertNotIn("Traceback", errors.getvalue())
+                self.assertFalse((root / "output").exists())
+
     def test_merge_group_concurrency_key_uses_validated_pull_request_number(self):
         event = {"merge_group": {"head_ref": "gh-readonly-queue/production/pr-378-" + "a" * 40}}
         self.assertEqual(PLAN.merge_group_pr_number(event, "merge_group"), "378")

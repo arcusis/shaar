@@ -165,3 +165,23 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
             cache.symlink_to(target)
             with patch.dict(fetcher.PINS, {"react": pin}):
                 self.assertFalse(fetcher.archive_matches("react", cache))
+    def test_install_rejects_symlinked_archive_directory_before_download(self):
+        fetcher = load_fetcher()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external"
+            external.mkdir()
+            cache = root / "cache"
+            cache.symlink_to(external, target_is_directory=True)
+            downloaded = []
+
+            def download(name, destination):
+                downloaded.append(name)
+                destination.write_bytes(b"unexpected cache write")
+
+            with self.assertRaisesRegex(ValueError, "archive cache directory must not be a symlink"):
+                fetcher.install_pinned("react", cache, download, "test source")
+
+            self.assertEqual(downloaded, [])
+            self.assertEqual(list(external.iterdir()), [])

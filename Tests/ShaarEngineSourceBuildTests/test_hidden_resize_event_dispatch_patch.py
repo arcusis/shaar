@@ -24,6 +24,14 @@ class HiddenResizeEventDispatchPatchTests(unittest.TestCase):
             " void Document::EnqueueResizeEvent() {\n+  if (!GetExecutionContext())\n+    return;",
             patch,
         )
+        dispatch = patch.split("void Document::DispatchHiddenResizeEventTask", 1)[1].split(
+            "void Document::EnqueueMediaQueryChangeListeners", 1
+        )[0]
+        self.assertIn("+  if (!GetExecutionContext())\n+    return;", dispatch)
+        self.assertLess(
+            dispatch.index("+  if (!GetExecutionContext())"),
+            dispatch.index("scripted_animation_controller_->DispatchHiddenResizeEvents"),
+        )
         self.assertIn("TaskType::kDOMManipulation", patch)
         self.assertIn("HiddenDocumentResizeEventDispatchesWithoutAnimationFrame", patch)
 

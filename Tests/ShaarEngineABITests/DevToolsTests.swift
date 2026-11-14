@@ -10,8 +10,13 @@ import Testing
 private final class FakeDevToolsEngine: ShaarDevToolsSubmitting, @unchecked Sendable {
   private let lock = NSLock()
   private var stored: ShaarDevToolsRequest?
-  private let reply: Data
+  private var reply: Data
   init(reply: Data = Data("{\"schemaVersion\":1}".utf8)) { self.reply = reply }
+  func setReply(_ value: String) {
+    lock.lock()
+    reply = Data(value.utf8)
+    lock.unlock()
+  }
   var request: ShaarDevToolsRequest? {
     lock.lock()
     defer { lock.unlock() }
@@ -23,8 +28,9 @@ private final class FakeDevToolsEngine: ShaarDevToolsSubmitting, @unchecked Send
   ) throws -> UInt64 {
     lock.lock()
     stored = request
+    let response = reply
     lock.unlock()
-    Task { completion(.success(reply)) }
+    Task { completion(.success(response)) }
     return 91
   }
 }
@@ -234,6 +240,33 @@ struct DevToolsTests {
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         booleanVersion, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
+  }
+
+  @Test func openPanelRejectsBooleanVersionAndLeaseIDs() async throws {
+    let fake = FakeDevToolsEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    for reply in [
+      #"{"schemaVersion":true,"leaseID":42}"#,
+      #"{"schemaVersion":1,"leaseID":true}"#,
+    ] {
+      fake.setReply(reply)
+      let result = await withCheckedContinuation {
+        (continuation: CheckedContinuation<Result<UInt32, ShaarEngineError>, Never>) in
+        do {
+          _ = try adapter.openPanel(
+            scope: ShaarNavigationScope(profileID: "profile-a"),
+            windowID: "window-a", tabID: "tab-a") { continuation.resume(returning: $0) }
+        } catch let error as ShaarEngineError {
+          continuation.resume(returning: .failure(error))
+        } catch {
+          continuation.resume(returning: .failure(.invalidEvent("unexpected panel error")))
+        }
+      }
+      guard case .failure(.invalidEvent(_)) = result else {
+        Issue.record("Boolean panel acknowledgement was accepted: \(reply)")
+        continue
+      }
+    }
   }
 
   @Test func shaarDefaultConstructsAdapter() {

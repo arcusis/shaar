@@ -29,7 +29,6 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -540,11 +539,6 @@ class PanelClient final : public content::DevToolsAgentHostClient,
     Close();
   }
   void WebContentsDestroyed() override { Close(); }
-  void DidFinishNavigation(content::NavigationHandle* navigation) override {
-    if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame() &&
-        !navigation->IsSameDocument())
-      Close();
-  }
 
  private:
   void MaskStartTimedOut(int command_id) {

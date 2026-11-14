@@ -9,6 +9,15 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum PlatformPromptProbeArguments {
+  static func value(after flag: String, in arguments: [String]) -> String? {
+    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1),
+      !arguments[index + 1].hasPrefix("--")
+    else { return nil }
+    return arguments[index + 1]
+  }
+}
+
 /// Hidden proof that a page title cannot open the screen-sharing picker, and that a
 /// request bound to the live tab can.
 @MainActor
@@ -37,9 +46,10 @@ final class PlatformPromptProbe {
 
   private init(arguments: [String]) throws {
     func value(after flag: String) throws -> String {
-      guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
-      else { throw Failure("Missing \(flag).") }
-      return arguments[index + 1]
+      guard let value = PlatformPromptProbeArguments.value(after: flag, in: arguments) else {
+        throw Failure("Missing \(flag).")
+      }
+      return value
     }
     let framework = URL(filePath: try value(after: "--probe-framework"))
     guard let executable = Bundle.main.executableURL,

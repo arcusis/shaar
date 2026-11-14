@@ -22,6 +22,9 @@ NOTICE_LINES = (
 )
 COMMENT_PREFIX_BY_SUFFIX = {
     ".swift": "//",
+    ".c": "//",
+    ".cc": "//",
+    ".cpp": "//",
     ".h": "//",
     ".m": "//",
     ".mm": "//",

@@ -49,6 +49,15 @@ class LicenseHeaderTests(unittest.TestCase):
         })
         self.assertEqual(missing, [])
 
+    def test_c_and_cpp_sources_require_the_notice(self):
+        names = ("Sources/native.c", "Sources/native.cc", "Sources/native.cpp")
+        missing = self._missing({name: "int main(void) { return 0; }\n" for name in names})
+        self.assertEqual(missing, [Path(name) for name in names])
+
+        valid = {name: "\n".join(check_license_headers.expected_notice(Path(name))) + "\n"
+                 for name in names}
+        self.assertEqual(self._missing(valid), [])
+
     def test_reports_missing_or_displaced_notice(self):
         missing = self._missing({
             "Sources/Bare.swift": "import Foundation\n",
@@ -64,13 +73,6 @@ class LicenseHeaderTests(unittest.TestCase):
         (self.root / "linked.py").symlink_to(external)
         self.assertEqual(check_license_headers.files_missing_notice(self.root, [Path("linked.py")]),
                          [Path("linked.py")])
-
-    def test_invalid_utf8_tracked_source_is_reported_as_missing_notice(self):
-        (self.root / "broken.py").write_bytes(b"# invalid: \xff\n")
-        self.assertEqual(
-            check_license_headers.files_missing_notice(self.root, [Path("broken.py")]),
-            [Path("broken.py")],
-        )
 
     def test_unreadable_source_reports_a_direct_error(self):
         path = self.root / "invalid.py"

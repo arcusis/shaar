@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import CoreGraphics
+import AppKit
 import ScreenCaptureKit
 import SwiftUI
 
@@ -42,6 +43,11 @@ struct DesktopCaptureSource: Identifiable, Equatable {
   }
 }
 
+struct DesktopCaptureSettingsButton {
+  let title: String
+  let action: () -> Void
+}
+
 @MainActor
 struct DesktopCapturePicker: View {
   let request: DesktopCaptureRequest
@@ -50,10 +56,12 @@ struct DesktopCapturePicker: View {
   private let requestScreenRecordingAccess: () -> Bool
   private let shareableContent: () async throws -> SCShareableContent
   private let screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])?
+  private let openSettings: (URL) -> Void
   @State private var sources: [DesktopCaptureSource] = []
   @State private var loading = true
   @State private var error: String?
   @State private var note: String?
+  @State private var needsScreenRecordingAccess = false
 
   init(
     request: DesktopCaptureRequest,
@@ -63,7 +71,8 @@ struct DesktopCapturePicker: View {
     shareableContent: @escaping () async throws -> SCShareableContent = {
       try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     },
-    screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])? = nil
+    screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])? = nil,
+    openSettings: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
   ) {
     self.request = request
     self.store = store
@@ -71,6 +80,16 @@ struct DesktopCapturePicker: View {
     self.requestScreenRecordingAccess = requestScreenRecordingAccess
     self.shareableContent = shareableContent
     self.screenSourcesProvider = screenSourcesProvider
+    self.openSettings = openSettings
+  }
+
+  func settingsButton(for needsAccess: Bool) -> DesktopCaptureSettingsButton? {
+    guard needsAccess,
+      let url = MacPermission.screenRecording.settingsURL
+    else { return nil }
+    return DesktopCaptureSettingsButton(
+      title: PanelsL10n.string("Open Settings"),
+      action: { openSettings(url) })
   }
 
   var pickerContent: DesktopCapturePickerContent {
@@ -87,6 +106,8 @@ struct DesktopCapturePicker: View {
       error: displayedError,
       note: displayedNote,
       onRetry: { await reloadSources() },
+      needsScreenRecordingAccess: needsScreenRecordingAccess,
+      settingsButton: settingsButton(for: needsScreenRecordingAccess),
       onSelect: { store.resolveDesktopCapture(request.id, sourceID: $0) },
       onCancel: { store.resolveDesktopCapture(request.id, sourceID: nil) }
     )
@@ -130,6 +151,7 @@ struct DesktopCapturePicker: View {
       screens: DesktopCaptureCatalog.allowedSources(screens, for: request),
       screenAccessFailed: screenAccessFailed,
       screenEnumerationFailed: screenEnumerationFailed)
+    needsScreenRecordingAccess = screenAccessFailed
     sources = listing.sources
     store.setDesktopCaptureSources(listing.sources.map(\.id), for: request.id)
     error = listing.error.map(PanelsL10n.string)
@@ -172,6 +194,8 @@ struct DesktopCapturePickerContent: View {
   let error: String?
   var note: String? = nil
   var onRetry: () async -> Void = {}
+  var needsScreenRecordingAccess = false
+  var settingsButton: DesktopCaptureSettingsButton? = nil
   let onSelect: (String) -> Void
   let onCancel: () -> Void
 
@@ -191,6 +215,9 @@ struct DesktopCapturePickerContent: View {
           Task { await onRetry() }
         }
         .accessibilityIdentifier("desktop-capture-retry")
+      }
+      if needsScreenRecordingAccess, let settingsButton {
+        Button(settingsButton.title, action: settingsButton.action)
       }
       if loading {
         ProgressView(PanelsL10n.string("Looking for screens, windows, and tabs…"))

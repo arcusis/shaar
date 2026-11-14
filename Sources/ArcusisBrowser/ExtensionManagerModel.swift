@@ -36,6 +36,7 @@ final class ExtensionManagerModel {
   private var requestID = UUID()
   private var developerModeRequestID = UUID()
   private var extensionAccessRequestID = UUID()
+  private var statusRequestID = UUID()
 
   static func shared(
     runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID
@@ -138,14 +139,15 @@ final class ExtensionManagerModel {
   }
 
   func setDeveloperMode(_ enabled: Bool) {
-    let request = UUID()
+    let request = beginStatusRequest()
     developerModeRequestID = request
     let previousValue = developerMode
     developerMode = enabled
     status = nil
     preferences?.setExtensionDeveloperMode(enabled, for: profileID)
     submitDeveloperMode(enabled) { [weak self] reply in
-      guard let self, self.developerModeRequestID == request else { return }
+      guard let self, self.developerModeRequestID == request,
+        self.statusRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -160,10 +162,11 @@ final class ExtensionManagerModel {
   }
 
   private func verifyStoredDeveloperMode() {
-    let request = UUID()
+    let request = beginStatusRequest()
     developerModeRequestID = request
     submitDeveloperMode(true) { [weak self] reply in
-      guard let self, self.developerModeRequestID == request else { return }
+      guard let self, self.developerModeRequestID == request,
+        self.statusRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -178,6 +181,8 @@ final class ExtensionManagerModel {
   }
 
   func loadUnpacked(at url: URL, tabID: UUID?) {
+    let request = beginStatusRequest()
+    developerModeRequestID = request
     guard developerMode else {
       status = SettingsL10n.string("Turn on Developer mode to load an unpacked extension.")
       return
@@ -186,8 +191,6 @@ final class ExtensionManagerModel {
       status = SettingsL10n.string("Choose a folder that contains a Manifest V3 extension.")
       return
     }
-    let request = UUID()
-    developerModeRequestID = request
     status = nil
     var payload: [String: Any] = [
       "schemaVersion": 1, "action": "loadUnpacked", "path": path,
@@ -196,7 +199,8 @@ final class ExtensionManagerModel {
     submitManage(
       ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": true], tabID: nil
     ) { [weak self] modeReply in
-      guard let self, self.developerModeRequestID == request else { return }
+      guard let self, self.developerModeRequestID == request,
+        self.statusRequestID == request else { return }
       switch modeReply {
       case .updated:
         self.submitUnpackedLoad(payload, tabID: tabID, request: request)
@@ -212,7 +216,8 @@ final class ExtensionManagerModel {
 
   private func submitUnpackedLoad(_ payload: [String: Any], tabID: UUID?, request: UUID) {
     submitManage(payload, tabID: tabID) { [weak self] reply in
-      guard let self, self.developerModeRequestID == request else { return }
+      guard let self, self.developerModeRequestID == request,
+        self.statusRequestID == request else { return }
       switch reply {
       case .prompted:
         self.status = nil
@@ -233,7 +238,7 @@ final class ExtensionManagerModel {
   }
 
   func setIncognitoEnabled(_ id: String, enabled: Bool) {
-    let request = UUID()
+    let request = beginStatusRequest()
     extensionAccessRequestID = request
     guard BrowserExtension.isValidID(id) else {
       status = ExtensionInstallNotice.privateAccessRefused
@@ -246,7 +251,8 @@ final class ExtensionManagerModel {
         "enabled": enabled,
       ], tabID: nil
     ) { [weak self] reply in
-      guard let self, self.extensionAccessRequestID == request else { return }
+      guard let self, self.extensionAccessRequestID == request,
+        self.statusRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -260,7 +266,7 @@ final class ExtensionManagerModel {
   func setSiteAccess(
     _ access: ExtensionSiteAccess, extensionID: String, origin: String, tabID: UUID?
   ) {
-    let request = UUID()
+    let request = beginStatusRequest()
     extensionAccessRequestID = request
     guard BrowserExtension.isValidID(extensionID), ExtensionPageOrigin.accepts(origin) else {
       status = ExtensionInstallNotice.siteAccessRefused
@@ -273,7 +279,8 @@ final class ExtensionManagerModel {
         "access": access.rawValue, "origin": origin,
       ], tabID: tabID
     ) { [weak self] reply in
-      guard let self, self.extensionAccessRequestID == request else { return }
+      guard let self, self.extensionAccessRequestID == request,
+        self.statusRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -292,6 +299,12 @@ final class ExtensionManagerModel {
     submitManage(
       ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": enabled], tabID: nil,
       completion: completion)
+  }
+
+  private func beginStatusRequest() -> UUID {
+    let request = UUID()
+    statusRequestID = request
+    return request
   }
 
   private func mutate(_ operation: ExtensionManagementOperation) {

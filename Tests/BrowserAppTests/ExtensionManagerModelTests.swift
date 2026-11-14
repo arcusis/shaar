@@ -42,26 +42,70 @@ struct ExtensionManagerModelTests {
         fileURL: FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")),
       profileID: UUID())
     let extensionID = String(repeating: "a", count: 32)
-
     model.setIncognitoEnabled(extensionID, enabled: true)
     model.setSiteAccess(.onClick, extensionID: extensionID, origin: "https://example.test", tabID: nil)
     runtime.complete(1, json: #"{"schemaVersion":1,"updated":true}"#, code: 0)
     runtime.complete(0, json: nil, code: 1)
-
     #expect(model.status == nil)
+  }
+
+  @Test func staleExtensionActionReplyCannotReplaceLatestNotice() {
+    let runtime = SiteAccessRuntime()
+    runtime.holdReplies = true
+    let profileID = UUID()
+    let preferences = BrowserPreferencesStore(
+      fileURL: FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json"))
+    let model = ExtensionManagerModel.shared(
+      runtime: runtime, preferences: preferences, profileID: profileID)
+    let extensionID = String(repeating: "a", count: 32)
+    model.setSiteAccess(
+      .onSite, extensionID: extensionID, origin: "https://example.test", tabID: nil)
+    model.setIncognitoEnabled(extensionID, enabled: true)
+    #expect(runtime.replies.count == 2)
+    runtime.replies[1](nil, 1)
+    #expect(model.status == ExtensionInstallNotice.privateAccessRefused)
+    runtime.replies[0](nil, 1)
+    #expect(model.status == ExtensionInstallNotice.privateAccessRefused)
+  }
+
+  @Test func staleSettingsReplyCannotReplaceDeveloperModeNotice() {
+    let runtime = SiteAccessRuntime()
+    runtime.holdReplies = true
+    let profileID = UUID()
+    let preferences = BrowserPreferencesStore(
+      fileURL: FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json"))
+    let model = ExtensionManagerModel.shared(
+      runtime: runtime, preferences: preferences, profileID: profileID)
+    let extensionID = String(repeating: "a", count: 32)
+
+    model.setSiteAccess(
+      .onSite, extensionID: extensionID, origin: "https://example.test", tabID: nil)
+    model.setDeveloperMode(true)
+    #expect(runtime.replies.count == 2)
+
+    runtime.replies[1](nil, 0)
+    #expect(model.status == ExtensionInstallNotice.developerModeFailed)
+    runtime.replies[0](nil, 1)
+    #expect(model.status == ExtensionInstallNotice.developerModeFailed)
   }
 }
 
 @MainActor
 private final class SiteAccessRuntime: ARCShaarRuntime {
   nonisolated(unsafe) var payloads: [[String: Any]] = []
+  nonisolated(unsafe) var replies: [(String?, Int) -> Void] = []
+  nonisolated(unsafe) var holdReplies = false
 
   override func submitExtensionManage(
     forProfileID profileID: String, tabID: String?, payload: [String: Any],
     completion: @escaping (String?, Int) -> Void
   ) {
     payloads.append(payload)
-    completion(nil, 1)
+    if holdReplies {
+      replies.append(completion)
+    } else {
+      completion(nil, 1)
+    }
   }
 }
 

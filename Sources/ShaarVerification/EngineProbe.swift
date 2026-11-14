@@ -1650,6 +1650,24 @@ final class EngineProbe {
   }
 }
 
+enum EngineProbeMeasurementTabCount: Equatable {
+  case absent
+  case valid(Int)
+  case invalid
+
+  private static let allowed: Set<Int> = [1, 10, 30, 50, 100]
+
+  static func parse(arguments: [String]) -> Self {
+    let indexes = arguments.indices.filter { arguments[$0] == "--probe-measure-tabs" }
+    guard !indexes.isEmpty else { return .absent }
+    guard indexes.count == 1, let index = indexes.first else { return .invalid }
+    guard arguments.indices.contains(index + 1),
+      let count = Int(arguments[index + 1]), allowed.contains(count)
+    else { return .invalid }
+    return .valid(count)
+  }
+}
+
 private struct ProbeFailure: LocalizedError {
   let message: String
   init(_ message: String) { self.message = message }

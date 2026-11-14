@@ -553,21 +553,31 @@ import Foundation
           "(()=>{const feed=document.getElementById('feed');if(!feed)return 0;const before=feed.children.length;feed.scrollTop=feed.scrollHeight;return before;})()"
       ))
     let before = primed ?? 0
-    var after = before
-    let grew = await untilReady(attempts: 40) {
-      after =
-        wholeNumber(
-          await evaluate(
-            runtime, tab: scrollID,
-            script:
-              "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
-          )) ?? 0
-      return before == 100 && after > before
+    let deliveredScroll = await untilReady(attempts: 20) {
+      (wholeNumber(await evaluate(runtime, tab: scrollID, script: "window.__scrollEvents||0")) ?? 0) > 0
     }
-    rows.append(
-      row(
-        "heavy-scroll", grew ? "pass" : "fail",
-        "Scroll grew from \(before) to \(after) nodes."))
+    if !deliveredScroll {
+      rows.append(row(
+        "heavy-scroll", "blocked",
+        "The hidden scroll did not deliver a scroll event to the page; row growth was not attributable."
+      ))
+    } else {
+      var after = before
+      let grew = await untilReady(attempts: 40) {
+        after =
+          wholeNumber(
+            await evaluate(
+              runtime, tab: scrollID,
+              script:
+                "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
+            )) ?? 0
+        return before == 100 && after > before
+      }
+      rows.append(
+        row(
+          "heavy-scroll", grew ? "pass" : "fail",
+          "Scroll grew from \(before) to \(after) nodes."))
+    }
 
     context.store.perform(.open(url(base, path: "/webgl")))
     guard await until(attempts: 100, condition: { settled(context, path: "/webgl") }),

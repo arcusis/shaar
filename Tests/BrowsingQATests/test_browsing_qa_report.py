@@ -50,6 +50,14 @@ class BrowsingQAReportTests(unittest.TestCase):
                 PROBE.write_receipt(receipt, root / "table.md", root / "app", [])
             self.assertEqual(target.read_text(encoding="utf-8"), "preserve target")
 
+    def test_heavy_scroll_requires_page_event_before_attributing_no_growth(self):
+        fixture = (ROOT / "scripts/test-browsing-qa.py").read_text()
+        source = (ROOT / "Sources/ShaarVerification/ShaarBrowsingQA.swift").read_text()
+        self.assertIn("window.__scrollEvents=0", fixture)
+        self.assertIn("window.__scrollEvents++", fixture)
+        self.assertIn('script: "window.__scrollEvents||0"', source)
+        self.assertIn('row(\n        "heavy-scroll", "blocked",', source)
+
     def test_fifty_tabs_always_run(self):
         allowed, reason = PROBE.allow_overload(50, None, None, None)
         self.assertTrue(allowed)
@@ -182,7 +190,9 @@ process.stdin.on('end', () => {
     getElementById(id) { assert.equal(id, 'feed'); return feed; },
     createElement(tag) { assert.equal(tag, 'div'); return {textContent: ''}; },
   };
-  vm.runInNewContext(source, {document});
+  const page = {document};
+  page.window = page;
+  vm.runInNewContext(source, page);
   assert.equal(feed.children.length, 100, 'initial rows');
   feed.listeners.scroll();
   assert.equal(feed.children.length, 200, 'rows after first scroll');

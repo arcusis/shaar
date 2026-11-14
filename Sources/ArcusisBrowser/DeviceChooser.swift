@@ -59,7 +59,14 @@ struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
 
   var displayOrigin: String {
     guard let host = origin.host() else { return pageURL.absoluteString }
-    let authority = origin.port.map { "\(host):\($0)" } ?? host
+    let formattedHost = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+    let port = origin.port.flatMap { port -> Int? in
+      if (origin.scheme == "http" && port == 80) || (origin.scheme == "https" && port == 443) {
+        return nil
+      }
+      return port
+    }
+    let authority = port.map { "\(formattedHost):\($0)" } ?? formattedHost
     return "\(origin.scheme ?? "https")://\(authority)"
   }
 

@@ -61,6 +61,10 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
   public init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
     id = try values.decode(String.self, forKey: .id)
+    guard !id.isEmpty else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .id, in: values, debugDescription: "Expected a non-empty download identifier")
+    }
     url = try values.decode(String.self, forKey: .url)
     filename = try values.decode(String.self, forKey: .filename)
     path = try values.decode(String.self, forKey: .path)

@@ -55,6 +55,15 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   }
 }
 
+@Test func downloadRecordRejectsAnEmptyIdentifier() async throws {
+  let payload = Data(
+    #"{"schemaVersion":1,"downloads":[{"id":"","url":"https://example.test/a","filename":"a.bin","path":"/tmp/a.bin","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}"#.utf8)
+  let fake = FakeDownloadsTransport(replies: [400: payload])
+  await #expect(throws: (any Error).self) {
+    _ = try await ShaarDownloadsAdapter(transport: fake).list()
+  }
+}
+
 @Test func listPreservesUnknownSizeAndFailureDiagnostics() async throws {
   let payload = Data(
     #"{"schemaVersion":1,"downloads":[{"id":"guid-2","url":"https://example.test/b","filename":"b.bin","path":"","state":"failed","paused":false,"received":0,"total":-1,"speed":0,"mimeType":"application/octet-stream","dangerous":true,"offTheRecord":false,"error":"NETWORK_FAILED","startTime":0}]}"#

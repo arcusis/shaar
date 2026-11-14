@@ -1527,6 +1527,8 @@ class EngineTransferTests(unittest.TestCase):
     def test_merge_group_bundle_selection_rejects_fork_pull_request_runs(self):
         from ci_engine import matching_pr_bundle_run_id
         response = {"workflow_runs": [
+            {"id": 9, "run_number": 9, "conclusion": "success",
+             "head_repository": {"full_name": "arcusis/shaar"}, "pull_requests": None},
             {"id": 10, "run_number": 10, "conclusion": "success",
              "head_repository": {"full_name": "contributor/shaar"},
              "pull_requests": [{"number": 448}]},
@@ -1538,6 +1540,7 @@ class EngineTransferTests(unittest.TestCase):
         ]}
         self.assertEqual(matching_pr_bundle_run_id(response, 448, "arcusis/shaar"), "11")
         self.assertEqual(matching_pr_bundle_run_id(response, 448, "other/shaar"), "")
+        self.assertEqual(matching_pr_bundle_run_id({"workflow_runs": None}, 448, "arcusis/shaar"), "")
 
     def test_merge_group_bundle_lookup_is_bounded_and_fail_open(self):
         workflow = (ROOT / ".github/workflows/ci-engine-bundle.yml").read_text()

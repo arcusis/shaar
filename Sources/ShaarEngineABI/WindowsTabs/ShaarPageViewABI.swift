@@ -90,7 +90,7 @@ private typealias WindowResize =
 
   private func decode(_ status: shaar_error_code, error: shaar_error) throws {
     guard error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
-      throw ShaarEngineError.invalidEvent("short page-view error")
+      throw ShaarEngineError.invalidEvent("short page-view error struct")
     }
     guard error.message.size == 0 || error.message.data != nil else {
       throw ShaarEngineError.invalidEvent("invalid page-view error message")

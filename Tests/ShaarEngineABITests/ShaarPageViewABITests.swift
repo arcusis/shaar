@@ -148,7 +148,7 @@ struct ShaarPageViewABITests {
 
   @Test @MainActor func shortErrorStructIsRejectedBeforeDecodingItsFields() throws {
     let abi = try ShaarPageViewABI(resolver: FakeShortErrorPageViewSymbols())
-    #expect(throws: ShaarEngineError.invalidEvent("short page-view error")) {
+    #expect(throws: ShaarEngineError.invalidEvent("short page-view error struct")) {
       try abi.attach(
         engine: OpaquePointer(bitPattern: 0x11)!, window: OpaquePointer(bitPattern: 0x22)!,
         tab: OpaquePointer(bitPattern: 0x33)!)

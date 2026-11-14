@@ -1420,12 +1420,28 @@
         }
       }
     },
+    "Print…": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Print…" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הדפסה…" } }
+      }
+    },
     "Saved preferences exceed the supported size; original file preserved.": {
       "localizations": {
         "he": {
           "stringUnit": {
             "state": "translated",
             "value": "גודל ההעדפות השמורות חורג מהמותר; הקובץ המקורי נשמר."
+          }
+        }
+      }
+    },
+    "Saved preferences are not a regular file; original file preserved.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובץ ההעדפות השמור אינו קובץ רגיל; הקובץ המקורי נשמר."
           }
         }
       }
@@ -2310,6 +2326,30 @@
             "value": "התמיכה של %@"
           }
         }
+      }
+    },
+    "Emoji & Symbols": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Emoji & Symbols" } },
+        "he": { "stringUnit": { "state": "translated", "value": "אימוג׳י וסמלים" } }
+      }
+    },
+    "Forward": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Forward" } },
+        "he": { "stringUnit": { "state": "translated", "value": "קדימה" } }
+      }
+    },
+    "Paste and Go": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Paste and Go" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הדבקה ומעבר" } }
+      }
+    },
+    "Reopen Last Closed Window": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reopen Last Closed Window" } },
+        "he": { "stringUnit": { "state": "translated", "value": "פתיחת החלון האחרון שנסגר מחדש" } }
       }
     },
     "New window": {

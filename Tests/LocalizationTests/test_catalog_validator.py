@@ -42,6 +42,35 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn("Could not clear history. Try again.", data["strings"])
 
+    def test_native_menu_titles_are_available_in_settings_catalog(self):
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        for key in (
+            "Emoji & Symbols", "Forward", "Paste and Go", "Reopen Last Closed Window",
+            "Print…",
+        ):
+            with self.subTest(key=key):
+                self.assertIn(key, catalog["strings"])
+
+    def test_saved_preferences_regular_file_rejection_has_hebrew_copy(self):
+        key = "Saved preferences are not a regular file; original file preserved."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "קובץ ההעדפות השמור אינו קובץ רגיל; הקובץ המקורי נשמר.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserPreferencesStore.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(f'SettingsL10n.string("{key}")', source)
+
     def test_shell_catalog_has_no_duplicate_json_keys(self):
         path = ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings"
         data = VALIDATOR.load_json_without_duplicate_keys(
@@ -351,6 +380,68 @@ class CatalogValidatorTests(unittest.TestCase):
         translation = shell["strings"]["Could not complete the %@ action. Try again."][
             "localizations"]["he"]["stringUnit"]["value"]
         self.assertEqual(translation, "לא ניתן להשלים את הפעולה %@. כדאי לנסות שוב.")
+
+    def test_developer_tools_empty_result_has_hebrew_copy(self):
+        key = "The developer tools returned no result."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "כלי הפיתוח לא החזירו תוצאה.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/DeveloperPageModel.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(f'InspectorToolsL10n.string("{key}")', source)
+
+    def test_sensitive_developer_data_notice_has_hebrew_copy(self):
+        key = (
+            "Sensitive header values are redacted by default. Console text redacts common "
+            "credential patterns and strips URL credentials, queries and fragments. URL paths, "
+            "screenshots and unrecognized secrets may still contain sensitive data. Nothing is "
+            "uploaded."
+        )
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertNotEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], key
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorPageToolsView.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(key, source)
+
+    def test_http_auth_prompt_has_hebrew_copy(self):
+        keys = {
+            "Sign in to %@": "התחברות אל %@",
+            "%@ is requesting your username and password.": "%@ מבקש את שם המשתמש והסיסמה.",
+            "Realm": "תחום",
+            "Username": "שם משתמש",
+            "Password": "סיסמה",
+            "Sign In": "כניסה",
+        }
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        for key, translation in keys.items():
+            with self.subTest(key=key):
+                self.assertEqual(
+                    catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+                    translation,
+                )
+        source = (ROOT / "Sources/ArcusisBrowser/HTTPAuthSheet.swift").read_text(
+            encoding="utf-8"
+        )
+        for key in keys:
+            self.assertIn(f'"{key}"', source)
 
     def test_extension_execution_failure_uses_hebrew_shell_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift").read_text(
@@ -753,32 +844,58 @@ class CatalogValidatorTests(unittest.TestCase):
             root = Path(directory)
             source = root / "Sources/ArcusisBrowser/ExampleView.swift"
             source.parent.mkdir(parents=True)
-            source.write_text('Text("Translated footer")\n', encoding="utf-8")
             catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
             catalog_path.parent.mkdir(parents=True)
             catalog_path.write_text(
                 json.dumps({"strings": {"Translated footer": {
                     "localizations": {"he": unit("כותרת תחתונה מתורגמת")}
                 }}}), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "unlocalized Text.*Translated footer"):
-                VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+            for swift in (
+                'Text("Translated footer")',
+                'Text("Translated footer", comment: "localized footer")',
+            ):
+                source.write_text(swift + "\n", encoding="utf-8")
+                with self.subTest(swift=swift):
+                    with self.assertRaisesRegex(
+                        ValueError, "unlocalized Text.*Translated footer"
+                    ):
+                        VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
-    def test_rejects_direct_swiftui_control_titles_with_hebrew_catalog_translations(self):
-        controls = ("Button", "Label", "Menu", "Picker", "SecureField", "TextField", "Toggle")
+    def test_rejects_direct_swiftui_control_titles_when_hebrew_translation_exists(self):
+        examples = (
+            ('Button("Translated button") { }', "Button", "Translated button"),
+            ('ColorPicker("Translated color", selection: $color)', "ColorPicker", "Translated color"),
+            ('DatePicker("Translated date", selection: $date)', "DatePicker", "Translated date"),
+            ('Label("Translated heading", systemImage: "star")', "Label", "Translated heading"),
+            ('LabeledContent("Translated label", value: "value")', "LabeledContent", "Translated label"),
+            ('Menu("Translated menu") {}', "Menu", "Translated menu"),
+            ('NavigationLink("Translated navigation") {}', "NavigationLink", "Translated navigation"),
+            ('Picker("Translated picker", selection: $selection) {}', "Picker", "Translated picker"),
+            ('ProgressView("Translated progress")', "ProgressView", "Translated progress"),
+            ('Section("Translated section") {}', "Section", "Translated section"),
+            ('SecureField("Translated secure prompt", text: $secret)', "SecureField", "Translated secure prompt"),
+            ('Toggle("Translated toggle", isOn: $enabled)', "Toggle", "Translated toggle"),
+            ('TextField("Translated prompt", text: $value)', "TextField", "Translated prompt"),
+            (
+                'TextField(\n  "Translated multiline prompt",\n  text: $value\n)',
+                "TextField",
+                "Translated multiline prompt",
+            ),
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "Sources/ArcusisBrowser/ExampleView.swift"
             source.parent.mkdir(parents=True)
             catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
             catalog_path.parent.mkdir(parents=True)
-            keys = {f"Translated {control}": {
-                "localizations": {"he": unit(f"{control} מתורגם")}
-            } for control in controls}
+            keys = {
+                key: {"localizations": {"he": unit("תרגום")}}
+                for _, _, key in examples
+            }
             catalog_path.write_text(json.dumps({"strings": keys}), encoding="utf-8")
 
-            for control in controls:
-                key = f"Translated {control}"
-                source.write_text(f'{control}("{key}")\n', encoding="utf-8")
+            for swift, control, key in examples:
+                source.write_text(swift + "\n", encoding="utf-8")
                 with self.subTest(control=control):
                     with self.assertRaisesRegex(
                         ValueError, f"unlocalized {control} title.*{key}"
@@ -849,34 +966,6 @@ class CatalogValidatorTests(unittest.TestCase):
             catalog_path.parent.mkdir(parents=True)
             catalog_path.write_text(json.dumps({"strings": {}}), encoding="utf-8")
             VALIDATOR.validate_source_references(root, [catalog_path])
-
-    def test_rejects_direct_swiftui_control_titles_when_hebrew_translation_exists(self):
-        examples = (
-            ('Menu("Translated menu") {}', "Menu", "Translated menu"),
-            ('Picker("Translated picker", selection: $selection) {}', "Picker", "Translated picker"),
-            ('Toggle("Translated toggle", isOn: $enabled)', "Toggle", "Translated toggle"),
-            ('Section("Translated section") {}', "Section", "Translated section"),
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            source = root / "Sources/ArcusisBrowser/ExampleView.swift"
-            source.parent.mkdir(parents=True)
-            catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
-            catalog_path.parent.mkdir(parents=True)
-            catalog_path.write_text(json.dumps({"strings": {
-                key: {"localizations": {"he": unit("תרגום")}}
-                for _, _, key in examples
-            }}), encoding="utf-8")
-
-            for swift, control, key in examples:
-                source.write_text(swift + "\n", encoding="utf-8")
-                with self.subTest(control=control):
-                    with self.assertRaisesRegex(ValueError, f"unlocalized {control}.*{key}"):
-                        VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
-    def test_split_pane_loading_indicator_uses_localized_shell_copy(self):
-        source = (ROOT / "Sources/ArcusisBrowser/SplitPageView.swift").read_text(
-            encoding="utf-8")
-        self.assertIn('ProgressView(ShellL10n.string("Loading profile…"))', source)
 
 if __name__ == "__main__":
     unittest.main()

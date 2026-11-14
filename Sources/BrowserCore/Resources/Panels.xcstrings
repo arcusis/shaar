@@ -49,6 +49,42 @@
         }
       }
     },
+    "Sign in to %@": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Sign in to %@" } },
+        "he": { "stringUnit": { "state": "translated", "value": "התחברות אל %@" } }
+      }
+    },
+    "%@ is requesting your username and password.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ is requesting your username and password." } },
+        "he": { "stringUnit": { "state": "translated", "value": "%@ מבקש את שם המשתמש והסיסמה." } }
+      }
+    },
+    "Realm": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Realm" } },
+        "he": { "stringUnit": { "state": "translated", "value": "תחום" } }
+      }
+    },
+    "Username": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Username" } },
+        "he": { "stringUnit": { "state": "translated", "value": "שם משתמש" } }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Password" } },
+        "he": { "stringUnit": { "state": "translated", "value": "סיסמה" } }
+      }
+    },
+    "Sign In": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Sign In" } },
+        "he": { "stringUnit": { "state": "translated", "value": "כניסה" } }
+      }
+    },
     "The selected file could not be read. Try another file.": {
       "localizations": {
         "en": {

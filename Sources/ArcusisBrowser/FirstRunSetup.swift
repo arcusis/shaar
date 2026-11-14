@@ -72,6 +72,8 @@ struct FirstRunSetupView: View {
       "Step %d of %d", .integer(step.rawValue + 1), .integer(FirstRunStep.allCases.count))
   }
 
+  static let stepHeadingTraits: AccessibilityTraits = .isHeader
+
   let store: BrowserStore
   let location: FirstRunLocation
   let onFinish: () -> Void
@@ -107,7 +109,9 @@ struct FirstRunSetupView: View {
       VStack(alignment: .leading, spacing: 0) {
         progress
         VStack(alignment: .leading, spacing: 16) {
-          Text(step.title).font(.largeTitle.weight(.semibold))
+          Text(step.title)
+            .font(.largeTitle.weight(.semibold))
+            .accessibilityAddTraits(Self.stepHeadingTraits)
           stepContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

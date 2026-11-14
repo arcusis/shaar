@@ -286,9 +286,19 @@ def main():
 
 
 def validate_output_path(path: Path) -> Path:
-    if path.is_symlink():
-        raise ValueError(f"output must not be a symlink: {path}")
-    output = path.resolve()
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    current = Path(absolute.anchor)
+    platform_symlink_aliases = {Path("/var")} if sys.platform == "darwin" else set()
+    for component in absolute.parts[1:]:
+        if component == "..":
+            current = current.parent
+            continue
+        if component == ".":
+            continue
+        current /= component
+        if current.is_symlink() and current not in platform_symlink_aliases:
+            raise ValueError(f"output path must not traverse a symlink: {current}")
+    output = current.resolve()
     protected_roots = (ROOT.resolve(), Path(tempfile.gettempdir()).resolve())
     if output == output.parent or any(root == output or output in root.parents for root in protected_roots):
         raise ValueError(f"refusing unsafe output directory: {path}")

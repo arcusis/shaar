@@ -38,6 +38,17 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
                 with self.subTest(path=path), self.assertRaises(ValueError):
                     fetcher.validate_output_path(path)
 
+    def test_output_path_rejects_symlinked_ancestors(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            redirect = root / "redirect"
+            redirect.symlink_to(REPO.parent, target_is_directory=True)
+            escaped = redirect / "generated" / "FrameworkDevTools"
+
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                fetcher.validate_output_path(escaped)
+
     def test_release_url_names_the_pinned_github_asset(self):
         fetcher = load_fetcher()
 

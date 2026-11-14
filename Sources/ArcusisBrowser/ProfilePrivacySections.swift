@@ -87,8 +87,8 @@ struct ProfilePrivacySections: View {
       }
       Section {
         HStack {
-          if model.busy {
-            ProgressView(SettingsL10n.string("Loading site permissions…")).controlSize(.small)
+          if let busyMessage = model.busyMessage {
+            ProgressView(busyMessage).controlSize(.small)
           }
           Spacer()
           Button(SettingsL10n.string("Refresh")) { Task { await model.load() } }

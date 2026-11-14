@@ -1810,7 +1810,7 @@ final class BrowserStore {
   }
 
   private static func saveNotice(failure: String?) -> String? {
-    failure.map { ShellL10n.format("Changes could not be saved. %@", arguments: [.string($0)]) }
+    failure.map { _ in ShellL10n.string("Changes could not be saved. Try again.") }
   }
 
   private func reconcileTransientState() {

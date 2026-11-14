@@ -171,6 +171,15 @@ struct BrowserStoreTests {
     #expect(try file.load() == store.session)
   }
 
+  @Test func failedSessionWriteUsesLocalizedRecoveryNotice() throws {
+    let parent = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try Data("not a directory".utf8).write(to: parent)
+    defer { try? FileManager.default.removeItem(at: parent) }
+    let file = SessionFile(url: parent.appending(path: "session.json"))
+    let store = BrowserStore(sessionFile: file)
+    #expect(store.storageNotice == ShellL10n.string("Changes could not be saved. Try again."))
+  }
+
   @Test func damagedSessionIsPreservedWhenUserChangesTemporarySession() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

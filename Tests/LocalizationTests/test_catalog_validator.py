@@ -143,6 +143,22 @@ class CatalogValidatorTests(unittest.TestCase):
                 compile_native.assert_not_called()
 
             self.assertEqual((marker / "preserve.txt").read_text(encoding="utf-8"), "preserve")
+    def test_browser_store_save_failure_uses_localized_recovery_copy(self):
+        key = "Changes could not be saved. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן לשמור את השינויים. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserStore.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('ShellL10n.string("Changes could not be saved. Try again.")', source)
+        self.assertNotIn('ShellL10n.format("Changes could not be saved. %@"', source)
 
     def test_default_browser_failure_uses_hebrew_settings_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(

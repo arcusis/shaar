@@ -89,13 +89,33 @@ import Testing
     .first { $0.name == "q" }?.value
   #expect(destination.host() == "www.google.com")
   #expect(query == input)
-  #expect(NavigationInput.address(for: "https://alice@example.com")?.host() == "example.com")
+  #expect(NavigationInput.address(for: "https://alice@example.com") == nil)
   #expect(
     NavigationInput.address(for: "example.com/path@alice")?.absoluteString
       == "https://example.com/path@alice")
 
   let result = CommandSearch.results(for: input, in: BrowserSession.fresh()).first
   #expect(result?.action == .open(destination))
+}
+
+@Test func navigationRejectsCredentialsEmbeddedInWebURLAuthority() {
+  var session = BrowserSession.fresh()
+  let initialTabCount = session.selectedSpace.tabs.count
+  for input in [
+    "https://alice@example.com", "https://alice:secret@example.com",
+    "https://alice%40example.com:secret@example.com",
+  ] {
+    #expect(NavigationInput.address(for: input) == nil)
+    #expect(NavigationInput.destination(for: input) == nil)
+    if let url = URL(string: input) {
+      #expect(!NavigationInput.isWebURL(url))
+      #expect(session.open(url) == nil)
+      #expect(session.selectedSpace.tabs.count == initialTabCount)
+    }
+  }
+  #expect(
+    NavigationInput.address(for: "https://example.com/path@alice")?.absoluteString
+      == "https://example.com/path@alice")
 }
 
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {

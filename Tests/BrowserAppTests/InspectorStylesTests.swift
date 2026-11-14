@@ -108,6 +108,19 @@ import Testing
     await #expect(throws: InspectorFailure.self) { _ = try await model.screenshot() }
   }
 
+  @Test func cancelledStyleEditDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let edit = Task { @MainActor in await inspector.styles.edit(property: "color", value: "red", important: false) }
+    edit.cancel()
+    await edit.value
+
+    #expect(inspector.styles.failure == nil)
+  }
+
   @Test func nativeCSSPanelRendersGridFlexAndSourceLimitStates() async throws {
     let inspector = makeInspector()
     inspector.open()

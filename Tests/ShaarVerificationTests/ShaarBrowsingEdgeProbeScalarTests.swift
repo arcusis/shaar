@@ -27,6 +27,12 @@ struct ShaarBrowsingEdgeProbeScalarTests {
     #expect(ShaarBrowsingEdgeProbe.number(UInt64.max) == nil)
   }
 
+  @Test func integerParserAcceptsExactlyRepresentableFloatingPointValues() {
+    #expect(ShaarBrowsingEdgeProbe.number(7.0) == 7)
+    #expect(ShaarBrowsingEdgeProbe.number(-2.0) == -2)
+    #expect(ShaarBrowsingEdgeProbe.number(2.000_000_000_000_000_4) == nil)
+  }
+
   @Test func booleanParserAcceptsOnlyBooleanValues() {
     #expect(ShaarBrowsingEdgeProbe.flag(true) == true)
     #expect(ShaarBrowsingEdgeProbe.flag(false) == false)

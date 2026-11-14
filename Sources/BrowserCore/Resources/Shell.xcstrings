@@ -1796,6 +1796,22 @@
         }
       }
     },
+    "New Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Window"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלון חדש"
+          }
+        }
+      }
+    },
     "New Mini Window": {
       "localizations": {
         "en": {

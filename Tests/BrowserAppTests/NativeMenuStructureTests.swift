@@ -201,6 +201,10 @@ import Testing
     commandItems.first { $0.0 == command.rawValue }?.1
   }
   #expect(item(.newPrivateWindow)?.menu?.title == "File")
+  #expect(item(.newWindow)?.menu?.title == "File")
+  #expect(item(.newWindow)?.title == "New Window")
+  #expect(item(.newWindow)?.keyEquivalent == "n")
+  #expect(item(.newWindow)?.keyEquivalentModifierMask == .command)
   #expect(item(.openFile)?.menu?.title == "File")
   #expect(item(.openFile)?.title == "Open File…")
   #expect(item(.openFile)?.keyEquivalent == "o")
@@ -378,8 +382,8 @@ import Testing
   let items = menu.items.compactMap(\.submenu).flatMap(\.items)
   func item(_ title: String) -> NSMenuItem? { items.first { $0.title == title } }
 
-  #expect(item("New window") == nil)
-  #expect(!items.contains { $0.keyEquivalent == "n" && $0.keyEquivalentModifierMask == .command })
+  #expect(item("New Window")?.keyEquivalent == "n")
+  #expect(item("New Window")?.keyEquivalentModifierMask == .command)
   #expect(item("New Private Window")?.keyEquivalent == "n")
   #expect(item("New Private Window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("New tab")?.keyEquivalent == "t")

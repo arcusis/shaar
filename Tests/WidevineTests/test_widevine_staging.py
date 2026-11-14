@@ -40,14 +40,22 @@ class WidevineSignatureTests(unittest.TestCase):
         response = {"response": {"protocol": "3.1", "app": [{
             "appid": MODULE.COMPONENT_ID, "updatecheck": {
                 "status": "ok", "urls": {"url": [
+                    {"codebase": "http://redirector.gvt1.com/edgedl/widevine/"},
                     {"codebase": "https://redirector.gvt1.com/edgedl/widevine/"}]},
                 "manifest": {"version": "4.10.1.2", "packages": {"package": [{
                     "name": "widevine.crx3", "size": 32, "hash_sha256": "a" * 64}]}}}}]}}
         data = b")]}\'\n" + json.dumps(response).encode()
-        with patch.object(MODULE.urllib.request, "urlopen", return_value=io.BytesIO(data)):
+        with patch.object(MODULE.urllib.request, "urlopen", return_value=io.BytesIO(data)) as open_url:
             self.assertEqual(MODULE.component_url(), (
                 "https://redirector.gvt1.com/edgedl/widevine/widevine.crx3",
                 "4.10.1.2", "a" * 64, 32))
+            request = json.loads(open_url.call_args.args[0].data)["request"]
+            self.assertEqual(request["@updater"], "chrome")
+            self.assertEqual(request["prodversion"], "157.0.8103.51")
+            self.assertEqual(request["prodchannel"], "stable")
+            self.assertEqual(request["nacl_arch"], "arm64")
+            self.assertEqual(request["acceptformat"], "crx3,download,puff")
+            self.assertNotEqual(request["sessionid"], request["requestid"])
         response["response"]["app"][0]["updatecheck"]["manifest"]["packages"]["package"][0]["name"] = "../wrong.crx3"
         data = b")]}\'\n" + json.dumps(response).encode()
         with patch.object(MODULE.urllib.request, "urlopen", return_value=io.BytesIO(data)):

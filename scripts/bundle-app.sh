@@ -269,8 +269,13 @@ for helper in helpers:
 PY
   sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework" adhoc_sign
   if $with_widevine_cdm; then
-    codesign --verify --strict \
-      "$app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Libraries/WidevineCdm/_platform_specific/mac_arm64/libwidevinecdm.dylib"
+    widevine_binary="$app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Libraries/WidevineCdm/_platform_specific/mac_arm64/libwidevinecdm.dylib"
+    codesign --verify --strict "$widevine_binary"
+    codesign -dv --verbose=4 "$widevine_binary" 2>&1 | \
+      /usr/bin/grep -Fx 'TeamIdentifier=EQHXZ8M8AV' >/dev/null || {
+        echo 'Bundling changed the Google Widevine code-signing identity.' >&2
+        exit 1
+      }
   fi
 fi
 # Only release bundles carry the update feed; without it the app never starts Sparkle.

@@ -30,6 +30,7 @@ enum BrowserSheet: Identifiable {
   case desktopCapture(DesktopCaptureRequest)
   case webShare(WebShareRequest)
   case print(PrintRequest)
+  case javascriptDialog(JavaScriptDialogRequest)
   case externalApp(ExternalAppRequest)
   case deviceChooser(DeviceChooserRequest)
   case httpAuth(HTTPAuthRequest)
@@ -47,6 +48,7 @@ enum BrowserSheet: Identifiable {
     case .desktopCapture(let request): request.sheetID
     case .webShare(let request): request.sheetID
     case .print(let request): request.sheetID
+    case .javascriptDialog(let request): request.sheetID
     case .externalApp(let request): "external-\(request.id)"
     case .deviceChooser(let request): request.sheetID
     case .httpAuth(let request): request.sheetID
@@ -62,7 +64,7 @@ enum BrowserSheet: Identifiable {
     switch self {
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
     case .extensionInstall, .websitePermission, .desktopCapture, .webShare, .print, .externalApp,
-      .deviceChooser, .httpAuth:
+      .deviceChooser, .httpAuth, .javascriptDialog:
       true
     }
   }
@@ -74,6 +76,7 @@ enum BrowserSheet: Identifiable {
     case .desktopCapture(let request): request.tabID
     case .webShare(let request): request.tabID
     case .print(let request): request.tabID
+    case .javascriptDialog(let request): request.tabID
     case .externalApp(let request): request.tabID
     case .deviceChooser(let request): request.tabID
     case .httpAuth(let request): request.tabID
@@ -89,6 +92,7 @@ enum BrowserSheet: Identifiable {
     case .desktopCapture(let request): request.matches(session)
     case .webShare(let request): request.matches(session)
     case .print(let request): request.matches(session)
+    case .javascriptDialog(let request): request.matches(session)
     case .externalApp(let request): request.matches(session)
     case .deviceChooser(let request): request.matches(session)
     case .httpAuth(let request): request.matches(session)

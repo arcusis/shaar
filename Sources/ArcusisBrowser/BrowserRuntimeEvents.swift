@@ -179,6 +179,23 @@ final class BrowserRuntimeEvents {
       }
       receive(payload)
     }
+    runtime.onJavaScriptDialogRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String,
+        let client = self.router.claim(.javascriptDialog, id: id, payload: payload),
+        let receive = client.onJavaScriptDialogRequest
+      else {
+        if let id = payload["id"] as? String {
+          self?.runtime.resolveJavaScriptDialogRequestID(id, accepted: false, input: nil)
+        }
+        return
+      }
+      receive(payload)
+    }
+    runtime.onJavaScriptDialogDismissed = { [weak self] id in
+      guard let client = self?.router.client(for: .javascriptDialog, id: id, removing: true)
+      else { return }
+      client.onJavaScriptDialogDismissed?(id)
+    }
     runtime.onExternalAppRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard !self.router.owns(.externalApp, id: id) else { return }
@@ -317,6 +334,11 @@ final class BrowserRuntimeEvents {
   func resolvePrint(_ id: String, windowID: String, accepted: Bool) {
     guard router.consume(.print, id: id, windowID: windowID) else { return }
     runtime.resolvePrintRequestID(id, accepted: accepted)
+  }
+
+  func resolveJavaScriptDialog(_ id: String, accepted: Bool, input: String?) {
+    guard router.client(for: .javascriptDialog, id: id, removing: true) != nil else { return }
+    runtime.resolveJavaScriptDialogRequestID(id, accepted: accepted, input: input)
   }
 
   func resolveExternalApp(_ id: String, windowID: String, accepted: Bool) {

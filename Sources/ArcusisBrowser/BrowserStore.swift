@@ -1117,6 +1117,39 @@ final class BrowserStore {
     return enqueueConsent(.print(request))
   }
 
+  @discardableResult
+  func requestJavaScriptDialog(_ request: JavaScriptDialogRequest) -> Bool {
+    guard request.matches(session) else { return false }
+    return enqueueConsent(.javascriptDialog(request))
+  }
+
+  func resolveJavaScriptDialog(_ id: String, accepted: Bool, input: String?) {
+    let sheetID = "javascript-dialog-\(id)"
+    guard let request = consentRequests.first(where: { $0.id == sheetID }),
+      case .javascriptDialog(let dialog) = request
+    else { return }
+    let presented = sheet?.id == sheetID && presentedConsentID == sheetID
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID { presentedConsentID = nil }
+    if presented { sheet = nil }
+    let isCurrent = presented && dialog.matches(session)
+      && rendererFailures[dialog.tabID] == nil
+    let allowed = isCurrent && accepted
+    onJavaScriptDialogDecision?(id, allowed, allowed ? input : nil)
+    presentNextConsent()
+  }
+
+  func dismissJavaScriptDialog(_ id: String) {
+    let sheetID = "javascript-dialog-\(id)"
+    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID {
+      presentedConsentID = nil
+      sheet = nil
+    }
+    presentNextConsent()
+  }
+
   private func printRequestIsCurrent(_ request: PrintRequest) -> Bool {
     guard let frameID = permissionFrames[request.tabID],
       let origin = permissionFrameOrigins[request.tabID]
@@ -1417,12 +1450,16 @@ final class BrowserStore {
       onDesktopCaptureDecision?(request.id, nil)
     case .webShare(let request): onWebShareDecision?(request.id, .cancelled)
     case .print(let request): onPrintDecision?(request.id, false)
+    case .javascriptDialog(let request):
+      onJavaScriptDialogDecision?(request.id, request.kind == .alert, nil)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .deviceChooser(let request): onDeviceChooserDecision?(request, nil)
     case .httpAuth(let request): onHTTPAuthDecision?(request, nil, nil)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }
   }
+
+  var onJavaScriptDialogDecision: ((String, Bool, String?) -> Void)?
 
   func presentNextConsent() {
     guard sheet == nil, let request = consentRequests.first else { return }

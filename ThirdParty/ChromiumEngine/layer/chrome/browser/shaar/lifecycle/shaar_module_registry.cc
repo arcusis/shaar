@@ -47,6 +47,7 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_save_prompts_register);
 // BEGIN login
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_login_register);
 // END login
+SHAAR_DECLARE_OPTIONAL_MODULE(shaar_javascript_dialogs_register);
 // END save_prompts
 #undef SHAAR_DECLARE_OPTIONAL_MODULE
 
@@ -227,6 +228,8 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
   if (shaar_login_register)
     shaar_login_register(registry);
   // END login
+  if (shaar_javascript_dialogs_register)
+    shaar_javascript_dialogs_register(registry);
   // END save_prompts
 }
 

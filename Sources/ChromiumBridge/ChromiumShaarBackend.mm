@@ -205,6 +205,7 @@ struct Symbols {
   ShaarShareReplyFunction _shaarShareReply;
   NSMutableDictionary<NSString *, NSDictionary *> *_shaarInstallRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarPrintRequests;
+  NSMutableDictionary<NSString *, NSString *> *_shaarJavaScriptDialogRequests;
   ShaarPrintReplyFunction _shaarPrintReply;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
@@ -214,6 +215,7 @@ struct Symbols {
   BOOL _shaarDeviceChooserAvailable;
   BOOL _shaarWebShareAvailable;
   BOOL _shaarPrintAvailable;
+  BOOL _shaarJavaScriptDialogsAvailable;
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
@@ -392,6 +394,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarHTTPAuthRequests = [NSMutableDictionary dictionary];
   _shaarShareRequests = [NSMutableDictionary dictionary];
   _shaarPrintRequests = [NSMutableDictionary dictionary];
+  _shaarJavaScriptDialogRequests = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -418,6 +421,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarPrintReply = reinterpret_cast<ShaarPrintReplyFunction>(
       dlsym(_shaarLibrary, "shaar_print_reply"));
   _shaarPrintAvailable = _symbols.abi_minor() >= 16 && _shaarPrintReply != nullptr;
+  _shaarJavaScriptDialogsAvailable = _symbols.abi_minor() >= 17;
   return self;
 }
 
@@ -484,6 +488,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarDeviceChooserRequests removeAllObjects];
   [_shaarShareRequests removeAllObjects];
   [_shaarInstallRequests removeAllObjects];
+  [_shaarJavaScriptDialogRequests removeAllObjects];
   _symbols.release(_shaarEngine);
   _shaarEngine = nullptr;
   return result == SHAAR_OK ? 0 : 1;
@@ -551,21 +556,44 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
         ![host isKindOfClass:NSString.class] || !host.length || host.length > 255) return;
     _shaarHTTPAuthRequests[requestID] = tabID;
     NSMutableDictionary *request = [payload mutableCopy];
-    request[@"profileID"] = profileID;
-    request[@"tabID"] = tabID;
-    request[@"windowID"] = windowID;
+    request[@"profileID"] = profileID; request[@"tabID"] = tabID; request[@"windowID"] = windowID;
     if (self.onHTTPAuthRequest) self.onHTTPAuthRequest(request);
     else [self resolveHTTPAuthRequestID:requestID tabID:tabID username:nil password:nil];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_JAVASCRIPT_DIALOG &&
+      _shaarJavaScriptDialogsAvailable && !event->session_id.size &&
+      [kind isEqualToString:@"javascriptDialogRequested"]) {
+    NSString *requestID = payload[@"id"];
+    NSString *windowID = String(event->window_id);
+    if (![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] || !requestID.length ||
+        requestID.length > 64 || _shaarJavaScriptDialogRequests[requestID] ||
+        !_shaarTabs[tabID] || ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+    _shaarJavaScriptDialogRequests[requestID] = tabID;
+    NSMutableDictionary *request = [payload mutableCopy];
+    request[@"profileID"] = profileID; request[@"tabID"] = tabID; request[@"windowID"] = windowID;
+    if (self.onJavaScriptDialogRequest) self.onJavaScriptDialogRequest(request);
+    else [self resolveJavaScriptDialogRequestID:requestID accepted:NO input:nil];
     return;
   }
   if (event->kind == SHAAR_EVENT_PERMISSION && !event->session_id.size &&
       [kind isEqualToString:@"httpAuthDismissed"]) {
     NSString *requestID = payload[@"id"];
-    if (![payload[@"schemaVersion"] isEqual:@1] ||
-        ![requestID isKindOfClass:NSString.class] ||
+    if (![payload[@"schemaVersion"] isEqual:@1] || ![requestID isKindOfClass:NSString.class] ||
         ![_shaarHTTPAuthRequests[requestID] isEqualToString:tabID]) return;
     [_shaarHTTPAuthRequests removeObjectForKey:requestID];
     if (self.onHTTPAuthDismissed) self.onHTTPAuthDismissed(requestID);
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_JAVASCRIPT_DIALOG && _shaarJavaScriptDialogsAvailable &&
+      !event->session_id.size && [kind isEqualToString:@"javascriptDialogDismissed"]) {
+    NSString *requestID = payload[@"id"];
+    if (![payload[@"schemaVersion"] isEqual:@1] || ![requestID isKindOfClass:NSString.class] ||
+        ![_shaarJavaScriptDialogRequests[requestID] isEqualToString:tabID]) return;
+    [_shaarJavaScriptDialogRequests removeObjectForKey:requestID];
+    if (self.onJavaScriptDialogDismissed) self.onJavaScriptDialogDismissed(requestID);
     return;
   }
   if (event->kind == SHAAR_EVENT_PERMISSION &&
@@ -743,6 +771,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       [self resolvePrintRequestID:requestID accepted:NO];
     for (NSString *requestID in [_shaarHTTPAuthRequests allKeysForObject:tabID])
       [self resolveHTTPAuthRequestID:requestID tabID:tabID username:nil password:nil];
+    for (NSString *requestID in [_shaarJavaScriptDialogRequests allKeysForObject:tabID])
+      [self resolveJavaScriptDialogRequestID:requestID accepted:NO input:nil];
     NSString *mappedWindowID = _shaarTabWindows[tabID];
     NSString *windowID = String(event->window_id);
     if (!windowID.length) windowID = mappedWindowID;
@@ -2079,6 +2109,19 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarPrintRequests removeObjectForKey:requestID];
   if (!_shaarPrintReply || !requestID.UTF8String) return;
   _shaarPrintReply(requestID.UTF8String, accepted ? 1 : 0);
+}
+
+- (void)resolveJavaScriptDialogRequestID:(NSString *)requestID accepted:(BOOL)accepted
+                                  input:(NSString *)input {
+  NSString *tabID = _shaarJavaScriptDialogRequests[requestID];
+  if (!tabID) return;
+  [_shaarJavaScriptDialogRequests removeObjectForKey:requestID];
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID) return;
+  NSDictionary *payload = @{@"schemaVersion": @1, @"id": requestID,
+    @"accepted": @(accepted), @"input": input ?: @""};
+  [self shaarSubmit:SHAAR_OP_JAVASCRIPT_DIALOG_REPLY profileID:profileID
+              tabID:tabID payload:payload completion:nil];
 }
 
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {

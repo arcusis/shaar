@@ -1,0 +1,49 @@
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -291,1 +291,5 @@
++namespace shaar::javascript_dialogs {
++content::JavaScriptDialogManager* GetManager() __attribute__((weak_import));
++}  // namespace shaar::javascript_dialogs
++
+ namespace content {
+@@ -9790,14 +9794,20 @@ void WebContentsImpl::RunJavaScriptDialog(
+   bool should_suppress = false;
+   JavaScriptDialogManager* dialog_manager = nullptr;
+   // Give guest a first crack at the dialog.
+   if (GuestPageHolderImpl* guest_holder =
+           GuestPageHolderImpl::FromRenderFrameHost(*render_frame_host)) {
+     if (auto* guest_delegate = guest_holder->delegate()) {
+       dialog_manager = guest_delegate->GuestGetJavascriptDialogManager();
+     }
+   } else if (delegate_) {
+     dialog_manager = delegate_->GetJavaScriptDialogManager(this);
+     should_suppress = delegate_->ShouldSuppressDialogs(this);
+   }
++  if (!GuestPageHolderImpl::FromRenderFrameHost(*render_frame_host) &&
++      delegate_ &&
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder") &&
++      shaar::javascript_dialogs::GetManager) {
++    dialog_manager = shaar::javascript_dialogs::GetManager();
++  }
+ 
+   // While a JS message dialog is showing, defer commits in this WebContents.
+@@ -9927,12 +9936,18 @@ void WebContentsImpl::RunBeforeUnloadDialog(
+   JavaScriptDialogManager* dialog_manager = nullptr;
+   bool should_suppress = false;
+   // Give guest a first crack at the dialog.
+   if (GuestPageHolderImpl* guest_holder =
+           GuestPageHolderImpl::FromRenderFrameHost(*render_frame_host)) {
+     if (auto* guest_delegate = guest_holder->delegate()) {
+       dialog_manager = guest_delegate->GuestGetJavascriptDialogManager();
+     }
+   } else if (delegate_) {
+     dialog_manager = delegate_->GetJavaScriptDialogManager(this);
+     should_suppress = delegate_->ShouldSuppressDialogs(this);
+   }
++  if (!GuestPageHolderImpl::FromRenderFrameHost(*render_frame_host) &&
++      delegate_ &&
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder") &&
++      shaar::javascript_dialogs::GetManager) {
++    dialog_manager = shaar::javascript_dialogs::GetManager();
++  }

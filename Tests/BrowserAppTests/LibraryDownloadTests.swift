@@ -13,6 +13,12 @@ import Testing
 
 @Suite @MainActor
 struct LibraryDownloadTests {
+  @Test func downloadActionsAreVisibleForKeyboardFocus() {
+    #expect(LibraryDownloadsView.actionsAreVisible(isHovered: false, isFocused: true))
+    #expect(LibraryDownloadsView.actionsAreVisible(isHovered: true, isFocused: false))
+    #expect(!LibraryDownloadsView.actionsAreVisible(isHovered: false, isFocused: false))
+  }
+
   @Test func downloadLibrarySortBenchmark() {
     let profile = UUID()
     let model = DownloadsModel()

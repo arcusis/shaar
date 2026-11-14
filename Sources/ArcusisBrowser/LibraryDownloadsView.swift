@@ -23,6 +23,11 @@ struct LibraryDownloadsView: View {
   @State private var quickLookURL: URL?
   @State private var thumbnails = LibraryThumbnailLoader()
   @FocusState private var searchIsFocused: Bool
+  @FocusState private var focusedActionsID: String?
+
+  static func actionsAreVisible(isHovered: Bool, isFocused: Bool) -> Bool {
+    isHovered || isFocused
+  }
 
   init(store: BrowserStore, profileID: UUID, mediaOnly: Bool) {
     self.store = store
@@ -228,7 +233,10 @@ struct LibraryDownloadsView: View {
         Image(systemName: "ellipsis").frame(width: 24, height: 24)
       }
       .menuStyle(.borderlessButton).fixedSize()
-      .opacity(hoveredID == item.id ? 1 : 0)
+      .focused($focusedActionsID, equals: item.id)
+      .opacity(
+        Self.actionsAreVisible(
+          isHovered: hoveredID == item.id, isFocused: focusedActionsID == item.id) ? 1 : 0)
       .accessibilityLabel(PanelsL10n.format("Actions for %@", .string(item.filename)))
     }
     .padding(8).contentShape(Rectangle())

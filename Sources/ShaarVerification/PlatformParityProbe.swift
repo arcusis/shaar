@@ -30,7 +30,8 @@ enum PlatformParityPreferenceEvidence {
     store("autofill.credit_card_enabled", autofill?["credit_card_enabled"])
     store("credentials_enable_service", root["credentials_enable_service"])
     if let profile = root["profile"] as? [String: Any],
-      let mode = profile["cookie_controls_mode"] as? NSNumber
+      let mode = profile["cookie_controls_mode"] as? NSNumber,
+      CFGetTypeID(mode) != CFBooleanGetTypeID()
     {
       values["profile.cookie_controls_mode"] = mode.stringValue
     }

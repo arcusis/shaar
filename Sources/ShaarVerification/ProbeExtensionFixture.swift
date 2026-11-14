@@ -20,6 +20,11 @@ enum ProbeExtensionFixture {
 
   private(set) static var accountIsolationID: String?
 
+  static func hasNewNotice(since priorNotice: String?, currentNotice: String?) -> Bool {
+    guard let currentNotice else { return false }
+    return currentNotice != priorNotice
+  }
+
   static func rememberAccountIsolation(_ id: String) {
     accountIsolationID = id
   }
@@ -34,7 +39,7 @@ enum ProbeExtensionFixture {
       {
         return .opened(popup)
       }
-      if let notice = engine.notice, notice != priorNotice {
+      if hasNewNotice(since: priorNotice, currentNotice: engine.notice) {
         return .didNotOpen
       }
       do {

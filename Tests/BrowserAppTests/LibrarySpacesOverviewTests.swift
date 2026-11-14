@@ -125,6 +125,19 @@ final class LibrarySpacesOverviewTests: XCTestCase {
       expected)
   }
 
+  func testTabAccessibilityLabelFallsBackForWhitespaceOnlyTitles() {
+    let address = "https://example.com/page"
+    XCTAssertEqual(
+      LibrarySpaceItemsAccessibility.tabLabel(title: "", address: address),
+      "\(address), \(address)")
+    XCTAssertEqual(
+      LibrarySpaceItemsAccessibility.tabLabel(title: " \n\t", address: address),
+      "\(address), \(address)")
+    XCTAssertEqual(
+      LibrarySpaceItemsAccessibility.tabLabel(title: " Article ", address: address),
+      " Article , \(address)")
+  }
+
   func testSearchRetainsNestedFolderContextForMatchingTabOrParentFolder() throws {
     let profile = BrowserProfile(name: "Daily")
     let parent = BrowserFolder(name: "Research")

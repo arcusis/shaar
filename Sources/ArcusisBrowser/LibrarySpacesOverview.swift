@@ -346,9 +346,17 @@ private struct LibrarySpaceItemsView: View {
     .buttonStyle(.plain)
     .help("\(tab.title)\n\(tab.url.absoluteString)")
     .accessibilityLabel(
-      "\(tab.title.isEmpty ? tab.url.absoluteString : tab.title), \(tab.url.absoluteString)"
-    )
+      LibrarySpaceItemsAccessibility.tabLabel(title: tab.title, address: tab.url.absoluteString))
     .accessibilityAddTraits(selected ? .isSelected : [])
+  }
+}
+
+enum LibrarySpaceItemsAccessibility {
+  static func tabLabel(title: String, address: String) -> String {
+    let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedTitle.isEmpty, title != address else { return address }
+    let accessibleTitle = title
+    return "\(accessibleTitle), \(address)"
   }
 }
 

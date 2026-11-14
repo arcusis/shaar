@@ -13,17 +13,22 @@ It requires a clean checkout at the pinned commit, applies every manifest patch
 with strict `git apply`, and writes `build/ShaarEngineSource/applied-patches.json`.
 For a recovered, already-patched tree, run
 `python3 scripts/engine_patches.py --verify-tree /path/to/chromium/src` instead.
+For a Chromium 157 source tree that includes the pinned upstream stack and
+copied Shaar layer, pass the builder's replay record as well:
+`python3 scripts/engine_patches.py --verify-tree /path/to/chromium/src --builder-receipt /path/to/build-root/applied-patches.json`.
 This copies only patch-touched files to a scratch repository, reverses the
-patches from last to first, compares the result with files at the pinned
-Chromium commit, and writes the same receipt only if all checks pass.
+patches from last to first, compares the result with the pinned Chromium commit
+or the builder's recorded pre-Shaar baseline, and writes the same receipt only
+if all checks pass.
 The engine package script embeds this receipt in the archive. Archive fetch and
 bundle verification reject a missing or incomplete patch series. The receipt
 records the patch inputs and application run; it does not independently attest
 the compiled binary's source provenance.
 
-Chromium 157 DevTools is a separate `devtoolsFrontend157` record. It is not part
-of the Chromium 155 `patches` list, and `0014-shaar-devtools-theme.patch` stays
-on this pin. Each Shaar panel lives in
+Chromium 157 DevTools keeps its staging metadata in `devtoolsFrontend157`.
+The 157 patch list contains the applied 0064 and 0065 patches once; legacy
+`0014-shaar-devtools-theme.patch` is retained only for older manifests.
+Each Shaar panel lives in
 `devtools-frontend/front_end/panels/shaar/<feature>/` and adds one import to
 `shaar-meta.ts`. The 157 checkout copies that directory into
 `third_party/devtools-frontend/src/front_end/panels/shaar`, then applies

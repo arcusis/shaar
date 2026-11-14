@@ -354,10 +354,6 @@
       "sha256": "5663294999812b4d468ac7747ad01d7877a97be3943a56cab0c082fb5a8dd9d3"
     },
     {
-      "file": "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
-      "sha256": "abfcc6ecfeff6b8690579ef92ba239a2aefca9d24a6962bdd5e8424469b54924"
-    },
-    {
       "file": "ThirdParty/ChromiumEngine/patches/0016-shaar-agent-bridge.patch",
       "sha256": "3284a53767cb9046a7b79cf6d6c5f63861ad47e71e9d41e83faa9de6aadada91"
     },
@@ -506,6 +502,14 @@
       "sha256": "52a8ac2dfecd135078052a1ca678900f0fec81859f148e093f91e2b0c9f0fc16"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0064-shaar-devtools-theme-157.patch",
+      "sha256": "a34512296d4af976d27d38ae65d0594c2d1a22cb2394bd162f0ca2529ba177df"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0065-shaar-devtools-frontend-registration.patch",
+      "sha256": "1e23d3d027834224b3ead09f9e9c4d9b6d009d1ec92240bf0dadf1994db1c2c6"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0066-shaar-save-prompts.patch",
       "sha256": "33d111990e8de140bac8983e1e6352836087761f0a17e53dcd45311e3d605bc1"
     },
@@ -614,17 +618,6 @@
     "registration": "ThirdParty/ChromiumEngine/devtools-frontend/front_end/panels/shaar/shaar-meta.ts",
     "copyTo": "third_party/devtools-frontend/src/front_end/panels/shaar",
     "stageScript": "scripts/stage-shaar-devtools-frontend.py",
-    "replacesPatch": "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
-    "patches": [
-      {
-        "file": "ThirdParty/ChromiumEngine/patches/0064-shaar-devtools-theme-157.patch",
-        "sha256": "a34512296d4af976d27d38ae65d0594c2d1a22cb2394bd162f0ca2529ba177df"
-      },
-      {
-        "file": "ThirdParty/ChromiumEngine/patches/0065-shaar-devtools-frontend-registration.patch",
-        "sha256": "1e23d3d027834224b3ead09f9e9c4d9b6d009d1ec92240bf0dadf1994db1c2c6"
-      }
-    ],
     "commit": "12ada949de6a27116dea47c600da5322f44c64f4"
   },
   "requiredExports": [

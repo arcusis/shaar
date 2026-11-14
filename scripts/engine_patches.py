@@ -98,7 +98,7 @@ def apply(manifest, src, output):
     write_receipt(output, revision, patches)
 
 
-def verify_tree(manifest, src, output):
+def verify_tree(manifest, src, output, builder_receipt=None):
     root, revision, patches = manifest_inputs(manifest)
     output.unlink(missing_ok=True)
     checked_source(src, revision)
@@ -120,6 +120,21 @@ def verify_tree(manifest, src, output):
             touched.add(path)
     if not touched:
         raise PatchError("patch series touches no files")
+    baseline = None
+    if builder_receipt is not None:
+        builder = json.loads(builder_receipt.read_text())
+        data = json.loads(manifest.read_text())
+        if (builder.get("schemaVersion") != 1
+                or builder.get("chromium", {}).get("commit") != revision
+                or builder.get("sourceBuildManifestSha256") != hashlib.sha256(manifest.read_bytes()).hexdigest()
+                or builder.get("layerSha256") != data["layer"]["sha256"]
+                or builder.get("shaarPatches") != patches
+                or not isinstance(builder.get("upstreamPatchSeries"), list)
+                or not builder["upstreamPatchSeries"]):
+            raise PatchError("builder receipt does not match the pinned replay")
+        baseline = builder.get("preShaarFiles")
+        if not isinstance(baseline, dict) or set(baseline) != touched:
+            raise PatchError("builder receipt has an incomplete pre-Shaar baseline")
     with tempfile.TemporaryDirectory(prefix="shaar-patch-verify-") as temporary:
         scratch = Path(temporary)
         run_git(scratch, "init", "-q")
@@ -150,29 +165,47 @@ def verify_tree(manifest, src, output):
             run_git(scratch, "apply", "--reverse", str(patch))
             print(f"reversed {item['file']}", file=sys.stderr)
         for name in sorted(touched):
-            expected = git_bytes(src, "ls-tree", "-z", revision, "--", name)
-            target = scratch / name
-            if not expected:
-                if target.exists() or target.is_symlink():
-                    raise PatchError(f"unwound tree differs from upstream: {name}")
+            if baseline is not None:
+                target = scratch / name
+                expected_state = baseline[name]
+                if not isinstance(expected_state, dict):
+                    raise PatchError(f"invalid pre-Shaar baseline: {name}")
+                if expected_state.get("kind") == "missing":
+                    matches = not target.exists() and not target.is_symlink()
+                elif expected_state.get("kind") == "symlink":
+                    matches = target.is_symlink() and os.readlink(target) == expected_state.get("target")
+                elif expected_state.get("kind") == "file":
+                    matches = (target.is_file() and not target.is_symlink()
+                               and hashlib.sha256(target.read_bytes()).hexdigest() == expected_state.get("sha256")
+                               and bool(target.stat().st_mode & stat.S_IXUSR) == expected_state.get("executable"))
+                else:
+                    matches = False
+                if not matches:
+                    raise PatchError(f"unwound tree differs from builder baseline: {name}")
             else:
-                if expected.count(b"\0") != 1:
-                    raise PatchError(f"ambiguous upstream path: {name}")
-                metadata = expected.split(b"\t", 1)[0].split()
-                if len(metadata) != 3 or metadata[1] != b"blob":
-                    raise PatchError(f"unsupported upstream path: {name}")
-                upstream = git_bytes(src, "show", f"{revision}:{name}")
-                mode = metadata[0]
-                if mode == b"120000":
-                    if not target.is_symlink() or os.fsencode(os.readlink(target)) != upstream:
-                        raise PatchError(f"unwound tree differs from upstream: {name}")
-                elif mode in (b"100644", b"100755"):
-                    if (not target.is_file() or target.is_symlink()
-                            or target.read_bytes() != upstream
-                            or bool(target.stat().st_mode & stat.S_IXUSR) != (mode == b"100755")):
+                expected = git_bytes(src, "ls-tree", "-z", revision, "--", name)
+                target = scratch / name
+                if not expected:
+                    if target.exists() or target.is_symlink():
                         raise PatchError(f"unwound tree differs from upstream: {name}")
                 else:
-                    raise PatchError(f"unsupported upstream mode: {name}")
+                    if expected.count(b"\0") != 1:
+                        raise PatchError(f"ambiguous upstream path: {name}")
+                    metadata = expected.split(b"\t", 1)[0].split()
+                    if len(metadata) != 3 or metadata[1] != b"blob":
+                        raise PatchError(f"unsupported upstream path: {name}")
+                    upstream = git_bytes(src, "show", f"{revision}:{name}")
+                    mode = metadata[0]
+                    if mode == b"120000":
+                        if not target.is_symlink() or os.fsencode(os.readlink(target)) != upstream:
+                            raise PatchError(f"unwound tree differs from upstream: {name}")
+                    elif mode in (b"100644", b"100755"):
+                        if (not target.is_file() or target.is_symlink()
+                                or target.read_bytes() != upstream
+                                or bool(target.stat().st_mode & stat.S_IXUSR) != (mode == b"100755")):
+                            raise PatchError(f"unwound tree differs from upstream: {name}")
+                    else:
+                        raise PatchError(f"unsupported upstream mode: {name}")
             source = src / name
             state = original_states[name]
             if state[0] == "symlink":
@@ -223,12 +256,16 @@ def main():
     modes.add_argument("--verify-archive", type=Path, metavar="ARCHIVE")
     modes.add_argument("--verify-receipt", type=Path, metavar="RECEIPT")
     parser.add_argument("--output", type=Path, default=Path("build/ShaarEngineSource") / RECEIPT)
+    parser.add_argument("--builder-receipt", type=Path,
+                        help="pinned 157 builder replay receipt with the pre-Shaar baseline")
     args = parser.parse_args()
     try:
+        if args.builder_receipt and not args.verify_tree:
+            raise PatchError("--builder-receipt requires --verify-tree")
         if args.apply:
             apply(args.manifest, args.apply, args.output)
         elif args.verify_tree:
-            verify_tree(args.manifest, args.verify_tree, args.output)
+            verify_tree(args.manifest, args.verify_tree, args.output, args.builder_receipt)
         elif args.verify_archive:
             verify_archive(args.manifest, args.verify_archive)
         else:

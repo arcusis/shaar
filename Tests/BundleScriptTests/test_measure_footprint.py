@@ -43,6 +43,21 @@ class MeasureFootprintSampleTests(unittest.TestCase):
 
             self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
 
+    def test_report_writer_rejects_symlinked_parent_without_writing_outside(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            outside.mkdir()
+            target = outside / "report.json"
+            target.write_text("preserve this", encoding="utf-8")
+            linked_directory = root / "linked-output"
+            linked_directory.symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "performance report directory must not be a symlink"):
+                measure_footprint.write_report(linked_directory / "report.json", {"schema": 3})
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
     def test_sample_copy_rejects_symlinked_file_without_overwriting_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

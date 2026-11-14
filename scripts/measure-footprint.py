@@ -450,6 +450,8 @@ def compare_sleeping_rss(cases):
 
 
 def write_report(path: Path, result: dict) -> None:
+    if path.parent.is_symlink():
+        raise ValueError(f"performance report directory must not be a symlink: {path.parent}")
     if path.is_symlink():
         raise ValueError(f"performance report path must not be a symlink: {path}")
     if path.exists() and not path.is_file():

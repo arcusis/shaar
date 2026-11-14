@@ -29,6 +29,27 @@ import Testing
     }
   }
 
+  @Test func liveTabAuditRejectsJSONNumbersForBooleanFlags() throws {
+    let base: [String: Any] = [
+      "sourceIsRegular": true, "contextIsPrivate": true, "contextDistinct": true,
+      "allWindowsUsePrivateActiveProfile": true, "allTabsInNativeProfileBrowser": true,
+      "allWindowsDisplayOwnedWebContents": true, "visibleNativeViewportCount": 1,
+      "tabCount": 1,
+    ]
+    let keys = [
+      "sourceIsRegular", "contextIsPrivate", "contextDistinct",
+      "allWindowsUsePrivateActiveProfile", "allTabsInNativeProfileBrowser",
+      "allWindowsDisplayOwnedWebContents",
+    ]
+    for key in keys {
+      var malformed = base
+      malformed[key] = 1
+      #expect(
+        !PrivateMultiTabEvidence.liveTabAudit(
+          try jsonObject(malformed) as [AnyHashable: Any], tabCount: 1))
+    }
+  }
+
   @Test func shellAttachmentRequiresTheNativePageAsAnActualSubview() {
     let container = NSView()
     let page = NSView()
@@ -48,6 +69,25 @@ import Testing
     let shellAudit = try #require(
       JSONSerialization.jsonObject(with: data) as? [String: Any])
     #expect(!PrivateMultiTabEvidence.liveShellAudit(shellAudit, stage: "tab-0"))
+  }
+
+  @Test func shellAuditRejectsJSONNumbersForBooleanEvidence() throws {
+    let base: [String: Any] = [
+      "stage": "tab-0", "containerCount": 1, "layerBacked": [true],
+      "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
+    ]
+    let invalid: [(String, Any)] = [
+      ("attached", 1), ("attachedInWindow", 1), ("nativeHidden", 0),
+      ("rawWindowSibling", 0), ("layerBacked", [1]),
+    ]
+    for (key, value) in invalid {
+      var malformed = base
+      malformed[key] = value
+      #expect(
+        !PrivateMultiTabEvidence.liveShellAudit(
+          try jsonObject(malformed), stage: "tab-0"))
+    }
   }
 
   @Test func liveTabCountsRejectBooleansFractionsAndStrings() {
@@ -176,4 +216,9 @@ import Testing
     }
     #expect(PrivateMultiTabEvidence.lightSamples(bitmap) == 0)
   }
+}
+
+private func jsonObject(_ object: [String: Any]) throws -> [String: Any] {
+  let data = try JSONSerialization.data(withJSONObject: object)
+  return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 }

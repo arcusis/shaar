@@ -115,6 +115,16 @@ import Testing
       adapter.decode(
         unknownIntermediateIndex, expectedScope: scope, expectedTabID: "t", expectedRequestID: 19)
         == ShaarFindUpdate(requestID: 19, matchCount: 1, activeMatch: -1, isFinal: true))
+
+    let invalidActiveIndex = ShaarCopiedEvent(
+      sequence: 5, kind: 7, profileID: Data("p".utf8), sessionID: Data(),
+      windowID: Data("w".utf8), tabID: Data("t".utf8),
+      payloadJSON: Data(
+        #"{"kind":"result","schemaVersion":1,"requestID":"19","matchCount":1,"activeMatch":-2,"final":true}"#.utf8))
+    #expect(
+      adapter.decode(
+        invalidActiveIndex, expectedScope: scope, expectedTabID: "t", expectedRequestID: 19)
+        == nil)
   }
 
   @Test func findEventFinalFlagRequiresAJSONBoolean() {

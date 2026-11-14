@@ -29,6 +29,12 @@ class PageFocusDeliveryTests(unittest.TestCase):
         self.assertIn("EXPECT_FALSE(host.Focus(tab));", source)
         self.assertIn('"window.pageFocusCount").ExtractInt(), 0', source)
 
+    def test_repeated_native_focus_does_not_duplicate_page_focus(self):
+        source = (ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm").read_text()
+        self.assertIn("RepeatedNativeFocusKeepsPageFocusEventIdempotent", source)
+        self.assertEqual(source.count("ASSERT_TRUE(host.Focus(tab));"), 3)
+        self.assertIn('"window.pageFocusCount").ExtractInt(), 1', source)
+
 
 if __name__ == "__main__":
     unittest.main()

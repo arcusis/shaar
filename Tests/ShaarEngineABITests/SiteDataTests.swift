@@ -99,6 +99,57 @@ struct SiteDataTests {
     #expect(await fake.lastCall()?.operation == .siteCookiesClear)
   }
 
+  @Test func siteDataResultBooleansRejectNumericSubstitutes() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+
+    await fake.setResponse(
+      #"{"schemaVersion":1,"settings":{"camera":{"value":"ask","isDefault":1}}}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.settings(origin: "https://example.com")
+    }
+
+    await fake.setResponse(#"{"schemaVersion":1,"value":"allow","isDefault":0}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.set(origin: "https://example.com", type: "camera", value: .allow)
+    }
+
+    await fake.setResponse(#"{"schemaVersion":1,"blocked":1,"managed":true}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.thirdPartyCookiePolicy()
+    }
+    await fake.setResponse(#"{"schemaVersion":1,"blocked":false,"managed":0}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.thirdPartyCookiePolicy()
+    }
+
+    await fake.setResponse(#"{"schemaVersion":1,"complete":1}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.clearSiteData(origin: "https://example.com")
+    }
+    await fake.setResponse(
+      #"{"schemaVersion":1,"clearedTypes":["cache"],"complete":1}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.clearBrowsingData(types: ["cache"])
+    }
+    await fake.setResponse(#"{"schemaVersion":1,"complete":1}"#)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.clearSelectedTabCookies(origin: "https://example.com")
+    }
+
+    let cookie = try #require(ShaarSiteCookie(dictionary: [
+      "name": "sid", "value": "abc", "domain": "example.com", "path": "/",
+      "secure": true, "httpOnly": true, "sameSite": "Lax",
+      "expiresUnixMs": NSNull(), "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
+      "sourceScheme": 2, "sourcePort": 443,
+    ]))
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.setCookie(
+        cookie, value: "updated", secure: true, httpOnly: false, sameSite: .lax,
+        origin: "https://example.com")
+    }
+  }
+
   @Test func individualCookieOperationsUseSiteDataAndValidateIdentity() async throws {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
@@ -127,11 +178,15 @@ struct SiteDataTests {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
     let cookie =
-      #"{"name":"sid","value":"abc","domain":"example.com","path":"/","secure":true,"httpOnly":true,"sameSite":"Lax","expiresUnixMs":null,"partitionSite":null,"partitionCrossSite":null,"sourceScheme":2,"sourcePort":443}"#
+      #"{"name":"sid","value":"abc","domain":"example.com","path":"/","secure":true,"httpOnly":true,"sameSite":"Lax","expiresUnixMs":null,"partitionSite":"https://example.com","partitionCrossSite":true,"sourceScheme":2,"sourcePort":443}"#
     for invalid in [
       cookie.replacingOccurrences(of: #""sourcePort":443"#, with: #""sourcePort":true"#),
       cookie.replacingOccurrences(of: #""sourceScheme":2"#, with: #""sourceScheme":true"#),
       cookie.replacingOccurrences(of: #""expiresUnixMs":null"#, with: #""expiresUnixMs":true"#),
+      cookie.replacingOccurrences(of: #""secure":true"#, with: #""secure":1"#),
+      cookie.replacingOccurrences(of: #""httpOnly":true"#, with: #""httpOnly":0"#),
+      cookie.replacingOccurrences(
+        of: #""partitionCrossSite":true"#, with: #""partitionCrossSite":1"#),
     ] {
       await fake.setResponse("{\"schemaVersion\":1,\"cookies\":[\(invalid)]}")
       await #expect(throws: ShaarSiteDataError.malformedResponse) {

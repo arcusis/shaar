@@ -43,7 +43,7 @@ struct NativeWindowFitEvidence: Equatable {
 enum NativeWindowDocumentValidation {
   static func isReady(_ value: [String: Any], differentFrom oldInstance: String? = nil) -> Bool {
     guard value["fixture"] as? String == "v1",
-      let instance = value["instance"] as? String
+      let instance = value["instance"] as? String, !instance.isEmpty
     else { return false }
     return instance != oldInstance
   }

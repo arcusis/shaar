@@ -33,6 +33,7 @@ struct WebShareRequest: Identifiable, Equatable {
       frameID.count >= 1, frameID.count <= 256,
       Self.isTrueBoolean(payload["userActivated"]),
       NavigationInput.isWebURL(pageURL),
+      pageURL.port != 0,
       !Self.hasEmptyExplicitPort(pageURL),
       Self.secureOrigin(requestingOrigin),
       let title = Self.boundedText(payload["title"], maxUTF8: 2048, required: false),
@@ -82,6 +83,7 @@ struct WebShareRequest: Identifiable, Equatable {
   private static func secureOrigin(_ origin: URL) -> Bool {
     guard NavigationInput.isWebURL(origin),
       !hasEmptyExplicitPort(origin),
+      origin.port != 0,
       origin.path.isEmpty || origin.path == "/",
       origin.query == nil,
       origin.fragment == nil,

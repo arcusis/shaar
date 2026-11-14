@@ -17,8 +17,17 @@ checksum=$(jq -er .sha256 "$pin")
 [[ $asset == "ShaarEngine-${tag#engine-}.tar.xz" ]] || {
   echo 'Shaar engine asset and tag do not match.' >&2; exit 1;
 }
-cache="$PWD/build/EngineCache"
+build="$PWD/build"
+cache="$build/EngineCache"
 archive="$cache/$asset"
+if [[ -L "$build" || ( -e "$build" && ! -d "$build" ) ]]; then
+  echo 'Engine cache build root must be a regular directory.' >&2
+  exit 1
+fi
+if [[ -L "$cache" || ( -e "$cache" && ! -d "$cache" ) ]]; then
+  echo 'Engine cache directory must be a regular directory.' >&2
+  exit 1
+fi
 mkdir -p "$cache"
 if [[ -L "$archive" || -L "$archive.partial" ]]; then
   echo 'Engine archive cache paths must not be symlinks.' >&2

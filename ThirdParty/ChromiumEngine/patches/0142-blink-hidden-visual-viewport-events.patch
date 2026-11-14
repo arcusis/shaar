@@ -9,7 +9,9 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
  
  #include <algorithm>
  #include <memory>
-@@ -6754,21 +6755,50 @@
+@@ -6754,21 +6755,56 @@
++  if (!GetExecutionContext() || !domWindow())
++    return;
    VisualViewportScrollEvent* event =
        MakeGarbageCollected<VisualViewportScrollEvent>();
    event->SetTarget(domWindow()->visualViewport());
@@ -18,6 +20,8 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
  }
  
  void Document::EnqueueVisualViewportScrollEndEvent() {
++  if (!GetExecutionContext() || !domWindow())
++    return;
    VisualViewportScrollEndEvent* event =
        MakeGarbageCollected<VisualViewportScrollEndEvent>();
    event->SetTarget(domWindow()->visualViewport());
@@ -26,6 +30,8 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
  }
  
  void Document::EnqueueVisualViewportResizeEvent() {
++  if (!GetExecutionContext() || !domWindow())
++    return;
    VisualViewportResizeEvent* event =
        MakeGarbageCollected<VisualViewportResizeEvent>();
    event->SetTarget(domWindow()->visualViewport());

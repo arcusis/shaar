@@ -1,3 +1,38 @@
+diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
+--- a/third_party/blink/renderer/core/dom/document.cc
++++ b/third_party/blink/renderer/core/dom/document.cc
+@@ -6721,7 +6721,7 @@
+       block_target, inline_target);
+   scrollsnapchange_event->SetTarget(target);
+   if (hidden())
+-    scripted_animation_controller_->EnqueueHiddenScrollSnapEvent(
++    scripted_animation_controller_->EnqueueHiddenScrollRelatedEvent(
+         scrollsnapchange_event);
+   else
+     scripted_animation_controller_->EnqueuePerFrameEvent(scrollsnapchange_event);
+@@ -6736,7 +6736,7 @@
+       block_target, inline_target);
+   scrollsnapchanging_event->SetTarget(target);
+   if (hidden())
+-    scripted_animation_controller_->EnqueueHiddenScrollSnapEvent(
++    scripted_animation_controller_->EnqueueHiddenScrollRelatedEvent(
+         scrollsnapchanging_event);
+   else
+     scripted_animation_controller_->EnqueuePerFrameEvent(
+@@ -6754,7 +6754,11 @@
+   init->setBubbles(target->IsDocumentNode());
+   Event* overscroll_event = OverscrollEvent::Create(type, init);
+   overscroll_event->SetTarget(target);
+-  scripted_animation_controller_->EnqueuePerFrameEvent(overscroll_event);
++  if (hidden())
++    scripted_animation_controller_->EnqueueHiddenScrollRelatedEvent(
++        overscroll_event);
++  else
++    scripted_animation_controller_->EnqueuePerFrameEvent(overscroll_event);
+ }
+ 
+ void Document::EnqueueMoveEvent() {
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 @@ -298,26 +298,29 @@
@@ -38,6 +73,7 @@
    }));
  }
  
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
 @@ -118,7 +118,7 @@
@@ -60,50 +96,9 @@
  };
  
  }  // namespace blink
---- a/third_party/blink/renderer/core/dom/document.cc
-+++ b/third_party/blink/renderer/core/dom/document.cc
-@@ -6721,7 +6721,7 @@
-       block_target, inline_target);
-   scrollsnapchange_event->SetTarget(target);
-   if (hidden())
--    scripted_animation_controller_->EnqueueHiddenScrollSnapEvent(
-+    scripted_animation_controller_->EnqueueHiddenScrollRelatedEvent(
-         scrollsnapchange_event);
-   else
-     scripted_animation_controller_->EnqueuePerFrameEvent(scrollsnapchange_event);
-@@ -6736,7 +6736,7 @@
-       block_target, inline_target);
-   scrollsnapchanging_event->SetTarget(target);
-   if (hidden())
--    scripted_animation_controller_->EnqueueHiddenScrollSnapEvent(
-+    scripted_animation_controller_->EnqueueHiddenScrollRelatedEvent(
-         scrollsnapchanging_event);
-   else
-     scripted_animation_controller_->EnqueuePerFrameEvent(
-@@ -6754,7 +6754,11 @@
-   init->setBubbles(target->IsDocumentNode());
-   Event* overscroll_event = OverscrollEvent::Create(type, init);
-   overscroll_event->SetTarget(target);
--  scripted_animation_controller_->EnqueuePerFrameEvent(overscroll_event);
-+  if (hidden())
-+    scripted_animation_controller_->EnqueueHiddenScrollRelatedEvent(
-+        overscroll_event);
-+  else
-+    scripted_animation_controller_->EnqueuePerFrameEvent(overscroll_event);
- }
- 
- void Document::EnqueueMoveEvent() {
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
-@@ -181,7 +181,7 @@
-   EXPECT_TRUE(observer.Order().empty());
- 
-   task_environment_.RunUntilIdle();
--  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2));
-+  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2, 3));
- }
- 
- TEST_F(ScriptedAnimationControllerTest,
 @@ -498,7 +498,7 @@
  }
  
@@ -123,7 +118,7 @@
    Member<Node> block_target = &GetDocument();
    Member<Node> inline_target = &GetDocument();
  
-@@ -515,6 +518,10 @@
+@@ -515,10 +518,14 @@
                                               inline_target);
    GetDocument().EnqueueScrollSnapChangingEvent(&GetDocument(), block_target,
                                                 inline_target);
@@ -134,3 +129,8 @@
    EXPECT_TRUE(observer.Order().empty());
  
    task_environment_.RunUntilIdle();
+-  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2));
++  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2, 3));
+ }
+ 
+ 

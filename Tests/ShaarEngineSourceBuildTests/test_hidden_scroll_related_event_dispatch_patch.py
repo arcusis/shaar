@@ -36,7 +36,10 @@ class HiddenScrollRelatedEventDispatchPatchTests(unittest.TestCase):
         self.assertIn("+  GetDocument().body()->addEventListener(", patch)
         self.assertIn("+                                       GetDocument().body(),\n+                                       GetDocument().body(),", patch)
         self.assertIn("EXPECT_TRUE(observer.Order().empty())", patch)
-        self.assertIn("testing::ElementsAre(1, 2, 3)", patch)
+        test = patch.split("HiddenDocumentScrollRelatedEventsDispatchWithoutAnimationFrame", 1)[1]
+        self.assertIn("testing::ElementsAre(1, 2, 3)", test)
+        preceding_tests = patch.split("HiddenDocumentScrollRelatedEventsDispatchWithoutAnimationFrame", 1)[0]
+        self.assertNotIn("+  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2, 3));", preceding_tests)
 
 
 if __name__ == "__main__":

@@ -571,7 +571,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0144-blink-hidden-scroll-related-events.patch",
-      "sha256": "7eabc8b43dc93f66a6ffb67bba75214f4d5bb15b7e3abb7d5ecdd1bf53464977"
+      "sha256": "b66e1ab6621e1131e956137f880d799d17bee1fe800dc4b3b5d254d07340b28a"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0142-blink-hidden-visual-viewport-events.patch",

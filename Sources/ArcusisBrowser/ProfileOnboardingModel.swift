@@ -184,7 +184,7 @@ final class ProfileOnboardingModel {
       outcome = .created(id)
       actions.close(.created(id))
     } catch {
-      failure = Self.creationFailure()
+      failure = SettingsL10n.string("Could not create this profile. Try again.")
     }
   }
 

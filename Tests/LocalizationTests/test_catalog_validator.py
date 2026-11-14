@@ -229,6 +229,20 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn('addStandard("Paste and Match Style"', source)
 
+    def test_profile_creation_failure_uses_hebrew_recovery_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/ProfileOnboardingModel.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('SettingsL10n.string("Could not create this profile. Try again.")', source)
+        settings = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        translation = settings["strings"]["Could not create this profile. Try again."][
+            "localizations"]["he"]["stringUnit"]["value"]
+        self.assertEqual(translation, "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב.")
+
     def test_rejects_null_catalog_and_localization_maps_cleanly(self):
         for data in (None, {"sourceLanguage": "en", "strings": {"x": None}},
                      {"sourceLanguage": "en", "strings": {"x": {"localizations": None}}}):

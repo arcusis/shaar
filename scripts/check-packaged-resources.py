@@ -26,7 +26,9 @@ MODULE_TOKEN = re.compile(r"Bundle\.module|(?<![\w.])\.module\b")
 FALLBACK_CLOSURE = re.compile(r"\{\s*\.module\s*\}")
 
 
-def code_portion(line: str) -> str:
+def code_portion(line: str, block_comment_depth: list[int] | None = None) -> str:
+    if block_comment_depth is None:
+        block_comment_depth = [0]
     code = []
     quoted = False
     escaped = False
@@ -37,7 +39,28 @@ def code_portion(line: str) -> str:
     pending_interpolation = False
     interpolation_start = 0
     interpolation_ranges = []
+    skip_next = False
     for index, character in enumerate(line):
+        if skip_next:
+            skip_next = False
+            continue
+        if not quoted and block_comment_depth[0]:
+            if line.startswith("/*", index):
+                block_comment_depth[0] += 1
+                code.extend((" ", " "))
+                skip_next = True
+            elif line.startswith("*/", index):
+                block_comment_depth[0] -= 1
+                code.extend((" ", " "))
+                skip_next = True
+            else:
+                code.append(" ")
+            continue
+        if not quoted and line.startswith("/*", index):
+            block_comment_depth[0] = 1
+            code.extend((" ", " "))
+            skip_next = True
+            continue
         if quoted:
             literal.append(character)
             code.append(character)
@@ -92,14 +115,19 @@ def code_portion(line: str) -> str:
     return "".join(code)
 
 
+def code_lines(lines: list[str]) -> list[str]:
+    block_comment_depth = [0]
+    return [code_portion(line, block_comment_depth) for line in lines]
+
+
 def violations_in_source(text: str, path: str) -> list[str]:
     lines = text.splitlines()
+    code = code_lines(lines)
     errors = []
-    for index, line in enumerate(lines):
-        code = code_portion(line)
-        if not MODULE_TOKEN.search(code):
+    for index, line in enumerate(code):
+        if not MODULE_TOKEN.search(line):
             continue
-        if "Bundle.module" in code or not fallback_only(code, lines, index):
+        if "Bundle.module" in line or not fallback_only(line, code, index):
             errors.append(
                 f"{path}:{index + 1}: Bundle.module in a shipping target must be the "
                 "development fallback passed to PackagedResourceBundle.resolve"
@@ -107,7 +135,7 @@ def violations_in_source(text: str, path: str) -> list[str]:
     return errors
 
 def fallback_only(line: str, lines: list[str], index: int) -> bool:
-    window = "\n".join(code_portion(candidate) for candidate in lines[max(0, index - 5) : index + 1])
+    window = "\n".join(lines[max(0, index - 5) : index + 1])
     if "PackagedResourceBundle.resolve(" not in window:
         return False
     remainder = FALLBACK_CLOSURE.sub("", line)

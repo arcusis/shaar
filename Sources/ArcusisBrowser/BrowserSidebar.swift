@@ -5,6 +5,19 @@
 import BrowserCore
 import SwiftUI
 
+struct FavoritePageIndex {
+  private let pagesByFavoriteID: [UUID: BrowserFavoritePage]
+
+  init(_ pages: [BrowserFavoritePage]) {
+    pagesByFavoriteID = Dictionary(
+      pages.lazy.map { ($0.favoriteID, $0) }, uniquingKeysWith: { first, _ in first })
+  }
+
+  func page(for favoriteID: UUID) -> BrowserFavoritePage? {
+    pagesByFavoriteID[favoriteID]
+  }
+}
+
 struct BrowserSidebar: View {
   static let pinnedSectionHeadingTraits: AccessibilityTraits = .isHeader
 
@@ -512,8 +525,9 @@ struct BrowserSidebar: View {
   }
 
   private var profileFavorites: some View {
+    let pages = FavoritePageIndex(store.session.favoritePages)
     let favorites = store.profileFavorites.map { favorite in
-      let page = store.session.favoritePages.first { $0.favoriteID == favorite.id }
+      let page = pages.page(for: favorite.id)
       return FavoriteTile(
         id: favorite.id, title: favorite.title, url: page?.tab.url ?? favorite.originalURL,
         image: store.favicon(for: favorite), pageID: page?.tab.id)

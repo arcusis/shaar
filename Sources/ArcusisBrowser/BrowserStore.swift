@@ -1162,7 +1162,11 @@ final class BrowserStore {
       guard case .webShare(let share) = request else { return false }
       return share.tabID == tabID && share.frameID == frameID
     }
-    guard !usedByAcceptedShare else { return }
+    let usedByPendingPrint = consentRequests.contains { request in
+      guard case .print(let print) = request else { return false }
+      return print.tabID == tabID && print.frameID == frameID
+    }
+    guard !usedByAcceptedShare, !usedByPendingPrint else { return }
     permissionFrames[tabID] = nil
     permissionFrameOrigins[tabID] = nil
     cancelWebSharesInvalidatedByFrame(for: tabID)

@@ -23,6 +23,8 @@ TESTS_ROOT = REPOSITORY_ROOT / "Tests"
 
 def junit_output_path(value: str) -> Path:
     path = Path(value)
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(f"parent must not be a symlink: {path.parent}")
     if path.exists() and path.is_dir():
         raise argparse.ArgumentTypeError("must name a file, not a directory")
     if path.parent.exists() and not path.parent.is_dir():

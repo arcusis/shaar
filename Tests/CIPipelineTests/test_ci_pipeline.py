@@ -91,6 +91,23 @@ class PipelineGateTests(unittest.TestCase):
     def test_ci_plan_decodes_changed_paths_with_filesystem_surrogate_escapes(self):
         raw_path = b"Notebook/odd-\xff.md"
         self.assertEqual(PLAN.decode_changed_paths(raw_path + b"\0"), [os.fsdecode(raw_path)])
+    def test_python_junit_destination_rejects_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            external = root / "external"
+            external.mkdir()
+            sentinel = external / "keep.txt"
+            sentinel.write_text("leave untouched")
+            linked_parent = root / "reports"
+            linked_parent.symlink_to(external, target_is_directory=True)
+
+            with self.assertRaisesRegex(
+                PYTHON_TESTS.argparse.ArgumentTypeError, "parent must not be a symlink"
+            ):
+                PYTHON_TESTS.junit_output_path(str(linked_parent / "python.xml"))
+
+            self.assertEqual(sentinel.read_text(), "leave untouched")
+            self.assertEqual(list(external.iterdir()), [sentinel])
 
     def test_evidence_directory_argument_requires_an_existing_directory(self):
         with tempfile.TemporaryDirectory() as temporary:

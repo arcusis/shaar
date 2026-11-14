@@ -73,6 +73,17 @@ struct WebShareConsentTests {
     _ = WebShareSheetContent(request: share, onCancel: {}, onShare: {}).body
   }
 
+  @Test func maximumLengthShareTextKeepsTheConsentSheetBounded() throws {
+    let store = openedStore()
+    let share = try request(store, title: "", text: String(repeating: "x", count: 4096), url: nil)
+    let host = NSHostingView(
+      rootView: WebShareSheetContent(request: share, onCancel: {}, onShare: {}))
+    host.frame = NSRect(x: 0, y: 0, width: 488, height: 500)
+    host.layoutSubtreeIfNeeded()
+
+    #expect(host.fittingSize.height < 500)
+  }
+
   @Test func rejectsMalformedSharePayloads() throws {
     let store = openedStore()
     let original = try request(store)

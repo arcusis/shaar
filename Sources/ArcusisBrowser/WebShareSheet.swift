@@ -58,27 +58,33 @@ struct WebShareSheetContent: View {
       Text(PanelsL10n.string("Share"))
         .font(.title2.weight(.semibold))
         .accessibilityAddTraits(Self.headingTraits)
-      Text(request.originLabel)
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .textSelection(.enabled)
-      if !request.title.isEmpty {
-        Text(request.title)
-          .font(.headline)
-          .textSelection(.enabled)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 12) {
+          Text(request.originLabel)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+          if !request.title.isEmpty {
+            Text(request.title)
+              .font(.headline)
+              .textSelection(.enabled)
+          }
+          if !request.text.isEmpty {
+            Text(request.text)
+              .font(.body)
+              .textSelection(.enabled)
+          }
+          if let url = request.url {
+            Text(url.absoluteString)
+              .font(.callout)
+              .foregroundStyle(.secondary)
+              .textSelection(.enabled)
+              .lineLimit(2)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
-      if !request.text.isEmpty {
-        Text(request.text)
-          .font(.body)
-          .textSelection(.enabled)
-      }
-      if let url = request.url {
-        Text(url.absoluteString)
-          .font(.callout)
-          .foregroundStyle(.secondary)
-          .textSelection(.enabled)
-          .lineLimit(2)
-      }
+      .frame(minHeight: 80, maxHeight: 220)
       HStack {
         Spacer()
         Button(PanelsL10n.string("Cancel"), role: .cancel, action: onCancel)

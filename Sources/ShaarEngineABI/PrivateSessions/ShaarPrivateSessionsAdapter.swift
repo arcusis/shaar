@@ -59,7 +59,8 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
     tabID: Data,
     handler: (ShaarCopiedEvent) -> Void
   ) -> Bool {
-    guard !profileID.isEmpty, !sessionID.isEmpty, !windowID.isEmpty, !tabID.isEmpty,
+    guard event.kind >= 4,
+      !profileID.isEmpty, !sessionID.isEmpty, !windowID.isEmpty, !tabID.isEmpty,
       event.profileID == profileID, event.sessionID == sessionID,
       event.windowID == windowID, event.tabID == tabID
     else { return false }

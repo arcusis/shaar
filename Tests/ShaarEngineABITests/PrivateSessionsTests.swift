@@ -88,6 +88,19 @@ struct PrivateSessionsTests {
     #expect(delivered)
   }
 
+  @Test @MainActor func eventRoutingRejectsOwnerLevelKindsEvenWithMatchingObjectIDs() {
+    let adapter = ShaarPrivateSessionsAdapter(engine: FakePrivateSessionsEngine())
+    let event = ShaarCopiedEvent(
+      sequence: 5, kind: 2, profileID: Data("p".utf8), sessionID: Data("s".utf8),
+      windowID: Data("w".utf8), tabID: Data("t".utf8), payloadJSON: Data("{}".utf8))
+    var delivered = false
+    #expect(
+      !adapter.routePrivateEvent(
+        event, profileID: Data("p".utf8), sessionID: Data("s".utf8),
+        windowID: Data("w".utf8), tabID: Data("t".utf8), handler: { _ in delivered = true }))
+    #expect(!delivered)
+  }
+
   @Test @MainActor func distinctSessionIDsCoexistPerProfile() throws {
     let engine = FakePrivateSessionsEngine()
     let adapter = ShaarPrivateSessionsAdapter(engine: engine)

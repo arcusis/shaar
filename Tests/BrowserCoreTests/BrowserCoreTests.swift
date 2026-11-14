@@ -264,6 +264,16 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
   }
 }
 
+@Test func navigationRejectsEmbeddedHTTPAuthenticationCredentials() {
+  for address in ["https://alice:secret@example.com/", "http://alice@example.com/"] {
+    let url = URL(string: address)!
+    #expect(!NavigationInput.isWebURL(url))
+    #expect(NavigationInput.address(for: address) == nil)
+    #expect(NavigationInput.destination(for: address) == nil)
+  }
+  #expect(NavigationInput.address(for: "https://example.com/alice@home") != nil)
+}
+
 @Test func navigationInputRecognizesLocalhostWithQueryOrFragment() {
   #expect(
     NavigationInput.destination(for: "localhost?view=1")?.absoluteString

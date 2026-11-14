@@ -141,6 +141,7 @@ import Testing
   @Test func screenshotCachePrunesOnlyOwnedOldFilesAndKeepsPrivatePermissions() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
     defer { try? FileManager.default.removeItem(at: root) }
     let now = Date.now
     let old = root.appending(path: "123-section.png")
@@ -165,6 +166,9 @@ import Testing
     let permissions =
       try FileManager.default.attributesOfItem(atPath: saved.path)[.posixPermissions] as? NSNumber
     #expect(permissions?.intValue == 0o600)
+    let directoryPermissions =
+      try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber
+    #expect(directoryPermissions?.intValue == 0o700)
   }
 
   @Test func screenshotCacheRejectsSymlinkedDirectory() throws {

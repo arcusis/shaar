@@ -27,6 +27,7 @@ struct InspectorScreenshotCache {
     guard directoryValues.isDirectory == true, directoryValues.isSymbolicLink != true else {
       throw CocoaError(.fileWriteNoPermission)
     }
+    try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     let cutoff = now.addingTimeInterval(-7 * 24 * 60 * 60)
     for file in try manager.contentsOfDirectory(
       at: directory,

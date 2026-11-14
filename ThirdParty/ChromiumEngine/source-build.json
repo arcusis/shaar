@@ -507,7 +507,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0065-shaar-devtools-frontend-registration.patch",
-      "sha256": "1e23d3d027834224b3ead09f9e9c4d9b6d009d1ec92240bf0dadf1994db1c2c6"
+      "sha256": "55cc4583e83406757cb4f753b7d9395167a2dbca798e77b5ba2d124f9aa78425"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0066-shaar-save-prompts.patch",

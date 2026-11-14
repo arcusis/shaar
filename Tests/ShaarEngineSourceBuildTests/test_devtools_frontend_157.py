@@ -65,6 +65,22 @@ class DevToolsFrontend157Tests(unittest.TestCase):
         self.assertIn("../../panels/shaar:meta", source)
         self.assertIn("panels/shaar:unittests", source)
 
+    def test_registration_patch_lists_every_generated_shaar_bundle_in_grd(self):
+        source = REGISTRATION.read_text()
+        self.assertIn("--- a/third_party/devtools-frontend/src/config/gni/devtools_grd_files.gni", source)
+        features = sorted(
+            path.name for path in PANEL.iterdir()
+            if path.is_dir() and (path / "BUILD.gn").is_file()
+        )
+        expected = {"front_end/panels/shaar/shaar-meta.js"}
+        for feature in features:
+            expected.add(f"front_end/panels/shaar/{feature}/{feature}-meta.js")
+            expected.add(f"front_end/panels/shaar/{feature}/{feature}.js")
+        listed = set(re.findall(
+            r'^\+  "(front_end/panels/shaar/[^\"]+\.js)",$', source, re.MULTILINE
+        ))
+        self.assertEqual(listed, expected)
+
     def test_proof_panel_lists_the_pinned_build(self):
         panel = (FEATURE / "BuildInfoPanel.ts").read_text()
         self.assertIn("shaar-devtools-frontend", panel)

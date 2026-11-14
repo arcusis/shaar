@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -24,13 +25,15 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "base/version.h"
-#include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/component_loader.h"
+#include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "chrome/browser/shaar/extensions/shaar_extension_install.h"
 #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+#include "chrome/browser/shaar/extensions/shaar_extension_install.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -210,13 +213,6 @@ namespace shaar::extensions_host {
 bool ShouldListLocation(extensions::mojom::ManifestLocation location) {
   return !extensions::Manifest::IsComponentLocation(location);
 }
-
-bool WebStoreFitURLAllowed(const GURL& url, bool testing) {
-  if (url.SchemeIs("https") && url.host() == "chromewebstore.google.com")
-    return true;
-  return testing && url.SchemeIs("http") && url.host() == "127.0.0.1" &&
-         url.path() == "/web-store-fit";
-}
 }  // namespace shaar::extensions_host
 
 bool SharedHomeVersionSatisfied(std::string_view installed,
@@ -259,26 +255,44 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
                   error);
   } else if (operation == SHAAR_OP_EXTENSION_MANAGE) {
     const std::string* action = input.FindString("action");
-    const std::string* id = input.FindString("extensionId");
-    if (!action || !id || !ValidExtensionId(*id))
-      return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension action or ID",
-                  error);
-    if (*action == "setEnabled" || *action == "setIncognitoEnabled") {
-      if (!HasOnlyKeys(input,
-                       {"schemaVersion", "action", "extensionId", "enabled"}) ||
-          !input.FindBool("enabled").has_value())
-        return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension enable request",
+    if (action && *action == "setDeveloperMode") {
+      if (!shaar::extensions_host::DeveloperModePayloadValid(input))
+        return Fail(SHAAR_INVALID_ARGUMENT, "invalid developer mode request",
                     error);
-    } else if (*action == "uninstall") {
-      if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId"}))
+    } else if (action && *action == "loadUnpacked") {
+      const std::string* path = input.FindString("path");
+      if (!shaar::extensions_host::UnpackedPayloadValid(input) || !path ||
+          shaar::extensions_host::InspectUnpackedFolder(
+              base::FilePath::FromUTF8Unsafe(*path)) !=
+              shaar::extensions_host::UnpackedFolderStatus::kOk)
         return Fail(SHAAR_INVALID_ARGUMENT,
-                    "invalid extension uninstall request", error);
-    } else if (*action == "install") {
-      if (!ValidInstallSource(input))
-        return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension install source",
+                    "unpacked extension folder is not manifest v3", error);
+    } else if (action && *action == "setSiteAccess") {
+      if (!shaar::extensions_host::SiteAccessPayloadValid(input))
+        return Fail(SHAAR_INVALID_ARGUMENT, "invalid site access request",
                     error);
     } else {
-      return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
+      const std::string* id = input.FindString("extensionId");
+      if (!action || !id || !ValidExtensionId(*id))
+        return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension action or ID",
+                    error);
+      if (*action == "setEnabled" || *action == "setIncognitoEnabled") {
+        if (!HasOnlyKeys(
+                input, {"schemaVersion", "action", "extensionId", "enabled"}) ||
+            !input.FindBool("enabled").has_value())
+          return Fail(SHAAR_INVALID_ARGUMENT,
+                      "invalid extension enable request", error);
+      } else if (*action == "uninstall") {
+        if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId"}))
+          return Fail(SHAAR_INVALID_ARGUMENT,
+                      "invalid extension uninstall request", error);
+      } else if (*action == "install") {
+        if (!ValidInstallSource(input))
+          return Fail(SHAAR_INVALID_ARGUMENT,
+                      "invalid extension install source", error);
+      } else {
+        return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
+      }
     }
   } else if (operation == SHAAR_OP_EXTENSION_ACTION ||
              operation == SHAAR_OP_EXTENSION_ACTION_STATE) {
@@ -315,7 +329,8 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
                   error);
   } else if (operation == SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS) {
     if (!HasOnlyKeys(input, {"schemaVersion"}))
-      return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema", error);
+      return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema",
+                  error);
   } else {
     return Fail(SHAAR_UNSUPPORTED_CAPABILITY, "unknown extension operation",
                 error);
@@ -335,14 +350,10 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
       return Fail(SHAAR_WRONG_PROFILE, "Web Store tab scope mismatch", error);
     const GURL& committed = contents->GetLastCommittedURL();
     const GURL& visible = contents->GetVisibleURL();
-    const char* testing_environment = std::getenv("SHAAR_ENGINE_TESTING");
-    const bool testing = testing_environment &&
-                         std::strcmp(testing_environment, "1") == 0;
-    if (!shaar::extensions_host::WebStoreFitURLAllowed(committed, testing) ||
-        !shaar::extensions_host::WebStoreFitURLAllowed(visible, testing) ||
+    if (!committed.SchemeIs("https") ||
+        committed.host() != "chromewebstore.google.com" ||
         visible.scheme() != committed.scheme() ||
-        visible.host() != committed.host() ||
-        visible.EffectiveIntPort() != committed.EffectiveIntPort())
+        visible.host() != committed.host())
       return Fail(SHAAR_POLICY_BLOCKED, "Web Store zoom host mismatch", error);
     const double requested = *Number(input, "zoomFactor");
     const double applied = *Number(input, "appliedZoom");
@@ -370,12 +381,12 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
 
   if (operation == SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS) {
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
-    if (!testing || std::strcmp(testing, "1") != 0 ||
-        !shaar::lifecycle::HasOwnedProbeRoot(engine))
-      return Fail(SHAAR_POLICY_BLOCKED,
-                  "component audit requires testing mode and owned probe root", error);
+    if (!testing || std::strcmp(testing, "1") != 0)
+      return Fail(SHAAR_POLICY_BLOCKED, "component audit requires testing mode",
+                  error);
     if (!HasOnlyKeys(input, {"schemaVersion"}))
-      return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema", error);
+      return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema",
+                  error);
     auto* loader = extensions::ComponentLoader::Get(profile);
     base::ListValue entries;
     for (std::string_view name : {"react", "vue", "angular"}) {
@@ -384,8 +395,9 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
       row.Set("name", name);
       row.Set("id", id);
       row.Set("registered", loader && loader->Exists(id));
-      row.Set("enabled", registry->GetExtensionById(
-                             id, extensions::ExtensionRegistry::ENABLED) != nullptr);
+      row.Set("enabled",
+              registry->GetExtensionById(
+                  id, extensions::ExtensionRegistry::ENABLED) != nullptr);
       entries.Append(std::move(row));
     }
     base::DictValue result;
@@ -393,7 +405,8 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
     result.Set("components", std::move(entries));
     std::string json;
     if (!base::JSONWriter::Write(base::Value(std::move(result)), &json))
-      return Fail(SHAAR_CHROMIUM_ERROR, "could not encode component audit", error);
+      return Fail(SHAAR_CHROMIUM_ERROR, "could not encode component audit",
+                  error);
     ReplyLater({reply, reply_context, request_id}, SHAAR_OK, std::move(json));
     return SHAAR_OK;
   }
@@ -445,6 +458,22 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
 
   if (operation == SHAAR_OP_EXTENSION_MANAGE) {
     const std::string* action = input.FindString("action");
+    if (action && *action == "setDeveloperMode") {
+      const auto enabled = input.FindBool("enabled");
+      return shaar::extensions_host::ApplyDeveloperMode(
+          profile, enabled.value_or(false), reply, reply_context, request_id,
+          error);
+    }
+    if (action && *action == "loadUnpacked") {
+      return shaar::extensions_host::BeginUnpackedLoad(
+          context, engine, window, tab, profile, input, reply, reply_context,
+          request_id, error);
+    }
+    if (action && *action == "setSiteAccess") {
+      return shaar::extensions_host::ApplySiteAccess(
+          context, engine, window, tab, profile, input, reply, reply_context,
+          request_id, error);
+    }
     const std::string* id = input.FindString("extensionId");
     if (!action || !id || !ValidExtensionId(*id))
       return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension action or ID",
@@ -656,8 +685,11 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
         !input.FindBool("accepted").has_value())
       return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension consent decision",
                   error);
-    return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                "extension consent host integration is not available", error);
+    return shaar::extensions_host::ResolveInstallDecision(
+        context, engine, window, tab, profile,
+        context->profile_services->ProfileID(engine, scope.profile),
+        *consent_id, *input.FindBool("accepted"), reply, reply_context,
+        request_id, error);
   }
   if (operation == SHAAR_OP_EXTENSION_POPUP_CLOSE) {
     const std::string* popup_id = input.FindString("popupId");

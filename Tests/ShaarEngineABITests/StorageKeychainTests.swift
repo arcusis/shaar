@@ -200,9 +200,25 @@ private func fakeStorageKeychainSubmitShortError(
   return shaar_error_code(rawValue: 0)
 }
 
+@_cdecl("fake_shaar_storage_keychain_submit_short_immediate_error")
+private func fakeStorageKeychainSubmitShortImmediateError(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ arguments: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard engine != nil, let immediateError, window == nil, tab == nil,
+    scope.private_session == nil
+  else { return shaar_error_code(rawValue: 1) }
+  immediateError.pointee.size = 0
+  immediateError.pointee.code = shaar_error_code(rawValue: 4)
+  return shaar_error_code(rawValue: 4)
+}
+
 private struct FakeStorageKeychainABISymbols: ShaarSymbolResolving {
   var invalidResultSlice = false
   var shortErrorStruct = false
+  var shortImmediateError = false
 
   func symbol(named: String) -> UnsafeRawPointer? {
     switch named {
@@ -219,7 +235,10 @@ private struct FakeStorageKeychainABISymbols: ShaarSymbolResolving {
           UnsafeMutablePointer<shaar_error>?
       ) -> shaar_error_code = invalidResultSlice
           ? fakeStorageKeychainSubmitInvalidSlice
-          : shortErrorStruct ? fakeStorageKeychainSubmitShortError : fakeStorageKeychainSubmit
+          : shortErrorStruct
+            ? fakeStorageKeychainSubmitShortError
+            : shortImmediateError
+              ? fakeStorageKeychainSubmitShortImmediateError : fakeStorageKeychainSubmit
       return unsafeBitCast(function, to: UnsafeRawPointer.self)
     default:
       return nil
@@ -359,6 +378,21 @@ struct StorageKeychainTests {
     let profile = OpaquePointer(bitPattern: 0x11)!
     let transport = try ShaarStorageKeychainABITransport(
       resolver: FakeStorageKeychainABISymbols(shortErrorStruct: true),
+      profileResolver: FakeStorageKeychainProfileResolver(
+        nativeScope: shaar_scope(
+          size: UInt32(MemoryLayout<shaar_scope>.size), profile: profile,
+          private_session: nil)))
+    await #expect(throws: ShaarEngineError.invalidEvent("short storage-keychain error")) {
+      try await transport.submitStorageKeychain(
+        profileID: UUID(), operation: ShaarStorageKeychainAdapter.identityOperation,
+        arguments: Data(#"{"schemaVersion":1}"#.utf8))
+    }
+  }
+
+  @Test func concreteTransportRejectsShortImmediateErrorStruct() async throws {
+    let profile = OpaquePointer(bitPattern: 0x11)!
+    let transport = try ShaarStorageKeychainABITransport(
+      resolver: FakeStorageKeychainABISymbols(shortImmediateError: true),
       profileResolver: FakeStorageKeychainProfileResolver(
         nativeScope: shaar_scope(
           size: UInt32(MemoryLayout<shaar_scope>.size), profile: profile,

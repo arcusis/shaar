@@ -141,6 +141,11 @@ public struct ShaarStorageKeychainABITransport: ShaarStorageKeychainTransport,
       }
       if status != 0 {
         Unmanaged<StorageKeychainReplyBox>.fromOpaque(replyContext).release()
+        guard immediateError.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+          continuation.resume(
+            throwing: ShaarEngineError.invalidEvent("short storage-keychain error"))
+          return
+        }
         let message =
           (try? String(
             decoding: copyStorageKeychainBytes(immediateError.message), as: UTF8.self)) ?? ""

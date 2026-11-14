@@ -15,4 +15,11 @@ import Testing
     #expect(
       DevelopmentModeProbe.fixtureURL(account, path: "devmode-vite").path == "/devmode-vite")
   }
+
+  @Test func fixtureURLPreservesServerAuthorityAndDropsAccountQueryAndFragment() {
+    let account = URL(string: "http://127.0.0.1:43123/nested/account?token=local#section")!
+    #expect(
+      DevelopmentModeProbe.fixtureURL(account, path: "devmode-next").absoluteString
+        == "http://127.0.0.1:43123/nested/devmode-next")
+  }
 }

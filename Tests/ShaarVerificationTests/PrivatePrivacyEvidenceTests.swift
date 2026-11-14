@@ -216,7 +216,7 @@ import Testing
     #expect(ARCProbeTrustedClickElementAllowed("window-client-download"))
     #expect(ARCProbeTrustedClickElementAllowed("external-consent-probe"))
     #expect(ARCProbeTrustedClickElementAllowed("arcusis-private-quit-activation"))
-    #expect(!ARCProbeTrustedClickElementAllowed("parity-action"))
+    #expect(ARCProbeTrustedClickElementAllowed("parity-action"))
     #expect(!ARCProbeTrustedClickElementAllowed("quit"))
     #expect(!ARCProbeTrustedClickElementAllowed(""))
   }

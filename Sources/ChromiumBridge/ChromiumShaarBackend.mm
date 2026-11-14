@@ -643,8 +643,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     return;
   }
   if (event->kind == SHAAR_EVENT_FIND) {
-    NSString *token = _shaarFindTokens[payload[@"requestID"]];
-    if (token && _shaarTabs[tabID] && self.onFindResult)
+    id nativeRequestID = payload[@"requestID"];
+    NSString *token = [nativeRequestID isKindOfClass:NSString.class]
+        ? _shaarFindTokens[nativeRequestID] : nil;
+    if (token && [_shaarFindRequests[tabID] isEqualToString:nativeRequestID] &&
+        _shaarTabs[tabID] && self.onFindResult)
       self.onFindResult(tabID, token, [payload[@"matchCount"] intValue],
                         [payload[@"activeMatch"] intValue], [payload[@"final"] boolValue]);
     return;

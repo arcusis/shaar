@@ -12,10 +12,43 @@ import Testing
 
 @Suite @MainActor
 struct ProfilePrivacyTests {
+  @Test func privacyMutationProgressLabelDescribesItsActiveOperation() async {
+    let backend = ProfileSettingsStub()
+    let profileID = UUID()
+    backend.delayedProfile = profileID
+    let model = ProfilePrivacyModel(profileID: profileID, backend: backend)
+
+    let clearing = Task { await model.clear(siteData: true) }
+    for _ in 0..<100 where backend.loadContinuation == nil { await Task.yield() }
+    #expect(backend.loadContinuation != nil)
+    #expect(model.busy)
+    #expect(model.busyMessage == SettingsL10n.string("Clearing site data…"))
+    backend.loadContinuation?.resume()
+    await clearing.value
+    #expect(!model.busy && model.busyMessage == nil)
+  }
+
   @Test func sitePermissionsLoadingLabelHasHebrewTranslation() {
     #expect(
       BrowserLocalization.string("Loading site permissions…", table: "Settings", language: .hebrew)
         == "טעינת הרשאות אתרים…")
+  }
+
+  @Test func privacyMutationProgressLabelsHaveHebrewTranslations() {
+    #expect(
+      BrowserLocalization.string("Clearing site data…", table: "Settings", language: .hebrew)
+        == "ניקוי נתוני האתר…")
+    #expect(
+      BrowserLocalization.string("Clearing cache…", table: "Settings", language: .hebrew)
+        == "ניקוי המטמון…")
+    #expect(
+      BrowserLocalization.string(
+        "Resetting site permissions…", table: "Settings", language: .hebrew)
+        == "איפוס הרשאות האתר…")
+    #expect(
+      BrowserLocalization.string(
+        "Updating third-party cookie setting…", table: "Settings", language: .hebrew)
+        == "עדכון הגדרת קובצי Cookie של צד שלישי…")
   }
 
   @Test func settingsUseSelectedShaarRuntimeForPrivacyBackend() throws {

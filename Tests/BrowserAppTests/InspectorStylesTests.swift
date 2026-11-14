@@ -10,6 +10,17 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorStylesTests {
+  @Test func backendFailuresUseLocalizedPageStyleRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorStylesModel.failureMessage(for: error)
+        == InspectorL10n.string("Could not complete the page style change. Try again."))
+    let known = InspectorFailure("CSS could not be applied.")
+    #expect(
+      InspectorStylesModel.failureMessage(for: known)
+        == InspectorL10n.display(known.localizedDescription))
+  }
+
   @Test func declarationToggleNameIdentifiesTheProperty() {
     let enabled = InspectorDeclaration(name: "color", value: "red", disabled: false)
     let disabled = InspectorDeclaration(name: "color", value: "red", disabled: true)

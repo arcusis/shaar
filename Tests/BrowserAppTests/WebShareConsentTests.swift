@@ -264,6 +264,29 @@ struct WebShareConsentTests {
     #expect(outcomes == [false])
   }
 
+  @Test func cloudSharingCompletionResolvesTheShareAndTreatsErrorsAsCancellation() {
+    let service = NSSharingService(
+      title: "Test", image: NSImage(size: NSSize(width: 1, height: 1)),
+      alternateImage: nil, handler: {})
+    let successfulPicker = WebShareSystemPicker(items: ["Shared item"])
+    var successfulOutcomes: [Bool] = []
+    successfulPicker.outcome.onFinish = { successfulOutcomes.append($0) }
+
+    successfulPicker.sharingService(service, didCompleteForItems: ["Shared item"], error: nil)
+
+    #expect(successfulOutcomes == [true])
+
+    let failedPicker = WebShareSystemPicker(items: ["Shared item"])
+    var failedOutcomes: [Bool] = []
+    failedPicker.outcome.onFinish = { failedOutcomes.append($0) }
+    failedPicker.sharingService(
+      service, didCompleteForItems: ["Shared item"],
+      error: NSError(domain: "WebShareConsentTests", code: 2))
+    failedPicker.sharingService(service, didShareItems: ["Shared item"])
+
+    #expect(failedOutcomes == [false])
+  }
+
   @Test func dismissingTheSystemPickerCancelsTheShareOnce() {
     let systemPicker = WebShareSystemPicker(items: ["Shared item"])
     var outcomes: [Bool] = []

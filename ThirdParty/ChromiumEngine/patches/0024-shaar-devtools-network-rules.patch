@@ -1,47 +1,69 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
-@@ -1123,2 +1123,3 @@
+@@ -1402,6 +1402,7 @@
+     case SHAAR_OP_DEVTOOLS_PANEL_OPEN:
+     case SHAAR_OP_DEVTOOLS_PANEL_CLOSE:
      case SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY:
 +    case SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES:
      case SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND:
-@@ -1136,3 +1137,5 @@
+     case SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST:
+     case SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN:
+@@ -1416,7 +1417,9 @@
+     default:
+       return false;
    }
 -  const bool panel_operation = operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
 +  const bool panel_operation =
 +      operation == SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES ||
 +      operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
        operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
-@@ -1346,3 +1349,4 @@
+       operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
+       operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND ||
+@@ -1897,7 +1900,8 @@
+       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
+       operation == SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST ||
        operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
 -      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND) {
 +      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND ||
 +      operation == SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES) {
      if (!PolicyAllowsOperation(context->devtools_runtime, engine, scope,
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+                                contents, operation, kPanel))
+       return Fail(error, SHAAR_POLICY_BLOCKED, "DevTools panel is blocked");
 --- a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
-@@ -25,2 +25,5 @@
+@@ -33,6 +33,9 @@
+   registry->Register(SHAAR_OP_DEVTOOLS_UI_SET_DOCK,
+                      SHAAR_OP_DEVTOOLS_CONTROL_STATUS,
                       &shaar::devtools::HandleDevToolsOperation);
 +  registry->Register(SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES,
 +                     SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES,
 +                     &shaar::devtools::HandleDevToolsOperation);
    registry->Register(SHAAR_OP_DEVTOOLS_PANEL_OPEN,
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+                      SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND,
+                      &shaar::devtools::HandleDevToolsOperation);
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
-@@ -20,3 +20,5 @@
+@@ -18,13 +18,16 @@
+ #include <string>
+ #include <string_view>
  #include <utility>
 -
 +#include <vector>
 +
 +#include "base/base64.h"
  #include "base/containers/span.h"
-@@ -27,2 +29,3 @@
+ #include "base/functional/bind.h"
+ #include "base/json/json_reader.h"
+ #include "base/json/json_writer.h"
+ #include "base/memory/weak_ptr.h"
  #include "base/no_destructor.h"
 +#include "base/strings/string_util.h"
  #include "base/task/sequenced_task_runner.h"
-@@ -52,2 +55,15 @@
+ #include "base/time/time.h"
+ #include "base/values.h"
+@@ -51,6 +54,19 @@
+ constexpr size_t kMaxPendingBodies = 16;
+ constexpr size_t kMaxPhase2Rows = 50;
  constexpr size_t kMaxPhase2ReplyBytes = 128 * 1024;
 +constexpr size_t kMaxRuleInputBytes = 2 * 1024 * 1024;
 +constexpr size_t kMaxRules = 100;
@@ -57,7 +79,11 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +  int delay_ms = 0;
 +};
  
-@@ -101,2 +117,163 @@
+ struct ReplyTarget {
+   shaar_request_id id;
+@@ -128,6 +144,167 @@
+       return false;
+   }
    return true;
 +}
 +
@@ -221,15 +247,23 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +  params.Set("patterns", std::move(patterns));
 +  return params;
  }
-@@ -1077,2 +1254,7 @@
+ 
+ std::string Clipped(const std::string* source, bool* truncated) {
+@@ -1139,6 +1316,11 @@
+     if (closing_)
+       return;
      closing_ = true;
 +    if (attached_) {
 +      ResumePausedRequests();
 +      if (!rules_.empty() || pending_rules_)
 +        SendCommand("Fetch.disable", base::DictValue());
 +    }
+     StopScreencast();
      Leases().erase(contents_);
-@@ -1086,3 +1268,30 @@
+     auto pending = std::move(pending_bodies_);
+@@ -1149,7 +1331,34 @@
+       Reply(entry.second, SHAAR_CANCELLED, {}, "DevTools panel lease closed");
+     for (auto& entry : phase2)
        Reply(entry.second.reply, SHAAR_CANCELLED, {}, "DevTools panel lease closed");
 +    if (pending_rules_)
 +      Reply(pending_rules_->reply, SHAAR_CANCELLED, {}, "DevTools panel lease closed");
@@ -260,14 +294,21 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +        base::Seconds(15));
 +    return SHAAR_OK;
    }
-@@ -1145,2 +1354,6 @@
+ 
+   shaar_error_code GetBody(const std::string& request_id, ReplyTarget reply,
+@@ -1246,16 +1455,34 @@
+     if (closing_)
+       return;
      if (message.size() > kMaxInputBytes) {
 +      if (!rules_.empty()) {
 +        Close();
 +        return;
 +      }
        Drop();
-@@ -1151,6 +1364,20 @@
+       return;
+     }
+     const std::string_view input(reinterpret_cast<const char*>(message.data()),
+                                  message.size());
      auto parsed = base::JSONReader::Read(input, base::JSON_PARSE_RFC);
 -    if (!parsed || !parsed->is_dict())
 -      return;
@@ -290,35 +331,29 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +        return;
 +      }
        auto phase2 = pending_phase2_.find(*id);
-@@ -1196,2 +1423,6 @@
+       if (phase2 != pending_phase2_.end()) {
+         PendingPhase2 pending = std::move(phase2->second);
+@@ -1331,6 +1558,10 @@
+     const auto* params = root.FindDict("params");
+     if (!method || !params)
        return;
 +    if (*method == "Fetch.requestPaused") {
 +      HandlePaused(*params);
 +      return;
 +    }
-     if (message.size() > kMaxEventInputBytes) {
-@@ -1231,2 +1462,125 @@
-  private:
-+  struct PendingRules {
+     if (*method == "Page.screencastFrame") {
+       HandleFrame(*params);
+       return;
+@@ -1495,6 +1726,113 @@
+     } else {
+       SendAck(frame.session_id);
+     }
++  }
++
 +    ReplyTarget reply;
 +    int command_id;
 +    std::vector<NetworkRule> previous;
 +  };
-+
-+  int SendCommand(std::string_view method, base::DictValue params) {
-+    if (!attached_ || next_command_id_ == INT_MAX)
-+      return 0;
-+    const int id = next_command_id_++;
-+    base::DictValue command;
-+    command.Set("id", id);
-+    command.Set("method", std::string(method));
-+    command.Set("params", std::move(params));
-+    std::string json;
-+    if (!base::JSONWriter::Write(base::Value(std::move(command)), &json))
-+      return 0;
-+    host_->DispatchProtocolMessage(this, base::as_byte_span(json));
-+    return id;
-+  }
 +
 +  void SendPaused(const std::string& request_id, std::string_view method,
 +                  base::DictValue params) {
@@ -420,18 +455,23 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +    ResumePausedRequests();
 +    SendCommand("Fetch.disable", base::DictValue());
 +    Reply(target, SHAAR_NOT_READY, {}, "Fetch configuration timed out");
-+  }
-+
+   }
+ 
    struct PendingPhase2 {
-@@ -1347,2 +1701,5 @@
+@@ -1614,6 +1952,9 @@
+   std::deque<std::string> request_order_;
+   std::map<int, ReplyTarget> pending_bodies_;
    std::map<int, PendingPhase2> pending_phase2_;
 +  std::optional<PendingRules> pending_rules_;
 +  std::vector<NetworkRule> rules_;
 +  std::map<std::string, bool> paused_;
    std::set<std::string> cache_ids_;
-@@ -1356,2 +1713,19 @@
+   std::map<std::string, std::set<std::string>> cache_urls_;
+   std::set<std::string> worker_scopes_;
+@@ -1633,6 +1974,23 @@
+ 
  }  // namespace
-+
+ 
 +bool BuildNetworkRulesCommandForTesting(std::string_view input,
 +                                        std::string* output) {
 +  if (!output || input.size() > kMaxRuleInputBytes)
@@ -448,15 +488,24 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +                                       : FetchEnableParams(rules));
 +  return base::JSONWriter::Write(base::Value(std::move(command)), output);
 +}
- 
-@@ -1425,3 +1799,5 @@
++
+ bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
+                                  std::string* output) {
+   if (!output || lease_id <= 0 || message.size() > kMaxEventInputBytes)
+@@ -1701,7 +2059,9 @@
+     shaar_bytes args_json, shaar_request_id request_id, shaar_reply_fn reply,
+     void* reply_context, shaar_error* error) {
    if (!context || !context->devtools_runtime || !engine || !contents || !reply ||
 -      !args_json.data || args_json.size == 0 || args_json.size > 20 * 1024)
 +      !args_json.data || args_json.size == 0 ||
 +      args_json.size > (operation == SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES
 +                            ? kMaxRuleInputBytes : 20 * 1024))
      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid panel request");
-@@ -1497,2 +1873,11 @@
+   auto parsed = base::JSONReader::Read(
+       std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+@@ -1790,6 +2150,15 @@
+       return Fail(error, SHAAR_NOT_FOUND, "panel lease not found");
+     return lease->Phase2Command(*command_id, *params, target, error);
    }
 +  if (operation == SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES) {
 +    if (!HasKeys(args, {"schemaVersion", "leaseID", "rules"}))
@@ -468,18 +517,24 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +    return lease->InstallRules(*rules, target, error);
 +  }
    return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown panel operation");
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.h b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+ }
+ 
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.h
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
-@@ -19,2 +19,4 @@
+@@ -17,6 +17,8 @@
+ bool ProjectPhase2EventForTesting(std::string_view message,
+                                   std::string_view origin, int lease_id,
                                    std::string* output);
 +bool BuildNetworkRulesCommandForTesting(std::string_view rules,
 +                                        std::string* output);
  void ClosePanelLeaseForTab(content::WebContents* contents);
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+ void ClosePanelLeasesForEngine(shaar_engine* engine);
+ 
 --- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-@@ -807,4 +807,31 @@
+@@ -923,8 +923,35 @@
+   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_CLOSE));
+   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY));
    EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND));
 +  EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES));
    EXPECT_EQ(nullptr, registry.Find(SHAAR_OP_MEDIA_GET_STATE));
@@ -511,10 +566,15 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
 +      R"([{"method":"GET","url":"https://example.test/","kind":"responseHeaders","status":200,"headers":[{"name":"X-Test","value":"bad\r\nheader"}],"bodyBase64":"","redirectURL":"","delayMilliseconds":0}])",
 +      &output));
  }
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+ 
+ TEST(ShaarDevToolsPanelTest, ProjectsBoundedDOMChanges) {
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -206,2 +206,3 @@
+@@ -233,6 +233,7 @@
+   SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE = 1014,
+   SHAAR_OP_DEVTOOLS_VIEWPORT_ADD = 1015,
+   SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE = 1016,
 +  SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES = 1080,
    // Testing only: exercise the native DevTools URL and Node frontend routes.
    SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL = 1090,
+   SHAAR_OP_PROBE_NODE_FRONTEND = 1091,

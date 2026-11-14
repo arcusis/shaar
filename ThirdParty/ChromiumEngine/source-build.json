@@ -359,43 +359,27 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0016-shaar-agent-bridge.patch",
-      "sha256": "62a72f276311815778d82dacb2023dbcb9dfef8090ed6a768e4b290ba34191de"
+      "sha256": "3284a53767cb9046a7b79cf6d6c5f63861ad47e71e9d41e83faa9de6aadada91"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0017-shaar-devtools-phase2.patch",
-      "sha256": "6e089f96d87775560e7322400a14262730644f448d58a67e70c300ba5baa9dee"
+      "sha256": "703438c6829fa8e5bf24214c96d4230893a24a5cc48951a4ff8c4c36c60a784f"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0018-shaar-devtools-owned-tab-route.patch",
-      "sha256": "f23df2ef6c44c2bbf1c19f704d191d158c647e49e6ef49b98e97ca1154cc4164"
+      "sha256": "fe0c029d4e23b5d6a22bee2f28caa6c6f9644dbc437b463a44726a75fcac406a"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0019-shaar-site-cookie-items.patch",
-      "sha256": "2fe8787eddcb03aa6c06f23ac3a25b1c5d624c14c0dd411c40c58a902019db7f"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0020-shaar-safe-area-insets.patch",
-      "sha256": "5dda749534e384f69cd62a9f076bdf776db37a09ee4c07235d70d51b54b2356e"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0021-shaar-devtools-viewports-lease.patch",
-      "sha256": "562e2829639648d53a161c4ee1788b0c3643cb4d454733ac0cfc4a90a4b92feb"
+      "sha256": "9c3c951f8e1836c2361f6545f4ebbf26398829f36625fa360d74f15cbaf23675"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0022-shaar-devtools-dom-tree.patch",
-      "sha256": "de11c0643efcdaa76e980a41cabc821b66858bfbac26ec0313b82da99d2691ae"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0023-shaar-devtools-viewport-frames.patch",
-      "sha256": "3e450f900873179ef8772d007ee51d637bbfd59e41e6386d95ca6ab4d10c810e"
+      "sha256": "9964c0a218caf806064de7aec761fdfed042cd2a519a69c984c41467b94b3b9f"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0024-shaar-devtools-network-rules.patch",
-      "sha256": "04838485483549eee0bd38c78d4d2c9f0a169e63a813dce5987d67dbdb9ab125"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0025-shaar-devtools-repro-screencast.patch",
-      "sha256": "5df98a03edd6442fa8b09c2759061ad42492b85fb573b168bd781654960668f8"
+      "sha256": "668c1c69ade171a851df967baea0f3de9c6c3ce80ff6504d31de40145b120e51"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0026-shaar-devtools-dom-session-events.patch",
@@ -403,7 +387,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0028-shaar-devtools-hidden-panels.patch",
-      "sha256": "37933ef4840397b33042b0b510dd4c3da54b38297bd4927e4804f52298cf1d89"
+      "sha256": "d72c09e72c3eee0513c7f999cb6c2df99d893146ede897c55709c8908c68cf16"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0029-shaar-devtools-viewport-presets.patch",

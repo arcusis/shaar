@@ -25,6 +25,8 @@ import Testing
     #expect(!EngineProbeMeasurementArguments.hasValidTabCount(in: [flag, "101"]))
     #expect(
       !EngineProbeMeasurementArguments.hasValidTabCount(in: [flag, "bad", flag, "10"]))
+    #expect(EngineProbeMeasurementArguments.tabCount(in: [flag, "10", flag, "30"]) == nil)
+    #expect(!EngineProbeMeasurementArguments.hasValidTabCount(in: [flag, "10", flag, "30"]))
   }
 
   @Test func measurementModesRequireTheirTabCountAndEagerSleepingBase() {

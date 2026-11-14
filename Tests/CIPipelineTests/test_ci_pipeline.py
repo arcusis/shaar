@@ -49,6 +49,46 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_ci_gate_reports_missing_required_environment_inputs(self):
+        required = {
+            "CI_NEEDS": "{}",
+            "CI_FULL": "false",
+            "CI_NIGHTLY": "false",
+            "GITHUB_STEP_SUMMARY": "/tmp/ci-summary.md",
+        }
+        for missing in required:
+            for value in (None, ""):
+                env = dict(required)
+                if value is None:
+                    env.pop(missing)
+                else:
+                    env[missing] = value
+                with self.subTest(missing=missing, value=value), \
+                        patch.dict(os.environ, env, clear=True), \
+                        patch("sys.stderr", new=io.StringIO()) as stderr:
+                    self.assertEqual(GATE.main(), 2)
+                    self.assertEqual(
+                        stderr.getvalue(),
+                        f"CI required gate: missing or empty environment variable {missing}\n",
+                    )
+
+    def test_ci_gate_rejects_invalid_boolean_environment_inputs(self):
+        required = {
+            "CI_NEEDS": "{}",
+            "CI_FULL": "false",
+            "CI_NIGHTLY": "false",
+            "CI_WEBSITE": "false",
+            "CI_BROWSING": "false",
+            "CI_SHIPPING_GUARD": "false",
+            "GITHUB_STEP_SUMMARY": "/tmp/ci-summary.md",
+        }
+        for name in ("CI_FULL", "CI_NIGHTLY", "CI_WEBSITE", "CI_BROWSING", "CI_SHIPPING_GUARD"):
+            env = dict(required, **{name: "yes"})
+            with self.subTest(name=name), patch.dict(os.environ, env, clear=True), \
+                    patch("sys.stderr", new=io.StringIO()) as stderr:
+                self.assertEqual(GATE.main(), 2)
+                self.assertEqual(stderr.getvalue(), f"CI required gate: {name} must be 'true' or 'false'\n")
+
     def test_ci_gate_validates_needs_json_and_stage_results(self):
         for raw, message in (
             ("{", "CI_NEEDS is not valid JSON"),

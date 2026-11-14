@@ -200,6 +200,9 @@ private let shaarDevToolsABICallback: shaar_reply_fn = { context, result in
     guard value.size >= UInt32(MemoryLayout<shaar_result>.size),
       value.request_id == box.expectedRequestID
     else { throw ShaarEngineError.invalidEvent("invalid DevTools result envelope") }
+    guard value.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+      throw ShaarEngineError.invalidEvent("short DevTools error")
+    }
     try ShaarStatusCode.decode(
       UInt32(value.error.code.rawValue), platformCode: value.error.platform_code,
       message: String(decoding: try copyDevToolsBytes(value.error.message), as: UTF8.self))

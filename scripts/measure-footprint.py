@@ -102,6 +102,8 @@ def parse_tab_counts(text):
         if count not in ALLOWED_TAB_COUNTS:
             allowed = ", ".join(str(item) for item in ALLOWED_TAB_COUNTS)
             raise SystemExit(f"tab count must be one of {allowed}: {count}")
+        if count in counts:
+            raise SystemExit(f"tab count is duplicated: {count}")
         counts.append(count)
     if not counts:
         raise SystemExit("at least one tab count is required")

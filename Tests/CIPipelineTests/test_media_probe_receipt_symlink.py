@@ -24,6 +24,10 @@ class MediaProbeReceiptSymlinkTests(unittest.TestCase):
     def test_cli_rejects_symlinked_receipt_paths_before_starting_probe(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            app = root / "app"
+            executable = app / "Contents/MacOS/ShaarVerification"
+            executable.parent.mkdir(parents=True)
+            executable.write_text("fixture")
             external = root / "external.json"
             external.write_text("preserve this receipt")
             receipt = root / "receipt.json"
@@ -41,7 +45,7 @@ class MediaProbeReceiptSymlinkTests(unittest.TestCase):
             for path, message in cases:
                 with self.subTest(path=path):
                     stderr = io.StringIO()
-                    with patch.object(sys, "argv", ["test-shaar-media.py", "--app", str(root / "app"),
+                    with patch.object(sys, "argv", ["test-shaar-media.py", "--app", str(app),
                                                      "--receipt", str(path)]), \
                             patch.object(MEDIA, "ThreadingHTTPServer") as server, \
                             patch.object(MEDIA.threading, "Thread") as thread, \

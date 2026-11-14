@@ -59,6 +59,39 @@ struct SiteDataTests {
     #expect(await fake.calls.count == callsAfterRead)
   }
 
+  @Test func settingResponseRejectsNumericBooleanDefaultFlag() async throws {
+    let fake = FakeSiteDataEngine()
+    await fake.setResponse(
+      #"{"schemaVersion":1,"settings":{"camera":{"value":"ask","isDefault":1}}}"#)
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      _ = try await adapter.settings(origin: "https://example.com")
+    }
+  }
+
+  @Test func clearResponseRejectsNumericBooleanCompletion() async throws {
+    let fake = FakeSiteDataEngine()
+    await fake.setResponse(#"{"schemaVersion":1,"complete":1}"#)
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.clearSiteData(origin: "https://example.com")
+    }
+  }
+
+  @Test func cookieDecoderRejectsNumericBooleanFlags() throws {
+    let valid: [String: Any] = [
+      "name": "sid", "value": "v", "domain": "example.com", "path": "/",
+      "secure": true, "httpOnly": false, "sameSite": "Lax", "expiresUnixMs": NSNull(),
+      "partitionSite": "https://example.com", "partitionCrossSite": true,
+      "sourceScheme": 2, "sourcePort": 443,
+    ]
+    for key in ["secure", "httpOnly", "partitionCrossSite"] {
+      var invalid = valid
+      invalid[key] = 1
+      #expect(ShaarSiteCookie(dictionary: invalid) == nil)
+    }
+  }
+
   @Test func resetAndClearOperationsUseTypedSchemas() async throws {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)

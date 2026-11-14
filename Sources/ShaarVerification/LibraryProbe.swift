@@ -12,6 +12,10 @@ import SwiftUI
 @testable import ArcusisBrowser
 
 enum LibraryProbeEvidence {
+  static func hasDistinctIdentityIDs(_ ids: [UUID]) -> Bool {
+    Set(ids).count == ids.count
+  }
+
   static func fixtureDocument(_ json: String?) -> [String: Any]? {
     guard let data = json?.data(using: .utf8),
       let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -106,6 +110,11 @@ final class LibraryProbe {
       try JSONEncoder().encode(ids).write(to: file, options: .atomic)
     } else {
       ids = try LibraryIdentities.decode(from: Data(contentsOf: file))
+      guard LibraryProbeEvidence.hasDistinctIdentityIDs([
+        ids.alpha, ids.beta, ids.shared, ids.folder, ids.bookmarkA, ids.bookmarkB,
+      ]) else {
+        throw LibraryProbeFailure("Library identity checkpoint contains duplicate IDs.")
+      }
       try await wait("native bookmark restart recovery") {
         self.item(ids.bookmarkA, in: a) != nil && self.item(ids.bookmarkB, in: b) != nil
       }

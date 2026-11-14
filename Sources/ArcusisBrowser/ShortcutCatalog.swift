@@ -249,9 +249,11 @@ enum ShortcutPageRouting {
         // resulting symbol as the menu key equivalent, while this event's base key is /.
         let shiftedSymbol = flags.contains(.shift) && itemKey != key && itemKey == typedKey
         if shiftedSymbol { itemFlags.insert(.shift) }
+        let searchAlias = item.representedObject as? String == BrowserMenuCommand.search.rawValue
+          && key == "f" && flags == [.command, .option]
         guard
-          item.isEnabled && !itemKey.isEmpty && (itemKey == key || shiftedSymbol)
-            && itemFlags == flags
+          item.isEnabled && !itemKey.isEmpty
+            && (((itemKey == key || shiftedSymbol) && itemFlags == flags) || searchAlias)
         else { continue }
         if pageHasFocus && standardEditItem { return false }
         if let validator = item.target as? NSMenuItemValidation,

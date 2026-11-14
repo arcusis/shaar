@@ -463,7 +463,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0049-shaar-devtools-lease-navigation.patch",
-      "sha256": "f941671668eec9434260487ccb0594b2859b3272dcc76a30863e26782e482595"
+      "sha256": "6fe91ce843b2f13b371be05a147088f9aa2599a01835fdba1211c378fa6b765f"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0051-shaar-devtools-wide-dom-children.patch",

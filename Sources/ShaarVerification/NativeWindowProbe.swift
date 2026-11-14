@@ -525,15 +525,25 @@ final class NativeWindowProbe {
   }
 
   private func report(error: Error?) throws {
+    try Self.reportData(
+      phase: phase, checks: checks, observations: observations, closedWindows: closedWindows,
+      error: error
+    ).write(to: root.appending(path: "\(phase)-native-windows.json"), options: .atomic)
+  }
+
+  static func reportData(
+    phase: String, checks: [String], observations: [String: Any],
+    closedWindows: [String: Bool], error: Error?
+  ) throws -> Data {
     try JSONSerialization.data(
       withJSONObject: [
-        "passed": error == nil, "checks": checks,
+        "passed": error == nil, "phase": phase, "checks": checks,
         "observations": observations, "closedWindows": closedWindows,
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
           "Native multiwindow API only, authored pages and component extension, with no visible windows. Application Cmd-N, per-window stores/menus, saved window restoration, native focus/input, and close cancellation are not implemented or verified by this probe.",
       ], options: [.prettyPrinted, .sortedKeys]
-    ).write(to: root.appending(path: "\(phase)-native-windows.json"), options: .atomic)
+    )
   }
 }
 

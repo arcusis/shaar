@@ -133,6 +133,22 @@ test("link checker reports images that target a missing map", () => {
   }
 });
 
+test("link checker validates social preview image URLs", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><meta property="og:image" content="/og-missing.png"><meta name="twitter:image" content="/twitter-missing.png">',
+    );
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: missing target /og-missing.png",
+      "index.html: missing target /twitter-missing.png",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("link checker validates inline SVG image files and use fragments", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {

@@ -31,7 +31,6 @@ class BrowsingQAReportTests(unittest.TestCase):
             self.assertEqual(PROBE.Fixture.next_slow_reload_request("/run-b"), 1)
         finally:
             PROBE.Fixture.slow_reload_requests = original
-    }
 
     def test_receipt_and_markdown_paths_must_not_collide_or_follow_symlinks(self):
         with tempfile.TemporaryDirectory() as temporary:

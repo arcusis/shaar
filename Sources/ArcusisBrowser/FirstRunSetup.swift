@@ -94,8 +94,11 @@ struct FirstRunSetupView: View {
     _spaceName = State(initialValue: store.session.selectedSpace.name)
   }
 
-  static func defaultBrowserFailure() -> String {
-    SettingsL10n.string("Could not set Shaar as the default browser.")
+  static func defaultBrowserFailure(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.string(
+      "Could not set Shaar as the default browser.", table: "Settings", language: language)
   }
 
   var body: some View {

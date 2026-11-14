@@ -33,6 +33,11 @@ def stage(overlay: Path, destination: Path) -> list[str]:
             continue
         relative = source.relative_to(overlay)
         target = destination / relative
+        parent = destination
+        for component in relative.parts[:-1]:
+            parent = parent / component
+            if parent.is_symlink():
+                raise SystemExit(f"Refusing destination symlink: {parent}")
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists() or target.is_symlink():
             target.unlink()

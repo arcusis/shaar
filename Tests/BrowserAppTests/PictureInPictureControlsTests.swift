@@ -135,7 +135,24 @@ final class PictureInPictureControlsTests: XCTestCase {
     controls.attach(tabID: tab, finding: { video }, video: { nil })
     controls.detach()
     await Task.yield()
+    XCTAssertFalse(controls.isAttached)
+    XCTAssertNil(controls.tabID)
+  }
 
+  func testDetachingBeforeAttachmentTaskStartsPreventsLateWindowAttachment() async {
+    let video = transparentWindow()
+    defer { video.close() }
+    let controls = PictureInPictureControls()
+    var findCount = 0
+
+    controls.attach(tabID: UUID(), finding: {
+      findCount += 1
+      return video
+    }, video: { nil })
+    controls.detach()
+    await Task.yield()
+
+    XCTAssertEqual(findCount, 0)
     XCTAssertFalse(controls.isAttached)
     XCTAssertNil(controls.tabID)
   }

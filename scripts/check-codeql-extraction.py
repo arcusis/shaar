@@ -12,7 +12,7 @@ from pathlib import Path
 import sys
 from urllib.parse import unquote, urlparse
 
-from ci_support import swift_source_files
+from ci_support import output_file, swift_source_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,6 +76,8 @@ def main() -> int:
         missing = missing_sources(document, expected, ROOT)
         result = {"scope": options.scope, "expected": len(expected), "missing": missing,
                   "revision": os.environ.get("GITHUB_SHA", "local")}
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        summary_path = output_file(Path(summary)) if summary else None
         write_coverage_report(options.report, result)
     except (OSError, UnicodeError, ValueError) as error:
         print(f"Invalid CodeQL extraction report: {error}", file=sys.stderr)
@@ -84,8 +86,8 @@ def main() -> int:
     print(message)
     for name in missing:
         print(f"Missing extraction: {name}")
-    if os.environ.get("GITHUB_STEP_SUMMARY"):
-        with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
+    if summary_path:
+        with summary_path.open("a") as output:
             output.write(f"### Swift extraction coverage\n\n{message}.\n")
     return int(bool(missing))
 

@@ -143,6 +143,9 @@ struct PrintConsentTests {
     var oversizedOriginPayload = valid
     oversizedOriginPayload["origin"] = oversizedOrigin
     #expect(PrintRequest(payload: oversizedOriginPayload) == nil)
+    var maxByteTitle = valid
+    maxByteTitle["title"] = String(repeating: "👩", count: 512)
+    #expect(PrintRequest(payload: maxByteTitle) != nil)
 
     for unsupportedVersion: Any in [2, "1", true, NSNumber(value: 1.0), NSNull()] {
       var unsupported = valid

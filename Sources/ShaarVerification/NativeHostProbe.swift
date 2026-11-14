@@ -1259,7 +1259,8 @@ final class NativeHostProbe {
   static func parseDocumentJSON(_ json: String?) -> [String: Any]? {
     guard let data = json?.data(using: .utf8),
       let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      value["fixture"] as? String == "v1", value["instance"] as? String != nil
+      value["fixture"] as? String == "v1",
+      let instance = value["instance"] as? String, !instance.isEmpty
     else { return nil }
     return value
   }

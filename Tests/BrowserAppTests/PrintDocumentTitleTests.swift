@@ -43,6 +43,15 @@ struct PrintDocumentTitleTests {
     #expect(PrintDocumentTitle.make(pageTitle: englandFlag, productName: "Shaar") == englandFlag)
   }
 
+  @Test func fallsBackWhenPageTitleHasNoVisibleFilenameCharacters() {
+    #expect(
+      PrintDocumentTitle.make(pageTitle: "\u{200C}\u{200D}", productName: "Shaar") == "Shaar")
+
+    let tagOnly = "\u{E0067}\u{E0062}\u{E007F}"
+    #expect(PrintDocumentTitle.make(pageTitle: tagOnly, productName: "Shaar") == "Shaar")
+    #expect(PrintDocumentTitle.make(pageTitle: "\u{FE0F}", productName: "Shaar") == "Shaar")
+  }
+
   @Test func capsPageTitleLength() {
     let result = PrintDocumentTitle.make(
       pageTitle: String(repeating: "a", count: 200), productName: "Shaar")

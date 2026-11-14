@@ -22,11 +22,6 @@ private final class FakeDevToolsEngine: ShaarDevToolsSubmitting, @unchecked Send
     defer { lock.unlock() }
     return stored
   }
-  func setReply(_ value: String) {
-    lock.lock()
-    reply = Data(value.utf8)
-    lock.unlock()
-  }
   func submit(
     _ request: ShaarDevToolsRequest,
     completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void

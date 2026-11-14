@@ -533,9 +533,27 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 
 class Fixture(http.server.BaseHTTPRequestHandler):
     cross_site_origin = None
+    private_navigation_requests = {}
+    private_navigation_requests_lock = threading.Lock()
+
+    @classmethod
+    def next_private_navigation_request(cls, path):
+        with cls.private_navigation_requests_lock:
+            request = cls.private_navigation_requests.get(path, 0) + 1
+            cls.private_navigation_requests[path] = request
+            return request
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith('/private-window-') and path.endswith('-slow'):
+            request = self.next_private_navigation_request(path)
+            time.sleep(1.5)
+            body = (f'<!doctype html><html data-arcusis-fixture="v1" '
+                    f'data-private-request="{request}"><meta charset="utf-8">'
+                    '<title>Private provisional navigation</title>'
+                    '<script>window.arcusisInstance=crypto.randomUUID()</script></html>').encode()
+            self.html(body)
+            return
         if path == '/cross-site-a':
             destination = f'{self.cross_site_origin}/cross-site-b'
             self.html(f'''<!doctype html><meta charset="utf-8"><title>Origin A</title>

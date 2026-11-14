@@ -27,4 +27,11 @@ import Testing
     ]
     #expect(PrivateWindowProbe.historyPaths(rows).isEmpty)
   }
+
+  @Test func privateInFlightReloadNeedsARepeatedFixtureRequest() {
+    #expect(!PrivateWindowProbe.privateNavigationRequestWasRepeated(nil))
+    #expect(!PrivateWindowProbe.privateNavigationRequestWasRepeated("1"))
+    #expect(PrivateWindowProbe.privateNavigationRequestWasRepeated("2"))
+    #expect(!PrivateWindowProbe.privateNavigationRequestWasRepeated("loading"))
+  }
 }

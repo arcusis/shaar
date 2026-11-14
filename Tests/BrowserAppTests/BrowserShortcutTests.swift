@@ -104,6 +104,25 @@ import Testing
   #expect(store.session.selectedSpace.selectedTabID == tabs[0].id)
 }
 
+@Test @MainActor func controlTabFollowsNativeOrderAfterFolderMoves() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let first = session.open(URL(string: "https://cycle-folder-first.example")!)!
+  let second = session.open(URL(string: "https://cycle-folder-second.example")!)!
+  let third = session.open(URL(string: "https://cycle-folder-third.example")!)!
+  let folderOne = session.addFolder(name: "One", in: spaceID)!
+  let folderTwo = session.addFolder(name: "Two", in: spaceID)!
+  let movedFirst = session.moveTab(first, from: spaceID, to: spaceID, folderID: folderOne)
+  let movedSecond = session.moveTab(second, from: spaceID, to: spaceID, folderID: folderTwo)
+  #expect(movedFirst && movedSecond)
+  #expect(session.selectedSpace.orderedTabs.map(\.id) == [first, second, third])
+  session.selectTab(third, in: spaceID)
+  let store = BrowserStore(session: session)
+
+  #expect(store.selectAdjacentTab(by: 1))
+  #expect(store.session.selectedPage?.tab.id == first)
+}
+
 @Test @MainActor func controlTabRejectsAdditionalModifiersAndKeyUp() throws {
   let store = BrowserStore()
   store.perform(.open(URL(string: "https://next-one.example")!))

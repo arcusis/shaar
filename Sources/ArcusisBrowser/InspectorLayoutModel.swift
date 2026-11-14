@@ -52,7 +52,7 @@ final class InspectorLayoutModel {
   @ObservationIgnored private var epoch = 0
   @ObservationIgnored private var installedGeneration = -1
   @ObservationIgnored private var scanning = false
-  @ObservationIgnored private var tail: Task<Void, Never>?
+  @ObservationIgnored private(set) var tail: Task<Void, Never>?
 
   init(inspector: InspectorModel) { self.inspector = inspector }
 
@@ -176,6 +176,8 @@ final class InspectorLayoutModel {
 
   func reset() {
     epoch += 1
+    tail?.cancel()
+    tail = nil
     containers = []
     enabled.removeAll()
     pinnedLock = nil

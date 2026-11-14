@@ -9,6 +9,22 @@ import Testing
 
 @Suite @MainActor
 struct InspectorLayoutModelTests {
+  @Test func resetCancelsAndClearsQueuedLayoutWork() async throws {
+    let url = try #require(URL(string: "https://example.test"))
+    let inspector = InspectorModel(
+      target: SiteControlTarget(tabID: UUID(), profileID: UUID(), url: url), engine: nil)
+    let model = inspector.layout
+
+    await model.disableAll()
+    let queued = try #require(model.tail)
+    #expect(!queued.isCancelled)
+
+    model.reset()
+
+    #expect(queued.isCancelled)
+    #expect(model.tail == nil)
+  }
+
   @Test func distinctLongElementIDsReceiveDistinctContainerKeys() throws {
     let context = try #require(JSContext())
     let setup = #"""

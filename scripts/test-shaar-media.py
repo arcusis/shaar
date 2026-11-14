@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -44,9 +45,8 @@ def main() -> None:
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        with tempfile.TemporaryDirectory(
-            prefix="arcusis-engine-probe-", ignore_cleanup_errors=True
-        ) as temporary:
+        temporary = tempfile.mkdtemp(prefix="arcusis-engine-probe-")
+        try:
             root = Path(temporary)
             marker = root / ".arcusis-probe"
             marker.write_text("arcusis-engine-probe-v1\n")
@@ -79,6 +79,8 @@ def main() -> None:
                              indent=2))
             if process.returncode or not evidence or not evidence.get("passed"):
                 raise SystemExit(1)
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
         server.shutdown()
 
 

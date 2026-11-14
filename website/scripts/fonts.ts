@@ -8,7 +8,7 @@
 // from the site's own origin.
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 // One request per family: the combined endpoint omits some families.
@@ -64,6 +64,19 @@ function parseFaces(css: string): (SiteFont & { url: string })[] {
   return faces;
 }
 
+function isWoff2(data: Buffer): boolean {
+  return (
+    data.length >= 48 &&
+    data.toString("ascii", 0, 4) === "wOF2" &&
+    data.readUInt32BE(8) === data.length &&
+    data.readUInt16BE(12) > 0 &&
+    data.readUInt16BE(14) === 0 &&
+    data.readUInt32BE(16) > 0 &&
+    data.readUInt32BE(20) > 0 &&
+    data.readUInt32BE(20) <= data.length - 48
+  );
+}
+
 /** Copies cached or freshly downloaded font files into `outputDirectory`. Returns the faces it wrote. */
 export async function prepareFonts(
   cacheDirectory: string,
@@ -96,7 +109,9 @@ export async function prepareFonts(
       for (const face of parsed) {
         const font = await fetchFontAsset(face.url);
         if (!font.ok) throw new Error(`Font download returned ${font.status} for ${face.family}`);
-        await writeFile(resolve(cacheDirectory, face.file), Buffer.from(await font.arrayBuffer()));
+        const data = Buffer.from(await font.arrayBuffer());
+        if (!isWoff2(data)) throw new Error(`Font download was not WOFF2 for ${face.family}`);
+        await writeFile(resolve(cacheDirectory, face.file), data);
       }
       faces = parsed.map(({ family, file, weight }) => ({ family, file, weight }));
       await writeFile(manifestPath, JSON.stringify(faces, null, 2));
@@ -108,13 +123,13 @@ export async function prepareFonts(
   try {
     await mkdir(outputDirectory, { recursive: true });
     for (const face of faces) {
-      await writeFile(
-        resolve(outputDirectory, face.file),
-        await readFile(resolve(cacheDirectory, face.file)),
-      );
+      const data = await readFile(resolve(cacheDirectory, face.file));
+      if (!isWoff2(data)) throw new Error(`Cached font is not WOFF2 for ${face.family}`);
+      await writeFile(resolve(outputDirectory, face.file), data);
     }
   } catch (error) {
     console.warn(`Cached fonts unavailable, the site falls back to system fonts: ${String(error)}`);
+    await rm(manifestPath, { force: true });
     return [];
   }
   return faces;

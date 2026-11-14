@@ -1645,6 +1645,7 @@ enum ProbeTimeout {
   }
 
   static func scale(from value: String?) -> Double {
-    max(1, value.flatMap(Double.init) ?? 1)
+    guard let parsed = value.flatMap(Double.init), parsed.isFinite else { return 1 }
+    return max(1, parsed)
   }
 }

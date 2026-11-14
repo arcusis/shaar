@@ -222,7 +222,7 @@ static NSArray<NSString *> *ARCMediaActions(id value) {
 }
 
 static BOOL ARCMediaFlag(id value) {
-  return [value isKindOfClass:NSNumber.class] && [value boolValue];
+  return ARCMediaIsJSONBoolean(value) && [value boolValue];
 }
 
 static id ARCMediaVolume(id value) {

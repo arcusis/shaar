@@ -89,6 +89,21 @@ import Testing
   #expect(parsed.pictureInPicture?.isLive == true)
 }
 
+@Test func shaarMediaStateRejectsNumericBooleanSubstitutes() throws {
+  let payload = try #require(
+    ARCProbeShaarMediaPublicState([
+      "schemaVersion": 1, "playbackState": "playing", "supportedActions": [],
+      "hasVideo": 1, "canSeek": 1, "tabMuted": 1, "silent": 1,
+      "pipVideoState": "inPictureInPicture", "pipVideoIsLive": 1,
+    ]) as? [String: Any])
+  #expect(payload["hasVideo"] as? Bool == false)
+  #expect(payload["canSeek"] as? Bool == false)
+  #expect(payload["muted"] as? Bool == false)
+  #expect(payload["silent"] as? Bool == false)
+  let pip = try #require(payload["pictureInPicture"] as? [String: Any])
+  #expect(pip["live"] as? Bool == false)
+}
+
 @Test func shaarMediaEventsReachOnlyTheirOwnedTab() throws {
   let event: [String: Any] = [
     "schemaVersion": 1, "kind": "state_changed",

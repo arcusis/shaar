@@ -9,20 +9,23 @@ import Testing
 
 @MainActor private final class FakePrivateSessionsEngine: ShaarPrivateSessionsEngine {
   var calls: [String] = []
+  var sessionHandle: UInt = 11
+  var windowHandle: UInt = 22
+  var tabHandle: UInt = 33
   func openSession(profileID: Data, sessionID: Data) throws -> UInt {
     calls.append("open-session")
-    return 11
+    return sessionHandle
   }
   func closeSession(_ handle: UInt) throws { calls.append("close-session-\(handle)") }
   func openWindow(session: UInt, windowID: Data) throws -> UInt {
     calls.append("open-window")
-    return 22
+    return windowHandle
   }
   func closeWindow(_ handle: UInt) throws { calls.append("close-window-\(handle)") }
   func openTab(session: UInt, window: UInt, tabID: Data, url: Data, foreground: Bool) throws -> UInt
   {
     calls.append("open-tab-\(foreground)")
-    return 33
+    return tabHandle
   }
   func closeTab(_ handle: UInt) throws { calls.append("close-tab-\(handle)") }
   func activateTab(session: UInt, window: UInt, tab: UInt, requestID: UInt64) throws {
@@ -86,6 +89,69 @@ struct PrivateSessionsTests {
         event, profileID: Data("p".utf8), sessionID: Data("other".utf8),
         windowID: Data("w".utf8), tabID: Data("t".utf8), handler: { _ in delivered = false }))
     #expect(delivered)
+  }
+
+  @Test @MainActor func nullNativeHandlesAreRejectedBeforeTheyCanBeReused() throws {
+    let sessionEngine = FakePrivateSessionsEngine()
+    sessionEngine.sessionHandle = 0
+    let sessionAdapter = ShaarPrivateSessionsAdapter(engine: sessionEngine)
+    #expect(
+      throws: ShaarEngineError.status(
+        .chromiumError, platformCode: 0, message: "private session open returned a null handle")
+    ) {
+      try sessionAdapter.openSession(
+        profileID: Data("profile-a".utf8), sessionID: Data("session-a".utf8))
+    }
+    #expect(
+      throws: ShaarEngineError.status(
+        .notFound, platformCode: 0, message: "private session is closed")
+    ) {
+      try sessionAdapter.openWindow(sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8))
+    }
+
+    let windowEngine = FakePrivateSessionsEngine()
+    let windowAdapter = ShaarPrivateSessionsAdapter(engine: windowEngine)
+    _ = try windowAdapter.openSession(
+      profileID: Data("profile-a".utf8), sessionID: Data("session-a".utf8))
+    windowEngine.windowHandle = 0
+    #expect(
+      throws: ShaarEngineError.status(
+        .chromiumError, platformCode: 0, message: "private window open returned a null handle")
+    ) {
+      try windowAdapter.openWindow(
+        sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8))
+    }
+    #expect(
+      throws: ShaarEngineError.status(
+        .wrongSession, platformCode: 0, message: "window is outside private session")
+    ) {
+      try windowAdapter.openTab(
+        sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8),
+        tabID: Data("tab-a".utf8), url: Data("about:blank".utf8), foreground: true)
+    }
+
+    let tabEngine = FakePrivateSessionsEngine()
+    let tabAdapter = ShaarPrivateSessionsAdapter(engine: tabEngine)
+    _ = try tabAdapter.openSession(
+      profileID: Data("profile-a".utf8), sessionID: Data("session-a".utf8))
+    _ = try tabAdapter.openWindow(sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8))
+    tabEngine.tabHandle = 0
+    #expect(
+      throws: ShaarEngineError.status(
+        .chromiumError, platformCode: 0, message: "private tab open returned a null handle")
+    ) {
+      try tabAdapter.openTab(
+        sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8),
+        tabID: Data("tab-a".utf8), url: Data("about:blank".utf8), foreground: true)
+    }
+    #expect(
+      throws: ShaarEngineError.status(
+        .wrongSession, platformCode: 0, message: "tab is outside private window")
+    ) {
+      try tabAdapter.activateTab(
+        sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8),
+        tabID: Data("tab-a".utf8), requestID: 1)
+    }
   }
 
   @Test @MainActor func activationRejectsZeroRequestIDBeforeCallingEngine() throws {

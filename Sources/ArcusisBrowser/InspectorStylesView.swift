@@ -27,6 +27,10 @@ struct InspectorStylesView: View {
     declaration.name
   }
 
+  static var matchedRulesLoadingAccessibilityLabel: String {
+    InspectorL10n.string("Reading styles…")
+  }
+
   init(inspector: InspectorModel, model: InspectorStylesModel) {
     self.inspector = inspector
     self.model = model
@@ -120,7 +124,9 @@ struct InspectorStylesView: View {
               ) {
                 VStack(alignment: .leading, spacing: 12) {
                   if model.busy && model.rules.isEmpty {
-                    ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+                    ProgressView().controlSize(.small)
+                      .accessibilityLabel(Self.matchedRulesLoadingAccessibilityLabel)
+                      .frame(maxWidth: .infinity)
                   }
                   newRuleControl
                   ForEach(model.rules) { rule in

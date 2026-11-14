@@ -161,7 +161,6 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn('SettingsL10n.string("Could not clear history. Try again.")', source)
         self.assertNotIn('SettingsL10n.format("Could not clear history: %"', source)
-
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Fixture.xcstrings"
@@ -244,7 +243,9 @@ class CatalogValidatorTests(unittest.TestCase):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorPanelComponents.swift").read_text(
             encoding="utf-8"
         )
-        self.assertIn('isCollapsed ? "chevron.forward" : "chevron.down"', source)
+        self.assertIn("static func disclosureSymbol(isCollapsed: Bool, rightToLeft: Bool)", source)
+        self.assertIn('guard isCollapsed else { return "chevron.down" }', source)
+        self.assertIn('return rightToLeft ? "chevron.left" : "chevron.right"', source)
 
     def test_source_editor_menu_uses_direction_aware_disclosure(self):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorActionsView.swift").read_text(

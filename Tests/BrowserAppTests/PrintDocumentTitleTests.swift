@@ -57,6 +57,19 @@ struct PrintDocumentTitleTests {
     #expect(result.count == 120)
   }
 
+  @Test func capsMultibytePDFNamesWithoutSplittingGraphemeClusters() {
+    let title = String(repeating: "a\u{0301}", count: 100)
+    let result = PrintDocumentTitle.make(pageTitle: title, productName: "Shaar")
+
+    #expect(result.utf8.count <= 180)
+    #expect(result == String(title.prefix(result.count)))
+  }
+
+  @Test func fallsBackWhenOneGraphemeExceedsTheFilenameByteLimit() {
+    let title = "a" + String(repeating: "\u{0301}", count: 100)
+    #expect(PrintDocumentTitle.make(pageTitle: title, productName: "Shaar") == "Shaar")
+  }
+
   @Test func removesBidiFormattingAndFilenameSeparators() {
     #expect(
       PrintDocumentTitle.make(pageTitle: "Report\u{202E}fdp/part", productName: "Shaar")

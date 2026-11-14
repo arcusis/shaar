@@ -8,7 +8,7 @@ import Testing
 
 @Suite struct ProbeTimeoutTests {
   @Test func timeoutScaleDefaultsAndClampsInvalidOrSubunitValues() {
-    for value: String? in [nil, "", "invalid", "0", "0.75"] {
+    for value: String? in [nil, "", "invalid", "0", "0.75", "inf", "-inf", "nan"] {
       #expect(ProbeTimeout.scale(from: value) == 1)
     }
   }

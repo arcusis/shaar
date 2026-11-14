@@ -307,7 +307,8 @@ final class InspectorDetailsModel {
   }
 
   func selectComponent(_ identity: Int) async {
-    guard let inspector, tree?.nodes.contains(where: { $0.id == identity }) == true,
+    guard !Task.isCancelled, let inspector,
+      tree?.nodes.contains(where: { $0.id == identity }) == true,
       inspector.selection?.id == selectedID
     else { return }
     let generation = inspector.documentGeneration

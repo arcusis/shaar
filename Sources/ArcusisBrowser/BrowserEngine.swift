@@ -1144,7 +1144,7 @@ final class BrowserEngine {
     guard let tab = store?.session.selectedPage?.tab.id else { return }
     extensionPanel = nil
     do { try runtime.executeExtensionID(id, tabID: tab.uuidString) } catch {
-      notice = ShellL10n.string("Could not run this extension. Try again.")
+      notice = PanelsL10n.string("Could not run the extension. Try again.")
     }
   }
 

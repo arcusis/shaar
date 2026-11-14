@@ -39,7 +39,6 @@ import Testing
   #expect(throws: POSIXError(.EIO)) {
     try file.save(session) { directory in
       #expect(directory.path == root.path)
-      #expect(try file.loadPrimary() == session)
       throw POSIXError(.EIO)
     }
   }

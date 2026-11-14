@@ -30,8 +30,12 @@ final class PictureInPictureControls {
   /// Waits for Chromium to show the window it reported.
   private var pendingAttachment: Task<Void, Never>?
   private var gesture: (frame: CGRect, edges: PictureInPictureGeometry.Edges)?
+  private let visibleFrameForWindow: (NSWindow) -> CGRect?
 
-  init() {
+  init(visibleFrameForWindow: @escaping (NSWindow) -> CGRect? = { window in
+    (window.screen ?? NSScreen.main)?.visibleFrame
+  }) {
+    self.visibleFrameForWindow = visibleFrameForWindow
     view.onControl = { [weak self] in self?.press($0) }
     view.onGesture = { [weak self] in self?.handle($0) }
   }
@@ -104,7 +108,7 @@ final class PictureInPictureControls {
 
   func minimize() {
     guard let window = videoWindow, untuckedFrame == nil,
-      let screen = (window.screen ?? NSScreen.main)?.visibleFrame
+      let screen = visibleFrameForWindow(window)
     else { return }
     untuckedFrame = window.frame
     view.presentation.tuckedLeft = PictureInPictureGeometry.tucksLeft(window.frame, in: screen)

@@ -74,7 +74,9 @@ final class PictureInPictureControlsTests: XCTestCase {
   func testButtonsSendCommandsAndMinimizeTucksTheVideoWindow() throws {
     let video = transparentWindow()
     defer { video.close() }
-    let controls = PictureInPictureControls()
+    let controls = PictureInPictureControls(visibleFrameForWindow: { _ in
+      CGRect(x: 0, y: 0, width: 1920, height: 1080)
+    })
     var commands: [PictureInPictureControls.Command] = []
     controls.onCommand = { _, command in commands.append(command) }
     let tab = UUID()

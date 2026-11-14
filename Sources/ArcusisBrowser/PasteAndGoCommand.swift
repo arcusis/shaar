@@ -5,9 +5,17 @@
 import AppKit
 import BrowserCore
 
+@MainActor
+protocol PasteAndGoPasteboard {
+  func string(forType type: NSPasteboard.PasteboardType) -> String?
+}
+
+extension NSPasteboard: PasteAndGoPasteboard {}
+
+@MainActor
 enum PasteAndGoCommand {
   static func destination(
-    in pasteboard: NSPasteboard, searchEngine: BrowserSearchEngine
+    in pasteboard: any PasteAndGoPasteboard, searchEngine: BrowserSearchEngine
   ) -> URL? {
     guard let text = pasteboard.string(forType: .string) else { return nil }
     return NavigationInput.destination(for: text, searchEngine: searchEngine)
@@ -15,7 +23,7 @@ enum PasteAndGoCommand {
 
   @discardableResult
   static func route(
-    in pasteboard: NSPasteboard, searchEngine: BrowserSearchEngine,
+    in pasteboard: any PasteAndGoPasteboard, searchEngine: BrowserSearchEngine,
     navigate: (URL) -> Bool
   ) -> Bool {
     guard let url = destination(in: pasteboard, searchEngine: searchEngine) else { return false }
@@ -24,7 +32,7 @@ enum PasteAndGoCommand {
 
   @MainActor @discardableResult
   static func route(
-    in pasteboard: NSPasteboard, store: BrowserStore, searchEngine: BrowserSearchEngine,
+    in pasteboard: any PasteAndGoPasteboard, store: BrowserStore, searchEngine: BrowserSearchEngine,
     navigate: (URL) -> Bool
   ) -> Bool {
     guard let url = destination(in: pasteboard, searchEngine: searchEngine) else { return false }

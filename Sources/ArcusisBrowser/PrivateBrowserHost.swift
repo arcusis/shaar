@@ -282,13 +282,14 @@ final class PrivateBrowserHost {
       Self.supportsPrivateCommand(command), owner.store.sheet == nil
     else { return false }
     return Self.windowCanPerform(
-      command, store: owner.store, pasteboard: .general,
+      command, store: owner.store, pasteboard: NSPasteboard.general,
       searchEngine: preferences.searchEngine(for: owner.store.session.selectedSpace.profileID))
   }
 
   static func windowCanPerform(
     _ command: BrowserMenuCommand, store: BrowserStore,
-    pasteboard: NSPasteboard = .general, searchEngine: BrowserSearchEngine = .google
+    pasteboard: any PasteAndGoPasteboard = NSPasteboard.general,
+    searchEngine: BrowserSearchEngine = .google
   ) -> Bool {
     return switch command {
     case .back:
@@ -375,7 +376,7 @@ final class PrivateBrowserHost {
       }
     case .pasteAndGo:
       _ = PasteAndGoCommand.route(
-        in: .general, store: store,
+        in: NSPasteboard.general, store: store,
         searchEngine: preferences.searchEngine(for: store.session.selectedSpace.profileID),
         navigate: owner.page.navigateCurrentPage(to:))
     case .find: store.showPageFind()

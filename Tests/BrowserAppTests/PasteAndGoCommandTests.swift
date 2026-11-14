@@ -8,12 +8,19 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@MainActor
+private final class MemoryPasteboard: PasteAndGoPasteboard {
+  var value: String?
+
+  func string(forType type: NSPasteboard.PasteboardType) -> String? { value }
+  func setString(_ string: String) { value = string }
+}
+
 @Test @MainActor func pasteAndGoRoutesURLOrSearchTextAndRejectsUnsupportedSchemes() throws {
-  let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoCommandTests"))
+  let pasteboard = MemoryPasteboard()
   var routed: URL?
   func route(_ text: String) -> Bool {
-    pasteboard.clearContents()
-    #expect(pasteboard.setString(text, forType: .string))
+    pasteboard.setString(text)
     return PasteAndGoCommand.route(in: pasteboard, searchEngine: .google) { url in
       routed = url
       return true
@@ -29,12 +36,11 @@ import Testing
 }
 
 @Test @MainActor func pasteAndGoOpensAnEmptySelectedSpaceWithoutNativeNavigation() throws {
-  let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoEmptySpaceTests"))
-  pasteboard.clearContents()
+  let pasteboard = MemoryPasteboard()
   let store = BrowserStore()
   let destination = URL(string: "https://empty-tab.example/path")!
   #expect(store.session.selectedPage == nil)
-  #expect(pasteboard.setString(destination.absoluteString, forType: .string))
+  pasteboard.setString(destination.absoluteString)
   var nativeNavigationRequested = false
 
   #expect(
@@ -48,8 +54,7 @@ import Testing
 }
 
 @Test @MainActor func pasteAndGoOpensAnEmptyPrivateSpace() throws {
-  let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoPrivateEmptySpaceTests"))
-  pasteboard.clearContents()
+  let pasteboard = MemoryPasteboard()
   let destination = URL(string: "https://private-empty-tab.example/path")!
   let session = try BrowserSession.privateWindow(sourceProfileID: UUID(), firstTabID: UUID())
   let store = BrowserStore(privateSession: session)
@@ -59,7 +64,7 @@ import Testing
   #expect(
     !PrivateBrowserHost.windowCanPerform(
       .pasteAndGo, store: store, pasteboard: pasteboard, searchEngine: .google))
-  #expect(pasteboard.setString(destination.absoluteString, forType: .string))
+  pasteboard.setString(destination.absoluteString)
   #expect(
     PrivateBrowserHost.windowCanPerform(
       .pasteAndGo, store: store, pasteboard: pasteboard, searchEngine: .google))
@@ -69,10 +74,9 @@ import Testing
 }
 
 @Test @MainActor func pasteAndGoNavigatesTheSelectedPrivatePage() throws {
-  let pasteboard = NSPasteboard(name: NSPasteboard.Name("PasteAndGoPrivateSelectedPageTests"))
-  pasteboard.clearContents()
+  let pasteboard = MemoryPasteboard()
   let destination = URL(string: "https://private-selected-page.example/path")!
-  #expect(pasteboard.setString(destination.absoluteString, forType: .string))
+  pasteboard.setString(destination.absoluteString)
   let session = try BrowserSession.privateWindow(sourceProfileID: UUID(), firstTabID: UUID())
   let store = BrowserStore(privateSession: session)
   let currentURL = URL(string: "https://private-current-page.example/")!

@@ -23,40 +23,40 @@ import Testing
     #expect(window.makeFirstResponder(field))
     let up = try #require(arrow(126, flags: [], window: window))
     #expect(up.specialKey == .upArrow)
-    #expect(up.window === window)
-    #expect(ShaarCSSLengthNudge.consume(up) == nil)
+    #expect(up.window == nil, "the fixture window stays unordered and cannot take focus")
+    #expect(ShaarCSSLengthNudge.consume(up, in: window) == nil)
     #expect(editedText(window) == "11px")
 
     replaceText(window, "10px")
     let shift = try #require(arrow(126, flags: [.shift], window: window))
-    #expect(ShaarCSSLengthNudge.consume(shift) == nil)
+    #expect(ShaarCSSLengthNudge.consume(shift, in: window) == nil)
     #expect(editedText(window) == "20px")
 
     replaceText(window, "10px")
     let option = try #require(arrow(125, flags: [.option], window: window))
-    #expect(ShaarCSSLengthNudge.consume(option) == nil)
+    #expect(ShaarCSSLengthNudge.consume(option, in: window) == nil)
     #expect(editedText(window) == "9.9px")
 
     replaceText(window, "10px")
     let command = try #require(arrow(126, flags: [.command], window: window))
-    #expect(ShaarCSSLengthNudge.consume(command) === command)
+    #expect(ShaarCSSLengthNudge.consume(command, in: window) === command)
     #expect(editedText(window) == "10px")
 
     let control = try #require(arrow(125, flags: [.control], window: window))
-    #expect(ShaarCSSLengthNudge.consume(control) === control)
+    #expect(ShaarCSSLengthNudge.consume(control, in: window) === control)
 
     let letter = try #require(arrow(0, flags: [], window: window))
-    #expect(ShaarCSSLengthNudge.consume(letter) === letter)
+    #expect(ShaarCSSLengthNudge.consume(letter, in: window) === letter)
 
     replaceText(window, "auto")
     let ignored = try #require(arrow(126, flags: [], window: window))
-    #expect(ShaarCSSLengthNudge.consume(ignored) === ignored)
+    #expect(ShaarCSSLengthNudge.consume(ignored, in: window) === ignored)
     #expect(editedText(window) == "auto")
 
     let labeled = labeledEditor(window, text: "4px")
     #expect(window.makeFirstResponder(labeled))
     let labeledUp = try #require(arrow(126, flags: [], window: window))
-    #expect(ShaarCSSLengthNudge.consume(labeledUp) == nil)
+    #expect(ShaarCSSLengthNudge.consume(labeledUp, in: window) == nil)
     #expect(labeled.string == "5px")
 
     let plain = NSTextView(frame: NSRect(x: 0, y: 0, width: 80, height: 24))
@@ -64,12 +64,12 @@ import Testing
     window.contentView?.addSubview(plain)
     #expect(window.makeFirstResponder(plain))
     let plainUp = try #require(arrow(126, flags: [], window: window))
-    #expect(ShaarCSSLengthNudge.consume(plainUp) === plainUp)
+    #expect(ShaarCSSLengthNudge.consume(plainUp, in: window) === plainUp)
     #expect(plain.string == "8px")
 
     #expect(window.makeFirstResponder(nil))
     let nowhere = try #require(arrow(126, flags: [], window: window))
-    #expect(ShaarCSSLengthNudge.consume(nowhere) === nowhere)
+    #expect(ShaarCSSLengthNudge.consume(nowhere, in: window) === nowhere)
     #expect(NSApp.keyWindow === previous)
   }
 }

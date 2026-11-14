@@ -763,7 +763,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   static func pasteAndGoDestination(for store: BrowserStore) -> URL? {
     PasteAndGoCommand.destination(
-      in: .general,
+      in: NSPasteboard.general,
       searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID))
   }
 
@@ -830,7 +830,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       }
     case .pasteAndGo:
       _ = PasteAndGoCommand.route(
-        in: .general, store: store,
+        in: NSPasteboard.general, store: store,
         searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID),
         navigate: context.engine.navigateCurrentPage(to:))
     case .print:

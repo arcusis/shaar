@@ -242,7 +242,9 @@ final class SpaceSwipeWindowMonitor {
     return nil
   }
 
-  func route(_ event: NSEvent, deltaX: CGFloat, deltaY: CGFloat) -> NSEvent? {
+  func route(
+    _ event: NSEvent, deltaX: CGFloat, deltaY: CGFloat, eventWindow: NSWindow? = nil
+  ) -> NSEvent? {
     guard let store, let window else { return event }
     let modalOwnsInput =
       store.commandIsOpen || store.sheet != nil || !store.installationRequests.isEmpty
@@ -253,7 +255,7 @@ final class SpaceSwipeWindowMonitor {
     let result = SpaceSwipeNavigationDecision.route(
       deltaX: deltaX,
       deltaY: deltaY,
-      eventBelongsToWindow: event.window === window,
+      eventBelongsToWindow: (eventWindow ?? event.window) === window,
       commandPressed: event.modifierFlags.contains(.command),
       modalOwnsInput: modalOwnsInput,
       isRightToLeft: clientView?.isRightToLeft ?? false

@@ -24,13 +24,17 @@ import Testing
     !$0.isSeparatorItem && $0.action != nil && $0.submenu == nil
       && !ShortcutCatalog.unassignedTitles.contains($0.title)
   }
-  #expect(actionableItems.allSatisfy { !$0.keyEquivalent.isEmpty })
+  let missingShortcuts = actionableItems.filter { $0.keyEquivalent.isEmpty }.map(\.title)
+  #expect(missingShortcuts.isEmpty, "Missing shortcuts: \(missingShortcuts)")
   let shortcutKeys = actionableItems.map {
     var modifiers = $0.keyEquivalentModifierMask
     if $0.keyEquivalent != $0.keyEquivalent.lowercased() { modifiers.insert(.shift) }
     return "\($0.keyEquivalent.lowercased()):\(modifiers.rawValue)"
   }
-  #expect(Set(shortcutKeys).count == shortcutKeys.count)
+  let duplicates = Dictionary(grouping: zip(shortcutKeys, actionableItems), by: \.0)
+    .filter { $0.value.count > 1 }
+    .mapValues { $0.map { $0.1.title } }
+  #expect(duplicates.isEmpty, "Duplicate shortcuts: \(duplicates)")
 
   let catalog = ShortcutCatalog(menu: menu)
   #expect(Set(catalog.entries.map(\.title)).isSuperset(of: Set(commands.map { $0.1.title })))

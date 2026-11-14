@@ -277,6 +277,11 @@ final class InspectorModel {
     if pasteboard.setString(value, forType: .string) { presentation.copied(label) }
   }
 
+  func copy(_ value: String, label: String, to pasteboard: any InspectorClipboard) {
+    pasteboard.clearContents()
+    if pasteboard.setString(value, forType: .string) { presentation.copied(label) }
+  }
+
   func toggleLock() {
     if mode == .locked { pick() } else if let selection { selectAncestor(selection.id) }
   }

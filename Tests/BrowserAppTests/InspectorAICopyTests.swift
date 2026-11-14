@@ -11,6 +11,38 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorAICopyTests {
+  private final class MemoryClipboard: InspectorClipboard {
+    private(set) var items: [NSPasteboardItem] = []
+    private(set) var changeCount = 0
+
+    func clearContents() {
+      changeCount += 1
+      items = []
+    }
+
+    func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool {
+      let item = NSPasteboardItem()
+      item.setString(string, forType: type)
+      items = [item]
+      changeCount += 1
+      return true
+    }
+
+    func writeObjects(_ objects: [NSPasteboardWriting]) -> Bool {
+      changeCount += 1
+      items = objects.compactMap { $0 as? NSPasteboardItem }
+      return items.count == objects.count
+    }
+
+    func string(forType type: NSPasteboard.PasteboardType) -> String? {
+      items.first?.string(forType: type)
+    }
+
+    func data(forType type: NSPasteboard.PasteboardType) -> Data? {
+      items.first?.data(forType: type)
+    }
+  }
+
   @Test func backendFailuresUseLocalizedCopyRecoveryCopy() {
     let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(
@@ -79,10 +111,9 @@ import Testing
     #expect(notes.notes.map(\.feedback) == ["Change spacing", "New note"])
     notes.delete(notes.notes[0].id)
     #expect(notes.notes.count == 1)
-    let board = NSPasteboard.withUniqueName()
-    defer { board.releaseGlobally() }
+    let board = MemoryClipboard()
     notes.copyNotes(to: board)
-    #expect(board.pasteboardItems?.count == 1)
+    #expect(board.items.count == 1)
     #expect(board.string(forType: .string)?.contains("Design Feedback: Account") == true)
     #expect(notes.notes.isEmpty && notes.clearedNotes.count == 1)
     notes.undoClear()
@@ -113,8 +144,7 @@ import Testing
   }
 
   @Test func clipboardHasMarkdownAndRealPNGOnOneItemAndCorruptionDoesNotReplaceIt() throws {
-    let board = NSPasteboard.withUniqueName()
-    defer { board.releaseGlobally() }
+    let board = MemoryClipboard()
     let bitmap = try #require(
       NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: 20, pixelsHigh: 12, bitsPerSample: 8, samplesPerPixel: 4,
@@ -122,7 +152,7 @@ import Testing
       ))
     let png = try #require(bitmap.representation(using: .png, properties: [:]))
     try InspectorAICopyModel.write("Markdown fixture", png: png, to: board)
-    let items = try #require(board.pasteboardItems)
+    let items = board.items
     #expect(items.count == 1)
     #expect(items[0].string(forType: .string) == "Markdown fixture")
     #expect(items[0].string(forType: .init("net.daringfireball.markdown")) == "Markdown fixture")
@@ -134,7 +164,7 @@ import Testing
     }
     #expect(board.changeCount == count)
     try InspectorAICopyModel.write(nil, png: png, to: board)
-    #expect(board.pasteboardItems?.count == 1 && board.data(forType: .png) == png)
+    #expect(board.items.count == 1 && board.data(forType: .png) == png)
     #expect(board.string(forType: .string) == nil)
   }
 
@@ -201,8 +231,7 @@ import Testing
   @Test func unavailableOrClosedSelectionFailsWithoutTouchingClipboard() async throws {
     let model = inspector()
     defer { model.close() }
-    let board = NSPasteboard.withUniqueName()
-    defer { board.releaseGlobally() }
+    let board = MemoryClipboard()
     let count = board.changeCount
     await model.aiCopy.copyElement(to: board)
     #expect(model.aiCopy.failure == "Lock an element first.")

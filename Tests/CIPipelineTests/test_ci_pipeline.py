@@ -1601,6 +1601,35 @@ class EngineTransferTests(unittest.TestCase):
             self.assertEqual([call.args[0] for call in checks.run.call_args_list], ["normal-window-browsing"])
             self.assertTrue((root / "build" / BUNDLE_NAME).is_dir())
 
+    def test_normal_browsing_rebuilds_after_a_corrupt_shared_bundle_download(self):
+        from ci_engine import BUNDLE_NAME
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "build/ci/engine-build"
+            evidence.mkdir(parents=True)
+            (evidence / "bundle.json").write_text("{")
+            (evidence / "verification.tar.gz").write_bytes(b"partial archive")
+            partial_bundle = root / "build" / BUNDLE_NAME
+            partial_bundle.mkdir(parents=True)
+            (partial_bundle / "partial").write_text("incomplete extraction")
+            checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
+            with patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"):
+                STAGES.run_basic_browsing(checks)
+            self.assertEqual(
+                [call.args[0] for call in checks.run.call_args_list],
+                ["verification-build", "normal-window-browsing"],
+            )
+            self.assertFalse((evidence / "bundle.json").exists())
+            self.assertFalse(partial_bundle.exists())
+
+    def test_normal_browsing_continues_when_shared_bundle_artifact_download_fails(self):
+        workflow = (ROOT / ".github/workflows/source-checks.yml").read_text()
+        basic_browsing = workflow.split("  basic-browsing:\n", 1)[1].split("\n  coverage:\n", 1)[0]
+        download = basic_browsing.split(
+            "      - name: Download shared exact-source verification bundle\n", 1
+        )[1].split("      - name:", 1)[0]
+        self.assertIn("continue-on-error: true", download)
+
     def test_localization_engine_requires_restored_bundle_without_rebuilding_it(self):
         checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
         with patch.object(STAGES, "require_hosted_mac"), patch.object(

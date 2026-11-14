@@ -9,6 +9,10 @@ import SwiftUI
 
 enum ProfileAccountSignInAccessibility {
   static var loadingLabel: String { SettingsL10n.string("Loading sign-in…") }
+
+  static func loadingPageLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string("Loading sign-in page…", table: "Settings", language: language)
+  }
 }
 
 /// Signs a profile in to, or out of, a provider account in a window that uses that
@@ -365,7 +369,8 @@ private struct ProfileAccountSignInView: View {
         } else if let id = store.session.selectedSpace.selectedTabID, engine.pages[id] != nil {
           ChromiumPage(engine: engine, tabID: id)
         } else {
-          ProgressView().accessibilityLabel(ProfileAccountSignInAccessibility.loadingLabel)
+          ProgressView()
+            .accessibilityLabel(ProfileAccountSignInAccessibility.loadingPageLabel())
         }
       }
     }

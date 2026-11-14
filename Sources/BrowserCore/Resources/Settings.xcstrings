@@ -710,6 +710,16 @@
         }
       }
     },
+    "Loading sign-in page…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טעינת דף ההתחברות…"
+          }
+        }
+      }
+    },
     "Profile color": {
       "localizations": {
         "he": {

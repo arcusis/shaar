@@ -16,6 +16,15 @@ struct ProfileAccountSignInTests {
     #expect(ProfileAccountSignInAccessibility.loadingLabel == SettingsL10n.string("Loading sign-in…"))
   }
 
+  @Test func loadingPageAccessibilityLabelIsLocalized() {
+    #expect(
+      ProfileAccountSignInAccessibility.loadingPageLabel(language: .english)
+        == "Loading sign-in page…")
+    #expect(
+      ProfileAccountSignInAccessibility.loadingPageLabel(language: .hebrew)
+        == "טעינת דף ההתחברות…")
+  }
+
   @Test func hiddenSignInOwnsItsWindowUntilCancellationAndFinishesOnce() throws {
     let runtime = SignInWindowTestRuntime()
     let profile = BrowserProfile(id: UUID(), name: "Work")

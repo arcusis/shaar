@@ -84,6 +84,15 @@ import Testing
     #expect(cadence.delay == .seconds(1))
   }
 
+  @Test func cancellingInspectorRefreshWaitStopsBeforeTheNextRead() async {
+    let wait = Task {
+      await InspectorModel.waitForRefreshToBecomeIdle(isRefreshing: { true })
+    }
+    wait.cancel()
+
+    #expect(await !wait.value)
+  }
+
   @Test func inspectorModelWakesThePollWhenTheUserMoves() throws {
     let model = InspectorModel(target: target, engine: nil)
     model.open()

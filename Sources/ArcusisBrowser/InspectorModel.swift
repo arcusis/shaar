@@ -545,10 +545,21 @@ final class InspectorModel {
   }
 
   private func refreshWhenIdle() async {
-    for _ in 0..<20 where refreshing {
-      try? await Task.sleep(for: .milliseconds(20))
-    }
+    guard await Self.waitForRefreshToBecomeIdle(isRefreshing: { self.refreshing }) else { return }
     await refresh()
+  }
+
+  static func waitForRefreshToBecomeIdle(isRefreshing: () -> Bool) async -> Bool {
+    for _ in 0..<20 {
+      guard !Task.isCancelled else { return false }
+      guard isRefreshing() else { return true }
+      do {
+        try await Task.sleep(for: .milliseconds(20))
+      } catch {
+        return false
+      }
+    }
+    return !Task.isCancelled
   }
 
   func evaluate(_ expression: String) async throws -> Any? {

@@ -621,6 +621,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     store.bookmarkCurrentPage()
   }
 
+  static func showBookmarks(in store: BrowserStore) {
+    store.showLibrary(.bookmarks)
+  }
+
   private func perform(_ command: BrowserMenuCommand, in context: NativeBrowserContext) {
     let store = context.store
     switch command {
@@ -651,7 +655,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .reopenClosed: store.reopenLastClosedTab()
     case .recentlyClosed: store.showRecentlyClosed()
     case .bookmarkPage: Self.bookmarkCurrentPage(in: store)
-    case .bookmarks: store.showLibrary(.bookmarks)
+    case .bookmarks: Self.showBookmarks(in: store)
     case .history: store.showLibrary(.history)
     case .clearHistory: break  // Routed through the settings controller above.
     case .downloads: store.showDownloads()

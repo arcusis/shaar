@@ -82,10 +82,24 @@ struct PrintRequest: Identifiable, Equatable {
     return ["http", "https"].contains(origin.scheme?.lowercased() ?? "")
   }
 
+  private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x061C || value == 0x200E || value == 0x200F
+      || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
+  }
+
   private static func boundedTitle(_ value: Any?) -> String? {
     guard let value else { return "" }
     guard let title = value as? String, title.utf8.count <= 2048 else { return nil }
-    return title
+    let scalars = title.unicodeScalars.map { scalar -> Unicode.Scalar in
+      switch scalar.properties.generalCategory {
+      case .control, .lineSeparator, .paragraphSeparator: return " "
+      default: return Self.isBidirectionalControl(scalar) ? " " : scalar
+      }
+    }
+    let sanitized = String(String.UnicodeScalarView(scalars))
+      .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    return String(sanitized.prefix(256))
   }
 
   private static func hasSupportedSchemaVersion(_ value: Any?) -> Bool {
@@ -95,4 +109,5 @@ struct PrintRequest: Identifiable, Equatable {
     else { return false }
     return true
   }
+
 }

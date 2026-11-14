@@ -330,12 +330,14 @@ final class AgentBridgeModel {
   }
 
   private func revoke(_ old: SiteControlTarget) {
+    revision += 1
+    let current = revision
     busy = true
     revocationUnconfirmed = true
     oneTimeToken = nil
     canCopySetup = false
     request(.disable, old) { [weak self] _, error in
-      guard let self, !self.closed else { return }
+      guard let self, !self.closed, self.revision == current else { return }
       self.busy = false
       if let error {
         self.failure = error.localizedDescription

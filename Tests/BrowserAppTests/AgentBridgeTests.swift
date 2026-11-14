@@ -196,6 +196,40 @@ final class AgentBridgeTests: XCTestCase {
     XCTAssertFalse(model.needsBanner)
   }
 
+  func testOlderRevocationFailureCannotClearNewerPendingRevocation() {
+    let first = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    var disableReplies: [AgentBridgeModel.Reply] = []
+    let model = AgentBridgeModel(target: first) { operation, _, reply in
+      if operation == .enable {
+        reply(
+          [
+            "schemaVersion": 1, "enabled": true, "port": 9222,
+            "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
+            "connectionCount": 1, "token": String(repeating: "a", count: 43),
+          ], nil)
+      } else if operation == .disable {
+        disableReplies.append(reply)
+      }
+    }
+
+    model.enable()
+    model.disable()
+    model.update(
+      target: SiteControlTarget(
+        tabID: first.tabID, profileID: first.profileID,
+        url: URL(string: "https://other.test/")!), committed: true)
+    XCTAssertEqual(disableReplies.count, 2)
+
+    disableReplies[0](nil, AgentBridgeFailure.invalidReply)
+    XCTAssertTrue(model.busy)
+    XCTAssertTrue(model.revocationUnconfirmed)
+    XCTAssertNil(model.failure)
+
+    disableReplies[1](["schemaVersion": 1], nil)
+    XCTAssertFalse(model.needsBanner)
+  }
+
   func testOffscreenBeforeAndAfterScreenshots() throws {
     _ = NSApplication.shared
     let previous = NSApp.keyWindow

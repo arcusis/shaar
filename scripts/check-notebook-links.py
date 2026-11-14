@@ -14,7 +14,7 @@ import sys
 
 
 DEFAULT_NOTEBOOK = Path(__file__).resolve().parents[1] / "Notebook"
-WIKI_LINK = re.compile(r"\[\[([^\]\n]+)\]\]")
+WIKI_LINK = re.compile(r"(?<!\\)\[\[([^\]\n]+)\]\]")
 
 
 def index_text(path: Path) -> str:

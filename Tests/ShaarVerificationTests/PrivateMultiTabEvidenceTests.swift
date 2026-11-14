@@ -185,6 +185,9 @@ import Testing
     var outside = audit
     outside["nativeFrameInHost"] = NSStringFromRect(NSRect(x: 400, y: 0, width: 320, height: 240))
     #expect(!PrivateMultiTabEvidence.liveShellAudit(outside, stage: "tab-0"))
+    var clipped = audit
+    clipped["nativeFrameInHost"] = NSStringFromRect(NSRect(x: 200, y: 0, width: 320, height: 240))
+    #expect(!PrivateMultiTabEvidence.liveShellAudit(clipped, stage: "tab-0"))
   }
 
   @Test func blankPrivateTabCannotCoverTheSwiftUIShell() {

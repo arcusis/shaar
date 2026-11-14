@@ -19,6 +19,24 @@ SPEC.loader.exec_module(TRIM)
 
 
 class TrimEngineLocalesTests(unittest.TestCase):
+    def test_removed_byte_count_excludes_symlink_target_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            resources = root / "Resources"
+            resources.mkdir()
+            (resources / "en.lproj").mkdir()
+            (resources / "he.lproj").mkdir()
+            removed = resources / "fr.lproj"
+            removed.mkdir()
+            target = root / "outside.pak"
+            target.write_bytes(b"not removed")
+            (removed / "alias.pak").symlink_to(target)
+
+            result = TRIM.trim_locales(resources)
+
+            self.assertEqual(result["removedBytes"], 0)
+            self.assertTrue(target.exists())
+
     def test_keeps_supported_languages_and_unrelated_resources(self):
         with tempfile.TemporaryDirectory() as temporary:
             resources = Path(temporary)

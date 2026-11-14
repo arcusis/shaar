@@ -18,7 +18,7 @@ KEEP = re.compile(r"^(?:base|en|en_GB|he)(?:_(?:FEMININE|MASCULINE|NEUTER))?\.lp
 
 
 def size(path: Path) -> int:
-    return sum(file.stat().st_size for file in path.rglob("*") if file.is_file())
+    return sum(file.stat().st_size for file in path.rglob("*") if file.is_file() and not file.is_symlink())
 
 
 def trim_locales(resources: Path) -> dict:

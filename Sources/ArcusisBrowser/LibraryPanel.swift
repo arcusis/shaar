@@ -25,7 +25,7 @@ enum LibraryPanelSearch {
   ) -> [BrowserBookmark] {
     if !query.isEmpty {
       return items.filter {
-        matches("\($0.title) \($0.address ?? \"\") \($0.path)", query: query)
+        matches("\($0.title) \($0.address ?? "") \($0.path)", query: query)
       }
     }
     var hiddenDepth: Int?

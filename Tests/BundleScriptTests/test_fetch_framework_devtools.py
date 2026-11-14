@@ -125,3 +125,25 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
             with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")):
                 with self.assertRaisesRegex(ValueError, "size limit"):
                     fetcher.unpack("react", archive, root / "output")
+
+    def test_install_rejects_symlinked_cache_root_before_download(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external-cache"
+            external.mkdir()
+            sentinel = external / "keep.txt"
+            sentinel.write_text("leave untouched")
+            cache = root / "cache"
+            cache.symlink_to(external, target_is_directory=True)
+            downloads = []
+
+            def download(name, destination):
+                downloads.append(name)
+                destination.write_bytes(b"not the pinned archive")
+
+            with self.assertRaisesRegex(ValueError, "cache directory must not be a symlink"):
+                fetcher.install_pinned("react", cache, download, "test source")
+
+            self.assertEqual(downloads, [])
+            self.assertEqual(list(external.iterdir()), [sentinel])

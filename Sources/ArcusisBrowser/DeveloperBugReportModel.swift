@@ -139,7 +139,7 @@ extension DeveloperPageModel {
       }
       return file
     } catch {
-      reportFailure = error.localizedDescription
+      reportFailure = InspectorToolsL10n.string("Could not create the bug report. Try again.")
       return nil
     }
   }

@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Could not create the bug report. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not create the bug report. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן ליצור את דוח התקלה. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
     "Could not apply developer settings. Try again.": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Could not apply developer settings. Try again." } },

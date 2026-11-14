@@ -442,6 +442,15 @@ def compare_sleeping_rss(cases):
     return comparisons
 
 
+def write_report(path: Path, result: dict) -> None:
+    if path.is_symlink():
+        raise ValueError(f"performance report path must not be a symlink: {path}")
+    if path.exists() and not path.is_file():
+        raise ValueError(f"performance report path is not a regular file: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, indent=2) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path, default=Path("build/Shaar Verification.app"))
@@ -526,8 +535,7 @@ def main():
     }
     if sleeping_comparison is not None:
         result["sleepingComparison"] = sleeping_comparison
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, indent=2) + "\n")
+    write_report(args.output, result)
     print(json.dumps(result, indent=2))
 
 

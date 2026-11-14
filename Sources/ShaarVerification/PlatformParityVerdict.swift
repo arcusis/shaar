@@ -117,6 +117,14 @@ enum PlatformParityVerdicts {
     )
   }
 
+  /// Wait for the PDF fixture to render or download; a committed URL alone is not viewer evidence.
+  static func pdfViewerObservationIsComplete(
+    committedURL: String, pageText: String, downloads: [String]
+  ) -> Bool {
+    pageText.contains("Parity PDF")
+      || downloads.contains { $0.localizedCaseInsensitiveContains("pdf") }
+  }
+
   /// The product list can contain an extension this run never installed.
   /// An empty list with no install attempt was not measured.
   static func extensions(listed: [String], installedMV3: Bool) -> PlatformParityDecision {

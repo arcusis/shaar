@@ -503,8 +503,9 @@ private struct ParitySnapshot {
     case "Downloads":
       return snapshot.downloads.contains { $0.localizedCaseInsensitiveContains("parity-note") }
     case "PDF viewer":
-      return snapshot.pageText.contains("Parity PDF") || snapshot.committedURL.contains("page.pdf")
-        || snapshot.downloads.contains { $0.localizedCaseInsensitiveContains("pdf") }
+      return PlatformParityVerdicts.pdfViewerObservationIsComplete(
+        committedURL: snapshot.committedURL, pageText: snapshot.pageText,
+        downloads: snapshot.downloads)
     case "Media Session":
       return snapshot.mediaTitle.localizedCaseInsensitiveContains("parity")
     case "Picture in Picture", "Autofill addresses", "Autofill cards", "Autofill passwords":

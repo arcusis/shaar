@@ -8,6 +8,15 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func onboardingSignInProgressLabelIsLocalized() {
+  #expect(
+    ProfileOnboardingAccessibility.signInProgressLabel(provider: "Google", language: .english)
+      == "Finish signing in to Google in the sign-in window.")
+  #expect(
+    ProfileOnboardingAccessibility.signInProgressLabel(provider: "Google", language: .hebrew)
+      == "יש להשלים את ההתחברות אל \u{2068}Google\u{2069} בחלון ההתחברות.")
+}
+
 @MainActor
 private final class OnboardingRecorder {
   var signIns: [(profile: BrowserProfile, provider: AccountProvider)] = []

@@ -11,6 +11,18 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum SiteControlsProbeFixture {
+  static func url(from fixture: URL) -> URL? {
+    guard var components = URLComponents(url: fixture, resolvingAgainstBaseURL: false) else {
+      return nil
+    }
+    components.host = "site-controls.localhost"
+    components.path = "/site-controls"
+    components.query = nil
+    return components.url
+  }
+}
+
 /// Drives the site control center against an authored loopback page in its own site, so clearing
 /// cookies and storage never touches other probes' accounts.
 @MainActor
@@ -90,11 +102,10 @@ final class SiteControlsProbe {
       guard store.createSpace(name: Self.spaceName, sharingProfile: profile, tint: .forest) else {
         throw SiteControlsProbeFailure("Could not create the site controls space.")
       }
-      var components = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
-      components.host = "site-controls.localhost"
-      components.path = "/site-controls"
-      components.query = nil
-      store.perform(.open(components.url!))
+      guard let siteFixture = SiteControlsProbeFixture.url(from: fixture) else {
+        throw SiteControlsProbeFailure("Could not create the site controls fixture URL.")
+      }
+      store.perform(.open(siteFixture))
     }
     let tab = try require(store.session.selectedSpace.selectedTabID, "fixture tab is selected")
     _ = try await document(tab)

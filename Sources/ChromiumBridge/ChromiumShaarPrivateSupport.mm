@@ -16,7 +16,16 @@ std::atomic<uint64_t> kPrivateRequestID{1ULL << 62};
 
 void Reply(void *context, const shaar_result *result) {
   void (^finish)(NSDictionary *) = (__bridge_transfer id)context;
-  if (!result || result->error.code != SHAAR_OK) {
+  if (!result) {
+    finish(@{@"error": @"Shaar private operation failed."});
+    return;
+  }
+  if (result->size < sizeof(*result) ||
+      result->error.size < sizeof(result->error)) {
+    finish(@{@"error": @"Shaar private operation returned an invalid result."});
+    return;
+  }
+  if (result->error.code != SHAAR_OK) {
     finish(@{@"error": @"Shaar private operation failed."});
     return;
   }

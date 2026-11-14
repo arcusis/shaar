@@ -334,6 +334,8 @@ struct PrintConsentTests {
     #expect(decisions.map(\.0) == [first.id, second.id])
     #expect(decisions.map(\.1) == [false, true])
     #expect(store.sheet == nil)
+  }
+
   @Test func navigationCommitCancelsPrintConsentBeforeFrameCanBeRebound() throws {
     let store = openedStore()
     let print = try request(store)

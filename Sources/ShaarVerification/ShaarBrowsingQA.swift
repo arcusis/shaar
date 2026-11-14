@@ -561,10 +561,24 @@ import Foundation
     let deliveredScroll = await untilReady(attempts: 20) {
       (wholeNumber(await evaluate(runtime, tab: scrollID, script: "window.__scrollEvents||0")) ?? 0) > 0
     }
+    var reachedLoadThreshold = false
+    if deliveredScroll {
+      reachedLoadThreshold = await untilReady(attempts: 20) {
+        (wholeNumber(await evaluate(
+          runtime, tab: scrollID,
+          script: "window.__scrollLoadThresholdReached?1:0"
+        )) ?? 0) == 1
+      }
+    }
     if !deliveredScroll {
       rows.append(row(
         "heavy-scroll", "blocked",
         "The hidden scroll did not deliver a scroll event to the page; row growth was not attributable."
+      ))
+    } else if !reachedLoadThreshold {
+      rows.append(row(
+        "heavy-scroll", "blocked",
+        "A page scroll event arrived, but the feed did not reach its lazy-load threshold."
       ))
     } else {
       var after = before

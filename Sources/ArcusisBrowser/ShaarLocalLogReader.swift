@@ -14,7 +14,13 @@ struct ShaarLocalLogReader {
   mutating func readLines() throws -> [String] {
     guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
       let size = (attributes[.size] as? NSNumber)?.uint64Value
-    else { return [] }
+    else {
+      if !FileManager.default.fileExists(atPath: file.path) {
+        offset = 0
+        pending = ""
+      }
+      return []
+    }
     if size < offset {
       offset = 0
       pending = ""

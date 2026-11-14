@@ -11,6 +11,7 @@ import Testing
   @Test func fixtureURLRequiresAnExplicitPortAndNoCredentials() {
     #expect(ShaarBrowsingQA.isLoopbackFixtureURL(URL(string: "http://127.0.0.1:48123/")))
     #expect(!ShaarBrowsingQA.isLoopbackFixtureURL(URL(string: "http://127.0.0.1/")))
+    #expect(!ShaarBrowsingQA.isLoopbackFixtureURL(URL(string: "http://127.0.0.1:0/")))
     #expect(
       !ShaarBrowsingQA.isLoopbackFixtureURL(
         URL(string: "http://user:secret@127.0.0.1:48123/")))

@@ -34,6 +34,15 @@ import Testing
     }
   }
 
+  @Test func loopbackFixturesMustUseAConnectablePort() {
+    #expect(
+      run(http: URL(string: "http://127.0.0.1:0/"), https: URL(string: "https://127.0.0.1:8443/"))
+        == 2)
+    #expect(
+      run(http: URL(string: "http://127.0.0.1:8080/"), https: URL(string: "https://127.0.0.1:0/"))
+        == 2)
+  }
+
   @Test func validLoopbackFixturesPassConfigurationBeforeRuntimeInitialization() throws {
     let root = FileManager.default.temporaryDirectory.appending(
       path: "platform-parity-configuration-\(UUID().uuidString)")

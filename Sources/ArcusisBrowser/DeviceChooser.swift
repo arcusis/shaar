@@ -141,8 +141,17 @@ enum DeviceChooserIntake {
         let name = raw["name"] as? String, name.utf8.count <= 256
       else { return nil }
       let sanitizedName = displayName(name)
+      let hasVisibleBase = sanitizedName.unicodeScalars.contains { scalar in
+        guard !CharacterSet.whitespacesAndNewlines.contains(scalar) else { return false }
+        switch scalar.properties.generalCategory {
+        case .nonspacingMark, .spacingMark, .enclosingMark:
+          return false
+        default:
+          return true
+        }
+      }
       let title =
-        sanitizedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !hasVisibleBase
         ? PanelsL10n.string("Unknown device") : sanitizedName
       options.append(DeviceChooserOption(index: index, title: title, detail: ""))
     }

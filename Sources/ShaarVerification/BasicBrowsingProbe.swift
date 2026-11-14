@@ -10,6 +10,19 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+enum BasicBrowsingPageEvidence {
+  static func isLive(_ value: Any?, expectedHost: String?) -> Bool {
+    guard let page = value as? [String: Any],
+      let href = page["href"] as? String,
+      let ready = page["ready"] as? String,
+      let text = page["text"] as? String,
+      let current = URL(string: href)
+    else { return false }
+    return ready == "complete" && !text.isEmpty
+      && (expectedHost == nil || current.host() == expectedHost)
+  }
+}
+
 /// A short user-flow smoke in the normal browser store, backed by the disposable engine fixture.
 @MainActor
 struct BasicBrowsingProbe {
@@ -93,15 +106,8 @@ struct BasicBrowsingProbe {
 
   private func waitForLivePage(_ id: UUID, expectedHost: String?) async throws {
     try await waitUntil("live page \(id)") {
-      guard let json = await self.evaluate(id.uuidString),
-        let page = json as? [String: Any],
-        let href = page["href"] as? String,
-        let ready = page["ready"] as? String,
-        let text = page["text"] as? String,
-        let current = URL(string: href)
-      else { return false }
-      return ready == "complete" && !text.isEmpty
-        && (expectedHost == nil || current.host() == expectedHost)
+      BasicBrowsingPageEvidence.isLive(
+        await self.evaluate(id.uuidString), expectedHost: expectedHost)
     }
     let audit = runtime.normalProbeSelectionAudit(forTabID: id.uuidString)
     guard engine.pages[id] != nil, audit["liveTab"] as? Bool == true,

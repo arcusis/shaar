@@ -148,6 +148,19 @@ import Testing
     #expect(model.selectedComponent == 1)
   }
 
+  @Test func cancelledAssetSaveDoesNotPublishFailure() async throws {
+    let inspector = try makeInspector(tab: .assets)
+    defer { inspector.close() }
+
+    let save = Task { @MainActor in
+      await inspector.details.saveAsset(url: "https://example.com/image.png", frameID: "frame")
+    }
+    save.cancel()
+    await save.value
+
+    #expect(inspector.details.failure == nil)
+  }
+
   @Test func malformedAssetDimensionsAndOversizedPayloadsAreRejected() throws {
     let inspector = try makeInspector(tab: .assets)
     defer { inspector.close() }

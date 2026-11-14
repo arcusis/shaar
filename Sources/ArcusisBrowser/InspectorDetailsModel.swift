@@ -436,8 +436,10 @@ final class InspectorDetailsModel {
   }
 
   func saveAsset(url: String, frameID: String) async {
+    guard !Task.isCancelled else { return }
     do {
       let data = try await resourceData(url: url, frameID: frameID)
+      guard !Task.isCancelled else { return }
       let panel = NSSavePanel()
       let filename = (URL(string: url)?.lastPathComponent ?? "asset").unicodeScalars.map {
         CharacterSet.controlCharacters.contains($0) || "/\\:".unicodeScalars.contains($0)
@@ -447,6 +449,8 @@ final class InspectorDetailsModel {
         filename.isEmpty || [".", ".."].contains(filename) ? "asset" : String(filename.prefix(160))
       guard await panel.begin() == .OK, let destination = panel.url else { return }
       try data.write(to: destination, options: .atomic)
+    } catch is CancellationError {
+      return
     } catch { failure = InspectorDetailsL10n.display(error.localizedDescription) }
   }
 }

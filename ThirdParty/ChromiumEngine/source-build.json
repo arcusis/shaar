@@ -515,7 +515,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0068-shaar-bluetooth-gate.patch",
-      "sha256": "72378ee626d2bc3383a159903c4b5819331e35eb090e3445063c9914c75411b7"
+      "sha256": "730013c0c543c71c0653553a7bafb3fc0ab06178ccac09ae2cdf8e54a81bf21a"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0069-shaar-device-chooser.patch",

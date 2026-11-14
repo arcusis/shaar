@@ -16,6 +16,10 @@ from sensitive_files import policy_errors
 
 
 def scan_history(root, base: str, head: str, report) -> int:
+    if report.is_symlink():
+        raise ValueError(f"secret scan report must not be a symlink: {report}")
+    if report.exists() and not report.is_file():
+        raise ValueError(f"secret scan report is not a regular file: {report}")
     errors = []
     for revision in history_commits(root, base, head):
         errors.extend(f"{revision[:12]}: {error}" for error in policy_errors(root, revision))

@@ -2707,6 +2707,16 @@
         }
       }
     },
+    "Window changes could not be saved. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשמור את שינויי החלונות. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
     "Inspect Element": {
       "localizations": {
         "en": {

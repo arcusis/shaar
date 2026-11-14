@@ -15,12 +15,18 @@ enum SettingsL10n {
     BrowserLocalization.format(key, table: "Settings", arguments: arguments)
   }
 
-  static func notice(_ message: String) -> String {
+  static func notice(
+    _ message: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
     let saveFailure = "Window changes could not be saved. "
     if message.hasPrefix(saveFailure) {
-      return format(
-        "Window changes could not be saved. %@",
-        .string(String(message.dropFirst(saveFailure.count))))
+      guard language.resolved == .hebrew else {
+        return BrowserLocalization.format(
+          "Window changes could not be saved. %@", table: "Settings", language: language,
+          arguments: [.string(String(message.dropFirst(saveFailure.count)))])
+      }
+      return BrowserLocalization.string(
+        "Window changes could not be saved. Try again.", table: "Settings", language: language)
     }
     return string(message)
   }

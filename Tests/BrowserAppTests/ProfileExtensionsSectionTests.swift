@@ -16,6 +16,15 @@ final class ProfileExtensionsSectionTests: XCTestCase {
     XCTAssertEqual(ProfileExtensionsSection.extensionRowHeadingTraits, .isHeader)
   }
 
+  func testExtensionToolbarButtonNamesItsProfileInBothLanguages() {
+    XCTAssertEqual(
+      ExtensionToolbar.accessibilityLabel(profileName: "Work", language: .english),
+      "Extensions for Work")
+    XCTAssertEqual(
+      ExtensionToolbar.accessibilityLabel(profileName: "Work", language: .hebrew),
+      "תוספים עבור \u{2068}Work\u{2069}")
+  }
+
   func testProfileNamesFollowShaarsSelectedLanguageOrder() {
     let english = UUID()
     let hebrew = UUID()

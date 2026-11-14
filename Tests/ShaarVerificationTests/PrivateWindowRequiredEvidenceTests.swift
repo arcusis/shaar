@@ -7,6 +7,10 @@ import Testing
 @testable import ShaarVerification
 
 @MainActor @Suite struct PrivateWindowRequiredEvidenceTests {
+  @Test func requiredCheckNamesAreUniqueForEarlyFailureReports() {
+    #expect(Set(PrivateWindowProbe.checkNames).count == PrivateWindowProbe.checkNames.count)
+  }
+
   private func completeChecks() -> [String: Bool] {
     Dictionary(uniqueKeysWithValues: PrivateWindowProbe.checkNames.map { ($0, true) })
   }

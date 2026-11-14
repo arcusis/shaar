@@ -24,4 +24,20 @@ struct WebShareProbeTests {
       #expect(decoded == [value])
     }
   }
+
+  @MainActor
+  @Test func shareOriginDropsPagePathQueryFragmentAndCredentials() throws {
+    let page = URL(string: "http://user:secret@127.0.0.1:48000/account?token=local#section")!
+    let origin = try #require(WebShareProbe.originURL(for: page))
+    let components = try #require(URLComponents(url: origin, resolvingAgainstBaseURL: false))
+
+    #expect(components.scheme == "http")
+    #expect(components.host == "127.0.0.1")
+    #expect(components.port == 48000)
+    #expect(components.path.isEmpty)
+    #expect(components.query == nil)
+    #expect(components.fragment == nil)
+    #expect(components.user == nil)
+    #expect(components.password == nil)
+  }
 }

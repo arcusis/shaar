@@ -10,7 +10,8 @@ import { accessibilityStandards } from "../src/a11y";
 const require = createRequire(import.meta.url);
 const axe = require("axe-core");
 
-test("accessibility audit covers WCAG 2.2 AA tags supported by axe", () => {
+test("accessibility audit covers WCAG 2.1 A and WCAG 2.2 AA tags supported by axe", () => {
+  assert.ok(accessibilityStandards.includes("wcag21a"));
   assert.ok(accessibilityStandards.includes("wcag22aa"));
   const supportedTags = new Set(axe.getRules().flatMap((rule: { tags: string[] }) => rule.tags));
   for (const tag of accessibilityStandards) assert.ok(supportedTags.has(tag), tag);

@@ -218,9 +218,12 @@ final class ExtensionProbe {
     let json: String? = await withCheckedContinuation { continuation in
       runtime.evaluateProbePopupID(id, script: expression) { continuation.resume(returning: $0) }
     }
-    return json.flatMap { $0.data(using: .utf8) }.flatMap {
-      try? JSONSerialization.jsonObject(with: $0, options: .fragmentsAllowed)
-    }
+    return Self.popupEvidence(json)
+  }
+
+  static func popupEvidence(_ json: String?) -> Any? {
+    guard let json, let data = json.data(using: .utf8) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
   }
 
   /// The bundled manager extension answers chrome.management without adding tabs or windows.

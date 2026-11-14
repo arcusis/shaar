@@ -152,8 +152,21 @@ import Foundation
     guard keepHidden(&rows, "overload-open") else { return rows }
 
     let extraStarted = Date()
+    let beforeExtraCount = tabCount(context, space: space)
+    let beforeExtraTabID = context.store.session.selectedSpace.selectedTabID
     context.store.perform(.open(url(base, path: "/light", query: "n=extra")))
-    let extraReady = await until(attempts: 150, condition: { settled(context, path: "/light") })
+    let extraReady = await until(
+      attempts: 150,
+      condition: {
+        guard let selected = context.store.session.selectedSpace.selectedTab else { return false }
+        return Self.overloadExtraTabPassed(
+          beforeCount: beforeExtraCount,
+          afterCount: tabCount(context, space: space),
+          beforeTabID: beforeExtraTabID,
+          selectedTabID: selected.id,
+          selectedURL: selected.url,
+          settled: settled(context, path: "/light"))
+      })
     rows.append(
       row(
         "overload-next-tab", extraReady ? "pass" : "fail",
@@ -965,6 +978,19 @@ import Foundation
 
   private static func tabCount(_ context: NativeBrowserContext, space: UUID) -> Int {
     context.store.session.spaces.first { $0.id == space }?.tabs.count ?? 0
+  }
+
+  static func overloadExtraTabPassed(
+    beforeCount: Int, afterCount: Int, beforeTabID: UUID?, selectedTabID: UUID?,
+    selectedURL: URL, settled: Bool
+  ) -> Bool {
+    guard afterCount == beforeCount + 1,
+      let beforeTabID, let selectedTabID, beforeTabID != selectedTabID,
+      selectedURL.path == "/light",
+      URLComponents(url: selectedURL, resolvingAgainstBaseURL: false)?.queryItems?.contains(
+        where: { $0.name == "n" && $0.value == "extra" }) == true
+    else { return false }
+    return settled
   }
 
   private static func liveCount(_ context: NativeBrowserContext) -> Int {

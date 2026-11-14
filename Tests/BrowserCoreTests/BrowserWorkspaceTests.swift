@@ -154,6 +154,32 @@ private func workspaceFixture() throws -> BrowserSession {
   try workspace.validate()
 }
 
+@Test func restoringClosedWindowKeepsCurrentSharedWorkspaceDefinitions() throws {
+  var workspace = try BrowserWorkspace(session: workspaceFixture())
+  let closedID = try #require(workspace.windows.first?.id)
+  let survivingID = try workspace.addWindow(from: closedID)
+  let closedWindow = try #require(workspace.window(closedID))
+  let selectedTabID = closedWindow.session.selectedSpace.selectedTabID
+  try workspace.removeWindow(closedID)
+
+  let currentProfileID = closedWindow.session.selectedSpace.profileID
+  try workspace.renameProfile(currentProfileID, name: "Current profile")
+  let currentFavoriteID = try #require(
+    try workspace.addFavorite(
+      windowID: survivingID, profileID: currentProfileID,
+      originalURL: URL(string: "https://current.example/favorite")!))
+
+  let restoredID = try workspace.restoreWindow(closedWindow, from: survivingID)
+  let restored = try #require(workspace.window(restoredID))
+
+  #expect(
+    restored.session.profiles.first { $0.id == currentProfileID }?.name == "Current profile")
+  #expect(restored.session.selectedSpace.profileID == currentProfileID)
+  #expect(restored.session.favorites.contains { $0.id == currentFavoriteID })
+  #expect(restored.session.selectedSpace.selectedTabID == selectedTabID)
+  try workspace.validate()
+}
+
 @Test func keepAlivePinnedDefinitionReachesNewWindows() throws {
   var session = try workspaceFixture()
   let firstPin = session.selectedSpace.tabs.first { $0.isPinned }

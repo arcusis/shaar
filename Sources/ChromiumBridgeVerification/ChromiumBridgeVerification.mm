@@ -41,6 +41,16 @@
 }
 @end
 
+@interface ARCPrivateMediaProbeRuntime : ARCShaarRuntime
+@end
+
+@implementation ARCPrivateMediaProbeRuntime
+- (shaar_engine *)privateEngineHandle { return (shaar_engine *)1; }
+- (shaar_profile *)privateProfileHandleForID:(NSString *)profileID {
+  return (shaar_profile *)1;
+}
+@end
+
 @interface ARCShaarRuntime (MediaEventProbe)
 - (void)receiveEvent:(const shaar_event *)event;
 @end
@@ -191,6 +201,42 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
   [runtime receiveEvent:&event];
   return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count),
            @"accessCount": @(access.count)};
+}
+
+NSDictionary *ARCProbePrivateShaarMediaEventDispatch(NSDictionary *payload) {
+  ARCPrivateMediaProbeRuntime *runtime = [ARCPrivateMediaProbeRuntime new];
+  __block NSUInteger accessCount = 0;
+  runtime.onPrivateMediaAccess = ^(NSString *contextID, NSString *windowID,
+                                   NSString *tabID, NSDictionary *state) {
+    accessCount += 1;
+  };
+  NSString *contextID = @"PRIVATE-CONTEXT";
+  NSString *profileID = @"PRIVATE-PROFILE";
+  NSString *windowID = @"PRIVATE-WINDOW";
+  NSString *tabID = @"PRIVATE-TAB";
+  NSMutableDictionary *state = ARCPrivateShaarState(runtime);
+  state[@"contexts"] = [@{contextID: @{
+    @"sourceProfileID": profileID,
+    @"windows": [NSMutableArray arrayWithObject:windowID],
+    @"session": [NSValue valueWithPointer:(void *)1],
+  }} mutableCopy];
+  state[@"windows"] = [@{windowID: @{
+    @"contextID": contextID, @"tabs": [NSMutableArray arrayWithObject:tabID],
+  }} mutableCopy];
+  state[@"tabs"] = [@{tabID: @{
+    @"contextID": contextID, @"windowID": windowID,
+  }} mutableCopy];
+  NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  shaar_event event = {};
+  event.size = sizeof(event);
+  event.kind = SHAAR_EVENT_MEDIA;
+  event.profile_id = {profileID.UTF8String, profileID.length};
+  event.session_id = {contextID.UTF8String, contextID.length};
+  event.window_id = {windowID.UTF8String, windowID.length};
+  event.tab_id = {tabID.UTF8String, tabID.length};
+  event.payload_json = {(const char *)data.bytes, data.length};
+  [runtime receivePrivateEvent:&event payload:payload];
+  return @{@"accessCount": @(accessCount)};
 }
 
 NSDictionary *ARCProbeDesktopCaptureEventDispatch(NSDictionary *payload, BOOL validOwner) {

@@ -5,6 +5,7 @@
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
 
+#include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 
 namespace {
@@ -49,6 +50,11 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
     [status[@"trackerProtectionEnabled"] isEqual:@YES] &&
     [status[@"trackerDomainCount"] intValue] > 0 &&
     [status[@"trackerRulesRevision"] length] > 0;
+}
+
+BOOL PrivateIsJSONBoolean(id value) {
+  return [value isKindOfClass:NSNumber.class] &&
+      CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID();
 }
 
 const shaar_operation kShaarOpPrivateTabDiscard = (shaar_operation)208;
@@ -620,9 +626,8 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
       NSNumber *camera = payload[@"camera"];
       NSNumber *microphone = payload[@"microphone"];
       NSNumber *screen = payload[@"screen"];
-      if ([camera isKindOfClass:NSNumber.class] &&
-          [microphone isKindOfClass:NSNumber.class] &&
-          [screen isKindOfClass:NSNumber.class]) {
+      if (PrivateIsJSONBoolean(camera) && PrivateIsJSONBoolean(microphone) &&
+          PrivateIsJSONBoolean(screen)) {
         self.onPrivateMediaAccess(contextID, windowID, tabID, @{
           @"camera": camera, @"microphone": microphone, @"screen": screen});
       }

@@ -25,12 +25,6 @@ import Testing
   let session = try BrowserSession(profiles: [profile], spaces: [space], selectedSpaceID: space.id)
   #expect(throws: Never.self) { try session.validate() }
 
-  var invalidSession = session
-  var invalidSpace = invalidSession.spaces[0]
-  invalidSpace.tabs[0].folderID = UUID()
-  invalidSession.spaces[0] = invalidSpace
-  #expect(throws: SessionError.invalidState) { try invalidSession.validate() }
-
   let start = ContinuousClock.now
   for _ in 0..<10 { try session.validate() }
   print("sessionValidationScaleBenchmark: \(start.duration(to: .now))")

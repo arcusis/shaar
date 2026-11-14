@@ -357,23 +357,24 @@ struct PrivateMultiTabProbe {
 }
 
 enum PrivateMultiTabEvidence {
+  @MainActor
   static func pageIsAttached(_ page: NSView?, to container: NSView, retainedPage: NSView?) -> Bool {
     guard let page, retainedPage === page else { return false }
     return page.superview === container
   }
 
   static func blankShellAudit(_ audit: [String: Any]) -> Bool {
-    audit["nativeViewPresent"] as? Bool == true
+    booleanEvidence(audit["nativeViewPresent"]) == true
       && liveShellAudit(audit, stage: "first-blank")
   }
 
   static func liveTabAudit(_ audit: [AnyHashable: Any]?, tabCount: Int) -> Bool {
-    audit?["sourceIsRegular"] as? Bool == true
-      && audit?["contextIsPrivate"] as? Bool == true
-      && audit?["contextDistinct"] as? Bool == true
-      && audit?["allWindowsUsePrivateActiveProfile"] as? Bool == true
-      && audit?["allTabsInNativeProfileBrowser"] as? Bool == true
-      && audit?["allWindowsDisplayOwnedWebContents"] as? Bool == true
+    booleanEvidence(audit?["sourceIsRegular"]) == true
+      && booleanEvidence(audit?["contextIsPrivate"]) == true
+      && booleanEvidence(audit?["contextDistinct"]) == true
+      && booleanEvidence(audit?["allWindowsUsePrivateActiveProfile"]) == true
+      && booleanEvidence(audit?["allTabsInNativeProfileBrowser"]) == true
+      && booleanEvidence(audit?["allWindowsDisplayOwnedWebContents"]) == true
       && integerEvidence(audit?["visibleNativeViewportCount"]) == 1
       && integerEvidence(audit?["tabCount"]) == tabCount
   }
@@ -381,11 +382,11 @@ enum PrivateMultiTabEvidence {
   static func liveShellAudit(_ audit: [String: Any], stage: String) -> Bool {
     audit["stage"] as? String == stage
       && integerEvidence(audit["containerCount"]) == 1
-      && audit["layerBacked"] as? [Bool] == [true]
-      && audit["attached"] as? Bool == true
-      && audit["attachedInWindow"] as? Bool == true
-      && audit["nativeHidden"] as? Bool == false
-      && audit["rawWindowSibling"] as? Bool == false
+      && booleanArrayEvidence(audit["layerBacked"]) == [true]
+      && booleanEvidence(audit["attached"]) == true
+      && booleanEvidence(audit["attachedInWindow"]) == true
+      && booleanEvidence(audit["nativeHidden"]) == false
+      && booleanEvidence(audit["rawWindowSibling"]) == false
   }
 
   static func splitShellAudit(_ audit: [String: Any]) -> Bool {
@@ -394,11 +395,11 @@ enum PrivateMultiTabEvidence {
       && integerEvidence(audit["attachedContainerCount"]) == 2
       && integerEvidence(audit["attachedPagesInWindowCount"]) == 2
       && integerEvidence(audit["visiblePagesInWindowCount"]) == 2
-      && audit["layerBacked"] as? [Bool] == [true, true]
-      && audit["attached"] as? Bool == true
-      && audit["attachedInWindow"] as? Bool == true
-      && audit["nativeHidden"] as? Bool == false
-      && audit["rawWindowSibling"] as? Bool == false
+      && booleanArrayEvidence(audit["layerBacked"]) == [true, true]
+      && booleanEvidence(audit["attached"]) == true
+      && booleanEvidence(audit["attachedInWindow"]) == true
+      && booleanEvidence(audit["nativeHidden"]) == false
+      && booleanEvidence(audit["rawWindowSibling"]) == false
   }
 
   static func liveSearch(_ evidence: [String: Any]?, host: String) -> Bool {
@@ -434,5 +435,22 @@ enum PrivateMultiTabEvidence {
       return Int(exactly: number.doubleValue)
     }
     return Int(number.stringValue)
+  }
+
+  private static func booleanEvidence(_ value: Any?) -> Bool? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) == CFBooleanGetTypeID()
+    else { return nil }
+    return number.boolValue
+  }
+
+  private static func booleanArrayEvidence(_ value: Any?) -> [Bool]? {
+    guard let values = value as? [Any] else { return nil }
+    var result: [Bool] = []
+    for value in values {
+      guard let boolean = booleanEvidence(value) else { return nil }
+      result.append(boolean)
+    }
+    return result
   }
 }

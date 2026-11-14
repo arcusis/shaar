@@ -269,9 +269,13 @@ bool ProfileOwnsContents(shaar::ShaarEngineContext* context,
 
 }  // namespace
 
-void DismissSavePromptsForDestroyedContents(content::WebContents* contents) {
+void SupersedeSavePrompts(content::WebContents* contents) {
   if (contents)
     Supersede(contents);
+}
+
+void DismissSavePromptsForDestroyedContents(content::WebContents* contents) {
+  SupersedeSavePrompts(contents);
 }
 
 int DecisionCode(const char* prompt, bool update, const char* decision) {

@@ -129,9 +129,21 @@ enum InspectorIdleSmokeEvidence {
 
   private static func pollCalls(_ model: InspectorModel) async throws -> Int {
     let value = try await model.evaluate("globalThis.__shaarInspectorPollCalls")
-    if let calls = value as? Int { return calls }
-    if let calls = value as? Double { return Int(calls) }
+    if let calls = pollCallCount(from: value) { return calls }
     throw Failure("Inspector poll counter was missing")
+  }
+
+  static func pollCallCount(from value: Any?) -> Int? {
+    let calls: Int?
+    if let value = value as? Int {
+      calls = value
+    } else if let value = value as? Double {
+      calls = Int(exactly: value)
+    } else {
+      calls = nil
+    }
+    guard let calls, calls >= 0 else { return nil }
+    return calls
   }
 
   private static let pollCounter = """

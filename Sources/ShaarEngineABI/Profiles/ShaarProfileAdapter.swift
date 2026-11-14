@@ -145,6 +145,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
   public func activate(profileID: String, inWindow window: UInt64) throws {
     let id = try Self.validateUUID(profileID)
     guard let handle = handles[id] else { throw ShaarProfileError.notOpen }
+    guard window != 0 else { throw ShaarProfileError.staleHandle }
     try engine.activateProfile(handle, inWindow: window)
   }
 

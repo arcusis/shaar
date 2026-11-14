@@ -79,6 +79,18 @@ struct ShaarProfileAdapterTests {
     #expect(adapter.loadedProfileIDs.isEmpty)
   }
 
+  @Test @MainActor func activationRejectsNullWindowHandleBeforeCallingEngine() async throws {
+    let fake = FakeProfileEngine()
+    let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
+    let id = "4a4d4885-d38a-4b4a-bc03-b12f634bff11"
+    try await adapter.open(profileID: id)
+
+    #expect(throws: ShaarProfileError.staleHandle) {
+      try adapter.activate(profileID: id, inWindow: 0)
+    }
+    #expect(fake.activated.isEmpty)
+  }
+
   @Test @MainActor func storageKeychainResolutionUsesOnlyAnOpenProfile() async throws {
     let fake = FakeProfileEngine()
     let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)

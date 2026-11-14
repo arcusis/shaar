@@ -52,7 +52,6 @@ struct BrowserLibraryTests {
     let knownError = BrowserImport.ImportError.unsupported
     #expect(LibraryPanel.importErrorMessage(knownError) == knownError.localizedDescription)
   }
-  }
 
   @Test func bookmarkAndHistorySearchFindsTitlesWithoutTypingAccents() {
     #expect(LibraryPanelSearch.matches("Résumé https://example.test", query: "resume"))

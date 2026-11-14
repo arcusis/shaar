@@ -405,7 +405,7 @@ struct DeviceChooserTests {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
     let options = (0..<64).map {
-      DeviceChooserOption(index: $0, title: "USB device \($0)", detail: "")
+      DeviceChooserOption(optionID: "device-\($0)", title: "USB device \($0)", detail: "")
     }
     let request = DeviceChooserRequest(
       id: "long-list", tabID: tab.id, profileID: store.session.selectedSpace.profileID,

@@ -579,7 +579,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0142-blink-hidden-visual-viewport-events.patch",
-      "sha256": "1a27ec7e72efb2129a26809546be5d84044c19b38dce0d4c48c4146e49557ce2"
+      "sha256": "93f374256cf24fc8feb02547ca82229ccf9cd311d9c553666696ffb37661610f"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0120-shaar-print-view-manager.patch",

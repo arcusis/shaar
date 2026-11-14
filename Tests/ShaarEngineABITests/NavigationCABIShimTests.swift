@@ -66,3 +66,19 @@ private func fakeNavigationCShimSubmit(
   }
   #expect(noReply == invalidArgument)
 }
+
+@Test func navigationCShimRejectsTruncatedScopeBeforeCopyingIt() {
+  let invalidArgument = UInt32(SHAAR_INVALID_ARGUMENT.rawValue)
+  let symbol = unsafeBitCast(fakeNavigationCShimSubmit as NavigationShimSubmit,
+                             to: UnsafeRawPointer.self)
+  var scope = shaar_scope(size: 0, profile: nil, private_session: nil)
+  var error = shaar_error(
+    size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK, platform_code: 0,
+    message: shaar_bytes(data: nil, size: 0))
+  let status = withUnsafePointer(to: &scope) { scopePointer in
+    shaar_navigation_submit_invoke(
+      symbol, OpaquePointer(bitPattern: 0x22), scopePointer, nil, nil, 0,
+      shaar_bytes(data: nil, size: 0), 1, noOpNavigationShimReply, nil, &error)
+  }
+  #expect(status == invalidArgument)
+}

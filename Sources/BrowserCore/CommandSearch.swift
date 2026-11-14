@@ -7,7 +7,7 @@ import Foundation
 public enum NavigationInput {
   public static func isWebURL(_ url: URL) -> Bool {
     ["http", "https"].contains(url.scheme?.lowercased() ?? "") && !(url.host() ?? "").isEmpty
-      && (url.port.map { (0...65535).contains($0) } ?? true)
+      && (url.port.map { (1...65535).contains($0) } ?? true)
   }
 
   /// Only engine-requested Node inspector frontends may use Chromium's internal scheme.

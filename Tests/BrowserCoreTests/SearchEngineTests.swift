@@ -72,10 +72,12 @@ import Testing
       == "https://LOCALHOST:3000/path")
 }
 
-@Test func navigationRejectsOutOfRangeWebPorts() {
-  let invalid = URL(string: "https://example.com:99999")!
-  #expect(!NavigationInput.isWebURL(invalid))
-  #expect(NavigationInput.address(for: invalid.absoluteString) == nil)
+@Test func navigationRejectsInvalidWebPorts() {
+  for invalid in [URL(string: "https://example.com:0")!, URL(string: "https://example.com:99999")!]
+  {
+    #expect(!NavigationInput.isWebURL(invalid))
+    #expect(NavigationInput.address(for: invalid.absoluteString) == nil)
+  }
   #expect(NavigationInput.address(for: "https://example.com:65535")?.port == 65535)
 }
 

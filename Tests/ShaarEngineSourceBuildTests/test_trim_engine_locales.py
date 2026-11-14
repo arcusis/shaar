@@ -125,6 +125,24 @@ class TrimEngineLocalesTests(unittest.TestCase):
                     TRIM.main()
             self.assertTrue((external_resources / "fr.lproj").is_dir())
 
+    def test_removed_bytes_excludes_symlink_targets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            resources = root / "Resources"
+            resources.mkdir()
+            for name in ("en.lproj", "he.lproj"):
+                (resources / name).mkdir()
+            external = root / "large-external-resource"
+            external.write_bytes(b"external" * 100)
+            french = resources / "fr.lproj"
+            french.mkdir()
+            (french / "strings.pak").symlink_to(external)
+
+            result = TRIM.trim_locales(resources)
+
+            self.assertEqual(result["removedBytes"], 0)
+            self.assertTrue(external.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

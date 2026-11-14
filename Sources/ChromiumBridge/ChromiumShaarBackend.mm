@@ -45,6 +45,11 @@ NSError *ShaarStatusError(NSString *message, shaar_error_code status) {
                          userInfo:@{NSLocalizedDescriptionKey: message}];
 }
 
+BOOL ShaarResultIsValid(const shaar_result *result) {
+  return result && result->size >= sizeof(*result) &&
+      result->error.size >= sizeof(result->error);
+}
+
 BOOL ShaarPrintField(id value, NSUInteger maxUTF8Length, BOOL required) {
   if (![value isKindOfClass:NSString.class]) return !required && value == nil;
   NSData *data = [(NSString *)value dataUsingEncoding:NSUTF8StringEncoding];
@@ -823,7 +828,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       _shaarEngine, Bytes(canonicalID), Bytes(directory), 1, _nextRequestID++,
       [](void *context, const shaar_result *result) {
         void (^finish)(NSError *) = (__bridge_transfer id)context;
-        finish(result && result->error.code == SHAAR_OK ? nil :
+        finish(ShaarResultIsValid(result) && result->error.code == SHAAR_OK ? nil :
                ShaarError(@"Shaar could not load the profile."));
       }, context, &profile, &error);
   if (status != SHAAR_OK) {
@@ -1234,11 +1239,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       {(const char *)json.bytes, json.length}, _nextRequestID++,
       [](void *context, const shaar_result *result) {
         void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
-        if (!result || result->error.code != SHAAR_OK) {
-          if (!result) {
-            finish(nil, ShaarError(@"Shaar tab operation failed."));
-            return;
-          }
+        if (!ShaarResultIsValid(result)) {
+          finish(nil, ShaarError(@"Shaar tab operation returned an invalid result."));
+          return;
+        }
+        if (result->error.code != SHAAR_OK) {
           NSString *message = String(result->error.message);
           if (message.length == 0) message = @"Shaar tab operation failed.";
           finish(nil, ShaarStatusError(message, result->error.code));
@@ -1280,7 +1285,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       {(const char *)json.bytes, json.length}, _nextRequestID++,
       [](void *context, const shaar_result *result) {
         void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
-        if (!result || result->error.code != SHAAR_OK) {
+        if (!ShaarResultIsValid(result)) {
+          finish(nil, ShaarError(@"Shaar profile operation returned an invalid result."));
+          return;
+        }
+        if (result->error.code != SHAAR_OK) {
           finish(nil, ShaarError(@"Shaar profile operation failed."));
           return;
         }
@@ -1611,8 +1620,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       {(const char *)json.bytes, json.length}, _nextRequestID++,
       [](void *context, const shaar_result *result) {
         void (^reply)(NSString *, shaar_error_code) = (__bridge_transfer id)context;
-        NSString *json = result ? String(result->payload_json) : nil;
-        reply(json, result ? result->error.code : SHAAR_CHROMIUM_ERROR);
+        if (!ShaarResultIsValid(result)) {
+          reply(nil, SHAAR_CHROMIUM_ERROR);
+          return;
+        }
+        reply(String(result->payload_json), result->error.code);
       }, context, &error);
   if (status != SHAAR_OK) {
     if (syncCode) *syncCode = error.code == SHAAR_OK ? SHAAR_CHROMIUM_ERROR : error.code;

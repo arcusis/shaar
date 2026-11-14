@@ -10,6 +10,23 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ChromiumBridgeErrorContractTests(unittest.TestCase):
+    def test_backend_result_callbacks_validate_before_reading_fields(self):
+        source = (ROOT / "Sources/ChromiumBridge/ChromiumShaarBackend.mm").read_text()
+        marker = "[](void *context, const shaar_result *result) {"
+        callbacks = source.split(marker)[1:]
+        self.assertEqual(len(callbacks), 4)
+
+        for callback in callbacks:
+            callback = callback[:callback.index("}, context, &")]
+            validation = callback.find("ShaarResultIsValid(result)")
+            member_reads = [
+                position for token in ("result->error.code", "result->payload_json")
+                if (position := callback.find(token)) >= 0
+            ]
+            self.assertGreaterEqual(validation, 0)
+            self.assertTrue(member_reads)
+            self.assertLess(validation, min(member_reads))
+
     def test_private_reply_checks_result_and_error_sizes_before_decoding(self):
         source = (ROOT / "Sources/ChromiumBridge/ChromiumShaarPrivateSupport.mm").read_text()
         start = source.index("void Reply(void *context, const shaar_result *result) {")

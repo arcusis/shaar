@@ -19,11 +19,15 @@ extension DeveloperPageModel {
 
   func refreshPerformance() async throws {
     guard performanceEnabled else { return }
+    try Task.checkCancellation()
     try retainDeveloperSession()
     let generation = documentGeneration
     _ = try await call("Performance.enable")
+    try Task.checkCancellation()
     _ = try await evaluate(PagePerformanceScript.install)
+    try Task.checkCancellation()
     let metrics = try await call("Performance.getMetrics")
+    try Task.checkCancellation()
     guard
       let page = try await evaluate("globalThis.__shaarPerformanceV1.snapshot()") as? [String: Any],
       generation == documentGeneration, performanceEnabled, !Task.isCancelled

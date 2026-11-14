@@ -54,10 +54,17 @@ public enum BrowserLaunch {
     BrowserApplication.main()
   }
 
-  private static func value(after flag: String, in arguments: [String]) -> String? {
+  static func value(after flag: String, in arguments: [String]) -> String? {
     guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
     else { return nil }
-    return arguments[index + 1]
+    let value = arguments[index + 1]
+    let flags: Set<String> = [
+      "--render-preview", "--command", "--command-query", "--command-filter", "--compact",
+      "--hide-sidebar", "--space-editor", "--extension-consent", "--recent-downloads",
+      "--settings", "--settings-profiles", "--settings-profile-editor", "--sleeping-tab",
+      "--first-run-step", "--first-run-from-dmg",
+    ]
+    return flags.contains(value) ? nil : value
   }
 
   @MainActor private static func renderPreview(

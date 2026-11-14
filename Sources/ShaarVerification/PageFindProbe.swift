@@ -247,6 +247,11 @@ final class PageFindProbe {
   }
 
   private func writeReport(error: Error?) throws {
+    try Self.reportData(phase: phase, checks: checks, error: error)
+      .write(to: root.appending(path: "\(phase)-find.json"), options: .atomic)
+  }
+
+  static func reportData(phase: String, checks: [String], error: Error?) throws -> Data {
     try JSONSerialization.data(
       withJSONObject: [
         "passed": error == nil, "phase": phase, "checks": checks,
@@ -254,7 +259,7 @@ final class PageFindProbe {
         "scope":
           "Authored text searched through Chromium. Offscreen layout; live keyboard focus is unverified.",
       ], options: [.prettyPrinted, .sortedKeys]
-    ).write(to: root.appending(path: "\(phase)-find.json"), options: .atomic)
+    )
   }
 }
 

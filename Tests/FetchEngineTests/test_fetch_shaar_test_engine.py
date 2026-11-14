@@ -18,6 +18,39 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class FetchShaarTestEngineTests(unittest.TestCase):
+    def test_symlinked_cache_roots_are_rejected_before_access(self):
+        for relative in ("build", "build/ShaarEngineTestCache"):
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                scripts = root / "scripts"
+                scripts.mkdir()
+                shutil.copy2(REPO / "scripts/fetch-shaar-test-engine.sh", scripts)
+                external = root / "external"
+                external.mkdir()
+                sentinel = external / "keep.txt"
+                sentinel.write_text("leave untouched")
+                link = root / relative
+                if relative == "build":
+                    link.symlink_to(external, target_is_directory=True)
+                else:
+                    link.parent.mkdir()
+                    link.symlink_to(external, target_is_directory=True)
+                tools = root / "tools"
+                tools.mkdir()
+                uname = tools / "uname"
+                uname.write_text("#!/bin/sh\nprintf 'arm64\\n'\n")
+                uname.chmod(0o755)
+                environment = dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}")
+
+                result = subprocess.run(
+                    ["bash", str(scripts / "fetch-shaar-test-engine.sh")],
+                    cwd=root, env=environment, capture_output=True, text=True,
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("cache root must not be a symlink", result.stderr)
+                self.assertEqual(list(external.iterdir()), [sentinel])
+
     def test_failed_framework_extraction_removes_staging_directory(self):
         with tempfile.TemporaryDirectory(prefix="fetch-shaar-test-engine-") as temporary:
             root = Path(temporary)

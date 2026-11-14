@@ -268,6 +268,22 @@ struct DeviceChooserTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func sheetRejectsAnOptionIndexThatWasNotPresented() throws {
+    let store = try store()
+    let request = try #require(
+      self.request(
+        store, transport: "usb", id: "unlisted-option",
+        options: [["index": 2, "name": "Presented adapter"]], canGrant: true))
+    var decided: Int??
+    store.onDeviceChooserDecision = { _, index in decided = .some(index) }
+
+    #expect(store.requestDeviceChooser(request))
+    store.resolveDeviceChooser(request.id, optionIndex: 1)
+
+    #expect(decided == .some(nil))
+    #expect(store.deviceChooserRequests.isEmpty)
+  }
+
   @Test func anUpdateReplacesTheOpenDeviceList() throws {
     let store = try store()
     let opened = try #require(self.request(store, transport: "usb", id: "7"))

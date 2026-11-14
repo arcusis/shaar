@@ -950,6 +950,26 @@ TEST(ShaarDevToolsPanelTest, ProjectsOnlyNamedFieldsFromAllowlistedEvents) {
       0, &output));
 }
 
+TEST(ShaarDevToolsPanelTest, ProjectsWebSocketLifecycleAndFrames) {
+  std::string output;
+  EXPECT_TRUE(ProjectPanelEventForTesting(
+      R"({"method":"Network.webSocketCreated","params":{"requestId":"ws-1","url":"ws://example.test/socket","initiator":{"type":"script","stack":{"callFrames":[{"url":"secret"}]}}}})",
+      42, &output));
+  EXPECT_NE(std::string::npos, output.find("ws://example.test/socket"));
+  EXPECT_EQ(std::string::npos, output.find("secret"));
+  EXPECT_TRUE(ProjectPanelEventForTesting(
+      R"({"method":"Network.webSocketHandshakeResponseReceived","params":{"requestId":"ws-1","response":{"status":101,"headers":{"Set-Cookie":"secret"}}}})",
+      42, &output));
+  EXPECT_NE(std::string::npos, output.find("101"));
+  EXPECT_TRUE(ProjectPanelEventForTesting(
+      R"({"method":"Network.webSocketFrameReceived","params":{"requestId":"ws-1","response":{"opcode":1,"payloadData":"echo-ready"}}})",
+      42, &output));
+  EXPECT_NE(std::string::npos, output.find("echo-ready"));
+  EXPECT_TRUE(ProjectPanelEventForTesting(
+      R"({"method":"Network.webSocketClosed","params":{"requestId":"ws-1","timestamp":1}})",
+      42, &output));
+}
+
 TEST(ShaarDevToolsPanelTest, ClipsTextAndRejectsUnboundedProtocolInput) {
   std::string output;
   const std::string message =

@@ -565,6 +565,52 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unlocalized Text.*Translated footer"):
                 VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
 
+    def test_rejects_direct_swiftui_control_titles_with_hebrew_catalog_translations(self):
+        controls = ("Button", "Label", "Menu", "Picker", "SecureField", "TextField", "Toggle")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Sources/ArcusisBrowser/ExampleView.swift"
+            source.parent.mkdir(parents=True)
+            catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
+            catalog_path.parent.mkdir(parents=True)
+            keys = {f"Translated {control}": {
+                "localizations": {"he": unit(f"{control} מתורגם")}
+            } for control in controls}
+            catalog_path.write_text(json.dumps({"strings": keys}), encoding="utf-8")
+
+            for control in controls:
+                key = f"Translated {control}"
+                source.write_text(f'{control}("{key}")\n', encoding="utf-8")
+                with self.subTest(control=control):
+                    with self.assertRaisesRegex(
+                        ValueError, f"unlocalized {control} title.*{key}"
+                    ):
+                        VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+
+    def test_rejects_direct_swiftui_text_when_hebrew_plural_catalog_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Sources/ArcusisBrowser/ExampleView.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text('Text("%d week ago")\n', encoding="utf-8")
+            catalog_path = root / "Sources/BrowserCore/Resources/Panels.xcstrings"
+            catalog_path.parent.mkdir(parents=True)
+            catalog_path.write_text(json.dumps({"strings": {
+                "%d week ago": {"localizations": {"he": {"variations": {"plural": {
+                    "one": unit("לפני שבוע"),
+                    "two": unit("לפני שבועיים"),
+                    "other": unit("לפני %d שבועות"),
+                }}}}}
+            }}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unlocalized Text.*%d week ago"):
+                VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+
+    def test_folder_name_field_uses_its_shell_catalog_translation(self):
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserSidebar.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('ShellL10n.string("Untitled")', source)
+
     def test_rejects_direct_accessibility_strings_when_hebrew_translation_exists(self):
         examples = (
             ('.help("Translated tooltip")', "help", "Translated tooltip"),

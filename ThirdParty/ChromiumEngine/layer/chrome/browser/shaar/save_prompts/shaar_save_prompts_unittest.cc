@@ -79,6 +79,21 @@ TEST(ShaarSavePromptTest, PageURLRejectsNonWebSchemes) {
                    .is_valid());
 }
 
+TEST(ShaarSavePromptTest, DetailDropsUnicodeFormattingControls) {
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("user\xE2\x80\xAE" "admin"),
+            "useradmin");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("left\xE2\x81\xA6" "right"),
+            "leftright");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("עברית"), "עברית");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail(
+                Repeat('a', 119) + "\xE2\x80\xAE" "b"),
+            Repeat('a', 119) + "b");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("soft\xC2\xAD" "hyphen"),
+            "softhyphen");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("bom\xEF\xBB\xBF" "text"),
+            "bomtext");
+}
+
 TEST(ShaarSavePromptTest, RegistersItsModuleAndOperationHandler) {
   ShaarModuleRegistry registry;
   shaar_save_prompts_register(&registry);

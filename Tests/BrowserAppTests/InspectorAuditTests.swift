@@ -2,6 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
+import BrowserCore
+import ChromiumBridge
 import Foundation
 import JavaScriptCore
 import SwiftUI
@@ -9,7 +12,73 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@MainActor
+private final class PendingInspectorSelectionRuntime: ARCChromiumRuntime {
+  private(set) var selectionReply: (@MainActor @Sendable ([String: Any]?, (any Error)?) -> Void)?
+  private(set) var followUpCalls = 0
+  private let pageView = NSView()
+
+  override func view(
+    forPrivateTabID tabID: String, windowID: String, contextID: String
+  ) -> NSView? { pageView }
+
+  override func beginInspector(
+    forPrivateTabID tabID: String, windowID: String, contextID: String
+  ) -> Bool { true }
+
+  override func endInspector(forTabID tabID: String) {}
+
+  override func privateInspectorCall(
+    _ method: String, params: [AnyHashable: Any], tabID: String, windowID: String,
+    contextID: String,
+    completion: @escaping @MainActor @Sendable ([String: Any]?, (any Error)?) -> Void
+  ) {
+    let expression = params["expression"] as? String ?? ""
+    if expression.contains("__shaarInspectorV2?.select(node)") {
+      selectionReply = completion
+    } else {
+      followUpCalls += 1
+      completion(["result": ["value": false]], nil)
+    }
+  }
+
+  func completeSelection() {
+    selectionReply?(["result": ["value": true]], nil)
+    selectionReply = nil
+  }
+}
+
 @Suite @MainActor struct InspectorAuditTests {
+  @Test func cancelledSelectionDoesNotRefreshInspectorWhenReplyArrives() async throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PendingInspectorSelectionRuntime()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "selection-context", windowID: "selection-window",
+      firstTabID: tabID, store: store)
+    session.tabChanged(
+      tabID, url: "https://example.test", title: "Fixture", loading: false,
+      back: false, forward: false)
+    let inspector = InspectorModel(target: try #require(session.inspectorTarget), privateSession: session)
+    inspector.open()
+    defer { inspector.close() }
+    let finding = InspectorAuditModel.Finding(
+      id: "image-alt:0", ruleID: "image-alt", impact: "serious", title: "Image alt",
+      help: "Add alt text.", helpURL: "https://example.test/help", target: "#image",
+      summary: "Image is missing alt text")
+    let audit = inspector.details.audit
+    audit.select(finding)
+    for _ in 0..<100 where runtime.selectionReply == nil { await Task.yield() }
+    try #require(runtime.selectionReply != nil)
+
+    audit.cancel()
+    let callsBeforeReply = runtime.followUpCalls
+    runtime.completeSelection()
+    for _ in 0..<100 where runtime.followUpCalls == callsBeforeReply { await Task.yield() }
+    #expect(runtime.followUpCalls == callsBeforeReply)
+  }
+
   @Test func staleAuditCompletionCannotClearNewerOperation() throws {
     let inspector = makeInspector(tab: .accessibility)
     defer { inspector.close() }

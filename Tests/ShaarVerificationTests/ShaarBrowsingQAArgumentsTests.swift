@@ -8,6 +8,16 @@ import Testing
 @testable import ShaarVerification
 
 @Suite @MainActor struct ShaarBrowsingQAArgumentsTests {
+  @Test func scenarioDispatchAcceptsOnlyRegisteredScenarios() {
+    for scenario in [
+      "overload-50", "overload-100", "overload-200", "churn", "windows", "splits", "heavy",
+      "dialogs", "downloads", "renderer", "restore-seed", "restore-check",
+    ] {
+      #expect(ShaarBrowsingQA.supportsScenario(scenario))
+    }
+    #expect(!ShaarBrowsingQA.supportsScenario("overload-500"))
+    #expect(!ShaarBrowsingQA.supportsScenario(""))
+  }
   @Test func unsupportedScenarioReturnsStructuredErrorBeforeEngineStartup() throws {
     let root = FileManager.default.temporaryDirectory.appending(
       path: "browsing-qa-scenario-" + UUID().uuidString)

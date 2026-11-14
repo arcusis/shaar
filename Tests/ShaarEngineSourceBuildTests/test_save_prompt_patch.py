@@ -65,7 +65,7 @@ class SavePromptPatchTests(unittest.TestCase):
         self.assertIn("replacements.ClearQuery()", source)
         self.assertIn("replacements.ClearRef()", source)
         self.assertIn(
-            "const GURL page = CleanPageURL(contents->GetLastCommittedURL());", source
+            "const GURL page = CleanPageURLForSavePrompt(contents->GetLastCommittedURL());", source
         )
         self.assertIn('payload.Set("pageURL", page.spec())', source)
         self.assertIn('payload.Set("origin", origin.spec())', source)

@@ -14,6 +14,7 @@
 namespace content {
 class WebContents;
 }
+class GURL;
 
 namespace shaar::save_prompts {
 
@@ -34,6 +35,7 @@ bool OfferSavePrompt(content::WebContents* contents,
 int DecisionCode(const char* prompt, bool update, const char* decision);
 bool IsValidDecisionRequestID(std::string_view id);
 std::string SanitizeDetail(std::string_view raw);
+GURL CleanPageURLForSavePrompt(const GURL& url);
 
 // A private window, or a tab with no browser context, never gets a save offer.
 bool SavePromptAllowedForContext(bool has_browser_context,

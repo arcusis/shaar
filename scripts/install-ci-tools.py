@@ -72,8 +72,12 @@ def read_verified_cached_archive(cache_path: Path, digest: str) -> Optional[byte
 
 def archive_payload(pin: dict, cache_directory: Optional[Path] = None) -> bytes:
     digest = pin["sha256"]
-    if cache_directory and cache_directory.is_symlink():
-        raise ValueError(f"Archive cache directory is a symlink: {cache_directory}")
+    if cache_directory:
+        if cache_directory.is_symlink():
+            raise ValueError(f"Archive cache directory is a symlink: {cache_directory}")
+        for parent in list(cache_directory.parents)[:2]:
+            if parent.is_symlink():
+                raise ValueError(f"Archive cache directory has a symlinked parent: {parent}")
     cache_path = cache_directory / f"{digest}.archive" if cache_directory else None
     if cache_path:
         cached = read_verified_cached_archive(cache_path, digest)

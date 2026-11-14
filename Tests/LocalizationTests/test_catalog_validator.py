@@ -35,6 +35,13 @@ def catalog(english, hebrew, key="Open %@"):
 
 
 class CatalogValidatorTests(unittest.TestCase):
+    def test_settings_catalog_has_no_duplicate_json_keys(self):
+        path = ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings"
+        data = VALIDATOR.load_json_without_duplicate_keys(
+            path.read_text(encoding="utf-8")
+        )
+        self.assertIn("Could not clear history. Try again.", data["strings"])
+
     def test_show_all_history_native_menu_has_hebrew_settings_copy(self):
         key = "Show All History"
         catalog = json.loads(

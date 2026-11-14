@@ -135,6 +135,8 @@ struct PrivateMultiTabProbe {
     guard owner.store.selectedSplit != nil else {
       throw Failure("Private tabs could not use the shared split model.")
     }
+    try await waitForSplitContainers(owner)
+    try await captureShell(owner, stage: "split")
     try workspace.flushSaves()
     guard try Data(contentsOf: file.url) == savedWorkspace else {
       throw Failure("Private tabs, folder or split changed the saved normal workspace.")
@@ -280,6 +282,14 @@ struct PrivateMultiTabProbe {
     let audit: [String: Any] = [
       "stage": stage,
       "containerCount": containers.count,
+      "attachedContainerCount": containers.filter { $0.pageView?.superview === $0 }.count,
+      "attachedPagesInWindowCount": containers.filter {
+        $0.pageView?.superview === $0 && $0.pageView?.window === owner.window
+      }.count,
+      "visiblePagesInWindowCount": containers.filter {
+        $0.pageView?.superview === $0 && $0.pageView?.window === owner.window
+          && $0.pageView?.isHidden == false && !$0.isHidden
+      }.count,
       "nativeViewPresent": native != nil,
       "nativeHidden": native?.isHidden ?? true,
       "nativeInWindow": native?.window === owner.window,
@@ -308,11 +318,24 @@ struct PrivateMultiTabProbe {
     else { throw Failure("Private shell capture was empty.") }
     try png.write(
       to: root.appending(path: "\(phase)-private-shell-\(stage).png"), options: .atomic)
-    if stage != "first-blank" {
+    if stage == "split" {
+      guard PrivateMultiTabEvidence.splitShellAudit(audit) else {
+        throw Failure("Private split pages are not attached to their host containers: \(audit).")
+      }
+    } else if stage != "first-blank" {
       guard PrivateMultiTabEvidence.liveShellAudit(audit, stage: stage) else {
         throw Failure("Private page container is not layer-backed: \(audit).")
       }
     }
+  }
+
+  private func waitForSplitContainers(_ owner: PrivateBrowserHost.Owner) async throws {
+    for _ in 0..<100 {
+      owner.hosting.layoutSubtreeIfNeeded()
+      if pageContainers(in: owner.hosting).count == 2 { return }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    throw Failure("Private split did not create two page containers.")
   }
 
   private func pageContainers(in view: NSView) -> [ChromiumPageContainerView] {
@@ -351,6 +374,19 @@ enum PrivateMultiTabEvidence {
     audit["stage"] as? String == stage
       && integerEvidence(audit["containerCount"]) == 1
       && audit["layerBacked"] as? [Bool] == [true]
+      && audit["attached"] as? Bool == true
+      && audit["attachedInWindow"] as? Bool == true
+      && audit["nativeHidden"] as? Bool == false
+      && audit["rawWindowSibling"] as? Bool == false
+  }
+
+  static func splitShellAudit(_ audit: [String: Any]) -> Bool {
+    audit["stage"] as? String == "split"
+      && integerEvidence(audit["containerCount"]) == 2
+      && integerEvidence(audit["attachedContainerCount"]) == 2
+      && integerEvidence(audit["attachedPagesInWindowCount"]) == 2
+      && integerEvidence(audit["visiblePagesInWindowCount"]) == 2
+      && audit["layerBacked"] as? [Bool] == [true, true]
       && audit["attached"] as? Bool == true
       && audit["attachedInWindow"] as? Bool == true
       && audit["nativeHidden"] as? Bool == false

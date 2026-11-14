@@ -97,6 +97,9 @@ struct DevToolsPanelTests {
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":5,"leaseID":42,"data":{"requestID":"r1","status":200,"truncated":false}}"#
     #expect(decodePanel(response) != nil)
     #expect(
+      decodePanel(response.replacingOccurrences(of: #""truncated":false"#,
+        with: #""truncated":0"#)) == nil)
+    #expect(
       decodePanel(response.replacingOccurrences(of: #""status":200"#, with: #""status":true"#))
         == nil)
   }
@@ -216,6 +219,8 @@ struct DevToolsPanelTests {
     #expect(decoded?.data.frame?.jpeg == Data([0xFF, 0xD8, 0xFF, 0xD9]))
     for unsafe in [
       payload.replacingOccurrences(of: #""masked":true"#, with: #""masked":false"#),
+      payload.replacingOccurrences(of: #""masked":true"#, with: #""masked":1"#),
+      payload.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":0"#),
       payload.replacingOccurrences(of: #""masked":true"#, with: #""masked":true,"headers":{}"#),
       payload.replacingOccurrences(of: #""sessionID":7"#, with: #""sessionID":0"#),
     ] {
@@ -307,6 +312,8 @@ struct DevToolsPanelTests {
       #"{"schemaVersion":2,"body":"ok","base64Encoded":false}"#,
       #"{"schemaVersion":1,"body":7,"base64Encoded":false}"#,
       #"{"schemaVersion":1,"body":"ok","base64Encoded":"false"}"#,
+      #"{"schemaVersion":1,"body":"ok","base64Encoded":0}"#,
+      #"{"schemaVersion":1,"body":"ok","base64Encoded":1}"#,
       "not-json",
     ] {
       #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)

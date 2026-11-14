@@ -7,7 +7,7 @@ import Testing
 
 @testable import ShaarVerification
 
-@Suite struct InspectorIdleSmokeEvidenceTests {
+@Suite @MainActor struct InspectorIdleSmokeEvidenceTests {
   @Test func probeAcceptsOnlyHTTPOnTheLiteralLoopbackAddress() {
     #expect(
       InspectorIdleSmokeEvidence.acceptsPageURL(URL(string: "http://127.0.0.1:8080/inspect")))
@@ -19,5 +19,13 @@ import Testing
     #expect(
       !InspectorIdleSmokeEvidence.acceptsPageURL(
         URL(string: "http://127.0.0.1.example.invalid:8080/inspect")))
+  }
+
+  @Test func pollCountMustBeANonnegativeExactInteger() {
+    #expect(InspectorIdleSmoke.pollCallCount(from: 5) == 5)
+    #expect(InspectorIdleSmoke.pollCallCount(from: 5.0) == 5)
+    for malformed: Any in [2.5, true, "5", -1] {
+      #expect(InspectorIdleSmoke.pollCallCount(from: malformed) == nil)
+    }
   }
 }

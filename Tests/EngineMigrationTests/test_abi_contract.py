@@ -97,6 +97,19 @@ class EngineABIContractTests(unittest.TestCase):
                 {"Framework/Headers/shaar_engine.h", "Framework/Versions/A/Headers/shaar_engine.h"},
                 "Framework/Versions/A/Chromium Framework"))
 
+    def test_archive_member_discovery_rejects_ambiguous_framework_binaries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "fixture.tar.xz"
+            with tarfile.open(archive_path, "w:xz") as archive:
+                for name in ("Framework/Chromium Framework", "Other/Chromium Framework"):
+                    payload = name.encode()
+                    entry = tarfile.TarInfo(name)
+                    entry.size = len(payload)
+                    archive.addfile(entry, io.BytesIO(payload))
+
+            with self.assertRaisesRegex(CONTRACT.ContractError, "exactly one Chromium Framework binary"):
+                CONTRACT.archive_members(archive_path)
+
     def test_source_build_header_is_digest_checked_and_includes_pinned_patch_declarations(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

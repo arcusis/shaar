@@ -39,6 +39,8 @@ struct PrivateProtectionStatus {
 }
 
 struct PrivateStartPage: View {
+  static let titleAccessibilityTraits: AccessibilityTraits = .isHeader
+
   let store: BrowserStore
   @State private var status: PrivateProtectionStatus?
 
@@ -57,6 +59,7 @@ struct PrivateStartPage: View {
         VStack(alignment: .leading, spacing: 8) {
           ShellL10n.text("A little more private.")
             .font(.system(size: 30, weight: .semibold, design: .rounded))
+            .accessibilityAddTraits(Self.titleAccessibilityTraits)
           ShellL10n.text(
             "Your browsing history stays out of this Mac’s saved history. Private windows for the same profile share temporary site data until the last one closes."
           )

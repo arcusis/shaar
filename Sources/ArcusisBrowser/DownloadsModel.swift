@@ -146,12 +146,24 @@ final class DownloadsModel {
       item.profileID == profileID, item.canOpen, let url = item.fileURL
     else { return nil }
     let resolvedURL = url.resolvingSymlinksInPath()
+    if records[profileID]?[id] != nil {
+      guard let directory = folder?.directoryURL ?? profileDirectory?(profileID),
+        Self.isContained(resolvedURL, in: directory)
+      else { return nil }
+    }
     guard
       let values = try? resolvedURL.resourceValues(forKeys: [.isRegularFileKey, .isReadableKey]),
       values.isRegularFile == true, values.isReadable == true,
       FileManager.default.isReadableFile(atPath: resolvedURL.path)
     else { return nil }
     return resolvedURL
+  }
+
+  private static func isContained(_ file: URL, in directory: URL) -> Bool {
+    let root = directory.resolvingSymlinksInPath().standardizedFileURL.path
+    let path = file.standardizedFileURL.path
+    let prefix = root.hasSuffix("/") ? root : root + "/"
+    return path != root && path.hasPrefix(prefix)
   }
 
   func fileActionFailed(profileID: UUID) {

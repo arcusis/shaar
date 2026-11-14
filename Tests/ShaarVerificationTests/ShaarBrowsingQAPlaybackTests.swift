@@ -12,8 +12,18 @@ import Testing
     #expect(!ShaarBrowsingQA.playbackSettled("{}"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":true,\"width\":320}"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":false,\"width\":0}"))
-    #expect(ShaarBrowsingQA.playbackSettled("{\"paused\":false,\"width\":320}"))
-    #expect(ShaarBrowsingQA.playbackSettled("{ \"width\": 320, \"paused\": false }"))
+    #expect(
+      !ShaarBrowsingQA.playbackSettled(
+        "{\"paused\":false,\"width\":320,\"error\":0,\"playResult\":\"pending\"}"))
+    #expect(
+      ShaarBrowsingQA.playbackSettled(
+        "{\"paused\":false,\"width\":320,\"error\":0,\"playResult\":\"resolved\"}"))
+    #expect(
+      ShaarBrowsingQA.playbackSettled(
+        "{ \"width\": 320, \"paused\": false, \"error\": 0, \"playResult\": \"resolved\" }"))
+    #expect(
+      ShaarBrowsingQA.playbackSettled(
+        "{\"paused\":true,\"width\":0,\"error\":0,\"playResult\":\"NotAllowedError\"}"))
     #expect(ShaarBrowsingQA.playbackSettled("{\"error\":3}"))
     #expect(ShaarBrowsingQA.playbackSettled("{ \"error\": 3 }"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"error\":0,\"paused\":true,\"width\":0}"))
@@ -24,8 +34,12 @@ import Testing
   }
 
   @Test func playbackVerdictParsesJSONEvidenceAndRejectsMalformedData() {
-    #expect(ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":0}"))
-    #expect(ShaarBrowsingQA.playbackStarted("{ \"error\": 0, \"width\": 320, \"paused\": false }"))
+    #expect(
+      ShaarBrowsingQA.playbackStarted(
+        "{\"paused\":false,\"width\":320,\"error\":0,\"click\":\"true\",\"playResult\":\"resolved\"}"))
+    #expect(
+      ShaarBrowsingQA.playbackStarted(
+        "{ \"error\": 0, \"width\": 320, \"paused\": false, \"click\": \"true\", \"playResult\": \"resolved\" }"))
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":true,\"width\":320,\"error\":0}"))
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":0,\"error\":0}"))
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":3}"))
@@ -40,7 +54,18 @@ import Testing
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":true,\"width\":320,\"error\":0}"))
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":0,\"error\":0}"))
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":3}"))
-    #expect(ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":0}"))
+    #expect(
+      ShaarBrowsingQA.playbackStarted(
+        "{\"paused\":false,\"width\":320,\"error\":0,\"click\":\"true\",\"playResult\":\"resolved\"}"))
+  }
+
+  @Test func playbackVerdictRequiresTrustedClickAndResolvedPlayPromise() {
+    #expect(
+      !ShaarBrowsingQA.playbackStarted(
+        "{\"paused\":false,\"width\":320,\"error\":0,\"click\":\"false\",\"playResult\":\"resolved\"}"))
+    #expect(
+      !ShaarBrowsingQA.playbackStarted(
+        "{\"paused\":false,\"width\":320,\"error\":0,\"click\":\"true\",\"playResult\":\"NotAllowedError\"}"))
   }
 
   @Test func playbackVerdictRejectsNumericPausedValues() {

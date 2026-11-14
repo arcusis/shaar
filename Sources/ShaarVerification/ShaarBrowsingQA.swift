@@ -1027,7 +1027,9 @@ import Foundation
     guard let evidence = playbackEvidence(value),
       let paused = jsonBoolean(evidence["paused"]),
       let width = integer(evidence["width"]),
-      let error = integer(evidence["error"])
+      let error = integer(evidence["error"]),
+      evidence["click"] as? String == "true",
+      evidence["playResult"] as? String == "resolved"
     else { return false }
     return !paused && width > 0 && error == 0
   }
@@ -1207,6 +1209,10 @@ import Foundation
       error = nil
     }
     if let error, error != 0 { return true }
+    guard let playResult = evidence["playResult"] as? String, playResult != "pending" else {
+      return false
+    }
+    if playResult != "resolved" { return true }
     guard let paused = jsonBoolean(evidence["paused"]),
       let width = integer(evidence["width"])
     else { return false }

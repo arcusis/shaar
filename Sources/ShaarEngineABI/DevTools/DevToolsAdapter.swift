@@ -483,6 +483,11 @@ public struct ShaarDevToolsFrontendState: Equatable, Sendable {
 }
 
 public enum ShaarDevToolsEventRouter {
+  private static func isJSONBoolean(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber else { return false }
+    return CFGetTypeID(number) == CFBooleanGetTypeID()
+  }
+
   public static func decodeFrontendState(
     _ event: ShaarCopiedEvent,
     scope: ShaarNavigationScope,
@@ -495,7 +500,7 @@ public enum ShaarDevToolsEventRouter {
       event.windowID == Data(windowID.utf8),
       event.tabID == Data(tabID.utf8),
       let payload = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
-      payload["schemaVersion"] as? Int == 1,
+      devToolsEnvelopeInteger(payload["schemaVersion"]) == 1,
       payload["kind"] as? String == "frontendState",
       let open = devToolsJSONBoolean(payload["open"]),
       Set(payload.keys) == ["schemaVersion", "kind", "open"]

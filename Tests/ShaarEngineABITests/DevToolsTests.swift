@@ -224,6 +224,16 @@ struct DevToolsTests {
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         withSensitiveField, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
+
+    let booleanVersion = ShaarCopiedEvent(
+      sequence: 19, kind: 14, profileID: Data("profile-a".utf8),
+      sessionID: Data("private-a".utf8), windowID: Data("window-a".utf8),
+      tabID: Data("tab-a".utf8),
+      payloadJSON: Data(
+        #"{"schemaVersion":true,"kind":"frontendState","open":true}"#.utf8))
+    #expect(
+      ShaarDevToolsEventRouter.decodeFrontendState(
+        booleanVersion, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
   }
 
   @Test func shaarDefaultConstructsAdapter() {

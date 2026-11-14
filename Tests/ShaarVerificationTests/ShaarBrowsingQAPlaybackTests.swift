@@ -17,6 +17,8 @@ import Testing
     #expect(ShaarBrowsingQA.playbackSettled("{\"error\":3}"))
     #expect(ShaarBrowsingQA.playbackSettled("{ \"error\": 3 }"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"error\":0,\"paused\":true,\"width\":0}"))
+    #expect(!ShaarBrowsingQA.playbackSettled("{\"error\":false,\"paused\":false,\"width\":320}"))
+    #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":false,\"width\":true}"))
     #expect(!ShaarBrowsingQA.playbackSettled("not JSON with \"error\":3"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"error\":\"3\"}"))
   }
@@ -28,6 +30,8 @@ import Testing
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":0,\"error\":0}"))
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":3}"))
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320}"))
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":false}"))
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":true,\"error\":0}"))
     #expect(!ShaarBrowsingQA.playbackStarted("not JSON with \"paused\":false \"error\":0"))
   }
 

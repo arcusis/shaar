@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Darwin
 import Foundation
 
@@ -953,8 +954,8 @@ import Foundation
   static func playbackStarted(_ value: String?) -> Bool {
     guard let evidence = playbackEvidence(value),
       let paused = evidence["paused"] as? Bool,
-      let width = evidence["width"] as? Int,
-      let error = evidence["error"] as? Int
+      let width = integer(evidence["width"]),
+      let error = integer(evidence["error"])
     else { return false }
     return !paused && width > 0 && error == 0
   }
@@ -1126,11 +1127,25 @@ import Foundation
 
   static func playbackSettled(_ value: String?) -> Bool {
     guard let evidence = playbackEvidence(value) else { return false }
-    if let error = evidence["error"] as? Int, error != 0 { return true }
+    let error: Int?
+    if let rawError = evidence["error"] {
+      guard let parsedError = integer(rawError) else { return false }
+      error = parsedError
+    } else {
+      error = nil
+    }
+    if let error, error != 0 { return true }
     guard let paused = evidence["paused"] as? Bool,
-      let width = evidence["width"] as? Int
+      let width = integer(evidence["width"])
     else { return false }
     return !paused && width > 0
+  }
+
+  private static func integer(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return nil }
+    return number as? Int
   }
 
   private static func playbackEvidence(_ value: String?) -> [String: Any]? {

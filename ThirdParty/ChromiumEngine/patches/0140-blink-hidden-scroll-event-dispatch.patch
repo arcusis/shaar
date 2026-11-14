@@ -23,11 +23,13 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.c
  #include "third_party/blink/renderer/platform/wtf/functional.h"
  #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
  
-@@ -225,6 +228,29 @@
+@@ -225,6 +228,31 @@
    EnqueueEvent(event);
  }
  
 +void ScriptedAnimationController::EnqueueHiddenScrollEvent(Event* event) {
++  if (!GetExecutionContext())
++    return;
 +  if (!InsertToPerFrameEventsMap(event))
 +    return;
 +  EnqueueEvent(event);

@@ -81,6 +81,21 @@ def archive_payload(pin: dict, cache_directory: Optional[Path] = None) -> bytes:
     return payload
 
 
+def validate_install_destinations(directory: Path, members: list[str]) -> None:
+    if directory.is_symlink():
+        raise ValueError(f"Refusing symlinked CI tool destination directory: {directory}")
+    if directory.exists() and not directory.is_dir():
+        raise ValueError(f"CI tool destination is not a directory: {directory}")
+    if directory.parent.is_symlink():
+        raise ValueError(f"Refusing symlinked CI tool destination parent: {directory.parent}")
+    for member in members:
+        destination = directory / member
+        if destination.is_symlink():
+            raise ValueError(f"Refusing symlinked CI tool output: {destination}")
+        if destination.exists() and not destination.is_file():
+            raise ValueError(f"CI tool output is not a regular file: {destination}")
+
+
 DOWNLOAD_ATTEMPTS = 5
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
@@ -126,11 +141,15 @@ def main() -> None:
     options = parser.parse_args()
     manifest = json.loads(Path(__file__).with_name("ci-tools.json").read_text())
     host = f"{platform.system()}-{platform.machine()}"
+    selected = [(name, platforms[host]) for name, platforms in manifest.items()
+                if name != "periphery" or options.include_periphery]
+    members = [member for name, pin in selected for member in (name, *pin.get("companions", []))]
+    try:
+        validate_install_destinations(options.destination, members)
+    except ValueError as error:
+        parser.error(str(error))
     options.destination.mkdir(parents=True, exist_ok=True)
-    for name, platforms in manifest.items():
-        if name == "periphery" and not options.include_periphery:
-            continue
-        pin = platforms[host]
+    for name, pin in selected:
         payload = archive_payload(pin, options.cache_directory)
         for member in (name, *pin.get("companions", [])):
             binary = binary_from_archive(payload, member, pin["sha256"])

@@ -199,30 +199,23 @@ struct DesktopCaptureConsentTests {
     #expect(enumerationCount == 1)
   }
 
-  @Test func deniedScreenRecordingAccessWiresSettingsButtonToSystemSettings() async throws {
+  @Test func screenRecordingSettingsButtonOpensSystemSettings() throws {
     let browserStore = store()
     let capture = try request(browserStore)
     var openedURL: URL?
     let picker = DesktopCapturePicker(
       request: capture,
       store: browserStore,
-      hasScreenRecordingAccess: { false },
-      requestScreenRecordingAccess: { false },
       openSettings: { openedURL = $0 }
     )
 
-    await picker.loadSources()
-    let content = picker.pickerContent
-    #expect(content.needsScreenRecordingAccess)
-    let button = try #require(content.settingsButton)
-    #expect(button.title == "Open Settings")
+    let button = try #require(picker.settingsButton(for: true))
     #expect(button.title == PanelsL10n.string("Open Settings"))
     #expect(
       MacPermission.screenRecording.settingsURL?.absoluteString.contains("Privacy_ScreenCapture")
         == true)
     button.action()
     #expect(openedURL == MacPermission.screenRecording.settingsURL)
-    _ = content.body
   }
 
   @Test func rejectsMalformedOrInsecureDesktopCapturePayloads() throws {

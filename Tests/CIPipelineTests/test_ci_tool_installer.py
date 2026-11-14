@@ -61,6 +61,18 @@ class CIToolInstallerTests(unittest.TestCase):
 
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
 
+    def test_symlinked_destination_parent_is_rejected_before_fetching(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            destination = Path(directory) / "linked" / "tools"
+            external = Path(outside)
+            sentinel = external / "sentinel"
+            sentinel.write_text("preserve", encoding="utf-8")
+            destination.parent.symlink_to(external, target_is_directory=True)
+
+            self.assert_install_rejected(destination, "Refusing symlinked CI tool destination parent")
+
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
+
 
 if __name__ == "__main__":
     unittest.main()

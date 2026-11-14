@@ -550,7 +550,7 @@ final class InspectorStylesModel {
   }
 
   func undo() async {
-    guard !busy, let inspector else { return }
+    guard !Task.isCancelled, !busy, let inspector else { return }
     do {
       let result =
         try await inspector.evaluate("globalThis.__shaarInspectorStyles.undo()") as? [String: Any]

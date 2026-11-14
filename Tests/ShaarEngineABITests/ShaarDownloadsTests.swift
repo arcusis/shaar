@@ -45,6 +45,22 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   #expect(result[0].startTime == 1234)
 }
 
+@Test func downloadIdentitiesMustBeNonEmptyAndUnique() async throws {
+  let duplicate = Data(
+    #"{"schemaVersion":1,"downloads":[{"id":"same","url":"https://example.test/a","filename":"a","path":"/tmp/a","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0},{"id":"same","url":"https://example.test/b","filename":"b","path":"/tmp/b","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}"#.utf8)
+  let duplicateReply = FakeDownloadsTransport(replies: [400: duplicate])
+  await #expect(throws: ShaarDownloadsError.malformedResponse) {
+    _ = try await ShaarDownloadsAdapter(transport: duplicateReply).list()
+  }
+
+  let empty = Data(
+    #"{"schemaVersion":1,"downloads":[{"id":"","url":"https://example.test/a","filename":"a","path":"/tmp/a","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}"#.utf8)
+  let emptyReply = FakeDownloadsTransport(replies: [400: empty])
+  await #expect(throws: (any Error).self) {
+    _ = try await ShaarDownloadsAdapter(transport: emptyReply).list()
+  }
+}
+
 @Test func downloadRecordRequiresPrivacyBit() async throws {
   let missing = Data(
     #"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/a.bin","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"error":null,"startTime":0}]}"#
@@ -110,6 +126,14 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   #expect(args["action"] as? String == "pause")
   #expect(args["downloadId"] as? String == "guid-2")
   #expect(args["schemaVersion"] as? Int == 1)
+}
+
+@Test func downloadControlRejectsEmptyIDBeforeSubmitting() async throws {
+  let fake = FakeDownloadsTransport(replies: [401: Data("{}".utf8)])
+  await #expect(throws: ShaarDownloadsError.invalidControl) {
+    try await ShaarDownloadsAdapter(transport: fake).control(.pause, id: "")
+  }
+  #expect(await fake.recordedCalls().isEmpty)
 }
 
 @Test func directoryUsesTheAcknowledgedEnginePath() async throws {

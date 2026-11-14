@@ -283,10 +283,15 @@ final class PrivateBrowserHost {
     guard let owner = activeOwner, !runtime.isQuitting,
       Self.supportsPrivateCommand(command), owner.store.sheet == nil
     else { return false }
-    return Self.windowCanPerform(command, store: owner.store)
+    return Self.windowCanPerform(
+      command, store: owner.store, pasteboard: .general,
+      searchEngine: preferences.searchEngine(for: owner.store.session.selectedSpace.profileID))
   }
 
-  static func windowCanPerform(_ command: BrowserMenuCommand, store: BrowserStore) -> Bool {
+  static func windowCanPerform(
+    _ command: BrowserMenuCommand, store: BrowserStore,
+    pasteboard: NSPasteboard = .general, searchEngine: BrowserSearchEngine = .google
+  ) -> Bool {
     return switch command {
     case .back:
       store.session.selectedPage.flatMap { store.privatePage?.pages[$0.tab.id] }?.canGoBack == true
@@ -308,6 +313,8 @@ final class PrivateBrowserHost {
     case .findNext, .findPrevious: store.pageFind?.canMove == true
     case .sharePage:
       !store.commandIsOpen && NativeBrowserHost.shareURL(for: store) != nil
+    case .pasteAndGo:
+      PasteAndGoCommand.destination(in: pasteboard, searchEngine: searchEngine) != nil
     default: true
     }
   }
@@ -368,6 +375,11 @@ final class PrivateBrowserHost {
       if let url = NativeBrowserHost.shareURL(for: store) {
         NativeBrowserHost.presentSharePicker(for: url, in: owner.window)
       }
+    case .pasteAndGo:
+      _ = PasteAndGoCommand.route(
+        in: .general, store: store,
+        searchEngine: preferences.searchEngine(for: store.session.selectedSpace.profileID),
+        navigate: owner.page.navigateCurrentPage(to:))
     case .find: store.showPageFind()
     case .findNext: store.movePageFind(forward: true)
     case .findPrevious: store.movePageFind(forward: false)

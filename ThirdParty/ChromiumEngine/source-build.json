@@ -319,7 +319,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0005-private-extension-tab-helpers.patch",
-      "sha256": "26b76dbbf8c05586bfa80524cf8a66bd903b0b5b44d05ee4df3a15ca371fc424"
+      "sha256": "c524fa937243b41416d394bb999a39022db38d14701310e4cd5ed5f974b2cda9"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0006-shaar-embedded-app.patch",
@@ -339,7 +339,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0010-shaar-devtools-window.patch",
-      "sha256": "aaa164e9f9ba75e0e239052c832427de1dc5d15bb4ee2a51ee8381060f9f77fa"
+      "sha256": "43f42a7542b7de09654c0e9ee76c018b04281c86c20344d18bfaffde1f324c55"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0011-shaar-private-permission-defaults.patch",
@@ -356,10 +356,6 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
       "sha256": "abfcc6ecfeff6b8690579ef92ba239a2aefca9d24a6962bdd5e8424469b54924"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0015-shaar-framework-devtools.patch",
-      "sha256": "c89090cabd307f38b186e5ddc97ee058ccc0cbe454f438152f6f58ff6eec416c"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0016-shaar-agent-bridge.patch",

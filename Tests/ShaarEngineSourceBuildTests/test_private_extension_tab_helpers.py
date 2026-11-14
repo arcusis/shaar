@@ -19,16 +19,17 @@ MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 class PrivateExtensionTabHelpersTests(unittest.TestCase):
     def test_disabled_profile_skips_extension_tab_helpers(self):
         source = PATCH.read_text()
-        self.assertIn("chrome/browser/ui/tab_helpers.cc", source)
+        self.assertIn("chrome/browser/ui/tabs/tab_features.cc", source)
         guard = r"AreExtensionsDisabledForProfile\(profile\)\) \{"
-        self.assertEqual(len(re.findall(guard, source)), 2)
+        self.assertEqual(len(re.findall(guard, source)), 4)
         for helper in (
-            "AppTabHelper",
-            "NavigationExtensionEnabler",
             "WebNavigationTabObserver",
             "TabHelper",
         ):
             self.assertRegex(source, rf"\+\s+extensions::{helper}::CreateForWebContents")
+        for helper in ("AppTabHelper", "NavigationExtensionEnabler"):
+            self.assertRegex(source, rf"\+\s+std::make_unique<extensions::{helper}>")
+        self.assertIn("+  navigation_extension_enabler_.reset();", source)
 
     def test_patch_is_pinned_in_source_build(self):
         patches = json.loads(MANIFEST.read_text())["patches"]

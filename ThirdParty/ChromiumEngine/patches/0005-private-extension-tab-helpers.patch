@@ -1,41 +1,95 @@
---- a/chrome/browser/ui/tab_helpers.cc
-+++ b/chrome/browser/ui/tab_helpers.cc
-@@ -233,6 +233,7 @@
+--- a/chrome/browser/ui/tabs/tab_features.cc
++++ b/chrome/browser/ui/tabs/tab_features.cc
+@@ -342,6 +342,7 @@
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+ #include "chrome/browser/extensions/app_tab_helper.h"
++#include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
  #endif
  
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-+#include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
- #include "chrome/browser/extensions/api/web_navigation/web_navigation_tab_observer.h"
- #include "chrome/browser/extensions/navigation_extension_enabler.h"
- #include "chrome/browser/extensions/tab_helper.h"
-@@ -809,7 +810,10 @@
+@@ -1128,25 +1129,31 @@
  #endif
  
  #if BUILDFLAG(ENABLE_EXTENSIONS)
--  extensions::AppTabHelper::CreateForWebContents(web_contents);
+-  app_tab_helper_ =
+-      std::make_unique<extensions::AppTabHelper>(tab, tab.GetContents());
 +  if (!extensions::ChromeContentBrowserClientExtensionsPart::
 +          AreExtensionsDisabledForProfile(profile)) {
-+    extensions::AppTabHelper::CreateForWebContents(web_contents);
++    app_tab_helper_ =
++        std::make_unique<extensions::AppTabHelper>(tab, tab.GetContents());
 +  }
  #endif
  
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-@@ -818,10 +822,14 @@
-       web_contents);
- #endif
- 
--  // These helpers are used on Win/Mac/Linux and also desktop Android.
--  extensions::NavigationExtensionEnabler::CreateForWebContents(web_contents);
--  extensions::WebNavigationTabObserver::CreateForWebContents(web_contents);
--  extensions::TabHelper::CreateForWebContents(web_contents);
-+  // The universal extension observer is absent when extensions are disabled
-+  // for this profile. TabHelper requires that observer.
+-  // If the web contents already have a view type, don't overwrite it here. One
+-  // case where this can happen is when the user opens undocked developer tools.
+-  // For all developer tools web contents, the view type is set to
+-  // `kDeveloperTools` by the `DevToolsWindow` before tab helpers are attached.
+-  if (extensions::GetViewType(tab.GetContents()) ==
+-      extensions::mojom::ViewType::kInvalid) {
+-    extensions::SetViewType(tab.GetContents(),
+-                            extensions::mojom::ViewType::kTabContents);
 +  if (!extensions::ChromeContentBrowserClientExtensionsPart::
 +          AreExtensionsDisabledForProfile(profile)) {
-+    extensions::NavigationExtensionEnabler::CreateForWebContents(web_contents);
-+    extensions::WebNavigationTabObserver::CreateForWebContents(web_contents);
-+    extensions::TabHelper::CreateForWebContents(web_contents);
-+  }
- #endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
++    // If the web contents already have a view type, don't overwrite it here. One
++    // case where this can happen is when the user opens undocked developer tools.
++    // For all developer tools web contents, the view type is set to
++    // `kDeveloperTools` by the `DevToolsWindow` before tab helpers are attached.
++    if (extensions::GetViewType(tab.GetContents()) ==
++        extensions::mojom::ViewType::kInvalid) {
++      extensions::SetViewType(tab.GetContents(),
++                              extensions::mojom::ViewType::kTabContents);
++    }
++    extensions::WebNavigationTabObserver::CreateForWebContents(tab.GetContents());
++    extensions::TabHelper::CreateForWebContents(tab.GetContents());
++    navigation_extension_enabler_ =
++        std::make_unique<extensions::NavigationExtensionEnabler>(
++            tab.GetContents());
+   }
+-  extensions::WebNavigationTabObserver::CreateForWebContents(tab.GetContents());
+-  extensions::TabHelper::CreateForWebContents(tab.GetContents());
+-  navigation_extension_enabler_ =
+-      std::make_unique<extensions::NavigationExtensionEnabler>(
+-          tab.GetContents());
+ #endif
  
- #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+   if (base::FeatureList::IsEnabled(features::kGlicMarketingAutoOpen)) {
+@@ -1803,20 +1810,27 @@
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+   app_tab_helper_.reset();
+-  app_tab_helper_ =
+-      std::make_unique<extensions::AppTabHelper>(*tab, new_contents);
++  if (!extensions::ChromeContentBrowserClientExtensionsPart::
++          AreExtensionsDisabledForProfile(profile)) {
++    app_tab_helper_ =
++        std::make_unique<extensions::AppTabHelper>(*tab, new_contents);
++  }
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+-  if (extensions::GetViewType(new_contents) ==
+-      extensions::mojom::ViewType::kInvalid) {
+-    extensions::SetViewType(new_contents,
+-                            extensions::mojom::ViewType::kTabContents);
++  navigation_extension_enabler_.reset();
++  if (!extensions::ChromeContentBrowserClientExtensionsPart::
++          AreExtensionsDisabledForProfile(profile)) {
++    if (extensions::GetViewType(new_contents) ==
++        extensions::mojom::ViewType::kInvalid) {
++      extensions::SetViewType(new_contents,
++                              extensions::mojom::ViewType::kTabContents);
++    }
++    extensions::WebNavigationTabObserver::CreateForWebContents(new_contents);
++    extensions::TabHelper::CreateForWebContents(new_contents);
++    navigation_extension_enabler_ =
++        std::make_unique<extensions::NavigationExtensionEnabler>(new_contents);
+   }
+-  extensions::WebNavigationTabObserver::CreateForWebContents(new_contents);
+-  extensions::TabHelper::CreateForWebContents(new_contents);
+-  navigation_extension_enabler_ =
+-      std::make_unique<extensions::NavigationExtensionEnabler>(new_contents);
+ #endif
+ 
+   if (glic_marketing_page_tab_helper_) {

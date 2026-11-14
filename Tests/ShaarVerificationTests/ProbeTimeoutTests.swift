@@ -18,4 +18,10 @@ import Testing
     #expect(ProbeTimeout.scale(from: "1.25") == 1.25)
     #expect(ProbeTimeout.scale(from: "2") == 2)
   }
+
+  @Test func timeoutScaleRejectsNonfiniteValues() {
+    #expect(ProbeTimeout.scale(from: "infinity") == 1)
+    #expect(ProbeTimeout.scale(from: "-infinity") == 1)
+    #expect(ProbeTimeout.scale(from: "nan") == 1)
+  }
 }

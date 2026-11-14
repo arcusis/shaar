@@ -1,4 +1,4 @@
---- a/content/public/browser/shaar_agent_bridge.h
+--- /dev/null
 +++ b/content/public/browser/shaar_agent_bridge.h
 @@ -0,0 +1,46 @@
 +// Copyright 2026 Shaar contributors. MPL-2.0.

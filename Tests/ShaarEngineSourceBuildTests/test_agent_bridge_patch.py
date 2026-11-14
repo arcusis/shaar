@@ -33,6 +33,9 @@ class AgentBridgePatchTests(unittest.TestCase):
             self.assertIn(guard, patch)
 
     def test_patch_digest_is_pinned(self):
+        self.assertTrue(PATCH.read_text().startswith(
+            '--- /dev/null\n+++ b/content/public/browser/shaar_agent_bridge.h\n'
+        ))
         patches = json.loads(MANIFEST.read_text())["patches"]
         matching = [entry for entry in patches if entry["file"] == str(PATCH.relative_to(ROOT))]
         self.assertEqual(len(matching), 1)

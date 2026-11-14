@@ -355,7 +355,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0016-shaar-agent-bridge.patch",
-      "sha256": "3284a53767cb9046a7b79cf6d6c5f63861ad47e71e9d41e83faa9de6aadada91"
+      "sha256": "a70de0d6232fc305b6209afea31aa4424f341cf631b6b21f111e0af971fda989"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0017-shaar-devtools-phase2.patch",

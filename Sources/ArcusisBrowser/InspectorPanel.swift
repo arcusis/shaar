@@ -5,7 +5,6 @@
 import SwiftUI
 
 struct InspectorPanel: View {
-  @Environment(\.layoutDirection) private var layoutDirection
   @Bindable var model: InspectorModel
   var layout: InspectorLayoutSnapshot? = nil
   @State private var copyButtonFrame = CGRect.zero
@@ -260,9 +259,7 @@ struct InspectorPanel: View {
         ForEach(selection.ancestors) { ancestor in
           HStack(spacing: 3) {
             if ancestor.id != selection.ancestors.first?.id {
-              Image(
-                systemName: InspectorL10n.forwardChevron(
-                  isRightToLeft: layoutDirection == .rightToLeft))
+              Image(systemName: InspectorL10n.forwardChevron())
                 .font(.system(size: 6)).foregroundStyle(.tertiary)
             }
             Button {

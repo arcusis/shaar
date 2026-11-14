@@ -6,9 +6,7 @@ import BrowserCore
 import SwiftUI
 
 enum InspectorL10n {
-  static func forwardChevron(isRightToLeft: Bool) -> String {
-    isRightToLeft ? "chevron.left" : "chevron.right"
-  }
+  static func forwardChevron() -> String { "chevron.forward" }
 
   static func string(_ key: String) -> String {
     BrowserLocalization.string(

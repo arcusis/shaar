@@ -21,8 +21,7 @@ struct InspectorDetailsL10nTests {
   }
 
   @Test func inspectorForwardChevronMirrorsInRightToLeftLayout() {
-    #expect(InspectorL10n.forwardChevron(isRightToLeft: false) == "chevron.right")
-    #expect(InspectorL10n.forwardChevron(isRightToLeft: true) == "chevron.left")
+    #expect(InspectorL10n.forwardChevron() == "chevron.forward")
   }
 
   @Test func ltrTextIsIsolatedFromSurroundingRightToLeftCopy() {

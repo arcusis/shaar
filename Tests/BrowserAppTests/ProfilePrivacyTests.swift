@@ -60,6 +60,14 @@ struct ProfilePrivacyTests {
         == "טעינת הרשאות אתרים")
   }
 
+  @Test func busyAccessibilityLabelUsesTheActiveOperationMessage() {
+    let clearingCache = SettingsL10n.string("Clearing cache…")
+    #expect(ProfilePrivacyAccessibility.progressLabel(for: clearingCache) == clearingCache)
+    #expect(
+      ProfilePrivacyAccessibility.progressLabel(for: nil)
+        == ProfilePrivacyAccessibility.loadingPermissionsLabel())
+  }
+
   @Test func settingsUseSelectedShaarRuntimeForPrivacyBackend() throws {
     let runtime = ARCShaarRuntime()
     let workspace = try BrowserWorkspaceStore(initialSession: .fresh())

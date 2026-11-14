@@ -9,6 +9,10 @@ enum ProfilePrivacyAccessibility {
   static func loadingPermissionsLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
     BrowserLocalization.string("Loading site permissions", table: "Settings", language: language)
   }
+
+  static func progressLabel(for busyMessage: String?) -> String {
+    busyMessage ?? loadingPermissionsLabel()
+  }
 }
 
 struct ProfilePrivacySections: View {
@@ -96,7 +100,7 @@ struct ProfilePrivacySections: View {
           if let busyMessage = model.busyMessage {
             ProgressView(busyMessage)
               .controlSize(.small)
-              .accessibilityLabel(ProfilePrivacyAccessibility.loadingPermissionsLabel())
+              .accessibilityLabel(ProfilePrivacyAccessibility.progressLabel(for: busyMessage))
           }
           Spacer()
           Button(SettingsL10n.string("Refresh")) { Task { await model.load() } }

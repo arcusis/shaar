@@ -1193,6 +1193,10 @@ class ProbeSoakTests(unittest.TestCase):
             STAGES.run_visuals(checks, "1")
         self.assertEqual([call.args[1] for call in run.call_args_list], list(STAGES.VISUAL_SHARDS["1"]))
         self.assertTrue(all("--filter" in call.args[2] for call in run.call_args_list))
+        self.assertTrue(all(
+            call.kwargs["env"]["ARCUSIS_SIDEBAR_VISUAL_CI"] == "1"
+            for call in run.call_args_list
+        ))
 
     def test_shards_cover_every_original_iteration_once_without_retry(self):
         from collections import Counter

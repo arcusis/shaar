@@ -137,6 +137,13 @@ public enum ShaarDevToolsPanelEventRouter {
       id == .screencastFrame || event.payloadJSON.count <= 32_768,
       let rawLeaseID = panelInteger(root["leaseID"]), rawLeaseID >= 0,
       rawLeaseID <= Int(UInt32.max), UInt32(rawLeaseID) == leaseID,
+      panelInteger(root["schemaVersion"]) == 1,
+      root["kind"] as? String == "panelEvent",
+      let rawID = panelInteger(root["eventID"]),
+      let id = ShaarDevToolsPanelEventID(rawValue: rawID),
+      id == .screencastFrame || event.payloadJSON.count <= 32_768,
+      let rawLeaseID = panelInteger(root["leaseID"]),
+      UInt32(exactly: rawLeaseID) == leaseID,
       let fields = root["data"] as? [String: Any],
       let payload = decodeData(fields, for: id)
     else { return nil }

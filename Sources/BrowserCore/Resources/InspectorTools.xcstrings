@@ -637,6 +637,22 @@
         }
       }
     },
+    "Sensitive header values are redacted by default. Console text redacts common credential patterns and strips URL credentials, queries and fragments. URL paths, screenshots and unrecognized secrets may still contain sensitive data. Nothing is uploaded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensitive header values are redacted by default. Console text redacts common credential patterns and strips URL credentials, queries and fragments. URL paths, screenshots and unrecognized secrets may still contain sensitive data. Nothing is uploaded."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ערכים רגישים בכותרות מוסתרים כברירת מחדל. טקסט המסוף מסתיר דפוסים נפוצים של פרטי התחברות ומסיר פרטי התחברות, שאילתות ומקטעים מכתובות URL. נתיבי URL, צילומי מסך וסודות שלא זוהו עדיין עלולים להכיל מידע רגיש. שום מידע אינו מועלה."
+          }
+        }
+      }
+    },
     "Creating report…": {
       "localizations": {
         "en": {
@@ -1673,6 +1689,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "יעד כלי הפיתוח אינו זמין עוד."
+          }
+        }
+      }
+    },
+    "The developer tools returned no result.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The developer tools returned no result."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כלי הפיתוח לא החזירו תוצאה."
           }
         }
       }

@@ -2378,6 +2378,30 @@
         "he": { "stringUnit": { "state": "translated", "value": "למטה" } }
       }
     },
+    "Leave": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Leave" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לעזוב" } }
+      }
+    },
+    "Leave this page?": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Leave this page?" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לעזוב את הדף?" } }
+      }
+    },
+    "This page says": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This page says" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הדף הזה אומר" } }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "OK" } },
+        "he": { "stringUnit": { "state": "translated", "value": "אישור" } }
+      }
+    },
     "Cancel": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },

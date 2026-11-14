@@ -42,6 +42,35 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn("Could not clear history. Try again.", data["strings"])
 
+    def test_native_menu_titles_are_available_in_settings_catalog(self):
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        for key in (
+            "Emoji & Symbols", "Forward", "Paste and Go", "Reopen Last Closed Window",
+            "Print…",
+        ):
+            with self.subTest(key=key):
+                self.assertIn(key, catalog["strings"])
+
+    def test_saved_preferences_regular_file_rejection_has_hebrew_copy(self):
+        key = "Saved preferences are not a regular file; original file preserved."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "קובץ ההעדפות השמור אינו קובץ רגיל; הקובץ המקורי נשמר.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserPreferencesStore.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(f'SettingsL10n.string("{key}")', source)
+
     def test_shell_catalog_has_no_duplicate_json_keys(self):
         path = ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings"
         data = VALIDATOR.load_json_without_duplicate_keys(
@@ -351,6 +380,68 @@ class CatalogValidatorTests(unittest.TestCase):
         translation = shell["strings"]["Could not complete the %@ action. Try again."][
             "localizations"]["he"]["stringUnit"]["value"]
         self.assertEqual(translation, "לא ניתן להשלים את הפעולה %@. כדאי לנסות שוב.")
+
+    def test_developer_tools_empty_result_has_hebrew_copy(self):
+        key = "The developer tools returned no result."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "כלי הפיתוח לא החזירו תוצאה.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/DeveloperPageModel.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(f'InspectorToolsL10n.string("{key}")', source)
+
+    def test_sensitive_developer_data_notice_has_hebrew_copy(self):
+        key = (
+            "Sensitive header values are redacted by default. Console text redacts common "
+            "credential patterns and strips URL credentials, queries and fragments. URL paths, "
+            "screenshots and unrecognized secrets may still contain sensitive data. Nothing is "
+            "uploaded."
+        )
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertNotEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], key
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorPageToolsView.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(key, source)
+
+    def test_http_auth_prompt_has_hebrew_copy(self):
+        keys = {
+            "Sign in to %@": "התחברות אל %@",
+            "%@ is requesting your username and password.": "%@ מבקש את שם המשתמש והסיסמה.",
+            "Realm": "תחום",
+            "Username": "שם משתמש",
+            "Password": "סיסמה",
+            "Sign In": "כניסה",
+        }
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        for key, translation in keys.items():
+            with self.subTest(key=key):
+                self.assertEqual(
+                    catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+                    translation,
+                )
+        source = (ROOT / "Sources/ArcusisBrowser/HTTPAuthSheet.swift").read_text(
+            encoding="utf-8"
+        )
+        for key in keys:
+            self.assertIn(f'"{key}"', source)
 
     def test_extension_execution_failure_uses_hebrew_shell_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift").read_text(

@@ -397,7 +397,7 @@ def validate_source_references(root, catalogs, include_app=False):
                 "InspectorL10n": "Inspector", "InspectorDetailsL10n": "InspectorDetails",
                 "InspectorToolsL10n": "InspectorTools"}
     call = re.compile(r"\b(" + "|".join(map(re.escape, wrappers)) + r")\.(?:string|text|format|plural)\s*\(")
-    direct_text = re.compile(r'\b(Text)\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)')
+    direct_text = re.compile(r'\b(Text)\s*\(\s*("(?:[^"\\]|\\.)*")')
     direct_control_text = re.compile(
         r'\b(Button|ColorPicker|DatePicker|Label|LabeledContent|Menu|NavigationLink|Picker|'
         r'ProgressView|Section|SecureField|TextField|Toggle)'

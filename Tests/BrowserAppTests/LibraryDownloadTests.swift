@@ -28,6 +28,10 @@ struct LibraryDownloadTests {
         itemID: "other-download", hoveredID: nil, focusedID: "focused-download"))
   }
 
+  @Test func downloadProgressIsMarkedAsFrequentlyUpdating() {
+    #expect(LibraryDownloadsView.downloadProgressAccessibilityTraits.contains(.updatesFrequently))
+  }
+
   @Test func downloadLibrarySortBenchmark() {
     let profile = UUID()
     let model = DownloadsModel()

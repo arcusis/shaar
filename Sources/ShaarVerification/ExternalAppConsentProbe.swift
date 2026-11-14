@@ -571,12 +571,7 @@ final class ExternalAppConsentProbe {
       return Evidence(runID: runID)
     }
     guard let data = try? Data(contentsOf: url),
-      let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      Set(metadata.keys) == ["schema", "runID"],
-      let schema = metadata["schema"] as? NSNumber,
-      CFGetTypeID(schema) != CFBooleanGetTypeID(), schema == 1,
-      let runID = metadata["runID"] as? String,
-      UUID(uuidString: runID)?.uuidString == runID
+      let runID = decodeRunID(data)
     else { throw ProbeFailure("External consent run identity is malformed or missing.") }
     guard
       let priorData = try? Data(
@@ -585,6 +580,17 @@ final class ExternalAppConsentProbe {
       prior["runID"] as? String == runID
     else { throw ProbeFailure("External consent phases have inconsistent run identity.") }
     return Evidence(runID: runID)
+  }
+
+  static func decodeRunID(_ data: Data) -> String? {
+    guard let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(metadata.keys) == ["schema", "runID"],
+      let schema = metadata["schema"] as? NSNumber,
+      CFGetTypeID(schema) != CFBooleanGetTypeID(), schema == 1,
+      let runID = metadata["runID"] as? String,
+      UUID(uuidString: runID)?.uuidString == runID
+    else { return nil }
+    return runID
   }
 
   private func failure(_ text: String) -> ProbeFailure { ProbeFailure(text) }

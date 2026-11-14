@@ -518,6 +518,16 @@ struct DesktopCaptureConsentTests {
     #expect(sources.first?.label == PanelsL10n.format("Tab: %@", .string("meet.google.com")))
   }
 
+  @Test func windowNamesFallBackWhenScreenCaptureKitOmitsOwnerOrTitle() {
+    #expect(DesktopCaptureCatalog.windowName(owner: "", title: "Meeting") == "Meeting")
+    #expect(DesktopCaptureCatalog.windowName(owner: "Browser", title: " \n") == "Browser")
+    #expect(
+      DesktopCaptureCatalog.windowName(owner: nil, title: nil) == PanelsL10n.string("Window"))
+    #expect(
+      DesktopCaptureCatalog.windowName(owner: " Browser ", title: " Meeting ")
+        == "Browser — Meeting")
+  }
+
   @Test func catalogExposesOnlyRequestedCaptureSourceKinds() throws {
     let store = store()
     let base = try request(store)

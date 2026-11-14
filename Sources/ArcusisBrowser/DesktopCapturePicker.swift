@@ -147,14 +147,8 @@ struct DesktopCapturePicker: View {
   private func screenSources(from content: SCShareableContent) -> [DesktopCaptureSource] {
     let windows = content.windows.compactMap { window -> DesktopCaptureSource? in
       guard window.windowID != 0, window.isOnScreen else { return nil }
-      let owner = window.owningApplication?.applicationName ?? PanelsL10n.string("Window")
-      let title = window.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let name: String
-      if let title, !title.isEmpty {
-        name = "\(owner) — \(title)"
-      } else {
-        name = owner
-      }
+      let name = DesktopCaptureCatalog.windowName(
+        owner: window.owningApplication?.applicationName, title: window.title)
       return DesktopCaptureSource(id: "window:\(window.windowID):0", name: name, kind: .window)
     }
     let displays = content.displays.map { display in

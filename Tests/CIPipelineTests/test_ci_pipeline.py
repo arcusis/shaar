@@ -1625,10 +1625,23 @@ class ProbeSoakTests(unittest.TestCase):
                 stream=io.StringIO(), resultclass=PYTHON_TESTS.ReportResult
             ).run(unittest.TestSuite())
 
-            with self.assertRaisesRegex(ValueError, "JUnit report parent must not be a symlink"):
+            with self.assertRaisesRegex(ValueError, "JUnit report parent (directory )?must not be a symlink"):
                 result.write_report(report)
 
             self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_python_junit_rejects_symlink_parent_directory(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            target = Path(outside) / "report.xml"
+            link = root / "reports"
+            link.symlink_to(outside, target_is_directory=True)
+            result = unittest.TextTestRunner(
+                stream=io.StringIO(), resultclass=PYTHON_TESTS.ReportResult
+            ).run(unittest.TestSuite())
+            with self.assertRaisesRegex(ValueError, "JUnit report parent (directory )?must not be a symlink"):
+                result.write_report(link / "report.xml")
+            self.assertFalse(target.exists())
 
     def test_python_module_import_error_is_reported_without_skipping_other_modules(self):
         with tempfile.TemporaryDirectory() as directory:

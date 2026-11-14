@@ -88,6 +88,8 @@ class ReportResult(unittest.TextTestResult):
 
     def write_report(self, path):
         path = Path(path)
+        if path.parent.is_symlink():
+            raise ValueError(f"JUnit report parent directory must not be a symlink: {path.parent}")
         if path.is_symlink():
             raise ValueError(f"JUnit report path must not be a symlink: {path}")
         absolute = Path(os.path.abspath(path))

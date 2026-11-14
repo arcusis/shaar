@@ -63,6 +63,8 @@ enum BrowserMenuCommand: String, CaseIterable {
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, fullScreen, settings, quit,
     createFolder
   case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
+
+  static var showAllHistoryTitle: String { ShellL10n.string("Show All History") }
 }
 
 enum PageZoomMenuRouter {

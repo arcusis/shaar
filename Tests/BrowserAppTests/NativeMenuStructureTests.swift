@@ -346,6 +346,12 @@ import Testing
   #expect(section == .history)
 }
 
+@Test func showAllHistoryCommandUsesItsStandardTitleAndShortcut() {
+  #expect(BrowserMenuCommand.showAllHistoryTitle == "Show All History")
+  #expect(ShortcutCatalog.shortcut(for: .history)?.key == "y")
+  #expect(ShortcutCatalog.shortcut(for: .history)?.modifiers == .command)
+}
+
 @Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: false) == "Enter Full Screen")
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: true) == "Exit Full Screen")

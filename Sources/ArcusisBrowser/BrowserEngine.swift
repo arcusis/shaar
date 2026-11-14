@@ -89,6 +89,11 @@ final class BrowserEngine {
   /// so the bitmap compare still sees the saved icon when the page finishes loading.
   @ObservationIgnored private var persistedFaviconImages: [UUID: NSImage] = [:]
 
+  isolated deinit {
+    suspensionTask?.cancel()
+    memoryPressureSource?.cancel()
+  }
+
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
     favicons[tabID] = image
   }

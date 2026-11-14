@@ -12,6 +12,25 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct TabSuspensionTests {
+  @Test func deinitializingEngineCancelsItsBackgroundSuspensionTask() throws {
+    let tab = BrowserTab(url: URL(string: "https://engine-lifetime.example")!)
+    var store: BrowserStore?
+    var engine: BrowserEngine?
+    do {
+      let created = try makeEngine(tabs: [tab])
+      store = created.0
+      engine = created.1
+    }
+    let task = try #require(engine?.suspensionTask)
+    weak var releasedEngine: BrowserEngine? = engine
+
+    store?.engine = nil
+    engine = nil
+
+    #expect(releasedEngine == nil)
+    #expect(task.isCancelled)
+  }
+
   @Test func idleTabsAreDiscardedWithoutClosingOrRestoringScroll() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let pinned = BrowserTab(url: URL(string: "https://pinned.example")!, isPinned: true)

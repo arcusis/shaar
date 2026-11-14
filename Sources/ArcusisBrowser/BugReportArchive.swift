@@ -10,9 +10,10 @@ enum BugReportArchive {
     bounded page-level HAR built from resource timing and instrumented fetch/XMLHttpRequest calls.
     Capture starts when page tools are enabled and continues across navigation while they stay open; buffered resource timing from the current navigation is also included. Response bodies, browser-generated request headers,
     cross-origin headers/timings without permission, workers, WebSockets, and other frames may be
-    unavailable. Unknown methods use UNKNOWN and unknown timing phases use -1. Console messages and
-    screenshot content are not redacted. HAR URL credentials, query values, and fragments are
-    redacted. Nothing was uploaded.
+    unavailable. Unknown methods use UNKNOWN and unknown timing phases use -1. Console text redacts
+    common credential patterns and strips URL credentials, queries, and fragments; HAR URLs receive
+    the same URL redaction. URL paths, screenshots, and unrecognized secrets may still contain
+    sensitive data. Nothing was uploaded.
     """
 
   static func har(snapshot: [String: Any], includeSensitiveHeaders: Bool, version: String)

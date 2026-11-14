@@ -5,6 +5,45 @@
 import Foundation
 
 extension DeveloperPageModel {
+  static func redactedConsoleMessage(_ raw: String) -> String {
+    let patterns: [(String, String)] = [
+      (
+        #"(?i)\b(?:authorization|proxy-authorization)\s*:\s*(?:bearer|basic)\s+\S+"#,
+        "[redacted authorization]"
+      ),
+      (#"(?i)\b(?:cookie|set-cookie)\s*:\s*[^\r\n]+"#, "[redacted cookie]"),
+      (
+        #"(?i)([\"']?(?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|password|passwd|secret|credential|authorization|proxy-authorization|cookie|set-cookie|session[_-]?id)[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^,\r\n;&]+)"#,
+        "$1[redacted]"
+      ),
+      (
+        #"(?i)([?&](?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|api[_-]?key|client[_-]?secret|password|secret|credential|session[_-]?id|signature|code|state|nonce)=)[^&#\s]+"#,
+        "$1[redacted]"
+      ),
+      (
+        #"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"#,
+        "[redacted token]"
+      ),
+    ]
+    let redacted = patterns.reduce(raw) { value, pattern in
+      guard let regex = try? NSRegularExpression(pattern: pattern.0) else { return value }
+      return regex.stringByReplacingMatches(
+        in: value, range: NSRange(value.startIndex..., in: value), withTemplate: pattern.1)
+    }
+    guard
+      let regex = try? NSRegularExpression(
+        pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
+    else { return redacted }
+    var result = redacted
+    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
+      .reversed()
+    {
+      guard let range = Range(match.range, in: result) else { continue }
+      result.replaceSubrange(range, with: redactedReportPageURL(String(result[range])))
+    }
+    return result
+  }
+
   static func redactedReportPageURL(_ raw: String) -> String {
     guard var components = URLComponents(string: raw) else { return "Unavailable" }
     components.user = nil
@@ -54,7 +93,8 @@ extension DeveloperPageModel {
         let time = row["time"] as? Double ?? 0
         return [
           "level": String((row["level"] as? String ?? "log").prefix(32)),
-          "message": String((row["message"] as? String ?? "").prefix(4096)),
+          "message": String(
+            Self.redactedConsoleMessage(row["message"] as? String ?? "").prefix(4096)),
           "time": time.isFinite ? time : 0,
         ]
       }

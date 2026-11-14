@@ -285,7 +285,7 @@ struct InspectorPageToolsView: View {
         .toggleStyle(.checkbox).font(.system(size: 11))
         hint(
           InspectorToolsL10n.string(
-            "Cookie and authorization headers are redacted by default. URLs, console messages and screenshot content are not redacted. Nothing is uploaded."
+            "Sensitive header values are redacted by default. Console text redacts common credential patterns and strips URL credentials, queries and fragments. URL paths, screenshots and unrecognized secrets may still contain sensitive data. Nothing is uploaded."
           )
         )
         Button {

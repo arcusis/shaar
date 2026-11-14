@@ -98,6 +98,15 @@ TEST(ShaarSavePromptTest, DetailDropsUnicodeFormattingControls) {
             "bomtext");
 }
 
+TEST(ShaarSavePromptTest, DetailDropsMalformedUtf8Sequences) {
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xC0\xAF"), "");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xED\xA0\x80"), "");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xF4\x90\x80\x80"), "");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xC3("), "(");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xF0\x9F\x8C\x8D"),
+            "\xF0\x9F\x8C\x8D");
+}
+
 TEST(ShaarSavePromptTest, RegistersItsModuleAndOperationHandler) {
   ShaarModuleRegistry registry;
   shaar_save_prompts_register(&registry);

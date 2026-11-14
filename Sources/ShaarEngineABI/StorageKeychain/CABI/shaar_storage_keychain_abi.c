@@ -19,7 +19,8 @@ uint32_t shaar_storage_keychain_submit_invoke(
     void* reply_context,
     shaar_error* immediate_error) {
   if (!submit_symbol || !engine || !scope || scope->size < sizeof(*scope) ||
-      !scope->profile || scope->private_session || !reply || !immediate_error)
+      !scope->profile || scope->private_session || !reply || !immediate_error ||
+      immediate_error->size < sizeof(*immediate_error))
     return SHAAR_INVALID_ARGUMENT;
   shaar_submit_fn submit = (shaar_submit_fn)submit_symbol;
   return (uint32_t)submit(engine, *scope, NULL, NULL, (shaar_operation)operation,

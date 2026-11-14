@@ -174,6 +174,20 @@ struct DeviceChooserTests {
     #expect(request.options.first?.title == name)
   }
 
+  @Test func chooserEventsRejectNumericGrantFlags() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    var payload = event(
+      transport: "usb", id: "numeric-grant", page: tab.url,
+      options: [["optionId": "numeric-grant", "name": "Adapter"]], canGrant: true)
+    payload["canGrant"] = 1
+
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: payload) == nil)
+  }
+
   @Test func chooserRejectsMalformedAndDuplicateOptionIDs() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

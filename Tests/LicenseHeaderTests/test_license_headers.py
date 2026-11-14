@@ -72,6 +72,12 @@ class LicenseHeaderTests(unittest.TestCase):
             [Path("broken.py")],
         )
 
+    def test_unreadable_source_reports_a_direct_error(self):
+        path = self.root / "invalid.py"
+        path.write_bytes(b"\xff\xfe")
+        with self.assertRaisesRegex(ValueError, "cannot read tracked source for license header check: invalid.py"):
+            check_license_headers.files_missing_notice(self.root, [Path("invalid.py")])
+
     def test_skips_third_party_and_other_file_types(self):
         missing = self._missing({
             "ThirdParty/Vendor/vendor.swift": "import Foundation\n",

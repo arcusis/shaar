@@ -72,14 +72,23 @@ def files_missing_notice(root: Path, paths: list[Path], unreadable: list[tuple[P
                 missing_notice = True
                 if unreadable is not None:
                     unreadable.append((path, str(error)))
+                else:
+                    raise ValueError(
+                        f"cannot read tracked source for license header check: {path}"
+                    ) from error
             if missing_notice:
                 missing.append(path)
+                continue
     return missing
 
 
 def main() -> int:
     unreadable = []
-    missing = files_missing_notice(REPOSITORY_ROOT, tracked_files(REPOSITORY_ROOT), unreadable)
+    try:
+        missing = files_missing_notice(REPOSITORY_ROOT, tracked_files(REPOSITORY_ROOT), unreadable)
+    except (OSError, ValueError) as error:
+        print(f"License header check failed: {error}", file=sys.stderr)
+        return 1
     unreadable_errors = dict(unreadable)
     for path in missing:
         if path in unreadable_errors:

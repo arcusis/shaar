@@ -10,6 +10,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +51,33 @@ class CatalogValidatorTests(unittest.TestCase):
             path = Path(directory) / "Fixture.xcstrings"
             path.write_text(json.dumps(data), encoding="utf-8")
             VALIDATOR.validate_catalog(path)
+
+    def test_main_rejects_symlinked_output_directory_without_touching_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "package"
+            core = package / "Sources/BrowserCore/Resources"
+            resources = package / "Resources/Localizations"
+            core.mkdir(parents=True)
+            resources.mkdir(parents=True)
+            (core / "Core.xcstrings").write_text("{}", encoding="utf-8")
+            target = root / "output-target"
+            target.mkdir()
+            marker = target / "en.lproj"
+            marker.mkdir()
+            (marker / "preserve.txt").write_text("preserve", encoding="utf-8")
+            output_link = root / "output-link"
+            output_link.symlink_to(target, target_is_directory=True)
+
+            with patch.object(VALIDATOR.sys, "argv", ["compile-localizations.py", str(package), str(output_link)]), \
+                    patch.object(VALIDATOR, "validate_catalog"), \
+                    patch.object(VALIDATOR, "validate_source_references"), \
+                    patch.object(VALIDATOR, "compile_native") as compile_native:
+                with self.assertRaisesRegex(SystemExit, "output directory must not be a symlink"):
+                    VALIDATOR.main()
+                compile_native.assert_not_called()
+
+            self.assertEqual((marker / "preserve.txt").read_text(encoding="utf-8"), "preserve")
 
     def test_default_browser_failure_uses_hebrew_settings_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(

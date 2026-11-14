@@ -427,7 +427,11 @@ def validate_source_references(root, catalogs, include_app=False):
 def main():
     if len(sys.argv) != 3:
         raise SystemExit("Usage: compile-localizations.py PACKAGE_ROOT OUTPUT_DIR")
-    root, output = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
+    root = Path(sys.argv[1]).resolve()
+    output_argument = Path(sys.argv[2])
+    if output_argument.is_symlink():
+        raise SystemExit(f"Localization output directory must not be a symlink: {output_argument}")
+    output = output_argument.resolve()
     core = root / "Sources/BrowserCore/Resources"
     catalogs = sorted(core.glob("*.xcstrings")) + sorted((root / "Resources/Localizations").glob("*.xcstrings"))
     if not catalogs:

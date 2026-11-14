@@ -14,6 +14,7 @@ struct DesktopCaptureListing: Equatable {
 enum DesktopCaptureCatalog {
   static let screenAccessNote =
     "Screen Recording access is unavailable. Check Privacy & Security settings."
+  static let screenEnumerationNote = "Screen sources could not be loaded. Try again."
   static let emptySources = "No screens, windows, or tabs are available"
 
   static func allowedSources(
@@ -49,14 +50,22 @@ enum DesktopCaptureCatalog {
   }
 
   static func listing(
-    tabs: [DesktopCaptureSource], screens: [DesktopCaptureSource], screenAccessFailed: Bool
+    tabs: [DesktopCaptureSource], screens: [DesktopCaptureSource], screenAccessFailed: Bool,
+    screenEnumerationFailed: Bool = false
   ) -> DesktopCaptureListing {
     let sources = tabs + screens
     if sources.isEmpty {
-      let message = screenAccessFailed ? screenAccessNote : emptySources
+      let message: String
+      if screenEnumerationFailed {
+        message = screenEnumerationNote
+      } else {
+        message = screenAccessFailed ? screenAccessNote : emptySources
+      }
       return DesktopCaptureListing(sources: [], note: nil, error: message)
     }
     return DesktopCaptureListing(
-      sources: sources, note: screenAccessFailed ? screenAccessNote : nil, error: nil)
+      sources: sources,
+      note: screenAccessFailed ? screenAccessNote : (screenEnumerationFailed ? screenEnumerationNote : nil),
+      error: nil)
   }
 }

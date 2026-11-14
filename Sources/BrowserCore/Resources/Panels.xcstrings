@@ -3284,6 +3284,16 @@
         }
       }
     },
+    "Screen sources could not be loaded. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לטעון את מקורות המסך. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
     "Screen: %@": {
       "localizations": {
         "he": {

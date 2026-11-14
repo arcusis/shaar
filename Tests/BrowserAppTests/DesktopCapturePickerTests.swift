@@ -93,4 +93,19 @@ struct DesktopCapturePickerTests {
 
     #expect(enumerationCount == 2)
   }
+
+  @Test func screenEnumerationFailurePreservesTabsAndDoesNotClaimPermissionDenial() {
+    let tab = DesktopCaptureSource(id: "tab:\(UUID().uuidString):0", name: "Meet", kind: .tab)
+    let listing = DesktopCaptureCatalog.listing(
+      tabs: [tab], screens: [], screenAccessFailed: false, screenEnumerationFailed: true)
+
+    #expect(listing.sources == [tab])
+    #expect(listing.note == DesktopCaptureCatalog.screenEnumerationNote)
+    #expect(listing.note != DesktopCaptureCatalog.screenAccessNote)
+    #expect(listing.error == nil)
+
+    let emptyListing = DesktopCaptureCatalog.listing(
+      tabs: [], screens: [], screenAccessFailed: false, screenEnumerationFailed: true)
+    #expect(emptyListing.error == DesktopCaptureCatalog.screenEnumerationNote)
+  }
 }

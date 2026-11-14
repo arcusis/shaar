@@ -36,10 +36,10 @@ test("layout provides matching Twitter metadata for page shares", () => {
   );
   assert.equal(
     document.querySelector('meta[property="og:image:alt"]')?.getAttribute("content"),
-    "Shaar",
+    "Shaar app icon",
   );
   assert.equal(
     document.querySelector('meta[name="twitter:image:alt"]')?.getAttribute("content"),
-    "Shaar",
+    "Shaar app icon",
   );
 });

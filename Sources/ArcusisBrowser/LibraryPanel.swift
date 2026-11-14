@@ -36,6 +36,10 @@ enum LibraryPanelSearch {
       return true
     }
   }
+
+  static func history(_ entries: [BrowserHistoryEntry], query: String) -> [BrowserHistoryEntry] {
+    entries.filter { matches("\($0.title) \($0.address)", query: query) }
+  }
 }
 
 enum LibraryPanelAccessibility {
@@ -129,13 +133,8 @@ struct LibraryPanel: View {
     PanelsL10n.string(section == .bookmarks ? "Search Bookmarks" : "Search History")
   }
 
-  private var history: [BrowserHistoryEntry] {
-    (store.library.history[profileID] ?? []).filter {
-      LibraryPanelSearch.matches("\($0.title) \($0.address)", query: query)
-    }
-  }
-
   var body: some View {
+    let history = LibraryPanelSearch.history(store.library.history[profileID] ?? [], query: query)
     let visibleBookmarks = bookmarks
     let filteredBookmarks = LibraryPanelFilteredRows {
       section == .bookmarks ? visibleBookmarks : []

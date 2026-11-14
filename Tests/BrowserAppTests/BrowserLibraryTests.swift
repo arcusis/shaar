@@ -100,6 +100,36 @@ struct BrowserLibraryTests {
     #expect(beforeCount == afterCount && afterCount == 200_000)
   }
 
+  @Test func libraryHistoryFilterReuseFocusedBenchmark() throws {
+    let profileID = UUID()
+    let entries = try (0..<10_000).map { index in
+      try BrowserHistoryEntry(
+        profileID: profileID,
+        payload: [
+          "u": "https://example.test/page-\(index)", "t": "Needle page \(index)", "n": 1,
+          "v": [1_000.0 + Double(index)],
+        ])
+    }
+
+    let beforeStart = ContinuousClock.now
+    var beforeCount = 0
+    for _ in 0..<10 {
+      beforeCount += LibraryPanelSearch.history(entries, query: "Needle").count
+      beforeCount += LibraryPanelSearch.history(entries, query: "Needle").count
+    }
+    let before = beforeStart.duration(to: .now)
+
+    let afterStart = ContinuousClock.now
+    var afterCount = 0
+    for _ in 0..<10 {
+      let filtered = LibraryPanelSearch.history(entries, query: "Needle")
+      afterCount += filtered.count * 2
+    }
+    let after = afterStart.duration(to: .now)
+    print("libraryHistoryFilterReuseFocusedBenchmark: before=\(before), after=\(after)")
+    #expect(beforeCount == afterCount && afterCount == 200_000)
+  }
+
   @Test func bookmarkImportRequiresDestinationTreeAfterLoadFailure() {
     let bookmark = BrowserImportItem(title: "Page", address: "https://example.test")
     let history = BrowserImportItem(

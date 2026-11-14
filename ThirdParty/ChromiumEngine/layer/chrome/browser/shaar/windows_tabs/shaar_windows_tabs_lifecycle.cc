@@ -33,6 +33,7 @@
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
 #include "chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+#include "chrome/browser/shaar/save_prompts/shaar_save_prompts.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -78,6 +79,8 @@ struct shaar_tab : content::WebContentsObserver,
                                         window_id, tab_id, web_contents());
   }
   void WebContentsDestroyed() override {
+    shaar::save_prompts::DismissSavePromptsForDestroyedContents(
+        web_contents());
     favicon_observation.Reset();
     // Drop the WebContents pointer before a queued view update can request it.
     shaar::agent_bridge::RevokeForTab(engine, this);

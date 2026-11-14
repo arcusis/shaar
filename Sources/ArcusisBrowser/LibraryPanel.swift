@@ -21,6 +21,12 @@ enum LibraryPanelSearch {
   }
 }
 
+enum LibraryPanelAccessibility {
+  static func loadingLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string("Loading library", table: "Panels", language: language)
+  }
+}
+
 enum LibraryHistoryAccessibility {
   static func removeLabel(
     title: String, address: String, language: BrowserLanguage = .currentLaunchLanguage
@@ -115,7 +121,9 @@ struct LibraryPanel: View {
       } else if loading
         && (section == .bookmarks ? tree == nil : store.library.history[profileID] == nil)
       {
-        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        ProgressView()
+          .accessibilityLabel(LibraryPanelAccessibility.loadingLabel())
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 0) {

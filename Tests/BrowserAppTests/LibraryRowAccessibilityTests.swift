@@ -34,3 +34,8 @@ import Testing
       title: "Home", address: "https://first.test", language: .hebrew)
       == "הסרת \u{2068}Home\u{2069} בכתובת \u{2068}https://first.test\u{2069} מההיסטוריה")
 }
+
+@Test func libraryLoadingLabelIsLocalized() {
+  #expect(LibraryPanelAccessibility.loadingLabel(language: .english) == "Loading library")
+  #expect(LibraryPanelAccessibility.loadingLabel(language: .hebrew) == "הספרייה בטעינה")
+}

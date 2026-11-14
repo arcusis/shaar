@@ -130,7 +130,7 @@ class CatalogValidatorTests(unittest.TestCase):
         ]["value"]
         self.assertEqual(
             value,
-            "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים שמשמשים לכניסה באמצעות מפתח גישה.",
+            "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כמו מפתחות אבטחה וטלפונים המשמשים לאימות באמצעות מפתח גישה.",
         )
     def test_window_navigation_native_menu_has_hebrew_copy(self):
         expected = {"Next Window": "החלון הבא", "Previous Window": "החלון הקודם"}

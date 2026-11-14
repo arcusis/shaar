@@ -103,6 +103,7 @@
     "This engine cannot read or change the third-party cookie policy. Your cookie policy has not been changed.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "המנוע הזה לא יכול לקרוא או לשנות את מדיניות קובצי ה-Cookie של צד שלישי. המדיניות שלך לא שונתה."}}}},
     "This cookie policy is managed by your organization.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מדיניות קובצי ה-Cookie הזו מנוהלת על ידי הארגון שלך."}}}},
     "Refresh": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "רענון"}}}},
+    "Loading site permissions…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "טעינת הרשאות אתרים…"}}}},
     "No site permission exceptions found.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא נמצאו חריגות בהרשאות אתרים."}}}},
     "Reset Permissions…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "איפוס הרשאות…"}}}},
     "Site Permissions": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות אתרים"}}}},

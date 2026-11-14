@@ -72,6 +72,30 @@ def write_output(path, data):
         output.write(data)
 
 
+def run_probe(command, environment, timeout):
+    try:
+        return subprocess.run(
+            command, env=environment, capture_output=True, text=True,
+            timeout=timeout, check=False)
+    except subprocess.TimeoutExpired as error:
+        def text_output(value):
+            if isinstance(value, bytes):
+                return value.decode("utf-8", errors="replace")
+            return value or ""
+
+        return subprocess.CompletedProcess(
+            command, 124, text_output(error.stdout), text_output(error.stderr))
+    except OSError as error:
+        return subprocess.CompletedProcess(command, 126, "", str(error))
+
+
+def read_evidence(path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
@@ -102,13 +126,12 @@ def main():
             page = f"http://127.0.0.1:{server.server_port}/share"
             environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                                SHAAR_ENGINE_TESTING="1", SHAAR_MOCK_KEYCHAIN="1")
-            process = subprocess.run(
+            process = run_probe(
                 [str(executable), "--probe-web-share",
                  "--probe-framework", str(framework),
                  "--probe-output", str(report), "--probe-data-dir", str(root),
-                 "--probe-url", page],
-                env=environment, capture_output=True, text=True, timeout=90, check=False)
-            evidence = json.loads(report.read_text()) if report.is_file() else None
+                 "--probe-url", page], environment, timeout=90)
+            evidence = read_evidence(report) if report.is_file() else None
             shots = {"share-sheet.png": (root / "share-sheet.png").is_file()}
             if evidence and evidence.get("passed"):
                 source = root / "share-sheet.png"

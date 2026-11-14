@@ -8,6 +8,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +25,8 @@ class WebShareProbeOutputPathTests(unittest.TestCase):
         self.assertIn("validate_output_destination(screenshot)", source)
         self.assertIn("write_output(screenshot,", source)
         self.assertIn("write_output(options.receipt,", source)
+        self.assertIn("process = run_probe(", source)
+        self.assertIn("evidence = read_evidence(report)", source)
 
     def assert_symlink_output_is_rejected(self, name, data):
         with tempfile.TemporaryDirectory() as temporary:
@@ -46,6 +49,28 @@ class WebShareProbeOutputPathTests(unittest.TestCase):
 
     def test_screenshot_symlink_is_not_followed(self):
         self.assert_symlink_output_is_rejected("share-sheet.png", b"image")
+
+    def test_probe_timeout_becomes_a_failed_receipt_result(self):
+        timeout = PROBE.subprocess.TimeoutExpired(["probe"], 1, stderr=b"picker stalled")
+        with mock.patch.object(PROBE.subprocess, "run", side_effect=timeout):
+            result = PROBE.run_probe(["probe"], {}, timeout=1)
+
+        self.assertEqual(result.returncode, 124)
+        self.assertEqual(result.stderr, "picker stalled")
+
+    def test_probe_start_error_becomes_a_failed_receipt_result(self):
+        with mock.patch.object(PROBE.subprocess, "run", side_effect=OSError("cannot launch")):
+            result = PROBE.run_probe(["probe"], {}, timeout=1)
+
+        self.assertEqual(result.returncode, 126)
+        self.assertEqual(result.stderr, "cannot launch")
+
+    def test_partial_report_is_treated_as_missing_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            report = Path(temporary) / "report.json"
+            report.write_text('{"passed":')
+
+            self.assertIsNone(PROBE.read_evidence(report))
 
 
 if __name__ == "__main__":

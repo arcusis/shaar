@@ -71,6 +71,14 @@ export function applyMotionPreferenceChange(
   return next;
 }
 
+export function updateSceneVisibility(
+  state: { inViewport: boolean; documentVisible: boolean },
+  change: Partial<{ inViewport: boolean; documentVisible: boolean }>,
+): boolean {
+  Object.assign(state, change);
+  return state.inViewport && state.documentVisible;
+}
+
 const bladeShades = ["#4f8a2c", "#5c9733", "#6aa53b", "#3f7726", "#7cb247", "#8fbf55"];
 const flowerShades = ["#f7d54a", "#f6f2e4", "#ea8fb4", "#b39be2", "#f2a65a"];
 
@@ -192,7 +200,11 @@ export function startScene(
   const birds: Bird[] = [];
   let shootingStar: { x: number; y: number; life: number } | null = null;
   const pointer = { x: -9999, y: -9999, targetX: 0, targetY: 0, parallaxX: 0, parallaxY: 0 };
-  let visible = true;
+  const visibility = {
+    inViewport: true,
+    documentVisible: document.visibilityState === "visible",
+  };
+  let visible = visibility.inViewport && visibility.documentVisible;
   let frame = 0;
   const road = new Path2D(roadPath);
   // Night tint layer: the union of every hill filled with the current tint color. Filling
@@ -581,11 +593,13 @@ export function startScene(
     resetPointerOnLeave(pointer, reducedMotion, wake),
   );
   new IntersectionObserver(([entry]) => {
-    visible = entry.isIntersecting && document.visibilityState === "visible";
+    visible = updateSceneVisibility(visibility, { inViewport: entry.isIntersecting });
     wake();
   }).observe(canvas);
   document.addEventListener("visibilitychange", () => {
-    visible = document.visibilityState === "visible";
+    visible = updateSceneVisibility(visibility, {
+      documentVisible: document.visibilityState === "visible",
+    });
     wake();
   });
   new ResizeObserver(() => {

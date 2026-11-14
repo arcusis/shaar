@@ -26,6 +26,13 @@ def layer_digest(files):
 
 
 class PendingReloadCacheModeTests(unittest.TestCase):
+    def test_pending_reload_replaces_the_provisional_history_entry(self):
+        source = SOURCE.read_text()
+        pending = source.split(
+            "if (const content::NavigationEntry* pending = controller->GetPendingEntry()) {", 1
+        )[1].split("\n  }", 1)[0]
+        self.assertIn("params.should_replace_current_entry = true;", pending)
+
     def test_pending_reload_preserves_normal_and_bypassing_cache_modes(self):
         source = SOURCE.read_text()
         pending = source.split(

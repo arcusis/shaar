@@ -12,10 +12,16 @@ import subprocess
 
 
 SWIFT_SECURITY_EVENTS = ("schedule", "workflow_dispatch")
+API_TIMEOUT_SECONDS = 60
 
 
 def api(path: str) -> dict | list:
-    return json.loads(subprocess.check_output(["gh", "api", path], text=True))
+    try:
+        response = subprocess.check_output(
+            ["gh", "api", path], text=True, timeout=API_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        raise ValueError(f"GitHub API request timed out after {API_TIMEOUT_SECONDS}s: {path}") from error
+    return json.loads(response)
 
 
 def production_runs(document: dict, revision: str, events: tuple[str, ...] = ("push",)) -> list[dict]:

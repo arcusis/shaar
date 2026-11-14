@@ -73,7 +73,10 @@ static NSString *ShaarJSONString(id value) {
 NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *json) {
   NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
   NSDictionary *object = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-  if (![object isKindOfClass:NSDictionary.class] || ![object[@"schemaVersion"] isEqual:@1] ||
+  if (![object isKindOfClass:NSDictionary.class] ||
+      ![object[@"schemaVersion"] isKindOfClass:NSNumber.class] ||
+      CFGetTypeID((__bridge CFTypeRef)object[@"schemaVersion"]) == CFBooleanGetTypeID() ||
+      ![object[@"schemaVersion"] isEqual:@1] ||
       ![object[@"extensions"] isKindOfClass:NSArray.class]) return nil;
   NSMutableArray *rows = [NSMutableArray array];
   for (id entry in object[@"extensions"]) {

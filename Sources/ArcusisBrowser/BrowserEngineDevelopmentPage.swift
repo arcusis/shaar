@@ -22,6 +22,8 @@ extension BrowserEngine {
 
   func updateDevelopmentPage(tabID: UUID, url: URL, loading: Bool) {
     let page = DevelopmentPage.detect(url: url)
+    let previousURL = developmentPageURLs[tabID]
+    if loading || previousURL != url { developmentProbeRequests[tabID] = UUID() }
     if loading || developmentProbedURLs[tabID] != url { developmentPages[tabID] = page }
     developmentPageURLs[tabID] = url
     if loading { developmentProbedURLs[tabID] = nil }
@@ -30,11 +32,14 @@ extension BrowserEngine {
       let profileID = store?.session.profileID(forTabID: tabID)
     else { return }
     developmentProbedURLs[tabID] = url
+    let request = developmentProbeRequests[tabID] ?? UUID()
+    developmentProbeRequests[tabID] = request
     Task { [weak self] in
       guard let self else { return }
       // The navigation callback may arrive before the document exposes its framework markers.
       try? await Task.sleep(for: .milliseconds(250))
       guard !Task.isCancelled,
+        self.developmentProbeRequests[tabID] == request,
         self.store?.session.page(forTabID: tabID)?.tab.url == url,
         let model = self.developerModels[tabID], model.target.url == url
       else { return }
@@ -42,6 +47,7 @@ extension BrowserEngine {
         let value = try await model.evaluate(Self.frameworkMarkerScript)
         guard let text = value as? String, let data = text.data(using: .utf8),
           let markers = try? JSONDecoder().decode(PageMarkerSnapshot.self, from: data),
+          self.developmentProbeRequests[tabID] == request,
           self.store?.session.profileID(forTabID: tabID) == profileID,
           self.store?.session.page(forTabID: tabID)?.tab.url == url
         else { return }

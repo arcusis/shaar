@@ -46,6 +46,7 @@ final class BrowserEngine {
   var developmentPages: [UUID: DevelopmentPage] = [:]
   var developmentPageURLs: [UUID: URL] = [:]
   var developmentProbedURLs: [UUID: URL] = [:]
+  var developmentProbeRequests: [UUID: UUID] = [:]
   let downloads: DownloadsModel
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -228,6 +229,7 @@ final class BrowserEngine {
       self.developmentPages.removeAll()
       self.developmentPageURLs.removeAll()
       self.developmentProbedURLs.removeAll()
+      self.developmentProbeRequests.removeAll()
       self.extensionPanel = nil
       self.store?.dismissPageFind()
       self.liveTabs.removeAll()
@@ -591,6 +593,7 @@ final class BrowserEngine {
       self.developmentPages[id] = nil
       self.developmentPageURLs[id] = nil
       self.developmentProbedURLs[id] = nil
+      self.developmentProbeRequests[id] = nil
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
       self.clearFavicon(id)
@@ -823,6 +826,7 @@ final class BrowserEngine {
       developmentPages[removed] = nil
       developmentPageURLs[removed] = nil
       developmentProbedURLs[removed] = nil
+      developmentProbeRequests[removed] = nil
       mediaAccess[removed] = nil
       forgetMedia(removed)
       clearFavicon(removed)

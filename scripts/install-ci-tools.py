@@ -107,6 +107,8 @@ def validate_install_destinations(directory: Path, members: list[str]) -> None:
         raise ValueError(f"CI tool destination is not a directory: {directory}")
     if directory.parent.is_symlink():
         raise ValueError(f"Refusing symlinked CI tool destination parent: {directory.parent}")
+    if directory.parent.parent.is_symlink():
+        raise ValueError(f"Refusing symlinked ancestor for CI tool destination: {directory.parent.parent}")
     for member in members:
         destination = directory / member
         if destination.is_symlink():

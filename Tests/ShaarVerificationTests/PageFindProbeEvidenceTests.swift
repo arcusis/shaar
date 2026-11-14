@@ -25,6 +25,9 @@ import Testing
         ["fixture": "v1", "ready": "complete", "text": 1]))
     #expect(
       !PageFindProbeEvidence.isReadyDocument(
+        ["fixture": "v1", "ready": "complete", "text": "true"]))
+    #expect(
+      !PageFindProbeEvidence.isReadyDocument(
         ["fixture": "v1", "ready": "complete"]))
   }
 }

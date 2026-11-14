@@ -29,7 +29,7 @@ struct PrintRequest: Identifiable, Equatable {
       let requestingOrigin = URL(string: originString),
       let frameID = payload["frameID"] as? String,
       Self.isFrameToken(frameID),
-      NavigationInput.isWebURL(pageURL),
+      Self.isDisplayableWebURL(pageURL),
       Self.isWebOrigin(requestingOrigin),
       let title = Self.boundedTitle(payload["title"])
     else { return nil }
@@ -108,6 +108,16 @@ struct PrintRequest: Identifiable, Equatable {
       Self.hasValidPort(origin)
     else { return false }
     return ["http", "https"].contains(origin.scheme?.lowercased() ?? "")
+  }
+
+  private static func isDisplayableWebURL(_ url: URL) -> Bool {
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+      return false
+    }
+    components.user = nil
+    components.password = nil
+    guard let credentialFreeURL = components.url else { return false }
+    return NavigationInput.isWebURL(credentialFreeURL)
   }
 
   private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {

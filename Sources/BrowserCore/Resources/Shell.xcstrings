@@ -254,6 +254,7 @@
     "The browser engine could not be loaded.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את מנוע הדפדפן."}}}},
     "An unexpected error occurred.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"אירעה שגיאה בלתי צפויה."}}}},
     "Pinned": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Pinned"}},"he":{"stringUnit":{"state":"translated","value":"נעוצים"}}}},
+    "Today's tabs": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Today's tabs"}},"he":{"stringUnit":{"state":"translated","value":"לשוניות היום"}}}},
     "Single tabs only": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Single tabs only"}},"he":{"stringUnit":{"state":"translated","value":"לשוניות בודדות בלבד"}}}},
     "Drop tabs here": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Drop tabs here"}},"he":{"stringUnit":{"state":"translated","value":"יש לגרור לכאן לשוניות"}}}},
     "Drag split stack": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Drag split stack"}},"he":{"stringUnit":{"state":"translated","value":"גרירת ערימת תצוגה מפוצלת"}}}},

@@ -313,7 +313,10 @@ final class BrowserEngine {
         completion(PanelsL10n.string("The browser engine is unavailable."))
         return
       }
-      let done: @MainActor (Error?) -> Void = { error in completion(error?.localizedDescription) }
+      let done: @MainActor (Error?) -> Void = { error in
+        completion(
+          error == nil ? nil : PanelsL10n.string("Could not update the Library. Try again."))
+      }
       switch mutation {
       case .bookmark(let operation):
         self.events.applyBookmarkOperation(

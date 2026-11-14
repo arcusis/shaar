@@ -177,6 +177,22 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertIn('ShellL10n.string("Changes could not be saved. Try again.")', source)
         self.assertNotIn('ShellL10n.format("Changes could not be saved. %@"', source)
 
+    def test_library_mutation_failure_uses_localized_recovery_copy(self):
+        key = "Could not update the Library. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן לעדכן את הספרייה. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('PanelsL10n.string("Could not update the Library. Try again.")', source)
+
     def test_default_browser_failure_uses_hebrew_settings_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(
             encoding="utf-8"

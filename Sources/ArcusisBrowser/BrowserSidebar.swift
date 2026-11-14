@@ -6,6 +6,8 @@ import BrowserCore
 import SwiftUI
 
 struct BrowserSidebar: View {
+  static let pinnedSectionHeadingTraits: AccessibilityTraits = .isHeader
+
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
@@ -213,6 +215,7 @@ struct BrowserSidebar: View {
         LazyVStack(alignment: .leading, spacing: 4) {
           HStack {
             ShellL10n.text("Pinned").font(.system(size: 11, weight: .semibold))
+              .accessibilityAddTraits(Self.pinnedSectionHeadingTraits)
               .foregroundStyle(.secondary)
             Spacer()
             Button {

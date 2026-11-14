@@ -15,6 +15,10 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
 }
 
 @Suite @MainActor struct BrowserWindowSidebarTests {
+  @Test func pinnedSidebarGroupIsAHeading() {
+    #expect(BrowserSidebar.pinnedSectionHeadingTraits == .isHeader)
+  }
+
   @Test func compactScreenDoesNotRequireOversizedBrowserContent() {
     let store = BrowserStore(sessionFile: nil)
     let size = NSSize(width: 620, height: 480)

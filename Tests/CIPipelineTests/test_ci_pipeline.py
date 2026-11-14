@@ -925,6 +925,9 @@ class SupplyChainTests(unittest.TestCase):
         with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
             self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"payload")
         self.assertEqual(sleeps, [2, 4])
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=[http_error(408), io.BytesIO(b"payload")]):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"payload")
+        self.assertEqual(sleeps[-1], 2)
         with patch.object(INSTALL.urllib.request, "urlopen", side_effect=[http_error(404)]):
             with self.assertRaises(INSTALL.urllib.error.HTTPError):
                 INSTALL.download("https://example.invalid/tool", sleeps.append)

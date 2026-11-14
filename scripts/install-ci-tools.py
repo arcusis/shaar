@@ -104,7 +104,7 @@ def validate_install_destinations(directory: Path, members: list[str]) -> None:
 
 
 DOWNLOAD_ATTEMPTS = 5
-RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 
 
 def download(url: str, sleep=time.sleep) -> bytes:

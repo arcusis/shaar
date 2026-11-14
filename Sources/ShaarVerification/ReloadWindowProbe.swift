@@ -256,6 +256,10 @@ final class ReloadWindowProbe {
           "({href:location.href,marker:document.getElementById('destination')?.innerText||'',clicked:document.documentElement.dataset.clicked||'',trusted:document.documentElement.dataset.trusted||''})"
       ) { continuation.resume(returning: $0) }
     }
+    return Self.parseDocumentJSON(value)
+  }
+
+  static func parseDocumentJSON(_ value: String?) -> [String: Any]? {
     guard let value, let data = value.data(using: .utf8) else { return nil }
     return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
   }

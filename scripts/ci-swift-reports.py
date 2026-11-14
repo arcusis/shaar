@@ -10,6 +10,8 @@ from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
+from ci_support import output_file
+
 
 CASE_EVENT = re.compile(r"^Test Case '(.+)' (started|passed|failed|skipped)(?: \(([0-9.]+) seconds\))?\.$")
 SUITE_END = re.compile(r"^Test Suite '(?:All tests|Selected tests)' (?:passed|failed) at ")
@@ -73,7 +75,8 @@ def write_reports(log: Path, directory: Path) -> None:
     suite = ET.Element("testsuite", name="XCTest", tests=str(len(cases)),
                        failures=str(failures), errors="0", skipped=str(skipped))
     suite.extend(cases)
-    ET.ElementTree(suite).write(directory / "xctest.xml", encoding="utf-8", xml_declaration=True)
+    report = output_file(directory / "xctest.xml")
+    ET.ElementTree(suite).write(report, encoding="utf-8", xml_declaration=True)
     # Some toolchains also emit XCTest XML here. The validated conversion owns
     # that provider's report, so retain one copy of each test rather than two.
     (directory / "swift.xml").unlink(missing_ok=True)

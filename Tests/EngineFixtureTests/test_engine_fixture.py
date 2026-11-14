@@ -179,6 +179,20 @@ class SplitProbePhaseArgumentTests(unittest.TestCase):
 
 
 class DevelopmentModeRunnerTests(unittest.TestCase):
+    def test_private_provisional_navigation_fixture_numbers_reloads(self):
+        server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        path = f'/private-window-{uuid.uuid4()}-slow'
+        url = f'http://127.0.0.1:{server.server_port}{path}'
+        for request in (1, 2):
+            with urllib.request.urlopen(url) as response:
+                body = response.read()
+            self.assertIn(f'data-private-request="{request}"'.encode(), body)
+            self.assertIn(b'window.arcusisInstance=crypto.randomUUID()', body)
+
     def test_account_fixture_counts_page_resize_events(self):
         server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

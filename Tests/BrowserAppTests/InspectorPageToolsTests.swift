@@ -20,6 +20,15 @@ import Testing
     #expect(!InspectorStorageView.entryAccessibilityTraits(isSelected: false).contains(.isSelected))
   }
 
+  @Test func backendFailuresUseLocalizedPageToolsRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorPageToolsModel.failureMessage(for: error)
+        == InspectorToolsL10n.string("The page-tools request could not be completed. Try again."))
+    let known = InspectorFailure("Storage could not be read.")
+    #expect(InspectorPageToolsModel.failureMessage(for: known) == known.localizedDescription)
+  }
+
   @Test func storageEditorAccessibilityLabelsAreLocalized() {
     #expect(
       BrowserLocalization.string("Key", table: "InspectorTools", language: .english) == "Key")

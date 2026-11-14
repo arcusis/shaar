@@ -288,7 +288,7 @@ final class InspectorPageToolsModel {
       if isCurrent(lifecycle), generation == inspector.documentGeneration,
         !(error is CancellationError)
       {
-        failure = InspectorToolsL10n.backendError(error.localizedDescription)
+        failure = Self.failureMessage(for: error)
         signalUpdate()
       }
     }
@@ -437,7 +437,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = InspectorToolsL10n.backendError(error.localizedDescription)
+      failure = Self.failureMessage(for: error)
     }
   }
 
@@ -472,7 +472,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = InspectorToolsL10n.backendError(error.localizedDescription)
+      failure = Self.failureMessage(for: error)
     }
   }
 
@@ -488,7 +488,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = InspectorToolsL10n.backendError(error.localizedDescription)
+      failure = Self.failureMessage(for: error)
     }
   }
 
@@ -517,6 +517,13 @@ final class InspectorPageToolsModel {
       throw InspectorFailure(InspectorToolsL10n.backendError(bounded))
     }
     return value
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return error.localizedDescription
+    }
+    return InspectorToolsL10n.string("The page-tools request could not be completed. Try again.")
   }
 
   isolated deinit { pollTask?.cancel() }

@@ -584,6 +584,10 @@
       "sha256": "93d724a6e39e9f41637808a86efc403db304fb141524856646cf83fa05f24f86"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0080-shaar-download-readiness.patch",
+      "sha256": "a2110709215a9fa5d118abaafd25cc231fddcb16da877ac9072a4734993531ca"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0081-shaar-native-window-session-id.patch",
       "sha256": "ca33752de8db14d1442f995a81408908b4439e1b55ef10b68d75727fb9aeeaff"
     },

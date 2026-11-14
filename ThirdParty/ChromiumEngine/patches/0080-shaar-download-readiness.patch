@@ -1,0 +1,84 @@
+--- a/chrome/browser/shaar/downloads/shaar_downloads.h
++++ b/chrome/browser/shaar/downloads/shaar_downloads.h
+@@ -49,6 +49,7 @@
+ 
+   // Returns false until Chromium has initialized history for this manager.
+   bool IsReady() const;
++  static bool HasReadyDownloadHistory(content::DownloadManager* manager);
+   base::DictValue List() const;
+   bool Control(const std::string& guid,
+                const std::string& action,
+--- a/chrome/browser/shaar/downloads/shaar_downloads.cc
++++ b/chrome/browser/shaar/downloads/shaar_downloads.cc
+@@ -85,6 +85,11 @@
+   return ready_ && manager_;
+ }
+ 
++bool Downloads::HasReadyDownloadHistory(
++    content::DownloadManager* manager) {
++  return manager && manager->IsManagerInitialized();
++}
++
+ base::DictValue Downloads::Record(const download::DownloadItem &item,
+                                   bool off_the_record) {
+   base::DictValue record;
+--- a/chrome/browser/shaar/downloads/shaar_downloads_lifecycle_adapter.cc
++++ b/chrome/browser/shaar/downloads/shaar_downloads_lifecycle_adapter.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+ #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
++#include "content/public/browser/download_manager.h"
+ 
+ namespace {
+ 
+@@ -104,6 +105,10 @@
+       context->profile_services->ProfileID(engine, scope.profile);
+   if (!profile || profile_id.empty())
+     return SHAAR_NOT_FOUND;
++  if (!shaar::Downloads::HasReadyDownloadHistory(
++          profile->GetDownloadManager())) {
++    return SHAAR_NOT_READY;
++  }
+   auto* downloads = GetDownloadsData(profile)->Get(profile, engine, profile_id);
+   std::string payload;
+   std::string diagnostic;
+--- a/chrome/browser/shaar/downloads/shaar_downloads_unittest.cc
++++ b/chrome/browser/shaar/downloads/shaar_downloads_unittest.cc
+@@ -8,6 +8,7 @@
+ 
+ #include "base/time/time.h"
+ #include "components/download/public/common/mock_download_item.h"
++#include "content/public/test/mock_download_manager.h"
+ #include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "url/gurl.h"
+@@ -82,6 +83,17 @@
+   EXPECT_EQ(*record.FindString("path"), "/temporary/file.bin");
+ }
+ 
++TEST(ShaarDownloadsHandlerTest, WaitsUntilDownloadHistoryIsInitialized) {
++  NiceMock<content::MockDownloadManager> manager;
++  EXPECT_CALL(manager, IsManagerInitialized()).WillOnce(Return(false));
++  EXPECT_FALSE(Downloads::HasReadyDownloadHistory(&manager));
++
++  NiceMock<content::MockDownloadManager> ready_manager;
++  EXPECT_CALL(ready_manager, IsManagerInitialized()).WillOnce(Return(true));
++  EXPECT_TRUE(Downloads::HasReadyDownloadHistory(&ready_manager));
++  EXPECT_FALSE(Downloads::HasReadyDownloadHistory(nullptr));
++}
++
+ TEST(ShaarDownloadsHandlerTest, RejectsMalformedArgumentsAndUnknownOperation) {
+   Downloads downloads(nullptr, "profile-id", "", nullptr, nullptr);
+   std::string payload;
+--- a/chrome/browser/shaar/BUILD.gn
++++ b/chrome/browser/shaar/BUILD.gn
+@@ -279,7 +279,7 @@
+ test("shaar_downloads_unittests") {
+   sources = [ "downloads/shaar_downloads_unittest.cc" ]
+   deps = [ ":engine", "//components/download/public/common:test_support",
+-           "//testing/gmock", "//testing/gtest" ]
++           "//content/test:test_support", "//testing/gmock", "//testing/gtest" ]
+ }
+ 
+ test("shaar_bookmarks_unittests") {

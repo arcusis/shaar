@@ -95,6 +95,7 @@ struct LibraryPanel: View {
   }
 
   var body: some View {
+    let visibleBookmarks = bookmarks
     VStack(alignment: .leading, spacing: 14) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
@@ -128,12 +129,12 @@ struct LibraryPanel: View {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 0) {
             if section == .bookmarks {
-              ForEach(bookmarks) { bookmarkRow($0) }
+              ForEach(visibleBookmarks) { bookmarkRow($0) }
             } else {
               ForEach(history) { historyRow($0) }
             }
           }
-          if section == .bookmarks ? bookmarks.isEmpty : history.isEmpty {
+          if section == .bookmarks ? visibleBookmarks.isEmpty : history.isEmpty {
             ContentUnavailableView(
               PanelsL10n.string("No matches"), systemImage: section == .bookmarks ? "star" : "clock"
             )

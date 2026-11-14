@@ -27,6 +27,47 @@ struct BrowserLibraryTests {
     #expect(!LibraryPanelSearch.matches("Café https://example.test", query: "resume"))
   }
 
+  @Test func libraryBookmarkFilterReuseFocusedBenchmark() throws {
+    let profileID = UUID()
+    let children = (0..<10_000).map { index in
+      [
+        "id": UUID().uuidString, "k": "u", "t": "Needle page \(index)",
+        "u": "https://example.test/page-\(index)",
+      ] as [String: Any]
+    }
+    let tree = try BookmarkTree(
+      profileID: profileID,
+      payload: [
+        "bar": ["id": UUID().uuidString, "k": "f", "t": "Bookmarks Bar", "c": children],
+        "other": ["id": UUID().uuidString, "k": "f", "t": "Other Bookmarks", "c": []],
+      ])
+    let items = tree.items
+
+    let beforeStart = ContinuousClock.now
+    var beforeCount = 0
+    for _ in 0..<10 {
+      beforeCount += items.filter {
+        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
+      }.count
+      beforeCount += items.filter {
+        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
+      }.count
+    }
+    let before = beforeStart.duration(to: .now)
+
+    let afterStart = ContinuousClock.now
+    var afterCount = 0
+    for _ in 0..<10 {
+      let filtered = items.filter {
+        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
+      }
+      afterCount += filtered.count * 2
+    }
+    let after = afterStart.duration(to: .now)
+    print("libraryBookmarkFilterReuseFocusedBenchmark: before=\(before), after=\(after)")
+    #expect(beforeCount == afterCount && afterCount == 200_000)
+  }
+
   @Test func bookmarkImportRequiresDestinationTreeAfterLoadFailure() {
     let bookmark = BrowserImportItem(title: "Page", address: "https://example.test")
     let history = BrowserImportItem(

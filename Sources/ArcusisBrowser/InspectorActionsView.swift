@@ -5,7 +5,6 @@
 import SwiftUI
 
 struct InspectorActionsView: View {
-  @Environment(\.layoutDirection) private var layoutDirection
   @Bindable var model: InspectorModel
   @Binding var copyButtonFrame: CGRect
   var body: some View {
@@ -86,7 +85,6 @@ struct InspectorActionsView: View {
 
 /// Drawn inside the dock, so the same menu can be rendered offscreen without ordering an NSMenu.
 struct InspectorCopyMenu: View {
-  @Environment(\.layoutDirection) private var layoutDirection
   @Bindable var model: InspectorModel
   @AppStorage("inspectorSourceEditor") private var sourceEditor = InspectorSourceEditor.vscode
     .rawValue
@@ -119,9 +117,7 @@ struct InspectorCopyMenu: View {
           )
           .font(.system(size: 11))
           Spacer()
-          Image(
-            systemName: InspectorL10n.forwardChevron(
-              isRightToLeft: layoutDirection == .rightToLeft))
+          Image(systemName: InspectorL10n.forwardChevron())
             .font(.system(size: 8)).foregroundStyle(.secondary)
         }.padding(.horizontal, 8).frame(maxWidth: .infinity, alignment: .leading)
           .frame(height: 27).contentShape(Rectangle())

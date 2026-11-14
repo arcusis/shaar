@@ -389,10 +389,20 @@ final class InspectorModel {
       return revisionChanged ? .changed : .unchanged
     } catch {
       if revision == generation, !Task.isCancelled {
-        failure = InspectorL10n.display(error.localizedDescription)
+        failure = Self.captureFailureMessage(for: error)
       }
       return .unavailable
     }
+  }
+
+  static func captureFailureMessage(
+    for error: Error, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return InspectorL10n.display(error.localizedDescription)
+    }
+    return BrowserLocalization.string(
+      "The page could not complete the Inspector request.", table: "Inspector", language: language)
   }
 
   /// Apply validated renderer data independently of protocol transport and native rendering.

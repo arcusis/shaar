@@ -14,6 +14,20 @@ import Testing
     #expect(InspectorPanel.titleAccessibilityTraits.contains(.isHeader))
   }
 
+  @Test func elementCaptureBackendFailuresUseHebrewRecoveryCopy() {
+    let backendError = NSError(
+      domain: "DevTools", code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "The engine refused the request."])
+    #expect(
+      InspectorModel.captureFailureMessage(for: backendError, language: .hebrew)
+        == "הדף לא הצליח להשלים את הבקשה מכלי הבדיקה.")
+
+    let known = InspectorFailure("Element data could not be displayed.")
+    #expect(
+      InspectorModel.captureFailureMessage(for: known)
+        == InspectorL10n.display(known.localizedDescription))
+  }
+
   @Test func inspectorCopyControlsRevealForVoiceOverFocus() {
     #expect(
       InspectorCopyButtonVisibility.isVisible(

@@ -178,10 +178,15 @@ final class DeveloperPageModel {
         }
         if current == revision && destination == target { failure = nil }
       } catch {
-        if current == revision { failure = error.localizedDescription }
+        if current == revision { failure = Self.failureMessage(for: error) }
       }
       completed = current
     }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is DeveloperModeFailure { return error.localizedDescription }
+    return InspectorToolsL10n.string("Could not apply developer settings. Try again.")
   }
 
   func endSession() {

@@ -11,6 +11,15 @@ import Testing
 
 @Suite @MainActor
 struct DeveloperPerformanceModelTests {
+  @Test func runtimeSimulationFailuresUseLocalizedRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      DeveloperPageModel.failureMessage(for: error)
+        == InspectorToolsL10n.string("Could not apply developer settings. Try again."))
+    let known = DeveloperModeFailure("The page changed. Try again.")
+    #expect(DeveloperPageModel.failureMessage(for: known) == known.localizedDescription)
+  }
+
   @Test func disablingPerformanceClearsThePreviousSnapshot() async throws {
     let model = DeveloperPageModel(
       target: SiteControlTarget(

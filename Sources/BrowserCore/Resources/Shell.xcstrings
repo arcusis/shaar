@@ -6,6 +6,7 @@
     "Browser sidebar": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Browser sidebar"}},"he":{"stringUnit":{"state":"translated","value":"סרגל הצד של הדפדפן"}}}},
     "Enter Full Screen": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Enter Full Screen"}},"he":{"stringUnit":{"state":"translated","value":"כניסה למסך מלא"}}}},
     "Paste and Match Style": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Paste and Match Style"}},"he":{"stringUnit":{"state":"translated","value":"הדבקה והתאמת סגנון"}}}},
+    "Could not complete the browser window action. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not complete the browser window action. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להשלים את הפעולה בחלון הדפדפן. כדאי לנסות שוב."}}}},
     "Coverage": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Coverage"}},"he":{"stringUnit":{"state":"translated","value":"כיסוי"}}}},
     "Script": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Script"}},"he":{"stringUnit":{"state":"translated","value":"סקריפט"}}}},
     "Style sheet": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Style sheet"}},"he":{"stringUnit":{"state":"translated","value":"גיליון סגנון"}}}},

@@ -1273,8 +1273,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   private func report(_ error: Error) {
-    lastError = error.localizedDescription
-    activeContext?.engine.reportNotice(error.localizedDescription)
+    let message = Self.localizedFailureNotice(for: error)
+    lastError = message
+    activeContext?.engine.reportNotice(message)
+  }
+
+  static func localizedFailureNotice(for _: Error) -> String {
+    return ShellL10n.string("Could not complete the browser window action. Try again.")
   }
 
   func validateMenuItem(_ item: NSMenuItem) -> Bool {

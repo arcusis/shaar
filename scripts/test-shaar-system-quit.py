@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+from urllib.parse import urlsplit
 
 
 def run_case(app: Path, fixture_url: str | None, inspector: bool) -> dict:
@@ -61,13 +62,31 @@ def run_case(app: Path, fixture_url: str | None, inspector: bool) -> dict:
                 "passed": result["passed"], "checks": result["inspectorChecks"]}
 
 
+def verification_app(value: str) -> Path:
+    app = Path(value)
+    if not app.is_dir():
+        raise argparse.ArgumentTypeError(f"verification app directory does not exist: {app}")
+    return app
+
+
+def loopback_fixture_url(value: str) -> str:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "fixture URL must use http://127.0.0.1:<port>") from error
+    if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or not port
+            or parsed.username is not None or parsed.password is not None):
+        raise argparse.ArgumentTypeError("fixture URL must use http://127.0.0.1:<port>")
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", type=Path, required=True)
-    parser.add_argument("--fixture-url", required=True)
+    parser.add_argument("--app", type=verification_app, required=True)
+    parser.add_argument("--fixture-url", type=loopback_fixture_url, required=True)
     options = parser.parse_args()
-    assert options.app.is_dir()
-    assert options.fixture_url.startswith("http://127.0.0.1:")
     results = [run_case(options.app, options.fixture_url, False),
                run_case(options.app, options.fixture_url, True)]
     print(json.dumps({"cases": results, "passed": len(results)}, indent=2))

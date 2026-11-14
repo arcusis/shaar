@@ -271,11 +271,12 @@ private func groupedHistory(
   var order: [String] = []
   var addressCache = BrowserImportAddressCache()
   for row in rows {
-    guard let address = row["url"]?.string,
-      let rawVisit = row["visit_time"], let visit = date(rawVisit),
-      addressCache.accepts(address)
+    guard let address = row["url"]?.string else { continue }
+    let isExistingGroup = grouped[address] != nil
+    guard isExistingGroup || addressCache.accepts(address),
+      let rawVisit = row["visit_time"], let visit = date(rawVisit)
     else { continue }
-    if grouped[address] == nil {
+    if !isExistingGroup {
       order.append(address)
       grouped[address] = (title: row["title"]?.string ?? "", visits: [])
     }

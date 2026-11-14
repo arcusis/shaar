@@ -173,6 +173,12 @@ final class ReloadWindowProbe {
     let destination = try await destinationTab(
       name: name, source: source, ownerID: ownerID, prior: prior, host: host,
       gestureResult: gestureResult)
+    let createdTabs = Set(
+      host.contexts.values.flatMap { $0.store.session.spaces.flatMap(\.tabs) }.map(\.id)
+    ).subtracting(prior)
+    try expect(
+      Self.hasSingleDestinationTab(createdTabs, destination: destination),
+      "\(name) creates exactly one destination tab")
     if elementID != "plain" {
       let clicked = try require(await document(source, runtime: runtime), "No source document")
       try expect(
@@ -329,5 +335,9 @@ final class ReloadWindowProbe {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
+  }
+
+  static func hasSingleDestinationTab(_ createdIDs: Set<UUID>, destination: UUID) -> Bool {
+    createdIDs.count == 1 && createdIDs.contains(destination)
   }
 }

@@ -135,6 +135,18 @@ shaar_error_code Go(content::NavigationController* controller, bool forward) {
 shaar_error_code Reload(content::NavigationController* controller,
                         bool bypass_cache) {
   if (!controller) return SHAAR_NOT_FOUND;
+  // During a provisional navigation, NavigationController::Reload() can
+  // restart the last committed entry instead of the pending destination.
+  // Reload the pending URL explicitly so a reload requested while a page is
+  // loading continues toward that page.
+  if (const content::NavigationEntry* pending = controller->GetPendingEntry()) {
+    content::NavigationController::LoadURLParams params(pending->GetURL());
+    params.transition_type = ui::PAGE_TRANSITION_RELOAD;
+    params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE
+                                      : content::ReloadType::NORMAL;
+    controller->LoadURLWithParams(params);
+    return SHAAR_OK;
+  }
   controller->Reload(bypass_cache ? content::ReloadType::BYPASSING_CACHE
                                   : content::ReloadType::NORMAL,
                      true);

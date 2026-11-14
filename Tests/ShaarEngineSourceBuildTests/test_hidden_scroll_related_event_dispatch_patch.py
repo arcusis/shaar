@@ -26,6 +26,12 @@ class HiddenScrollRelatedEventDispatchPatchTests(unittest.TestCase):
         )
         self.assertIn('AtomicString("overscroll")', patch)
         self.assertIn("EnqueueOverscrollEvent", patch)
+        self.assertIn(
+            '+  GetDocument().EnqueueOverscrollEvent(AtomicString("overscroll"),\n'
+            '+                                       GetDocument().body(),\n'
+            '+                                       GetDocument().body(),',
+            patch,
+        )
         self.assertIn("HiddenDocumentScrollRelatedEventsDispatchWithoutAnimationFrame", patch)
         self.assertIn("+  GetDocument().body()->addEventListener(", patch)
         self.assertIn("+                                       GetDocument().body(),\n+                                       GetDocument().body(),", patch)

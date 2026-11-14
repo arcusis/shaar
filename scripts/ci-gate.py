@@ -65,7 +65,17 @@ def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
 
 
 def main() -> int:
-    required = ("CI_NEEDS", "CI_FULL", "CI_NIGHTLY", "GITHUB_STEP_SUMMARY")
+    raw_needs = os.environ.get("CI_NEEDS")
+    if not raw_needs:
+        print("CI required gate: missing or empty environment variable CI_NEEDS", file=sys.stderr)
+        return 2
+    try:
+        needs = parse_needs(raw_needs)
+    except ValueError as error:
+        print(f"CI gate error: {error}", file=sys.stderr)
+        return 1
+
+    required = ("CI_FULL", "CI_NIGHTLY", "GITHUB_STEP_SUMMARY")
     missing = next((name for name in required if not os.environ.get(name)), None)
     if missing:
         print(f"CI required gate: missing or empty environment variable {missing}", file=sys.stderr)
@@ -76,13 +86,6 @@ def main() -> int:
             print(f"CI required gate: {name} must be 'true' or 'false'", file=sys.stderr)
             return 2
 
-    for name in ("CI_FULL", "CI_NIGHTLY", "CI_WEBSITE", "CI_BROWSING", "CI_SHIPPING_GUARD"):
-        value = os.environ.get(name)
-        if value is not None and value not in ("true", "false"):
-            print(f"CI required gate: {name} must be 'true' or 'false'", file=sys.stderr)
-            return 2
-
-    needs = parse_needs(os.environ["CI_NEEDS"])
     errors = gate_errors(needs, os.environ["CI_FULL"] == "true", os.environ["CI_NIGHTLY"] == "true",
                          os.environ.get("CI_WEBSITE") == "true",
                          os.environ.get("CI_BROWSING") == "true",

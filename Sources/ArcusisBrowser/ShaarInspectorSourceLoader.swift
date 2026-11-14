@@ -15,18 +15,18 @@ import Foundation
     guard inspector.isOpen, inspector.target == target,
       let resourceURL = URL(string: url),
       DevelopmentSourceResolver.sameOrigin(resourceURL, target.url)
-    else { throw InspectorFailure("This source is no longer available.") }
+    else { throw InspectorFailure(InspectorL10n.string("This source is no longer available.")) }
 
     let tree = try await inspector.call("Page.getResourceTree")
     guard let frameID = frameID(for: url, in: tree) else {
-      throw InspectorFailure("This source is no longer in the page resource tree.")
+      throw InspectorFailure(InspectorL10n.string("This source is no longer in the page resource tree."))
     }
     let reply = try await inspector.call(
       "Page.getResourceContent", params: ["url": url, "frameId": frameID])
     guard let content = reply["content"] as? String,
       content.utf8.count <= maxContentBytes,
       let encoded = reply["base64Encoded"] as? Bool
-    else { throw InspectorFailure("Source content is unavailable or exceeds 5 MiB.") }
+    else { throw InspectorFailure(InspectorL10n.string("Source content is unavailable or exceeds 5 MiB.")) }
     return (content, encoded)
   }
 

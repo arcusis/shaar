@@ -451,6 +451,19 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertEqual(forms["two"]["stringUnit"]["value"], "שני בייטים של קוד סימון")
         self.assertEqual(forms["other"]["stringUnit"]["value"], "%d בייטים של קוד סימון")
 
+    def test_inspector_source_loader_errors_use_inspector_catalog(self):
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Inspector.xcstrings").read_text(encoding="utf-8"))
+        expected = {
+            "This source is no longer available.": "המקור הזה כבר אינו זמין.",
+            "This source is no longer in the page resource tree.": "המקור הזה כבר אינו מופיע בעץ המשאבים של הדף.",
+            "Source content is unavailable or exceeds 5 MiB.": "תוכן המקור אינו זמין או שגודלו חורג מ־5 MiB.",
+        }
+        source = (ROOT / "Sources/ArcusisBrowser/ShaarInspectorSourceLoader.swift").read_text(encoding="utf-8")
+        for key, translation in expected.items():
+            with self.subTest(key=key):
+                self.assertEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], translation)
+                self.assertIn(f'InspectorL10n.string("{key}")', source)
+
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"
         data = json.loads(path.read_text(encoding="utf-8"))

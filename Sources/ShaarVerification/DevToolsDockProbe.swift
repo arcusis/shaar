@@ -5,34 +5,59 @@
 import AppKit
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 
 @testable import ArcusisBrowser
+
+enum DevToolsDockEvidence {
+  static func allWindowsAreHidden(_ state: [AnyHashable: Any]) -> Bool {
+    boolean(state["allWindowsHidden"]) == true
+  }
+
+  static func matches(_ state: [AnyHashable: Any], open: Bool, previousWidth: Double? = nil) -> Bool {
+    guard boolean(state["open"]) == open,
+      let page = number(state["pageWidth"]),
+      let host = number(state["containerWidth"]),
+      let height = number(state["pageHeight"]),
+      host > 0, height > 0
+    else { return false }
+    if let previousWidth, abs(host - previousWidth) <= 10 { return false }
+    if !open { return abs(page - host) <= 1 }
+    guard boolean(state["sameWindow"]) == true,
+      boolean(state["sameContainer"]) == true,
+      boolean(state["frontendHitNearTabStrip"]) == true,
+      boolean(state["pageAboveFrontend"]) == true,
+      boolean(state["frontendCoversContainer"]) == true,
+      boolean(state["geometryReady"]) == true,
+      let gap = number(state["gap"]),
+      let frontend = number(state["frontendWidth"]),
+      let frontendHeight = number(state["frontendHeight"])
+    else { return false }
+    return gap <= 1 && page > 0 && page < host && abs(frontend - host) <= 1
+      && frontendHeight > 0
+  }
+
+  private static func boolean(_ value: Any?) -> Bool? {
+    guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+      return nil
+    }
+    return number.boolValue
+  }
+
+  private static func number(_ value: Any?) -> Double? {
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
+      return nil
+    }
+    return number.doubleValue
+  }
+}
 
 enum DevToolsDockProbeEvidence {
   static func geometryMatches(
     _ state: [AnyHashable: Any], open: Bool, previousWidth: Double? = nil
   ) -> Bool {
-    guard state["open"] as? Bool == open,
-      let page = state["pageWidth"] as? Double,
-      let host = state["containerWidth"] as? Double,
-      let height = state["pageHeight"] as? Double,
-      host > 0, height > 0
-    else { return false }
-    if let previousWidth, abs(host - previousWidth) <= 10 { return false }
-    if !open { return abs(page - host) <= 1 }
-    guard state["sameWindow"] as? Bool == true,
-      state["sameContainer"] as? Bool == true,
-      state["frontendHitNearTabStrip"] as? Bool == true,
-      state["pageAboveFrontend"] as? Bool == true,
-      state["frontendCoversContainer"] as? Bool == true,
-      state["geometryReady"] as? Bool == true,
-      let gap = state["gap"] as? Double,
-      let frontend = state["frontendWidth"] as? Double,
-      let frontendHeight = state["frontendHeight"] as? Double
-    else { return false }
-    return gap <= 1 && page > 0 && page < host && abs(frontend - host) <= 1
-      && frontendHeight > 0
+    DevToolsDockEvidence.matches(state, open: open, previousWidth: previousWidth)
   }
 }
 
@@ -113,11 +138,13 @@ struct DevToolsDockProbe {
     else { throw InspectorFailure("Native frontend audit unavailable.") }
     let bytes = try JSONSerialization.data(withJSONObject: state, options: [.sortedKeys])
     FileHandle.standardError.write(Data("DevTools dock audit: ".utf8) + bytes + Data("\n".utf8))
-    guard state["allWindowsHidden"] as? Bool == true else {
+    guard DevToolsDockEvidence.allWindowsAreHidden(state) else {
       throw InspectorFailure("DevTools exposed a native window.")
     }
-    return DevToolsDockProbeEvidence.geometryMatches(
-      state, open: open, previousWidth: previousWidth)
+    guard DevToolsDockEvidence.allWindowsAreHidden(state) else {
+      throw InspectorFailure("DevTools exposed a native window.")
+    }
+    return DevToolsDockEvidence.matches(state, open: open, previousWidth: previousWidth)
   }
 
   private func wait(_ name: String, until ready: () async throws -> Bool) async throws {

@@ -3684,6 +3684,8 @@
         }
       }
     },
+    "Agent control requires a web page.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Agent control requires a web page."}},"he":{"stringUnit":{"state":"translated","value":"שליטת סוכן זמינה רק בדפי אינטרנט."}}}},
+    "Local agent %d": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Local agent %d"}},"he":{"stringUnit":{"state":"translated","value":"סוכן מקומי %d"}}}},
     "Agent disconnect not confirmed": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Agent disconnect not confirmed"}},"he":{"stringUnit":{"state":"translated","value":"הניתוק מהסוכן לא אושר"}}}},
     "Agent connected to this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Agent connected to this tab"}},"he":{"stringUnit":{"state":"translated","value":"הסוכן מחובר ללשונית הזו"}}}},
     "Waiting for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Waiting for agent"}},"he":{"stringUnit":{"state":"translated","value":"ממתינים לסוכן"}}}},

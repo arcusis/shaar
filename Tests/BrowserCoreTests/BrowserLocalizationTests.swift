@@ -138,6 +138,17 @@ import Testing
       == "Uncatalogued test label")
 }
 
+@Test func agentBridgeValidationAndConnectionLabelsHaveHebrewForms() {
+  #expect(
+    BrowserLocalization.string(
+      "Agent control requires a web page.", table: "Shell", language: .hebrew)
+      == "שליטת סוכן זמינה רק בדפי אינטרנט.")
+  #expect(
+    BrowserLocalization.format(
+      "Local agent %d", table: "Shell", language: .hebrew, arguments: [.integer(2)])
+      == "סוכן מקומי 2")
+}
+
 @Test func bridgeDownloadPluralUsesEnglishNumericOneAndHebrewNativeForms() {
   #expect(
     BrowserLocalization.plural("%d active downloads", count: 1, table: "Bridge", language: .english)

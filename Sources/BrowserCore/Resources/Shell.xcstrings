@@ -3592,26 +3592,6 @@
         "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לשמור את שינויי החלון. %@" } }
       }
     },
-    "Could not load private site cookie settings. Try again.": {
-      "localizations": {
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "לא ניתן לטעון את הגדרות קובצי ה-Cookie של האתר בחלון הפרטי. כדאי לנסות שוב."
-          }
-        }
-      }
-    },
-    "Could not update private site cookie settings. Try again.": {
-      "localizations": {
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "לא ניתן לעדכן את הגדרות קובצי ה-Cookie של האתר בחלון הפרטי. כדאי לנסות שוב."
-          }
-        }
-      }
-    },
     "Saved windows could not be restored. The original files are preserved; changes in these temporary windows will not be saved.": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Saved windows could not be restored. The original files are preserved; changes in these temporary windows will not be saved." } },

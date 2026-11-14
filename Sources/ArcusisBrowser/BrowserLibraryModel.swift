@@ -42,6 +42,22 @@ final class BrowserLibraryModel {
   @ObservationIgnored private var pendingRefresh: [LibraryKey: Task<Void, Never>] = [:]
   @ObservationIgnored private var dirty: Set<LibraryKey> = []
 
+  static func loadFailure(
+    _ error: Error, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    switch error {
+    case LibraryDataError.invalidBookmarks:
+      return BrowserLocalization.string(
+        "The engine returned invalid bookmark data.", language: language)
+    case LibraryDataError.invalidHistory:
+      return BrowserLocalization.string(
+        "The engine returned invalid history data.", language: language)
+    default:
+      return BrowserLocalization.string(
+        "Could not load this Library section. Try again.", language: language)
+    }
+  }
+
   func notice(_ profile: UUID, section: LibrarySection) -> String? {
     let key = LibraryKey(profileID: profile, section: section)
     return notices[key] ?? watchNotices[key]
@@ -86,7 +102,7 @@ final class BrowserLibraryModel {
           }
           self.history[profile] = entries.sorted { $0.lastVisit > $1.lastVisit }
         }
-      } catch { self.notices[key] = error.localizedDescription }
+      } catch { self.notices[key] = Self.loadFailure(error) }
       if self.dirty.remove(key) != nil { self.invalidate(profile, section: section) }
     }
   }

@@ -10,6 +10,17 @@ import Testing
 
 @Suite @MainActor
 struct BrowserLibraryTests {
+  @Test func unexpectedLoadErrorsUseHebrewRecoveryCopy() {
+    let expected = "לא ניתן לטעון את החלק הזה בספרייה. כדאי לנסות שוב."
+    #expect(
+      BrowserLibraryModel.loadFailure(
+        NSError(domain: "Library", code: 7), language: .hebrew) == expected)
+    #expect(
+      BrowserLibraryModel.loadFailure(
+        LibraryDataError.invalidBookmarks, language: .hebrew)
+        == "מנוע הדפדפן החזיר נתוני סימנייה לא תקינים.")
+  }
+
   @Test func bookmarkAndHistorySearchFindsTitlesWithoutTypingAccents() {
     #expect(LibraryPanelSearch.matches("Résumé https://example.test", query: "resume"))
     #expect(LibraryPanelSearch.matches("Café https://example.test", query: "cafe"))

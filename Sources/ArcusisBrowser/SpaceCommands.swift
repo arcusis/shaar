@@ -15,6 +15,8 @@ enum SpaceShortcut {
 
 struct SpaceCommands: Commands {
   static let newSpaceShortcut = KeyboardShortcut("S", modifiers: [.command, .shift])
+  static let splitViewShortcut = KeyboardShortcut("=", modifiers: [.control, .shift])
+  static let copyURLShortcut = KeyboardShortcut("c", modifiers: [.command, .shift])
   let store: BrowserStore
 
   var body: some Commands {
@@ -43,14 +45,14 @@ struct SpaceCommands: Commands {
     }
     CommandMenu(ShellL10n.string("Page")) {
       Button(ShellL10n.string("Split View")) { store.splitSelectedTab() }
-        .keyboardShortcut("=", modifiers: [.control, .shift])
+        .keyboardShortcut(Self.splitViewShortcut)
         .disabled(!store.canSplitSelectedTab)
       Button(ShellL10n.string("Copy URL")) {
         guard let url = store.session.selectedPage?.tab.url else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(CleanLink.clean(url).absoluteString, forType: .string)
       }
-      .keyboardShortcut("c", modifiers: [.command, .shift])
+      .keyboardShortcut(Self.copyURLShortcut)
       .disabled(store.session.selectedPage == nil)
     }
   }

@@ -1339,10 +1339,6 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     return number.boolValue
   }
 
-  nonisolated static func videoIsPlaying(_ evidence: [String: Any]) -> Bool {
-    flag(evidence["video"]) == true && flag(evidence["paused"]) == false
-  }
-
   nonisolated static func numbers(_ value: Any?) -> [Int] {
     if let values = value as? [Any] { return values.compactMap { number($0) } }
     if let values = value as? NSArray { return values.compactMap { number($0) } }

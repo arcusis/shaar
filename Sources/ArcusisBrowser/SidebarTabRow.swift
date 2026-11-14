@@ -25,10 +25,10 @@ enum SidebarTabTitle {
   }
 
   static func accessibilityLabel(
-    title: String, isSleeping: Bool, isPinned: Bool = false,
+    title: String, address: String, isSleeping: Bool, isPinned: Bool = false,
     language: BrowserLanguage = .currentLaunchLanguage
   ) -> String {
-    var label = title
+    var label = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? address : title
     let states = [
       isPinned ? BrowserLocalization.string("Pinned", table: "Shell", language: language) : nil,
       isSleeping ? BrowserLocalization.string("Sleeping", table: "Shell", language: language) : nil,
@@ -50,6 +50,7 @@ struct SidebarTabRow: View {
 
   let tabID: UUID
   let title: String
+  let address: String
   let favicon: NSImage?
   let isPinned: Bool
   let isSelected: Bool
@@ -104,7 +105,7 @@ struct SidebarTabRow: View {
     .focused($focusedControl, equals: .select)
     .accessibilityLabel(
       SidebarTabTitle.accessibilityLabel(
-        title: title, isSleeping: isSleeping, isPinned: isPinned))
+        title: title, address: address, isSleeping: isSleeping, isPinned: isPinned))
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .accessibilityAction(named: ShellL10n.text("Close tab"), onClose)
     .accessibilityIdentifier("sidebar-tab-select-\(tabID.uuidString)")

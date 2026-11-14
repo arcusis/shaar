@@ -1861,6 +1861,25 @@ class EngineTransferTests(unittest.TestCase):
             self.assertIn(f"shards={json.dumps(engine_shards(2))}", output.read_text())
 
 
+class PythonTestRunnerTests(unittest.TestCase):
+    def test_import_failure_is_recorded_in_requested_junit_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            test_directory = root / "FixtureTests"
+            test_directory.mkdir()
+            (test_directory / "test_broken.py").write_text("def broken(:\n")
+            report_path = root / "junit/python.xml"
+            with (patch.object(PYTHON_TESTS, "TESTS_ROOT", root),
+                  patch.object(sys, "argv", ["test-python.py", "--junit", str(report_path)]),
+                  patch.object(sys, "stdout", io.StringIO()),
+                  patch.object(sys, "stderr", io.StringIO())):
+                status = PYTHON_TESTS.main()
+            report = ET.parse(report_path).getroot()
+            self.assertEqual(status, 1)
+            self.assertEqual(report.attrib["errors"], "1")
+            self.assertIn("invalid syntax", report.find("testcase/error").text.lower())
+
+
 class SwiftExtractionTests(unittest.TestCase):
     def test_cli_rejects_input_named_coverage_json_without_overwriting_it(self):
         with tempfile.TemporaryDirectory() as temporary:

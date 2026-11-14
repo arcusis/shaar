@@ -24,7 +24,7 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
       let frameID = payload["frameID"] as? String,
       Self.isFrameToken(frameID),
       NavigationInput.isWebURL(pageURL),
-      requestingOrigin.host() != nil,
+      NavigationInput.isWebURL(requestingOrigin),
       requestingOrigin.path.isEmpty || requestingOrigin.path == "/",
       requestingOrigin.query == nil,
       requestingOrigin.fragment == nil,

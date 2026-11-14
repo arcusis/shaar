@@ -215,6 +215,8 @@ struct DesktopCaptureConsentTests {
       ("pageURL", "file:///tmp/page" as Any),
       ("origin", "http://meet.google.com" as Any),
       ("origin", "https://meet.google.com/path" as Any),
+      ("origin", "https://meet.google.com:99999" as Any),
+      ("origin", "http://localhost:99999" as Any),
       ("frameID", 4 as Any),
       ("frameID", "wrong-frame" as Any),
     ] {

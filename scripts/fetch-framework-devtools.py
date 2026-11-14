@@ -160,6 +160,14 @@ def archive_directory(explicit):
     return ROOT / "build" / "cache" / "framework-devtools"
 
 
+def validate_archive_directory(path):
+    if path.is_symlink():
+        raise ValueError(f"cache directory must not be a symlink: {path}")
+    if path.exists() and not path.is_dir():
+        raise ValueError(f"cache path is not a directory: {path}")
+    return path
+
+
 def archive_matches(name, archive):
     if not archive.is_file():
         return False
@@ -171,6 +179,7 @@ def archive_matches(name, archive):
 
 
 def install_pinned(name, archive_dir, download, source_label):
+    validate_archive_directory(archive_dir)
     archive_dir.mkdir(parents=True, exist_ok=True)
     archive = archive_dir / f"{name}.crx"
     with tempfile.NamedTemporaryFile(dir=archive_dir, delete=False) as temp:
@@ -192,6 +201,7 @@ def install_pinned(name, archive_dir, download, source_label):
 
 
 def ensure_archive(name, archive_dir, from_web_store):
+    validate_archive_directory(archive_dir)
     archive = archive_dir / f"{name}.crx"
     if not from_web_store and archive_matches(name, archive):
         return archive

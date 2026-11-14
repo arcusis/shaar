@@ -51,22 +51,45 @@ import Testing
     let clock = ContinuousClock()
     let oldLookup = clock.measure {
       for _ in 0..<5 {
-        for favorite in favorites {
-          _ = spaces.contains { $0.profileID == favorite.profileID }
-        }
+        for favorite in favorites { _ = spaces.contains { $0.profileID == favorite.profileID } }
       }
     }
     let validation = try clock.measure {
       for _ in 0..<5 { try workspace.validate() }
     }
-    print(
-      "workspaceFavoritePageValidationBenchmark: old lookup \(oldLookup), "
-        + "validation \(validation)")
+    print("workspaceFavoritePageValidationBenchmark: old lookup \(oldLookup), validation \(validation)")
     let oldSeconds = Double(oldLookup.components.seconds)
       + Double(oldLookup.components.attoseconds) / 1e18
     let validationSeconds = Double(validation.components.seconds)
       + Double(validation.components.attoseconds) / 1e18
     #expect(validationSeconds < oldSeconds * 3)
+  }
+
+  @Test func workspaceSpaceDefinitionValidationScalesWithSpaces() throws {
+    let count = 1_000
+    let profile = BrowserProfile(name: "Shared")
+    let spaces = (0..<count).map { index in
+      BrowserSpace(
+        profileID: profile.id, name: "Space \(index)", symbol: "square.stack", tint: .ocean)
+    }
+    let session = try BrowserSession(
+      profiles: [profile], spaces: spaces, selectedSpaceID: spaces[0].id)
+    let workspace = try BrowserWorkspace(session: session)
+    let clock = ContinuousClock()
+    let oldLookup = clock.measure {
+      for _ in 0..<5 {
+        for space in spaces { _ = spaces.first { $0.id == space.id } }
+      }
+    }
+    let validation = try clock.measure {
+      for _ in 0..<5 { try workspace.validate() }
+    }
+    print("workspaceSpaceDefinitionValidationBenchmark: old lookup \(oldLookup), validation \(validation)")
+    let oldSeconds = Double(oldLookup.components.seconds)
+      + Double(oldLookup.components.attoseconds) / 1e18
+    let validationSeconds = Double(validation.components.seconds)
+      + Double(validation.components.attoseconds) / 1e18
+    #expect(validationSeconds * 2 < oldSeconds)
   }
 
   @Test func invalidProfileEditsAreTransactional() throws {

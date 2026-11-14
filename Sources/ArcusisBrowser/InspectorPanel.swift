@@ -10,6 +10,7 @@ struct InspectorPanel: View {
   @State private var copyButtonFrame = CGRect.zero
   @State private var breadcrumbPosition: Int?
   @State private var showsAgentBridge = false
+  static var titleAccessibilityTraits: AccessibilityTraits { .isHeader }
   var body: some View {
     GeometryReader { geometry in
       VStack(spacing: 0) {
@@ -105,6 +106,7 @@ struct InspectorPanel: View {
     HStack(spacing: 7) {
       Image(systemName: "viewfinder").font(.system(size: 12)).foregroundStyle(.secondary)
       Text(InspectorL10n.string("Inspector")).font(.system(size: 12, weight: .semibold))
+        .accessibilityAddTraits(Self.titleAccessibilityTraits)
       Spacer()
       if let bridge = model.engine?.developerModels[model.target.tabID]?.agentBridge {
         let presentation = AgentBridgePresentation(model: bridge)

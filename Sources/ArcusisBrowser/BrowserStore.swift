@@ -613,7 +613,8 @@ final class BrowserStore {
     guard session.selectedSpaceID == spaceID, sheet == nil,
       let space = session.spaces.first(where: { $0.id == spaceID })
     else { return }
-    let todayIDs = Set(space.tabs.filter { !$0.isPinned }.map(\.id))
+    var todayIDs: Set<UUID> = []
+    for tab in space.tabs where !tab.isPinned { todayIDs.insert(tab.id) }
     let byTopic = Dictionary(grouping: groups) {
       $0.topic.trimmingCharacters(in: .whitespacesAndNewlines)
     }

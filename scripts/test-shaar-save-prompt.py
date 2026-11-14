@@ -14,6 +14,8 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
+from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +24,24 @@ BUTTON = (
     '<button id="plain" type="submit" '
     'style="position:fixed;left:8px;top:8px;width:180px;height:48px">'
 )
+EXPECTED_SUBMISSIONS = {"/password", "/card", "/address"}
+
+
+class FixtureServer(ThreadingHTTPServer):
+    def __init__(self, address, handler):
+        super().__init__(address, handler)
+        self.submissions = set()
+        self.submission_lock = threading.Lock()
+
+    def record_submission(self, referer):
+        path = urlsplit(referer or "").path
+        if path in EXPECTED_SUBMISSIONS:
+            with self.submission_lock:
+                self.submissions.add(path)
+
+    def submitted_forms(self):
+        with self.submission_lock:
+            return sorted(self.submissions)
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -29,6 +49,7 @@ class Fixture(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length:
             self.rfile.read(min(length, 65536))
+        self.server.record_submission(self.headers.get("Referer"))
         self.path = "/saved"
         self.do_GET()
 
@@ -103,7 +124,7 @@ def main():
     if not executable.is_file():
         parser.error(f"Missing verification app: {executable}")
     before = crash_names()
-    with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
+    with FixtureServer(("127.0.0.1", 0), Fixture) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
@@ -126,13 +147,19 @@ def main():
         finally:
             shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
+        deadline = time.monotonic() + 3
+        while set(server.submitted_forms()) != EXPECTED_SUBMISSIONS and time.monotonic() < deadline:
+            time.sleep(0.05)
+        submitted_forms = server.submitted_forms()
     crashes = sorted(crash_names() - before)
     receipt = {
         "verificationExecutable": str(executable), "exitCode": result.returncode,
         "allWindowsHidden": report.get("allWindowsHidden"),
         "windowsOnScreen": report.get("windowsOnScreen"),
-        "rows": report.get("rows", []), "crashReports": crashes,
-        "passed": result.returncode == 0 and report.get("passed") is True and not crashes,
+        "rows": report.get("rows", []), "submittedForms": submitted_forms,
+        "crashReports": crashes,
+        "passed": result.returncode == 0 and report.get("passed") is True
+        and set(submitted_forms) == EXPECTED_SUBMISSIONS and not crashes,
     }
     options.receipt.parent.mkdir(parents=True, exist_ok=True)
     options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")

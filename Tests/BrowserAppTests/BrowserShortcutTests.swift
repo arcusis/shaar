@@ -163,6 +163,10 @@ import Testing
   #expect(movedFirst && movedSecond)
   #expect(session.selectedSpace.orderedTabs.map(\.id) == [first, second, third])
   session.selectTab(third, in: spaceID)
+  let store = BrowserStore(session: session)
+
+  #expect(store.selectAdjacentTab(by: 1))
+  #expect(store.session.selectedPage?.tab.id == first)
 }
 
 @Test @MainActor func controlTabCyclesFromTheSelectedFavoritePage() throws {
@@ -183,9 +187,6 @@ import Testing
 
   #expect(store.selectAdjacentTab(by: 1))
   #expect(store.session.selectedPage?.tab.id == first)
-}
-
-  #expect(store.session.selectedPage?.tab.id != second)
   #expect(store.selectAdjacentTab(by: 1))
   #expect(store.session.selectedPage?.tab.id == second)
   #expect(store.selectAdjacentTab(by: 1))

@@ -90,7 +90,8 @@ struct DeveloperPerformanceModelTests {
 
   @Test func developerCallRejectsReplyAfterModelClose() async throws {
     var session = BrowserSession.fresh()
-    let tabID = try #require(session.open(URL(string: "https://example.test")!))
+    let openedTabID = session.open(URL(string: "https://example.test")!)
+    let tabID = try #require(openedTabID)
     let page = try #require(session.page(forTabID: tabID)?.tab)
     let store = BrowserStore(session: session)
     let runtime = PendingDeveloperCallRuntime()

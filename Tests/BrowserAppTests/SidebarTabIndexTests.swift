@@ -167,6 +167,8 @@ struct SidebarTabIndexTests {
   private func seconds(_ duration: Duration) -> Double {
     let components = duration.components
     return Double(components.seconds) + Double(components.attoseconds) / 1e18
+  }
+
   @Test func sidebarSplitMenuCandidateFilteringFocusedBenchmark() {
     let tabs = (0..<1_000).map { offset in
       tab(offset + 1)

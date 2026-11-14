@@ -88,27 +88,6 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
   #expect(model.allowed == true)
 }
 
-@MainActor @Test func privateCookieFailuresUseLocalizedRecoveryCopy() async throws {
-  let readRuntime = PrivateCookieAsyncRuntime()
-  readRuntime.readError = NSError(domain: "PrivateCookie", code: 1)
-  let readModel = try privateCookieModel(readRuntime)
-  await readModel.load()
-  #expect(readModel.failure == PrivateSiteControlsModel.loadFailure())
-  #expect(
-    PrivateSiteControlsModel.loadFailure(language: .hebrew)
-      == "לא ניתן לטעון את הרשאות האתר. כדאי לנסות שוב.")
-
-  let writeRuntime = PrivateCookieAsyncRuntime()
-  let writeModel = try privateCookieModel(writeRuntime)
-  await writeModel.load()
-  writeRuntime.writeError = NSError(domain: "PrivateCookie", code: 2)
-  await writeModel.setAllowed(true)
-  #expect(writeModel.failure == PrivateSiteControlsModel.updateFailure())
-  #expect(
-    PrivateSiteControlsModel.updateFailure(language: .hebrew)
-      == "לא ניתן לעדכן את ההרשאה הזו. כדאי לנסות שוב.")
-}
-
 @MainActor @Test func cancelledPrivateCookieReadDoesNotPublishLateState() async throws {
   let runtime = PrivateCookieAsyncRuntime()
   runtime.delayNextRead = true
@@ -165,7 +144,7 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
 
 @MainActor @Test func privateCookieFailuresUseLocalizedRecoveryCopy() async throws {
   let readRuntime = PrivateCookieAsyncRuntime()
-  readRuntime.readError = PrivateCookieFailure()
+  readRuntime.readError = NSError(domain: "PrivateCookie", code: 1)
   let readModel = try privateCookieModel(readRuntime)
   await readModel.load()
   #expect(
@@ -178,7 +157,7 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
   let writeRuntime = PrivateCookieAsyncRuntime()
   let writeModel = try privateCookieModel(writeRuntime)
   await writeModel.load()
-  writeRuntime.writeError = PrivateCookieFailure()
+  writeRuntime.writeError = NSError(domain: "PrivateCookie", code: 2)
   await writeModel.setAllowed(true)
   #expect(
     writeModel.failure

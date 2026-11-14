@@ -425,7 +425,7 @@ private struct BrowserApplication: App {
           .disabled(!store.canBookmarkCurrentPage)
         Button(ShellL10n.string("Bookmarks…")) { store.showLibrary(.bookmarks) }.disabled(
           store.sheet != nil)
-        Button(ShellL10n.string("History…")) { store.showLibrary(.history) }.keyboardShortcut("y")
+        Button(BrowserMenuCommand.showAllHistoryTitle) { store.showLibrary(.history) }.keyboardShortcut("y")
           .disabled(
             store.sheet != nil)
       }

@@ -137,6 +137,7 @@ struct DevToolsPanelTests {
         tabID: "tab-a", leaseID: 42)?.data.text == "hello")
     for payload in [
       safe.replacingOccurrences(of: #""eventID":1"#, with: #""eventID":99"#),
+      safe.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":0"#),
       safe.replacingOccurrences(of: #""text":"hello""#, with: #""headers":{"Cookie":"secret"}"#),
       safe.replacingOccurrences(
         of: #""text":"hello""#, with: #""text":"\#(String(repeating: "x", count: 4_097))""#),

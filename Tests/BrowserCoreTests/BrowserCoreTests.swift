@@ -90,6 +90,46 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
   try session.validate()
 }
 
+@Test func selectedFavoriteValidationScalesWithFavoritePages() throws {
+  let count = 1_000
+  let profile = BrowserProfile(name: "Shared")
+  let favorites = (0..<count).map { _ in
+    BrowserFavorite(profileID: profile.id, originalURL: URL(string: "https://example.com")!)
+  }
+  let pages = favorites.map {
+    BrowserFavoritePage(favoriteID: $0.id, tab: BrowserTab(url: URL(string: "https://example.com")!))
+  }
+  let spaces = favorites.enumerated().map { index, favorite in
+    BrowserSpace(
+      profileID: profile.id, name: "Space \(index)", symbol: "square.stack", tint: .ocean,
+      selectedFavoriteID: favorite.id)
+  }
+  let session = try BrowserSession(
+    profiles: [profile], spaces: spaces, selectedSpaceID: spaces[0].id,
+    favorites: favorites, favoritePages: pages)
+  let favoritePageIDs = pages.map(\.favoriteID)
+
+  let clock = ContinuousClock()
+  let oldLookup = clock.measure {
+    for _ in 0..<5 {
+      for space in spaces {
+        _ = favoritePageIDs.contains(space.selectedFavoriteID!)
+      }
+    }
+  }
+  let validation = try clock.measure {
+    for _ in 0..<5 { try session.validate() }
+  }
+  let oldSeconds = Double(oldLookup.components.seconds)
+    + Double(oldLookup.components.attoseconds) / 1e18
+  let validationSeconds = Double(validation.components.seconds)
+    + Double(validation.components.attoseconds) / 1e18
+  print(
+    "selectedFavoriteValidationBenchmark: old lookup \(oldLookup), "
+      + "validation \(validation)")
+  #expect(validationSeconds * 2 < oldSeconds)
+}
+
 @Test func profileSharingIsExplicitAndNewSpacesDefaultToNewProfiles() throws {
   var session = BrowserSession.fresh()
   let initialProfile = session.selectedSpace.profileID

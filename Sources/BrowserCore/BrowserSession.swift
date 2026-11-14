@@ -335,7 +335,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     let closedIDs = closedTabs.map(\.id)
     let favoriteIDs = favorites.map(\.id)
     let favoritePageIDs = favoritePages.map(\.tab.id)
-    let favoritePageFavoriteIDs = favoritePages.map(\.favoriteID)
+    let favoritePageFavoriteIDs = Set(favoritePages.map(\.favoriteID))
     guard !profiles.isEmpty, !spaces.isEmpty,
       profileIDs.count == profiles.count,
       spaceIDs.count == spaces.count,
@@ -346,7 +346,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       Set(tabIDs).isDisjoint(with: favoritePageIDs),
       Set(favoritePageIDs).count == favoritePageIDs.count,
       Set(favoriteIDs).count == favoriteIDs.count,
-      Set(favoritePageFavoriteIDs).count == favoritePageFavoriteIDs.count,
+      favoritePageFavoriteIDs.count == favoritePages.count,
       spaceIDs.contains(selectedSpaceID),
       profiles.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
       spaces.allSatisfy({ space in
@@ -361,7 +361,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       favorites.allSatisfy({ favorite in
         profileIDs.contains(favorite.profileID) && Self.isPersistableURL(favorite.originalURL)
           && !favorite.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }), Set(favoritePageFavoriteIDs).isSubset(of: Set(favoriteIDs)),
+      }), favoritePageFavoriteIDs.isSubset(of: Set(favoriteIDs)),
       favoritePages.allSatisfy({ page in
         guard let favorite = favoritesByID[page.favoriteID] else { return false }
         return page.tab.isPinned == false && page.tab.folderID == nil

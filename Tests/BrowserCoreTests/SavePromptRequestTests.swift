@@ -20,7 +20,7 @@ private func payload(
   var value: [String: Any] = [
     "schemaVersion": 1,
     "kind": "savePromptRequested",
-    "id": "prompt-1",
+    "id": "1",
     "prompt": prompt,
     "origin": origin,
     "pageURL": page,
@@ -49,6 +49,14 @@ private func payload(
 }
 
 @Test func savePromptRejectsSecretsAndUnknownFields() {
+  #expect(SavePromptRequest(payload: payload(extra: ["id": "prompt-1"])) == nil)
+  #expect(SavePromptRequest(payload: payload(extra: ["id": "01"])) == nil)
+  #expect(SavePromptRequest(payload: payload(extra: ["id": "1\u{0661}"])) == nil)
+  #expect(
+    SavePromptRequest(payload: payload(extra: ["id": "18446744073709551616"])) == nil)
+  #expect(
+    SavePromptRequest(payload: payload(extra: ["id": String(repeating: "1", count: 21)])) == nil)
+  #expect(SavePromptRequest(payload: payload(extra: ["id": "18446744073709551615"])) != nil)
   #expect(SavePromptRequest(payload: payload(extra: ["password": "parity-secret"])) == nil)
   #expect(SavePromptRequest(payload: payload(extra: ["schemaVersion": true])) == nil)
   #expect(SavePromptRequest(payload: payload(extra: ["schemaVersion": 1.0])) == nil)

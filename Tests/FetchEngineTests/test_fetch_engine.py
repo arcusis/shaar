@@ -116,6 +116,43 @@ class FetchEngineTests(unittest.TestCase):
         self.assertEqual(result.stdout, f"{self.framework}\n")
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
 
+    def test_build_and_engine_cache_roots_reject_symlinks_and_non_directories(self):
+        cases = (
+            ("build", "symlink", "must not be a symlink"),
+            ("build/EngineCache", "symlink", "must not be a symlink"),
+            ("build", "file", "must be a directory"),
+            ("build/EngineCache", "file", "must be a directory"),
+        )
+        build_root = self.root / "build"
+        for relative, kind, message in cases:
+            with self.subTest(path=relative, kind=kind):
+                if build_root.is_symlink() or build_root.is_file():
+                    build_root.unlink()
+                elif build_root.exists():
+                    shutil.rmtree(build_root)
+
+                external = self.root / f"external-{relative.replace('/', '-')}-{kind}"
+                external.mkdir()
+                sentinel = external / "keep.txt"
+                sentinel.write_text("preserve this cache")
+                path = self.root / relative
+                if relative == "build/EngineCache":
+                    path.parent.mkdir()
+                if kind == "symlink":
+                    path.symlink_to(external, target_is_directory=True)
+                else:
+                    path.write_text("not a directory")
+                self.tool_log.unlink(missing_ok=True)
+
+                result = self._run()
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(message, result.stderr)
+                self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
+                self.assertEqual(sentinel.read_text(), "preserve this cache")
+                self.assertEqual(list(external.iterdir()), [sentinel])
+
     def test_changed_missing_and_extra_cached_members_fail_before_path_return(self):
         cases = (
             ("changed", lambda: (self.framework / "Resources/helper.dat").write_bytes(b"changed")),

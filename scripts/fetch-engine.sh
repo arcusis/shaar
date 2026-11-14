@@ -6,6 +6,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [[ $(uname -m) == arm64 ]] || { echo 'Pinned engine requires Apple silicon.' >&2; exit 1; }
+build_root="$PWD/build"
+cache="$build_root/EngineCache"
+if [[ -L "$build_root" || -L "$cache" ]]; then
+  echo 'Engine cache root must not be a symlink.' >&2; exit 1
+fi
+if [[ ( -e "$build_root" && ! -d "$build_root" ) || ( -e "$cache" && ! -d "$cache" ) ]]; then
+  echo 'Engine cache root must be a directory.' >&2; exit 1
+fi
 pin=ThirdParty/ChromiumEngine/pin.json
 jq -e '.schemaVersion == 1 and .sourceKind == "shaar" and
   (.releaseTag | test("^engine-157\\.0\\.8103\\.51-shaar\\.[1-9][0-9]*$")) and
@@ -17,7 +25,6 @@ checksum=$(jq -er .sha256 "$pin")
 [[ $asset == "ShaarEngine-${tag#engine-}.tar.xz" ]] || {
   echo 'Shaar engine asset and tag do not match.' >&2; exit 1;
 }
-cache="$PWD/build/EngineCache"
 archive="$cache/$asset"
 mkdir -p "$cache"
 verify() { [[ $(shasum -a 256 "$1" | cut -d ' ' -f 1) == "$checksum" ]]; }

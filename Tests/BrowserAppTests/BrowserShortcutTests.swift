@@ -85,6 +85,52 @@ import Testing
   #expect(!TabNumberShortcutRouting.route(event("0"), store: store))
 }
 
+@Test @MainActor func commandNumberCanSelectLiveFavoritePages() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let profileID = session.selectedSpace.profileID
+  let firstCandidate = session.open(URL(string: "https://number-first.example")!)
+  let first = try #require(firstCandidate)
+  let secondCandidate = session.open(URL(string: "https://number-second.example")!)
+  _ = try #require(secondCandidate)
+  let favoriteCandidate = session.addFavorite(
+    profileID: profileID, originalURL: URL(string: "https://number-favorite.example")!)
+  let favorite = try #require(favoriteCandidate)
+  let didSelectFavorite = session.selectFavorite(favorite, in: spaceID)
+  #expect(didSelectFavorite)
+  let store = BrowserStore(session: session)
+  let third = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+    windowNumber: 0, context: nil, characters: "3", charactersIgnoringModifiers: "3",
+    isARepeat: false, keyCode: 0)!
+
+  #expect(TabNumberShortcutRouting.route(third, store: store))
+  #expect(store.session.selectedPage?.tab.id == store.session.favoritePage(for: favorite)?.tab.id)
+  #expect(store.session.selectedPage?.tab.id != first)
+}
+
+@Test @MainActor func commandNumberFollowsNativeOrderAfterFolderMoves() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let first = session.open(URL(string: "https://folder-first.example")!)!
+  let second = session.open(URL(string: "https://folder-second.example")!)!
+  let third = session.open(URL(string: "https://folder-third.example")!)!
+  let folderOne = session.addFolder(name: "One", in: spaceID)!
+  let folderTwo = session.addFolder(name: "Two", in: spaceID)!
+  let movedFirst = session.moveTab(first, from: spaceID, to: spaceID, folderID: folderOne)
+  let movedSecond = session.moveTab(second, from: spaceID, to: spaceID, folderID: folderTwo)
+  #expect(movedFirst && movedSecond)
+  #expect(session.selectedSpace.orderedTabs.map(\.id) == [first, second, third])
+  let store = BrowserStore(session: session)
+  let firstShortcut = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+    windowNumber: 0, context: nil, characters: "1", charactersIgnoringModifiers: "1",
+    isARepeat: false, keyCode: 0)!
+
+  #expect(TabNumberShortcutRouting.route(firstShortcut, store: store))
+  #expect(store.session.selectedPage?.tab.id == first)
+}
+
 @Test @MainActor func controlTabCyclesToTheNextTabAndWraps() throws {
   let store = BrowserStore()
   for index in 1...3 {

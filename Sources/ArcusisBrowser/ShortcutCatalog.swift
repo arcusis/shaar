@@ -266,9 +266,7 @@ enum TabNumberShortcutRouting {
       let character = event.charactersIgnoringModifiers,
       let number = Int(character), (1...9).contains(number)
     else { return false }
-    let tabs = store.session.selectedSpace.tabs
-    let index = number == 9 ? tabs.count - 1 : number - 1
-    return store.selectTabByShortcutIndex(index)
+    return store.selectNumberedPage(number)
   }
 }
 

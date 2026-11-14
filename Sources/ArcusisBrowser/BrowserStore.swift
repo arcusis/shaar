@@ -968,6 +968,31 @@ final class BrowserStore {
   }
 
   @discardableResult
+  func selectNumberedPage(_ number: Int) -> Bool {
+    let space = session.selectedSpace
+    let tabs = space.tabs
+    let orderedTabs = space.orderedTabs
+    let favorites = session.favorites(for: space.profileID)
+    let pageIDs = orderedTabs.map(\.id) + favorites.compactMap {
+      session.favoritePage(for: $0.id)?.tab.id
+    }
+    let index = number == 9 ? pageIDs.count - 1 : number - 1
+    guard pageIDs.indices.contains(index) else { return false }
+    let pageID = pageIDs[index]
+    if let tabIndex = tabs.firstIndex(where: { $0.id == pageID }) {
+      return selectTabByShortcutIndex(tabIndex)
+    }
+    guard let favorite = favorites.first(where: {
+      session.favoritePage(for: $0.id)?.tab.id == pageID
+    }), session.selectFavorite(favorite.id, in: space.id) else { return false }
+    closeLibraryDrawer()
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    save()
+    return true
+  }
+
+  @discardableResult
   func selectAdjacentTab(by offset: Int) -> Bool {
     let space = session.selectedSpace
     let tabs = space.orderedTabs

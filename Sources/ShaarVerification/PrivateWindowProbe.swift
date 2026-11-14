@@ -39,6 +39,9 @@ final class PrivateWindowProbe {
   private var normalSelectionBefore: [AnyHashable: Any] = [:]
   private var normalSelectionAudit: [String: Any] = [:]
   private var privateWindows: [String] = []
+  private var diskSnapshot: [String: String] = [:]
+  private var privateDiskMarkers: Set<Data> = []
+  private var privateDiskArtifactAudit: [String: Any] = [:]
   private var privateWindowContexts: [String: String] = [:]
   private var privateContexts: [String] = []
   private var expectedPrivateCallbackOwners: [String: String] = [:]
@@ -224,6 +227,11 @@ final class PrivateWindowProbe {
     let w2 = UUID().uuidString.uppercased()
     let t1 = UUID().uuidString.uppercased()
     let t2 = UUID().uuidString.uppercased()
+    diskSnapshot = chromiumProfileFiles()
+    privateDiskMarkers = [
+      Data("/private-window-\(marker)-".utf8), Data("privacyProbe".utf8),
+      Data("privacyJS=1".utf8), Data("privacyHttp=1".utf8),
+    ]
     markStage("opening-private-windows")
     try open(w1, contextA, t1, fixture.appending(path: "private-window-\(marker)-a").absoluteString)
     privateWindows.append(w1)
@@ -314,6 +322,7 @@ final class PrivateWindowProbe {
       PrivateWindowOwnership.nativeFixtureIsOwned(
         runtime.privateProbeAudit(forContextID: contextA) as? [String: Any])
     let secret = UUID().uuidString.lowercased()
+    privateDiskMarkers.insert(Data(secret.utf8))
     try await setPrivate(t1, cookie: secret, storage: secret)
     try await waitUntil(t2) { $0["local"] as? String == secret }
     let shared = try await readPrivate(t2)
@@ -472,6 +481,10 @@ final class PrivateWindowProbe {
       checks["productNormalHistoryExcludesPrivateVisit"] == true
       && checks["productWorkspaceBytesUnchangedAfterClose"] == true
       && checks["productFinalCloseReleasesOwners"] == true
+    privateDiskArtifactAudit = auditPrivateDiskArtifacts()
+    checks["productPrivateWindowCloseLeavesNoData"] =
+      checks["productPrivateWindowCloseLeavesNoData"] == true
+      && privateDiskArtifactAudit["passed"] as? Bool == true
     ProbeHiddenWindows.orderOutVisibleWindows()
     try writeReport(runID: runID)
     guard requiredChecksPassed, !Self.checkNames.isEmpty else {
@@ -497,6 +510,42 @@ final class PrivateWindowProbe {
     privateContexts = remainingContexts
     checks["cleanupChildrenClosed"] = privateWindows.isEmpty
     checks["cleanupContextsRetired"] = privateContexts.isEmpty
+  }
+
+  private func chromiumProfileFiles() -> [String: String] {
+    let fileManager = FileManager.default
+    let roots = [root.appending(path: "Chromium"), root.appending(path: "Cache")]
+    var files: [String: String] = [:]
+    for directory in roots where fileManager.fileExists(atPath: directory.path) {
+      guard
+        let enumerator = fileManager.enumerator(
+          at: directory, includingPropertiesForKeys: [.isRegularFileKey],
+          options: [.skipsPackageDescendants]
+        )
+      else { continue }
+      for case let url as URL in enumerator {
+        if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+          let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+          files[url.path] =
+            "\(values?.fileSize ?? -1):\(values?.contentModificationDate?.timeIntervalSince1970 ?? 0)"
+        }
+      }
+    }
+    return files
+  }
+
+  private func auditPrivateDiskArtifacts() -> [String: Any] {
+    let after = chromiumProfileFiles()
+    let changedFiles = after.keys.filter { diskSnapshot[$0] != after[$0] }.sorted()
+    var leaked: [String] = []
+    for path in changedFiles {
+      guard let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe)
+      else { continue }
+      if privateDiskMarkers.contains(where: { !$0.isEmpty && data.range(of: $0) != nil }) {
+        leaked.append(URL(fileURLWithPath: path).lastPathComponent)
+      }
+    }
+    return ["passed": leaked.isEmpty, "newFileCount": changedFiles.count, "leakedFiles": leaked]
   }
 
   private func begin(_ id: String, _ source: String) async throws -> Bool {
@@ -1059,6 +1108,7 @@ final class PrivateWindowProbe {
       "productRendererViewportAudit": productRendererViewportAudit,
       "productRendererCaptureOutcome": productRendererCaptureOutcome,
       "productSmokeDiagnostics": productSmokeDiagnostics,
+      "privateDiskArtifactAudit": privateDiskArtifactAudit,
       "productLifecycleBlocker": productLifecycleBlocker ?? "",
       "cleanup": [
         "windowsRemaining": privateWindows.count, "contextsRemaining": privateContexts.count,

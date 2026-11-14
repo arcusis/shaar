@@ -144,7 +144,8 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
   run_step 'Bluetooth and Serial chooser no-hang' run_device_chooser_check
   run_step 'Private window isolation' run_engine_fixture --private-window
   run_step 'Private multi-tab isolation' run_engine_fixture --private-multitab
-  run_step 'Basic browsing' run_engine_fixture --basic-browsing
+  run_step 'Basic browsing and page-initiated unsafe scheme navigation' \
+    run_engine_fixture --basic-browsing
   run_step 'Reload and closed-window recovery' run_engine_fixture --reload-window
   run_step 'Session recovery' run_engine_fixture --session-recovery
   run_step 'External protocol handler consent' run_engine_fixture --external-app-consent
@@ -167,7 +168,8 @@ else
     'Browsing QA, dialogs, downloads, session restore' 'Tab/window adoption' \
     'Bookmarks/history and browser import' 'Chrome Web Store extension install' \
     'Local MV3 extension install' 'Bluetooth and Serial chooser no-hang' \
-    'Private window isolation' 'Private multi-tab isolation' 'Basic browsing' \
+    'Private window isolation' 'Private multi-tab isolation' \
+    'Basic browsing and page-initiated unsafe scheme navigation' \
     'Reload and closed-window recovery' 'Session recovery' 'External protocol handler consent' \
     'Permission and protocol prompts' 'Save prompts' 'Platform parity for v0.2 web items' \
     'Media and picture-in-picture'; do

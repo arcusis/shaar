@@ -2624,19 +2624,19 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "דף אחרון אחד"
+                  "value": "דף אחד שנפתח לאחרונה"
                 }
               },
               "two": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "שני דפים אחרונים"
+                  "value": "שני דפים שנפתחו לאחרונה"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d דפים אחרונים"
+                  "value": "%d דפים שנפתחו לאחרונה"
                 }
               }
             }

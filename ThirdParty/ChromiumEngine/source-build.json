@@ -303,7 +303,7 @@
   "patches": [
     {
       "file": "ThirdParty/ChromiumEngine/patches/0001-shaar-framework-hook.patch",
-      "sha256": "0eac45319ff87614ffa493e0c6f2e27d7a5148614675054789434a8c067b16cb"
+      "sha256": "8e7327dcd34f09570bec783d15a1b069eb482272290f2a353f603f6c838c03e9"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0002-shaar-lifecycle-hooks.patch",

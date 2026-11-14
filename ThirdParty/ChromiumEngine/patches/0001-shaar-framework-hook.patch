@@ -6,12 +6,6 @@
 +      "//chrome/browser/shaar:engine",
        "//chrome/browser/lifetime",
        "//chrome/browser/mac",
-@@ -1353,4 +1354,5 @@
-       ":chrome_dll_symbol_order",
-       "//build/config/compiler:wexit_time_destructors",
-+      "//chrome/browser/shaar:exports",
-     ]
-     if (!is_component_build && !using_sanitizer) {
 @@ -1406,5 +1408,8 @@
      }
 -

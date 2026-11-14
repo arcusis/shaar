@@ -9,6 +9,10 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test @MainActor func printStaysUnavailableInPrivateWindowsUntilItsNativeRouteIsSupported() {
+  #expect(!PrivateBrowserHost.supportsPrivateCommand(.print))
+}
+
 @Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {
   let workspace = try BrowserWorkspaceStore()
   try workspace.removeWindow(workspace.workspace.windows[0].id)
@@ -149,6 +153,10 @@ import Testing
   #expect(item(.newPrivateWindow)?.menu?.title == "File")
   #expect(item(.closeWindow)?.menu?.title == "File")
   #expect(item(.sharePage)?.menu?.title == "File")
+  #expect(item(.print)?.menu?.title == "File")
+  #expect(item(.print)?.title == "Print…")
+  #expect(item(.print)?.keyEquivalent == "p")
+  #expect(item(.print)?.keyEquivalentModifierMask == .command)
   #expect(item(.find)?.menu?.title == "Edit")
   #expect(item(.pasteAndGo)?.menu?.title == "Edit")
   #expect(item(.pasteAndGo)?.title == "Paste and Go")

@@ -285,6 +285,9 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 
 /// Shaar C ABI implementation of the core profile/window/tab/navigation backend.
 @interface ARCShaarRuntime : ARCChromiumRuntime <ARCBrowserCoreBackend>
+/// Opens Chromium's native print panel for the selected live tab when supported by the engine.
+- (BOOL)supportsNativePrint;
+- (BOOL)printTabID:(NSString *)tabID windowID:(NSString *)windowID profileID:(NSString *)profileID;
 /// The panel lease and fixed screencast commands only.
 - (void)panelRequest:(NSUInteger)operation tabID:(NSString *)tabID
          profileID:(NSString *)profileID windowID:(NSString *)windowID

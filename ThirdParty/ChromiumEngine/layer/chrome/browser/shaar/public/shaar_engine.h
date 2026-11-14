@@ -483,6 +483,9 @@ SHAAR_EXPORT shaar_error_code shaar_tab_open(
     int foreground, shaar_tab **out, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
+/* Opens Chromium's native print panel for the selected, live tab. */
+SHAAR_EXPORT shaar_error_code shaar_tab_print(
+    shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
 /* Verification-only native ownership and display evidence. Caller sets size;
  * every field is derived from the registered Chromium tab and page host. */

@@ -24,6 +24,7 @@
 #include "base/values.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/favicon/core/favicon_driver_observer.h"
+#include "chrome/browser/printing/print_view_manager.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
@@ -648,6 +649,31 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_close(
   if (index < 0)
     return Result(SHAAR_NOT_FOUND, error);
   model->CloseWebContentsAt(index, 0);
+  return Result(SHAAR_OK, error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_print(
+    shaar_tab* tab, shaar_error* error) {
+  if (!pthread_main_np() || !tab)
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  auto found = tab_handles.find(tab);
+  if (found == tab_handles.end() || !LiveTab(tab))
+    return Result(SHAAR_NOT_FOUND, error);
+  content::WebContents* contents =
+      shaar::windows_tabs::Registry().FindWebContents(tab->engine, tab->window, tab);
+  Browser* browser = tab->browser;
+  if (!contents || !browser ||
+      browser->GetTabStripModel()->GetActiveWebContents() != contents) {
+    return Result(SHAAR_NOT_READY, error);
+  }
+  auto* manager = PrintViewManager::FromWebContents(contents);
+  if (!manager) {
+    PrintViewManager::CreateForWebContents(contents);
+    manager = PrintViewManager::FromWebContents(contents);
+  }
+  content::RenderFrameHost* main_frame = contents->GetPrimaryMainFrame();
+  if (!manager || !main_frame || !manager->BasicPrint(main_frame))
+    return Result(SHAAR_NOT_READY, error);
   return Result(SHAAR_OK, error);
 }
 

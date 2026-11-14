@@ -594,7 +594,7 @@ final class BrowserStore {
 
   func closeTab(_ id: UUID) {
     guard session.page(forTabID: id) != nil else { return }
-    requestedTabCloses.insert(id)
+    guard requestedTabCloses.insert(id).inserted else { return }
     if let onCloseTab {
       onCloseTab(id)
       return

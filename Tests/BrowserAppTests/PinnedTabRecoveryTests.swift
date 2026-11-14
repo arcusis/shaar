@@ -36,6 +36,20 @@ struct PinnedTabRecoveryTests {
     #expect(store.session.selectedPage?.tab == recovered)
   }
 
+  @Test func repeatedPendingCloseRequestsCoalesceAndCanRetryAfterNavigation() throws {
+    let (store, tab) = try makeStore()
+    var requested: [UUID] = []
+    store.onCloseTab = { requested.append($0) }
+
+    store.closeTab(tab.id)
+    store.closeTab(tab.id)
+    #expect(requested == [tab.id])
+
+    store.nativeDocumentCommitted(tab.id, profileID: store.session.selectedSpace.profileID)
+    store.closeTab(tab.id)
+    #expect(requested == [tab.id, tab.id])
+  }
+
   @Test func rendererExitReportedByCloseArchivesThePin() async throws {
     let (store, tab) = try makeStore()
     let runtime = PinRecoveryRuntime()

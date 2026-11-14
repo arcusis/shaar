@@ -490,7 +490,8 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       && failure(context) == nil && windowsHidden()
     return makeRow(
       "Infinite scroll", passed,
-      "rows \(firstCount) then \(secondCount), scroll events \(scrollEvents), scrollend events \(scrollEndEvents), top \(top), height \(height), client \(client), frames \(frames), responsive \(ping != nil)"
+      "rows \(firstCount) then \(secondCount), scroll events \(scrollEvents), scrollend events \(scrollEndEvents), top \(top), height \(height), client \(client), frames \(frames), responsive \(ping != nil)",
+      proven: scrollFailureIsAttributable(scrollEvents: scrollEvents)
     )
   }
 
@@ -1356,6 +1357,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     flag(media["video"]) == true
       && flag(media["paused"]) == false
       && (number(media["videoWidth"]) ?? 0) > 0
+  }
+
+  nonisolated static func scrollFailureIsAttributable(scrollEvents: Int) -> Bool {
+    scrollEvents > 0
   }
 }
 

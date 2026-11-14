@@ -59,4 +59,9 @@ struct ShaarBrowsingEdgeProbeScalarTests {
       "video": true, "paused": false, "videoWidth": 320,
     ]))
   }
+
+  @Test func scrollFailureNeedsAnObservedScrollEventToBeAttributable() {
+    #expect(!ShaarBrowsingEdgeProbe.scrollFailureIsAttributable(scrollEvents: 0))
+    #expect(ShaarBrowsingEdgeProbe.scrollFailureIsAttributable(scrollEvents: 1))
+  }
 }

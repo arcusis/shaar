@@ -28,6 +28,45 @@ import Testing
     print("workspacePinValidationBenchmark: \(start.duration(to: .now))")
   }
 
+  @Test func workspaceFavoritePageValidationScalesWithSpaces() throws {
+    let count = 1_000
+    let profiles = (0..<count).map { BrowserProfile(name: "Profile \($0)") }
+    let spaces = profiles.enumerated().map { index, profile in
+      BrowserSpace(
+        profileID: profile.id, name: "Space \(index)", symbol: "square.stack", tint: .ocean)
+    }
+    let favorites = profiles.map {
+      BrowserFavorite(profileID: $0.id, originalURL: URL(string: "https://example.com")!)
+    }
+    let pages = favorites.map {
+      BrowserFavoritePage(
+        favoriteID: $0.id, tab: BrowserTab(url: URL(string: "https://example.com")!))
+    }
+    let session = try BrowserSession(
+      profiles: profiles, spaces: spaces, selectedSpaceID: spaces[0].id,
+      favorites: favorites, favoritePages: pages)
+    let workspace = try BrowserWorkspace(session: session)
+    let clock = ContinuousClock()
+    let oldLookup = clock.measure {
+      for _ in 0..<5 {
+        for favorite in favorites {
+          _ = spaces.contains { $0.profileID == favorite.profileID }
+        }
+      }
+    }
+    let validation = try clock.measure {
+      for _ in 0..<5 { try workspace.validate() }
+    }
+    print(
+      "workspaceFavoritePageValidationBenchmark: old lookup \(oldLookup), "
+        + "validation \(validation)")
+    let oldSeconds = Double(oldLookup.components.seconds)
+      + Double(oldLookup.components.attoseconds) / 1e18
+    let validationSeconds = Double(validation.components.seconds)
+      + Double(validation.components.attoseconds) / 1e18
+    #expect(validationSeconds < oldSeconds * 3)
+  }
+
   @Test func invalidProfileEditsAreTransactional() throws {
     var workspace = try BrowserWorkspace(session: .fresh())
     let original = workspace

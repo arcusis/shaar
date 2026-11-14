@@ -263,6 +263,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     let definitionTabs = Dictionary(
       uniqueKeysWithValues: catalog.spaces.flatMap { space in space.tabs.map { ($0.id, $0) } })
     let favorites = Dictionary(uniqueKeysWithValues: catalog.favorites.map { ($0.id, $0) })
+    let spaceProfileIDs = Set(catalog.spaces.map(\.profileID))
     var claimed: Set<UUID> = []
     for window in windows {
       guard window.geometry?.isValid != false else { throw WorkspaceError.invalidState }
@@ -287,7 +288,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       guard window.session.favoritePages.count <= catalog.favorites.count,
         window.session.favoritePages.allSatisfy({ page in
           guard let favorite = favorites[page.favoriteID] else { return false }
-          return catalog.spaces.contains(where: { $0.profileID == favorite.profileID })
+          return spaceProfileIDs.contains(favorite.profileID)
         })
       else { throw WorkspaceError.invalidState }
       for space in window.session.spaces {

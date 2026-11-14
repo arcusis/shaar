@@ -15,6 +15,10 @@ struct BookmarkEditorRouteTests {
     #expect(BookmarkEditorAccessibility.busyLabel(language: .hebrew) == "מעדכן סימניות…")
   }
 
+  @Test func bookmarkEditorTitleIsVoiceOverHeading() {
+    #expect(BookmarkEditor.headingTraits.contains(.isHeader))
+  }
+
   @Test func newBookmarkRouteRequiresItsProfileAndAnExistingFolderParent() throws {
     let store = BrowserStore()
     let profile = store.session.selectedSpace.profileID

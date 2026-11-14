@@ -62,12 +62,16 @@ struct BookmarkEditor: View {
       && !busy
   }
 
+  static let headingTraits: AccessibilityTraits = .isHeader
+
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       Label(
         heading,
         systemImage: isFolder ? "folder" : "star"
-      ).font(.title2.weight(.semibold))
+      )
+      .font(.title2.weight(.semibold))
+      .accessibilityAddTraits(Self.headingTraits)
       Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
         .font(.callout).foregroundStyle(.secondary)
       TextField(PanelsL10n.string("Name"), text: $title)

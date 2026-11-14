@@ -188,6 +188,32 @@ struct ShaarExtensionsAdapterTests {
     }
   }
 
+  @Test func extensionConfirmationsRejectNumericBooleanSubstitutes() async throws {
+    let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"updated":1}"#)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
+    await #expect(throws: ShaarExtensionsAdapterError.mutationNotConfirmed) {
+      try await adapter.manage(
+        profileID: UUID(),
+        action: .setEnabled("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", true))
+    }
+
+    let installedProfile = UUID()
+    await fake.setReply(#"{"schemaVersion":1,"installed":1}"#)
+    let installed = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.0",
+      profileIDs: [installedProfile])
+    #expect(installed.installed.isEmpty)
+    #expect(installed.failed == [installedProfile])
+
+    let queuedProfile = UUID()
+    await fake.setReply(#"{"schemaVersion":1,"queued":1}"#)
+    let queued = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.0",
+      profileIDs: [queuedProfile])
+    #expect(queued.pending.isEmpty)
+    #expect(queued.failed == [queuedProfile])
+  }
+
   @Test func malformedRowsAndInvalidIDsAreRejected() async throws {
     let fake = FakeExtensionsTransport(
       #"{"schemaVersion":1,"extensions":[{"id":"../extension","name":"bad","version":"1","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":0}]}"#

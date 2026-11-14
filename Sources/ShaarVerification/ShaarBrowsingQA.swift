@@ -9,8 +9,29 @@ import ChromiumBridgeVerification
 import CoreFoundation
 import Darwin
 import Foundation
+import os
 
 @testable import ArcusisBrowser
+
+@MainActor private final class HeavyPageRunLoopSampler {
+  private(set) var maximumDelayMs = 0
+  private(set) var samples = 0
+  private var task: Task<Void, Never>?
+
+  func start() {
+    task = Task {
+      while !Task.isCancelled {
+        let before = Date()
+        try? await Task.sleep(for: .milliseconds(50))
+        guard !Task.isCancelled else { break }
+        maximumDelayMs = max(maximumDelayMs, Int(Date().timeIntervalSince(before) * 1000) - 50)
+        samples += 1
+      }
+    }
+  }
+
+  func stop() { task?.cancel() }
+}
 
 /// Hidden verification exercise for everyday browsing. The Python driver owns memory samples.
 @MainActor enum ShaarBrowsingQA {
@@ -545,6 +566,10 @@ import Foundation
   private static func heavy(
     context: NativeBrowserContext, runtime: ARCShaarRuntime, base: URL
   ) async -> [[String: Any]] {
+    let log = OSLog(subsystem: "com.arcusis.browser.verification", category: "HeavyPage")
+    let signpost = OSSignpostID(log: log)
+    os_signpost(.begin, log: log, name: "HeavyPage", signpostID: signpost)
+    defer { os_signpost(.end, log: log, name: "HeavyPage", signpostID: signpost) }
     var rows: [[String: Any]] = []
     let started = Date()
     context.store.perform(.open(url(base, path: "/heavy")))
@@ -561,6 +586,7 @@ import Foundation
         "heavy-dom", count == "20000" ? "pass" : "fail",
         "Large page reported \(count ?? "nothing") nodes in \(milliseconds(since: started)) ms.",
         ["elapsedMs": milliseconds(since: started)]))
+    os_signpost(.event, log: log, name: "HeavyDOMReady", signpostID: signpost)
 
     context.store.perform(.open(url(base, path: "/scroll")))
     guard await until(attempts: 100, condition: { settled(context, path: "/scroll") }),
@@ -628,6 +654,7 @@ import Foundation
       runtime, tab: webglID, script: "document.documentElement.dataset.webgl==='1'?1:0")
     rows.append(
       row("heavy-webgl", webgl == "1" ? "pass" : "fail", "WebGL dataset is \(webgl ?? "empty")."))
+    os_signpost(.event, log: log, name: "HeavyWebGLReady", signpostID: signpost)
 
     context.store.perform(.open(url(base, path: "/video")))
     guard await until(attempts: 100, condition: { settled(context, path: "/video") }),
@@ -638,6 +665,9 @@ import Foundation
     }
     let clipReady = await evaluate(
       runtime, tab: videoID, script: "document.documentElement.dataset.clip==='0'?0:1")
+    let sampler = HeavyPageRunLoopSampler()
+    sampler.start()
+    os_signpost(.event, log: log, name: "HeavyVideoReady", signpostID: signpost)
     if clipReady == "0" {
       rows.append(
         row(
@@ -659,6 +689,12 @@ import Foundation
           "heavy-video", clicked && playbackStarted(playback) ? "pass" : "fail",
           "Play click=\(clicked), state \(playback ?? "nothing")."))
     }
+    sampler.stop()
+    os_signpost(.event, log: log, name: "HeavyVideoDone", signpostID: signpost)
+    rows.append(row(
+      "heavy-main-run-loop", sampler.samples >= 2 && sampler.maximumDelayMs <= 1000 ? "pass" : "fail",
+      "\(sampler.samples) samples at 50 ms; maximum main run-loop delay \(sampler.maximumDelayMs) ms.",
+      ["samples": sampler.samples, "maximumDelayMs": sampler.maximumDelayMs]))
     rows.append(
       row(
         "picture-in-picture", "blocked",

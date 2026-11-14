@@ -581,7 +581,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       return false
     }
     let profileID = spaces[index].profileID
-    if spaces.filter({ $0.profileID == profileID }).count == 1,
+    if !spaces.contains(where: { $0.profileID == profileID && $0.id != id }),
       favoritePages.contains(where: { page in
         favorites.first(where: { $0.id == page.favoriteID })?.profileID == profileID
       })
@@ -599,7 +599,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       return false
     }
     let profileID = spaces[index].profileID
-    let lastProfileSpace = spaces.filter { $0.profileID == profileID }.count == 1
+    let lastProfileSpace = !spaces.contains { $0.profileID == profileID && $0.id != id }
     if lastProfileSpace {
       let ownedPages = favoritePages.filter { page in
         favorites.first(where: { $0.id == page.favoriteID })?.profileID == profileID

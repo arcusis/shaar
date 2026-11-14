@@ -108,25 +108,50 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
     profiles: [profile], spaces: spaces, selectedSpaceID: spaces[0].id,
     favorites: favorites, favoritePages: pages)
   let favoritePageIDs = pages.map(\.favoriteID)
-
   let clock = ContinuousClock()
   let oldLookup = clock.measure {
     for _ in 0..<5 {
-      for space in spaces {
-        _ = favoritePageIDs.contains(space.selectedFavoriteID!)
-      }
+      for space in spaces { _ = favoritePageIDs.contains(space.selectedFavoriteID!) }
     }
   }
-  let validation = try clock.measure {
-    for _ in 0..<5 { try session.validate() }
-  }
+  let validation = try clock.measure { for _ in 0..<5 { try session.validate() } }
   let oldSeconds = Double(oldLookup.components.seconds)
     + Double(oldLookup.components.attoseconds) / 1e18
   let validationSeconds = Double(validation.components.seconds)
     + Double(validation.components.attoseconds) / 1e18
-  print(
-    "selectedFavoriteValidationBenchmark: old lookup \(oldLookup), "
-      + "validation \(validation)")
+  print("selectedFavoriteValidationBenchmark: old lookup \(oldLookup), validation \(validation)")
+  #expect(validationSeconds * 2 < oldSeconds)
+}
+
+@Test func favoritePageValidationScalesWithFavoritePagesAndSpaces() throws {
+  let count = 1_000
+  let profiles = (0..<count).map { BrowserProfile(name: "Profile \($0)") }
+  let spaces = profiles.enumerated().map { index, profile in
+    BrowserSpace(
+      profileID: profile.id, name: "Space \(index)", symbol: "square.stack", tint: .ocean)
+  }
+  let favorites = profiles.map {
+    BrowserFavorite(profileID: $0.id, originalURL: URL(string: "https://example.com")!)
+  }
+  let pages = favorites.map {
+    BrowserFavoritePage(
+      favoriteID: $0.id, tab: BrowserTab(url: URL(string: "https://example.com")!))
+  }
+  let session = try BrowserSession(
+    profiles: profiles, spaces: spaces, selectedSpaceID: spaces[0].id,
+    favorites: favorites, favoritePages: pages)
+  let clock = ContinuousClock()
+  let oldLookupDuration = clock.measure {
+    for _ in 0..<5 {
+      for favorite in favorites { _ = spaces.contains { $0.profileID == favorite.profileID } }
+    }
+  }
+  let validationDuration = try clock.measure { for _ in 0..<5 { try session.validate() } }
+  let oldSeconds = Double(oldLookupDuration.components.seconds)
+    + Double(oldLookupDuration.components.attoseconds) / 1e18
+  let validationSeconds = Double(validationDuration.components.seconds)
+    + Double(validationDuration.components.attoseconds) / 1e18
+  print("favoritePageValidationBenchmark: old lookup \(oldLookupDuration), validation \(validationDuration)")
   #expect(validationSeconds * 2 < oldSeconds)
 }
 

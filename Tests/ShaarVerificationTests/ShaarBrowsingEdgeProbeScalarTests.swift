@@ -64,4 +64,13 @@ struct ShaarBrowsingEdgeProbeScalarTests {
     #expect(!ShaarBrowsingEdgeProbe.scrollFailureIsAttributable(scrollEvents: 0))
     #expect(ShaarBrowsingEdgeProbe.scrollFailureIsAttributable(scrollEvents: 1))
   }
+
+  @Test func infiniteScrollCapturesItsBaselineBeforeTriggeringTheScroll() {
+    let baseline = ShaarBrowsingEdgeProbe.scrollStateScript(triggerScroll: false)
+    let trigger = ShaarBrowsingEdgeProbe.scrollStateScript(triggerScroll: true)
+    #expect(!baseline.contains("scrollIntoView"))
+    #expect(!baseline.contains("root.scrollTop="))
+    #expect(trigger.contains("scrollIntoView"))
+    #expect(trigger.contains("root.scrollTop=root.scrollHeight"))
+  }
 }

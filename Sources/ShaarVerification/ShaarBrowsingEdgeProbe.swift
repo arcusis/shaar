@@ -459,9 +459,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     guard await open(context, runtime, page, path: "/scroll", marker: "scroll") else {
       return makeRow("Infinite scroll", false, "Scroll page did not become ready")
     }
-    let first = await scrollState(runtime, context)
+    let first = await scrollState(runtime, context, triggerScroll: false)
+    _ = await scrollState(runtime, context, triggerScroll: true)
     try? await Task.sleep(for: .milliseconds(400))
-    let second = await scrollState(runtime, context)
+    let second = await scrollState(runtime, context, triggerScroll: false)
     let ping = await evaluate(runtime, tab: selectedID(context), script: "({ok:true})", seconds: 3)
     let firstCount = number(first?["count"]) ?? 0
     let secondCount = number(second?["count"]) ?? 0
@@ -497,20 +498,25 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     )
   }
 
-  private static func scrollState(_ runtime: ARCShaarRuntime, _ context: NativeBrowserContext) async
-    -> [String: Any]?
-  {
+  private static func scrollState(
+    _ runtime: ARCShaarRuntime, _ context: NativeBrowserContext, triggerScroll: Bool
+  ) async -> [String: Any]? {
     let json = await evaluate(
       runtime, tab: selectedID(context),
-      script: """
-        (()=>{const root=document.getElementById('root'); if(!root) return {count:0,top:0,height:0,client:0};
-        const last=root.lastElementChild; if(last) last.scrollIntoView({block:'end'});
-        root.scrollTop=root.scrollHeight;
-        window.scrollTo(0, document.documentElement.scrollHeight);
-        return {count:root.children.length,top:root.scrollTop,height:root.scrollHeight,client:root.clientHeight,frames:window.__frames||0,scrollEvents:window.__scrollEvents||0,scrollEndEvents:window.__scrollEndEvents||0,pageScrollEvents:window.__pageScrollEvents||0};})()
-        """,
+      script: scrollStateScript(triggerScroll: triggerScroll),
       seconds: 5)
     return object(from: json)
+  }
+
+  nonisolated static func scrollStateScript(triggerScroll: Bool) -> String {
+    let scroll = triggerScroll
+      ? "const last=root.lastElementChild; if(last) last.scrollIntoView({block:'end'}); root.scrollTop=root.scrollHeight; window.scrollTo(0, document.documentElement.scrollHeight);"
+      : ""
+    return """
+      (()=>{const root=document.getElementById('root'); if(!root) return {count:0,top:0,height:0,client:0};
+      \(scroll)
+      return {count:root.children.length,top:root.scrollTop,height:root.scrollHeight,client:root.clientHeight,frames:window.__frames||0,scrollEvents:window.__scrollEvents||0,scrollEndEvents:window.__scrollEndEvents||0,pageScrollEvents:window.__pageScrollEvents||0};})()
+      """
   }
 
   private static func checkMedia(

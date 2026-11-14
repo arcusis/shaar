@@ -475,7 +475,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0053-shaar-devtools-document-navigation.patch",
-      "sha256": "1ce849dff480f3411898fd1adf47650ad5ac6f154047e560657ff60411fca754"
+      "sha256": "0f5aca9847cee1e89dae688800c2fbc6aac9d985c2c0cb0666db5ace07d84592"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0054-shaar-devtools-network-headers.patch",

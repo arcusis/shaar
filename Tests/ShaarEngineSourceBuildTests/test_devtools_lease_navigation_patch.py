@@ -11,6 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0049-shaar-devtools-lease-navigation.patch"
+FOLLOWUP_PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0053-shaar-devtools-document-navigation.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 
 
@@ -23,9 +24,15 @@ class DevToolsLeaseNavigationPatchTests(unittest.TestCase):
 
     def test_patch_digest_matches_ordered_manifest(self):
         entries = json.loads(MANIFEST.read_text())["patches"]
-        matching = [entry for entry in entries if entry["file"] == str(PATCH.relative_to(ROOT))]
-        self.assertEqual(len(matching), 1)
-        self.assertEqual(matching[0]["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest())
+        for patch in (PATCH, FOLLOWUP_PATCH):
+            matching = [entry for entry in entries if entry["file"] == str(patch.relative_to(ROOT))]
+            self.assertEqual(len(matching), 1)
+            self.assertEqual(matching[0]["sha256"], hashlib.sha256(patch.read_bytes()).hexdigest())
+
+    def test_followup_patch_accepts_navigation_header(self):
+        source = FOLLOWUP_PATCH.read_text()
+        self.assertIn(' #include "content/public/browser/navigation_handle.h"', source)
+        self.assertIn('+#include "net/http/http_response_headers.h"', source)
 
 
 if __name__ == "__main__":

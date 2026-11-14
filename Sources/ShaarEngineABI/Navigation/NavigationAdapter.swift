@@ -116,6 +116,9 @@ private let shaarNavigationReply: shaar_reply_fn = { context, result in
     guard result.size >= UInt32(MemoryLayout<shaar_result>.size) else {
       throw ShaarEngineError.invalidEvent("short navigation result")
     }
+    guard result.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+      throw ShaarEngineError.invalidEvent("short navigation error struct")
+    }
     guard result.request_id == box.expectedRequestID else {
       throw ShaarEngineError.invalidEvent("navigation result request ID mismatch")
     }

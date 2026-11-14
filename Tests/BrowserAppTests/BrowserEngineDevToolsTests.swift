@@ -37,10 +37,7 @@ struct BrowserEngineDevToolsTests {
     var afterCount = 0
     var afterOrder: [BrowserTab] = []
     for _ in 0..<100 {
-      let partition = tabs.reduce(into: (pinned: [BrowserTab](), unpinned: [BrowserTab]())) {
-        if $1.isPinned { $0.pinned.append($1) } else { $0.unpinned.append($1) }
-      }
-      afterOrder = partition.pinned + partition.unpinned + favorites
+      afterOrder = BrowserEngine.orderedTabs(tabs, favorites: favorites)
       afterCount += afterOrder.count
     }
     let after = afterStart.duration(to: .now)

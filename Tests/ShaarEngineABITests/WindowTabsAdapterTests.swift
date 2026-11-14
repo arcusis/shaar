@@ -52,6 +52,19 @@ struct WindowTabsAdapterTests {
       ShaarWindowTabsAdapter.makeIfSelected(engine: FakeWindowTabsEngine()) != nil)
   }
 
+  @Test @MainActor func openingWindowRejectsEmptyScopeIdentifiers() throws {
+    let fake = FakeWindowTabsEngine()
+    let adapter = makeShaarAdapter(fake)
+    #expect(throws: ShaarWindowTabsError.invalidScope) {
+      try adapter.openWindow(id: "empty-profile", scope: .profile(""))
+    }
+    #expect(throws: ShaarWindowTabsError.invalidScope) {
+      try adapter.openWindow(
+        id: "empty-session", scope: .privateSession(profileID: "profile-a", sessionID: ""))
+    }
+    #expect(fake.calls.isEmpty)
+  }
+
   @Test @MainActor func hostViewsRemainBorrowedAndRequireLiveHandles() throws {
     let fake = FakeWindowTabsEngine()
     let adapter = makeShaarAdapter(fake)

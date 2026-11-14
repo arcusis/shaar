@@ -81,6 +81,10 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
 
   public func openWindow(id: String, scope: ShaarTabScope) throws {
     guard !id.isEmpty, windows[id] == nil else { throw ShaarWindowTabsError.duplicateWindow }
+    guard !scope.profileID.isEmpty else { throw ShaarWindowTabsError.invalidScope }
+    if case .privateSession(_, let sessionID) = scope, sessionID.isEmpty {
+      throw ShaarWindowTabsError.invalidScope
+    }
     try engine.openWindow(id: id, scope: scope)
     windows[id] = WindowState(
       scope: scope, boundProfileIDs: [scope.profileID], activeProfileID: scope.profileID,
@@ -259,5 +263,5 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
 
 public enum ShaarWindowTabsError: Error, Equatable {
   case duplicateWindow, unknownWindow, duplicateTab, unknownTab, scopeMismatch, invalidPlacement,
-    invalidRequest
+    invalidRequest, invalidScope
 }

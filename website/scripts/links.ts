@@ -78,7 +78,9 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
       }
     }
     for (const image of document.querySelectorAll("img")) {
-      if (!image.hasAttribute("alt")) errors.push(`${path}: image missing alt`);
+      const alt = image.getAttribute("alt");
+      if (alt === null || (alt.trim() === "" && alt !== ""))
+        errors.push(`${path}: image missing or whitespace-only alt`);
     }
     const imageMapNames = new Set(
       [...document.querySelectorAll("map[name]")]

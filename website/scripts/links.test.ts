@@ -27,7 +27,7 @@ test("link checker resolves directory URLs and catches broken links and fragment
     assert.deepEqual(result.errors, [
       "index.html: missing fragment /download/#missing",
       "index.html: missing target /missing/",
-      "index.html: image missing alt",
+      "index.html: image missing or whitespace-only alt",
     ]);
     assert.equal(
       localTarget(root, new URL("https://shaar.arcusis.com/%2f..%2foutside.txt")),
@@ -49,6 +49,21 @@ test("link checker rejects unsafe schemes and duplicate ids", () => {
       "index.html: duplicate id same",
       "index.html: empty or unsafe link",
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("link checker rejects whitespace-only image alternatives but allows decorative images", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img src="/decorative.png" alt=""><img src="/unclear.png" alt="   ">',
+    );
+    writeFileSync(join(root, "decorative.png"), "fixture");
+    writeFileSync(join(root, "unclear.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, ["index.html: image missing or whitespace-only alt"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

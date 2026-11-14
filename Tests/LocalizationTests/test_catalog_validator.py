@@ -76,6 +76,20 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn('Image(systemName: "chevron.forward")', source)
 
+    def test_developer_page_action_failures_use_localized_recovery_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/DevelopmentModeButton.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("engine.reportNotice(action.failureNotice())", source)
+        shell = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        translation = shell["strings"]["Could not complete the %@ action. Try again."][
+            "localizations"]["he"]["stringUnit"]["value"]
+        self.assertEqual(translation, "לא ניתן להשלים את הפעולה %@. כדאי לנסות שוב.")
+
     def test_rejects_null_catalog_and_localization_maps_cleanly(self):
         for data in (None, {"sourceLanguage": "en", "strings": {"x": None}},
                      {"sourceLanguage": "en", "strings": {"x": {"localizations": None}}}):

@@ -7,6 +7,12 @@ import Testing
 @testable import ArcusisBrowser
 
 struct BrowserEngineSiteControlsTests {
+  @Test func developerPageActionFailuresUseHebrewActionAndRecoveryCopy() {
+    #expect(
+      SiteAction.hardReload.failureNotice(language: .hebrew)
+        == "לא ניתן להשלים את הפעולה \u{2068}טעינה מחדש מלאה\u{2069}. כדאי לנסות שוב.")
+  }
+
   @Test func reloadModesMapToTheirChromiumCounterparts() {
     #expect(PageReloadMode.normal.engineMode == .normal)
     #expect(PageReloadMode.bypassingCache.engineMode == .bypassingCache)

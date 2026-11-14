@@ -27,7 +27,13 @@ def gh(*args: str, payload: dict | None = None) -> dict | list:
 def paged(path: str) -> list[dict]:
     items, page = [], 1
     while True:
-        batch = gh(f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}")
+        page_path = f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}"
+        batch = gh(page_path)
+        if not isinstance(batch, list):
+            raise ValueError(f"GitHub API returned a non-list response for {page_path}")
+        for index, item in enumerate(batch):
+            if not isinstance(item, dict):
+                raise ValueError(f"GitHub API returned a non-object entry {index} for {page_path}")
         items.extend(batch)
         if len(batch) < 100:
             return items

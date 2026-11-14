@@ -7,6 +7,11 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func libraryFooterProgressLabelIsLocalized() {
+  #expect(LibraryPanelFooterAccessibility.footerProgressLabel(language: .english) == "Updating Library…")
+  #expect(LibraryPanelFooterAccessibility.footerProgressLabel(language: .hebrew) == "הספרייה מתעדכנת…")
+}
+
 @Test func bookmarkFolderStateUsesTheSelectedLanguage() {
   #expect(
     LibraryBookmarkAccessibility.folderState(collapsed: false, language: .english) == "Expanded")

@@ -2722,6 +2722,16 @@
         }
       }
     },
+    "Updating Library…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הספרייה מתעדכנת…"
+          }
+        }
+      }
+    },
     "Remove %@ at %@ from history": {
       "localizations": {
         "he": {

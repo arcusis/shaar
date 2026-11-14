@@ -19,12 +19,39 @@ enum LibraryPanelSearch {
   static func matches(_ text: String, query: String) -> Bool {
     query.isEmpty || text.localizedStandardContains(query)
   }
+
+  static func bookmarkRows(
+    items: [BrowserBookmark], collapsed: Set<UUID>, query: String
+  ) -> [BrowserBookmark] {
+    if !query.isEmpty {
+      return items.filter {
+        matches("\($0.title) \($0.address ?? "") \($0.path)", query: query)
+      }
+    }
+    var hiddenDepth: Int?
+    return items.filter { item in
+      if let hidden = hiddenDepth, item.depth > hidden { return false }
+      hiddenDepth = item.isFolder && collapsed.contains(item.id) ? item.depth : nil
+      return true
+    }
+  }
 }
 
 enum LibraryPanelAccessibility {
   static func loadingLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
     BrowserLocalization.string("Loading library", table: "Panels", language: language)
   }
+}
+
+struct LibraryPanelFilteredRows<Element> {
+  private let values: [Element]
+
+  init(makeValues: () -> [Element]) {
+    values = makeValues()
+  }
+
+  var rows: [Element] { values }
+  var isEmpty: Bool { values.isEmpty }
 }
 
 enum LibraryHistoryAccessibility {
@@ -72,17 +99,7 @@ struct LibraryPanel: View {
   private var tree: BookmarkTree? { store.library.bookmarks[profileID] }
   private var bookmarks: [BrowserBookmark] {
     guard let tree else { return [] }
-    if !query.isEmpty {
-      return tree.items.filter {
-        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: query)
-      }
-    }
-    var hiddenDepth: Int?
-    return tree.items.filter { item in
-      if let hidden = hiddenDepth, item.depth > hidden { return false }
-      hiddenDepth = item.isFolder && collapsed.contains(item.id) ? item.depth : nil
-      return true
-    }
+    return LibraryPanelSearch.bookmarkRows(items: tree.items, collapsed: collapsed, query: query)
   }
   private var searchLabel: String {
     PanelsL10n.string(section == .bookmarks ? "Search Bookmarks" : "Search History")
@@ -96,6 +113,12 @@ struct LibraryPanel: View {
 
   var body: some View {
     let visibleBookmarks = bookmarks
+    let filteredBookmarks = LibraryPanelFilteredRows {
+      section == .bookmarks ? visibleBookmarks : []
+    }
+    let filteredHistory = LibraryPanelFilteredRows {
+      section == .history ? history : []
+    }
     VStack(alignment: .leading, spacing: 14) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
@@ -129,12 +152,12 @@ struct LibraryPanel: View {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 0) {
             if section == .bookmarks {
-              ForEach(visibleBookmarks) { bookmarkRow($0) }
+              ForEach(filteredBookmarks.rows) { bookmarkRow($0) }
             } else {
-              ForEach(history) { historyRow($0) }
+              ForEach(filteredHistory.rows) { historyRow($0) }
             }
           }
-          if section == .bookmarks ? visibleBookmarks.isEmpty : history.isEmpty {
+          if section == .bookmarks ? filteredBookmarks.isEmpty : filteredHistory.isEmpty {
             ContentUnavailableView(
               PanelsL10n.string("No matches"), systemImage: section == .bookmarks ? "star" : "clock"
             )

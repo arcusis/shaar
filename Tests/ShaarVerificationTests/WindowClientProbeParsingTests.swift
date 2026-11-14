@@ -14,6 +14,8 @@ import Testing
     #expect(object["fixture"] == "v1")
     #expect(try WindowClientProbe.parseEvaluationJSON("false") as? Bool == false)
     #expect(try WindowClientProbe.parseEvaluationJSON("null") is NSNull)
+    #expect(try WindowClientProbe.parseEvaluationJSON("17") as? Int == 17)
+    #expect(try WindowClientProbe.parseEvaluationJSON("\"ready\"") as? String == "ready")
   }
 
   @Test func rejectsMissingAndMalformedEvaluationResults() {

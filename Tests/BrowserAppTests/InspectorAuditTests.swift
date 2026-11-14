@@ -179,6 +179,10 @@ private final class PendingInspectorAuditRuntime: ARCChromiumRuntime {
     #expect(audit.report?.violations == 0)
   }
 
+  @Test func impactGroupLabelsAreVoiceOverHeadings() {
+    #expect(InspectorAuditView.impactGroupHeadingTraits == .isHeader)
+  }
+
   @Test func boundedAuditReportsRejectStaleDocuments() throws {
     let inspector = makeInspector(tab: .accessibility)
     defer { inspector.close() }

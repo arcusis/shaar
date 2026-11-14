@@ -26,6 +26,7 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/icu/source/common/unicode/uchar.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -103,25 +104,6 @@ GURL OriginURL(const GURL& page) {
   return url::Origin::Create(page).GetURL();
 }
 
-bool IsFormattingCharacter(std::string_view bytes) {
-  if (bytes.size() == 2 &&
-      (bytes == "\xC2\xAD" || bytes == "\xD8\x9C"))
-    return true;
-  if (bytes.size() == 3 &&
-      static_cast<unsigned char>(bytes[0]) == 0xE2) {
-    const unsigned char second = static_cast<unsigned char>(bytes[1]);
-    const unsigned char third = static_cast<unsigned char>(bytes[2]);
-    if (second == 0x80 &&
-        (third == 0x8B || third == 0x8C || third == 0x8D ||
-         third == 0x8E || third == 0x8F ||
-         (third >= 0xAA && third <= 0xAE)))
-      return true;
-    if (second == 0x81 && third >= 0xA0 && third <= 0xAF)
-      return true;
-  }
-  return bytes == "\xEF\xBB\xBF";
-}
-
 void DeliverReply(ReplyContext request,
                   shaar_error_code code,
                   std::string payload,
@@ -169,6 +151,27 @@ std::optional<base::DictValue> ParseArguments(shaar_bytes bytes) {
   if (!parsed || !parsed->is_dict())
     return std::nullopt;
   return std::move(parsed->GetDict());
+}
+
+bool IsFormatCharacter(std::string_view raw, size_t index, size_t length) {
+  if (length == 1)
+    return false;
+  uint32_t code_point = static_cast<unsigned char>(raw[index]);
+  if (length == 2)
+    code_point &= 0x1F;
+  else if (length == 3)
+    code_point &= 0x0F;
+  else
+    code_point &= 0x07;
+  for (size_t offset = 1; offset < length; ++offset) {
+    const auto continuation = static_cast<unsigned char>(raw[index + offset]);
+    if ((continuation & 0xC0) != 0x80)
+      return false;
+    code_point = (code_point << 6) | (continuation & 0x3F);
+  }
+  return code_point <= 0x10FFFF &&
+         !(code_point >= 0xD800 && code_point <= 0xDFFF) &&
+         u_charType(static_cast<UChar32>(code_point)) == U_FORMAT_CHAR;
 }
 
 bool HasOnlyKeys(const base::DictValue& dict,
@@ -393,7 +396,7 @@ std::string SanitizeDetail(std::string_view raw) {
       continue;
     }
     const std::string_view character = raw.substr(index, length);
-    if (IsFormattingCharacter(character)) {
+    if (IsFormatCharacter(raw, index, length)) {
       index += length;
       continue;
     }

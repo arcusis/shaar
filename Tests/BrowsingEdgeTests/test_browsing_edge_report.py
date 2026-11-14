@@ -116,6 +116,26 @@ class BrowsingEdgeReportTests(unittest.TestCase):
             ]),
         )
 
+    def test_receipt_writer_rejects_symlinked_file_and_parent(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            external = Path(outside)
+            sentinel = external / "sentinel.json"
+            sentinel.write_text("preserve", encoding="utf-8")
+
+            linked_file = root / "receipt.json"
+            linked_file.symlink_to(sentinel)
+            with self.assertRaisesRegex(ValueError, "receipt path must not be a symlink"):
+                PROBE.write_receipt(linked_file, {"passed": True})
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
+
+            linked_parent = root / "linked"
+            linked_parent.symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "receipt directory must not be a symlink"):
+                PROBE.write_receipt(linked_parent / "receipt.json", {"passed": True})
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
+            self.assertFalse((external / "receipt.json").exists())
+
     def test_note_cap_fails_a_hidden_windows_row_that_claims_a_pass(self):
         rows = [{"name": "Hidden windows", "passed": True, "proven": True}]
         harness = {"passed": True, "proven": True}

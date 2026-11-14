@@ -27,6 +27,18 @@ enum EngineProbeMeasurementArguments {
     guard let count = tabCount(in: arguments) else { return false }
     return supportedCounts.contains(count)
   }
+
+  static func modeDependencyFailure(arguments: [String], tabCount: Int?) -> String? {
+    let eager = arguments.contains("--probe-measure-eager")
+    let sleeping = arguments.contains("--probe-measure-sleeping")
+    let inspector = arguments.contains("--probe-measure-inspector")
+    if eager && tabCount == nil { return "Eager measurement requires --probe-measure-tabs." }
+    if inspector && tabCount == nil { return "Inspector measurement requires --probe-measure-tabs." }
+    if sleeping && (tabCount == nil || !eager) {
+      return "Sleeping measurement requires eagerly loaded measurement tabs."
+    }
+    return nil
+  }
 }
 
 /// Uses only a marked, disposable directory and an authored loopback fixture.
@@ -258,14 +270,10 @@ final class EngineProbe {
       let measurementEager = arguments.contains("--probe-measure-eager")
       let measurementSleeping = arguments.contains("--probe-measure-sleeping")
       let measurementInspector = arguments.contains("--probe-measure-inspector")
-      guard !measurementEager || measurementTabCount != nil else {
-        throw ProbeFailure("Eager measurement requires --probe-measure-tabs.")
-      }
-      guard !measurementInspector || measurementTabCount != nil else {
-        throw ProbeFailure("Inspector measurement requires --probe-measure-tabs.")
-      }
-      guard !measurementSleeping || (measurementTabCount != nil && measurementEager) else {
-        throw ProbeFailure("Sleeping measurement requires eagerly loaded measurement tabs.")
+      if let failure = EngineProbeMeasurementArguments.modeDependencyFailure(
+        arguments: arguments, tabCount: measurementTabCount)
+      {
+        throw ProbeFailure(failure)
       }
       guard EngineProbeMeasurementArguments.hasValidTabCount(in: arguments) else {
         throw ProbeFailure("Measurement tab count must be 1, 10, 30, 50, or 100.")

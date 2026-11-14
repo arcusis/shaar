@@ -7,6 +7,7 @@ _shaar_engine_release
 _shaar_test_keep_alive_state
 _shaar_test_load_component_extension
 _shaar_submit
+_shaar_print_reply
 _shaar_cancel_request
 _shaar_profile_open
 _shaar_profile_create

@@ -129,10 +129,20 @@ def crash_names():
     return {item.name for item in CRASHES.iterdir() if "Shaar" in item.name or "shaar" in item.name}
 
 
+def evidence_directory(value: str) -> Path:
+    path = Path(value)
+    if path.is_symlink():
+        raise argparse.ArgumentTypeError(f"evidence directory must not be a symlink: {path}")
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(
+            f"evidence directory parent must not be a symlink: {path.parent}")
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path)
-    parser.add_argument("--evidence", required=True, type=Path)
+    parser.add_argument("--evidence", required=True, type=evidence_directory)
     options = parser.parse_args()
     app = options.app.resolve()
     evidence = options.evidence.resolve()

@@ -11,6 +11,8 @@ private func devToolsJSONBoolean(_ value: Any?) -> Bool? {
     CFGetTypeID(number) == CFBooleanGetTypeID()
   else { return nil }
   return number.boolValue
+}
+
 private func devToolsEnvelopeInteger(_ value: Any?) -> Int? {
   guard let number = value as? NSNumber,
     CFGetTypeID(number) != CFBooleanGetTypeID()

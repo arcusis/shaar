@@ -76,4 +76,11 @@ import Testing
     #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":0,\"width\":320}"))
     #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":1,\"width\":320}"))
   }
+
+  @Test func playbackVerdictRejectsEvidenceWithWrongJSONTypes() {
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":0,\"width\":320,\"error\":0}"))
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":\"320\",\"error\":0}"))
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":\"0\"}"))
+    #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":0,\"width\":320}"))
+  }
 }

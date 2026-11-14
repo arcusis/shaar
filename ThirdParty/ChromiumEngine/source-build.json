@@ -51,7 +51,7 @@
     "path": "ThirdParty/ChromiumEngine/layer",
     "sha256": "00175df5bffd9de91e0f90f52ee874671b5309e99f00932b646e865e7c50e3b9",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "880771ac2f8c97a869814c52a53d39b650d3ca961fe8688cf5262150ac8066f0",
+      "chrome/browser/shaar/BUILD.gn": "0f0db67814d9f03f432b583a4ca4ecec7d17597670fb9195f085d8e29dec1910",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.h": "15cd5f6fc6ee7c998f5c04e8e0bb9e6c9d5c276cd7ab810a22b83c6ef849cdb5",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_lifecycle_adapter.cc": "02f28526c3d8d14b9efc59973dd8269650d079613085f4d910c2901aba020de7",

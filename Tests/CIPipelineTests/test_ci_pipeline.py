@@ -936,6 +936,13 @@ class SupplyChainTests(unittest.TestCase):
             "swift-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-",
             cache,
         )
+    def test_python_environment_cache_key_separates_requirement_sets_by_mode(self):
+        setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
+        cache = setup.split("    - name: Restore Python environment for locked requirements\n", 1)[1]
+        cache = cache.split("    - name: Configure Python and report toolchain", 1)[0]
+        for mode in ("codeql", "engine-probe", "shipping", "release"):
+            self.assertIn(f"'{mode}'", cache)
+        self.assertIn("hashFiles('scripts/*requirements.txt')", cache)
 
     def test_installer_retries_transient_download_failures_only(self):
         def http_error(code):

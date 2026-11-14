@@ -25,7 +25,7 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: .venv
-        key: python-${{ runner.os }}-${{ runner.arch }}-3.13-${{ inputs.mode == 'codeql' && 'stdlib' || hashFiles('scripts/*requirements.txt') }}
+        key: python-${{ runner.os }}-${{ runner.arch }}-3.13-${{ inputs.mode == 'codeql' && 'stdlib' || inputs.mode == 'engine-probe' && 'stdlib' || inputs.mode == 'shipping' && 'shipping' || 'release' }}-${{ hashFiles('scripts/*requirements.txt') }}
     - name: Configure Python and report toolchain
       id: toolchain
       shell: bash

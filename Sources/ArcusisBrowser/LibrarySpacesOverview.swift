@@ -7,6 +7,10 @@ import BrowserCore
 import SwiftUI
 
 struct LibrarySpacesOverview: View {
+  static func spaceSelectionTraits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
+
   let store: BrowserStore
   let query: String
   let onSelectSpace: (UUID) -> Void
@@ -198,6 +202,8 @@ private struct LibrarySpaceCardHeader: View {
       .help(PanelsL10n.format("Select %@", .string(space.name)))
       .accessibilityLabel(
         PanelsL10n.format("Select Space %@, Profile %@", .string(space.name), .string(profileName)))
+      .accessibilityAddTraits(
+        LibrarySpacesOverview.spaceSelectionTraits(isSelected: store.session.selectedSpaceID == space.id))
       Button {
         guard
           LibrarySpacesOverviewModel.canEdit(

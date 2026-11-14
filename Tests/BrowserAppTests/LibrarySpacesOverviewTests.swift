@@ -11,6 +11,12 @@ import XCTest
 
 @MainActor
 final class LibrarySpacesOverviewTests: XCTestCase {
+  func testSpaceSelectionAccessibilityTraitTracksSelection() {
+    XCTAssertTrue(LibrarySpacesOverview.spaceSelectionTraits(isSelected: true).contains(.isSelected))
+    XCTAssertFalse(
+      LibrarySpacesOverview.spaceSelectionTraits(isSelected: false).contains(.isSelected))
+  }
+
   func testFolderSearchPathBenchmark() throws {
     let profile = BrowserProfile(name: "Scale")
     let folders = (0..<300).map { index in

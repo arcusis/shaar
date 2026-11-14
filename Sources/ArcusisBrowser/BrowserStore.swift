@@ -681,6 +681,9 @@ final class BrowserStore {
   func nativeTabClosed(_ id: UUID) {
     sleepingTabIDs.remove(id)
     let requested = requestedTabCloses.remove(id) != nil
+    permissionFrames[id] = nil
+    permissionFrameOrigins[id] = nil
+    cancelDesktopCaptures(for: id)
     let page = session.page(forTabID: id)
     // WebContents destruction also reports "closed". Losing a native document
     // is not permission to delete a saved pin.
@@ -1159,6 +1162,16 @@ final class BrowserStore {
       if sheet?.id == sheetID { sheet = nil }
     }
     presentNextConsent()
+  }
+
+  private func cancelDesktopCaptures(for tabID: UUID) {
+    let requestIDs = consentRequests.compactMap { request -> String? in
+      guard case .desktopCapture(let capture) = request, capture.tabID == tabID else { return nil }
+      return capture.id
+    }
+    for requestID in requestIDs {
+      resolveDesktopCapture(requestID, sourceID: nil)
+    }
   }
 
   func rememberPermissionFrame(_ tabID: UUID, frameID: String, origin: URL? = nil) {

@@ -303,6 +303,24 @@ struct DesktopCaptureConsentTests {
     #expect(rendererDecisions == [nil])
   }
 
+  @Test func closingPinnedNativeTabCancelsItsPresentedCaptureRequest() throws {
+    let browser = store()
+    let capture = try request(browser)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: capture.frameID, origin: capture.requestingOrigin)
+    var decisions: [String?] = []
+    browser.onDesktopCaptureDecision = { _, sourceID in decisions.append(sourceID) }
+    #expect(browser.requestDesktopCapture(capture))
+    browser.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    browser.togglePin(capture.tabID)
+
+    browser.nativeTabClosed(capture.tabID)
+
+    #expect(browser.session.page(forTabID: capture.tabID) != nil)
+    #expect(decisions == [nil])
+    #expect(browser.sheet == nil)
+  }
+
   @Test func aPageTitleCannotOpenTheCaptureSheet() throws {
     let store = store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

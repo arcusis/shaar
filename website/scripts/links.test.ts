@@ -119,6 +119,22 @@ test("link checker reports images that target a missing map", () => {
   }
 });
 
+test("link checker validates quoted CSS imports outside comments", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
+    writeFileSync(
+      join(root, "styles.css"),
+      '@import "/missing-import.css"; @import/**/"/missing-comment-separated.css"; /* @import "/commented.css"; */ .x { content: "@import \'/string.css\'"; }',
+    );
+    assert.deepEqual(checkLinks(root).errors, [
+      "styles.css: missing/nonlocal CSS asset /missing-import.css",
+      "styles.css: missing/nonlocal CSS asset /missing-comment-separated.css",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test("link checker catches missing poster when video source exists", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {
@@ -215,6 +231,17 @@ test("link checker rejects empty alternative text on image submit controls", () 
     );
     writeFileSync(join(root, "submit.png"), "fixture");
     assert.deepEqual(checkLinks(root).errors, ["index.html: image submit control missing alt"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("link checker reports malformed quoted CSS imports", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
+    writeFileSync(join(root, "styles.css"), '@import "http://[";');
+    assert.deepEqual(checkLinks(root).errors, ["styles.css: missing/nonlocal CSS asset http://["]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

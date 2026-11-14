@@ -162,7 +162,13 @@ public struct ShaarHistoryAdapter: Sendable {
   {
     guard ["safari", "chrome", "arc", "firefox"].contains(source),
       (1...5000).contains(pages.count),
-      pages.allSatisfy({ !$0.visits.isEmpty && $0.visits.allSatisfy({ $0 >= 0 }) })
+      pages.allSatisfy({ page in
+        guard let url = URL(string: page.url),
+          ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+          url.host != nil
+        else { return false }
+        return !page.visits.isEmpty && page.visits.allSatisfy({ $0 >= 0 })
+      })
     else {
       throw ShaarHistoryAdapterError.invalidResponse("invalid import batch")
     }

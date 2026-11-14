@@ -178,6 +178,22 @@ struct ShaarHistoryAdapterTests {
     #expect(await fake.calls.isEmpty)
   }
 
+  @Test func insertRejectsNonWebURLsBeforeSubmit() async throws {
+    let fake = FakeHistoryEngine(reply: #"{"schemaVersion":1}"#)
+    let adapter = ShaarHistoryAdapter(engine: fake)
+
+    for url in [
+      "file:///tmp/private.txt", "javascript:alert(1)", "https:example.test/path",
+    ] {
+      await #expect(throws: ShaarHistoryAdapterError.invalidResponse("invalid import batch")) {
+        try await adapter.insert(
+          profileID: UUID(), source: "firefox",
+          pages: [.init(url: url, visits: [1])])
+      }
+    }
+    #expect(await fake.calls.isEmpty)
+  }
+
   @Test func eventRouterRequiresKnownRegularProfileAndValidHistoryEnvelope() {
     let profile = UUID()
     let id = Data(profile.uuidString.utf8)

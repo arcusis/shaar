@@ -106,6 +106,8 @@ def stage(
     pin_dir: Path,
     catalog_dir: Optional[Path] = None,
 ) -> None:
+    if resources.parent.is_symlink():
+        raise ValueError(f"resource output parent must not be a symlink: {resources.parent}")
     if resources.is_symlink():
         raise ValueError(f"resource output directory must not be a symlink: {resources}")
     if resources.exists() and not resources.is_dir():

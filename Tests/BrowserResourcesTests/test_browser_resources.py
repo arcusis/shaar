@@ -79,6 +79,18 @@ class ResourceStagingTests(unittest.TestCase):
                 staging.stage(self.binary, self.resources, self.pin)
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "leave untouched")
         self.assertFalse((resources / staging.BUNDLE).exists())
+    }
+
+    def test_symlinked_resources_parent_is_rejected_before_staging(self):
+        external = self.root / "external-contents"
+        external.mkdir()
+        self.resources.parent.parent.mkdir(parents=True)
+        self.resources.parent.symlink_to(external, target_is_directory=True)
+
+        with self.assertRaisesRegex(ValueError, "resource output parent must not be a symlink"):
+            staging.stage(self.binary, self.resources, self.pin)
+
+        self.assertEqual(list(external.iterdir()), [])
 
     def test_invalid_inputs_rejected_before_replacing_existing_output(self):
         staging.stage(self.binary, self.resources, self.pin)

@@ -8,6 +8,10 @@ import Testing
 @testable import ArcusisBrowser
 
 struct SymbolCatalogTests {
+  @MainActor @Test func symbolSectionsAreVoiceOverHeadings() {
+    #expect(SymbolPicker.sectionHeaderTraits == .isHeader)
+  }
+
   @Test func catalogHasUniqueResolvableSymbols() {
     let symbols = SymbolCatalog.all.flatMap(\.symbols)
     #expect(symbols.count >= 350)

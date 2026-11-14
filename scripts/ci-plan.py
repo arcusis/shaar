@@ -93,7 +93,10 @@ def iteration_count(event: dict, name: str) -> int:
         return 3
     if name != "workflow_dispatch":
         return 1
-    raw = event.get("inputs", {}).get("probe_iterations", 1)
+    inputs = event.get("inputs", {})
+    if not isinstance(inputs, dict):
+        raise ValueError("workflow_dispatch inputs must be an object")
+    raw = inputs.get("probe_iterations", 1)
     if type(raw) not in (int, str) or not re.fullmatch(r"[0-9]{1,2}", str(raw)) or not 1 <= int(raw) <= 10:
         raise ValueError("probe_iterations must be an integer from 1 to 10")
     return int(raw)
@@ -124,11 +127,11 @@ def load_event(path: Path) -> dict:
 def main() -> int:
     try:
         event = load_event(Path(os.environ["GITHUB_EVENT_PATH"]))
+        name = os.environ["GITHUB_EVENT_NAME"]
+        iterations = iteration_count(event, name)
     except (KeyError, ValueError) as error:
         print(f"CI plan error: {error}", file=sys.stderr)
         return 1
-    name = os.environ["GITHUB_EVENT_NAME"]
-    iterations = iteration_count(event, name)
     base = (event.get("pull_request", {}).get("base", {}).get("sha")
             or event.get("merge_group", {}).get("base_sha") or event.get("before")
             or os.environ["GITHUB_SHA"])

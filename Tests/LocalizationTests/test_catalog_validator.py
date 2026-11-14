@@ -170,6 +170,25 @@ class CatalogValidatorTests(unittest.TestCase):
             'engine.reportNotice(ShellL10n.string("Could not complete the site action. Try again."))',
             source,
         )
+
+    def test_private_tab_open_failures_use_hebrew_recovery_copy(self):
+        key = "Could not open the private tab. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן לפתוח את הלשונית הפרטית. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/PrivatePageSession.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(
+            source.count('failure = ShellL10n.string("Could not open the private tab. Try again.")'),
+            2,
+        )
     def test_enter_full_screen_native_menu_has_hebrew_copy(self):
         key = "Enter Full Screen"
         for table in ("Shell", "Settings"):

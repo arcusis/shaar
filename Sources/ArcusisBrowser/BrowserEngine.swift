@@ -1192,11 +1192,21 @@ final class BrowserEngine {
       downloads.fileActionFailed(profileID: profileID)
       return
     }
-    if open {
-      if !NSWorkspace.shared.open(url) { downloads.fileActionFailed(profileID: profileID) }
-    } else {
-      NSWorkspace.shared.activateFileViewerSelecting([url])
+    if !Self.performDownloadFileAction(
+      url, open: open,
+      openFile: { NSWorkspace.shared.open($0) },
+      revealFile: { NSWorkspace.shared.activateFileViewerSelecting([$0]) })
+    {
+      downloads.fileActionFailed(profileID: profileID)
     }
+  }
+
+  static func performDownloadFileAction(
+    _ url: URL, open: Bool, openFile: (URL) -> Bool, revealFile: (URL) -> Void
+  ) -> Bool {
+    if open { return openFile(url) }
+    revealFile(url)
+    return true
   }
 
   static func validatedDownloadURL(_ candidate: URL, in directory: URL) -> URL? {

@@ -603,7 +603,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0150-shaar-pinned-build-tools.patch",
-      "sha256": "43404f106095b740c6f7aa35e912636f4ffde624aa1854ee067458efed313021"
+      "sha256": "0cbd78e35cf78fd2c85f518910a777ba17897ad9c147f9866181edcf8763cd94"
     }
   ],
   "devtoolsFrontend157": {

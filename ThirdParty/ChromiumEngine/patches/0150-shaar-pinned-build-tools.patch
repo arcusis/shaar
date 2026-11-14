@@ -13,6 +13,18 @@ diff --git a/build/config/rust.gni b/build/config/rust.gni
  
    # Directory under which to find `bin/bindgen` (a `bin` directory containing
    # the bindgen exectuable).
+diff --git a/build/toolchain/toolchain.gni b/build/toolchain/toolchain.gni
+--- a/build/toolchain/toolchain.gni
++++ b/build/toolchain/toolchain.gni
+@@ -41,7 +41,7 @@ declare_args() {
+ }
+ 
+ declare_args() {
+-  clang_version = "23"
++  clang_version = "24"
+ }
+ 
+ # Extension for shared library files (including leading dot).
 diff --git a/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni b/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni
 --- a/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni
 +++ b/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni

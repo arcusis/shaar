@@ -10,17 +10,17 @@ import Testing
 @Suite
 struct DeviceChooserSelectionAccessibilityTests {
   @Test func selectedTraitUsesThePresentedOptionRevision() {
-    let option = DeviceChooserOption(index: 0, title: "USB device", detail: "")
+    let option = DeviceChooserOption(optionID: "usb-0", title: "USB device", detail: "")
     let oldRevision = UUID()
     let newRevision = UUID()
     var selection = DeviceChooserSelection(options: [option], revision: oldRevision)
-    selection.select(0, from: [option], revision: oldRevision)
+    selection.select("usb-0", from: [option], revision: oldRevision)
 
     #expect(
       DeviceChooserConsent.isOptionSelected(
-        0, options: [option], selection: selection, revision: oldRevision))
+        "usb-0", options: [option], selection: selection, revision: oldRevision))
     #expect(
       !DeviceChooserConsent.isOptionSelected(
-        0, options: [option], selection: selection, revision: newRevision))
+        "usb-0", options: [option], selection: selection, revision: newRevision))
   }
 }

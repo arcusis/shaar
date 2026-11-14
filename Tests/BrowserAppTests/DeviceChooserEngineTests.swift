@@ -67,7 +67,7 @@ struct DeviceChooserEngineTests {
     #expect(store.sheet?.id == "chooser-chooser-invalid-update")
 
     payload["kind"] = "deviceChooserUpdated"
-    payload["options"] = [["index": 0, "name": "USB adapter"]]
+    payload["options"] = [["optionId": "usb-0", "name": "USB adapter"]]
     payload["canGrant"] = false
     runtime.onDeviceChooserEvent?(payload)
 

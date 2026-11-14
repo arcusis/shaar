@@ -197,24 +197,24 @@ struct DeviceChooserTests {
     let accepted = try #require(
       request(
         store, transport: "usb", id: "max-name-bytes",
-        options: [["optionId": "device-0", "name": acceptedName]], canGrant: true))
+        options: [["optionId": "name-boundary", "name": acceptedName]], canGrant: true))
     #expect(accepted.options.first?.title == acceptedName)
     let oversizedName = String(repeating: "a", count: 257)
     #expect(
       request(
         store, transport: "usb", id: "oversized-name",
-        options: [["optionId": "device-0", "name": oversizedName]], canGrant: true) == nil)
+        options: [["optionId": "name-too-large", "name": oversizedName]], canGrant: true) == nil)
     let multibyteName = String(repeating: "🔌", count: 64)
     #expect(
       request(
         store, transport: "usb", id: "max-multibyte-name",
-        options: [["optionId": "device-0", "name": multibyteName]], canGrant: true)?.options.first?.title
+        options: [["optionId": "multibyte-name", "name": multibyteName]], canGrant: true)?.options.first?.title
         == multibyteName)
     let oversizedMultibyteName = String(repeating: "🔌", count: 65)
     #expect(
       request(
         store, transport: "usb", id: "oversized-multibyte-name",
-        options: [["optionId": "device-0", "name": oversizedMultibyteName]], canGrant: true) == nil)
+        options: [["optionId": "multibyte-too-large", "name": oversizedMultibyteName]], canGrant: true) == nil)
   }
 
   @Test func chooserOptionCountMatchesTheEngineLimit() throws {
@@ -223,17 +223,13 @@ struct DeviceChooserTests {
       ["optionId": "device-\($0)", "name": "Device \($0)"] as [String: Any]
     }
     let accepted = try #require(
-      request(
-        store, transport: "usb", id: "max-options", options: acceptedOptions,
-        canGrant: true))
+      request(store, transport: "usb", id: "max-options", options: acceptedOptions, canGrant: true))
     #expect(accepted.options.count == 64)
     let excessOptions = (0..<65).map {
       ["optionId": "device-\($0)", "name": "Device \($0)"] as [String: Any]
     }
-    #expect(
-      request(
-        store, transport: "usb", id: "too-many-options", options: excessOptions,
-        canGrant: true) == nil)
+    #expect(request(store, transport: "usb", id: "too-many-options", options: excessOptions,
+      canGrant: true) == nil)
   }
 
   @Test func unnamedDevicesHaveAVisibleFallbackLabel() throws {

@@ -9,6 +9,13 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor final class ShaarBoxModelVisualTests: XCTestCase {
+  func testBoxModelEditLabelsIncludeRegionAndSide() {
+    XCTAssertEqual(
+      InspectorBoxModel.editAccessibilityLabel(region: "padding", index: 0), "Edit Padding Top")
+    XCTAssertEqual(
+      InspectorBoxModel.editAccessibilityLabel(region: "border", index: 1), "Edit Border Right")
+  }
+
   func testBoxModelRendersOffscreen() throws {
     let phase = ProcessInfo.processInfo.environment["SHAAR_BOX_CAPTURE"] ?? ""
     guard phase == "before" || phase == "after" else {

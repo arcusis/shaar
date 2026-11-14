@@ -148,9 +148,20 @@ struct InspectorBoxModel: View {
       }
       .buttonStyle(.plain)
       .help(tip(region: region, index: index, raw: raw))
+      .accessibilityLabel(Self.editAccessibilityLabel(region: region, index: index))
       .accessibilityHint(InspectorL10n.string("Edit box model value"))
       .onHover { hover(key, region: region, index: index, active: $0) }
     }
+  }
+
+  static func editAccessibilityLabel(region: String, index: Int) -> String {
+    let side = ["top", "right", "bottom", "left"][index]
+    return InspectorL10n.format(
+      "Edit %@ %@",
+      arguments: [
+        .string(InspectorL10n.string(region.capitalized)),
+        .string(InspectorL10n.string(side.capitalized)),
+      ])
   }
 
   private func editor(region: String, index: Int, compact: Bool) -> some View {

@@ -9,7 +9,7 @@ import SwiftUI
 enum PrintDocumentTitle {
   static func make(pageTitle: String?, productName: String = ProductIdentity.name) -> String {
     let scalars = (pageTitle ?? "").unicodeScalars.map { scalar -> Unicode.Scalar in
-      if (CharacterSet.controlCharacters.contains(scalar) && !isJoiner(scalar))
+      if CharacterSet.controlCharacters.contains(scalar) && !isJoiner(scalar) && !isEmojiTag(scalar)
         || isBidirectionalControl(scalar)
         || scalar.properties.generalCategory == .lineSeparator
         || scalar.properties.generalCategory == .paragraphSeparator || scalar == "/"
@@ -25,6 +25,10 @@ enum PrintDocumentTitle {
 
   private static func isJoiner(_ scalar: Unicode.Scalar) -> Bool {
     scalar.value == 0x200C || scalar.value == 0x200D
+  }
+
+  private static func isEmojiTag(_ scalar: Unicode.Scalar) -> Bool {
+    (0xE0000...0xE007F).contains(scalar.value)
   }
 
   private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {

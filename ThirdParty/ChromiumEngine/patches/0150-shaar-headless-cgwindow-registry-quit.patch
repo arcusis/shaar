@@ -1,0 +1,122 @@
+diff --git a/components/remote_cocoa/browser/scoped_cg_window_id.cc b/components/remote_cocoa/browser/scoped_cg_window_id.cc
+--- a/components/remote_cocoa/browser/scoped_cg_window_id.cc
++++ b/components/remote_cocoa/browser/scoped_cg_window_id.cc
+@@ -26,8 +26,11 @@ ScopedCGWindowID::ScopedCGWindowID(uint32_t cg_window_id,
+     : cg_window_id_(cg_window_id),
+       frame_sink_id_(frame_sink_id),
+       weak_factory_(this) {
+-  DCHECK_EQ(GetMap().count(cg_window_id), 0u);
+-  GetMap()[cg_window_id] = this;
++  // Hidden windows can have no WindowServer id (windowNumber == 0). There is
++  // nothing for a window capturer to look up in that case. A second owner of
++  // a nonzero id can replace an older owner during window teardown.
++  if (cg_window_id_ != 0)
++    GetMap()[cg_window_id_] = this;
+ }
+ 
+ ScopedCGWindowID::~ScopedCGWindowID() {
+@@ -35,8 +38,10 @@ ScopedCGWindowID::~ScopedCGWindowID() {
+   weak_factory_.InvalidateWeakPtrs();
+ 
+   auto found = GetMap().find(cg_window_id_);
+-  DCHECK_EQ(found->second, this);
+-  GetMap().erase(found);
++  // Another window may have replaced this id, or a headless window may never
++  // have been registered. Erasing end() corrupts the map in release builds.
++  if (found != GetMap().end() && found->second == this)
++    GetMap().erase(found);
+ 
+   for (auto& observer : observer_list_)
+     observer.OnScopedCGWindowIDDestroyed(cg_window_id_);
+@@ -62,6 +67,8 @@ void ScopedCGWindowID::OnMouseMoved(const gfx::PointF& location_in_window,
+ 
+ // static
+ base::WeakPtr<ScopedCGWindowID> ScopedCGWindowID::Get(uint32_t cg_window_id) {
++  if (cg_window_id == 0)
++    return nullptr;
+   auto found = GetMap().find(cg_window_id);
+   if (found == GetMap().end())
+     return nullptr;
+diff --git a/ui/views/cocoa/native_widget_mac_ns_window_host.mm b/ui/views/cocoa/native_widget_mac_ns_window_host.mm
+--- a/ui/views/cocoa/native_widget_mac_ns_window_host.mm
++++ b/ui/views/cocoa/native_widget_mac_ns_window_host.mm
+@@ -691,8 +691,8 @@ void NativeWidgetMacNSWindowHost::InitCompositor() {
+   // when it is received. Note that this is done at this moment (as opposed to
+   // as a callback to CreateWindow) so that we can associate the CGWindowID with
+   // the (now existing) compositor.
+   auto lambda = [](NativeWidgetMacNSWindowHost* host, uint32_t cg_window_id) {
+-    if (!host->compositor_) {
++    if (!host->compositor_ || cg_window_id == 0) {
+       return;
+     }
+     host->scoped_cg_window_id_ =
+diff --git a/components/remote_cocoa/browser/scoped_cg_window_id_unittest.cc b/components/remote_cocoa/browser/scoped_cg_window_id_unittest.cc
+new file mode 100644
+--- /dev/null
++++ b/components/remote_cocoa/browser/scoped_cg_window_id_unittest.cc
+@@ -0,0 +1,46 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "components/remote_cocoa/browser/scoped_cg_window_id.h"
++
++#include <memory>
++
++#include "components/viz/common/surfaces/frame_sink_id.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace remote_cocoa {
++namespace {
++
++TEST(ScopedCGWindowIDTest, HeadlessWindowsDoNotEnterRegistry) {
++  ScopedCGWindowID first(0, viz::FrameSinkId(1, 1));
++  ScopedCGWindowID second(0, viz::FrameSinkId(1, 2));
++  EXPECT_FALSE(ScopedCGWindowID::Get(0));
++}
++
++TEST(ScopedCGWindowIDTest, ReplacedOwnerCannotEraseNewOwner) {
++  auto first = std::make_unique<ScopedCGWindowID>(
++      42, viz::FrameSinkId(1, 1));
++  EXPECT_EQ(first.get(), ScopedCGWindowID::Get(42).get());
++
++  auto second = std::make_unique<ScopedCGWindowID>(
++      42, viz::FrameSinkId(1, 2));
++  EXPECT_EQ(second.get(), ScopedCGWindowID::Get(42).get());
++  first.reset();
++  EXPECT_EQ(second.get(), ScopedCGWindowID::Get(42).get());
++  second.reset();
++  EXPECT_FALSE(ScopedCGWindowID::Get(42));
++}
++
++TEST(ScopedCGWindowIDTest, MissingOwnerCanBeDestroyed) {
++  auto first = std::make_unique<ScopedCGWindowID>(
++      43, viz::FrameSinkId(1, 1));
++  auto second = std::make_unique<ScopedCGWindowID>(
++      43, viz::FrameSinkId(1, 2));
++  second.reset();
++  EXPECT_FALSE(ScopedCGWindowID::Get(43));
++  first.reset();
++}
++
++}  // namespace
++}  // namespace remote_cocoa
+diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
+--- a/chrome/browser/shaar/BUILD.gn
++++ b/chrome/browser/shaar/BUILD.gn
+@@ -375,5 +375,6 @@ test("shaar_layer_unittests") {
+   data_deps = [ "//chrome:packed_resources" ]
+   sources = [
++    "//components/remote_cocoa/browser/scoped_cg_window_id_unittest.cc",
+     "bookmarks/shaar_bookmarks_unittest.cc",
+     "devtools/shaar_devtools_unittest.cc",
+     "downloads/shaar_downloads_unittest.cc",
+@@ -415,6 +416,8 @@ test("shaar_layer_unittests") {
+     "//components/download/public/common:test_support",
+     "//components/history/core/browser",
+     "//components/os_crypt/common:keychain_password_mac",
++    "//components/remote_cocoa/browser:browser",
+     "//components/os_crypt/async/browser:keychain_key_provider",
+     "//components/permissions:test_support",
++    "//components/viz/common",
+     "//net:extras",

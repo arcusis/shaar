@@ -684,6 +684,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0149-shaar-http-basic-embedder-scope.patch",
       "sha256": "476d01482e4916dcaac4a01aa9c443ed7c29e86420fededc930d7334e00ee759"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0150-shaar-headless-cgwindow-registry-quit.patch",
+      "sha256": "bc6effc976cf1da080bd8c90db9691b13a0427e5e818572394f3e58ec2f78a3c"
     }
   ],
   "devtoolsFrontend157": {

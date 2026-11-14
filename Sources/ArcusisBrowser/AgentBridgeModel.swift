@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import CoreFoundation
 import Foundation
 import Observation
 
@@ -85,12 +86,12 @@ struct AgentBridgeStatus: Equatable {
     let allowed: Set<String> = [
       "schemaVersion", "enabled", "port", "wsEndpoint", "connectionCount", "expiresAt",
     ]
-    guard Set(value.keys).isSubset(of: allowed), value["schemaVersion"] as? Int == 1,
+    guard Set(value.keys).isSubset(of: allowed), integer(value["schemaVersion"]) == 1,
       let enabled = value["enabled"] as? Bool,
-      let count = value["connectionCount"] as? Int, (0...1024).contains(count)
+      let count = integer(value["connectionCount"]), (0...1024).contains(count)
     else { throw AgentBridgeFailure.invalidReply }
     if enabled {
-      guard let port = value["port"] as? Int, (1...65535).contains(port),
+      guard let port = integer(value["port"]), (1...65535).contains(port),
         let endpoint = value["wsEndpoint"] as? String,
         let components = URLComponents(string: endpoint), components.scheme == "ws",
         ["127.0.0.1", "::1"].contains(components.host ?? ""),
@@ -105,7 +106,7 @@ struct AgentBridgeStatus: Equatable {
       }
       return Self(enabled: true, port: port, wsEndpoint: endpoint, connectionCount: count)
     }
-    guard count == 0, value["port"] == nil || value["port"] as? Int == 0,
+    guard count == 0, value["port"] == nil || integer(value["port"]) == 0,
       value["wsEndpoint"] == nil
     else {
       throw AgentBridgeFailure.invalidReply
@@ -122,6 +123,14 @@ struct AgentBridgeStatus: Equatable {
         ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122)
           || $0 == 45 || $0 == 95
       }
+  }
+
+  private static func integer(_ value: Any?) -> Int? {
+    guard let value else { return nil }
+    if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+      return nil
+    }
+    return value as? Int
   }
 }
 

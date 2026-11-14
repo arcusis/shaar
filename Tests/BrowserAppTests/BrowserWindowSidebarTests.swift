@@ -15,6 +15,15 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
 }
 
 @Suite @MainActor struct BrowserWindowSidebarTests {
+  @Test func pinnedSidebarGroupIsAHeading() {
+    #expect(BrowserSidebar.pinnedSectionHeadingTraits == .isHeader)
+  }
+
+  @Test func sidebarGroupLabelIsLocalized() {
+    #expect(BrowserSidebar.accessibilityGroupLabel(language: .english) == "Browser sidebar")
+    #expect(BrowserSidebar.accessibilityGroupLabel(language: .hebrew) == "סרגל הצד של הדפדפן")
+  }
+
   @Test func compactScreenDoesNotRequireOversizedBrowserContent() {
     let store = BrowserStore(sessionFile: nil)
     let size = NSSize(width: 620, height: 480)

@@ -3,6 +3,7 @@
   "strings": {
     "Previous Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Previous Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הקודם"}}}},
     "Next Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Next Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הבא"}}}},
+    "Browser sidebar": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Browser sidebar"}},"he":{"stringUnit":{"state":"translated","value":"סרגל הצד של הדפדפן"}}}},
     "Enter Full Screen": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Enter Full Screen"}},"he":{"stringUnit":{"state":"translated","value":"כניסה למסך מלא"}}}},
     "Paste and Match Style": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Paste and Match Style"}},"he":{"stringUnit":{"state":"translated","value":"הדבקה והתאמת סגנון"}}}},
     "Coverage": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Coverage"}},"he":{"stringUnit":{"state":"translated","value":"כיסוי"}}}},

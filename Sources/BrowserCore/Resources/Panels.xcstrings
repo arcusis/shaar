@@ -3172,6 +3172,16 @@
         }
       }
     },
+    "Download progress for %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התקדמות הורדה עבור %@"
+          }
+        }
+      }
+    },
     "Downloading": {
       "localizations": {
         "he": {

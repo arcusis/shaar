@@ -95,8 +95,10 @@ struct RecentDownloadsPopover: View {
           if item.state == .downloading && !item.dangerous {
             if let progress = item.progress {
               ProgressView(value: progress)
+                .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
             } else if !item.paused {
               ProgressView().controlSize(.small)
+                .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
             }
             Text(byteStatus(item)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
           }

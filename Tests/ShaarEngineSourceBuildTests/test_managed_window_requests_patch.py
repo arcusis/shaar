@@ -43,7 +43,7 @@ class ManagedWindowRequestPatchTests(unittest.TestCase):
         self.assertIn("CreateEngineRequestedBrowser", lifecycle)
         self.assertIn("!user_gesture", event_bridge)
         self.assertIn("shaar_window_request_fn on_window_request", abi)
-        self.assertIn("SHAAR_ENGINE_ABI_MINOR 13u", abi)
+        self.assertIn("SHAAR_ENGINE_ABI_MINOR 17u", abi)
         self.assertIn("_shaar_tab_find", exports)
         self.assertIn("shaar_tab_find(", lifecycle)
         self.assertNotIn('scheme == "file"', navigation)

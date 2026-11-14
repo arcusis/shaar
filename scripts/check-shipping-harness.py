@@ -294,16 +294,8 @@ def engine_testing_findings(path: Path, text: str) -> list[str]:
                 verification_only = frame["parent"]
         if verification_only:
             verification_lines.add(line_number)
-    allowed = engine_start_span(path, text)
-    allowed_writes = {
-        match.start() + match.group(0).index(ENGINE_TESTING)
-        for match in ENGINE_TESTING_WRITE.finditer(cleaned)
-        if allowed and allowed[0] <= match.start() < allowed[1]
-    }
     found = []
     for match in re.finditer(re.escape(ENGINE_TESTING), cleaned):
-        if match.start() in allowed_writes:
-            continue
         number = cleaned.count("\n", 0, match.start()) + 1
         if number not in verification_lines:
             found.append(f"{path}:{number}: {ENGINE_TESTING}")

@@ -375,8 +375,9 @@ final class BrowserRuntimeEvents {
 
   func resolveHTTPAuth(_ request: HTTPAuthRequest, username: String?, password: String?) {
     guard router.consume(.httpAuth, id: request.id, windowID: request.windowID) else { return }
-    runtime.resolveHTTPAuthRequestID(request.id, tabID: request.tabID.uuidString,
-                                     username: username, password: password)
+    runtime.resolveHTTPAuthRequestID(
+      request.id, tabID: request.tabID.uuidString,
+      username: username, password: password)
   }
 
   func rejectHTTPAuth(_ id: String, tabID: String, windowID: String) {

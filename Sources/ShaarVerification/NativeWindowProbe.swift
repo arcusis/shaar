@@ -435,7 +435,7 @@ final class NativeWindowProbe {
       {
         last = value
       }
-if let measurement = NativeWindowFitEvidence.parse(last),
+      if let measurement = NativeWindowFitEvidence.parse(last),
         ready((measurement.width, measurement.overflow))
       {
         observations["webStoreFit:\(label)"] = last

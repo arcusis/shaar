@@ -51,7 +51,8 @@ private final class DownloadDirectoryContinuation: @unchecked Sendable {
 }
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage, print,
+  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
+    print,
     closeWindow,
     addFavorite
   case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history,
@@ -447,7 +448,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if privateHost?.hasActiveWindow == true {
       if command == .reopenClosed {
         let owner = privateHost?.activeOwner
-        let canReopenWindow = lastClosedWindowSnapshot != nil
+        let canReopenWindow =
+          lastClosedWindowSnapshot != nil
           && owner?.store.sheet == nil && owner?.window.attachedSheet == nil
         return Self.reopenClosedShortcutCommand(
           canReopenTab: privateHost?.canPerform(.reopenClosed) == true,
@@ -470,7 +472,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return false
     }
     if command == .reopenClosed {
-      let canReopenWindow = lastClosedWindowSnapshot != nil
+      let canReopenWindow =
+        lastClosedWindowSnapshot != nil
         && context.store.sheet == nil && context.window.attachedSheet == nil
       return Self.reopenClosedShortcutCommand(
         canReopenTab: windowCanPerform(command, in: context, afterLauncher: false),
@@ -560,7 +563,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return
     }
     if command == .clearHistory {
-      let profileID = activeContext?.store.session.selectedSpace.profileID
+      let profileID =
+        activeContext?.store.session.selectedSpace.profileID
         ?? privateWindowSourceProfileID().flatMap(UUID.init(uuidString:))
       settingsController?.showClearHistory(
         for: profileID)
@@ -781,11 +785,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .print:
       guard let page = store.session.selectedPage,
         let runtime = context.engine.runtime as? ARCShaarRuntime,
-        runtime.printTabID(page.tab.id.uuidString, windowID: context.nativeID,
-                           profileID: store.session.selectedSpace.profileID.uuidString)
+        runtime.printTabID(
+          page.tab.id.uuidString, windowID: context.nativeID,
+          profileID: store.session.selectedSpace.profileID.uuidString)
       else {
-        report(NSError(domain: "com.arcusis.browser.print", code: 1,
-                       userInfo: [NSLocalizedDescriptionKey: ShellL10n.string("Could not open print panel")]))
+        report(
+          NSError(
+            domain: "com.arcusis.browser.print", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: ShellL10n.string("Could not open print panel")]))
         return
       }
     case .find: store.showPageFind()

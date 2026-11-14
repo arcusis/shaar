@@ -336,10 +336,12 @@ final class NativeHostProbe {
       let saved = try JSONDecoder().decode(
         HostProbeIdentity.self, from: Data(contentsOf: checkpoint))
       let retainedWindowIDs = [saved.first, saved.second] + [saved.engineWindow].compactMap { $0 }
-      let fixtureTabIDs = [saved.firstTab, saved.secondTab]
+      let fixtureTabIDs =
+        [saved.firstTab, saved.secondTab]
         + [saved.staleTab, saved.engineTab].compactMap { $0 }
-      guard NativeHostIdentityCheckpointEvidence.hasDistinctWindowIDs(
-        retained: retainedWindowIDs, closed: saved.ordinarilyClosed)
+      guard
+        NativeHostIdentityCheckpointEvidence.hasDistinctWindowIDs(
+          retained: retainedWindowIDs, closed: saved.ordinarilyClosed)
       else { throw HostProbeFailure("Saved native host window identities are not distinct.") }
       guard NativeHostIdentityCheckpointEvidence.hasDistinctTabIDs(fixtureTabIDs)
       else { throw HostProbeFailure("Saved native host tab identities are not distinct.") }
@@ -1115,7 +1117,8 @@ final class NativeHostProbe {
       accountID: fields.accountID, documentInstance: fields.instance,
       innerWidthCSSPixels: fields.cssWidth, innerHeightCSSPixels: fields.cssHeight,
       resizeEventCount: fields.resizeEventCount,
-      pageFocusEventCount: fields.pageFocusEventCount, pageBlurEventCount: fields.pageBlurEventCount,
+      pageFocusEventCount: fields.pageFocusEventCount,
+      pageBlurEventCount: fields.pageBlurEventCount,
       devicePixelRatio: fields.devicePixelRatio,
       backingScaleFactor: Double(context.window.backingScaleFactor),
       sidebarVisible: context.store.sidebarIsVisible,

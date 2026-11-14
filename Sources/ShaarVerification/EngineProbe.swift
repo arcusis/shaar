@@ -38,7 +38,9 @@ enum EngineProbeMeasurementArguments {
     let sleeping = arguments.contains("--probe-measure-sleeping")
     let inspector = arguments.contains("--probe-measure-inspector")
     if eager && tabCount == nil { return "Eager measurement requires --probe-measure-tabs." }
-    if inspector && tabCount == nil { return "Inspector measurement requires --probe-measure-tabs." }
+    if inspector && tabCount == nil {
+      return "Inspector measurement requires --probe-measure-tabs."
+    }
     if sleeping && (tabCount == nil || !eager) {
       return "Sleeping measurement requires eagerly loaded measurement tabs."
     }

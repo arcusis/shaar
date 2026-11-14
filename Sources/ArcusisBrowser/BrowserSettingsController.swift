@@ -549,7 +549,8 @@ final class BrowserSettingsController: NSObject {
     settingsWindow.contentView = NSHostingView(
       rootView: BrowserSettingsRoot(
         state: state, initialSection: section,
-        confirmsClearHistoryOnAppear: confirmsClearHistory).settingsLocalization())
+        confirmsClearHistoryOnAppear: confirmsClearHistory
+      ).settingsLocalization())
     if presentation == .visible {
       settingsWindow.makeKeyAndOrderFront(nil)
     } else {
@@ -577,7 +578,8 @@ final class BrowserSettingsController: NSObject {
     settingsWindow.contentView = NSHostingView(
       rootView: BrowserSettingsRoot(
         state: state, initialSection: initialSection,
-        confirmsClearHistoryOnAppear: confirmsClearHistoryOnAppear).settingsLocalization())
+        confirmsClearHistoryOnAppear: confirmsClearHistoryOnAppear
+      ).settingsLocalization())
     settingsWindow.center()
     let delegate = BrowserSettingsWindowDelegate(controller: self)
     windowDelegate = delegate

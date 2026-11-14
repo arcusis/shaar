@@ -405,9 +405,9 @@ enum LibrarySpacesOverviewModel {
         }
       }
       if !spaceMatches && !needle.isEmpty {
-        let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
         let foldersByID = Dictionary(
           space.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
         var folderPathCache: [UUID: [UUID]] = [:]
         func folderPathIDs(to id: UUID?) -> [UUID] {
           guard let id else { return [] }
@@ -472,6 +472,19 @@ enum LibrarySpacesOverviewModel {
 
   private static func tabMatches(_ tab: BrowserTab, _ query: String) -> Bool {
     contains(tab.title, query) || contains(tab.url.absoluteString, query)
+  }
+
+  private static func folderPath(
+    to id: UUID?, in foldersByID: [UUID: BrowserFolder]
+  ) -> [BrowserFolder] {
+    var path: [BrowserFolder] = []
+    var next = id
+    var visited: Set<UUID> = []
+    while let current = next, let folder = foldersByID[current], visited.insert(current).inserted {
+      path.append(folder)
+      next = folder.parentID
+    }
+    return path
   }
 
   private static func contains(_ value: String, _ query: String) -> Bool {

@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("stage_browser_resources", ROOT / "scripts/stage-browser-resources.py")
@@ -57,6 +58,27 @@ class ResourceStagingTests(unittest.TestCase):
             staging.stage(self.binary, self.resources, self.pin)
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "leave untouched")
         self.assertEqual(list(outside.iterdir()), [sentinel])
+
+    def test_stage_rejects_symlinked_destination_parent(self):
+        outside = self.root / "outside-contents"
+        resources = outside / "Resources"
+        resources.mkdir(parents=True)
+        sentinel = resources / "keep.txt"
+        sentinel.write_text("leave untouched", encoding="utf-8")
+        self.resources.parent.parent.mkdir(parents=True)
+        self.resources.parent.symlink_to(outside, target_is_directory=True)
+
+        def compile_catalog(_catalog, output):
+            for language in ("en", "he"):
+                localized = output / f"{language}.lproj"
+                localized.mkdir(parents=True, exist_ok=True)
+                (localized / "Localizable.strings").write_text("\"key\" = \"value\";\n")
+
+        with self.assertRaisesRegex(ValueError, "symlinked parent"):
+            with patch.object(staging, "compile_catalog", side_effect=compile_catalog):
+                staging.stage(self.binary, self.resources, self.pin)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "leave untouched")
+        self.assertFalse((resources / staging.BUNDLE).exists())
 
     def test_invalid_inputs_rejected_before_replacing_existing_output(self):
         staging.stage(self.binary, self.resources, self.pin)

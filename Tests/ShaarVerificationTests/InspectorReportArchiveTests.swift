@@ -55,6 +55,31 @@ import Testing
     }
   }
 
+  @Test func nativeProbeRejectsEmptyVersionAndNonObjectMetadataSections() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "inspector-report-metadata-shapes-" + UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let valid: [String: Any] = [
+      "engineVersion": "155.0.fixture", "sensitiveHeadersIncluded": false,
+      "viewport": ["width": 390, "height": 844, "devicePixelRatio": 3],
+      "activeSimulations": ["device": "phone"],
+    ]
+    let invalidMetadata: [[String: Any]] = [
+      { var value = valid; value["engineVersion"] = ""; return value }(),
+      { var value = valid; value["viewport"] = "390x844"; return value }(),
+      { var value = valid; value["activeSimulations"] = ["phone"]; return value }(),
+    ]
+
+    for metadata in invalidMetadata {
+      let archive = try await BugReportArchive.save(
+        files: ["metadata.json": JSONSerialization.data(withJSONObject: metadata)],
+        directory: root)
+      #expect(throws: DeveloperModeFailure.self) {
+        _ = try InspectorPageToolsProbe.reportMetadata(archive)
+      }
+    }
+  }
+
   @Test func nativeProbeReadsActualArchiveMembersAndRejectsCorruption() async throws {
     let root = FileManager.default.temporaryDirectory.appending(
       path: "inspector-report-evidence-" + UUID().uuidString)

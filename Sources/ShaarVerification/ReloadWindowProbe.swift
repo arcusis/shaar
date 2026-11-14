@@ -9,6 +9,14 @@ import ChromiumBridgeVerification
 
 @testable import ArcusisBrowser
 
+enum ReloadWindowProbeEvidence {
+  static func isCrossSiteLoopbackNavigation(source: URL, destination: String?) -> Bool {
+    guard let destination = destination.flatMap(URL.init(string:)) else { return false }
+    return source.scheme == "http" && source.host == "127.0.0.1"
+      && destination.scheme == "http" && destination.host == "localhost"
+  }
+}
+
 /// Hidden, two-origin link and failed-page reload exercise for issue 1066.
 @MainActor
 final class ReloadWindowProbe {
@@ -173,7 +181,8 @@ final class ReloadWindowProbe {
     let page = try require(await document(destination, runtime: runtime), "No destination document")
     let destinationURL = (page["href"] as? String).flatMap(URL.init(string:))
     try expect(
-      originA.host == "127.0.0.1" && destinationURL?.host == "localhost",
+      ReloadWindowProbeEvidence.isCrossSiteLoopbackNavigation(
+        source: originA, destination: destinationURL?.absoluteString),
       "\(name) navigates between distinct loopback sites")
     try expect(
       page["marker"] as? String == "Cross-site destination loaded",

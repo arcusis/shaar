@@ -84,6 +84,11 @@ import Testing
   #expect(BrowserLocalization.string("Nativ", table: "Shell", language: .hebrew) == "נתיב")
 }
 
+@Test func pasteAndGoMenuTitleHasHebrewLocalization() {
+  #expect(BrowserLocalization.string("Paste and Go", table: "Shell", language: .english) == "Paste and Go")
+  #expect(BrowserLocalization.string("Paste and Go", table: "Shell", language: .hebrew) == "הדבקה ומעבר")
+}
+
 @Test func languageResolverHonorsOverridesAliasesAndUnsupportedPreferences() {
   #expect(
     BrowserLanguage.resolve(selection: .systemDefault, preferredLanguages: ["he-IL", "en-US"])
@@ -136,6 +141,17 @@ import Testing
   #expect(
     BrowserLocalization.string("Uncatalogued test label", language: .hebrew)
       == "Uncatalogued test label")
+}
+
+@Test func agentBridgeValidationAndConnectionLabelsHaveHebrewForms() {
+  #expect(
+    BrowserLocalization.string(
+      "Agent control requires a web page.", table: "Shell", language: .hebrew)
+      == "שליטת סוכן זמינה רק בדפי אינטרנט.")
+  #expect(
+    BrowserLocalization.format(
+      "Local agent %d", table: "Shell", language: .hebrew, arguments: [.integer(2)])
+      == "סוכן מקומי 2")
 }
 
 @Test func bridgeDownloadPluralUsesEnglishNumericOneAndHebrewNativeForms() {

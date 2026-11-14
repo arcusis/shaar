@@ -56,6 +56,7 @@ document.documentElement.dataset.ready = "huge";
 
 SCROLL = page("Scroll", "pending", """
 <div id="root" style="height:220px;overflow:auto"></div>
+<div id="page-scroll-spacer" style="height:180vh"></div>
 <script>
 const root = document.getElementById("root");
 function add(count) {
@@ -70,9 +71,17 @@ add(40);
 window.__frames = 0;
 window.__scrollEvents = 0;
 window.__scrollEndEvents = 0;
+window.__pageScrollEvents = 0;
+window.addEventListener("scroll", function () {
+  window.__pageScrollEvents += 1;
+});
+const pendingRows = {value: false};
 root.addEventListener("scroll", function () {
   window.__scrollEvents += 1;
-  if (root.scrollTop + root.clientHeight >= root.scrollHeight - 80) add(400);
+  if (!pendingRows.value && root.scrollTop + root.clientHeight >= root.scrollHeight - 80) {
+    pendingRows.value = true;
+    setTimeout(function () { add(400); }, 600);
+  }
 });
 root.addEventListener("scrollend", function () {
   window.__scrollEndEvents += 1;
@@ -111,7 +120,7 @@ try {
   const played = video.play();
   report.videoPending = true;
   Promise.resolve(played).then(function () {
-    report.video = video.videoWidth > 0 && video.readyState >= 2;
+    report.video = !video.paused && video.videoWidth > 0 && video.readyState >= 2;
     report.videoWidth = video.videoWidth;
     report.videoHeight = video.videoHeight;
     report.paused = video.paused;
@@ -408,6 +417,28 @@ def stop(process):
         process.kill()
 
 
+def validate_receipt_path(path, app=None):
+    if path.parent.is_symlink():
+        raise ValueError(f"receipt directory must not be a symlink: {path.parent}")
+    if path.is_symlink():
+        raise ValueError(f"receipt path must not be a symlink: {path}")
+    if path.exists() and not path.is_file():
+        raise ValueError(f"receipt path is not a regular file: {path}")
+    if app is not None:
+        try:
+            path.resolve().relative_to(app.resolve())
+        except ValueError:
+            pass
+        else:
+            raise ValueError(f"receipt path must be outside the verification app: {path}")
+
+
+def write_receipt(path, receipt, app=None):
+    validate_receipt_path(path, app)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(receipt, indent=2) + "\n")
+
+
 def read_report(path):
     try:
         return json.loads(path.read_text())
@@ -452,6 +483,10 @@ def main():
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/browsing-edge/receipt.json")
     options = parser.parse_args()
+    try:
+        validate_receipt_path(options.receipt, options.app)
+    except ValueError as error:
+        parser.error(str(error))
     executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
         parser.error(f"Missing verification app: {executable}")
@@ -535,8 +570,7 @@ def main():
             "stderrTail": (stderr or "")[-4000:],
             "passed": gate,
         }
-        options.receipt.parent.mkdir(parents=True, exist_ok=True)
-        options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
+        write_receipt(options.receipt, receipt, options.app)
         print(markdown_table(rows))
         print()
         print(json.dumps({

@@ -111,7 +111,7 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onQuitRequested)(void);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosed)(NSString *windowID, BOOL quitting);
 /// Synchronous: return a newly created window before Chromium attaches its browser.
-@property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type);
+@property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type, BOOL userGesture);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowShowRequest)(NSString *windowID, BOOL active);
 /// DevTools external navigation; the app validates source ownership before opening a tab.
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDevToolsOpenURLRequest)(NSDictionary<NSString *, id> *request);
@@ -138,11 +138,16 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onWebShareRequest)(NSDictionary<NSString *, id> *request);
 /// The engine asked the app to confirm printing for a live tab.
 @property(copy, nullable) void (^onPrintRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onJavaScriptDialogRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onJavaScriptDialogDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExternalAppDismissed)(NSString *requestID);
 /// deviceChooserRequested, deviceChooserUpdated, and deviceChooserDismissed.
 /// The payload is the engine permission event plus profileID, tabID, and windowID.
 @property(copy, nullable) void (^onDeviceChooserEvent)(NSDictionary<NSString *, id> *event);
+/// HTTP Basic authentication challenge routed to the tab's owning window.
+@property(copy, nullable) void (^onHTTPAuthRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onHTTPAuthDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (^onAgentBridgeStatus)(NSString *tabID, NSString *profileID,
                                                       NSDictionary<NSString *, id> *status);
@@ -172,6 +177,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID, NSString *windowID);
+/// A browser window is about to close and its remaining tab closures are teardown.
+@property(copy, nullable) void (^onWindowClosing)(NSString *windowID, BOOL closing);
 /// Chromium discarded, froze, or woke a tab. `state` is active, frozen, or discarded.
 @property(copy, nullable) void (^onTabLifecycle)(NSString *tabID, NSString *state, BOOL audible, BOOL capturing);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onTabActivated)(NSString *tabID, NSString *profileID);
@@ -245,6 +252,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID mode:(ARCPageReloadMode)mode;
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
               text:(NSString *)text forward:(BOOL)forward;
+- (BOOL)performPageZoomAction:(NSString *)action tabID:(NSString *)tabID
+                     profileID:(NSString *)profileID;
 - (void)stopFindingInTabID:(NSString *)tabID;
 - (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
             completion:(void (^)(NSError * _Nullable))completion;
@@ -262,17 +271,28 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 /// `outcome` is "shared" or "cancelled". The reply symbol is optional until patch 0072.
 - (void)resolveWebShareRequestID:(NSString *)requestID outcome:(NSString *)outcome;
 - (void)resolvePrintRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+- (void)resolveJavaScriptDialogRequestID:(NSString *)requestID accepted:(BOOL)accepted
+                                  input:(nullable NSString *)input;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
-/// `index` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
-- (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(nullable NSNumber *)index;
+/// `optionID` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
+- (void)resolveDeviceChooserRequestID:(NSString *)requestID
+                             optionID:(nullable NSString *)optionID;
+- (void)resolveHTTPAuthRequestID:(NSString *)requestID tabID:(NSString *)tabID
+                        username:(nullable NSString *)username
+                        password:(nullable NSString *)password;
 /// Canonical browser-managed download directory for a regular profile.
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
+/// On-disk Chromium profile directory for a loaded regular profile.
+- (nullable NSURL *)profileDataDirectoryForProfileID:(NSString *)profileID;
 - (int)nativeTabIDForID:(NSString *)tabID;
 - (void)quit;
 @end
 
 /// Shaar C ABI implementation of the core profile/window/tab/navigation backend.
 @interface ARCShaarRuntime : ARCChromiumRuntime <ARCBrowserCoreBackend>
+/// Opens Chromium's native print panel for the selected live tab when supported by the engine.
+- (BOOL)supportsNativePrint;
+- (BOOL)printTabID:(NSString *)tabID windowID:(NSString *)windowID profileID:(NSString *)profileID;
 /// The panel lease and fixed screencast commands only.
 - (void)panelRequest:(NSUInteger)operation tabID:(NSString *)tabID
          profileID:(NSString *)profileID windowID:(NSString *)windowID
@@ -462,6 +482,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
              requestID:(NSString *)requestID text:(NSString *)text forward:(BOOL)forward;
 - (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
+- (BOOL)performPrivatePageZoomAction:(NSString *)action tabID:(NSString *)tabID
+                            windowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSWindow *)windowForPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSView *)hostViewForPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSView *)viewForPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;

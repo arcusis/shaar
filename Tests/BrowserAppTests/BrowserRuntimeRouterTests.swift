@@ -59,6 +59,22 @@ struct BrowserRuntimeRouterTests {
     #expect(router.client(forTab: "still-open", nativeWindowID: "first") == nil)
   }
 
+  @Test func windowTeardownDoesNotTurnRemainingTabsIntoUserCloses() throws {
+    let router = BrowserRuntimeRouter()
+    let client = BrowserRuntimeClient(windowID: "first") { [] }
+    try router.register(client)
+    var closed: [String] = []
+    client.onTabClosed = { id, _ in closed.append(id) }
+    #expect(router.bindTab("saved-space-tab", windowID: "first"))
+
+    router.setWindowClosing(true, id: "first")
+    router.tabClosed("saved-space-tab", windowID: "first")
+
+    #expect(closed.isEmpty)
+    #expect(router.tabOwnerWindowID(for: "saved-space-tab") == nil)
+    #expect(router.client(forTab: "saved-space-tab", nativeWindowID: "first") == nil)
+  }
+
   @Test func closedWindowTabOwnerRemainsUntilMatchingCloseEvent() throws {
     let router = BrowserRuntimeRouter()
     let source = BrowserRuntimeClient(windowID: "source") { [] }
@@ -140,7 +156,7 @@ struct BrowserRuntimeRouterTests {
     #expect(router.clients(forProfile: "foreign").isEmpty)
     memberships.remove("beta")
     #expect(router.clients(forProfile: "beta").isEmpty)
-    weak var weakFirst = first
+    weak let weakFirst = first
     first = nil
     #expect(weakFirst == nil)
     #expect(router.clients(forProfile: "shared").map(\.windowID) == ["second"])

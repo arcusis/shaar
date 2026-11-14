@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import sys
 import time
 import unittest
@@ -18,6 +19,22 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 TESTS_ROOT = REPOSITORY_ROOT / "Tests"
+
+
+def junit_output_path(value: str) -> Path:
+    path = Path(value)
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(f"parent must not be a symlink: {path.parent}")
+    if path.exists() and path.is_dir():
+        raise argparse.ArgumentTypeError("must name a file, not a directory")
+    if path.parent.exists() and not path.parent.is_dir():
+        raise argparse.ArgumentTypeError(f"parent is not a directory: {path.parent}")
+    return path
+def load_error_test(test_file: Path, error: Exception) -> unittest.FunctionTestCase:
+    def fail():
+        raise RuntimeError(f"Could not load Python test module {test_file}: {error}") from error
+
+    return unittest.FunctionTestCase(fail, description=f"load {test_file}")
 
 
 class ReportResult(unittest.TextTestResult):
@@ -70,6 +87,19 @@ class ReportResult(unittest.TextTestResult):
         ET.SubElement(self.cases[test], "failure", message="Unexpected success")
 
     def write_report(self, path):
+        path = Path(path)
+        if path.parent.is_symlink():
+            raise ValueError(f"JUnit report parent directory must not be a symlink: {path.parent}")
+        if path.is_symlink():
+            raise ValueError(f"JUnit report path must not be a symlink: {path}")
+        absolute = Path(os.path.abspath(path))
+        system_aliases = {Path("/var"): Path("/private/var"),
+                          Path("/tmp"): Path("/private/tmp")}
+        for parent in absolute.parents:
+            if parent.is_symlink() and system_aliases.get(parent) != parent.resolve():
+                raise ValueError(f"JUnit report parent must not be a symlink: {parent}")
+        if path.exists() and not path.is_file():
+            raise ValueError(f"JUnit report path is not a regular file: {path}")
         self.report.set("tests", str(len(self.report)))
         self.report.set("failures", str(len(self.failures) + len(self.unexpectedSuccesses)))
         self.report.set("errors", str(len(self.errors)))
@@ -93,30 +123,47 @@ class ImportFailureTest(unittest.TestCase):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--junit", type=Path)
+    parser.add_argument("--junit", type=junit_output_path)
     options = parser.parse_args()
     sys.path.insert(0, str(REPOSITORY_ROOT))
-    test_directories = sorted(path for path in TESTS_ROOT.iterdir() if path.is_dir())
+    entries = sorted(TESTS_ROOT.iterdir())
+    symlinked_directories = [path for path in entries if path.is_symlink()]
+    test_directories = [path for path in entries if path.is_dir() and not path.is_symlink()]
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
-    discovered_files = 0
+    discovered_files = len(symlinked_directories)
+    for path in symlinked_directories:
+        suite.addTest(ImportFailureTest(
+            path, ValueError(f"Python test directory must not be a symlink: {path}")
+        ))
 
     for test_directory in test_directories:
         test_files = sorted(test_directory.glob("test_*.py"))
-        if not test_files:
+        symlinked_files = [path for path in test_files if path.is_symlink()]
+        for path in symlinked_files:
+            suite.addTest(ImportFailureTest(
+                path, ValueError(f"Python test file must not be a symlink: {path}")
+            ))
+        test_files = [path for path in test_files if not path.is_symlink()]
+        discovered_files += len(symlinked_files)
+        if not test_files and not symlinked_files:
             continue
         discovered_files += len(test_files)
         for test_file in test_files:
             module_spec = importlib.util.spec_from_file_location(test_file.stem, test_file)
             if module_spec is None or module_spec.loader is None:
-                print(f"Could not load Python test module: {test_file}", file=sys.stderr)
-                return 1
+                error = ImportError(f"No import loader available for {test_file}")
+                print(f"Could not load Python test module: {test_file}: {error}", file=sys.stderr)
+                suite.addTest(load_error_test(test_file, error))
+                continue
             module = importlib.util.module_from_spec(module_spec)
             sys.modules[module_spec.name] = module
             try:
                 module_spec.loader.exec_module(module)
             except Exception as error:
+                print(f"Could not load Python test module: {test_file}: {error}", file=sys.stderr)
                 suite.addTest(ImportFailureTest(test_file, error))
+                sys.modules.pop(module_spec.name, None)
                 continue
             suite.addTests(loader.loadTestsFromModule(module))
 

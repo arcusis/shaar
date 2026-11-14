@@ -15,7 +15,16 @@ from git_content import commit_id, git, history_commits, object_id, run_main
 from sensitive_files import policy_errors
 
 
+GITLEAKS_TIMEOUT_SECONDS = 300
+
+
 def scan_history(root, base: str, head: str, report) -> int:
+    if report.parent.is_symlink():
+        raise ValueError(f"secret scan report directory must not be a symlink: {report.parent}")
+    if report.is_symlink():
+        raise ValueError(f"secret scan report must not be a symlink: {report}")
+    if report.exists() and not report.is_file():
+        raise ValueError(f"secret scan report is not a regular file: {report}")
     errors = []
     for revision in history_commits(root, base, head):
         errors.extend(f"{revision[:12]}: {error}" for error in policy_errors(root, revision))
@@ -24,9 +33,14 @@ def scan_history(root, base: str, head: str, report) -> int:
     if errors:
         return 1
     report.parent.mkdir(parents=True, exist_ok=True)
-    return subprocess.run(["gitleaks", "git", "--no-banner", "--redact", "--ignore-gitleaks-allow",
-                           "--log-level", "warn", "--report-format", "json", "--report-path", str(report),
-                           "--log-opts", f"{object_id(base)}..{object_id(head)}", "."], cwd=root).returncode
+    try:
+        return subprocess.run(["gitleaks", "git", "--no-banner", "--redact", "--ignore-gitleaks-allow",
+                               "--log-level", "warn", "--report-format", "json", "--report-path", str(report),
+                               "--log-opts", f"{object_id(base)}..{object_id(head)}", "."], cwd=root,
+                              timeout=GITLEAKS_TIMEOUT_SECONDS).returncode
+    except subprocess.TimeoutExpired:
+        print(f"Gitleaks history scan exceeded {GITLEAKS_TIMEOUT_SECONDS}s", file=sys.stderr)
+        return 124
 
 
 def main() -> int:

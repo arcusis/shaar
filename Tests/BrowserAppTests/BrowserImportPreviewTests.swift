@@ -5,9 +5,31 @@
 import AppKit
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
+
+@Test func browserImportPreviewSummaryUsesHebrewDualForms() {
+  func readable(_ value: String) -> String {
+    value.replacingOccurrences(of: "\u{2068}", with: "")
+      .replacingOccurrences(of: "\u{2069}", with: "")
+  }
+  #expect(
+    readable(
+      BrowserImportPreviewCounts.summary(
+        bookmarks: 1, history: 1, profileName: "Work", language: .hebrew))
+      == "סימנייה אחת ו־פריט היסטוריה אחד מוכנים לייבוא לפרופיל Work.")
+  #expect(
+    readable(
+      BrowserImportPreviewCounts.summary(
+        bookmarks: 2, history: 2, profileName: "Work", language: .hebrew))
+      == "שתי סימניות ו־שני פריטי היסטוריה מוכנים לייבוא לפרופיל Work.")
+}
+
+@MainActor @Test func browserImportPreviewTitleIsVoiceOverHeading() {
+  #expect(BrowserImportPreviewView.headingTraits == .isHeader)
+}
 
 @Test func browserImportPreviewCountBenchmark() {
   let items = (0..<50_000).map { index in

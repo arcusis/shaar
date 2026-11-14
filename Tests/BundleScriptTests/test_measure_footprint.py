@@ -3,8 +3,11 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -27,6 +30,79 @@ def thread(total, frames, trailer=""):
 
 
 class MeasureFootprintSampleTests(unittest.TestCase):
+    def test_tab_counts_reject_duplicates_that_would_overwrite_comparison_results(self):
+        for value in ("1,1", "50, 50"):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                SystemExit, "tab count is duplicated"
+            ):
+                measure_footprint.parse_tab_counts(value)
+
+    def test_report_writer_rejects_symlink_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "outside.json"
+            target.write_text("preserve this", encoding="utf-8")
+            output = root / "report.json"
+            output.symlink_to(target)
+
+            with self.assertRaisesRegex(ValueError, "performance report path must not be a symlink"):
+                measure_footprint.write_report(output, {"schema": 3})
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_report_writer_rejects_symlinked_parent_without_writing_outside(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            outside.mkdir()
+            target = outside / "report.json"
+            target.write_text("preserve this", encoding="utf-8")
+            linked_directory = root / "linked-output"
+            linked_directory.symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "performance report directory must not be a symlink"):
+                measure_footprint.write_report(linked_directory / "report.json", {"schema": 3})
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_sample_copy_rejects_symlinked_file_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "outside.txt"
+            target.write_text("preserve this", encoding="utf-8")
+            output = root / "sample.txt"
+            output.symlink_to(target)
+
+            def create_sample(arguments, **_kwargs):
+                Path(arguments[-1]).write_text(thread(1, ["    + 1 work  (in Shaar)"]))
+                return subprocess.CompletedProcess(arguments, 0, stderr="")
+
+            with patch.object(measure_footprint.subprocess, "run", side_effect=create_sample):
+                result = measure_footprint.main_thread_sample(123, output)
+
+            self.assertEqual(result["mainThreadSample"], "unavailable")
+            self.assertIn("main-thread sample path must be a regular file", result["mainThreadSampleError"])
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_sample_copy_rejects_symlinked_directory_without_writing_outside(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            outside.mkdir()
+            link = root / "samples"
+            link.symlink_to(outside, target_is_directory=True)
+
+            def create_sample(arguments, **_kwargs):
+                Path(arguments[-1]).write_text(thread(1, ["    + 1 work  (in Shaar)"]))
+                return subprocess.CompletedProcess(arguments, 0, stderr="")
+
+            with patch.object(measure_footprint.subprocess, "run", side_effect=create_sample):
+                result = measure_footprint.main_thread_sample(123, link / "sample.txt")
+
+            self.assertEqual(result["mainThreadSample"], "unavailable")
+            self.assertIn("main-thread sample directory must not be a symlink", result["mainThreadSampleError"])
+            self.assertEqual(list(outside.iterdir()), [])
+
     def test_sleeping_comparison_reports_rss_saved_per_tab_count(self):
         comparisons = measure_footprint.compare_sleeping_rss([
             {"tabs": 50, "mode": "eager", "processTreeRSSMiBMean": 900.0},

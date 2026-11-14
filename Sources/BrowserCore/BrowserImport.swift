@@ -4,6 +4,11 @@
 
 import Foundation
 
+private struct BrowserImportFolderKey: Hashable {
+  let parentID: UUID
+  let name: String
+}
+
 public struct BrowserImportItem: Identifiable, Equatable, Sendable {
   public enum Kind: String, Sendable { case bookmark, history }
   public let id: UUID
@@ -71,12 +76,45 @@ public enum BrowserImport {
     return BrowserImportBatch(source: source, items: items)
   }
 
+  /// Reads a browser export without blocking the caller's actor on file or database work.
+  public static func readOffMain(_ url: URL, source: BrowserImportSource) async throws
+    -> BrowserImportBatch
+  {
+    try await performOffMain { try read(url, source: source) }
+  }
+
+  /// Runs synchronous import work away from the caller's actor and forwards cancellation to it.
+  static func performOffMain<Value: Sendable>(
+    _ operation: @escaping @Sendable () throws -> Value
+  ) async throws -> Value {
+    let worker = Task.detached(priority: .userInitiated) {
+      try Task<Never, Never>.checkCancellation()
+      let value = try operation()
+      try Task<Never, Never>.checkCancellation()
+      return value
+    }
+    return try await withTaskCancellationHandler {
+      try await worker.value
+    } onCancel: {
+      worker.cancel()
+    }
+  }
+
   public static func historyRows(for items: [BrowserImportItem]) -> [[String: Any]] {
     items.compactMap { item in
-      guard item.kind == .history, !item.visitTimes.isEmpty,
-        let latest = item.visitTimes.max()
-      else { return nil }
-      let visits = item.visitTimes.map { $0.timeIntervalSince1970 * 1_000 }
+      guard item.kind == .history, !item.visitTimes.isEmpty else { return nil }
+      var visits: [Double] = []
+      visits.reserveCapacity(item.visitTimes.count)
+      var latest: Date?
+      for visit in item.visitTimes {
+        visits.append(visit.timeIntervalSince1970 * 1_000)
+        if let current = latest {
+          if current < visit { latest = visit }
+        } else {
+          latest = visit
+        }
+      }
+      guard let latest else { return nil }
       return [
         "u": item.address, "t": item.title, "n": visits.count,
         "l": latest.timeIntervalSince1970 * 1_000,
@@ -89,19 +127,18 @@ public enum BrowserImport {
     Any]]
   {
     var operations: [[String: Any]] = []
-    var folders: [[String]: UUID] = [:]
+    var folders: [BrowserImportFolderKey: UUID] = [:]
     for item in items where item.kind == .bookmark {
       let parent: UUID
       if let components = item.folderComponents {
         var currentParent = otherFolderID
-        var path: [String] = []
         for component in components {
-          path.append(component)
-          if let existing = folders[path] {
+          let key = BrowserImportFolderKey(parentID: currentParent, name: component)
+          if let existing = folders[key] {
             currentParent = existing
           } else {
             let id = UUID()
-            folders[path] = id
+            folders[key] = id
             operations.append([
               "op": "add", "id": id.uuidString.lowercased(),
               "parent": currentParent.uuidString.lowercased(), "k": "f", "t": component,

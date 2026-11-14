@@ -8,6 +8,18 @@ import Testing
 @testable import ShaarVerification
 
 @Suite struct NativeHostViewportValidationTests {
+  @Test func cookieAccountParserRequiresExactCookieNameAndValue() {
+    #expect(
+      NativeHostViewportValidation.accountID(
+        fromCookie: "theme=dark; account=alpha; token=a=b") == "alpha")
+    #expect(NativeHostViewportValidation.accountID(fromCookie: " account=beta ") == "beta")
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "accountant=alpha; token=x") == nil)
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "account; token=x") == nil)
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "account=; token=x") == nil)
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "account=alpha; account=beta") == nil)
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "theme=dark") == nil)
+  }
+
   @Test func stableViewportAllowsOnePixelRoundingButRejectsRealResize() {
     let baseline = CGSize(width: 1200, height: 780)
     #expect(
@@ -28,5 +40,30 @@ import Testing
     #expect(NativeHostViewportValidation.deliveredResizeEvent(from: 0, to: 1))
     #expect(!NativeHostViewportValidation.deliveredResizeEvent(from: 2, to: 2))
     #expect(!NativeHostViewportValidation.deliveredResizeEvent(from: 3, to: 1))
+  }
+
+  @Test func viewportDocumentDecodesFixtureIdentityAndEventMetrics() {
+    let fields = NativeHostViewportValidation.documentFields(from: [
+      "fixture": "v1", "instance": "document-7",
+      "cookie": "theme=dark; account=acct-42; session=active",
+      "innerWidth": 1280, "innerHeight": 720, "resizeEventCount": 3,
+      "pageFocusEventCount": 2, "pageBlurEventCount": 1, "devicePixelRatio": 2.0,
+    ])
+    #expect(fields == HostViewportDocumentFields(
+      accountID: "acct-42", instance: "document-7", cssWidth: 1280, cssHeight: 720,
+      resizeEventCount: 3, pageFocusEventCount: 2, pageBlurEventCount: 1,
+      devicePixelRatio: 2.0))
+  }
+
+  @Test func viewportDocumentRejectsWrongFixtureAndMissingAccount() {
+    var payload: [String: Any] = [
+      "fixture": "v2", "instance": "document-7", "cookie": "account=acct-42",
+      "innerWidth": 1280, "innerHeight": 720, "resizeEventCount": 3,
+      "pageFocusEventCount": 2, "pageBlurEventCount": 1, "devicePixelRatio": 2.0,
+    ]
+    #expect(NativeHostViewportValidation.documentFields(from: payload) == nil)
+    payload["fixture"] = "v1"
+    payload["cookie"] = "theme=dark; session=active"
+    #expect(NativeHostViewportValidation.documentFields(from: payload) == nil)
   }
 }

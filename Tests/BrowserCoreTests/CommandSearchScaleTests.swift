@@ -346,6 +346,59 @@ private func stableID(_ suffix: Int) -> UUID {
   #expect(results.count == 1_001)
 }
 
+@Test func commandHistoryChipSparseMatchFocusedBenchmark() throws {
+  let profile = BrowserProfile(name: "Personal")
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Main", symbol: "house", tint: .ocean)
+  let session = try BrowserSession(
+    profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+  let history = try (0..<2_000).map { index in
+    try BrowserHistoryEntry(
+      profileID: profile.id,
+      payload: [
+        "u": "https://example.com/page-\(index)",
+        "t": index == 1_999 ? "Needle rare result" : "Common history page \(index)",
+        "n": 1, "v": [1_000.0 + Double(index)],
+      ])
+  }
+  let query = "Needle rare"
+  let beforeStart = ContinuousClock.now
+  var beforeResults: [CommandResult] = []
+  for _ in 0..<10 {
+    beforeResults = legacyHistoryResults(history, query: query, profileID: profile.id)
+  }
+  let before = beforeStart.duration(to: .now)
+
+  let afterStart = ContinuousClock.now
+  var afterResults: [CommandResult] = []
+  let sources = CommandSources(history: history)
+  for _ in 0..<10 {
+    afterResults = CommandLauncher.historySection(for: query, in: session, sources: sources).results
+  }
+  let after = afterStart.duration(to: .now)
+  print("commandHistoryChipSparseMatchFocusedBenchmark: before=\(before), after=\(after)")
+  #expect(beforeResults == afterResults && afterResults.count == 1)
+  #expect(durationSeconds(after) < durationSeconds(before) * 0.75)
+}
+
+private func legacyHistoryResults(
+  _ history: [BrowserHistoryEntry], query: String, profileID: UUID
+) -> [CommandResult] {
+  Array(
+    history.lazy
+      .filter {
+        $0.profileID == profileID && $0.destination != nil
+          && CommandText.matches(query, CommandFields.history($0))
+      }
+      .prefix(CommandLauncher.filteredLimit)
+      .map { CommandResult.history($0, subtitle: CommandText.domain(of: $0.destination)) })
+}
+
+private func durationSeconds(_ duration: Duration) -> Double {
+  let components = duration.components
+  return Double(components.seconds) + Double(components.attoseconds) / 1e18
+}
+
 private let nineBenchmarkBatches = 9
 
 private func commandSearchBenchmarkSession(tabCount: Int) -> BrowserSession {

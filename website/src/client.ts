@@ -3,13 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import { initializeDemo } from "./demo";
-import { initializeMenu } from "./menu";
 import { startScene } from "./scene";
 import { initializeSky, type SkyState } from "./sky";
 import { nearestStep } from "./story";
-
-const root = document.documentElement;
-root.dataset.enhanced = "true";
 
 // Home only: the sticky bar slides in once the hero frame (with its own nav) leaves view.
 function initializeStickyHeader(): void {
@@ -55,7 +51,6 @@ function initializeStory(): void {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  initializeMenu(document);
   initializeStickyHeader();
   initializeStory();
   initializeDemo();

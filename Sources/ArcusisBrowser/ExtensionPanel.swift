@@ -32,6 +32,16 @@ enum ExtensionPanelRoute: Identifiable, Equatable {
 }
 
 struct ExtensionToolbar: View {
+  static func accessibilityLabel(
+    profileName: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Extensions for %@", table: "Panels", language: language,
+      arguments: [.string(profileName)])
+  }
+
+  static let popupTitleTraits: AccessibilityTraits = .isHeader
+
   @Bindable var engine: BrowserEngine
   let store: BrowserStore
 
@@ -61,7 +71,8 @@ struct ExtensionToolbar: View {
       } label: {
         Image(systemName: "puzzlepiece.extension")
       }
-      .help(PanelsL10n.format("Extensions for %@", .string(store.profileName)))
+      .help(Self.accessibilityLabel(profileName: store.profileName))
+      .accessibilityLabel(Self.accessibilityLabel(profileName: store.profileName))
       .accessibilityLabel(PanelsL10n.format("Extensions for %@", .string(store.profileName)))
     }
     .popover(
@@ -74,7 +85,10 @@ struct ExtensionToolbar: View {
       case .popup(let context):
         VStack(spacing: 0) {
           HStack {
-            Text(context.name).font(.headline).lineLimit(1)
+            Text(context.name)
+              .font(.headline)
+              .lineLimit(1)
+              .accessibilityAddTraits(Self.popupTitleTraits)
             Spacer()
             Button {
               engine.extensionPanel = nil
@@ -97,6 +111,7 @@ struct ExtensionToolbar: View {
 
 /// Manage installed extensions in place: run, turn on or off, pin, inspect, and remove.
 struct ExtensionManagerPanel: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let engine: BrowserEngine
   let store: BrowserStore
   @State private var detailID: String?
@@ -123,6 +138,7 @@ struct ExtensionManagerPanel: View {
     VStack(alignment: .leading, spacing: 0) {
       VStack(alignment: .leading, spacing: 2) {
         Text(PanelsL10n.string("Extensions")).font(.headline)
+          .accessibilityAddTraits(Self.headingTraits)
         Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
           .font(.caption).foregroundStyle(.secondary)
       }

@@ -9,7 +9,20 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
-private struct WorkspaceProbeIdentity: Codable {
+enum WorkspaceProbeEvidence {
+  static func fixtureDocument(_ json: String?, address: String? = nil) -> [String: Any]? {
+    guard let data = json?.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      value["fixture"] as? String == "v1",
+      let instance = value["instance"] as? String,
+      !instance.isEmpty,
+      address == nil || value["url"] as? String == address
+    else { return nil }
+    return value
+  }
+}
+
+struct WorkspaceProbeIdentity: Codable, Equatable {
   let first: UUID
   let second: UUID
   let alpha: UUID
@@ -143,7 +156,7 @@ final class WorkspaceProbe {
     _ = try await document(selected)
     let background = selected == ids.firstOrdinary ? ids.betaTab : ids.firstOrdinary
     try expect(
-      runtime.nativeTabID(forID: background.uuidString) == -1,
+      !hasNativePage(background),
       "saved background ordinary tabs stay deferred until selection")
     first.perform(.tab(space: ids.alpha, tab: ids.firstOrdinary))
     _ = try await document(ids.firstOrdinary)
@@ -153,21 +166,20 @@ final class WorkspaceProbe {
       betaDocument["cookie"] as? String == "account=beta",
       "restored managed beta page uses its dedicated account")
     try expect(
-      runtime.nativeTabID(forID: ids.firstPin.uuidString) == -1,
+      !hasNativePage(ids.firstPin),
       "an unselected managed pin remains a row without starting a native page")
     if phase == "initial" {
       _ = try await document(ids.closed)
       try expect(
-        runtime.nativeTabID(forID: ids.secondPin.uuidString) == -1,
+        !hasNativePage(ids.secondPin),
         "new-window shared pin does not duplicate the first window's live page")
     } else {
       try expect(
-        runtime.nativeTabID(forID: ids.closed.uuidString) == -1,
+        !hasNativePage(ids.closed),
         "archived second-window page is not reopened during native restoration")
     }
     first.perform(.tab(space: ids.alpha, tab: ids.firstPin))
     var firstDocument = try await document(ids.firstPin)
-    let firstNative = runtime.nativeTabID(forID: ids.firstPin.uuidString)
     if phase == "initial" {
       let address = fixture.appending(path: "workspace-pin-current").absoluteString
       let literal = String(data: try JSONEncoder().encode(address), encoding: .utf8)!
@@ -197,11 +209,21 @@ final class WorkspaceProbe {
       "first-window navigation cannot change the shared original pin or another window's page")
     second.perform(.tab(space: ids.alpha, tab: ids.secondPin))
     let secondDocument = try await document(ids.secondPin)
-    try expect(
+    let firstOwner = runtime.windowID(forTabID: ids.firstPin.uuidString)
+    let secondOwner = runtime.windowID(forTabID: ids.secondPin.uuidString)
+    let distinctWindowTabs =
       ids.firstPin != ids.secondPin
-        && firstNative != runtime.nativeTabID(forID: ids.secondPin.uuidString)
-        && firstDocument["instance"] as? String != secondDocument["instance"] as? String,
-      "shared pin definitions materialize as distinct window-owned native documents")
+      && firstOwner == ids.first.uuidString && secondOwner == ids.second.uuidString
+      && firstOwner != secondOwner
+    let distinctDocuments =
+      firstDocument["instance"] as? String
+      != secondDocument["instance"] as? String
+    try expect(
+      distinctWindowTabs && distinctDocuments,
+      "shared pin definitions materialize as distinct window-owned native documents "
+        + "[distinctModelTabs=\(ids.firstPin != ids.secondPin), "
+        + "firstOwner=\(firstOwner ?? "none"), secondOwner=\(secondOwner ?? "none"), "
+        + "distinctDocuments=\(distinctDocuments)]")
     try expect(
       secondDocument["cookie"] as? String == "account=alpha",
       "separate pin instances explicitly share the profile account")
@@ -228,7 +250,8 @@ final class WorkspaceProbe {
     let secondAfterCatalog = try await document(ids.secondPin) as NSDictionary
     try expect(
       firstAfterCatalog == firstDocument as NSDictionary
-        && runtime.nativeTabID(forID: ids.firstPin.uuidString) == firstNative
+        && runtime.windowID(forTabID: ids.firstPin.uuidString) == ids.first.uuidString
+        && runtime.windowID(forTabID: ids.secondPin.uuidString) == ids.second.uuidString
         && secondAfterCatalog == secondDocument as NSDictionary,
       "catalog propagation preserves both existing window-owned native documents")
     first.toggleFolder(first.session.spaces[0].folders[0].id, in: ids.alpha)
@@ -277,6 +300,11 @@ final class WorkspaceProbe {
     ) { _ in }
   }
 
+  private func hasNativePage(_ tab: UUID) -> Bool {
+    runtime.windowID(forTabID: tab.uuidString) != nil
+      || runtime.view(forTabID: tab.uuidString) != nil
+  }
+
   private func captureWindows() async throws {
     for (index, host) in hosts.enumerated() {
       host.layoutSubtreeIfNeeded()
@@ -302,11 +330,7 @@ final class WorkspaceProbe {
             "({fixture:document.documentElement.dataset.arcusisFixture,url:location.href,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('account')})"
         ) { continuation.resume(returning: $0) }
       }
-      if let data = json?.data(using: .utf8),
-        let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["fixture"] as? String == "v1", value["instance"] as? String != nil,
-        address == nil || value["url"] as? String == address
-      {
+      if let value = WorkspaceProbeEvidence.fixtureDocument(json, address: address) {
         return value
       }
       try await Task.sleep(for: .milliseconds(100))

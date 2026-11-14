@@ -4,9 +4,19 @@
 
 import SwiftUI
 
+enum InspectorComponentAccessibility {
+  static func traits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
+}
+
 struct InspectorDetailsView: View {
   @Bindable var inspector: InspectorModel
   @Bindable var model: InspectorDetailsModel
+
+  static func componentSelectionTraits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
 
   var body: some View {
     ScrollView {
@@ -62,10 +72,17 @@ struct InspectorDetailsView: View {
                   Color.accentColor)
               }
             }.padding(.vertical, 4).contentShape(Rectangle())
-          }.buttonStyle(.plain).help(
+          }
+          .buttonStyle(.plain)
+          .accessibilityAddTraits(
+            InspectorComponentAccessibility.traits(
+              isSelected: model.selectedComponent == branch.id))
+          .help(
             InspectorDetailsL10n.format(
               "Inspect %1$@ data", arguments: [.string(branch.entry.name)]
             ))
+            .accessibilityAddTraits(
+              Self.componentSelectionTraits(isSelected: model.selectedComponent == branch.id))
         }
         if let limit = tree.limit {
           Text(InspectorDetailsL10n.string(limit)).font(.system(size: 10))
@@ -336,6 +353,12 @@ struct InspectorDetailsView: View {
       let children = branches(entries, parent: entry.id, depth: depth + 1)
       return Branch(entry: entry, children: children.isEmpty ? nil : children)
     }
+  }
+}
+
+enum InspectorComponentRowAccessibility {
+  static func traits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
   }
 }
 

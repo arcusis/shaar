@@ -202,7 +202,7 @@ final class InspectorStylesModel {
       failure = nil
     } catch {
       if inspector.documentGeneration == generation, !(error is CancellationError) {
-        failure = InspectorL10n.display(error.localizedDescription)
+        failure = Self.failureMessage(for: error)
       }
     }
   }
@@ -435,7 +435,7 @@ final class InspectorStylesModel {
   }
 
   func togglePseudo(_ name: String) async {
-    guard !forcing, !busy, InspectorPseudoForce.names.contains(name), let inspector,
+    guard !Task.isCancelled, !forcing, !busy, InspectorPseudoForce.names.contains(name), let inspector,
       inspector.isOpen,
       let selection = inspector.selection, selection.locked
     else { return }
@@ -463,13 +463,15 @@ final class InspectorStylesModel {
       await refresh(force: true)
     } catch {
       if turningOn, inspector.isOpen, inspector.selection?.id == selection.id {
-        failure = InspectorL10n.display(error.localizedDescription)
+        failure = Self.failureMessage(for: error)
       }
     }
   }
 
   func edit(property: String, value: String, important: Bool) async {
-    guard !busy, let inspector, let selection = inspector.selection, selection.locked else {
+    guard !Task.isCancelled, !busy, let inspector, let selection = inspector.selection,
+      selection.locked
+    else {
       return
     }
     do {
@@ -484,7 +486,7 @@ final class InspectorStylesModel {
       }
       await refresh(force: true)
       await inspector.refresh()
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
 
   func editRule(
@@ -531,7 +533,7 @@ final class InspectorStylesModel {
   }
 
   private func applyStyleResult(_ name: String, arguments: [Any]) async {
-    guard let inspector else { return }
+    guard !Task.isCancelled, let inspector else { return }
     do {
       let literal = String(
         data: try JSONSerialization.data(withJSONObject: arguments), encoding: .utf8)!
@@ -544,11 +546,11 @@ final class InspectorStylesModel {
       }
       await refresh(force: true)
       await inspector.refresh()
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
 
   func undo() async {
-    guard !busy, let inspector else { return }
+    guard !Task.isCancelled, !busy, let inspector else { return }
     do {
       let result =
         try await inspector.evaluate("globalThis.__shaarInspectorStyles.undo()") as? [String: Any]
@@ -558,7 +560,7 @@ final class InspectorStylesModel {
       }
       await refresh(force: true)
       await inspector.refresh()
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
 
   func clearOverlay(generation: Int? = nil) async {
@@ -575,7 +577,9 @@ final class InspectorStylesModel {
   }
 
   func toggleOverlay() async {
-    guard let inspector, canOverlay, inspector.isOpen, selectedID == inspector.selection?.id else {
+    guard !Task.isCancelled, let inspector, canOverlay, inspector.isOpen,
+      selectedID == inspector.selection?.id
+    else {
       return
     }
     let generation = inspector.documentGeneration
@@ -626,10 +630,11 @@ final class InspectorStylesModel {
         inspector.selection?.id == identity
       else { throw CancellationError() }
       overlay = true
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
 
   func screenshot() async throws -> Data {
+    guard !Task.isCancelled else { throw CancellationError() }
     guard !capturing else {
       throw InspectorFailure(InspectorL10n.string("An element capture is already in progress."))
     }
@@ -694,7 +699,14 @@ final class InspectorStylesModel {
       panel.nameFieldStringValue = "element@2x.png"
       guard await panel.begin() == .OK, let url = panel.url else { return }
       try data.write(to: url, options: .atomic)
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return InspectorL10n.display(error.localizedDescription)
+    }
+    return InspectorL10n.string("Could not complete the page style change. Try again.")
   }
 
   var exported: [InspectorDeclaration] {

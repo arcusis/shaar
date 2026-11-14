@@ -48,6 +48,7 @@ struct WebShareSheet: View {
 }
 
 struct WebShareSheetContent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let request: WebShareRequest
   let onCancel: () -> Void
   let onShare: () -> Void
@@ -56,27 +57,34 @@ struct WebShareSheetContent: View {
     VStack(alignment: .leading, spacing: 12) {
       Text(PanelsL10n.string("Share"))
         .font(.title2.weight(.semibold))
-      Text(request.originLabel)
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .textSelection(.enabled)
-      if !request.title.isEmpty {
-        Text(request.title)
-          .font(.headline)
-          .textSelection(.enabled)
+        .accessibilityAddTraits(Self.headingTraits)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 12) {
+          Text(request.originLabel)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+          if !request.title.isEmpty {
+            Text(request.title)
+              .font(.headline)
+              .textSelection(.enabled)
+          }
+          if !request.text.isEmpty {
+            Text(request.text)
+              .font(.body)
+              .textSelection(.enabled)
+          }
+          if let url = request.url {
+            Text(url.absoluteString)
+              .font(.callout)
+              .foregroundStyle(.secondary)
+              .textSelection(.enabled)
+              .lineLimit(2)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
-      if !request.text.isEmpty {
-        Text(request.text)
-          .font(.body)
-          .textSelection(.enabled)
-      }
-      if let url = request.url {
-        Text(url.absoluteString)
-          .font(.callout)
-          .foregroundStyle(.secondary)
-          .textSelection(.enabled)
-          .lineLimit(2)
-      }
+      .frame(minHeight: 80, maxHeight: 220)
       HStack {
         Spacer()
         Button(PanelsL10n.string("Cancel"), role: .cancel, action: onCancel)
@@ -136,7 +144,7 @@ struct WebShareAnchorView: NSViewRepresentable {
 
 @MainActor
 final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDelegate,
-  NSSharingServiceDelegate
+  @MainActor NSCloudSharingServiceDelegate
 {
   let picker: NSSharingServicePicker
   let outcome = WebShareOutcomeGate()
@@ -179,6 +187,12 @@ final class WebShareSystemPicker: NSObject, @MainActor NSSharingServicePickerDel
     _ sharingService: NSSharingService, didFailToShareItems items: [Any], error: Error
   ) {
     outcome.finish(false)
+  }
+
+  func sharingService(
+    _ sharingService: NSSharingService, didCompleteForItems items: [Any], error: Error?
+  ) {
+    outcome.finish(error == nil)
   }
 }
 

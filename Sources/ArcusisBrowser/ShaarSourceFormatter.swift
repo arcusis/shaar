@@ -12,6 +12,7 @@ enum ShaarSourceKind: Equatable {
 
 enum ShaarSourceFormatter {
   static let maximumBytes = 512 * 1_024
+  private static let maximumIndentationDepth = 32
   private static let regexPrefixWords: Set<String> = [
     "return", "throw", "case", "delete", "void", "typeof", "instanceof",
     "in", "of", "yield", "await", "else", "do",
@@ -250,7 +251,9 @@ enum ShaarSourceFormatter {
   private static func breakLine(_ result: inout String, depth: Int) {
     while result.last == " " { result.removeLast() }
     if !result.isEmpty && !result.hasSuffix("\n") { result.append("\n") }
-    if depth > 0 { result.append(String(repeating: "  ", count: depth)) }
+    if depth > 0 {
+      result.append(String(repeating: "  ", count: min(depth, maximumIndentationDepth)))
+    }
   }
 
   private static func endsLine(_ result: String) -> Bool {

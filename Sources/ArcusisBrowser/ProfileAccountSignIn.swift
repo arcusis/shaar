@@ -7,6 +7,14 @@ import BrowserCore
 import Observation
 import SwiftUI
 
+enum ProfileAccountSignInAccessibility {
+  static var loadingLabel: String { SettingsL10n.string("Loading sign-in…") }
+
+  static func loadingPageLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string("Loading sign-in page…", table: "Settings", language: language)
+  }
+}
+
 /// Signs a profile in to, or out of, a provider account in a window that uses that
 /// profile's own engine storage. The window keeps no tabs once it closes.
 @MainActor
@@ -188,9 +196,13 @@ final class ProfileAccountSignIn {
     } catch { return nil }
   }
 
-  func ownsWindow(_ id: String) -> Bool { id == engine.windowID || popups[id] != nil }
+  func ownsWindow(_ id: String) -> Bool {
+    !finished && (id == engine.windowID || popups[id] != nil)
+  }
 
-  var windowIDs: Set<String> { Set(popups.keys).union([engine.windowID]) }
+  var windowIDs: Set<String> {
+    finished ? [] : Set(popups.keys).union([engine.windowID])
+  }
 
   func showWindow(_ id: String, active: Bool) {
     guard visible, !finished, let window = popups[id]?.window else { return }
@@ -358,6 +370,7 @@ private struct ProfileAccountSignInView: View {
           ChromiumPage(engine: engine, tabID: id)
         } else {
           ProgressView()
+            .accessibilityLabel(ProfileAccountSignInAccessibility.loadingPageLabel())
         }
       }
     }

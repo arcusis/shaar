@@ -19,6 +19,11 @@ struct RendererRecoveryIdentity: Codable {
   var hasUsableDocumentIdentity: Bool {
     !lastDocument.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
+
+  static func recoveryRetainsDocumentURL(original: String?, restored: String?) -> Bool {
+    guard let original, let restored, !original.isEmpty else { return false }
+    return original == restored
+  }
 }
 
 /// Terminates authored renderers only. The browser process and original account pages stay alive.
@@ -159,8 +164,10 @@ final class RendererRecoveryProbe {
     let after = try await document(tab)
     try expect(
       after["instance"] as? String != before["instance"] as? String
+        && RendererRecoveryIdentity.recoveryRetainsDocumentURL(
+          original: before["href"] as? String, restored: after["href"] as? String)
         && runtime.nativeTabID(forID: tab.uuidString) == native,
-      "reload creates a replacement document in the existing native tab")
+      "reload creates a replacement document at its prior URL in the existing native tab")
     try expect(
       after["cookie"] as? String == "recoveryAccount=alpha" && after["local"] as? String == "alpha",
       "renderer reload retains the owning profile's cookies and local storage")

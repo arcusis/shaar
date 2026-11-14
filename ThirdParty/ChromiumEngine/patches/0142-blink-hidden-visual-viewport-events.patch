@@ -1,0 +1,124 @@
+diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
+--- a/third_party/blink/renderer/core/dom/document.cc
++++ b/third_party/blink/renderer/core/dom/document.cc
+@@ -28,6 +28,7 @@
+  */
+ 
+ #include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/frame/dom_visual_viewport.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -6754,21 +6755,49 @@
+   VisualViewportScrollEvent* event =
+       MakeGarbageCollected<VisualViewportScrollEvent>();
+   event->SetTarget(domWindow()->visualViewport());
+-  scripted_animation_controller_->EnqueuePerFrameEvent(event);
++  EnqueueVisualViewportEvent(event);
+ }
+ 
+ void Document::EnqueueVisualViewportScrollEndEvent() {
+   VisualViewportScrollEndEvent* event =
+       MakeGarbageCollected<VisualViewportScrollEndEvent>();
+   event->SetTarget(domWindow()->visualViewport());
+-  scripted_animation_controller_->EnqueuePerFrameEvent(event);
++  EnqueueVisualViewportEvent(event);
+ }
+ 
+ void Document::EnqueueVisualViewportResizeEvent() {
+   VisualViewportResizeEvent* event =
+       MakeGarbageCollected<VisualViewportResizeEvent>();
+   event->SetTarget(domWindow()->visualViewport());
++  EnqueueVisualViewportEvent(event);
++}
++
++void Document::EnqueueVisualViewportEvent(Event* event) {
+   scripted_animation_controller_->EnqueuePerFrameEvent(event);
++  if (!hidden() || hidden_visual_viewport_event_task_pending_ ||
++      !GetExecutionContext()) {
++    return;
++  }
++  hidden_visual_viewport_event_task_pending_ = true;
++  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
++      FROM_HERE,
++      BindOnce(&Document::DispatchHiddenVisualViewportEvents,
++               WrapPersistent(this)));
++}
++
++void Document::DispatchHiddenVisualViewportEvents() {
++  hidden_visual_viewport_event_task_pending_ = false;
++  if (!GetExecutionContext() || !domWindow())
++    return;
++  EventTarget* visual_viewport = domWindow()->visualViewport();
++  scripted_animation_controller_->DispatchEvents(base::BindRepeating(
++      [](EventTarget* target, Event* event) {
++        return event->target() == target &&
++               (event->type() == event_type_names::kScroll ||
++                event->type() == event_type_names::kScrollend ||
++                event->type() == event_type_names::kResize);
++      },
++      visual_viewport));
+ }
+ 
+ void Document::DispatchMediaQueryListEvents() {
+diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/renderer/core/dom/document.h
+--- a/third_party/blink/renderer/core/dom/document.h
++++ b/third_party/blink/renderer/core/dom/document.h
+@@ -1660,6 +1660,8 @@
+   void EnqueueVisualViewportScrollEvent();
+   void EnqueueVisualViewportScrollEndEvent();
+   void EnqueueVisualViewportResizeEvent();
++  void EnqueueVisualViewportEvent(Event*);
++  void DispatchHiddenVisualViewportEvents();
+   void EnqueueScrollSnapChangeEvent(Node* target,
+                                     Member<Node>& block_target,
+                                     Member<Node>& inline_target);
+@@ -3117,6 +3119,7 @@
+   // document with the capture flag set, then this flag is set to true. Once
+   // set to true, it is never set to false again.
+   bool has_capture_listener_ = false;
++  bool hidden_visual_viewport_event_task_pending_ = false;
+ 
+   int load_event_delay_count_ = 0;
+ 
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
+@@ -12,6 +12,8 @@
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/blink/renderer/core/animation/document_timeline.h"
+ #include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/frame/dom_visual_viewport.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/dom/events/event.h"
+ #include "third_party/blink/renderer/core/dom/events/event_target.h"
+ #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
+@@ -213,6 +215,28 @@
+   EXPECT_EQ(1, observer.Order()[1]);
+ }
+ 
++TEST_F(ScriptedAnimationControllerTest,
++       HiddenDocumentVisualViewportEventsDispatchWithoutAnimationFrame) {
++  GetPage().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
++                               /*is_initial_state=*/false);
++  TaskOrderObserver observer;
++  DOMVisualViewport* viewport = GetDocument().domWindow()->visualViewport();
++  viewport->addEventListener(AtomicString("scroll"),
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(1)));
++  viewport->addEventListener(AtomicString("scrollend"),
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(2)));
++  viewport->addEventListener(AtomicString("resize"),
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(3)));
++
++  GetDocument().EnqueueVisualViewportScrollEvent();
++  GetDocument().EnqueueVisualViewportScrollEndEvent();
++  GetDocument().EnqueueVisualViewportResizeEvent();
++  EXPECT_TRUE(observer.Order().empty());
++
++  task_environment_.RunUntilIdle();
++  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2, 3));
++}
++
+ TEST_F(ScriptedAnimationControllerTest, TestHasCallback) {
+   TaskOrderObserver observer;
+ 

@@ -28,6 +28,25 @@ struct ProfileAccountsTests {
     #expect(GoogleAccountList.accounts(fromBody: "<html>Sign in</html>") == nil)
   }
 
+  @Test func googleAccountListRejectsOversizedResponseBodies() throws {
+    let body = try JSONSerialization.data(withJSONObject: [
+      "gaia.l.a.r",
+      [["gaia.l.a", 1, "Alex Example", "alex@example.com", "https://photos.example/avatar.png"]],
+      String(repeating: "x", count: 1_048_576),
+    ])
+    let text = try #require(String(data: body, encoding: .utf8))
+    #expect(text.utf8.count > 1_048_576)
+    #expect(GoogleAccountList.accounts(fromBody: text) == nil)
+  }
+
+  @Test func googlePhotoURLRejectsInvalidAuthorities() {
+    #expect(
+      GoogleAccountList.photoURL(from: "https://user:secret@photos.example/avatar.png") == nil)
+    #expect(GoogleAccountList.photoURL(from: "https://user@photos.example/avatar.png") == nil)
+    #expect(GoogleAccountList.photoURL(from: "https://photos.example:65536/avatar.png") == nil)
+    #expect(GoogleAccountList.photoURL(from: "https://photos.example/user@avatar.png") != nil)
+  }
+
   @Test func providersRecognizeTheirSignedInLandingPages() {
     #expect(AccountProvider.google.isSignedInPage(URL(string: "https://myaccount.google.com/")!))
     #expect(AccountProvider.google.isSignedInPage(URL(string: "https://www.google.com/")!))

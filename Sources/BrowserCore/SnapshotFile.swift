@@ -28,19 +28,23 @@ public struct SnapshotFile<Value: ValidatedSnapshot>: Sendable {
   /// Returns nil when neither the primary nor the backup exists. Throws the primary's error when
   /// no valid backup can replace it; both files are then left untouched.
   public func load() throws -> Value? {
-    do {
-      if let value = try Self.read(url) { return value }
-    } catch {
-      guard let backup = try? Self.read(backupURL) else { throw error }
-      // The damaged primary must not rotate into the backup on the next save.
-      try DurableFileWriter.move(url, to: damagedURL)
-      return backup
+    try SnapshotFileLocks.withLocks(for: [url, backupURL, damagedURL]) {
+      do {
+        if let value = try Self.read(url) { return value }
+      } catch {
+        guard let backup = try? Self.read(backupURL) else { throw error }
+        // The damaged primary must not rotate into the backup on the next save.
+        try DurableFileWriter.move(url, to: damagedURL)
+        return backup
+      }
+      return try Self.read(backupURL)
     }
-    return try Self.read(backupURL)
   }
 
   /// Reads only the primary file, without falling back or moving anything. For verification.
-  public func loadPrimary() throws -> Value? { try Self.read(url) }
+  public func loadPrimary() throws -> Value? {
+    try SnapshotFileLocks.withLocks(for: [url]) { try Self.read(url) }
+  }
 
   public func save(_ value: Value) throws {
     try save(value, syncDirectory: DurableFileWriter.flushDirectory)
@@ -48,11 +52,13 @@ public struct SnapshotFile<Value: ValidatedSnapshot>: Sendable {
 
   /// Inject only the final durability boundary; validation and atomic replacement stay real.
   func save(_ value: Value, syncDirectory: (URL) throws -> Void) throws {
-    try value.validate()
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    try DurableFileWriter.replace(
-      url, with: encoder.encode(value), backup: backupURL, syncDirectory: syncDirectory)
+    try SnapshotFileLocks.withLocks(for: [url, backupURL]) {
+      try value.validate()
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      try DurableFileWriter.replace(
+        url, with: encoder.encode(value), backup: backupURL, syncDirectory: syncDirectory)
+    }
   }
 
   private static func read(_ url: URL) throws -> Value? {
@@ -60,6 +66,41 @@ public struct SnapshotFile<Value: ValidatedSnapshot>: Sendable {
     let value = try JSONDecoder().decode(Value.self, from: Data(contentsOf: url))
     try value.validate()
     return value
+  }
+}
+
+/// Separate Sendable SnapshotFile values may address the same files, so serialize their reads and
+/// replacements by canonical path within this process.
+private enum SnapshotFileLocks {
+  private static let registry = SnapshotFileLockRegistry()
+
+  static func withLocks<T>(for urls: [URL], _ operation: () throws -> T) rethrows -> T {
+    let keys = Set(urls.map(registryKey)).sorted()
+    let locks = keys.map { registry.lock(for: $0) }
+    for lock in locks { lock.lock() }
+    defer {
+      for lock in locks.reversed() { lock.unlock() }
+    }
+    return try operation()
+  }
+
+  private static func registryKey(for url: URL) -> String {
+    let directory = url.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL
+    return directory.appending(path: url.lastPathComponent).standardizedFileURL.path
+  }
+}
+
+private final class SnapshotFileLockRegistry: @unchecked Sendable {
+  private let registryLock = NSLock()
+  private var locks: [String: NSLock] = [:]
+
+  func lock(for path: String) -> NSLock {
+    registryLock.lock()
+    defer { registryLock.unlock() }
+    if let lock = locks[path] { return lock }
+    let lock = NSLock()
+    locks[path] = lock
+    return lock
   }
 }
 

@@ -8,6 +8,12 @@ import Testing
 @testable import ShaarVerification
 
 @Suite @MainActor struct ShaarBrowsingQAArgumentsTests {
+  @Test func missingCLIOperandsFailBeforeStartingTheEngine() {
+    #expect(ShaarBrowsingQA.run(arguments: []) == 2)
+    #expect(ShaarBrowsingQA.run(arguments: ["--browsing-qa"]) == 2)
+    #expect(ShaarBrowsingQA.run(arguments: ["--browsing-qa", "report.json"]) == 2)
+  }
+
   @Test func unsupportedScenarioReturnsStructuredErrorBeforeEngineStartup() throws {
     let root = FileManager.default.temporaryDirectory.appending(
       path: "browsing-qa-scenario-" + UUID().uuidString)

@@ -10,9 +10,10 @@ enum BugReportArchive {
     bounded page-level HAR built from resource timing and instrumented fetch/XMLHttpRequest calls.
     Capture starts when page tools are enabled and continues across navigation while they stay open; buffered resource timing from the current navigation is also included. Response bodies, browser-generated request headers,
     cross-origin headers/timings without permission, workers, WebSockets, and other frames may be
-    unavailable. Unknown methods use UNKNOWN and unknown timing phases use -1. Console messages and
-    screenshot content are not redacted. HAR URL credentials, query values, and fragments are
-    redacted. Nothing was uploaded.
+    unavailable. Unknown methods use UNKNOWN and unknown timing phases use -1. Console text redacts
+    common credential patterns and strips URL credentials, queries, and fragments; HAR URLs receive
+    the same URL redaction. URL paths, screenshots, and unrecognized secrets may still contain
+    sensitive data. Nothing was uploaded.
     """
 
   static func har(snapshot: [String: Any], includeSensitiveHeaders: Bool, version: String)
@@ -67,9 +68,22 @@ enum BugReportArchive {
       guard let name = row["name"] as? String, let value = row["value"] as? String else {
         return nil
       }
+      let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      let components = Set(
+        normalizedName.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+      let containsSecretMarker =
+        !components.isDisjoint(
+          with: [
+            "token", "secret", "password", "passwd", "credential", "csrf", "xsrf",
+            "signature", "session", "auth", "authorization", "cookie",
+          ])
+        || (components.contains("api") && components.contains("key"))
+        || (components.contains("client") && components.contains("key"))
+        || (components.contains("access") && components.contains("key"))
+        || (components.contains("private") && components.contains("key"))
       let hidden =
         !includeSensitive
-        && sensitive.contains(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        && (sensitive.contains(normalizedName) || containsSecretMarker)
       return [
         "name": String(name.prefix(128)),
         "value": hidden ? "[redacted]" : String(value.prefix(512)),
@@ -91,11 +105,13 @@ enum BugReportArchive {
   }
 
   private static func redactURLs(in value: String) -> String {
-    guard let regex = try? NSRegularExpression(
-      pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
+    guard
+      let regex = try? NSRegularExpression(
+        pattern: #"(?:https?|file|webpack|vite)://[^\s<>\"'`]+"#, options: [.caseInsensitive])
     else { return value }
     var result = value
-    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed()
+    for match in regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
+      .reversed()
     {
       guard let range = Range(match.range, in: result) else { continue }
       result.replaceSubrange(range, with: redactedURL(String(result[range])).url)

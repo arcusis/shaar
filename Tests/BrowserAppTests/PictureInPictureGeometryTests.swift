@@ -46,12 +46,14 @@ final class PictureInPictureGeometryTests: XCTestCase {
     let limits = CGSize(width: 800, height: 600)
 
     XCTAssertEqual(
-      Geometry.resized(frame, edges: .left, by: CGSize(width: 20, height: 0), minimum: size,
+      Geometry.resized(
+        frame, edges: .left, by: CGSize(width: 20, height: 0), minimum: size,
         maximum: limits), frame)
 
     let normalFrame = CGRect(x: 10, y: 20, width: 320, height: 180)
     XCTAssertEqual(
-      Geometry.resized(normalFrame, edges: [], by: CGSize(width: 20, height: 0), minimum: size,
+      Geometry.resized(
+        normalFrame, edges: [], by: CGSize(width: 20, height: 0), minimum: size,
         maximum: limits), normalFrame)
   }
 }

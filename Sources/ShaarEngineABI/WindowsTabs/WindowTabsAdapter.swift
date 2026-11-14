@@ -81,6 +81,10 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
 
   public func openWindow(id: String, scope: ShaarTabScope) throws {
     guard !id.isEmpty, windows[id] == nil else { throw ShaarWindowTabsError.duplicateWindow }
+    guard !scope.profileID.isEmpty else { throw ShaarWindowTabsError.invalidScope }
+    if case .privateSession(_, let sessionID) = scope, sessionID.isEmpty {
+      throw ShaarWindowTabsError.invalidScope
+    }
     try engine.openWindow(id: id, scope: scope)
     windows[id] = WindowState(
       scope: scope, boundProfileIDs: [scope.profileID], activeProfileID: scope.profileID,
@@ -148,11 +152,38 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
     case .privateSession:
       guard state.scope == scope else { throw ShaarWindowTabsError.scopeMismatch }
     }
-    try engine.openTab(id: id, windowID: windowID, url: url, foreground: foreground)
+    let previousProfileID = state.activeProfileID
+    let needsProfileSwitch = previousProfileID != scope.profileID
+    if needsProfileSwitch {
+      try engine.setActiveProfile(id: scope.profileID, windowID: windowID)
+    }
+    do {
+      try engine.openTab(id: id, windowID: windowID, url: url, foreground: foreground)
+    } catch {
+      if needsProfileSwitch {
+        do {
+          try engine.setActiveProfile(id: previousProfileID, windowID: windowID)
+        } catch {
+          state.activeProfileID = scope.profileID
+          windows[windowID] = state
+        }
+      }
+      throw error
+    }
     state.tabIDsByProfile[scope.profileID, default: []].append(id)
     if foreground {
       state.activeProfileID = scope.profileID
       state.activeTabByProfile[scope.profileID] = id
+    }
+    if needsProfileSwitch && !foreground {
+      do {
+        try engine.setActiveProfile(id: previousProfileID, windowID: windowID)
+      } catch {
+        state.activeProfileID = scope.profileID
+        windows[windowID] = state
+        tabOwners[id] = TabOwner(windowID: windowID, profileID: scope.profileID)
+        throw error
+      }
     }
     windows[windowID] = state
     tabOwners[id] = TabOwner(windowID: windowID, profileID: scope.profileID)
@@ -259,5 +290,5 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
 
 public enum ShaarWindowTabsError: Error, Equatable {
   case duplicateWindow, unknownWindow, duplicateTab, unknownTab, scopeMismatch, invalidPlacement,
-    invalidRequest
+    invalidRequest, invalidScope
 }

@@ -5,12 +5,17 @@
 import AppKit
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct WebShareConsentTests {
+  @Test func webShareSheetTitleIsVoiceOverHeading() {
+    #expect(WebShareSheetContent.headingTraits == .isHeader)
+  }
+
   private func openedStore() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com/article")!))
@@ -66,6 +71,17 @@ struct WebShareConsentTests {
     #expect(sheet.tabID == share.tabID)
     #expect(sheet.matches(store.session))
     _ = WebShareSheetContent(request: share, onCancel: {}, onShare: {}).body
+  }
+
+  @Test func maximumLengthShareTextKeepsTheConsentSheetBounded() throws {
+    let store = openedStore()
+    let share = try request(store, title: "", text: String(repeating: "x", count: 4096), url: nil)
+    let host = NSHostingView(
+      rootView: WebShareSheetContent(request: share, onCancel: {}, onShare: {}))
+    host.frame = NSRect(x: 0, y: 0, width: 488, height: 500)
+    host.layoutSubtreeIfNeeded()
+
+    #expect(host.fittingSize.height < 500)
   }
 
   @Test func rejectsMalformedSharePayloads() throws {
@@ -257,6 +273,29 @@ struct WebShareConsentTests {
       error: NSError(domain: "WebShareConsentTests", code: 1))
     systemPicker.sharingService(service, didShareItems: ["Shared item"])
     #expect(outcomes == [false])
+  }
+
+  @Test func cloudSharingCompletionResolvesTheShareAndTreatsErrorsAsCancellation() {
+    let service = NSSharingService(
+      title: "Test", image: NSImage(size: NSSize(width: 1, height: 1)),
+      alternateImage: nil, handler: {})
+    let successfulPicker = WebShareSystemPicker(items: ["Shared item"])
+    var successfulOutcomes: [Bool] = []
+    successfulPicker.outcome.onFinish = { successfulOutcomes.append($0) }
+
+    successfulPicker.sharingService(service, didCompleteForItems: ["Shared item"], error: nil)
+
+    #expect(successfulOutcomes == [true])
+
+    let failedPicker = WebShareSystemPicker(items: ["Shared item"])
+    var failedOutcomes: [Bool] = []
+    failedPicker.outcome.onFinish = { failedOutcomes.append($0) }
+    failedPicker.sharingService(
+      service, didCompleteForItems: ["Shared item"],
+      error: NSError(domain: "WebShareConsentTests", code: 2))
+    failedPicker.sharingService(service, didShareItems: ["Shared item"])
+
+    #expect(failedOutcomes == [false])
   }
 
   @Test func dismissingTheSystemPickerCancelsTheShareOnce() {

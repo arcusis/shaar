@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_H_
 
 #include <optional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -13,6 +14,7 @@
 #include <vector>
 
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "ui/base/window_open_disposition.h"
 
 class TabStripModel;
 class Browser;
@@ -21,16 +23,26 @@ class Profile;
 namespace content {
 class WebContents;
 }
+struct TabStripSelectionChange;
 
 namespace shaar::windows_tabs {
 
+bool AdoptPageWebContents(content::WebContents* source,
+                          std::unique_ptr<content::WebContents>* contents,
+                          const GURL& target_url,
+                          WindowOpenDisposition disposition,
+                          bool user_gesture);
+
 struct SelectedRegularTab {
+  shaar_engine* engine;
   shaar_window* window;
   shaar_tab* tab;
   std::string profile_id;
   std::string window_id;
   std::string tab_id;
 };
+
+bool ShouldEmitTabActivation(const TabStripSelectionChange& selection);
 
 bool HasHiddenNativeWindow(content::WebContents* contents);
 void UpdateDockedDevTools(content::WebContents* inspected,
@@ -57,14 +69,21 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
     std::unordered_set<Browser*> pending_closes;
   };
   Browser* FindBrowser(shaar_engine*, shaar_window*) override;
+  Browser* FindBrowserForProfile(shaar_engine*, shaar_window*,
+                                 std::string_view profile_id);
   bool IsSelectedWebContents(shaar_engine*, shaar_window*, shaar_tab*,
                              content::WebContents*) override;
+  std::optional<SelectedRegularTab> FindRegularTab(
+      shaar_engine*, content::WebContents*) const;
   std::optional<SelectedRegularTab> FindSelectedRegularTab(
       shaar_engine*, content::WebContents*) const;
+  std::optional<SelectedRegularTab> FindRegularTabForBrowser(
+      Browser*, content::WebContents*) const;
   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
                                          shaar_tab*) override;
   content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,
                                              std::string_view) override;
+  content::WebContents* FindWebContentsByID(shaar_engine*, std::string_view);
   std::string_view TabID(shaar_engine*, shaar_window*, shaar_tab*) override;
   // BEGIN find
   std::string_view WindowID(shaar_engine*, shaar_window*) override;
@@ -79,11 +98,23 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   void GetTabsForBrowser(
       shaar_engine*, shaar_window*, Browser*,
       std::unordered_map<std::string, content::WebContents*>*) const;
-  void BindWindow(shaar_engine*, shaar_window*, Browser*);
+  // False when `browser` is null or was already retired while closing.
+  bool BindWindow(shaar_engine*, shaar_window*, Browser*);
   bool ReserveWindow(shaar_engine*, shaar_window*, std::string id);
   bool ReserveTab(shaar_engine*, shaar_window*, shaar_tab*, std::string id);
   void UnbindTab(shaar_engine*, shaar_window*, shaar_tab*);
   void UnbindBrowser(shaar_engine*, shaar_window*, Browser*);
+  // Drops every window's reference. Pointer identity only: safe after free.
+  void RetireClosingBrowser(Browser*);
+  bool BrowserHasBoundTabs(Browser*) const;
+  bool IsClosingBrowser(Browser*) const;
+  // Retires a still-live cached Browser once unload has started. The first
+  // call must happen while the object is alive; later calls only compare.
+  bool ReleaseIfClosing(Browser*);
+  // Called only for a freshly allocated live Browser. Allocators may reuse
+  // the address of a Browser that was retired during close.
+  void MarkBrowserCreated(Browser*);
+  void WatchBrowserClose(Browser*);
   bool BeginWindowClose(shaar_engine*, shaar_window*);
   void BeginEngineQuit(shaar_engine*);
   void CancelEngineQuit(shaar_engine*);
@@ -111,6 +142,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   std::vector<WindowState> windows_;
   std::vector<TabEntry> tabs_;
   std::unordered_set<shaar_engine*> quitting_engines_;
+  // Addresses stay retired so a freed Browser cannot be stored again.
+  std::unordered_set<Browser*> retired_browsers_;
 };
 
 BrowserTabRegistryImpl& Registry();

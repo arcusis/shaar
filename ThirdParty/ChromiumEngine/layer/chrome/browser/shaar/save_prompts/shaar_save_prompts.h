@@ -14,8 +14,11 @@
 namespace content {
 class WebContents;
 }
+class GURL;
 
 namespace shaar::save_prompts {
+
+void DismissSavePromptsForDestroyedContents(content::WebContents* contents);
 
 // Decision values shared with the embedder patch. 3 is only a new password.
 constexpr int kDecisionSave = 1;
@@ -25,6 +28,8 @@ constexpr int kDecisionNever = 3;
 // Chromium calls this instead of opening a toolbar bubble. The callback runs
 // once, including when the offer is declined immediately. True means the offer
 // was delivered and the callback will run later.
+void SupersedeSavePrompts(content::WebContents* contents);
+
 bool OfferSavePrompt(content::WebContents* contents,
                      const char* prompt,
                      const char* detail,
@@ -32,7 +37,9 @@ bool OfferSavePrompt(content::WebContents* contents,
                      base::OnceCallback<void(int)> decision);
 
 int DecisionCode(const char* prompt, bool update, const char* decision);
+bool IsValidDecisionRequestID(std::string_view id);
 std::string SanitizeDetail(std::string_view raw);
+GURL CleanPageURLForSavePrompt(const GURL& url);
 
 // A private window, or a tab with no browser context, never gets a save offer.
 bool SavePromptAllowedForContext(bool has_browser_context,

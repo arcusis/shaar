@@ -60,7 +60,7 @@ struct DevelopmentModeButton: View {
   private func run(_ action: SiteAction, for target: SiteControlTarget) {
     Task {
       do { try await engine.perform(action, for: target) } catch {
-        engine.reportNotice(error.localizedDescription)
+        engine.reportNotice(ShellL10n.string("Could not complete the site action. Try again."))
       }
     }
   }
@@ -78,9 +78,8 @@ struct DevelopmentModeLabel: View {
       if let budget {
         Image(systemName: budget.badgeSymbol)
           .foregroundStyle(budget.badgeColor)
-          .help(
-            "Route budget: \(budget.passed) passed, \(budget.failed) over, \(budget.unavailable) unavailable"
-          )
+          .help(budget.accessibilityDescription())
+          .accessibilityLabel(budget.accessibilityDescription())
       }
     }
     .font(.system(size: 11, weight: .semibold))
@@ -93,6 +92,15 @@ struct DevelopmentModeLabel: View {
 }
 
 extension ShaarPerformanceBudgetResult {
+  func accessibilityDescription(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Route budget: %1$d passed, %2$d over, %3$d unavailable", table: "Shell",
+      language: language,
+      arguments: [.integer(passed), .integer(failed), .integer(unavailable)])
+  }
+
   fileprivate var badgeSymbol: String {
     if failed > 0 { return "exclamationmark.circle.fill" }
     if unavailable > 0 { return "questionmark.circle.fill" }

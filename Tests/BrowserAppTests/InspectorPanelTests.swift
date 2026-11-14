@@ -10,7 +10,39 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorPanelTests {
+  @Test func inspectorTitleIsAHeading() {
+    #expect(InspectorPanel.titleAccessibilityTraits.contains(.isHeader))
+  }
+
+  @Test func inspectorCopyControlsRevealForVoiceOverFocus() {
+    #expect(
+      InspectorCopyButtonVisibility.isVisible(
+        hovered: false, keyboardFocused: false, accessibilityFocused: true))
+    #expect(
+      InspectorCopyButtonVisibility.isVisible(
+        hovered: true, keyboardFocused: false, accessibilityFocused: false))
+    #expect(
+      InspectorCopyButtonVisibility.isVisible(
+        hovered: false, keyboardFocused: true, accessibilityFocused: false))
+    #expect(
+      !InspectorCopyButtonVisibility.isVisible(
+        hovered: false, keyboardFocused: false, accessibilityFocused: false))
+  }
+
   init() { _ = NSApplication.shared }
+
+  @Test func collapsedInspectorSectionsPointTowardTheLogicalCenterInBothDirections() {
+    #expect(
+      InspectorSection<EmptyView>.disclosureSymbol(isCollapsed: true, rightToLeft: false)
+        == "chevron.right")
+    #expect(
+      InspectorSection<EmptyView>.disclosureSymbol(isCollapsed: true, rightToLeft: true)
+        == "chevron.left")
+    #expect(
+      InspectorSection<EmptyView>.disclosureSymbol(isCollapsed: false, rightToLeft: true)
+        == "chevron.down")
+  }
+
   private var target: SiteControlTarget {
     .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/inspect")!)
   }
@@ -65,6 +97,15 @@ import Testing
     #expect(cadence.delay == .milliseconds(150))
     cadence.note(.unchanged)
     #expect(cadence.delay == .seconds(1))
+  }
+
+  @Test func cancellingInspectorRefreshWaitStopsBeforeTheNextRead() async {
+    let wait = Task {
+      await InspectorModel.waitForRefreshToBecomeIdle(isRefreshing: { true })
+    }
+    wait.cancel()
+
+    #expect(await !wait.value)
   }
 
   @Test func inspectorModelWakesThePollWhenTheUserMoves() throws {

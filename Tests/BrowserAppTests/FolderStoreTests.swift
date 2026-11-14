@@ -10,6 +10,10 @@ import Testing
 
 @Suite @MainActor
 struct FolderStoreTests {
+  @Test func folderEditorTitleIsVoiceOverHeading() {
+    #expect(FolderEditor.headingTraits.contains(.isHeader))
+  }
+
   @Test func folderEditorsCannotReplaceConsentOrEditAnotherSpaceAfterSwitching() throws {
     let store = BrowserStore()
     let space = store.session.selectedSpaceID

@@ -49,6 +49,14 @@ final class BrowserWorkspaceStore {
     return id
   }
 
+  @discardableResult
+  func restoreWindow(_ closedWindow: WorkspaceWindow, from sourceID: UUID? = nil) throws -> UUID {
+    let id = try workspace.restoreWindow(closedWindow, from: sourceID)
+    attach(workspace.window(id)!)
+    saveAndBroadcast()
+    return id
+  }
+
   func removeWindow(_ id: UUID) throws {
     try workspace.removeWindow(id)
     stores[id] = nil
@@ -154,7 +162,8 @@ final class BrowserWorkspaceStore {
       self?.workspace.window(window.id)?.pins.first { $0.tabID == tabID }?.pinID
     }
     stores[window.id]?.onSetSpaceProfile = { [weak self] spaceID, profileID in
-      (try? self?.setSpaceProfile(spaceID, to: profileID)) ?? false
+      guard let self, self.stores[window.id] != nil else { return false }
+      return (try? self.setSpaceProfile(spaceID, to: profileID)) ?? false
     }
     stores[window.id]?.onSpaceRemovalImpact = { [weak self] id in
       let spaces =
@@ -218,9 +227,10 @@ final class BrowserWorkspaceStore {
         ShellL10n.string("Pinned tabs cannot move between windows."))
       return false
     }
-    let destinationFolderIsPinned = folderID.flatMap { folderID in
-      targetSpace.folders.first(where: { $0.id == folderID })?.isPinned
-    } ?? false
+    let destinationFolderIsPinned =
+      folderID.flatMap { folderID in
+        targetSpace.folders.first(where: { $0.id == folderID })?.isPinned
+      } ?? false
     guard pinned != true, !destinationFolderIsPinned else {
       destinationStore.setSidebarNotice(
         ShellL10n.string("Tabs cannot be dropped into the pinned section from another window."))
@@ -326,9 +336,7 @@ final class BrowserWorkspaceStore {
   }
 
   private static func saveNotice(failure: String?) -> String? {
-    failure.map {
-      ShellL10n.format("Window changes could not be saved. %@", arguments: [.string($0)])
-    }
+    failure.map { _ in ShellL10n.string("Window changes could not be saved. Try again.") }
   }
 
   private func broadcast(excluding sourceID: UUID?) {

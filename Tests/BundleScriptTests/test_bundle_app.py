@@ -206,6 +206,23 @@ class BundleAppTests(unittest.TestCase):
                                     for suffix in ("strings", "stringsdict")), table)
             self.assertTrue((localized / "Core.stringsdict").is_file())
             self.assertTrue((resources / f"{language}.lproj" / "InfoPlist.strings").is_file())
+        hebrew_info = plistlib.loads(
+            (resources / "he.lproj" / "InfoPlist.strings").read_bytes())
+        self.assertEqual(
+            hebrew_info["NSCameraUsageDescription"],
+            "אתרים שתאשרו יוכלו להשתמש במצלמה לשיחות וידאו.")
+        self.assertEqual(
+            hebrew_info["NSMicrophoneUsageDescription"],
+            "אתרים שתאשרו יוכלו להשתמש במיקרופון לשיחות.")
+        self.assertEqual(
+            hebrew_info["NSLocationUsageDescription"],
+            "אתרים שתאשרו יוכלו להשתמש במיקום, למשל באתרי מפות ומשלוחים.")
+        self.assertEqual(
+            hebrew_info["NSLocationWhenInUseUsageDescription"],
+            "אתרים שתאשרו יוכלו להשתמש במיקום, למשל באתרי מפות ומשלוחים.")
+        self.assertEqual(
+            hebrew_info["NSBluetoothAlwaysUsageDescription"],
+            "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים שמשמשים לכניסה באמצעות מפתח גישה.")
         for name in ("LICENSE", "pin.json"):
             self.assertEqual(
                 (resources / "PublicSuffix" / name).read_bytes(),
@@ -385,7 +402,7 @@ class BundleAppTests(unittest.TestCase):
 
     def test_unsafe_release_config_is_rejected_before_bash_sources_it(self):
         config = self.root / "scripts" / "release-config.sh"
-        config.write_text(config.read_text().replace("SHAAR_BUILD_VERSION=1", "SHAAR_BUILD_VERSION=1;touch pwned"))
+        config.write_text(config.read_text().replace("SHAAR_BUILD_VERSION=2", "SHAAR_BUILD_VERSION=2;touch pwned"))
 
         result = self._run("--with-engine")
 
@@ -545,6 +562,11 @@ class BundleAppTests(unittest.TestCase):
             "swift build --manifest-cache none --scratch-path build/swiftpm/verification -c release "
             "--product ShaarVerification -Xswiftc -enable-testing",
             self._log(),
+        )
+        self.assertNotIn("-Xcc", self._log())
+        self.assertIn(
+            "SHAAR_PACKAGE_VERIFICATION_BUILD=1 swift_build --product",
+            SCRIPT.read_text(),
         )
         self.assertNotIn("build/swiftpm/default", self._log())
         self.assertIn("Built build/Shaar Verification.app", result.stdout)

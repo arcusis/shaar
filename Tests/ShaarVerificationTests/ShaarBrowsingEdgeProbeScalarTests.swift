@@ -8,6 +8,16 @@ import Testing
 
 @Suite("Browsing edge report scalar parsing")
 struct ShaarBrowsingEdgeProbeScalarTests {
+  @Test @MainActor func jsonObjectParserRejectsScalarsAndMalformedInput() {
+    #expect(
+      ShaarBrowsingEdgeProbe.object(from: "{\"marker\":\"ready\"}")?["marker"] as? String
+        == "ready")
+    #expect(ShaarBrowsingEdgeProbe.object(from: "false") == nil)
+    #expect(ShaarBrowsingEdgeProbe.object(from: "[]") == nil)
+    #expect(ShaarBrowsingEdgeProbe.object(from: "not JSON") == nil)
+    #expect(ShaarBrowsingEdgeProbe.object(from: nil) == nil)
+  }
+
   @Test func integerParserRejectsBooleansFractionsAndOverflow() {
     #expect(ShaarBrowsingEdgeProbe.number(7) == 7)
     #expect(ShaarBrowsingEdgeProbe.number(-2) == -2)
@@ -15,6 +25,12 @@ struct ShaarBrowsingEdgeProbeScalarTests {
     #expect(ShaarBrowsingEdgeProbe.number(2.5) == nil)
     #expect(ShaarBrowsingEdgeProbe.number(true) == nil)
     #expect(ShaarBrowsingEdgeProbe.number(UInt64.max) == nil)
+  }
+
+  @Test func integerParserAcceptsExactlyRepresentableFloatingPointValues() {
+    #expect(ShaarBrowsingEdgeProbe.number(7.0) == 7)
+    #expect(ShaarBrowsingEdgeProbe.number(-2.0) == -2)
+    #expect(ShaarBrowsingEdgeProbe.number(2.000_000_000_000_000_4) == nil)
   }
 
   @Test func booleanParserAcceptsOnlyBooleanValues() {
@@ -27,5 +43,40 @@ struct ShaarBrowsingEdgeProbeScalarTests {
   @Test func integerArraysDiscardNonIntegerScalars() {
     #expect(ShaarBrowsingEdgeProbe.numbers([1, 2.5, true, "4", 5]) == [1, 5])
     #expect(ShaarBrowsingEdgeProbe.numbers("not an array").isEmpty)
+  }
+
+  @Test func videoVerdictRejectsPausedFramesEvenWhenTheyHaveDimensions() {
+    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
+      "video": true, "paused": true, "videoWidth": 320,
+    ]))
+    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
+      "video": true, "paused": false, "videoWidth": 0,
+    ]))
+    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
+      "video": true, "videoWidth": 320,
+    ]))
+    #expect(ShaarBrowsingEdgeProbe.videoIsPlaying([
+      "video": true, "paused": false, "videoWidth": 320,
+    ]))
+  }
+
+  @Test func scrollFailureNeedsAnObservedScrollEventToBeAttributable() {
+    #expect(!ShaarBrowsingEdgeProbe.scrollFailureIsAttributable(scrollEvents: 0))
+    #expect(ShaarBrowsingEdgeProbe.scrollFailureIsAttributable(scrollEvents: 1))
+  }
+
+  @Test func infiniteScrollCapturesItsBaselineBeforeTriggeringTheScroll() {
+    let baseline = ShaarBrowsingEdgeProbe.scrollStateScript(triggerScroll: false)
+    let trigger = ShaarBrowsingEdgeProbe.scrollStateScript(triggerScroll: true)
+    #expect(!baseline.contains("scrollIntoView"))
+    #expect(!baseline.contains("root.scrollTop="))
+    #expect(trigger.contains("scrollIntoView"))
+    #expect(trigger.contains("root.scrollTop=root.scrollHeight"))
+  }
+
+  @Test func infiniteScrollGrowthRequiresTheConfiguredRowIncrease() {
+    #expect(!ShaarBrowsingEdgeProbe.scrollRowsHaveGrown(beforeCount: 40, afterCount: 239))
+    #expect(ShaarBrowsingEdgeProbe.scrollRowsHaveGrown(beforeCount: 40, afterCount: 240))
+    #expect(ShaarBrowsingEdgeProbe.scrollRowsHaveGrown(beforeCount: 440, afterCount: 640))
   }
 }

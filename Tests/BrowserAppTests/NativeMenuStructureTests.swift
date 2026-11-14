@@ -9,6 +9,21 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test @MainActor func printStaysUnavailableInPrivateWindowsUntilItsNativeRouteIsSupported() {
+  #expect(!PrivateBrowserHost.supportsPrivateCommand(.print))
+}
+
+@Test @MainActor func printCommandRequiresASelectedPageAndNativeSupport() {
+  #expect(!NativeBrowserHost.printCommandIsAvailable(
+    hasSelectedPage: false, commandIsOpen: false, hasNativePrint: true))
+  #expect(NativeBrowserHost.printCommandIsAvailable(
+    hasSelectedPage: true, commandIsOpen: false, hasNativePrint: true))
+  #expect(!NativeBrowserHost.printCommandIsAvailable(
+    hasSelectedPage: true, commandIsOpen: false, hasNativePrint: false))
+  #expect(!NativeBrowserHost.printCommandIsAvailable(
+    hasSelectedPage: true, commandIsOpen: true, hasNativePrint: true))
+}
+
 @Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {
   let workspace = try BrowserWorkspaceStore()
   try workspace.removeWindow(workspace.workspace.windows[0].id)
@@ -49,6 +64,79 @@ import Testing
   #expect(!first.isVisible && !second.isVisible && !third.isVisible)
 }
 
+@Test @MainActor func nativeMenuTitlesResolveToHebrewCatalogEntries() {
+  let menu = NativeBrowserHost.makeMenu(target: NSApplication.shared)
+  let groups = menu.items.compactMap(\.submenu)
+  let identifiers = groups.compactMap { group -> String? in
+    guard group.identifier?.rawValue != ProductIdentity.name else { return nil }
+    return group.identifier?.rawValue
+  } + groups.flatMap(\.items).compactMap { item -> String? in
+    guard let identifier = item.identifier?.rawValue else { return nil }
+    if item.representedObject as? String == BrowserMenuCommand.search.rawValue { return nil }
+    return identifier == "copyCurrentURL:" ? item.title : identifier
+  }
+  for identifier in identifiers {
+    let key: String
+    switch identifier {
+    case "About \(ProductIdentity.name)": key = "About %@"
+    case "Hide \(ProductIdentity.name)": key = "Hide %@"
+    case "Quit \(ProductIdentity.name)": key = "Quit %@"
+    case "\(ProductIdentity.name) Support": key = "%@ Support"
+    default: key = identifier
+    }
+    #expect(
+      BrowserLocalization.string(key, table: "Shell", language: .hebrew) != key,
+      "Native menu title lacks Hebrew catalog copy: \(identifier)")
+  }
+  for key in ["About %@", "Hide %@", "Quit %@", "%@ Support"] {
+    #expect(
+      BrowserLocalization.format(
+        key, table: "Shell", language: .hebrew,
+        arguments: [.string(ProductIdentity.name)]) != key)
+  }
+  #expect(
+      BrowserLocalization.string("Search or enter address", table: "Shell", language: .hebrew)
+      != "Search or enter address")
+}
+
+@Test @MainActor func reopenClosedShortcutPrefersATabThenFallsBackToAWindow() {
+  #expect(
+    NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: true, hasClosedWindow: true)
+      == .reopenClosed)
+  #expect(
+    NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: true)
+      == .reopenClosedWindow)
+  #expect(
+      NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: false)
+      == nil)
+}
+
+@Test @MainActor func reopenClosedWindowCommandRoutesAndPreservesSnapshotOnAttachFailure() throws {
+  let runtime = ARCChromiumRuntime()
+  let workspace = try BrowserWorkspaceStore()
+  let host = NativeBrowserHost(
+    events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
+    presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
+  defer { host.detach() }
+  var snapshotSession = workspace.workspace.windows[0].session
+  let spaceID = snapshotSession.selectedSpaceID
+  for tab in snapshotSession.selectedSpace.tabs where !tab.isPinned { snapshotSession.closeTab(tab.id) }
+  for closed in snapshotSession.recentlyClosedTabs(in: spaceID) {
+    _ = snapshotSession.reopenClosedTab(closed.id, in: spaceID)
+  }
+  _ = snapshotSession.open(URL(string: "https://restored-window.example")!)
+  let snapshot = try #require(BrowserWorkspace(session: snapshotSession).windows.first)
+  host.lastClosedWindowSnapshot = snapshot
+  let windowIDs = workspace.workspace.windows.map(\.id)
+  #expect(throws: (any Error).self) { try host.restore() }
+  #expect(host.canPerform(.reopenClosed))
+  #expect(host.canPerform(.reopenClosedWindow))
+  host.perform(.reopenClosedWindow)
+  #expect(host.lastError != nil)
+  #expect(host.lastClosedWindowSnapshot == snapshot)
+  #expect(workspace.workspace.windows.map(\.id) == windowIDs)
+}
+
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared
   let menu = NativeBrowserHost.makeMenu(target: application)
@@ -76,13 +164,26 @@ import Testing
   #expect(item(.newPrivateWindow)?.menu?.title == "File")
   #expect(item(.closeWindow)?.menu?.title == "File")
   #expect(item(.sharePage)?.menu?.title == "File")
+  #expect(item(.print)?.menu?.title == "File")
+  #expect(item(.print)?.title == "Print…")
+  #expect(item(.print)?.keyEquivalent == "p")
+  #expect(item(.print)?.keyEquivalentModifierMask == .command)
   #expect(item(.find)?.menu?.title == "Edit")
+  #expect(item(.pasteAndGo)?.menu?.title == "Edit")
+  #expect(item(.pasteAndGo)?.title == "Paste and Go")
   #expect(item(.reload)?.menu?.title == "View")
   #expect(item(.fullScreen)?.menu?.title == "View")
   #expect(item(.fullScreen)?.title == "Enter Full Screen")
   #expect(item(.fullScreen)?.keyEquivalent == "f")
   #expect(item(.fullScreen)?.keyEquivalentModifierMask == [.command, .control])
   #expect(item(.hardReload)?.menu?.title == "View")
+  #expect(item(.zoomIn)?.menu?.title == "View")
+  #expect(item(.zoomIn)?.keyEquivalent == "=")
+  #expect(item(.zoomIn)?.keyEquivalentModifierMask == .command)
+  #expect(item(.zoomOut)?.keyEquivalent == "-")
+  #expect(item(.zoomOut)?.keyEquivalentModifierMask == .command)
+  #expect(item(.actualSize)?.keyEquivalent == "0")
+  #expect(item(.actualSize)?.keyEquivalentModifierMask == .command)
   #expect(item(.hardReload)?.keyEquivalent == "r")
   #expect(item(.hardReload)?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item(.developerTools)?.menu?.title == "View")
@@ -102,7 +203,21 @@ import Testing
   #expect(item(.history)?.menu?.title == "History")
   #expect(item(.history)?.title == "Show All History")
   #expect(item(.history)?.representedObject as? String == BrowserMenuCommand.history.rawValue)
+  #expect(item(.back)?.menu?.title == "History")
+  #expect(item(.back)?.keyEquivalent == "[")
+  #expect(item(.back)?.keyEquivalentModifierMask == .command)
+  #expect(item(.forward)?.menu?.title == "History")
+  #expect(item(.forward)?.keyEquivalent == "]")
+  #expect(item(.forward)?.keyEquivalentModifierMask == .command)
+  #expect(item(.clearHistory)?.menu?.title == "History")
+  #expect(item(.clearHistory)?.title == "Clear History…")
+  #expect(item(.clearHistory)?.keyEquivalent == "\u{8}")
+  #expect(item(.clearHistory)?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item(.recentlyClosed)?.menu?.title == "History")
+  #expect(item(.reopenClosedWindow)?.menu?.title == "History")
+  #expect(
+    item(.reopenClosedWindow)?.representedObject as? String
+      == BrowserMenuCommand.reopenClosedWindow.rawValue)
   #expect(item(.downloads)?.menu?.title == "File")
   #expect(item(.extensions)?.menu?.title == "Extensions")
   #expect(item(.minimizeWindow)?.menu?.title == "Window")
@@ -115,6 +230,23 @@ import Testing
   #expect(item(.checkForUpdates)?.title == "Check for Updates…")
 }
 
+@Test func pageZoomMenuRoutesOnlyTheFocusedTabToTheFakeEngine() {
+  let tabID = UUID()
+  var received: [(String, UUID)] = []
+  let fakeEngine: (String, UUID) -> Bool = { action, tab in
+    received.append((action, tab))
+    return true
+  }
+
+  #expect(PageZoomMenuRouter.route(.zoomIn, focusedTabID: tabID, perform: fakeEngine))
+  #expect(PageZoomMenuRouter.route(.zoomOut, focusedTabID: tabID, perform: fakeEngine))
+  #expect(PageZoomMenuRouter.route(.actualSize, focusedTabID: tabID, perform: fakeEngine))
+  #expect(!PageZoomMenuRouter.route(.zoomIn, focusedTabID: nil, perform: fakeEngine))
+  #expect(!PageZoomMenuRouter.route(.reload, focusedTabID: tabID, perform: fakeEngine))
+  #expect(received.map(\.0) == ["in", "out", "reset"])
+  #expect(received.map(\.1) == [tabID, tabID, tabID])
+}
+
 @Test @MainActor func sharePageMenuUsesOnlyASelectedWebPage() {
   let store = BrowserStore()
   #expect(NativeBrowserHost.shareURL(for: store) == nil)
@@ -124,9 +256,65 @@ import Testing
   #expect(NativeBrowserHost.shareURL(for: store) == url)
 }
 
+@Test @MainActor func bookmarkPageMenuOpensTheCurrentPageBookmarkEditor() {
+  let store = BrowserStore()
+  store.perform(.open(URL(string: "https://bookmark.example/current")!))
+
+  NativeBrowserHost.bookmarkCurrentPage(in: store)
+
+  guard case .bookmarkEditor(let route)? = store.sheet,
+    case .newBookmark(_, _, let address) = route.mode
+  else {
+    Issue.record("Bookmark this page should open the bookmark editor")
+    return
+  }
+  #expect(address == "https://bookmark.example/current")
+}
+
+@Test @MainActor func bookmarksMenuOpensTheBookmarksLibrarySection() {
+  let store = BrowserStore()
+  NativeBrowserHost.showBookmarks(in: store)
+  guard case .library(_, .bookmarks) = store.sheet else {
+    Issue.record("Bookmarks menu should open the bookmarks library section")
+    return
+  }
+}
+
+@Test @MainActor func recentlyClosedHistoryCommandOpensTheActiveSpaceList() {
+  let store = BrowserStore()
+  let activeSpaceID = store.session.selectedSpaceID
+  NativeBrowserHost.showRecentlyClosed(in: store)
+  guard case .recentlyClosed(let spaceID) = store.sheet else {
+    Issue.record("Recently Closed did not open")
+    return
+  }
+  #expect(spaceID == activeSpaceID)
+}
+
 @Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: false) == "Enter Full Screen")
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: true) == "Exit Full Screen")
+}
+
+@Test @MainActor func backMenuCommandRoutesOnlyWhenTheSelectedPageCanGoBack() {
+  let tabID = UUID()
+  var routedTab: String?
+  #expect(
+    NativeBrowserHost.routeBack(tabID: tabID, canGoBack: true) { routedTab = $0 })
+  #expect(routedTab == tabID.uuidString)
+  #expect(!NativeBrowserHost.routeBack(tabID: tabID, canGoBack: false) { routedTab = $0 })
+  #expect(!NativeBrowserHost.routeBack(tabID: nil, canGoBack: true) { routedTab = $0 })
+}
+
+@Test @MainActor func forwardMenuCommandRoutesOnlyWhenTheSelectedPageCanGoForward() {
+  let tabID = UUID()
+  var routedTab: String?
+  #expect(
+    NativeBrowserHost.routeForward(tabID: tabID, canGoForward: true) { routedTab = $0 })
+  #expect(routedTab == tabID.uuidString)
+  #expect(!NativeBrowserHost.routeForward(tabID: tabID, canGoForward: false) { routedTab = $0 })
+  #expect(!NativeBrowserHost.routeForward(tabID: nil, canGoForward: true) { routedTab = $0 })
+  #expect(routedTab == tabID.uuidString)
 }
 
 @Test @MainActor func nativeMenuRetainsKeyEquivalentsAndEditResponderChain() {
@@ -141,6 +329,9 @@ import Testing
   #expect(item("New Private Window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("New tab")?.keyEquivalent == "t")
   #expect(item(CommandPanel.searchPrompt)?.keyEquivalent == "l")
+  #expect(item("Reopen last closed tab")?.keyEquivalent == "t")
+  #expect(item("Reopen last closed tab")?.keyEquivalentModifierMask == [.command, .shift])
+  #expect(item("Reopen Last Closed Window")?.keyEquivalent.isEmpty == true)
   #expect(item("Close tab")?.keyEquivalentModifierMask == .command)
   #expect(item("Close window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("Find in Page…")?.keyEquivalent == "f")
@@ -165,6 +356,24 @@ import Testing
   #expect(item("Select All")?.action == NSSelectorFromString("selectAll:"))
   #expect(item("Undo")?.target == nil && item("Paste")?.target == nil)
   #expect(item("Paste and Match Style")?.target == nil)
+  #expect(item("Emoji & Symbols")?.action == #selector(NSApplication.orderFrontCharacterPalette(_:)))
+  #expect(item("Emoji & Symbols")?.keyEquivalent == "e")
+  #expect(item("Emoji & Symbols")?.keyEquivalentModifierMask == .function)
+  #expect(item("Emoji & Symbols")?.target == nil)
+  #expect(
+    ShortcutCatalog(menu: menu).entries.first { $0.title == "Emoji & Symbols" }?.displayKeys
+      == "fn-E")
+}
+
+@Test @MainActor func functionEStaysOnTheSystemResponderChainWithPageFocus() {
+  let menu = NativeBrowserHost.makeMenu(target: NSApplication.shared)
+  let page = ChromiumPageContainerView()
+  let event = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .function, timestamp: 0,
+    windowNumber: 0, context: nil, characters: "e", charactersIgnoringModifiers: "e",
+    isARepeat: false, keyCode: 14)!
+
+  #expect(!ShortcutPageRouting.route(event, menu: menu, responder: page))
 }
 
 @Test @MainActor func copyURLMenuUsesTheActivePrivatePage() throws {

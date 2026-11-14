@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import Foundation
 import BrowserCore
+import Foundation
 import JavaScriptCore
 import SwiftUI
 import Testing
@@ -11,6 +11,24 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorPageToolsTests {
+  @Test func activeToolTitleIsAHeading() {
+    #expect(InspectorPageToolsView.titleAccessibilityTraits.contains(.isHeader))
+  }
+
+  @Test func storageEntrySelectionAccessibilityTraitTracksSelection() {
+    #expect(InspectorStorageView.entryAccessibilityTraits(isSelected: true).contains(.isSelected))
+    #expect(!InspectorStorageView.entryAccessibilityTraits(isSelected: false).contains(.isSelected))
+  }
+
+  @Test func backendFailuresUseLocalizedPageToolsRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorPageToolsModel.failureMessage(for: error)
+        == InspectorToolsL10n.string("The page-tools request could not be completed. Try again."))
+    let known = InspectorFailure("Storage could not be read.")
+    #expect(InspectorPageToolsModel.failureMessage(for: known) == known.localizedDescription)
+  }
+
   @Test func storageEditorAccessibilityLabelsAreLocalized() {
     #expect(
       BrowserLocalization.string("Key", table: "InspectorTools", language: .english) == "Key")
@@ -45,6 +63,24 @@ import Testing
     #expect(throws: CancellationError.self) {
       try tools.receive(snapshot(), generation: inspector.documentGeneration)
     }
+  }
+
+  @Test func pageToolsRejectSnapshotsFromPriorLifecycle() throws {
+    let (inspector, _, tools) = makeModels()
+    defer {
+      tools.stop()
+      inspector.close()
+    }
+    let oldLifecycle = tools.lifecycleID
+    tools.stop()
+    tools.start()
+
+    #expect(throws: CancellationError.self) {
+      try tools.receive(
+        snapshot(), generation: inspector.documentGeneration, lifecycle: oldLifecycle)
+    }
+    #expect(tools.startedAt == nil)
+    #expect(tools.console.isEmpty)
   }
 
   @Test func updateWaitResumesWhenACompletedSnapshotArrives() async throws {

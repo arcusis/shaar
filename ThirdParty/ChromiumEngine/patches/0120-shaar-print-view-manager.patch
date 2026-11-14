@@ -1,0 +1,95 @@
+--- a/chrome/browser/printing/print_view_manager.cc
++++ b/chrome/browser/printing/print_view_manager.cc
+@@ -13,6 +13,7 @@
+ 
+ #include "base/check.h"
+ #include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
+ #include "base/no_destructor.h"
+ #include "base/observer_list.h"
+ #include "build/build_config.h"
+@@ -576,6 +577,20 @@
+     }
+   }
+ 
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    // Scripted printing has no browser-owned preview WebUI in the Shaar
++    // embedder. Reuse Chromium's system-dialog handoff for the native panel.
++    auto weak_this = weak_factory_.GetWeakPtr();
++    if (!PrintForSystemDialogNow(base::DoNothing())) {
++      if (!weak_this)
++        return;
++      on_print_dialog_shown_callback_.Reset();
++      is_switching_to_system_dialog_ = false;
++      OnPrintPreviewRequestRejected(rfh_id);
++    }
++    return;
++  }
++
+   auto* dialog_controller = PrintPreviewDialogController::GetInstance();
+   CHECK(dialog_controller);
+   mojom::RequestPrintPreviewParams params;
+--- a/chrome/browser/printing/print_view_manager_unittest.cc
++++ b/chrome/browser/printing/print_view_manager_unittest.cc
+@@ -7,10 +7,12 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
+ #include "base/containers/span.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+ #include "base/functional/callback_helpers.h"
++#include "base/test/scoped_command_line.h"
+ #include "base/memory/read_only_shared_memory_region.h"
+ #include "base/memory/ref_counted_memory.h"
+ #include "base/memory/scoped_refptr.h"
+@@ -277,10 +279,18 @@
+     // Manually set it, as there is no IPC in progress.
+     print_manager_host_receivers_for_testing().SetCurrentTargetFrameForTesting(
+         web_contents()->GetPrimaryMainFrame());
++    system_dialog_shown = true;
+     DidShowPrintDialog();
+     print_manager_host_receivers_for_testing().SetCurrentTargetFrameForTesting(
+         nullptr);
++  }
++
++  void SetTargetFrameForTesting(content::RenderFrameHost* rfh) {
++    print_manager_host_receivers_for_testing().SetCurrentTargetFrameForTesting(
++        rfh);
+   }
++
++  bool system_dialog_shown = false;
+ };
+ 
+ }  // namespace
+@@ -378,7 +388,29 @@
+   raw_ptr<base::RunLoop> run_loop_ = nullptr;
+ };
+ #endif  // BUILDFLAG(IS_WIN)
++
++TEST_F(PrintViewManagerTest, ShaarEmbedderScriptedPrintUsesNativePanel) {
++  base::test::ScopedCommandLine command_line;
++  command_line.GetProcessCommandLine()->AppendSwitch("shaar-embedder");
++  content::RenderFrameHost* main_frame = web_contents()->GetPrimaryMainFrame();
++  content::RenderFrameHostTester::For(main_frame)->InitializeRenderFrameIfNeeded();
++
++  auto print_view_manager =
++      std::make_unique<TestPrintViewManagerForSystemDialogPrint>(web_contents());
++  print_view_manager->SetTargetFrameForTesting(main_frame);
++  bool scripted_print_finished = false;
++  print_view_manager->SetupScriptedPrintPreview(base::BindLambdaForTesting(
++      [&]() { scripted_print_finished = true; }));
++  print_view_manager->ShowScriptedPrintPreview();
+ 
++  EXPECT_TRUE(print_view_manager->system_dialog_shown);
++  EXPECT_TRUE(print_view_manager->print_preview_rfh());
++  EXPECT_FALSE(scripted_print_finished);
++
++  print_view_manager->PrintPreviewDone();
++  EXPECT_TRUE(scripted_print_finished);
++}
++
+ TEST_F(PrintViewManagerTest, PrintSubFrameAndDestroy) {
+   content::RenderFrameHostTester::For(web_contents()->GetPrimaryMainFrame())
+       ->InitializeRenderFrameIfNeeded();

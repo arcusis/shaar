@@ -14,6 +14,40 @@ import Testing
 struct RecentDownloadsTests {
   private let id = "8ce51349-a188-4bad-bd1c-011b48e48ca6"
 
+  @Test func recentDownloadProgressAccessibilityLabelIncludesPercentageWhenKnown() {
+    #expect(
+      RecentDownloadsPopover.progressLabel(for: 0.42)
+        == PanelsL10n.plural("%d percent", count: 42))
+    #expect(RecentDownloadsPopover.progressLabel(for: nil) == nil)
+  }
+
+  @Test func recentDownloadAccessibilityValueIncludesProgressWhenDeterminate() {
+    let profileID = UUID()
+    func item(total: Double, dangerous: Bool = false, state: DownloadState = .downloading) -> BrowserDownload {
+      BrowserDownload(
+        id: id, profileID: profileID, filename: "report.zip", path: "",
+        sourceURL: "https://example.test/report.zip", state: state,
+        paused: false, dangerous: dangerous, offTheRecord: false,
+        received: 50, total: total, startTime: 1)!
+    }
+
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(for: item(total: 100), language: .english)
+        == "50 percent")
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(for: item(total: 100), language: .hebrew)
+        == "50 אחוזים")
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(for: item(total: -1), language: .english)
+        == nil)
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(
+        for: item(total: 100, dangerous: true), language: .english) == nil)
+    #expect(
+      RecentDownloadsPopover.progressAccessibilityValue(
+        for: item(total: 100, state: .finished), language: .english) == nil)
+  }
+
   @Test func finishedDownloadRetriesThumbnailAfterCardStateChanges() async throws {
     final class Calls { var count = 0 }
     let calls = Calls()
@@ -51,13 +85,13 @@ struct RecentDownloadsTests {
   }
 
   @Test func completedReadableRegularFileIsAllowedOnlyForCurrentProfile() throws {
-    let model = DownloadsModel()
     let profile = UUID()
     let otherProfile = UUID()
     let file = FileManager.default.temporaryDirectory
       .appendingPathComponent("recent-download-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: file) }
     try Data("download".utf8).write(to: file)
+    let model = DownloadsModel(profileDirectory: { _ in file.deletingLastPathComponent() })
     model.changed(record(path: file.path, state: "finished"), profileID: profile)
 
     #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == file)
@@ -65,12 +99,12 @@ struct RecentDownloadsTests {
   }
 
   @Test func missingDirectoryIncompleteDangerousAndPrivateFilesAreRejected() throws {
-    let model = DownloadsModel()
     let profile = UUID()
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("recent-download-dir-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
     defer { try? FileManager.default.removeItem(at: directory) }
+    let model = DownloadsModel(profileDirectory: { _ in directory })
     let file = directory.appendingPathComponent("download.txt")
     try Data("download".utf8).write(to: file)
 
@@ -83,7 +117,7 @@ struct RecentDownloadsTests {
     model.changed(
       record(path: file.path, state: "finished", dangerous: true), profileID: profile)
     #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
-    let privateModel = DownloadsModel()
+    let privateModel = DownloadsModel(profileDirectory: { _ in directory })
     privateModel.changed(
       record(path: file.path, state: "finished", privateItem: true), profileID: profile)
     #expect(privateModel.items(in: profile).isEmpty)
@@ -91,12 +125,12 @@ struct RecentDownloadsTests {
   }
 
   @Test func removedAndChangedRecordsAreRevalidatedAtDragStart() throws {
-    let model = DownloadsModel()
     let profile = UUID()
     let file = FileManager.default.temporaryDirectory
       .appendingPathComponent("recent-download-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: file) }
     try Data("download".utf8).write(to: file)
+    let model = DownloadsModel(profileDirectory: { _ in file.deletingLastPathComponent() })
     model.changed(record(path: file.path, state: "finished"), profileID: profile)
     #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) != nil)
 
@@ -175,7 +209,7 @@ struct RecentDownloadsTests {
     NSGraphicsContext.restoreGraphicsState()
     try #require(bitmap.representation(using: .png, properties: [:])).write(to: file)
 
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in file.deletingLastPathComponent() })
     model.changed(record(path: file.path, state: "downloading"), profileID: profile)
     func view() -> RecentDownloadsPopover {
       RecentDownloadsPopover(

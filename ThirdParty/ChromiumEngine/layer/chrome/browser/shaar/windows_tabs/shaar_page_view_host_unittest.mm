@@ -8,18 +8,20 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 @interface ShaarFocusProbeWindow : NSWindow
 @property(nonatomic, strong) NSResponder* acceptedResponder;
+@property(nonatomic) BOOL rejectFirstResponder;
 @end
 
 @implementation ShaarFocusProbeWindow
 - (BOOL)isKeyWindow { return YES; }
 - (BOOL)makeFirstResponder:(NSResponder*)responder {
   self.acceptedResponder = responder;
-  return YES;
+  return !self.rejectFirstResponder;
 }
 @end
 
@@ -49,6 +51,49 @@ TEST_F(ShaarTabVisibilityTest, SelectionShowsRendererAndDeselectionHidesIt) {
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
 }
 
+TEST_F(ShaarTabVisibilityTest, FallbackSelectionTracksOwningWindowVisibility) {
+  ShaarVisibilityProbeWindow* window = [[ShaarVisibilityProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  [window.contentView addSubview:web_contents()->GetNativeView().GetNativeNSView()];
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  window.probeVisible = YES;
+  window.probeOcclusion = NSWindowOcclusionStateVisible;
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
+  window.probeOcclusion = 0;
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::OCCLUDED);
+  window.probeMiniaturized = YES;
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+}
+
+TEST_F(ShaarTabVisibilityTest, FallbackSelectionDeliversOnlyRealVisibilityChanges) {
+  web_contents()->WasHidden();
+  ShaarVisibilityProbeWindow* window = [[ShaarVisibilityProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  [window.contentView addSubview:web_contents()->GetNativeView().GetNativeNSView()];
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "window.visibilityChangeCount = 0;"
+      "document.addEventListener('visibilitychange', () => ++window.visibilityChangeCount);"));
+
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.visibilityChangeCount").ExtractInt(), 0);
+
+  window.probeVisible = YES;
+  window.probeOcclusion = NSWindowOcclusionStateVisible;
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.visibilityChangeCount").ExtractInt(), 1);
+}
+
 TEST_F(ShaarTabVisibilityTest, HostTracksWindowOcclusionWithoutOrderingIt) {
   web_contents()->WasHidden();
   ShaarVisibilityProbeWindow* window = [[ShaarVisibilityProbeWindow alloc]
@@ -59,16 +104,22 @@ TEST_F(ShaarTabVisibilityTest, HostTracksWindowOcclusionWithoutOrderingIt) {
   PageViewHost host(NSMakeRect(0, 0, 800, 600), window);
   host.SetSelectedWebContents(web_contents());
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "window.visibilityChangeCount = 0;"
+      "document.addEventListener('visibilitychange', () => ++window.visibilityChangeCount);"));
   window.probeVisible = YES;
   window.probeOcclusion = NSWindowOcclusionStateVisible;
   host.RefreshVisibility();
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.visibilityChangeCount").ExtractInt(), 1);
   window.probeOcclusion = 0;
   host.RefreshVisibility();
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::OCCLUDED);
   window.probeMiniaturized = YES;
   host.RefreshVisibility();
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.visibilityChangeCount").ExtractInt(), 2);
 }
 
 TEST(ShaarPageViewHostTest, DockedFrontendResizesAndClosesWithoutClosingHost) {
@@ -182,6 +233,63 @@ TEST(ShaarPageViewHostTest, FocusUsesTheAttachedViewsKeyWindow) {
   target.contentView = tab;
   EXPECT_FALSE(target.isVisible);
   EXPECT_TRUE(host.Focus(tab));
+  EXPECT_EQ(target.acceptedResponder, tab);
+  host.Detach(tab);
+  [target close];
+}
+
+TEST_F(ShaarTabVisibilityTest, FocusForwardsToSelectedWebContents) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* tab = web_contents()->GetNativeView().GetNativeNSView();
+  ASSERT_TRUE(host.Attach(tab));
+  host.SetSelectedWebContents(web_contents());
+  ShaarFocusProbeWindow* target = [[ShaarFocusProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  target.releasedWhenClosed = NO;
+  target.contentView = tab;
+  web_contents()->WasShown();
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "window.pageFocusCount = 0;"
+      "window.pageBlurCount = 0;"
+      "window.addEventListener('focus', () => ++window.pageFocusCount);"
+      "window.addEventListener('blur', () => ++window.pageBlurCount);"));
+
+  ASSERT_TRUE(host.Focus(tab));
+  EXPECT_EQ(target.acceptedResponder, tab);
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.pageFocusCount").ExtractInt(), 1);
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:NSWindowDidResignKeyNotification
+                    object:target];
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.pageBlurCount").ExtractInt(), 1);
+  host.Detach(tab);
+  [target close];
+}
+
+TEST_F(ShaarTabVisibilityTest, RejectedNativeFocusDoesNotFocusWebContents) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* tab = web_contents()->GetNativeView().GetNativeNSView();
+  ASSERT_TRUE(host.Attach(tab));
+  host.SetSelectedWebContents(web_contents());
+  ShaarFocusProbeWindow* target = [[ShaarFocusProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  target.releasedWhenClosed = NO;
+  target.rejectFirstResponder = YES;
+  target.contentView = tab;
+  web_contents()->WasShown();
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "window.pageFocusCount = 0;"
+      "window.addEventListener('focus', () => ++window.pageFocusCount);"));
+
+  EXPECT_FALSE(host.Focus(tab));
+  EXPECT_EQ(content::EvalJs(web_contents(), "window.pageFocusCount").ExtractInt(), 0);
   EXPECT_EQ(target.acceptedResponder, tab);
   host.Detach(tab);
   [target close];

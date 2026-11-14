@@ -52,6 +52,14 @@ struct DevToolsPanelTests {
       payloadJSON: Data(payload.utf8))
   }
 
+  @Test func responseBodyRequiresJSONBooleanEncodingFlag() {
+    for value in ["0", "1"] {
+      let payload =
+        #"{"schemaVersion":1,"body":"data","base64Encoded":\#(value)}"#
+      #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)
+    }
+  }
+
   @Test func exactScopeLeaseAndSequenceAreRequired() {
     let payload =
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":4,"leaseID":42,"data":{"requestID":"r1","url":"https://example.test","method":"GET","truncated":false}}"#
@@ -78,7 +86,8 @@ struct DevToolsPanelTests {
   }
 
   @Test func panelNumericFieldsRejectBooleansAndFractions() {
-    let dropped = #"{"schemaVersion":1,"kind":"panelEvent","eventID":11,"leaseID":42,"data":{"count":2}}"#
+    let dropped =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":11,"leaseID":42,"data":{"count":2}}"#
     let rootValues = ["schemaVersion": 1, "eventID": 11, "leaseID": 42]
     for (field, value) in rootValues {
       for replacement in ["true", "\(value).5"] {
@@ -92,10 +101,32 @@ struct DevToolsPanelTests {
         of: #""count":2"#, with: "\"count\":\(replacement)")
       #expect(decodePanel(payload) == nil)
     }
-    let response = #"{"schemaVersion":1,"kind":"panelEvent","eventID":5,"leaseID":42,"data":{"requestID":"r1","status":200,"truncated":false}}"#
+    let response =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":5,"leaseID":42,"data":{"requestID":"r1","status":200,"truncated":false}}"#
     #expect(decodePanel(response) != nil)
-    #expect(decodePanel(response.replacingOccurrences(of: #""status":200"#, with: #""status":true"#)) == nil)
+    #expect(
+      decodePanel(response.replacingOccurrences(of: #""truncated":false"#,
+        with: #""truncated":0"#)) == nil)
+    #expect(
+      decodePanel(response.replacingOccurrences(of: #""status":200"#, with: #""status":true"#))
+        == nil)
   }
+
+  @Test func panelEventEnvelopeRejectsBooleanIntegerFields() {
+    let valid =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"hello","level":"log","truncated":false}}"#
+    let invalidSchema = valid.replacingOccurrences(
+      of: #""schemaVersion":1"#, with: #""schemaVersion":true"#)
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        event(invalidSchema, scope: regular), scope: regular,
+        windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+    let booleanLease = valid.replacingOccurrences(
+      of: #""leaseID":42"#, with: #""leaseID":true"#)
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        event(booleanLease, scope: regular), scope: regular,
+        windowID: "window-a", tabID: "tab-a", leaseID: 1) == nil)  }
 
   @Test func networkHeadersAreAcceptedOnRequestAndResponseEvents() {
     let request =
@@ -122,6 +153,7 @@ struct DevToolsPanelTests {
         tabID: "tab-a", leaseID: 42)?.data.text == "hello")
     for payload in [
       safe.replacingOccurrences(of: #""eventID":1"#, with: #""eventID":99"#),
+      safe.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":0"#),
       safe.replacingOccurrences(of: #""text":"hello""#, with: #""headers":{"Cookie":"secret"}"#),
       safe.replacingOccurrences(
         of: #""text":"hello""#, with: #""text":"\#(String(repeating: "x", count: 4_097))""#),
@@ -212,6 +244,8 @@ struct DevToolsPanelTests {
     #expect(decoded?.data.frame?.jpeg == Data([0xFF, 0xD8, 0xFF, 0xD9]))
     for unsafe in [
       payload.replacingOccurrences(of: #""masked":true"#, with: #""masked":false"#),
+      payload.replacingOccurrences(of: #""masked":true"#, with: #""masked":1"#),
+      payload.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":0"#),
       payload.replacingOccurrences(of: #""masked":true"#, with: #""masked":true,"headers":{}"#),
       payload.replacingOccurrences(of: #""sessionID":7"#, with: #""sessionID":0"#),
     ] {
@@ -303,6 +337,8 @@ struct DevToolsPanelTests {
       #"{"schemaVersion":2,"body":"ok","base64Encoded":false}"#,
       #"{"schemaVersion":1,"body":7,"base64Encoded":false}"#,
       #"{"schemaVersion":1,"body":"ok","base64Encoded":"false"}"#,
+      #"{"schemaVersion":1,"body":"ok","base64Encoded":0}"#,
+      #"{"schemaVersion":1,"body":"ok","base64Encoded":1}"#,
       "not-json",
     ] {
       #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)
@@ -452,5 +488,27 @@ struct DevToolsPanelTests {
       ShaarDevToolsPhase2EventRouter.decode(
         event(injected, scope: privateScope), scope: privateScope,
         windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+  }
+
+  @Test func phase2EventIntegerFieldsRejectBooleansAndFractions() {
+    let valid =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":12,"leaseID":42,"data":{"isLocalStorage":true,"key":"k","value":"v","truncated":false}}"#
+    for payload in [
+      valid.replacingOccurrences(of: #""schemaVersion":1"#, with: #""schemaVersion":true"#),
+      valid.replacingOccurrences(of: #""schemaVersion":1"#, with: #""schemaVersion":1.5"#),
+      valid.replacingOccurrences(of: #""eventID":12"#, with: #""eventID":12.5"#),
+      valid.replacingOccurrences(of: #""leaseID":42"#, with: #""leaseID":42.5"#),
+    ] {
+      #expect(
+        ShaarDevToolsPhase2EventRouter.decode(
+          event(payload, scope: privateScope), scope: privateScope,
+          windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+    }
+    let booleanLease = valid.replacingOccurrences(
+      of: #""leaseID":42"#, with: #""leaseID":true"#)
+    #expect(
+      ShaarDevToolsPhase2EventRouter.decode(
+        event(booleanLease, scope: privateScope), scope: privateScope,
+        windowID: "window-a", tabID: "tab-a", leaseID: 1) == nil)
   }
 }

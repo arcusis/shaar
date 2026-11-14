@@ -107,9 +107,18 @@ def node_inspector():
         process.stderr.close()
 
 
+def verification_app_path(value: str) -> Path:
+    app = Path(value)
+    executable = app / "Contents/MacOS/ShaarVerification"
+    if not app.is_dir() or not executable.is_file():
+        raise argparse.ArgumentTypeError(
+            f"verification app is missing or incomplete: {app}")
+    return app
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", required=True, type=Path)
+    parser.add_argument("--app", required=True, type=verification_app_path)
     parser.add_argument("--receipt", required=True, type=Path)
     parser.add_argument("--with-node-inspector", action="store_true")
     options = parser.parse_args()

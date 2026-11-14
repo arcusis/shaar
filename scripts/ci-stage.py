@@ -17,7 +17,7 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from ci_support import Commands, ROOT
+from ci_support import Commands, ROOT, output_file
 from ci_engine import (
     BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes,
     validate_bundle_archive,
@@ -208,9 +208,26 @@ def restore_shared_verification_bundle() -> bool:
     return True
 
 
+def discard_shared_verification_bundle() -> None:
+    directory = ROOT / "build/ci/engine-build"
+    for name in ("bundle.json", "verification.tar.gz"):
+        (directory / name).unlink(missing_ok=True)
+    bundle = ROOT / "build" / BUNDLE_NAME
+    if bundle.is_symlink() or bundle.is_file():
+        bundle.unlink()
+    elif bundle.exists():
+        shutil.rmtree(bundle)
+
+
 def run_basic_browsing(checks: Commands) -> None:
     require_hosted_mac()
-    if not restore_shared_verification_bundle() and checks.run(
+    try:
+        restored = restore_shared_verification_bundle()
+    except (OSError, ValueError, tarfile.TarError, EOFError) as error:
+        print(f"Shared verification bundle could not be restored; rebuilding it: {error}")
+        discard_shared_verification_bundle()
+        restored = False
+    if not restored and checks.run(
         "verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]
     ):
         return
@@ -246,7 +263,7 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
                 "status": 0,
                 "seconds": 0.0,
             })
-            with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+            with output_file(Path(os.environ["GITHUB_OUTPUT"])).open("a") as output:
                 output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
             checks.results.append(dict(name="cached-verification-bundle", command=[],
                                         status=0, seconds=0.0))
@@ -255,7 +272,7 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return
     archive_bundle(ROOT, checks.directory)
-    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+    with output_file(Path(os.environ["GITHUB_OUTPUT"])).open("a") as output:
         output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
 
 
@@ -268,8 +285,6 @@ def run_engine_shard(checks: Commands, shard: str, iterations: int) -> None:
         return
     for mode, repetitions in modes:
         run_probe_iterations(checks, mode, repetitions)
-        if checks.results[-1]["status"]:
-            return
 
 
 def run_visuals(checks: Commands, shard: str) -> None:
@@ -308,8 +323,10 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 
 def record_stage_error(checks: Commands, error: Exception) -> None:
     message = str(error)
-    (checks.directory / "error.txt").write_text(message + "\n")
-    (checks.directory / "stage-error.log").write_text(message + "\n")
+    error_report = output_file(checks.directory / "error.txt")
+    stage_log = output_file(checks.directory / "stage-error.log")
+    error_report.write_text(message + "\n")
+    stage_log.write_text(message + "\n")
     checks.results.append(dict(name="stage-error", command=["report CI stage exception"],
                                status=1, seconds=0.0))
     print(message, file=sys.stderr)

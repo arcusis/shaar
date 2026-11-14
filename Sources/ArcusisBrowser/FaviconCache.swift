@@ -63,8 +63,10 @@ final class FaviconCache {
     guard entries[profileID]?.removeValue(forKey: itemID) != nil else { return }
     if entries[profileID]?.isEmpty == true {
       entries[profileID] = nil
-      try? FileManager.default.removeItem(at: profileDirectory(profileID))
-    } else {
+      if Self.isSafeDirectory(profileDirectory(profileID)) {
+        try? FileManager.default.removeItem(at: profileDirectory(profileID))
+      }
+    } else if Self.isSafeDirectory(profileDirectory(profileID)) {
       try? FileManager.default.removeItem(at: fileURL(for: itemID, profileID: profileID))
       try? FileManager.default.removeItem(at: hostURL(for: itemID, profileID: profileID))
     }
@@ -84,6 +86,7 @@ final class FaviconCache {
     // A failed write only means the placeholder shows until the page loads after a restart.
     try? FileManager.default.createDirectory(
       at: profileDirectory(profileID), withIntermediateDirectories: true)
+    guard Self.isSafeDirectory(profileDirectory(profileID)) else { return }
     try? data.write(to: fileURL(for: itemID, profileID: profileID), options: .atomic)
   }
 
@@ -112,13 +115,22 @@ final class FaviconCache {
   private func writeHost(_ site: String, for itemID: UUID, profileID: UUID) {
     try? FileManager.default.createDirectory(
       at: profileDirectory(profileID), withIntermediateDirectories: true)
+    guard Self.isSafeDirectory(profileDirectory(profileID)) else { return }
     try? Data(site.utf8).write(to: hostURL(for: itemID, profileID: profileID), options: .atomic)
+  }
+
+  private static func isSafeDirectory(_ url: URL) -> Bool {
+    guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+    else { return false }
+    return values.isDirectory == true && values.isSymbolicLink != true
   }
 
   private static func load(from directory: URL) -> [UUID: [UUID: Entry]] {
     var entries: [UUID: [UUID: Entry]] = [:]
     for profileURL in contents(of: directory) {
-      guard let profileID = UUID(uuidString: profileURL.lastPathComponent) else { continue }
+      guard let profileID = UUID(uuidString: profileURL.lastPathComponent),
+        isSafeDirectory(profileURL)
+      else { continue }
       // A PNG saved before the host file existed has no site to compare. Leave it
       // on disk and skip it here so a later nil tick cannot keep the stale icon.
       // The next page load writes the icon again. Host-less files do not use a slot.
@@ -147,15 +159,23 @@ final class FaviconCache {
   }
 
   private static func loadEntry(at fileURL: URL) -> Entry? {
-    guard let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+    guard isSafeRegularFile(fileURL),
+      let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
       size <= maximumIconBytes,
       let data = try? Data(contentsOf: fileURL)
     else { return nil }
     return entry(decoding: data, host: loadHost(beside: fileURL))
   }
 
+  private static func isSafeRegularFile(_ url: URL) -> Bool {
+    guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+    else { return false }
+    return values.isRegularFile == true && values.isSymbolicLink != true
+  }
+
   private static func loadHost(beside fileURL: URL) -> String? {
     let hostURL = fileURL.deletingPathExtension().appendingPathExtension("host")
+    guard isSafeRegularFile(hostURL) else { return nil }
     guard let text = try? String(contentsOf: hostURL, encoding: .utf8) else { return nil }
     return siteHost(text)
   }

@@ -113,6 +113,23 @@ class InventoryTests(unittest.TestCase):
         destination.write_text("file", encoding="utf-8")
         self.assertEqual(self.run_check("--write-inventory", destination / "inventory.csv"), 1)
 
+    def test_export_rejects_symlink_without_overwriting_target(self):
+        target = self.root / "existing.csv"
+        target.write_text("preserve this report", encoding="utf-8")
+        destination = self.root / "inventory.csv"
+        destination.symlink_to(target)
+
+        self.assertEqual(self.run_check("--write-inventory", destination), 1)
+        self.assertEqual(target.read_text(encoding="utf-8"), "preserve this report")
+    def test_inventory_export_rejects_symlink_before_overwriting_target(self):
+        target = self.root / "outside.csv"
+        target.write_text("preserve this", encoding="utf-8")
+        output = self.root / "inventory.csv"
+        output.symlink_to(target)
+
+        self.assertEqual(self.run_check("--write-inventory", output), 1)
+        self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
     def test_independent_string_additions_merge_and_pass_without_inventory(self):
         strings = {"Open %@": entry("פתחי %@"),
                    **{f"Middle {index}": entry(f"אמצע {index}") for index in range(6)}}

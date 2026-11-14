@@ -7,6 +7,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [[ $(uname -m) == arm64 ]] || { echo 'Shaar test engine requires Apple silicon.' >&2; exit 1; }
+build_root="$PWD/build"
+cache="$build_root/ShaarEngineTestCache"
+if [[ -L "$build_root" || -L "$cache" ]]; then
+  echo 'Shaar test engine cache root must not be a symlink.' >&2; exit 1
+fi
+if [[ ( -e "$build_root" && ! -d "$build_root" ) || ( -e "$cache" && ! -d "$cache" ) ]]; then
+  echo 'Shaar test engine cache root must be a directory.' >&2; exit 1
+fi
 pin=ThirdParty/ChromiumEngine/ci-test-pin.json
 jq -e '.schemaVersion == 1 and .sourceKind == "shaar" and
   (.releaseTag | test("^engine-155\\.0\\.8059\\.84-shaar\\.[1-9][0-9]*$")) and
@@ -18,9 +26,15 @@ checksum=$(jq -er .sha256 "$pin")
 [[ $asset == "ShaarEngine-${tag#engine-}.tar.xz" ]] || {
   echo 'Shaar test asset and tag do not match.' >&2; exit 1;
 }
-cache="$PWD/build/ShaarEngineTestCache"
 archive="$cache/$asset"
+[[ ! -L "$PWD/build" && ! -L "$cache" ]] || {
+  echo 'Refusing symlinked Shaar test engine cache directory.' >&2; exit 1;
+}
 mkdir -p "$cache"
+if [[ -L "$archive" ]]; then
+  echo 'Shaar test archive cache path must not be a symlink.' >&2
+  exit 1
+fi
 verify() { [[ $(shasum -a 256 "$1" | cut -d ' ' -f 1) == "$checksum" ]]; }
 if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   gh release download "$tag" --repo "${GITHUB_REPOSITORY:-arcusis/shaar}" \

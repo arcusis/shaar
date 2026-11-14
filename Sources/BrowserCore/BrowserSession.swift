@@ -4,6 +4,28 @@
 
 import Foundation
 
+enum SessionFolderValidation {
+  static func folderItemsMatch(
+    _ space: BrowserSpace, makeItems: () -> [PinnedSidebarItem]
+  ) -> Bool {
+    guard !space.folders.isEmpty else { return true }
+    return makeItems().count(where: {
+      if case .folder = $0 { return true }
+      return false
+    }) == space.folders.count
+  }
+
+  static func membershipIsValid(folders: [BrowserFolder], tabs: [BrowserTab]) -> Bool {
+    let pinStateByFolderID = Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0.isPinned) })
+    return folders.allSatisfy { folder in
+      !folder.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && (folder.parentID.map { pinStateByFolderID[$0] == folder.isPinned } ?? true)
+    } && tabs.allSatisfy { tab in
+      tab.folderID.map { pinStateByFolderID[$0] == tab.isPinned } ?? true
+    }
+  }
+}
+
 public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
   public let id: UUID
   public var name: String
@@ -335,7 +357,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     let closedIDs = closedTabs.map(\.id)
     let favoriteIDs = favorites.map(\.id)
     let favoritePageIDs = favoritePages.map(\.tab.id)
-    let favoritePageFavoriteIDs = favoritePages.map(\.favoriteID)
+    let favoritePageFavoriteIDs = Set(favoritePages.map(\.favoriteID))
     guard !profiles.isEmpty, !spaces.isEmpty,
       profileIDs.count == profiles.count,
       spaceIDs.count == spaces.count,
@@ -346,7 +368,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       Set(tabIDs).isDisjoint(with: favoritePageIDs),
       Set(favoritePageIDs).count == favoritePageIDs.count,
       Set(favoriteIDs).count == favoriteIDs.count,
-      Set(favoritePageFavoriteIDs).count == favoritePageFavoriteIDs.count,
+      favoritePageFavoriteIDs.count == favoritePages.count,
       spaceIDs.contains(selectedSpaceID),
       profiles.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
       spaces.allSatisfy({ space in
@@ -357,17 +379,18 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       })
     else { throw SessionError.invalidState }
     let favoritesByID = Dictionary(uniqueKeysWithValues: favorites.map { ($0.id, $0) })
+    let spaceProfileIDs = Set(spaces.map(\.profileID))
     guard
       favorites.allSatisfy({ favorite in
         profileIDs.contains(favorite.profileID) && Self.isPersistableURL(favorite.originalURL)
           && !favorite.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }), Set(favoritePageFavoriteIDs).isSubset(of: Set(favoriteIDs)),
+      }), favoritePageFavoriteIDs.isSubset(of: Set(favoriteIDs)),
       favoritePages.allSatisfy({ page in
         guard let favorite = favoritesByID[page.favoriteID] else { return false }
         return page.tab.isPinned == false && page.tab.folderID == nil
           && Self.isPersistableURL(page.tab.url)
           && !page.tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          && spaces.contains(where: { $0.profileID == favorite.profileID })
+          && spaceProfileIDs.contains(favorite.profileID)
       }),
       spaces.allSatisfy({ space in
         space.selectedFavoriteID.map { id in
@@ -385,31 +408,20 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       })
     else { throw SessionError.invalidState }
     for space in spaces {
-      let splitIDs = space.splits.flatMap(\.tabIDs)
-      guard Set(splitIDs).count == splitIDs.count,
-        Set(space.splits.map(\.id)).count == space.splits.count,
-        space.splits.allSatisfy(\.isValid),
-        Set(splitIDs).isSubset(of: Set(space.tabs.map(\.id)))
-      else { throw SessionError.invalidState }
+      if !space.splits.isEmpty {
+        let splitIDs = space.splits.flatMap(\.tabIDs)
+        guard Set(splitIDs).count == splitIDs.count,
+          Set(space.splits.map(\.id)).count == space.splits.count,
+          space.splits.allSatisfy(\.isValid),
+          Set(splitIDs).isSubset(of: Set(space.tabs.map(\.id)))
+        else { throw SessionError.invalidState }
+      }
       guard
-        space.folders.allSatisfy({ folder in
-          !folder.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (folder.parentID == nil
-              || space.folders.contains(where: {
-                $0.id == folder.parentID && $0.isPinned == folder.isPinned
-              }))
-        }),
-        space.tabs.allSatisfy({ tab in
-          tab.folderID == nil
-            || space.folders.contains(where: {
-              $0.id == tab.folderID && $0.isPinned == tab.isPinned
-            })
-        }),
-        (space.items(isPinned: true, includingCollapsed: true)
-          + space.items(isPinned: false, includingCollapsed: true)).filter({
-            if case .folder = $0 { return true }
-            return false
-          }).count == space.folders.count
+        SessionFolderValidation.membershipIsValid(folders: space.folders, tabs: space.tabs),
+        SessionFolderValidation.folderItemsMatch(space, makeItems: {
+          space.items(isPinned: true, includingCollapsed: true)
+            + space.items(isPinned: false, includingCollapsed: true)
+        })
       else { throw SessionError.invalidState }
     }
   }
@@ -586,7 +598,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       return false
     }
     let profileID = spaces[index].profileID
-    if spaces.filter({ $0.profileID == profileID }).count == 1,
+    if !spaces.contains(where: { $0.profileID == profileID && $0.id != id }),
       favoritePages.contains(where: { page in
         favorites.first(where: { $0.id == page.favoriteID })?.profileID == profileID
       })
@@ -604,7 +616,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       return false
     }
     let profileID = spaces[index].profileID
-    let lastProfileSpace = spaces.filter { $0.profileID == profileID }.count == 1
+    let lastProfileSpace = !spaces.contains { $0.profileID == profileID && $0.id != id }
     if lastProfileSpace {
       let ownedPages = favoritePages.filter { page in
         favorites.first(where: { $0.id == page.favoriteID })?.profileID == profileID

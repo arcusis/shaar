@@ -69,6 +69,7 @@ jobs:
       - name: Download the verified bundle artifact from the matching PR run
         if: github.event_name == 'merge_group' && steps.bundle-cache.outputs.cache-hit != 'true' && steps.pr-bundle-run.outputs.run_id != ''
         continue-on-error: true
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: ci-engine-build-${{ steps.pr-bundle-run.outputs.run_id }}

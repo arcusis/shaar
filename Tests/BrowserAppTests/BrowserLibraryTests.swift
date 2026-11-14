@@ -10,10 +10,124 @@ import Testing
 
 @Suite @MainActor
 struct BrowserLibraryTests {
+  @Test func unexpectedLoadErrorsUseHebrewRecoveryCopy() {
+    let expected = "לא ניתן לטעון את החלק הזה בספרייה. כדאי לנסות שוב."
+    #expect(
+      BrowserLibraryModel.loadFailure(
+        NSError(domain: "Library", code: 7), language: .hebrew) == expected)
+    #expect(
+      BrowserLibraryModel.loadFailure(
+        LibraryDataError.invalidBookmarks, language: .hebrew)
+        == "מנוע הדפדפן החזיר נתוני סימנייה לא תקינים.")
+  }
+
+  @Test func importReadFailureUsesHebrewRecoveryCopyAndKeepsKnownImportErrors() {
+    #expect(
+      LibraryPanel.importFailure(CocoaError(.fileReadNoPermission), language: .hebrew)
+        == "לא ניתן לפתוח את קובץ הייצוא של הדפדפן. כדאי לוודא שהפורמט נתמך ולנסות שוב.")
+    let knownError = BrowserImport.ImportError.unsupported
+    #expect(
+      LibraryPanel.importFailure(knownError, language: .hebrew)
+        == knownError.description(language: .hebrew))
+  }
+
+  @Test func runtimeLoadFailureShowsLocalizedLibraryRecoveryNotice() {
+    let model = BrowserLibraryModel()
+    let profile = UUID()
+    let failure = NSError(
+      domain: "LibraryRefreshTest", code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "Raw bookmark read error."])
+    model.onLoad = { _, _, done in done(.failure(failure)) }
+
+    model.refresh(profile, section: .bookmarks)
+
+    #expect(model.notice(profile, section: .bookmarks) == BrowserLibraryModel.loadFailure(failure))
+    #expect(model.notice(profile, section: .bookmarks) != "Raw bookmark read error.")
+  }
+
+  @Test func importReadErrorsUseLocalizedFallbackAndKeepKnownImporterMessages() {
+    let fallback = "The selected file could not be read. Try another file."
+    #expect(
+      LibraryPanel.importErrorMessage(CocoaError(.fileReadNoPermission)) == PanelsL10n.string(fallback))
+    let knownError = BrowserImport.ImportError.unsupported
+    #expect(LibraryPanel.importErrorMessage(knownError) == knownError.localizedDescription)
+  }
+
   @Test func bookmarkAndHistorySearchFindsTitlesWithoutTypingAccents() {
     #expect(LibraryPanelSearch.matches("Résumé https://example.test", query: "resume"))
     #expect(LibraryPanelSearch.matches("Café https://example.test", query: "cafe"))
     #expect(!LibraryPanelSearch.matches("Café https://example.test", query: "resume"))
+  }
+
+  @Test func libraryBookmarkFilterReuseFocusedBenchmark() throws {
+    let profileID = UUID()
+    let children = (0..<10_000).map { index in
+      [
+        "id": UUID().uuidString, "k": "u", "t": "Needle page \(index)",
+        "u": "https://example.test/page-\(index)",
+      ] as [String: Any]
+    }
+    let tree = try BookmarkTree(
+      profileID: profileID,
+      payload: [
+        "bar": ["id": UUID().uuidString, "k": "f", "t": "Bookmarks Bar", "c": children],
+        "other": ["id": UUID().uuidString, "k": "f", "t": "Other Bookmarks", "c": []],
+      ])
+    let items = tree.items
+
+    let beforeStart = ContinuousClock.now
+    var beforeCount = 0
+    for _ in 0..<10 {
+      beforeCount += items.filter {
+        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
+      }.count
+      beforeCount += items.filter {
+        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
+      }.count
+    }
+    let before = beforeStart.duration(to: .now)
+
+    let afterStart = ContinuousClock.now
+    var afterCount = 0
+    for _ in 0..<10 {
+      let filtered = items.filter {
+        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
+      }
+      afterCount += filtered.count * 2
+    }
+    let after = afterStart.duration(to: .now)
+    print("libraryBookmarkFilterReuseFocusedBenchmark: before=\(before), after=\(after)")
+    #expect(beforeCount == afterCount && afterCount == 200_000)
+  }
+
+  @Test func libraryHistoryFilterReuseFocusedBenchmark() throws {
+    let profileID = UUID()
+    let entries = try (0..<10_000).map { index in
+      try BrowserHistoryEntry(
+        profileID: profileID,
+        payload: [
+          "u": "https://example.test/page-\(index)", "t": "Needle page \(index)", "n": 1,
+          "v": [1_000.0 + Double(index)],
+        ])
+    }
+
+    let beforeStart = ContinuousClock.now
+    var beforeCount = 0
+    for _ in 0..<10 {
+      beforeCount += LibraryPanelSearch.history(entries, query: "Needle").count
+      beforeCount += LibraryPanelSearch.history(entries, query: "Needle").count
+    }
+    let before = beforeStart.duration(to: .now)
+
+    let afterStart = ContinuousClock.now
+    var afterCount = 0
+    for _ in 0..<10 {
+      let filtered = LibraryPanelSearch.history(entries, query: "Needle")
+      afterCount += filtered.count * 2
+    }
+    let after = afterStart.duration(to: .now)
+    print("libraryHistoryFilterReuseFocusedBenchmark: before=\(before), after=\(after)")
+    #expect(beforeCount == afterCount && afterCount == 200_000)
   }
 
   @Test func bookmarkImportRequiresDestinationTreeAfterLoadFailure() {
@@ -70,6 +184,30 @@ struct BrowserLibraryTests {
     #expect(reads.count == 2)
     reads[1](.success(tree(title: "Confirmed")))
     #expect(model.bookmarks[profile]?.items.contains { $0.title == "Confirmed" } == true)
+  }
+
+  @Test func duplicateMutationReplyDoesNotRefreshOrCompleteTwice() {
+    let model = BrowserLibraryModel()
+    let profile = UUID()
+    var writeReply: (@MainActor (String?) -> Void)?
+    var refreshCount = 0
+    var completionCount = 0
+    model.onMutation = { _, _, done in writeReply = done }
+    model.onLoad = { _, _, done in
+      refreshCount += 1
+      done(.success(tree(title: "Saved")))
+    }
+
+    let accepted = model.mutate(.bookmark(["op": "remove"]), profile: profile) { succeeded in
+      #expect(succeeded)
+      completionCount += 1
+    }
+    #expect(accepted)
+    writeReply?(nil)
+    writeReply?(nil)
+
+    #expect(refreshCount == 1)
+    #expect(completionCount == 1)
   }
 
   @Test func importedBookmarkBatchRefreshesOnlyAfterEveryOperationIsAcknowledged() {
@@ -175,6 +313,24 @@ struct BrowserLibraryTests {
     model.refresh(profile, section: .history)
     #expect(
       model.history[profile]?.count == 1000 && model.notice(profile, section: .history) != nil)
+  }
+
+  @Test func libraryHistoryRefreshFocusedBenchmark() {
+    let model = BrowserLibraryModel()
+    let profile = UUID()
+    let rows = (0..<5_000).map { index in
+      [
+        "u": "https://history.example/page-\(index)", "t": "History page \(index)",
+        "n": 1, "v": [NSNumber(value: 1_700_000_000_000 + index * 1_000)],
+      ] as [String: Any]
+    }
+    model.onLoad = { _, _, done in done(.success(rows)) }
+
+    let start = ContinuousClock.now
+    for _ in 0..<10 { model.refresh(profile, section: .history) }
+    print("libraryHistoryRefreshFocusedBenchmark: \(start.duration(to: .now))")
+    #expect(model.history[profile]?.count == rows.count)
+    #expect(model.history[profile]?.first?.address == "https://history.example/page-4999")
   }
 
   @Test func staleLibraryActionsCannotCrossProfilesOrReplaceConsent() throws {

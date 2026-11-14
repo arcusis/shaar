@@ -4,6 +4,7 @@
 
 import BrowserCore
 import ChromiumBridge
+import CoreFoundation
 import Foundation
 
 @testable import ArcusisBrowser
@@ -256,9 +257,19 @@ final class SessionRecoveryProbe {
 
   private func readyCheckpoint() throws -> [String: Any] {
     let data = try Data(contentsOf: root.appending(path: Self.readyName))
-    guard let ready = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      ready["mode"] as? String == Self.mode, ready["ready"] as? Bool == true
-    else { throw SessionRecoveryFailure("The recovery ready checkpoint is invalid.") }
+    guard let ready = Self.readyCheckpoint(from: data, expectedMode: Self.mode) else {
+      throw SessionRecoveryFailure("The recovery ready checkpoint is invalid.")
+    }
+    return ready
+  }
+
+  static func readyCheckpoint(from data: Data?, expectedMode: String) -> [String: Any]? {
+    guard let data,
+      let ready = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      ready["mode"] as? String == expectedMode,
+      let enabled = ready["ready"] as? NSNumber,
+      CFGetTypeID(enabled) == CFBooleanGetTypeID(), enabled.boolValue
+    else { return nil }
     return ready
   }
 

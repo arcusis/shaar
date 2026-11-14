@@ -36,12 +36,30 @@ def set_identity(path: Path, identifier: str, display_name: str) -> None:
     path.write_bytes(plistlib.dumps(info))
 
 
+def current_version(framework: Path) -> Path:
+    if framework.is_symlink() or not framework.is_dir():
+        raise ValueError("Chromium framework must be a real directory")
+    versions = framework / "Versions"
+    if versions.is_symlink() or not versions.is_dir():
+        raise ValueError("Chromium framework Versions must be a real directory")
+    versioned = versions / "Current"
+    try:
+        resolved = versioned.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("Chromium framework Current version is unavailable") from error
+    if not resolved.is_relative_to(versions.resolve()):
+        raise ValueError("Chromium framework Current version escapes Versions")
+    return versioned
+
+
 def rebrand(framework: Path) -> None:
-    versioned = framework / "Versions/Current"
+    versioned = current_version(framework)
     helpers = versioned / "Helpers"
     actual = {path.name for path in helpers.glob("*.app")}
     if actual != set(HELPER_IDS):
         raise ValueError("Unexpected Chromium helper set")
+    if any((helpers / name).is_symlink() or not (helpers / name).is_dir() for name in HELPER_IDS):
+        raise ValueError("Chromium helper bundles must be real directories")
     set_identity(versioned / "Resources/Info.plist", FRAMEWORK_ID, "Shaar Engine")
     notices = versioned / "Resources/ThirdPartyNotices"
     notices.mkdir(exist_ok=True)

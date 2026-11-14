@@ -7,7 +7,8 @@ import Foundation
 public enum NavigationInput {
   public static func isWebURL(_ url: URL) -> Bool {
     ["http", "https"].contains(url.scheme?.lowercased() ?? "") && !(url.host() ?? "").isEmpty
-      && (url.port.map { (0...65535).contains($0) } ?? true)
+      && url.user == nil && url.password == nil
+      && (url.port.map { (1...65535).contains($0) } ?? true)
   }
 
   /// Only engine-requested Node inspector frontends may use Chromium's internal scheme.
@@ -268,6 +269,7 @@ public enum CommandSearch {
     bookmarks: [BrowserBookmark], history: [BrowserHistoryEntry],
     searchEngine: BrowserSearchEngine, limit: Int
   ) -> [CommandResult] {
+    guard limit > 0 else { return [] }
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let typedAddress = NavigationInput.address(for: query)
     let completion =
@@ -286,6 +288,7 @@ public enum CommandSearch {
         || CommandText.titleStarts(with: query, result.title)
     }
     func append(_ result: CommandResult, url: URL? = nil) -> Bool {
+      guard candidateLimit > 0 else { return true }
       if results.count < candidateLimit {
         if leadingIndex == nil, leads(result, url) { leadingIndex = results.count }
         results.append(result)

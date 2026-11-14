@@ -106,6 +106,12 @@ def stage(
     pin_dir: Path,
     catalog_dir: Optional[Path] = None,
 ) -> None:
+    if resources.parent.is_symlink():
+        raise ValueError(f"resource output parent must not be a symlink: {resources.parent}")
+    if resources.is_symlink():
+        raise ValueError(f"resource output directory must not be a symlink: {resources}")
+    if resources.exists() and not resources.is_dir():
+        raise ValueError(f"resource output path is not a directory: {resources}")
     root = Path(__file__).resolve().parent.parent
     catalog_dir = catalog_dir or root / "Sources/BrowserCore/Resources"
     source = binary_dir / BUNDLE
@@ -137,6 +143,10 @@ def stage(
     if unexpected:
         raise ValueError(
             "SwiftPM resource bundle was not staged into the app: " + ", ".join(unexpected))
+    if resources.is_symlink() or (resources.exists() and not resources.is_dir()):
+        raise ValueError("resource staging destination is not a regular directory")
+    if any(parent.is_symlink() for parent in resources.parents[:2]):
+        raise ValueError("resource staging destination has a symlinked parent")
     resources.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=resources, prefix=".browser-resources-") as temporary:
         tmp = Path(temporary)

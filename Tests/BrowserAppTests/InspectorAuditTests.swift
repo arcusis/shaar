@@ -2,6 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
+import BrowserCore
+import ChromiumBridge
 import Foundation
 import JavaScriptCore
 import SwiftUI
@@ -9,7 +12,177 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@MainActor
+private final class PendingInspectorSelectionRuntime: ARCChromiumRuntime {
+  private(set) var selectionReply: (@MainActor @Sendable ([String: Any]?, (any Error)?) -> Void)?
+  private(set) var followUpCalls = 0
+  private let pageView = NSView()
+
+  override func view(
+    forPrivateTabID tabID: String, windowID: String, contextID: String
+  ) -> NSView? { pageView }
+
+  override func beginInspector(
+    forPrivateTabID tabID: String, windowID: String, contextID: String
+  ) -> Bool { true }
+
+  override func endInspector(forTabID tabID: String) {}
+
+  override func privateInspectorCall(
+    _ method: String, params: [AnyHashable: Any], tabID: String, windowID: String,
+    contextID: String,
+    completion: @escaping @MainActor @Sendable ([String: Any]?, (any Error)?) -> Void
+  ) {
+    let expression = params["expression"] as? String ?? ""
+    if expression.contains("__shaarInspectorV2?.select(node)") {
+      selectionReply = completion
+    } else {
+      followUpCalls += 1
+      completion(["result": ["value": false]], nil)
+    }
+  }
+
+  func completeSelection() {
+    selectionReply?(["result": ["value": true]], nil)
+    selectionReply = nil
+  }
+}
+
+@MainActor
+private final class PendingInspectorAuditRuntime: ARCChromiumRuntime {
+  private(set) var replies: [@MainActor @Sendable ([String: Any]?, (any Error)?) -> Void] = []
+  private let pageView = NSView()
+
+  override func view(
+    forPrivateTabID tabID: String, windowID: String, contextID: String
+  ) -> NSView? { pageView }
+
+  override func beginInspector(
+    forPrivateTabID tabID: String, windowID: String, contextID: String
+  ) -> Bool { true }
+
+  override func endInspector(forTabID tabID: String) {}
+
+  override func privateInspectorCall(
+    _ method: String, params: [AnyHashable: Any], tabID: String, windowID: String,
+    contextID: String,
+    completion: @escaping @MainActor @Sendable ([String: Any]?, (any Error)?) -> Void
+  ) {
+    let expression = params["expression"] as? String ?? ""
+    if expression.contains("__shaarInspectorV2?.stop()") {
+      completion(["result": ["value": true]], nil)
+    } else {
+      replies.append(completion)
+    }
+  }
+
+  func complete(_ index: Int) {
+    replies[index]([
+      "result": [
+        "value": ["scope": "page", "violations": 0, "incomplete": 0, "findings": [],
+          "truncated": false],
+      ]
+    ], nil)
+  }
+}
+
 @Suite @MainActor struct InspectorAuditTests {
+  @Test func cancelledSelectionDoesNotRefreshInspectorWhenReplyArrives() async throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PendingInspectorSelectionRuntime()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "selection-context", windowID: "selection-window",
+      firstTabID: tabID, store: store)
+    session.tabChanged(
+      tabID, url: "https://example.test", title: "Fixture", loading: false,
+      back: false, forward: false)
+    let inspector = InspectorModel(target: try #require(session.inspectorTarget), privateSession: session)
+    inspector.open()
+    defer { inspector.close() }
+    let finding = InspectorAuditModel.Finding(
+      id: "image-alt:0", ruleID: "image-alt", impact: "serious", title: "Image alt",
+      help: "Add alt text.", helpURL: "https://example.test/help", target: "#image",
+      summary: "Image is missing alt text")
+    let audit = inspector.details.audit
+    audit.select(finding)
+    for _ in 0..<100 where runtime.selectionReply == nil { await Task.yield() }
+    try #require(runtime.selectionReply != nil)
+
+    audit.cancel()
+    let callsBeforeReply = runtime.followUpCalls
+    runtime.completeSelection()
+    for _ in 0..<100 where runtime.followUpCalls == callsBeforeReply { await Task.yield() }
+    #expect(runtime.followUpCalls == callsBeforeReply)
+  }
+
+  @Test func staleAuditCompletionCannotClearNewerOperation() throws {
+    let inspector = makeInspector(tab: .accessibility)
+    defer { inspector.close() }
+    let audit = inspector.details.audit
+
+    audit.run()
+    let staleOperation = try #require(audit.operationID)
+    audit.cancel()
+    audit.run()
+    let currentOperation = try #require(audit.operationID)
+    #expect(currentOperation != staleOperation)
+
+    audit.finishOperation(staleOperation)
+
+    #expect(audit.busy)
+    #expect(audit.operationID == currentOperation)
+    audit.cancel()
+    #expect(!audit.busy)
+    #expect(audit.operationID == nil)
+  }
+
+  @Test func backendFailuresUseLocalizedAuditRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorAuditModel.failureMessage(for: error)
+        == InspectorL10n.string("Could not complete the page audit. Try again."))
+    let known = InspectorFailure("Audit results exceeded supported limits.")
+    #expect(InspectorAuditModel.failureMessage(for: known) == known.localizedDescription)
+  }
+
+  @Test func cancelledRunCompletionCannotClearNewerRunState() async throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PendingInspectorAuditRuntime()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "audit-context", windowID: "audit-window",
+      firstTabID: tabID, store: store)
+    let target = try #require(session.inspectorTarget)
+    let inspector = InspectorModel(target: target, privateSession: session)
+    inspector.open()
+    defer { inspector.close() }
+    let audit = inspector.details.audit
+
+    audit.run()
+    for _ in 0..<100 where runtime.replies.count < 1 { await Task.yield() }
+    try #require(runtime.replies.count == 1)
+    audit.cancel()
+    audit.run()
+    for _ in 0..<100 where runtime.replies.count < 2 { await Task.yield() }
+    try #require(runtime.replies.count == 2)
+
+    runtime.complete(0)
+    for _ in 0..<100 where audit.busy { await Task.yield() }
+    #expect(audit.busy)
+
+    runtime.complete(1)
+    for _ in 0..<100 where audit.report == nil { await Task.yield() }
+    #expect(!audit.busy)
+    #expect(audit.report?.violations == 0)
+  }
+
+  @Test func impactGroupLabelsAreVoiceOverHeadings() {
+    #expect(InspectorAuditView.impactGroupHeadingTraits == .isHeader)
+  }
+
   @Test func boundedAuditReportsRejectStaleDocuments() throws {
     let inspector = makeInspector(tab: .accessibility)
     defer { inspector.close() }

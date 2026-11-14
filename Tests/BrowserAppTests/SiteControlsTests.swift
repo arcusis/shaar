@@ -10,11 +10,29 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func siteControlSectionTitlesAreVoiceOverHeadings() {
+  #expect(SiteSectionTitle.accessibilityTraits == .isHeader)
+}
+
 @Test func runningSiteActionStatusIsLocalized() {
   #expect(
     BrowserLocalization.string("In progress", table: "Shell", language: .english) == "In progress")
   #expect(
     BrowserLocalization.string("In progress", table: "Shell", language: .hebrew) == "בתהליך")
+}
+
+@Test @MainActor func askPermissionStateHasAnAccessibleToggleValue() {
+  #expect(SitePermissionRow.accessibilityValue(for: .ask) == SettingsL10n.string("Ask"))
+  #expect(SitePermissionRow.accessibilityValue(for: .block) == nil)
+  #expect(SitePermissionRow.accessibilityValue(for: nil) == nil)
+}
+
+@Test func sitePermissionAskValueIsLocalizedAndOnlyUsedForAsk() {
+  #expect(SitePermissionRow.askStateValue(for: .ask, language: .english) == "Asks first")
+  #expect(SitePermissionRow.askStateValue(for: .ask, language: .hebrew) == "ישאל תחילה")
+  #expect(SitePermissionRow.askStateValue(for: .allow, language: .english) == nil)
+  #expect(SitePermissionRow.askStateValue(for: .block, language: .english) == nil)
+  #expect(SitePermissionRow.askStateValue(for: nil, language: .english) == nil)
 }
 
 private struct FakeFailure: LocalizedError {
@@ -26,18 +44,20 @@ private final class FakeSiteBackend: SiteControlBackend {
   var securityValue = SiteSecurity.secure
   var values: [SitePermission: SitePermissionValue] = [
     .microphone: .ask, .camera: .block, .location: .ask, .notifications: .ask,
-    .popups: .block, .sound: .allow, .autoPictureInPicture: .allow,
+    .midi: .ask, .popups: .block, .sound: .allow, .autoPictureInPicture: .allow,
   ]
   var failsReads = false
   var failsWrites = false
   var performed: [SiteAction] = []
   var suspendFirstWrite = false
+  var suspendNextPermissionWrite = false
   var writeCount = 0
   var finishFirstWrite: CheckedContinuation<Void, Never>?
   var suspendNextRead = false
   var finishRead: CheckedContinuation<Void, Never>?
   var suspendNextAction = false
   var finishAction: CheckedContinuation<Void, Never>?
+  var suspendNextCertificateLookup = false
 
   func security(of target: SiteControlTarget) -> SiteSecurity { securityValue }
 
@@ -57,6 +77,10 @@ private final class FakeSiteBackend: SiteControlBackend {
     async throws
   {
     writeCount += 1
+    if suspendNextPermissionWrite {
+      suspendNextPermissionWrite = false
+      try await Task.sleep(for: .seconds(60))
+    }
     if writeCount == 1, suspendFirstWrite {
       await withCheckedContinuation { continuation in finishFirstWrite = continuation }
     }
@@ -74,6 +98,10 @@ private final class FakeSiteBackend: SiteControlBackend {
   }
 
   func certificateChain(for target: SiteControlTarget) async throws -> [SecCertificate] {
+    if suspendNextCertificateLookup {
+      suspendNextCertificateLookup = false
+      try await Task.sleep(for: .seconds(60))
+    }
     throw FakeFailure()
   }
 }
@@ -91,6 +119,16 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.isAllowed(.sound) && !model.isAllowed(.camera))
   await model.setPermission(.camera, allowed: true)
   #expect(model.isAllowed(.camera) && backend.values[.camera] == .allow && model.failure == nil)
+  await model.setPermission(.midi, allowed: true)
+  #expect(model.isAllowed(.midi) && backend.values[.midi] == .allow && model.failure == nil)
+}
+
+@MainActor @Test func midiSiteControlHasLocalizedLabelAndExplainsItsScope() {
+  #expect(SitePermission.midi.title == ShellL10n.string("MIDI devices"))
+  #expect(
+    SitePermission.midi.help
+      == ShellL10n.string("Allow or block MIDI device access for this site"))
+  #expect(SitePermission.midi.symbol == WebsitePermissionKind.midi.symbol)
 }
 
 @MainActor @Test func notificationPermissionCanBeRevokedFromSiteControls() async {
@@ -182,6 +220,23 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.runningAction == nil)
 }
 
+@MainActor @Test func cancelledPermissionWriteRollsBackWithoutShowingFailure() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  await model.load()
+  backend.suspendNextPermissionWrite = true
+  let write = Task { await model.setPermission(.camera, allowed: true) }
+  for _ in 0..<100 where !model.savingPermissions.contains(.camera) { await Task.yield() }
+  #expect(model.savingPermissions.contains(.camera))
+
+  write.cancel()
+  await write.value
+
+  #expect(model.permissionValues[.camera] == .block)
+  #expect(model.failure == nil)
+  #expect(model.savingPermissions.isEmpty)
+}
+
 @MainActor @Test func olderPermissionReadCannotReplaceNewerRefresh() async {
   let backend = FakeSiteBackend()
   let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
@@ -213,6 +268,44 @@ private func target(_ address: String) -> SiteControlTarget {
   await write.value
   #expect(model.permissionValues[.camera] == .allow)
   #expect(backend.values[.camera] == .allow)
+}
+
+@MainActor @Test func cancelledPermissionWriteRestoresPriorChoiceWithoutPublishingLateFailure() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  await model.load()
+  backend.suspendFirstWrite = true
+  backend.failsWrites = true
+  let write = Task { await model.setPermission(.camera, allowed: true) }
+  for _ in 0..<100 where backend.finishFirstWrite == nil { await Task.yield() }
+  #expect(backend.finishFirstWrite != nil)
+  #expect(model.permissionValues[.camera] == .allow)
+
+  write.cancel()
+  backend.finishFirstWrite?.resume()
+  await write.value
+
+  #expect(model.permissionValues[.camera] == .block)
+  #expect(model.failure == nil)
+  #expect(model.savingPermissions.isEmpty)
+}
+
+@MainActor @Test func cancelledSiteActionDoesNotPublishItsLateFailure() async {
+  let backend = FakeSiteBackend()
+  backend.suspendNextAction = true
+  backend.failsWrites = true
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  let action = Task { await model.perform(.reload) }
+  for _ in 0..<100 where backend.finishAction == nil { await Task.yield() }
+  #expect(backend.finishAction != nil)
+
+  action.cancel()
+  backend.finishAction?.resume()
+  let actionSucceeded = await action.value
+  #expect(!actionSucceeded)
+
+  #expect(model.failure == nil)
+  #expect(model.runningAction == nil)
 }
 
 @MainActor @Test func siteControlsDoNotOverlapWritesToTheSamePermission() async {
@@ -256,9 +349,10 @@ private func target(_ address: String) -> SiteControlTarget {
   backend.failsWrites = true
   #expect(!(await model.perform(.clearCookiesAndReload)))
   #expect(
-    model.failure == ShellL10n.format(
-      "Could not complete the %@ action. Try again.",
-      arguments: [.string(SiteAction.clearCookiesAndReload.title)]) && model.runningAction == nil)
+    model.failure
+      == ShellL10n.format(
+        "Could not complete the %@ action. Try again.",
+        arguments: [.string(SiteAction.clearCookiesAndReload.title)]) && model.runningAction == nil)
 }
 
 @MainActor @Test func certificateFailureUsesLocalizedRecoveryCopy() async {
@@ -266,6 +360,18 @@ private func target(_ address: String) -> SiteControlTarget {
   let model = SiteControlsModel(target: target("https://news.example"), backend: backend)
   #expect(await model.certificateChain() == nil)
   #expect(model.failure == ShellL10n.string("Could not load this site’s certificate. Try again."))
+}
+
+@MainActor @Test func cancelledCertificateLookupDoesNotShowFailure() async {
+  let backend = FakeSiteBackend()
+  backend.suspendNextCertificateLookup = true
+  let model = SiteControlsModel(target: target("https://news.example"), backend: backend)
+  let lookup = Task { await model.certificateChain() }
+  await Task.yield()
+  lookup.cancel()
+
+  #expect(await lookup.value == nil)
+  #expect(model.failure == nil)
 }
 
 @MainActor @Test func reloadActionsShowTheirMenuShortcuts() {

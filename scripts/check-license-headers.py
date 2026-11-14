@@ -22,6 +22,9 @@ NOTICE_LINES = (
 )
 COMMENT_PREFIX_BY_SUFFIX = {
     ".swift": "//",
+    ".c": "//",
+    ".cc": "//",
+    ".cpp": "//",
     ".h": "//",
     ".m": "//",
     ".mm": "//",
@@ -58,7 +61,7 @@ def tracked_files(root: Path) -> list[Path]:
     return [Path(os.fsdecode(path)) for path in output.split(b"\0") if path]
 
 
-def files_missing_notice(root: Path, paths: list[Path]) -> list[Path]:
+def files_missing_notice(root: Path, paths: list[Path], unreadable: list[tuple[Path, str]] | None = None) -> list[Path]:
     missing = []
     for path in paths:
         if path.as_posix().startswith(EXCLUDED_DIRECTORIES):
@@ -66,15 +69,36 @@ def files_missing_notice(root: Path, paths: list[Path]) -> list[Path]:
         notice = expected_notice(path)
         if notice is not None:
             tracked_path = root / path
-            if tracked_path.is_symlink() or not has_notice(tracked_path, notice):
+            try:
+                missing_notice = tracked_path.is_symlink() or not has_notice(tracked_path, notice)
+            except (OSError, UnicodeError) as error:
+                missing_notice = True
+                if unreadable is not None:
+                    unreadable.append((path, str(error)))
+                else:
+                    raise ValueError(
+                        f"cannot read tracked source for license header check: {path}"
+                    ) from error
+            if missing_notice:
                 missing.append(path)
+                continue
     return missing
 
 
 def main() -> int:
-    missing = files_missing_notice(REPOSITORY_ROOT, tracked_files(REPOSITORY_ROOT))
+    unreadable = []
+    try:
+        missing = files_missing_notice(REPOSITORY_ROOT, tracked_files(REPOSITORY_ROOT), unreadable)
+    except (OSError, ValueError) as error:
+        print(f"License header check failed: {error}", file=sys.stderr)
+        return 1
+    unreadable_errors = dict(unreadable)
     for path in missing:
-        print(f"Missing MPL-2.0 header: {path}", file=sys.stderr)
+        if path in unreadable_errors:
+            print(f"Cannot read tracked file for MPL-2.0 header check: {path}: {unreadable_errors[path]}",
+                  file=sys.stderr)
+        else:
+            print(f"Missing MPL-2.0 header: {path}", file=sys.stderr)
     return 1 if missing else 0
 
 

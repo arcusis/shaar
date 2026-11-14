@@ -86,6 +86,24 @@ private func payload(
   #expect(request?.pageURL.absoluteString == "http://127.0.0.1:9/login")
 }
 
+@Test func savePromptMatchesTheCapturedPageButIgnoresQueryAndFragment() throws {
+  let selectedProfile = BrowserProfile(id: profile, name: "Selected")
+  func session(at pageURL: URL) throws -> BrowserSession {
+    let selectedTab = BrowserTab(id: tab, url: pageURL)
+    let selectedSpace = BrowserSpace(
+      profileID: profile, name: "Selected", symbol: "house", tint: .lavender,
+      tabs: [selectedTab], selectedTabID: tab)
+    return try BrowserSession(
+      profiles: [selectedProfile], spaces: [selectedSpace], selectedSpaceID: selectedSpace.id)
+  }
+
+  let request = try #require(SavePromptRequest(payload: payload()))
+  let samePage = try session(at: URL(string: "http://127.0.0.1:9/saved?token=1#continue")!)
+  let anotherPage = try session(at: URL(string: "http://127.0.0.1:9/account")!)
+  #expect(request.matches(samePage))
+  #expect(!request.matches(anotherPage))
+}
+
 @Test func savePromptNeverAppliesOnlyToANewPassword() {
   let password = SavePromptRequest(payload: payload())
   let update = SavePromptRequest(payload: payload(update: true))

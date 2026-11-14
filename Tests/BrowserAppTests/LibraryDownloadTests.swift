@@ -13,6 +13,25 @@ import Testing
 
 @Suite @MainActor
 struct LibraryDownloadTests {
+  @Test func downloadActionsAreVisibleForKeyboardFocus() {
+    #expect(LibraryDownloadsView.actionsAreVisible(isHovered: false, isFocused: true))
+    #expect(LibraryDownloadsView.actionsAreVisible(isHovered: true, isFocused: false))
+    #expect(!LibraryDownloadsView.actionsAreVisible(isHovered: false, isFocused: false))
+  }
+
+  @Test func rowActionsAreVisibleForKeyboardFocus() {
+    #expect(
+      LibraryDownloadsView.actionsAreVisible(
+        itemID: "focused-download", hoveredID: nil, focusedID: "focused-download"))
+    #expect(
+      !LibraryDownloadsView.actionsAreVisible(
+        itemID: "other-download", hoveredID: nil, focusedID: "focused-download"))
+  }
+
+  @Test func downloadProgressIsMarkedAsFrequentlyUpdating() {
+    #expect(LibraryDownloadsView.downloadProgressAccessibilityTraits.contains(.updatesFrequently))
+  }
+
   @Test func downloadLibrarySortBenchmark() {
     let profile = UUID()
     let model = DownloadsModel()
@@ -35,13 +54,14 @@ struct LibraryDownloadTests {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     let profile = UUID()
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in root })
     var rows: [[String: Any]] = []
     for index in 0..<100 {
       let url = root.appending(path: "media-\(index).png")
       try Data([0x89, 0x50, 0x4e, 0x47]).write(to: url)
-      rows.append(record(
-        UUID().uuidString.lowercased(), filename: url.lastPathComponent, path: url.path))
+      rows.append(
+        record(
+          UUID().uuidString.lowercased(), filename: url.lastPathComponent, path: url.path))
     }
     model.restore(rows, profileID: profile)
     let items = model.items(in: profile)
@@ -54,10 +74,11 @@ struct LibraryDownloadTests {
         items, search: "", mediaOnly: true, profileID: profile, currentProfileID: profile,
         downloads: model)
       beforeItems = visible
-      beforeCount += visible.compactMap {
-        LibraryDownloadQuery.mediaFile(
-          for: $0, profileID: profile, currentProfileID: profile, downloads: model)
-      }.count
+      beforeCount +=
+        visible.compactMap {
+          LibraryDownloadQuery.mediaFile(
+            for: $0, profileID: profile, currentProfileID: profile, downloads: model)
+        }.count
     }
     let before = beforeStart.duration(to: .now)
 
@@ -79,18 +100,60 @@ struct LibraryDownloadTests {
   @Test func downloadDateGroupsBenchmark() {
     let profile = UUID()
     let model = DownloadsModel()
-    model.restore((0..<5_000).map { index in
-      record(UUID().uuidString.lowercased(), filename: "download-\(index)")
-    }, profileID: profile)
+    model.restore(
+      (0..<5_000).map { index in
+        record(UUID().uuidString.lowercased(), filename: "download-\(index)")
+      }, profileID: profile)
 
     let items = model.items(in: profile)
-    let start = ContinuousClock.now
-    var count = 0
-    for _ in 0..<10 {
-      count += LibraryDownloadQuery.dateGroups(items).reduce(0) { $0 + $1.items.count }
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let calendar = Calendar(identifier: .gregorian)
+    let expected = legacyDateGroups(items, calendar: calendar, now: now)
+    let actual = LibraryDownloadQuery.dateGroups(items, calendar: calendar, now: now)
+    let actualDates = actual.map(\.date)
+    let expectedDates = expected.map(\.date)
+    let actualIDs = actual.map { $0.items.map(\.id) }
+    let expectedIDs = expected.map { $0.items.map(\.id) }
+    #expect(actualDates == expectedDates)
+    #expect(actualIDs == expectedIDs)
+
+    _ = legacyDateGroups(items, calendar: calendar, now: now)
+    _ = LibraryDownloadQuery.dateGroups(items, calendar: calendar, now: now)
+    var beforeSamples: [Duration] = []
+    var afterSamples: [Duration] = []
+    for _ in 0..<5 {
+      let beforeStart = ContinuousClock.now
+      for _ in 0..<10 { _ = legacyDateGroups(items, calendar: calendar, now: now) }
+      beforeSamples.append(beforeStart.duration(to: .now))
+      let afterStart = ContinuousClock.now
+      for _ in 0..<10 {
+        _ = LibraryDownloadQuery.dateGroups(items, calendar: calendar, now: now)
+      }
+      afterSamples.append(afterStart.duration(to: .now))
     }
-    print("downloadDateGroupsBenchmark: \(start.duration(to: .now))")
-    #expect(count == 50_000)
+    let before = beforeSamples.sorted()[beforeSamples.count / 2]
+    let after = afterSamples.sorted()[afterSamples.count / 2]
+    print("downloadDateGroupsBenchmark: before=\(before), after=\(after)")
+    #expect(after < before * 0.75)
+  }
+
+  private func legacyDateGroups(
+    _ items: [BrowserDownload], calendar: Calendar, now: Date
+  ) -> [LibraryDownloadDateGroup] {
+    let sorted = items.sorted {
+      $0.startTime == $1.startTime ? $0.id < $1.id : $0.startTime > $1.startTime
+    }
+    var groupedItems: [(date: Date, label: String, items: [BrowserDownload])] = []
+    for item in sorted {
+      let date = calendar.startOfDay(for: Date(timeIntervalSince1970: item.startTime))
+      let label = LibraryDownloadQuery.relativeDay(date, now: now, calendar: calendar)
+      if groupedItems.last?.label == label {
+        groupedItems[groupedItems.count - 1].items.append(item)
+      } else {
+        groupedItems.append((date: date, label: label, items: [item]))
+      }
+    }
+    return groupedItems.map { LibraryDownloadDateGroup(date: $0.date, items: $0.items) }
   }
 
   @Test func downloadSourceSubtitleUsesSelectedLanguage() {
@@ -131,7 +194,7 @@ struct LibraryDownloadTests {
     let file = root.appending(path: "report.pdf")
     try Data("%PDF-1.4".utf8).write(to: file)
     let profile = UUID()
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in root })
     let id = UUID().uuidString.lowercased()
     model.restore([record(id, filename: "report.pdf", path: file.path)], profileID: profile)
     let item = try #require(model.libraryItems(in: profile).first)
@@ -205,7 +268,7 @@ struct LibraryDownloadTests {
 
     let profile = UUID()
     let otherProfile = UUID()
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in root })
     let imageID = UUID().uuidString.lowercased()
     let videoID = UUID().uuidString.lowercased()
     let pdfID = UUID().uuidString.lowercased()
@@ -380,7 +443,7 @@ struct LibraryDownloadTests {
     let session = try BrowserSession(
       profiles: [profile], spaces: [space], selectedSpaceID: space.id)
     let store = BrowserStore(sessionFile: nil, session: session)
-    let downloads = DownloadsModel()
+    let downloads = DownloadsModel(profileDirectory: { _ in root })
     downloads.restore(
       [record(filename: "authored-image.png", path: imageURL.path)], profileID: profile.id)
     let item = try #require(downloads.items(in: profile.id).first)
@@ -459,7 +522,7 @@ struct LibraryDownloadTests {
     try makePNGFixture().write(to: imageURL)
     try makePDFFixture().write(to: pdfURL)
 
-    let downloads = DownloadsModel()
+    let downloads = DownloadsModel(profileDirectory: { _ in root })
     let imageID = UUID().uuidString.lowercased()
     let pdfID = UUID().uuidString.lowercased()
     downloads.restore(

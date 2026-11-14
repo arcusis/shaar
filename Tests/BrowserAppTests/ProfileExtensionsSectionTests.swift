@@ -12,6 +12,31 @@ import XCTest
 
 @MainActor
 final class ProfileExtensionsSectionTests: XCTestCase {
+  func testExtensionRowNamesAreVoiceOverHeadings() {
+    XCTAssertEqual(ProfileExtensionsSection.extensionRowHeadingTraits, .isHeader)
+  }
+
+  func testExtensionToolbarButtonNamesItsProfileInBothLanguages() {
+    XCTAssertEqual(
+      ExtensionToolbar.accessibilityLabel(profileName: "Work", language: .english),
+      "Extensions for Work")
+    XCTAssertEqual(
+      ExtensionToolbar.accessibilityLabel(profileName: "Work", language: .hebrew),
+      "תוספים עבור \u{2068}Work\u{2069}")
+  }
+
+  func testExtensionManagerTitleIsVoiceOverHeading() {
+    XCTAssertEqual(ExtensionManagerPanel.headingTraits, .isHeader)
+  }
+
+  func testExtensionDetailsSectionsAreVoiceOverHeadings() {
+    XCTAssertEqual(ExtensionDetails.detailsHeadingTraits, .isHeader)
+  }
+
+  func testExtensionPopupNameIsVoiceOverHeading() {
+    XCTAssertTrue(ExtensionToolbar.popupTitleTraits.contains(.isHeader))
+  }
+
   func testProfileNamesFollowShaarsSelectedLanguageOrder() {
     let english = UUID()
     let hebrew = UUID()
@@ -40,15 +65,15 @@ final class ProfileExtensionsSectionTests: XCTestCase {
       "ניסיון חוזר להתקנת התוסף \u{2068}Notes\u{2069} בפרופיל \u{2068}Work\u{2069}")
   }
 
-  func testSharedExtensionToggleLabelsNameTheActionExtensionAndProfile() {
+  func testSharedExtensionToggleLabelsNameTheExtensionAndProfile() {
     XCTAssertEqual(
-      ProfileExtensionsSection.toggleLabel(
-        extensionName: "Notes", profileName: "Work", enabled: false, language: .english),
-      "Enable Notes for Work")
+      ProfileExtensionsSection.toggleAccessibilityLabel(
+        extensionName: "Notes", profileName: "Work", language: .english),
+      "Extension Notes for profile Work")
     XCTAssertEqual(
-      ProfileExtensionsSection.toggleLabel(
-        extensionName: "Notes", profileName: "Work", enabled: true, language: .hebrew),
-      "השבתת התוסף \u{2068}Notes\u{2069} בפרופיל \u{2068}Work\u{2069}")
+      ProfileExtensionsSection.toggleAccessibilityLabel(
+        extensionName: "Notes", profileName: "Work", language: .hebrew),
+      "התוסף \u{2068}Notes\u{2069} בפרופיל \u{2068}Work\u{2069}")
   }
 
   func testPinnedExtensionsOnlyIncludesEnabledItems() {

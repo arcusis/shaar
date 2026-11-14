@@ -26,20 +26,42 @@ MODULE_TOKEN = re.compile(r"Bundle\.module|(?<![\w.])\.module\b")
 FALLBACK_CLOSURE = re.compile(r"\{\s*\.module\s*\}")
 
 
-def code_portion(line: str) -> str:
+def code_portion(line: str, block_comment_depth: list[int] | None = None) -> str:
+    if block_comment_depth is None:
+        block_comment_depth = [0]
     code = []
     quoted = False
     escaped = False
     literal_start = 0
-    literal = []
     interpolated = False
     interpolation_depth = 0
     pending_interpolation = False
     interpolation_start = 0
     interpolation_ranges = []
+    skip_next = False
+    quote_hashes = 0
     for index, character in enumerate(line):
+        if skip_next:
+            skip_next = False
+            continue
+        if not quoted and block_comment_depth[0]:
+            if line.startswith("/*", index):
+                block_comment_depth[0] += 1
+                code.extend((" ", " "))
+                skip_next = True
+            elif line.startswith("*/", index):
+                block_comment_depth[0] -= 1
+                code.extend((" ", " "))
+                skip_next = True
+            else:
+                code.append(" ")
+            continue
+        if not quoted and line.startswith("/*", index):
+            block_comment_depth[0] = 1
+            code.extend((" ", " "))
+            skip_next = True
+            continue
         if quoted:
-            literal.append(character)
             code.append(character)
             if interpolation_depth:
                 if character == "(":
@@ -60,30 +82,49 @@ def code_portion(line: str) -> str:
             elif character == "\\":
                 escaped = True
                 cursor = index + 1
+                hashes = 0
                 while cursor < len(line) and line[cursor] == "#":
                     cursor += 1
-                if cursor < len(line) and line[cursor] == "(":
+                    hashes += 1
+                if (
+                    hashes == quote_hashes
+                    and cursor < len(line)
+                    and line[cursor] == "("
+                ):
                     interpolated = True
                     pending_interpolation = True
             elif character == '"':
-                quoted = False
-                if not interpolated:
-                    code[literal_start:] = [" "] * len(literal)
-                elif interpolation_ranges:
-                    keep = {
-                        offset
-                        for start, end in interpolation_ranges
-                        for offset in range(start, end)
-                    }
-                    code[literal_start:] = [
-                        value if offset in keep else " "
-                        for offset, value in enumerate(code[literal_start:], start=literal_start)
-                    ]
+                cursor = index + 1
+                hashes = 0
+                while cursor < len(line) and line[cursor] == "#":
+                    cursor += 1
+                    hashes += 1
+                if hashes == quote_hashes:
+                    quoted = False
+                    if not interpolated:
+                        code[literal_start:] = [" "] * (len(code) - literal_start)
+                    elif interpolation_ranges:
+                        keep = {
+                            offset
+                            for start, end in interpolation_ranges
+                            for offset in range(start, end)
+                        }
+                        code[literal_start:] = [
+                            value if offset in keep else " "
+                            for offset, value in enumerate(code[literal_start:], start=literal_start)
+                        ]
         elif character == '"':
             quoted = True
-            literal_start = len(code)
-            literal = [character]
+            cursor = index - 1
+            quote_hashes = 0
+            while cursor >= 0 and line[cursor] == "#":
+                cursor -= 1
+                quote_hashes += 1
+            literal_start = len(code) - quote_hashes
             interpolated = False
+            interpolation_depth = 0
+            pending_interpolation = False
+            interpolation_ranges = []
             code.append(character)
         elif line.startswith("//", index):
             break
@@ -92,22 +133,50 @@ def code_portion(line: str) -> str:
     return "".join(code)
 
 
+def code_lines(lines: list[str]) -> list[str]:
+    block_comment_depth = [0]
+    return [code_portion(line, block_comment_depth) for line in lines]
+
+
 def violations_in_source(text: str, path: str) -> list[str]:
-    lines = text.splitlines()
+    lines = code_lines(text.splitlines())
     errors = []
     for index, line in enumerate(lines):
-        code = code_portion(line)
-        if not MODULE_TOKEN.search(code):
+        if not MODULE_TOKEN.search(line):
             continue
-        if "Bundle.module" in code or not fallback_only(code, lines, index):
+        if "Bundle.module" in line or not fallback_only(line, lines, index):
             errors.append(
                 f"{path}:{index + 1}: Bundle.module in a shipping target must be the "
                 "development fallback passed to PackagedResourceBundle.resolve"
             )
     return errors
 
+
+def without_block_comments(code: str) -> str:
+    masked = []
+    depth = 0
+    index = 0
+    while index < len(code):
+        if depth and code.startswith("/*", index):
+            depth += 1
+            masked.extend("  ")
+            index += 2
+        elif depth and code.startswith("*/", index):
+            depth -= 1
+            masked.extend("  ")
+            index += 2
+        elif not depth and code.startswith("/*", index):
+            depth = 1
+            masked.extend("  ")
+            index += 2
+        else:
+            character = code[index]
+            masked.append("\n" if depth and character == "\n" else " " if depth else character)
+            index += 1
+    return "".join(masked)
+
 def fallback_only(line: str, lines: list[str], index: int) -> bool:
-    window = "\n".join(code_portion(candidate) for candidate in lines[max(0, index - 5) : index + 1])
+    window = "\n".join(lines[max(0, index - 5) : index + 1])
     if "PackagedResourceBundle.resolve(" not in window:
         return False
     remainder = FALLBACK_CLOSURE.sub("", line)
@@ -126,13 +195,21 @@ def shipping_swift_files(root: Path) -> list[Path]:
 def violations_in_tree(root: Path) -> list[str]:
     errors = []
     for path in shipping_swift_files(root):
-        text = path.read_text(encoding="utf-8")
-        errors.extend(violations_in_source(text, path.relative_to(root).as_posix()))
+        relative = path.relative_to(root).as_posix()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise ValueError(f"cannot read shipping Swift source {relative}: {error}") from error
+        errors.extend(violations_in_source(text, relative))
     return errors
 
 
 def main() -> int:
-    errors = violations_in_tree(REPOSITORY_ROOT)
+    try:
+        errors = violations_in_tree(REPOSITORY_ROOT)
+    except ValueError as error:
+        print(f"Packaged resource source check failed: {error}", file=sys.stderr)
+        return 2
     for error in errors:
         print(error, file=sys.stderr)
     return 1 if errors else 0

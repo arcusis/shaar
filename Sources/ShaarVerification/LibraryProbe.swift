@@ -6,17 +6,36 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import Foundation
 import SwiftUI
 
 @testable import ArcusisBrowser
 
-private struct LibraryIdentities: Codable {
+enum LibraryProbeEvidence {
+  static func hasDistinctIdentityIDs(_ ids: [UUID]) -> Bool {
+    Set(ids).count == ids.count
+  }
+
+  static func fixtureDocument(_ json: String?) -> [String: Any]? {
+    guard let data = json?.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      value["fixture"] as? String == "v1"
+    else { return nil }
+    return value
+  }
+}
+
+struct LibraryIdentities: Codable {
   let alpha: UUID
   let beta: UUID
   let shared: UUID
   let folder: UUID
   let bookmarkA: UUID
   let bookmarkB: UUID
+
+  static func decode(from data: Data) throws -> Self {
+    try JSONDecoder().decode(Self.self, from: data)
+  }
 }
 
 @MainActor
@@ -90,7 +109,12 @@ final class LibraryProbe {
         bookmarkB: bookmarkB)
       try JSONEncoder().encode(ids).write(to: file, options: .atomic)
     } else {
-      ids = try JSONDecoder().decode(LibraryIdentities.self, from: Data(contentsOf: file))
+      ids = try LibraryIdentities.decode(from: Data(contentsOf: file))
+      guard LibraryProbeEvidence.hasDistinctIdentityIDs([
+        ids.alpha, ids.beta, ids.shared, ids.folder, ids.bookmarkA, ids.bookmarkB,
+      ]) else {
+        throw LibraryProbeFailure("Library identity checkpoint contains duplicate IDs.")
+      }
       try await wait("native bookmark restart recovery") {
         self.item(ids.bookmarkA, in: a) != nil && self.item(ids.bookmarkB, in: b) != nil
       }
@@ -366,10 +390,7 @@ final class LibraryProbe {
             "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('account'),session:sessionStorage.getItem('account')})"
         ) { continuation.resume(returning: $0) }
       }
-      if let data = json?.data(using: .utf8),
-        let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["fixture"] as? String == "v1"
-      {
+      if let value = LibraryProbeEvidence.fixtureDocument(json) {
         return value
       }
       try await Task.sleep(for: .milliseconds(100))

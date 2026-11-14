@@ -8,6 +8,8 @@ struct InspectorPageToolsView: View {
   let inspector: InspectorModel
   @Bindable var model: InspectorPageToolsModel
 
+  static var titleAccessibilityTraits: AccessibilityTraits { .isHeader }
+
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 0) {
@@ -29,6 +31,7 @@ struct InspectorPageToolsView: View {
       }.padding(.horizontal, 8).padding(.vertical, 5)
       HStack {
         Text(model.tool.title).font(.system(size: 12, weight: .semibold))
+          .accessibilityAddTraits(Self.titleAccessibilityTraits)
         Spacer()
         Text(inspector.target.url.host ?? InspectorToolsL10n.string("Page"))
           .font(.system(size: 11, design: .monospaced))
@@ -282,7 +285,7 @@ struct InspectorPageToolsView: View {
         .toggleStyle(.checkbox).font(.system(size: 11))
         hint(
           InspectorToolsL10n.string(
-            "Cookie and authorization headers are redacted by default. URLs, console messages and screenshot content are not redacted. Nothing is uploaded."
+            "Sensitive header values are redacted by default. Console text redacts common credential patterns and strips URL credentials, queries and fragments. URL paths, screenshots and unrecognized secrets may still contain sensitive data. Nothing is uploaded."
           )
         )
         Button {

@@ -9,6 +9,13 @@ import Testing
 
 @Suite("Web Share probe JavaScript strings")
 struct WebShareProbeTests {
+  @Test func authoredPageMustBeAnUnauthenticatedLoopbackURL() {
+    #expect(WebShareProbe.authoredLoopbackPageURL("http://127.0.0.1:43210/share") != nil)
+    #expect(WebShareProbe.authoredLoopbackPageURL("http://user:secret@127.0.0.1:43210/share") == nil)
+    #expect(WebShareProbe.authoredLoopbackPageURL("https://127.0.0.1:43210/share") == nil)
+    #expect(WebShareProbe.authoredLoopbackPageURL("http://localhost:43210/share") == nil)
+  }
+
   @Test func titleValuesRoundTripAsSingleJavaScriptStrings() throws {
     for value in [
       "plain title",
@@ -18,9 +25,26 @@ struct WebShareProbeTests {
       "unicode: \u{2028}\u{2029} café",
     ] {
       let encoded = WebShareProbe.javaScriptString(value)
-      let decoded = try JSONSerialization.jsonObject(
-        with: Data("[\(encoded)]".utf8)) as? [String]
+      let decoded =
+        try JSONSerialization.jsonObject(
+          with: Data("[\(encoded)]".utf8)) as? [String]
       #expect(decoded == [value])
     }
+  }
+
+  @MainActor
+  @Test func shareOriginDropsPagePathQueryFragmentAndCredentials() throws {
+    let page = URL(string: "http://user:secret@127.0.0.1:48000/account?token=local#section")!
+    let origin = try #require(WebShareProbe.originURL(for: page))
+    let components = try #require(URLComponents(url: origin, resolvingAgainstBaseURL: false))
+
+    #expect(components.scheme == "http")
+    #expect(components.host == "127.0.0.1")
+    #expect(components.port == 48000)
+    #expect(components.path.isEmpty)
+    #expect(components.query == nil)
+    #expect(components.fragment == nil)
+    #expect(components.user == nil)
+    #expect(components.password == nil)
   }
 }

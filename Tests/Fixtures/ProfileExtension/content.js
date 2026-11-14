@@ -20,4 +20,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.account) showAccount(changes.account.newValue);
   if (area === "local" && changes.activationProbe) showActivation(changes.activationProbe.newValue);
   if (area === "local" && changes.windowProbe) showWindow(changes.windowProbe.newValue);
+  if (area === "local" && changes.windowProbeResponse) {
+    document.documentElement.dataset.arcusisWindowResponse = JSON.stringify(
+      changes.windowProbeResponse.newValue ?? {}
+    );
+  }
 });

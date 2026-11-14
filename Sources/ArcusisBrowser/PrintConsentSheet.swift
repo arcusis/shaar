@@ -11,13 +11,22 @@ struct PrintConsentSheet: View {
   var body: some View {
     PrintConsentContent(
       request: request,
-      onCancel: { store.resolvePrint(request.id, accepted: false) },
-      onPrint: { store.resolvePrint(request.id, accepted: true) }
+      onCancel: cancel,
+      onPrint: continueToPrint
     )
+  }
+
+  func cancel() {
+    store.resolvePrint(request.id, accepted: false)
+  }
+
+  func continueToPrint() {
+    store.resolvePrint(request.id, accepted: true)
   }
 }
 
 struct PrintConsentContent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let request: PrintRequest
   let onCancel: () -> Void
   let onPrint: () -> Void
@@ -26,6 +35,7 @@ struct PrintConsentContent: View {
     VStack(alignment: .leading, spacing: 12) {
       Text(PanelsL10n.string("Print this page?"))
         .font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.headingTraits)
       Text(request.hostLabel)
         .font(.callout)
         .foregroundStyle(.secondary)
@@ -35,7 +45,7 @@ struct PrintConsentContent: View {
           .font(.headline)
           .textSelection(.enabled)
       }
-      Text(request.pageURL.absoluteString)
+      Text(request.displayPageURL)
         .font(.callout)
         .foregroundStyle(.secondary)
         .textSelection(.enabled)

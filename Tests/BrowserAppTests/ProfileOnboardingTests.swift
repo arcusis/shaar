@@ -4,9 +4,19 @@
 
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
+
+@Test func onboardingSignInProgressLabelIsLocalized() {
+  #expect(
+    ProfileOnboardingAccessibility.signInProgressLabel(provider: "Google", language: .english)
+      == "Finish signing in to Google in the sign-in window.")
+  #expect(
+    ProfileOnboardingAccessibility.signInProgressLabel(provider: "Google", language: .hebrew)
+      == "יש להשלים את ההתחברות אל \u{2068}Google\u{2069} בחלון ההתחברות.")
+}
 
 @MainActor
 private final class OnboardingRecorder {
@@ -48,6 +58,19 @@ private final class OnboardingRecorder {
 private struct CreationFailure: Error {}
 
 @Suite @MainActor struct ProfileOnboardingTests {
+  @Test func onboardingStepTitleIsVoiceOverHeading() {
+    #expect(OnboardingStepHeader.headingTraits == .isHeader)
+  }
+
+  @Test func stepProgressAccessibilityLabelUsesTheSelectedLanguage() {
+    #expect(
+      ProfileOnboardingAccessibility.stepLabel(stepIndex: 2, stepCount: 5, language: .english)
+        == "Step 2 of 5")
+    #expect(
+      ProfileOnboardingAccessibility.stepLabel(stepIndex: 2, stepCount: 5, language: .hebrew)
+        == "שלב 2 מתוך 5")
+  }
+
   @Test func stepsAdvanceSkipAndGoBackInOrder() {
     let model = OnboardingRecorder().model()
     #expect(model.step == .name)
@@ -177,11 +200,23 @@ private struct CreationFailure: Error {}
     advanceToAccount(model)
     model.skip()
     model.continueToNext()
-    #expect(model.failure != nil && model.outcome == nil && recorder.outcomes.isEmpty)
+    #expect(model.failure == SettingsL10n.string("Could not create this profile. Try again."))
+    #expect(model.outcome == nil && recorder.outcomes.isEmpty)
+    #expect(
+      BrowserLocalization.string(
+        "Could not create this profile. Try again.", table: "Settings", language: .hebrew)
+        == "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב.")
+
     recorder.creationError = nil
     model.continueToNext()
     #expect(recorder.drafts.count == 2 && recorder.signIns.isEmpty)
     #expect(recorder.outcomes == [.created(recorder.createdID)])
+  }
+
+  @Test func profileCreationFailureHasNaturalHebrewCopy() {
+    #expect(
+      ProfileOnboardingModel.creationFailure(language: .hebrew)
+        == "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב.")
   }
 
   private func advanceToAccount(_ model: ProfileOnboardingModel) {

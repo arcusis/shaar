@@ -22,12 +22,17 @@ final class DeveloperPageModel {
   private(set) var failure: String?
   @ObservationIgnored weak var engine: BrowserEngine?
   @ObservationIgnored private var revision = 0
-  @ObservationIgnored private var closed = false
+  @ObservationIgnored private(set) var closed = false
   private(set) var overridesMayBeActive = false
   var hasActiveSimulation: Bool { simulation.isActive || overridesMayBeActive }
   @ObservationIgnored private var userAgent: String?
   @ObservationIgnored private var builtInToolsOpen = false
   @ObservationIgnored private var mediaMonitor: Task<Void, Never>?
+  @ObservationIgnored private var drainTask: Task<Void, Never>?
+  @ObservationIgnored var bugReportArchiveWriter: ([String: Data], URL) async throws -> URL = {
+    files, directory in
+    try await BugReportArchive.save(files: files, directory: directory)
+  }
 
   init(target: SiteControlTarget, engine: BrowserEngine?) {
     self.target = target
@@ -87,7 +92,11 @@ final class DeveloperPageModel {
     monitorInspectorMedia()
     guard !applying else { return }
     applying = true
-    Task { await drain() }
+    drainTask = Task { [weak self] in
+      guard let self else { return }
+      await self.drain()
+      self.drainTask = nil
+    }
   }
 
   private func monitorInspectorMedia() {
@@ -173,10 +182,15 @@ final class DeveloperPageModel {
         }
         if current == revision && destination == target { failure = nil }
       } catch {
-        if current == revision { failure = error.localizedDescription }
+        if current == revision { failure = Self.failureMessage(for: error) }
       }
       completed = current
     }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is DeveloperModeFailure { return error.localizedDescription }
+    return InspectorToolsL10n.string("Could not apply developer settings. Try again.")
   }
 
   func endSession() {
@@ -190,6 +204,8 @@ final class DeveloperPageModel {
     agentBridge.close()
     closed = true
     revision += 1
+    drainTask?.cancel()
+    drainTask = nil
     mediaMonitor?.cancel()
     mediaMonitor = nil
     performanceEnabled = false
@@ -217,10 +233,33 @@ final class DeveloperPageModel {
     }
     let destination = target
     let generation = documentGeneration
-    let result = try await engine.runtime.developerCall(
-      method, params: params, tabID: destination.tabID.uuidString,
-      profileID: destination.profileID.uuidString, windowID: engine.windowID)
-    guard destination == target && generation == documentGeneration else {
+    let call = DeveloperCallContinuation()
+    let result = try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        call.install(continuation)
+        guard !Task.isCancelled else {
+          call.resume(.failure(CancellationError()))
+          return
+        }
+        engine.runtime.developerCall(
+          method, params: params, tabID: destination.tabID.uuidString,
+          profileID: destination.profileID.uuidString, windowID: engine.windowID
+        ) { result, error in
+          if let error {
+            call.resume(.failure(error))
+          } else if let result {
+            call.resume(.success(DeveloperCallValue(result)))
+          } else {
+            call.resume(.failure(DeveloperModeFailure(
+              InspectorToolsL10n.string("The developer tools returned no result."))))
+          }
+        }
+      }
+    } onCancel: {
+      call.resume(.failure(CancellationError()))
+    }
+    .value
+    guard !closed, destination == target && generation == documentGeneration else {
       throw DeveloperModeFailure(InspectorToolsL10n.string("The page changed. Try again."))
     }
     return result
@@ -248,6 +287,55 @@ final class DeveloperPageModel {
 struct DeveloperModeFailure: LocalizedError {
   let errorDescription: String?
   init(_ message: String) { errorDescription = message }
+}
+
+private struct DeveloperCallValue: @unchecked Sendable {
+  let value: [String: Any]
+
+  init(_ value: [String: Any]) { self.value = value }
+}
+
+private final class DeveloperCallContinuation: @unchecked Sendable {
+  private enum State {
+    case waiting
+    case installed(CheckedContinuation<DeveloperCallValue, any Error>)
+    case finished(Result<DeveloperCallValue, any Error>)
+  }
+
+  private let lock = NSLock()
+  private var state = State.waiting
+
+  func install(_ continuation: CheckedContinuation<DeveloperCallValue, any Error>) {
+    lock.lock()
+    switch state {
+    case .waiting:
+      state = .installed(continuation)
+      lock.unlock()
+    case .installed:
+      lock.unlock()
+      preconditionFailure("A developer call continuation can only be installed once.")
+    case .finished(let result):
+      lock.unlock()
+      continuation.resume(with: result)
+    }
+  }
+
+  func resume(_ result: Result<DeveloperCallValue, any Error>) {
+    lock.lock()
+    let continuation: CheckedContinuation<DeveloperCallValue, any Error>?
+    switch state {
+    case .waiting:
+      state = .finished(result)
+      continuation = nil
+    case .installed(let installed):
+      state = .finished(result)
+      continuation = installed
+    case .finished:
+      continuation = nil
+    }
+    lock.unlock()
+    continuation?.resume(with: result)
+  }
 }
 
 extension BrowserEngine {

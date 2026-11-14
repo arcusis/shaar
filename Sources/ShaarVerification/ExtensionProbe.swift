@@ -10,6 +10,13 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+enum ExtensionProbeEvidence {
+  static func contentScriptReady(_ page: [String: Any]?) -> Bool {
+    page?["fixture"] as? String == "v1"
+      && (page?["extensionAccount"] as? String).map { !$0.isEmpty } == true
+  }
+}
+
 /// A component-loaded MV3 fixture proves API/profile boundaries, not store installation or Bitwarden.
 @MainActor
 final class ExtensionProbe {
@@ -211,9 +218,12 @@ final class ExtensionProbe {
     let json: String? = await withCheckedContinuation { continuation in
       runtime.evaluateProbePopupID(id, script: expression) { continuation.resume(returning: $0) }
     }
-    return json.flatMap { $0.data(using: .utf8) }.flatMap {
-      try? JSONSerialization.jsonObject(with: $0, options: .fragmentsAllowed)
-    }
+    return Self.popupEvidence(json)
+  }
+
+  static func popupEvidence(_ json: String?) -> Any? {
+    guard let json, let data = json.data(using: .utf8) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
   }
 
   /// The bundled manager extension answers chrome.management without adding tabs or windows.
@@ -325,7 +335,7 @@ final class ExtensionProbe {
 
   private func waitForContentScript(_ tab: String) async throws {
     for _ in 0..<60 {
-      if let value = await page(tab), value["extensionAccount"] as? String != nil { return }
+      if ExtensionProbeEvidence.contentScriptReady(await page(tab)) { return }
       try await Task.sleep(for: .milliseconds(100))
     }
     throw ExtensionProbeFailure("MV3 content script did not load in \(tab).")

@@ -60,6 +60,7 @@ final class BrowserStore {
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
   var commandIsOpen = false
+
   var commandQuery = "" {
     didSet {
       if let keyword = commandProviderKeyword,
@@ -160,7 +161,8 @@ final class BrowserStore {
   @ObservationIgnored var onWebShareDecision: ((String, WebShareOutcome) -> Void)?
   @ObservationIgnored var onPrintDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
-  @ObservationIgnored var onDeviceChooserDecision: ((DeviceChooserRequest, Int?) -> Void)?
+  @ObservationIgnored var onDeviceChooserDecision: ((DeviceChooserRequest, String?) -> Void)?
+  @ObservationIgnored var onHTTPAuthDecision: ((HTTPAuthRequest, String?, String?) -> Void)?
   /// The Chromium save offer currently shown for this window. Only one is offered at a time.
   private(set) var savePrompt: SavePromptRequest?
   @ObservationIgnored private var savePromptPageURL: URL?
@@ -181,6 +183,11 @@ final class BrowserStore {
   @ObservationIgnored var onNewProfile: ((UUID) -> Void)?
   @ObservationIgnored var onSpaceRemovalImpact: ((UUID) -> SpaceRemovalImpact)?
   @ObservationIgnored private var presentedConsentID: String?
+
+  isolated deinit {
+    sidebarDragCleanupTask?.cancel()
+    tabDragCleanupTask?.cancel()
+  }
 
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
     self.sessionFile = sessionFile
@@ -595,7 +602,7 @@ final class BrowserStore {
 
   func closeTab(_ id: UUID) {
     guard session.page(forTabID: id) != nil else { return }
-    requestedTabCloses.insert(id)
+    guard requestedTabCloses.insert(id).inserted else { return }
     if let onCloseTab {
       onCloseTab(id)
       return
@@ -614,7 +621,8 @@ final class BrowserStore {
     guard session.selectedSpaceID == spaceID, sheet == nil,
       let space = session.spaces.first(where: { $0.id == spaceID })
     else { return }
-    let todayIDs = Set(space.tabs.filter { !$0.isPinned }.map(\.id))
+    var todayIDs: Set<UUID> = []
+    for tab in space.tabs where !tab.isPinned { todayIDs.insert(tab.id) }
     let byTopic = Dictionary(grouping: groups) {
       $0.topic.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -681,6 +689,9 @@ final class BrowserStore {
   func nativeTabClosed(_ id: UUID) {
     sleepingTabIDs.remove(id)
     let requested = requestedTabCloses.remove(id) != nil
+    permissionFrames[id] = nil
+    permissionFrameOrigins[id] = nil
+    cancelDesktopCaptures(for: id)
     let page = session.page(forTabID: id)
     // WebContents destruction also reports "closed". Losing a native document
     // is not permission to delete a saved pin.
@@ -853,6 +864,7 @@ final class BrowserStore {
     permissionFrames[id] = nil
     permissionFrameOrigins[id] = nil
     cancelWebSharesInvalidatedByFrame(for: id)
+    cancelPrintsInvalidatedByFrame(for: id)
     guard rendererFailures[id]?.profileID == profileID else { return }
     rendererFailures[id] = nil
   }
@@ -966,18 +978,61 @@ final class BrowserStore {
   }
 
   @discardableResult
+  func selectNumberedPage(_ number: Int) -> Bool {
+    let space = session.selectedSpace
+    let tabs = space.tabs
+    let orderedTabs = space.orderedTabs
+    let favorites = session.favorites(for: space.profileID)
+    let pageIDs = orderedTabs.map(\.id) + favorites.compactMap {
+      session.favoritePage(for: $0.id)?.tab.id
+    }
+    let index = number == 9 ? pageIDs.count - 1 : number - 1
+    guard pageIDs.indices.contains(index) else { return false }
+    let pageID = pageIDs[index]
+    if let tabIndex = tabs.firstIndex(where: { $0.id == pageID }) {
+      return selectTabByShortcutIndex(tabIndex)
+    }
+    guard let favorite = favorites.first(where: {
+      session.favoritePage(for: $0.id)?.tab.id == pageID
+    }), session.selectFavorite(favorite.id, in: space.id) else { return false }
+    closeLibraryDrawer()
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    save()
+    return true
+  }
+
+  @discardableResult
   func selectAdjacentTab(by offset: Int) -> Bool {
-    let tabs = session.selectedSpace.tabs
-    guard tabs.count > 1, let selectedID = session.selectedSpace.selectedTabID,
-      let index = tabs.firstIndex(where: { $0.id == selectedID })
+    let space = session.selectedSpace
+    let tabs = space.orderedTabs
+    let favoriteIDs = session.favorites(for: space.profileID).compactMap { favorite in
+      session.favoritePage(for: favorite.id)?.tab.id
+    }
+    let pageIDs = tabs.map(\.id) + favoriteIDs
+    guard pageIDs.count > 1, let selectedID = session.selectedPage?.tab.id,
+      let index = pageIDs.firstIndex(of: selectedID)
     else { return false }
-    let next = (index + offset % tabs.count + tabs.count) % tabs.count
-    return selectTabByShortcutIndex(next)
+    let nextID = pageIDs[(index + offset % pageIDs.count + pageIDs.count) % pageIDs.count]
+    if let tabIndex = space.tabs.firstIndex(where: { $0.id == nextID }) {
+      return selectTabByShortcutIndex(tabIndex)
+    }
+    guard let favorite = session.favorites(for: space.profileID).first(where: { favorite in
+      session.favoritePage(for: favorite.id)?.tab.id == nextID
+    }), session.selectFavorite(favorite.id, in: space.id) else { return false }
+    closeLibraryDrawer()
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    save()
+    return true
   }
 
   func nativeTabOpened(_ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool)
     -> Bool
   {
+    guard NavigationInput.isWebURL(tab.url) || tab.url.absoluteString == "about:blank" else {
+      return false
+    }
     let previousSpaceID = session.selectedSpaceID
     let mayForeground = foreground && session.selectedSpace.profileID == profileID
     let favoriteOpenerSpace: UUID? = openerID.flatMap { opener -> UUID? in
@@ -1032,7 +1087,16 @@ final class BrowserStore {
 
   @discardableResult
   func requestDesktopCapture(_ request: DesktopCaptureRequest) -> Bool {
-    enqueueConsent(.desktopCapture(request))
+    guard request.matches(session),
+      permissionFrames[request.tabID] == nil || permissionFrames[request.tabID] == request.frameID,
+      permissionFrameOrigins[request.tabID] == nil
+        || permissionFrameOrigins[request.tabID] == request.requestingOrigin,
+      rendererFailures[request.tabID] == nil
+    else { return false }
+    guard enqueueConsent(.desktopCapture(request)) else { return false }
+    rememberPermissionFrame(
+      request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
+    return true
   }
 
   @discardableResult
@@ -1062,11 +1126,57 @@ final class BrowserStore {
     return enqueueConsent(.print(request))
   }
 
+  @discardableResult
+  func requestJavaScriptDialog(_ request: JavaScriptDialogRequest) -> Bool {
+    guard request.matches(session) else { return false }
+    return enqueueConsent(.javascriptDialog(request))
+  }
+
+  func resolveJavaScriptDialog(_ id: String, accepted: Bool, input: String?) {
+    let sheetID = "javascript-dialog-\(id)"
+    guard let request = consentRequests.first(where: { $0.id == sheetID }),
+      case .javascriptDialog(let dialog) = request
+    else { return }
+    let presented = sheet?.id == sheetID && presentedConsentID == sheetID
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID { presentedConsentID = nil }
+    if presented { sheet = nil }
+    let isCurrent = presented && dialog.matches(session)
+      && rendererFailures[dialog.tabID] == nil
+    let allowed = isCurrent && accepted
+    onJavaScriptDialogDecision?(id, allowed, allowed ? input : nil)
+    presentNextConsent()
+  }
+
+  func dismissJavaScriptDialog(_ id: String) {
+    let sheetID = "javascript-dialog-\(id)"
+    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID {
+      presentedConsentID = nil
+      sheet = nil
+    }
+    presentNextConsent()
+  }
+
   private func printRequestIsCurrent(_ request: PrintRequest) -> Bool {
     guard let frameID = permissionFrames[request.tabID],
       let origin = permissionFrameOrigins[request.tabID]
     else { return false }
     return request.matches(session, frameID: frameID, origin: origin)
+  }
+
+  private func cancelPrintsInvalidatedByFrame(for tabID: UUID) {
+    let staleIDs = consentRequests.compactMap { request -> String? in
+      guard case .print(let printRequest) = request,
+        printRequest.tabID == tabID,
+        !printRequestIsCurrent(printRequest)
+      else { return nil }
+      return request.id
+    }
+    for id in staleIDs {
+      resolveConsent(id, accepted: false)
+    }
   }
 
   func resolvePrint(_ id: String, accepted: Bool) {
@@ -1123,6 +1233,8 @@ final class BrowserStore {
     }
     let valid =
       presented
+      && permissionFrames[capture.tabID] != nil
+      && permissionFrameOrigins[capture.tabID] != nil
       && capture.matches(
         session, frameID: permissionFrames[capture.tabID],
         origin: permissionFrameOrigins[capture.tabID])
@@ -1151,10 +1263,22 @@ final class BrowserStore {
     presentNextConsent()
   }
 
+  private func cancelDesktopCaptures(for tabID: UUID) {
+    let requestIDs = consentRequests.compactMap { request -> String? in
+      guard case .desktopCapture(let capture) = request, capture.tabID == tabID else { return nil }
+      return capture.id
+    }
+    for requestID in requestIDs {
+      resolveDesktopCapture(requestID, sourceID: nil)
+    }
+  }
+
   func rememberPermissionFrame(_ tabID: UUID, frameID: String, origin: URL? = nil) {
     permissionFrames[tabID] = frameID
     permissionFrameOrigins[tabID] = origin
     cancelWebSharesInvalidatedByFrame(for: tabID)
+    cancelDesktopCapturesInvalidatedByFrame(for: tabID)
+    cancelPrintsInvalidatedByFrame(for: tabID)
   }
 
   func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {
@@ -1163,10 +1287,15 @@ final class BrowserStore {
       guard case .webShare(let share) = request else { return false }
       return share.tabID == tabID && share.frameID == frameID
     }
-    guard !usedByAcceptedShare else { return }
+    let usedByPendingPrint = consentRequests.contains { request in
+      guard case .print(let print) = request else { return false }
+      return print.tabID == tabID && print.frameID == frameID
+    }
+    guard !usedByAcceptedShare, !usedByPendingPrint else { return }
     permissionFrames[tabID] = nil
     permissionFrameOrigins[tabID] = nil
     cancelWebSharesInvalidatedByFrame(for: tabID)
+    cancelDesktopCapturesInvalidatedByFrame(for: tabID)
   }
 
   private func cancelWebSharesInvalidatedByFrame(for tabID: UUID) {
@@ -1179,6 +1308,23 @@ final class BrowserStore {
     }
     for id in staleIDs {
       resolveWebShare(id, outcome: .cancelled)
+    }
+  }
+
+  private func cancelDesktopCapturesInvalidatedByFrame(for tabID: UUID) {
+    let staleIDs = consentRequests.compactMap { request -> String? in
+      guard case .desktopCapture(let capture) = request, capture.tabID == tabID else { return nil }
+      let matchesCurrentFrame: Bool
+      if let frameID = permissionFrames[tabID], let origin = permissionFrameOrigins[tabID] {
+        matchesCurrentFrame = capture.matches(session, frameID: frameID, origin: origin)
+      } else {
+        matchesCurrentFrame = false
+      }
+      guard !matchesCurrentFrame else { return nil }
+      return capture.id
+    }
+    for id in staleIDs {
+      resolveDesktopCapture(id, sourceID: nil)
     }
   }
 
@@ -1206,7 +1352,50 @@ final class BrowserStore {
     enqueueConsent(.deviceChooser(request))
   }
 
-  func resolveDeviceChooser(_ id: String, optionIndex: Int?) {
+  @discardableResult
+  func requestHTTPAuth(_ request: HTTPAuthRequest) -> Bool {
+    enqueueConsent(.httpAuth(request))
+  }
+
+  func resolveHTTPAuth(_ request: HTTPAuthRequest, username: String?, password: String?) {
+    let sheetID = request.sheetID
+    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    let presented = sheet?.id == sheetID && presentedConsentID == sheetID
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID { presentedConsentID = nil }
+    if presented { sheet = nil }
+    let accepted = presented && request.matches(session) && username != nil && password != nil
+    onHTTPAuthDecision?(request, accepted ? username : nil, accepted ? password : nil)
+    presentNextConsent()
+  }
+
+  func dismissHTTPAuth(_ id: String) {
+    let sheetID = "http-auth-\(id)"
+    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID {
+      presentedConsentID = nil
+      if sheet?.id == sheetID { sheet = nil }
+    }
+    presentNextConsent()
+  }
+
+  func dismissHTTPAuth(forTabID tabID: UUID) {
+    let ids = consentRequests.compactMap { request -> String? in
+      guard case .httpAuth(let auth) = request, auth.tabID == tabID else { return nil }
+      return auth.sheetID
+    }
+    guard !ids.isEmpty else { return }
+    consentRequests.removeAll { ids.contains($0.id) }
+    if let presentedConsentID, ids.contains(presentedConsentID) {
+      self.presentedConsentID = nil
+      if sheet?.id == presentedConsentID { sheet = nil }
+    }
+    presentNextConsent()
+  }
+
+  func resolveDeviceChooser(_ id: String, optionID: String?) {
+
     let sheetID = "chooser-\(id)"
     guard let request = consentRequests.first(where: { $0.id == sheetID }),
       case .deviceChooser(let chooser) = request
@@ -1216,7 +1405,7 @@ final class BrowserStore {
     if presentedConsentID == sheetID { presentedConsentID = nil }
     if presented { sheet = nil }
     onDeviceChooserDecision?(
-      chooser, grantedDeviceIndex(chooser, optionIndex: optionIndex, presented: presented))
+      chooser, grantedDeviceOptionID(chooser, optionID: optionID, presented: presented))
     presentNextConsent()
   }
 
@@ -1242,14 +1431,78 @@ final class BrowserStore {
     presentNextConsent()
   }
 
-  private func grantedDeviceIndex(
-    _ chooser: DeviceChooserRequest, optionIndex: Int?, presented: Bool
-  ) -> Int? {
+  private func grantedDeviceOptionID(
+    _ chooser: DeviceChooserRequest, optionID: String?, presented: Bool
+  ) -> String? {
     guard presented, chooser.matches(session), rendererFailures[chooser.tabID] == nil,
-      chooser.canGrant, let optionIndex
+      chooser.canGrant, let optionID
     else { return nil }
-    guard chooser.options.contains(where: { $0.index == optionIndex }) else { return nil }
-    return optionIndex
+    guard chooser.options.contains(where: { $0.optionID == optionID }) else { return nil }
+    return optionID
+  }
+
+  @discardableResult
+  func requestSavePrompt(_ request: SavePromptRequest) -> Bool {
+    guard !isPrivate else { return false }
+    if savePrompt?.id == request.id { return savePrompt == request }
+    guard savePrompt == nil, request.matches(session, inPrivateWindow: isPrivate) else {
+      return false
+    }
+    guard let pageURL = session.selectedPage?.tab.url,
+      let cleanedPageURL = cleanedSavePromptPageURL(pageURL)
+    else { return false }
+    dismissCommand()
+    dismissPageFind()
+    savePromptPageURL = cleanedPageURL
+    savePrompt = request
+    return true
+  }
+
+  func resolveSavePrompt(_ id: String, decision: SavePromptRequest.Decision) {
+    guard let request = savePrompt, request.id == id else { return }
+    savePrompt = nil
+    savePromptPageURL = nil
+    let matches = request.matches(session, inPrivateWindow: isPrivate)
+    onSavePromptDecision?(id, request.decision(decision, matchesSession: matches))
+  }
+
+  /// A Save click on another tab would reach Chromium as a silent dismiss.
+  /// Leaving the requesting tab consumes the offer immediately.
+  private func dismissSavePromptIfSelectionLeft(_ previous: BrowserSession) {
+    guard !dismissingSavePrompt, let prompt = savePrompt else { return }
+    let selected = session.selectedPage?.tab.id
+    guard selected != previous.selectedPage?.tab.id, prompt.tabID != selected else { return }
+    dismissingSavePrompt = true
+    resolveSavePrompt(prompt.id, decision: .dismiss)
+    dismissingSavePrompt = false
+  }
+
+  private func dismissSavePromptIfPageChanged(_ tabID: UUID) {
+    guard !dismissingSavePrompt, let prompt = savePrompt, prompt.tabID == tabID else { return }
+    let currentPageURL = session.page(forTabID: tabID)?.tab.url
+    let currentPageMatches = currentPageURL.flatMap(cleanedSavePromptPageURL) == savePromptPageURL
+    guard !prompt.matches(session, inPrivateWindow: isPrivate) || !currentPageMatches else { return }
+    dismissingSavePrompt = true
+    resolveSavePrompt(prompt.id, decision: .dismiss)
+    dismissingSavePrompt = false
+  }
+
+  private func cleanedSavePromptPageURL(_ url: URL) -> URL? {
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+      return nil
+    }
+    components.user = nil
+    components.password = nil
+    components.query = nil
+    components.fragment = nil
+    return components.url
+  }
+
+  /// Clears a prompt Chromium already finished. Does not send another decision.
+  func dismissSavePrompt(_ id: String) {
+    guard savePrompt?.id == id else { return }
+    savePrompt = nil
+    savePromptPageURL = nil
   }
 
   @discardableResult
@@ -1349,11 +1602,16 @@ final class BrowserStore {
       onDesktopCaptureDecision?(request.id, nil)
     case .webShare(let request): onWebShareDecision?(request.id, .cancelled)
     case .print(let request): onPrintDecision?(request.id, false)
+    case .javascriptDialog(let request):
+      onJavaScriptDialogDecision?(request.id, request.kind == .alert, nil)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .deviceChooser(let request): onDeviceChooserDecision?(request, nil)
+    case .httpAuth(let request): onHTTPAuthDecision?(request, nil, nil)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }
   }
+
+  var onJavaScriptDialogDecision: ((String, Bool, String?) -> Void)?
 
   func presentNextConsent() {
     guard sheet == nil, let request = consentRequests.first else { return }
@@ -1796,10 +2054,24 @@ final class BrowserStore {
   }
 
   private static func saveNotice(failure: String?) -> String? {
-    failure.map { ShellL10n.format("Changes could not be saved. %@", arguments: [.string($0)]) }
+    failure.map { _ in ShellL10n.string("Changes could not be saved. Try again.") }
   }
 
   private func reconcileTransientState() {
+    let liveTabIDs = Set(
+      session.spaces.flatMap(\.tabs).map(\.id) + session.favoritePages.map { $0.tab.id })
+    splitTabRecency.removeAll { !liveTabIDs.contains($0) }
+    sleepingTabIDs.formIntersection(liveTabIDs)
+    requestedTabCloses.formIntersection(liveTabIDs)
+    if let tabDrag, !liveTabIDs.contains(tabDrag.tabID) { self.tabDrag = nil }
+    if case .tab(_, _, let tabID) = sidebarDrag, !liveTabIDs.contains(tabID) {
+      sidebarDrag = nil
+    }
+    if let pendingSplitPlacement, !liveTabIDs.contains(pendingSplitPlacement.target) {
+      dismissCommand()
+    }
+    permissionFrames = permissionFrames.filter { liveTabIDs.contains($0.key) }
+    permissionFrameOrigins = permissionFrameOrigins.filter { liveTabIDs.contains($0.key) }
     rendererFailures = rendererFailures.filter { $0.value.belongs(to: session) }
     if !canUseLibraryDrawer {
       closeLibraryDrawer()

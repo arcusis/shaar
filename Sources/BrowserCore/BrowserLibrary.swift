@@ -121,13 +121,17 @@ public struct BrowserHistoryEntry: Identifiable, Equatable, Sendable {
       CFGetTypeID(count) != CFBooleanGetTypeID(), count.doubleValue.isFinite,
       count.doubleValue >= 0, count.doubleValue < Double(Int64.max),
       count.doubleValue.rounded(.towardZero) == count.doubleValue,
-      let visits = payload["v"] as? [NSNumber], !visits.isEmpty,
-      visits.allSatisfy({
-        CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue.isFinite && $0.doubleValue >= 0
-          && $0.doubleValue <= Date.distantFuture.timeIntervalSince1970 * 1000
-      }),
-      let last = visits.map(\.doubleValue).max()
+      let visits = payload["v"] as? [NSNumber], !visits.isEmpty
     else { throw LibraryDataError.invalidHistory }
+    let maximumVisit = Date.distantFuture.timeIntervalSince1970 * 1_000
+    var last = 0.0
+    for visit in visits {
+      let value = visit.doubleValue
+      guard CFGetTypeID(visit) != CFBooleanGetTypeID(), value.isFinite,
+        value >= 0, value <= maximumVisit
+      else { throw LibraryDataError.invalidHistory }
+      last = max(last, value)
+    }
     self.profileID = profileID
     self.address = address
     self.title =
@@ -135,6 +139,24 @@ public struct BrowserHistoryEntry: Identifiable, Equatable, Sendable {
       ? URL(string: address)?.host() ?? address : title
     visitCount = count.int64Value
     lastVisit = Date(timeIntervalSince1970: last / 1000)
+  }
+
+  static func latestValidVisit(in visits: [NSNumber]) -> Double? {
+    guard !visits.isEmpty else { return nil }
+    let latestAllowed = Date.distantFuture.timeIntervalSince1970 * 1000
+    var latest = 0.0
+    for (index, visit) in visits.enumerated() {
+      let value = visit.doubleValue
+      guard CFGetTypeID(visit) != CFBooleanGetTypeID(), value.isFinite, value >= 0,
+        value <= latestAllowed
+      else { return nil }
+      if index == 0 || value > latest { latest = value }
+    }
+    return latest
+  }
+
+  static func validatedLatestVisit(in visits: [NSNumber]) -> Double? {
+    latestValidVisit(in: visits)
   }
 }
 

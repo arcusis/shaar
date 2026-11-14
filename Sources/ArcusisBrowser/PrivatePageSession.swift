@@ -42,6 +42,11 @@ final class PrivatePageSession {
   @ObservationIgnored var onEmpty: (() -> Void)?
   @ObservationIgnored let profileIsDownloading: (UUID) -> Bool
 
+  isolated deinit {
+    suspensionTask?.cancel()
+    memoryPressureSource?.cancel()
+  }
+
   init(
     runtime: ARCChromiumRuntime, contextID: String, windowID: String,
     firstTabID: UUID, store: BrowserStore,
@@ -114,7 +119,7 @@ final class PrivatePageSession {
           contextID: contextID, url: tab.url.absoluteString)
         liveTabs.insert(tab.id)
       } catch {
-        failure = error.localizedDescription
+        failure = ShellL10n.string("Could not open the private tab. Try again.")
       }
     }
     for id in liveTabs.subtracting(expected) { close(id) }
@@ -202,6 +207,23 @@ final class PrivatePageSession {
     selectedTabID = id
     wakeIfSleeping(id)
     _ = store.nativeTabActivated(id, profileID: store.session.selectedSpace.profileID)
+    restoreSelectedPageAfterActivation(id)
+  }
+
+  private func restoreSelectedPageAfterActivation(_ selected: UUID) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.isClosed,
+        self.selectedTabID == selected,
+        self.store?.session.selectedPage?.tab.id == selected,
+        let view = self.runtime.view(
+          forPrivateTabID: selected.uuidString,
+          windowID: self.windowID,
+          contextID: self.contextID),
+        let window = self.runtime.window(
+          forPrivateWindowID: self.windowID, contextID: self.contextID)
+      else { return }
+      _ = ChromiumPageContainerView.restoreSelectedPage(view, tabID: selected, in: window)
+    }
   }
 
   func noteMediaAccess(_ id: UUID, camera: Bool, microphone: Bool, screen: Bool) {
@@ -312,7 +334,7 @@ final class PrivatePageSession {
           id.uuidString, windowID: windowID,
           contextID: contextID)
         selectedTabID = id
-      } catch { failure = error.localizedDescription }
+      } catch { failure = ShellL10n.string("Could not open the private tab. Try again.") }
     }
   }
 
@@ -343,12 +365,21 @@ struct PrivateBrowserPage: NSViewRepresentable {
     let native = session.runtime.view(
       forPrivateTabID: tabID.uuidString, windowID: session.windowID,
       contextID: session.contextID)
-    _ = view.attach(native)
-    if inSplit { native?.isHidden = false }
+    _ = Self.selectPage(native, tabID: tabID, liveTabs: session.liveTabs, in: view, inSplit: inSplit)
+  }
+
+  @discardableResult
+  static func selectPage(
+    _ page: NSView?, tabID: UUID, liveTabs: Set<UUID>, in container: ChromiumPageContainerView,
+    inSplit: Bool = false
+  ) -> Bool {
+    let selected = container.select(page, tabID: tabID, liveTabs: liveTabs)
+    if inSplit { page?.isHidden = false }
+    return selected
   }
 
   static func dismantleNSView(_ view: ChromiumPageContainerView, coordinator: ()) {
-    view.attach(nil)
+    ChromiumPageContainerView.dismantlePrivatePage(view)
   }
 }
 

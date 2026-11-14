@@ -4,6 +4,7 @@
 
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumShaarExtensionsInternal.h"
+#import <CoreFoundation/CoreFoundation.h>
 
 static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfafp";
 // Chromium 155 extensions/common/mojom/manifest.mojom ManifestLocation values.
@@ -46,20 +47,31 @@ static NSString *ARCJSONLiteral(id value) {
   _popupObservers = [NSMutableDictionary dictionary];
   _actionTitles = [NSMutableDictionary dictionary];
   _actionLoading = [NSMutableSet set];
-  _webStoreFit = [[ARCWebStoreFit alloc] initWithTesting:NO];
+  BOOL testing = NO;
+#if defined(SHAAR_VERIFICATION)
+  testing =
+      [NSProcessInfo.processInfo.environment[@"SHAAR_ENGINE_TESTING"] isEqualToString:@"1"];
+#endif
+  _webStoreFit = [[ARCWebStoreFit alloc] initWithTesting:testing];
   return self;
 }
 @end
 
 static ARCShaarExtensionState *ShaarExtensionState(ARCShaarRuntime *runtime) {
   static NSMapTable<ARCShaarRuntime *, ARCShaarExtensionState *> *states;
+  static NSRecursiveLock *statesLock;
   static dispatch_once_t once;
-  dispatch_once(&once, ^{ states = [NSMapTable weakToStrongObjectsMapTable]; });
+  dispatch_once(&once, ^{
+    states = [NSMapTable weakToStrongObjectsMapTable];
+    statesLock = [NSRecursiveLock new];
+  });
+  [statesLock lock];
   ARCShaarExtensionState *state = [states objectForKey:runtime];
   if (!state) {
     state = [ARCShaarExtensionState new];
     [states setObject:state forKey:runtime];
   }
+  [statesLock unlock];
   return state;
 }
 
@@ -72,13 +84,17 @@ static NSString *ShaarJSONString(id value) {
 NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *json) {
   NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
   NSDictionary *object = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-  if (![object isKindOfClass:NSDictionary.class] || ![object[@"schemaVersion"] isEqual:@1] ||
+  if (![object isKindOfClass:NSDictionary.class] ||
+      ![object[@"schemaVersion"] isKindOfClass:NSNumber.class] ||
+      CFGetTypeID((__bridge CFTypeRef)object[@"schemaVersion"]) == CFBooleanGetTypeID() ||
+      ![object[@"schemaVersion"] isEqual:@1] ||
       ![object[@"extensions"] isKindOfClass:NSArray.class]) return nil;
   NSMutableArray *rows = [NSMutableArray array];
   for (id entry in object[@"extensions"]) {
     if (![entry isKindOfClass:NSDictionary.class]) return nil;
     NSNumber *location = entry[@"source"];
     if (![location isKindOfClass:NSNumber.class] ||
+        CFGetTypeID((__bridge CFTypeRef)location) == CFBooleanGetTypeID() ||
         location.integerValue == ARCComponentExtensionLocation ||
         location.integerValue == ARCExternalComponentExtensionLocation) continue;
     NSString *identity = entry[@"id"];

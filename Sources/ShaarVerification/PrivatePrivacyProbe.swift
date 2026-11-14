@@ -11,6 +11,15 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum PrivatePrivacyEvaluation {
+  static func decode(_ json: String?) throws -> [String: Any] {
+    guard let json, let data = json.data(using: .utf8),
+      let result = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { throw PrivateWindowFailure("Private privacy script did not return an object.") }
+    return result
+  }
+}
+
 /// Paired normal/OTR behavior, using only the owned loopback listener.
 @MainActor
 struct PrivatePrivacyProbe {
@@ -223,10 +232,7 @@ struct PrivatePrivacyProbe {
         }
       }
     }
-    guard let json, let data = json.data(using: .utf8),
-      let result = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { throw PrivateWindowFailure("Private privacy script did not return an object.") }
-    return result
+    return try PrivatePrivacyEvaluation.decode(json)
   }
 
   private func report(_ checks: [String: Bool], _ observations: [String: Any], error: String?)

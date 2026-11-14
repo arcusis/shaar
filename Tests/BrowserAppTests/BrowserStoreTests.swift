@@ -10,6 +10,23 @@ import Testing
 
 @Suite @MainActor
 struct BrowserStoreTests {
+  @Test func removeSpaceProfileMembershipFocusedBenchmark() throws {
+    let profile = BrowserProfile(name: "Shared")
+    let spaces = (0..<2_000).map { index in
+      BrowserSpace(
+        profileID: profile.id, name: "Space \(index)", symbol: "square",
+        tint: .lavender)
+    }
+    let session = try BrowserSession(
+      profiles: [profile], spaces: spaces, selectedSpaceID: spaces[0].id)
+    let start = ContinuousClock.now
+    for _ in 0..<10 {
+      var copy = session
+      _ = copy.removeSpace(spaces[0].id)
+    }
+    print("removeSpaceProfileMembershipFocusedBenchmark: \(start.duration(to: .now))")
+  }
+
   @Test func cyclingSpacesCancelsPendingSplitPlacement() throws {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com/first")!))
@@ -152,6 +169,15 @@ struct BrowserStoreTests {
     #expect(store.session.spaces[0].tabs.isEmpty)
     try store.flushSaves()
     #expect(try file.load() == store.session)
+  }
+
+  @Test func failedSessionWriteUsesLocalizedRecoveryNotice() throws {
+    let parent = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try Data("not a directory".utf8).write(to: parent)
+    defer { try? FileManager.default.removeItem(at: parent) }
+    let file = SessionFile(url: parent.appending(path: "session.json"))
+    let store = BrowserStore(sessionFile: file)
+    #expect(store.storageNotice == ShellL10n.string("Changes could not be saved. Try again."))
   }
 
   @Test func damagedSessionIsPreservedWhenUserChangesTemporarySession() throws {

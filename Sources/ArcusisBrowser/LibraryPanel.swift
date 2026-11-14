@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -19,6 +20,43 @@ enum LibraryPanelSearch {
   static func matches(_ text: String, query: String) -> Bool {
     query.isEmpty || text.localizedStandardContains(query)
   }
+
+  static func bookmarkRows(
+    items: [BrowserBookmark], collapsed: Set<UUID>, query: String
+  ) -> [BrowserBookmark] {
+    if !query.isEmpty {
+      return items.filter {
+        matches("\($0.title) \($0.address ?? "") \($0.path)", query: query)
+      }
+    }
+    var hiddenDepth: Int?
+    return items.filter { item in
+      if let hidden = hiddenDepth, item.depth > hidden { return false }
+      hiddenDepth = item.isFolder && collapsed.contains(item.id) ? item.depth : nil
+      return true
+    }
+  }
+
+  static func history(_ entries: [BrowserHistoryEntry], query: String) -> [BrowserHistoryEntry] {
+    entries.filter { matches("\($0.title) \($0.address)", query: query) }
+  }
+}
+
+enum LibraryPanelAccessibility {
+  static func loadingLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string("Loading library", table: "Panels", language: language)
+  }
+}
+
+struct LibraryPanelFilteredRows<Element> {
+  private let values: [Element]
+
+  init(makeValues: () -> [Element]) {
+    values = makeValues()
+  }
+
+  var rows: [Element] { values }
+  var isEmpty: Bool { values.isEmpty }
 }
 
 enum LibraryHistoryAccessibility {
@@ -31,10 +69,30 @@ enum LibraryHistoryAccessibility {
   }
 }
 
+enum LibraryPanelFooterAccessibility {
+  static func footerProgressLabel(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    PanelsL10n.string("Updating Library…", language: language)
+  }
+}
+
+enum LibraryImportErrorPresentation {
+  static func message(for error: Error) -> String? {
+    if error is CancellationError { return nil }
+    let cocoaError = error as NSError
+    guard cocoaError.domain == NSCocoaErrorDomain, cocoaError.code == NSUserCancelledError else {
+      return error.localizedDescription
+    }
+    return nil
+  }
+}
+
 struct LibraryPanel: View {
   let store: BrowserStore
   let profileID: UUID
   @Environment(\.dismiss) private var dismiss
+  static var titleAccessibilityTraits: AccessibilityTraits { .isHeader }
   @State private var section: LibrarySection
   @State private var query = ""
   @State private var collapsed: Set<UUID> = []
@@ -51,6 +109,17 @@ struct LibraryPanel: View {
     _section = State(initialValue: section)
   }
 
+  static func importFailure(
+    _ error: Error, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    if let error = error as? BrowserImport.ImportError {
+      return error.description(language: language)
+    }
+    return BrowserLocalization.string(
+      "Could not open this browser export. Check that it is supported and try again.",
+      table: "Panels", language: language)
+  }
+
   private var key: LibraryKey { LibraryKey(profileID: profileID, section: section) }
   private var ownsContext: Bool { store.session.selectedSpace.profileID == profileID }
   private var busy: Bool { store.library.mutating.contains(key) }
@@ -58,40 +127,34 @@ struct LibraryPanel: View {
   private var tree: BookmarkTree? { store.library.bookmarks[profileID] }
   private var bookmarks: [BrowserBookmark] {
     guard let tree else { return [] }
-    if !query.isEmpty {
-      return tree.items.filter {
-        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: query)
-      }
-    }
-    var hiddenDepth: Int?
-    return tree.items.filter { item in
-      if let hidden = hiddenDepth, item.depth > hidden { return false }
-      hiddenDepth = item.isFolder && collapsed.contains(item.id) ? item.depth : nil
-      return true
-    }
+    return LibraryPanelSearch.bookmarkRows(items: tree.items, collapsed: collapsed, query: query)
   }
   private var searchLabel: String {
     PanelsL10n.string(section == .bookmarks ? "Search Bookmarks" : "Search History")
   }
 
-  private var history: [BrowserHistoryEntry] {
-    (store.library.history[profileID] ?? []).filter {
-      LibraryPanelSearch.matches("\($0.title) \($0.address)", query: query)
-    }
-  }
-
   var body: some View {
+    let history = LibraryPanelSearch.history(store.library.history[profileID] ?? [], query: query)
+    let visibleBookmarks = bookmarks
+    let filteredBookmarks = LibraryPanelFilteredRows {
+      section == .bookmarks ? visibleBookmarks : []
+    }
+    let filteredHistory = LibraryPanelFilteredRows {
+      section == .history ? history : []
+    }
     VStack(alignment: .leading, spacing: 14) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
           Text(section.title).font(.title2.weight(.semibold))
+            .accessibilityAddTraits(Self.titleAccessibilityTraits)
           if ownsContext {
             Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
               .font(.callout).foregroundStyle(.secondary)
           }
         }
         Spacer()
-        Button(PanelsL10n.string("Done")) { dismiss() }.keyboardShortcut(.cancelAction)
+        Button(PanelsL10n.string("Done"), role: .cancel) { dismiss() }
+          .keyboardShortcut(.cancelAction)
       }
       Picker(PanelsL10n.string("Library"), selection: $section) {
         ForEach(LibrarySection.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -107,17 +170,19 @@ struct LibraryPanel: View {
       } else if loading
         && (section == .bookmarks ? tree == nil : store.library.history[profileID] == nil)
       {
-        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        ProgressView()
+          .accessibilityLabel(LibraryPanelAccessibility.loadingLabel())
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 0) {
             if section == .bookmarks {
-              ForEach(bookmarks) { bookmarkRow($0) }
+              ForEach(filteredBookmarks.rows) { bookmarkRow($0) }
             } else {
-              ForEach(history) { historyRow($0) }
+              ForEach(filteredHistory.rows) { historyRow($0) }
             }
           }
-          if section == .bookmarks ? bookmarks.isEmpty : history.isEmpty {
+          if section == .bookmarks ? filteredBookmarks.isEmpty : filteredHistory.isEmpty {
             ContentUnavailableView(
               PanelsL10n.string("No matches"), systemImage: section == .bookmarks ? "star" : "clock"
             )
@@ -156,7 +221,10 @@ struct LibraryPanel: View {
         } label: {
           Label(PanelsL10n.string("Import…"), systemImage: "square.and.arrow.down")
         }
-        if loading || busy { ProgressView().controlSize(.small) }
+        if loading || busy {
+          ProgressView().controlSize(.small)
+            .accessibilityLabel(LibraryPanelFooterAccessibility.footerProgressLabel())
+        }
         Button(PanelsL10n.string("Refresh")) { store.library.refresh(profileID, section: section) }
       }
       .disabled(!ownsContext || busy || loading)
@@ -166,16 +234,24 @@ struct LibraryPanel: View {
     .fileImporter(
       isPresented: $choosingImport, allowedContentTypes: [.item, .folder]
     ) { result in
-      do {
-        let url = try result.get()
-        let access = url.startAccessingSecurityScopedResource()
-        defer { if access { url.stopAccessingSecurityScopedResource() } }
-        importPreview = try BrowserImport.read(url, source: importSource).items
-        importError = nil
-        showingImportPreview = true
-      } catch {
-        importError = error.localizedDescription
-        showingImportPreview = true
+      Task {
+        do {
+          let url = try result.get()
+          let access = url.startAccessingSecurityScopedResource()
+          defer { if access { url.stopAccessingSecurityScopedResource() } }
+          importPreview = try await BrowserImport.readOffMain(url, source: importSource).items
+          importError = nil
+          showingImportPreview = true
+        } catch {
+          guard LibraryImportErrorPresentation.message(for: error) != nil else { return }
+          let cocoaError = error as NSError
+          if error is BrowserImport.ImportError || cocoaError.domain == NSCocoaErrorDomain {
+            importError = Self.importFailure(error)
+          } else {
+            importError = Self.importErrorMessage(error)
+          }
+          showingImportPreview = true
+        }
       }
     }
     .sheet(
@@ -214,6 +290,11 @@ struct LibraryPanel: View {
       canImport: Self.canImportPreview(
         items: importPreview, hasBookmarkTree: tree != nil, busy: busy, loading: loading),
       onCancel: { showingImportPreview = false }, onImport: applyImport)
+  }
+
+  static func importErrorMessage(_ error: Error) -> String {
+    if error is BrowserImport.ImportError { return error.localizedDescription }
+    return PanelsL10n.string("The selected file could not be read. Try another file.")
   }
 
   static func canImportPreview(

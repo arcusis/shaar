@@ -105,8 +105,21 @@ extension PrivatePageSession {
       onSlept: { [weak self] id in self?.acceptSleep(id) })
   }
 
-  private func sleepingCandidates(in store: BrowserStore) -> [SleepingTabScheduler.Candidate] {
+  func sleepingCandidates(in store: BrowserStore) -> [SleepingTabScheduler.Candidate] {
     let isProfileDownloading = profileIsDownloading
+    let session = store.session
+    var profileByTabID: [UUID: UUID] = [:]
+    for space in session.spaces {
+      for tab in space.tabs { profileByTabID[tab.id] = space.profileID }
+    }
+    let profileByFavoriteID = Dictionary(
+      uniqueKeysWithValues: session.favorites.map { ($0.id, $0.profileID) })
+    for page in session.favoritePages {
+      if let profileID = profileByFavoriteID[page.favoriteID] {
+        profileByTabID[page.tab.id] = profileID
+      }
+    }
+    var downloadingByProfile: [UUID: Bool] = [:]
     return SleepingTabScheduler.candidates(
       in: store, liveTabs: liveTabs,
       isPlaying: { store.media.sessions[$0]?.isPlaying == true },
@@ -115,8 +128,11 @@ extension PrivatePageSession {
       hasDeveloperTools: { self.privateDeveloperTools.contains($0) },
       hasAgentConnection: { _ in false },
       profileIsDownloading: { id in
-        guard let profile = store.session.profileID(forTabID: id) else { return false }
-        return isProfileDownloading(profile)
+        guard let profile = profileByTabID[id] else { return false }
+        if let isDownloading = downloadingByProfile[profile] { return isDownloading }
+        let isDownloading = isProfileDownloading(profile)
+        downloadingByProfile[profile] = isDownloading
+        return isDownloading
       })
   }
 }

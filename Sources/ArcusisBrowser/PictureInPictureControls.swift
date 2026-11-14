@@ -36,6 +36,11 @@ final class PictureInPictureControls {
     view.onGesture = { [weak self] in self?.handle($0) }
   }
 
+  isolated deinit {
+    pendingAttachment?.cancel()
+    detach()
+  }
+
   var isAttached: Bool { panel != nil }
 
   /// Attaches to the tab's window once Chromium shows it; Chromium reports the window as it
@@ -48,6 +53,7 @@ final class PictureInPictureControls {
     self.tabID = tabID
     pendingAttachment = Task { [weak self] in
       for _ in 0..<50 {
+        guard !Task.isCancelled else { return }
         if let window = find() {
           self?.attach(to: window, tabID: tabID, video: video())
           return

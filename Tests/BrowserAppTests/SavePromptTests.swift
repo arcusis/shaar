@@ -19,8 +19,7 @@ struct SavePromptTests {
 
   private func request(
     _ store: BrowserStore, id: String = "1", kind: SavePromptRequest.Kind = .password,
-    update: Bool = false, detail: String = "parity-user", profileID: UUID? = nil,
-    tabID: UUID? = nil
+    update: Bool = false, detail: String = "parity-user"
   ) throws -> SavePromptRequest {
     let tab = try #require(store.session.selectedSpace.selectedTab)
     return try #require(
@@ -33,8 +32,8 @@ struct SavePromptTests {
         "pageURL": "http://127.0.0.1:9/password",
         "detail": detail,
         "update": update,
-        "profileID": (profileID ?? store.session.selectedSpace.profileID).uuidString,
-        "tabID": (tabID ?? tab.id).uuidString,
+        "profileID": store.session.selectedSpace.profileID.uuidString,
+        "tabID": tab.id.uuidString,
         "windowID": "window-1",
       ]))
   }
@@ -124,13 +123,6 @@ struct SavePromptTests {
     #expect(!request.matches(store.session, inPrivateWindow: true))
     #expect(!store.requestSavePrompt(request))
     #expect(store.savePrompt == nil)
-  }
-
-  @Test func requestMustMatchTheActiveProfileAndTab() throws {
-    let store = store()
-    #expect(try request(store).matches(store.session))
-    #expect(!(try request(store, profileID: UUID()).matches(store.session)))
-    #expect(!(try request(store, tabID: UUID()).matches(store.session)))
   }
 
   @Test func neverForACardIsDismissed() throws {

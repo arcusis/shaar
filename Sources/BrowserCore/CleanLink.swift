@@ -20,15 +20,22 @@ public enum CleanLink {
     if let destination = googleRedirectDestination(components) {
       return clean(destination)
     }
+    let hasCredentials = components.user != nil || components.password != nil
     let host = components.host?.lowercased() ?? ""
     let kept = components.queryItems?.filter { !isTracking($0.name.lowercased(), host: host) }
     let cleanedPath =
       isAmazonDomain(host) ? pathWithoutAmazonReferral(components.path) : components.path
-    if kept?.count == components.queryItems?.count && cleanedPath == components.path {
+    if kept?.count == components.queryItems?.count && cleanedPath == components.path
+      && !hasCredentials
+    {
       return url
     }
-    components.queryItems = kept?.isEmpty == true ? nil : kept
-    components.path = cleanedPath
+    components.user = nil
+    components.password = nil
+    if kept?.count != components.queryItems?.count {
+      components.queryItems = kept?.isEmpty == true ? nil : kept
+    }
+    if cleanedPath != components.path { components.path = cleanedPath }
     return components.url ?? url
   }
 

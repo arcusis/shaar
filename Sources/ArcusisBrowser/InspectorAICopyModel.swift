@@ -138,7 +138,7 @@ final class InspectorAICopyModel {
   }
 
   func copy(_ kind: CopyKind, to pasteboard: NSPasteboard = .general) async {
-    guard !busy else { return }
+    guard !Task.isCancelled, !busy else { return }
     busy = true
     failure = nil
     status = nil
@@ -182,12 +182,13 @@ final class InspectorAICopyModel {
         kind == .image ? "Copied image to clipboard" : "Copied element to clipboard")
       inspector.presentation.copied(kind == .image ? "image" : "element")
     } catch {
-      if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
+      if operation == revision { failure = Self.failureMessage(for: error) }
     }
   }
 
   func addNote() async {
-    guard !busy, notes.count < 50, !feedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    guard !Task.isCancelled, !busy, notes.count < 50,
+      !feedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { return }
     busy = true
     failure = nil
@@ -203,7 +204,7 @@ final class InspectorAICopyModel {
       if feedback == comment { feedback = "" }
       status = InspectorL10n.string("Note added")
     } catch {
-      if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
+      if operation == revision { failure = Self.failureMessage(for: error) }
     }
   }
 
@@ -243,8 +244,16 @@ final class InspectorAICopyModel {
       clear()
       status = InspectorL10n.string("Copied notes to clipboard")
       inspector?.presentation.copied("notes")
-    } catch { failure = InspectorL10n.display(error.localizedDescription) }
+    } catch { failure = Self.failureMessage(for: error) }
   }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return InspectorL10n.display(error.localizedDescription)
+    }
+    return InspectorL10n.string("Could not copy the selected element. Try again.")
+  }
+
   static func write(_ markdown: String?, png: Data?, to pasteboard: NSPasteboard) throws {
     let text = NSPasteboardItem()
     if let markdown {

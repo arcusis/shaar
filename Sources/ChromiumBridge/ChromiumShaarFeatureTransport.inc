@@ -54,7 +54,16 @@
       [](void *context, const shaar_result *result) {
         if (!context) return;
         void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
-        if (!result || result->error.code != SHAAR_OK) {
+        if (!result) {
+          finish(nil, ShaarError(@"Shaar feature operation failed."));
+          return;
+        }
+        if (result->size < sizeof(*result) ||
+            result->error.size < sizeof(result->error)) {
+          finish(nil, ShaarError(@"Shaar feature operation returned an invalid result."));
+          return;
+        }
+        if (result->error.code != SHAAR_OK) {
           finish(nil, ShaarError(@"Shaar feature operation failed."));
           return;
         }
@@ -74,13 +83,22 @@
 }
 
 - (BOOL)shaarDeleteProfileID:(NSString *)profileID {
+  return [self shaarDeleteProfileID:profileID completion:nil];
+}
+
+- (BOOL)shaarDeleteProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
   shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
   if (!profile || !_shaarEngine) return NO;
   for (NSString *owner in _shaarTabProfiles.allValues)
     if ([owner isEqualToString:profileID]) return NO;
   auto remove = (decltype(&shaar_profile_delete))dlsym(_shaarLibrary, "shaar_profile_delete");
   shaar_error error = EmptyError();
-  if (!remove || remove(profile, &error) != SHAAR_OK) return NO;
+  if (completion) _shaarProfileDeleteWaiters[profileID] = [completion copy];
+  const shaar_error_code status = remove ? remove(profile, &error) : SHAAR_NOT_READY;
+  if (status != SHAAR_OK) {
+    [_shaarProfileDeleteWaiters removeObjectForKey:profileID];
+    return NO;
+  }
   [_shaarProfiles removeObjectForKey:profileID];
   return YES;
 }

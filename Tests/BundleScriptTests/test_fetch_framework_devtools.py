@@ -3,9 +3,13 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import io
+import hashlib
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -37,6 +41,17 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
                 with self.subTest(path=path), self.assertRaises(ValueError):
                     fetcher.validate_output_path(path)
 
+    def test_output_path_rejects_symlinked_ancestors(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            redirect = root / "redirect"
+            redirect.symlink_to(REPO.parent, target_is_directory=True)
+            escaped = redirect / "generated" / "FrameworkDevTools"
+
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                fetcher.validate_output_path(escaped)
+
     def test_release_url_names_the_pinned_github_asset(self):
         fetcher = load_fetcher()
 
@@ -48,6 +63,20 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
             "https://github.com/arcusis/shaar/releases/download/"
             "framework-devtools-pins/react-8.0.0.crx",
         )
+
+    def test_transient_release_download_failure_is_retried(self):
+        fetcher = load_fetcher()
+        error = fetcher.urllib.error.HTTPError("https://example.invalid/react.crx", 503, "busy", {}, None)
+        sleeps = []
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "react.crx"
+            with patch.object(fetcher.urllib.request, "urlopen",
+                              side_effect=[error, io.BytesIO(b"pinned bytes")]) as open_url:
+                fetcher.download_url("https://example.invalid/react.crx", "react", destination, sleeps.append)
+            self.assertEqual(destination.read_bytes(), b"pinned bytes")
+
+        self.assertEqual(open_url.call_count, 2)
+        self.assertEqual(sleeps, [2])
 
     def test_bundle_does_not_refresh_archives_from_the_web_store(self):
         text = BUNDLE.read_text()
@@ -75,3 +104,84 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
             self.assertEqual(pinned.read_bytes(), b"pinned bytes")
             candidate = archive_dir / "react.crx.candidate"
             self.assertEqual(candidate.read_bytes(), b"not the pinned archive")
+
+    def test_oversized_cache_entry_is_rejected_before_full_file_read(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "react.crx"
+            with archive.open("wb") as handle:
+                handle.truncate(fetcher.MAX_ARCHIVE_SIZE + 1)
+
+            with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")):
+                self.assertFalse(fetcher.archive_matches("react", archive))
+
+    def test_oversized_archive_is_rejected_before_unpack_reads_it(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "react.crx"
+            with archive.open("wb") as handle:
+                handle.truncate(fetcher.MAX_ARCHIVE_SIZE + 1)
+
+            with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")):
+                with self.assertRaisesRegex(ValueError, "size limit"):
+                    fetcher.unpack("react", archive, root / "output")
+
+    def test_install_rejects_symlinked_cache_root_before_download(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external-cache"
+            external.mkdir()
+            sentinel = external / "keep.txt"
+            sentinel.write_text("leave untouched")
+            cache = root / "cache"
+            cache.symlink_to(external, target_is_directory=True)
+            downloads = []
+
+            def download(name, destination):
+                downloads.append(name)
+                destination.write_bytes(b"not the pinned archive")
+
+            with self.assertRaisesRegex(ValueError, "cache directory must not be a symlink"):
+                fetcher.install_pinned("react", cache, download, "test source")
+
+            self.assertEqual(downloads, [])
+            self.assertEqual(list(external.iterdir()), [sentinel])
+
+    def test_symlinked_pinned_cache_is_not_accepted(self):
+        fetcher = load_fetcher()
+        payload = b"verified pinned archive"
+        original = fetcher.PINS["react"]
+        pin = fetcher.PackagePin(
+            original.extension_id, original.version, hashlib.sha256(payload).hexdigest(),
+            original.devtools_page, original.page_script,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "outside.crx"
+            target.write_bytes(payload)
+            cache = root / "react.crx"
+            cache.symlink_to(target)
+            with patch.dict(fetcher.PINS, {"react": pin}):
+                self.assertFalse(fetcher.archive_matches("react", cache))
+    def test_install_rejects_symlinked_archive_directory_before_download(self):
+        fetcher = load_fetcher()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external"
+            external.mkdir()
+            cache = root / "cache"
+            cache.symlink_to(external, target_is_directory=True)
+            downloaded = []
+
+            def download(name, destination):
+                downloaded.append(name)
+                destination.write_bytes(b"unexpected cache write")
+
+            with self.assertRaisesRegex(ValueError, "archive cache directory must not be a symlink"):
+                fetcher.install_pinned("react", cache, download, "test source")
+
+            self.assertEqual(downloaded, [])
+            self.assertEqual(list(external.iterdir()), [])

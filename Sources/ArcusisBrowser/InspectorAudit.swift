@@ -57,6 +57,9 @@ final class InspectorAuditModel {
   private(set) var failure: String?
   private(set) var busy = false
   @ObservationIgnored private var operation: Task<Void, Never>?
+  @ObservationIgnored private(set) var operationID: UUID?
+  @ObservationIgnored private var selectionTask: Task<Void, Never>?
+  @ObservationIgnored private var selectionRequestID = UUID()
 
   init(inspector: InspectorModel?) { self.inspector = inspector }
 
@@ -76,16 +79,24 @@ final class InspectorAuditModel {
     let generation = inspector.documentGeneration
     let selectionID = scope == .selected ? inspector.selection?.id : nil
     let requestedScope = scope
+    let requestID = UUID()
     busy = true
     failure = nil
+    self.operationID = requestID
     operation = Task { [weak self] in
-      await self?.perform(requestedScope, generation: generation, selectionID: selectionID)
+      await self?.perform(
+        requestedScope, generation: generation, selectionID: selectionID, requestID: requestID)
     }
   }
 
   func cancel() {
+    operationID = nil
     operation?.cancel()
     operation = nil
+    operationID = nil
+    selectionRequestID = UUID()
+    selectionTask?.cancel()
+    selectionTask = nil
     busy = false
     report = nil
     failure = nil
@@ -112,19 +123,26 @@ final class InspectorAuditModel {
     let expression = """
       (()=>{try{const node=document.querySelector(\(selector));return node?globalThis.__shaarInspectorV2?.select(node)===true:false;}catch{return false;}})()
       """
-    operation?.cancel()
     let selectedReport = report?.scope == Scope.selected.rawValue
-    Task { [weak self, weak inspector] in
+    operation?.cancel()
+    operation = nil
+    operationID = nil
+    busy = false
+    selectionTask?.cancel()
+    let requestID = UUID()
+    selectionRequestID = requestID
+    selectionTask = Task { [weak self, weak inspector] in
       await self?.selectTarget(
-        expression, generation: generation, selectedReport: selectedReport, inspector: inspector)
+        expression, generation: generation, selectedReport: selectedReport, inspector: inspector,
+        requestID: requestID)
     }
   }
 
-  private func perform(_ scope: Scope, generation: Int, selectionID: Int?) async {
-    defer {
-      busy = false
-      operation = nil
-    }
+  private func perform(
+    _ scope: Scope, generation: Int, selectionID: Int?, requestID: UUID
+  ) async {
+    guard operationID == requestID else { return }
+    defer { finishOperation(requestID) }
     guard let inspector else { return }
     do {
       let source = try Self.resourceText("axe.min", extension: "js")
@@ -142,18 +160,39 @@ final class InspectorAuditModel {
     } catch is CancellationError {
       return
     } catch {
-      guard !Task.isCancelled, inspector.documentGeneration == generation else { return }
-      failure = InspectorL10n.display(error.localizedDescription)
+      guard operationID == requestID, !Task.isCancelled,
+        inspector.documentGeneration == generation else { return }
+      failure = Self.failureMessage(for: error)
     }
   }
 
+  func finishOperation(_ operationID: UUID) {
+    guard self.operationID == operationID else { return }
+    busy = false
+    operation = nil
+    self.operationID = nil
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return InspectorL10n.display(error.localizedDescription)
+    }
+    return InspectorL10n.string("Could not complete the page audit. Try again.")
+  }
+
   private func selectTarget(
-    _ expression: String, generation: Int, selectedReport: Bool, inspector: InspectorModel?
+    _ expression: String, generation: Int, selectedReport: Bool, inspector: InspectorModel?,
+    requestID: UUID
   ) async {
+    defer {
+      if selectionRequestID == requestID { selectionTask = nil }
+    }
     guard let inspector else { return }
     do {
       let selected = try await inspector.evaluate(expression) as? Bool ?? false
-      guard selected, inspector.isOpen, inspector.documentGeneration == generation else { return }
+      guard !Task.isCancelled, selectionRequestID == requestID, selected, inspector.isOpen,
+        inspector.documentGeneration == generation
+      else { return }
       if selectedReport { report = nil }
       failure = nil
       await inspector.refresh()

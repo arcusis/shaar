@@ -189,6 +189,11 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
       requestID, [](void *context, const shaar_result *result) {
         void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
         if (!result) { finish(nil, ShaarDevToolsError(@"DevTools returned no reply.")); return; }
+        if (result->size < sizeof(*result) ||
+            result->error.size < sizeof(result->error)) {
+          finish(nil, ShaarDevToolsError(@"DevTools returned an invalid result."));
+          return;
+        }
         if (result->error.code != SHAAR_OK) {
           finish(nil, ShaarDevToolsEngineError(result->error.code, result->error.message));
           return;

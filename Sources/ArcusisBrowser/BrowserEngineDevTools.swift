@@ -54,7 +54,9 @@ extension BrowserEngine {
     guard let target = siteControlTarget else { return }
     let identity = target.tabID.uuidString
     runtime.toggleDevTools(forTabID: identity) { [weak self] error in
-      if let error { self?.reportNotice(error.localizedDescription) }
+      if error != nil {
+        self?.reportNotice(ShellL10n.string("Could not open developer tools. Try again."))
+      }
       self?.developerModels[target.tabID]?.update(target: target)
     }
   }

@@ -68,6 +68,17 @@ import Testing
   #expect(results.last?.isOpen == true)
 }
 
+@Test func oneRowLimitWithMatchingOpenResultDoesNotIndexBeforeTheArray() {
+  var session = BrowserSession.fresh()
+  _ = session.open(URL(string: "https://needle.example")!)
+
+  let results = CommandSearch.results(
+    for: "needle", in: session, bookmarks: [], history: [], searchEngine: .google, limit: 1)
+
+  #expect(results.count == 1)
+  #expect(results.first?.isOpen == true)
+}
+
 private func limitedResults(
   for query: String, in session: BrowserSession, bookmarks: [BrowserBookmark] = [],
   history: [BrowserHistoryEntry] = []

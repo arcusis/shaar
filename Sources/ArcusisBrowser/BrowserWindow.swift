@@ -28,8 +28,13 @@ struct BrowserWindow: View {
   @State private var spacePagerState = SpacePagerState()
   @State private var pageEntryEdge: Edge = .trailing
 
+  static func reduceMotionEnabled(systemSetting: Bool, override: Bool?) -> Bool {
+    systemSetting || override == true
+  }
+
   private var spaceReduceMotion: Bool {
-    reduceMotion || accessibilityOverrides.reduceMotion == true
+    Self.reduceMotionEnabled(
+      systemSetting: reduceMotion, override: accessibilityOverrides.reduceMotion)
   }
 
   private var handoffURL: URL? {
@@ -56,10 +61,10 @@ struct BrowserWindow: View {
             }
           }
           .animation(
-            reduceMotion ? nil : .easeOut(duration: 0.12), value: store.libraryDrawerSection
+            spaceReduceMotion ? nil : .easeOut(duration: 0.12), value: store.libraryDrawerSection
           )
           .transaction { transaction in
-            if reduceMotion {
+            if spaceReduceMotion {
               transaction.animation = nil
               transaction.disablesAnimations = true
             }
@@ -76,7 +81,7 @@ struct BrowserWindow: View {
           spaceReduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85),
           value: store.session.selectedSpaceID
         )
-        .animation(reduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
+        .animation(spaceReduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
       }
       sidebarLayer
       if store.commandIsOpen {
@@ -99,14 +104,14 @@ struct BrowserWindow: View {
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }
     .animation(
-      reduceMotion ? nil : .spring(duration: 0.18, bounce: 0.15), value: store.commandIsOpen
+      spaceReduceMotion ? nil : .spring(duration: 0.18, bounce: 0.15), value: store.commandIsOpen
     )
-    .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
+    .animation(spaceReduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
     .animation(
-      reduceMotion ? nil : .easeOut(duration: 0.18),
+      spaceReduceMotion ? nil : .easeOut(duration: 0.18),
       value: SpaceChromeTint(space: store.session.selectedSpace)
     )
-    .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: sidebarVisibility)
+    .animation(spaceReduceMotion ? nil : .easeOut(duration: 0.18), value: sidebarVisibility)
     .userActivity(BrowserHandoff.activityType, isActive: handoffURL != nil) { activity in
       BrowserHandoff.update(
         activity, for: handoffURL, title: store.session.selectedPage?.tab.title)
@@ -159,8 +164,10 @@ struct BrowserWindow: View {
       case .desktopCapture(let request): DesktopCapturePicker(request: request, store: store)
       case .webShare(let request): WebShareSheet(request: request, store: store)
       case .print(let request): PrintConsentSheet(request: request, store: store)
+      case .javascriptDialog(let request): JavaScriptDialogSheet(request: request, store: store)
       case .externalApp(let request): ExternalAppConsent(store: store, request: request)
       case .deviceChooser(let request): DeviceChooserConsent(store: store, request: request)
+      case .httpAuth(let request): HTTPAuthSheet(store: store, request: request)
       case .downloads(let profile):
         if let engine = store.engine {
           DownloadsPanel(store: store, engine: engine, profileID: profile)
@@ -384,7 +391,7 @@ struct BrowserWindow: View {
       .frame(width: frame.width)
       .fixedSize(horizontal: false, vertical: true)
       .position(x: centerX, y: frame.midY)
-      .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.1), value: resultsHeight)
+      .animation(spaceReduceMotion ? nil : .spring(duration: 0.24, bounce: 0.1), value: resultsHeight)
       .transition(.scale(scale: 0.94, anchor: anchor).combined(with: .opacity))
   }
 

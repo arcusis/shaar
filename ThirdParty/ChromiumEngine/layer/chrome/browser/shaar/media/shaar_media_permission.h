@@ -18,6 +18,9 @@ struct MediaStreamRequest;
 
 namespace shaar::media {
 
+void StartCaptureObserving(shaar_engine* engine);
+void StopCaptureObserving();
+
 // Called only by Chromium's website camera/microphone handler. The callback
 // owns the pending device decision and defaults to denial on every failure.
 void RequestWebsiteMediaPermission(

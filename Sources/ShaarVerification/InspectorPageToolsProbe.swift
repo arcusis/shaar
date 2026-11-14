@@ -5,8 +5,8 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
-import CoreFoundation
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 import SwiftUI
 

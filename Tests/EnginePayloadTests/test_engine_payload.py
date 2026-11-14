@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import plistlib
+from contextlib import redirect_stdout
 from pathlib import Path
 import struct
 import shutil
@@ -277,6 +278,30 @@ class EnginePayloadTests(unittest.TestCase):
                 self.assertFalse(report["payload_match"])
                 self.assertIn("CodeResources", report["reason"])
 
+    def test_codesign_resources_rejects_duplicate_plist_dictionary_keys(self):
+        path = "Versions/155.0.8059.84/_CodeSignature/CodeResources"
+        helper = "Versions/155.0.8059.84/Helpers/app_mode_loader"
+        envelope = {"files": {}, "files2": {helper: {"cdhash": b"new"}},
+                    "rules": {}, "rules2": {}}
+        self.fixture(files={"Chromium Framework": b"engine", helper: b"helper",
+                            path: plistlib.dumps(envelope, fmt=plistlib.FMT_XML)}, links={})
+        duplicate = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>files</key><dict/>
+<key>files2</key><dict>
+<key>{helper}</key><dict><key>cdhash</key><data>b2xk</data></dict>
+<key>{helper}</key><dict><key>cdhash</key><data>bmV3</data></dict>
+</dict>
+<key>rules</key><dict/><key>rules2</key><dict/>
+</dict></plist>'''.encode()
+        (self.framework / path).write_bytes(duplicate)
+
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+
+        self.assertFalse(report["payload_match"], report["reason"])
+
     def test_codesign_resources_rejects_files2_known_field_additions_and_removals(self):
         version = "Versions/155.0.8059.84"
         helper = "Helpers/app_mode_loader"
@@ -485,6 +510,15 @@ class EnginePayloadTests(unittest.TestCase):
                 self.assertFalse(report["archive_metadata_verified"])
                 self.assertFalse(report["payload_match"])
 
+    def test_matching_archive_and_framework_symlink_cycles_fail_closed(self):
+        cycles = ({"LoopA": "LoopB", "LoopB": "LoopA"}, {"Loop": "Loop/child"})
+        for links in cycles:
+            with self.subTest(links=links):
+                report = self.fixture(links=links)
+                self.assertFalse(report["archive_metadata_verified"])
+                self.assertFalse(report["payload_match"])
+                self.assertEqual(report["reason"], "inventory contains symlink cycle")
+
     def test_malformed_signature_commands_and_unsupported_formats_fail_closed(self):
         for mutation in ("nonterminal", "bad_commands", "bad_segment", "unsafe_linkedit", "fat"):
             with self.subTest(mutation=mutation):
@@ -557,6 +591,15 @@ class EnginePayloadTests(unittest.TestCase):
                 self.assertEqual(report["reason"], reason)
                 self.assertNotIn(str(self.root), json.dumps(report))
 
+    def test_invalid_identity_map_type_fails_closed(self):
+        self.fixture()
+        pin = {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()}
+        report = payload.compare_payload(
+            self.archive, self.framework, pin, identity_map="Chromium Framework")
+        self.assertFalse(report["archive_metadata_verified"])
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(report["reason"], "identity map is malformed")
+
     def test_archive_pin_mismatch_and_truncated_archive_fail(self):
         self.fixture()
         report = payload.compare_payload(self.archive, self.framework, {"sha256": "0" * 64})
@@ -626,6 +669,61 @@ class EnginePayloadTests(unittest.TestCase):
         self.assertFalse(report["payload_match"])
         self.assertEqual(report["reason"], "archive is not a supported regular file")
         self.assertNotIn(str(self.root), json.dumps(report))
+
+    def test_cli_reports_non_utf8_pin_as_malformed_json(self):
+        pin_path = self.root / "pin.json"
+        pin_path.write_bytes(b"\xff\xfe")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = payload.main(["--archive", str(self.archive), "--pin", str(pin_path)])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(report["reason"], "pin file unavailable or malformed")
+        self.assertFalse(report["archive_metadata_verified"])
+
+    def test_cli_rejects_oversized_pin_file(self):
+        self.fixture()
+        pin_path = self.root / "pin.json"
+        digest = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        pin_path.write_text(json.dumps({"sha256": digest, "padding": "x" * (64 * 1024)}))
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = payload.main([
+                "--archive", str(self.archive), "--framework", str(self.framework),
+                "--pin", str(pin_path),
+            ])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(report["reason"], "pin file unavailable or malformed")
+        self.assertFalse(report["archive_metadata_verified"])
+
+    def test_cli_reports_deeply_nested_pin_as_malformed_json(self):
+        pin_path = self.root / "pin.json"
+        pin_path.write_text("[" * 10_000 + "0" + "]" * 10_000)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = payload.main(["--archive", str(self.archive), "--pin", str(pin_path)])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(report["reason"], "pin file unavailable or malformed")
+        self.assertFalse(report["archive_metadata_verified"])
+
+    def test_cli_rejects_duplicate_pin_json_keys(self):
+        self.fixture()
+        pin_path = self.root / "pin.json"
+        digest = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        pin_path.write_text(json.dumps({"sha256": "0" * 64})[:-1]
+                            + f',"sha256":"{digest}"}}', encoding="utf-8")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = payload.main([
+                "--archive", str(self.archive), "--framework", str(self.framework),
+                "--pin", str(pin_path),
+            ])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(report["reason"], "pin file unavailable or malformed")
+        self.assertFalse(report["archive_metadata_verified"])
 
     def test_unavailable_paths_do_not_leak_machine_paths(self):
         missing = self.root / "private-machine-path" / "missing.tar.xz"

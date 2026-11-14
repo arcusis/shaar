@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 BACKEND = REPO / "Sources/ChromiumBridge/ChromiumShaarBackend.mm"
+ENGINE_ABI = REPO / "Sources/ShaarEngineABI/ShaarEngineABI.swift"
 
 
 class SecurityLoggingTests(unittest.TestCase):
@@ -22,6 +23,16 @@ class SecurityLoggingTests(unittest.TestCase):
         self.assertNotIn("localizedDescription", lifecycle)
         self.assertIn('NSLog(@"Shaar lifecycle probe failed (ABI %u)"', lifecycle)
         self.assertIn('NSLog(@"Shaar tab discard refused"', lifecycle)
+
+    def test_event_rejection_does_not_log_engine_error_details(self):
+        source = ENGINE_ABI.read_text()
+        dispatcher = source[
+            source.index("@MainActor public final class ShaarEventDispatcher") :
+            source.index("/// Call serially from the C callback")
+        ]
+
+        self.assertNotIn("String(describing:", dispatcher)
+        self.assertIn('NSLog("Shaar engine event rejected")', dispatcher)
 
 
 if __name__ == "__main__":

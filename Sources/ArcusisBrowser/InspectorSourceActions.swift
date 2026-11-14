@@ -101,7 +101,7 @@ final class InspectorSourceActions {
   }
 
   func open() async {
-    guard !busy, let inspector, inspector.aiCopy.canCopy else { return }
+    guard !Task.isCancelled, !busy, let inspector, inspector.aiCopy.canCopy else { return }
     busy = true
     failure = nil
     location = nil
@@ -119,7 +119,7 @@ final class InspectorSourceActions {
         failure = InspectorL10n.string("Source location is not exposed for this element.")
         return
       }
-      location = InspectorAIFormatter.url(source)
+      location = InspectorL10n.display(InspectorAIFormatter.url(source))
       let editor =
         InspectorSourceEditor(
           rawValue: UserDefaults.standard.string(forKey: "inspectorSourceEditor") ?? "vscode")
@@ -130,12 +130,12 @@ final class InspectorSourceActions {
         location = nil
       }
     } catch {
-      if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
+      if operation == revision { failure = Self.failureMessage(for: error) }
     }
   }
 
   func copyForAgent(to pasteboard: NSPasteboard = .general) async {
-    guard !busy, let inspector, inspector.aiCopy.canCopy else { return }
+    guard !Task.isCancelled, !busy, let inspector, inspector.aiCopy.canCopy else { return }
     busy = true
     failure = nil
     location = nil
@@ -161,8 +161,15 @@ final class InspectorSourceActions {
       try InspectorAICopyModel.write(markdown, png: nil, to: pasteboard)
       inspector.presentation.copied("agent context")
     } catch {
-      if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
+      if operation == revision { failure = Self.failureMessage(for: error) }
     }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return InspectorL10n.display(error.localizedDescription)
+    }
+    return InspectorL10n.string("Could not get the source details. Try again.")
   }
 
   private func safeLocator(_ inspector: InspectorModel) async throws -> String {

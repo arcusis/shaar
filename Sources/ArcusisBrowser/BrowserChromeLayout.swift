@@ -83,3 +83,30 @@ enum BrowserChromeLayout {
     return min(naturalHeight, availableResultsHeight)
   }
 }
+
+struct StableContainerFrameSampler {
+  private(set) var previousFrame: CGRect?
+  private(set) var consecutiveStableSamples = 0
+  let tolerance: CGFloat
+
+  init(tolerance: CGFloat = 0.25) {
+    self.tolerance = tolerance
+  }
+
+  mutating func sample(_ frame: CGRect) -> Bool {
+    guard let previousFrame else {
+      self.previousFrame = frame
+      consecutiveStableSamples = 1
+      return false
+    }
+
+    let stable =
+      abs(frame.minX - previousFrame.minX) <= tolerance
+      && abs(frame.minY - previousFrame.minY) <= tolerance
+      && abs(frame.width - previousFrame.width) <= tolerance
+      && abs(frame.height - previousFrame.height) <= tolerance
+    self.previousFrame = frame
+    consecutiveStableSamples = stable ? consecutiveStableSamples + 1 : 1
+    return stable && consecutiveStableSamples >= 2
+  }
+}

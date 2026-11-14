@@ -28,6 +28,25 @@ private func fakePageViewAction(
   return shaar_error_code(rawValue: 4)
 }
 
+@_cdecl("fake_page_view_action_invalid_message_slice")
+private func fakePageViewActionInvalidMessageSlice(
+  _ engine: OpaquePointer?, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ error: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  error?.pointee.message = shaar_bytes(data: nil, size: 1)
+  return shaar_error_code(rawValue: 4)
+}
+
+@_cdecl("fake_page_view_action_short_error_struct")
+private func fakePageViewActionShortErrorStruct(
+  _ engine: OpaquePointer?, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ error: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  error?.pointee.size = 0
+  error?.pointee.code = shaar_error_code(rawValue: 4)
+  return shaar_error_code(rawValue: 4)
+}
+
 @_cdecl("fake_page_view_resize")
 private func fakePageViewResize(
   _ engine: OpaquePointer?, _ window: OpaquePointer?, _ width: Double, _ height: Double,
@@ -61,6 +80,43 @@ private struct FakePageViewSymbols: ShaarSymbolResolving {
   }
 }
 
+private struct FakeInvalidMessagePageViewSymbols: ShaarSymbolResolving {
+  func symbol(named name: String) -> UnsafeRawPointer? {
+    switch name {
+    case "shaar_window_host_view", "shaar_window_native_window", "shaar_tab_host_view":
+      let function = fakePageViewGet as @convention(c) (OpaquePointer?) -> UnsafeMutableRawPointer?
+      return unsafeBitCast(function, to: UnsafeRawPointer.self)
+    case "shaar_tab_view_attach", "shaar_tab_view_detach", "shaar_tab_view_focus":
+      let function =
+        fakePageViewActionInvalidMessageSlice
+        as @convention(c) (
+          OpaquePointer?, OpaquePointer?, OpaquePointer?, UnsafeMutablePointer<shaar_error>?
+        ) -> shaar_error_code
+      return unsafeBitCast(function, to: UnsafeRawPointer.self)
+    case "shaar_window_host_resize":
+      let function = fakePageViewResize
+        as @convention(c) (
+          OpaquePointer?, OpaquePointer?, Double, Double, UnsafeMutablePointer<shaar_error>?
+        ) -> shaar_error_code
+      return unsafeBitCast(function, to: UnsafeRawPointer.self)
+    default: return nil
+    }
+  }
+}
+
+private struct FakeShortErrorPageViewSymbols: ShaarSymbolResolving {
+  func symbol(named name: String) -> UnsafeRawPointer? {
+    guard ["shaar_tab_view_attach", "shaar_tab_view_detach", "shaar_tab_view_focus"].contains(name)
+    else { return FakePageViewSymbols().symbol(named: name) }
+    let function =
+      fakePageViewActionShortErrorStruct
+      as @convention(c) (
+        OpaquePointer?, OpaquePointer?, OpaquePointer?, UnsafeMutablePointer<shaar_error>?
+      ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
+  }
+}
+
 @Suite("Shaar page view ABI")
 struct ShaarPageViewABITests {
   @Test @MainActor func missingViewSymbolFailsBeforeUse() {
@@ -79,5 +135,23 @@ struct ShaarPageViewABITests {
       try abi.attach(engine: engine, window: window, tab: tab)
     }
     try abi.resize(engine: engine, window: window, width: 300, height: 200)
+  }
+
+  @Test @MainActor func invalidErrorMessageSliceIsRejected() throws {
+    let abi = try ShaarPageViewABI(resolver: FakeInvalidMessagePageViewSymbols())
+    #expect(throws: ShaarEngineError.invalidEvent("invalid page-view error message")) {
+      try abi.attach(
+        engine: OpaquePointer(bitPattern: 0x11)!, window: OpaquePointer(bitPattern: 0x22)!,
+        tab: OpaquePointer(bitPattern: 0x33)!)
+    }
+  }
+
+  @Test @MainActor func shortErrorStructIsRejectedBeforeDecodingItsFields() throws {
+    let abi = try ShaarPageViewABI(resolver: FakeShortErrorPageViewSymbols())
+    #expect(throws: ShaarEngineError.invalidEvent("short page-view error")) {
+      try abi.attach(
+        engine: OpaquePointer(bitPattern: 0x11)!, window: OpaquePointer(bitPattern: 0x22)!,
+        tab: OpaquePointer(bitPattern: 0x33)!)
+    }
   }
 }

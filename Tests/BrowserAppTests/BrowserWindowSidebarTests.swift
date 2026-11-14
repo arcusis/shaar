@@ -15,6 +15,28 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
 }
 
 @Suite @MainActor struct BrowserWindowSidebarTests {
+  @Test func pinnedSidebarGroupIsAHeading() {
+    #expect(BrowserSidebar.pinnedSectionHeadingTraits == .isHeader)
+  }
+
+  @Test func currentSidebarTabsGroupIsALocalizedHeading() {
+    #expect(BrowserSidebar.currentTabsSectionHeadingTraits == .isHeader)
+    #expect(BrowserSidebar.currentTabsSectionLabel(language: .english) == "Today's tabs")
+    #expect(BrowserSidebar.currentTabsSectionLabel(language: .hebrew) == "לשוניות היום")
+  }
+
+  @Test func sidebarGroupLabelIsLocalized() {
+    #expect(BrowserSidebar.accessibilityGroupLabel(language: .english) == "Browser sidebar")
+    #expect(BrowserSidebar.accessibilityGroupLabel(language: .hebrew) == "סרגל הצד של הדפדפן")
+  }
+
+  @Test func reduceMotionCombinesTheSystemSettingAndAccessibilityOverride() {
+    #expect(BrowserWindow.reduceMotionEnabled(systemSetting: false, override: nil) == false)
+    #expect(BrowserWindow.reduceMotionEnabled(systemSetting: false, override: true) == true)
+    #expect(BrowserWindow.reduceMotionEnabled(systemSetting: true, override: false) == true)
+    #expect(BrowserWindow.reduceMotionEnabled(systemSetting: true, override: nil) == true)
+  }
+
   @Test func compactScreenDoesNotRequireOversizedBrowserContent() {
     let store = BrowserStore(sessionFile: nil)
     let size = NSSize(width: 620, height: 480)

@@ -9,6 +9,16 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum PlatformPromptProbeConfiguration {
+  static func acceptsPageURL(_ page: URL?) -> Bool {
+    guard let page, page.scheme == "http", page.host == "127.0.0.1",
+      let port = page.port, (1...65_535).contains(port),
+      page.user == nil, page.password == nil
+    else { return false }
+    return true
+  }
+}
+
 /// Hidden proof that a page title cannot open the screen-sharing picker, and that a
 /// request bound to the live tab can.
 @MainActor
@@ -50,7 +60,7 @@ final class PlatformPromptProbe {
       )
     }
     guard let page = URL(string: try value(after: "--probe-url")),
-      page.scheme == "http", page.host == "127.0.0.1"
+      PlatformPromptProbeConfiguration.acceptsPageURL(page)
     else { throw Failure("The platform prompt probe requires an authored loopback page.") }
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)

@@ -2,9 +2,52 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import BrowserCore
 import Foundation
 import Testing
+
+@testable import BrowserCore
+
+@Test func folderReachabilityCountIncludesCollapsedDescendantsWithoutSidebarRows() throws {
+  let pinnedRoot = BrowserFolder(name: "Pinned", isCollapsed: true, isPinned: true)
+  let pinnedChild = BrowserFolder(
+    name: "Pinned child", parentID: pinnedRoot.id, isCollapsed: true, isPinned: true)
+  let todayRoot = BrowserFolder(name: "Today", isPinned: false)
+  let space = BrowserSpace(
+    profileID: UUID(), name: "Folders", symbol: "folder", tint: .ocean,
+    folders: [pinnedRoot, pinnedChild, todayRoot])
+
+  #expect(space.reachableFolderCount(isPinned: true) == 2)
+  #expect(space.reachableFolderCount(isPinned: false) == 1)
+  let session = try BrowserSession(
+    profiles: [BrowserProfile(id: space.profileID, name: "Folders")], spaces: [space],
+    selectedSpaceID: space.id)
+  try session.validate()
+}
+
+@Test func folderMembershipLookupValidatesParentsAndTabs() {
+  let root = BrowserFolder(name: "Root", isPinned: true)
+  let child = BrowserFolder(name: "Child", parentID: root.id, isPinned: true)
+  let tab = BrowserTab(url: URL(string: "https://example.test")!, isPinned: true, folderID: child.id)
+
+  #expect(SessionFolderValidation.membershipIsValid(folders: [root, child], tabs: [tab]))
+  #expect(!SessionFolderValidation.membershipIsValid(
+    folders: [root, BrowserFolder(name: "Child", parentID: root.id)], tabs: [tab]))
+  #expect(!SessionFolderValidation.membershipIsValid(
+    folders: [root], tabs: [BrowserTab(url: tab.url, isPinned: true, folderID: child.id)]))
+}
+
+@Test func sessionValidationSkipsFolderTraversalWhenNoFoldersExist() {
+  let space = BrowserSession.fresh().selectedSpace
+  var traversals = 0
+
+  let matches = SessionFolderValidation.folderItemsMatch(space, makeItems: {
+    traversals += 1
+    return []
+  })
+
+  #expect(matches)
+  #expect(traversals == 0)
+}
 
 private let legacySession = Data(
   """

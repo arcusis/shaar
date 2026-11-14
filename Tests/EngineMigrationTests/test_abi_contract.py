@@ -58,11 +58,13 @@ class EngineABIContractTests(unittest.TestCase):
             }}))
             self.assertEqual(CONTRACT.optional_symbols(root)["shaar_optional_call"],
                              "engine-157.0.8103.51-shaar.33")
-            manifest.write_text(json.dumps({"schemaVersion": 1, "symbols": {
-                "shaar_optional_call": "unspecified"
-            }}))
-            with self.assertRaises(CONTRACT.ContractError):
-                CONTRACT.optional_symbols(root)
+            for version in ("unspecified", "engine-157..0.8103.51-shaar.33",
+                            "engine-157.0.-8103.51-shaar.33", "engine-157.0.8103.51-shaar.0"):
+                manifest.write_text(json.dumps({"schemaVersion": 1, "symbols": {
+                    "shaar_optional_call": version
+                }}))
+                with self.subTest(version=version), self.assertRaises(CONTRACT.ContractError):
+                    CONTRACT.optional_symbols(root)
 
     def test_archive_must_match_pin_before_symbol_check(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -96,6 +98,19 @@ class EngineABIContractTests(unittest.TestCase):
             self.assertEqual(CONTRACT.archive_members(archive_path), (
                 {"Framework/Headers/shaar_engine.h", "Framework/Versions/A/Headers/shaar_engine.h"},
                 "Framework/Versions/A/Chromium Framework"))
+
+    def test_archive_member_discovery_rejects_ambiguous_framework_binaries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "fixture.tar.xz"
+            with tarfile.open(archive_path, "w:xz") as archive:
+                for name in ("Framework/Chromium Framework", "Other/Chromium Framework"):
+                    payload = name.encode()
+                    entry = tarfile.TarInfo(name)
+                    entry.size = len(payload)
+                    archive.addfile(entry, io.BytesIO(payload))
+
+            with self.assertRaisesRegex(CONTRACT.ContractError, "exactly one Chromium Framework binary"):
+                CONTRACT.archive_members(archive_path)
 
     def test_source_build_header_is_digest_checked_and_includes_pinned_patch_declarations(self):
         with tempfile.TemporaryDirectory() as temporary:

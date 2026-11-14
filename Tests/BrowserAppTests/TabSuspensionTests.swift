@@ -12,6 +12,47 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct TabSuspensionTests {
+  @Test func deinitializingEngineCancelsItsBackgroundSuspensionTask() throws {
+    let tab = BrowserTab(url: URL(string: "https://engine-lifetime.example")!)
+    var store: BrowserStore?
+    var engine: BrowserEngine?
+    do {
+      let created = try makeEngine(tabs: [tab])
+      store = created.0
+      engine = created.1
+    }
+    let task = try #require(engine?.suspensionTask)
+    weak var releasedEngine: BrowserEngine? = engine
+
+    store?.engine = nil
+    engine = nil
+
+    #expect(releasedEngine == nil)
+    #expect(task.isCancelled)
+  }
+
+  @Test func deinitializingPrivateSessionCancelsItsBackgroundSuspensionTask() throws {
+    let tabID = UUID()
+    var store: BrowserStore? = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    var session: PrivatePageSession? = nil
+    if let store {
+      session = PrivatePageSession(
+        runtime: SuspensionTestRuntime(), contextID: "private-context",
+        windowID: "private-window", firstTabID: tabID, store: store)
+    }
+    let task = try #require(session?.suspensionTask)
+    session?.memoryPressureSource?.cancel()
+    session?.memoryPressureSource = nil
+    weak var releasedSession: PrivatePageSession? = session
+
+    store?.privatePage = nil
+    session = nil
+
+    #expect(releasedSession == nil)
+    #expect(task.isCancelled)
+  }
+
   @Test func idleTabsAreDiscardedWithoutClosingOrRestoringScroll() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let pinned = BrowserTab(url: URL(string: "https://pinned.example")!, isPinned: true)
@@ -51,12 +92,13 @@ struct TabSuspensionTests {
     defer { engine.suspensionTask?.cancel() }
     let profileID = store.session.selectedSpace.profileID
     for index in 0..<1_000 {
-      engine.downloads.changed([
-        "id": UUID().uuidString, "filename": "file-\(index)", "path": "",
-        "url": "https://download.example/file", "state": DownloadState.downloading.rawValue,
-        "paused": false, "dangerous": false, "offTheRecord": false,
-        "received": 0.0, "total": -1.0, "startTime": Double(index),
-      ], profileID: profileID)
+      engine.downloads.changed(
+        [
+          "id": UUID().uuidString, "filename": "file-\(index)", "path": "",
+          "url": "https://download.example/file", "state": DownloadState.downloading.rawValue,
+          "paused": false, "dangerous": false, "offTheRecord": false,
+          "received": 0.0, "total": -1.0, "startTime": Double(index),
+        ], profileID: profileID)
     }
 
     let start = ContinuousClock.now
@@ -65,6 +107,53 @@ struct TabSuspensionTests {
     #expect(candidates.count == tabs.count)
     let allProfilesDownloading = candidates.allSatisfy { $0.profileIsDownloading }
     #expect(allProfilesDownloading)
+  }
+
+  @Test func privateSleepingCandidateDownloadLookupBenchmark() throws {
+    let tabs = (0..<1_000).map { index in
+      BrowserTab(url: URL(string: "https://private-tab-\(index).example")!)
+    }
+    let profile = BrowserProfile(name: "Private benchmark")
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Private", symbol: "eye.slash", tint: .ocean,
+      tabs: tabs, selectedTabID: tabs[0].id)
+    let browserSession = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+    let store = BrowserStore(privateSession: browserSession)
+    let runtime = SuspensionTestRuntime()
+    var downloadCheckCount = 0
+    let privateSession = PrivatePageSession(
+      runtime: runtime, contextID: "benchmark-context", windowID: "benchmark-window",
+      firstTabID: tabs[0].id, store: store, profileIsDownloading: { id in
+        downloadCheckCount += 1
+        return id == profile.id
+      })
+    defer {
+      privateSession.suspensionTask?.cancel()
+      privateSession.memoryPressureSource?.cancel()
+    }
+    var beforeSamples: [Duration] = []
+    var afterSamples: [Duration] = []
+    var beforeResolved = 0
+    var afterResolved = 0
+    for _ in 0..<5 {
+      let beforeStart = ContinuousClock.now
+      for tab in tabs where store.session.profileID(forTabID: tab.id) == profile.id {
+        beforeResolved += 1
+      }
+      beforeSamples.append(beforeStart.duration(to: .now))
+      let afterStart = ContinuousClock.now
+      let candidates = privateSession.sleepingCandidates(in: store)
+      for candidate in candidates where candidate.profileIsDownloading { afterResolved += 1 }
+      afterSamples.append(afterStart.duration(to: .now))
+      #expect(candidates.count == tabs.count)
+    }
+    #expect(beforeResolved == afterResolved && afterResolved == tabs.count * 5)
+    #expect(downloadCheckCount == 5)
+    let before = beforeSamples.sorted()[beforeSamples.count / 2]
+    let after = afterSamples.sorted()[afterSamples.count / 2]
+    print("privateSleepingCandidateDownloadLookup: before=\(before), after=\(after)")
+    #expect(after < before * 0.5)
   }
 
   @Test func anEditedFormStaysAwake() throws {

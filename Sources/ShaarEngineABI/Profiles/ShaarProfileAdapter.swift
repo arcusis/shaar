@@ -65,6 +65,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
   public func receive(_ event: ShaarCopiedEvent) {
     guard event.kind == 2,
       let profileID = String(data: event.profileID, encoding: .utf8),
+      event.sessionID.isEmpty, event.windowID.isEmpty, event.tabID.isEmpty,
       let payload = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       profileEventInteger(payload["schemaVersion"]) == 1,
       let kind = payload["kind"] as? String
@@ -78,6 +79,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
     if handles[id] != nil { return }
     if let existing = pending[id] {
       let handle = try await existing.value
+      guard handle != 0 else { throw ShaarProfileError.staleHandle }
       if handles[id] == nil { handles[id] = handle }
       return
     }
@@ -92,6 +94,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
       pending.removeValue(forKey: id)
       throw error
     }
+    guard handle != 0 else { throw ShaarProfileError.staleHandle }
     guard handles[id] == nil else {
       try? engine.closeProfile(handle)
       return
@@ -117,6 +120,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
       pending.removeValue(forKey: id)
       throw error
     }
+    guard handle != 0 else { throw ShaarProfileError.staleHandle }
     guard handles[id] == nil else {
       try? engine.closeProfile(handle)
       return

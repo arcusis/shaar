@@ -9,6 +9,21 @@ import Testing
 
 @Suite @MainActor
 struct SidebarMediaPlayerTests {
+  @Test func muteKeyboardFocusRevealsVolumeControl() {
+    #expect(SidebarMediaPlayer.showsVolumeControl(pointerRevealed: false, keyboardFocused: true))
+    #expect(SidebarMediaPlayer.showsVolumeControl(pointerRevealed: true, keyboardFocused: false))
+    #expect(!SidebarMediaPlayer.showsVolumeControl(pointerRevealed: false, keyboardFocused: false))
+  }
+
+  @Test func voiceOverFocusOnMuteOrVolumeKeepsVolumeControlAvailable() {
+    #expect(
+      SidebarMediaPlayer.showsVolumeControl(
+        pointerRevealed: false, keyboardFocused: false, accessibilityFocused: true))
+    #expect(
+      !SidebarMediaPlayer.showsVolumeControl(
+        pointerRevealed: false, keyboardFocused: false, accessibilityFocused: false))
+  }
+
   @Test func skipIgnoresUnsupportedAndNonSeekActions() {
     var commands: [MediaCommand] = []
     let player = SidebarMediaPlayer(

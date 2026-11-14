@@ -19,7 +19,9 @@ struct BrowserEngineMediaTests {
     let secondTab = try #require(store.session.selectedSpace.selectedTab?.id)
 
     let runtime = MediaOwnershipRuntime()
-    runtime.tabWindows = [firstTab.uuidString: "other-window", secondTab.uuidString: "owner-window"]
+    runtime.tabWindows = [
+      firstTab.uuidString: "other-window", secondTab.uuidString: "owner-window",
+    ]
     let engine = try BrowserEngine(
       events: BrowserRuntimeEvents(runtime: runtime), windowID: "owner-window", store: store)
     engine.liveTabs.formUnion([firstTab, secondTab])
@@ -38,7 +40,7 @@ struct BrowserEngineMediaTests {
 
 @MainActor
 private final class MediaOwnershipRuntime: ARCChromiumRuntime {
-  var tabWindows: [String: String] = [:]
+  nonisolated(unsafe) var tabWindows: [String: String] = [:]
 
   override func windowID(forTabID tabID: String) -> String? { tabWindows[tabID] }
 }

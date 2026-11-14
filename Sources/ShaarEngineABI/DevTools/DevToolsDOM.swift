@@ -12,6 +12,13 @@ private func domEventInteger(_ value: Any?) -> Int? {
   return Int(exactly: number.doubleValue)
 }
 
+private func domEventBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
 public enum ShaarDOMRelation: String, Sendable {
   case child
   case shadowRoot
@@ -72,18 +79,24 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
       if let number = rawCount as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
         return nil
       }
-      guard let parsedCount = rawCount as? Int else { return nil }
+      guard let parsedCount = domEventInteger(rawCount) else { return nil }
       count = parsedCount
     } else {
       count = childrenIDs.count
     }
-    guard let id = fields["nodeId"] as? Int, id > 0,
-      let type = fields["nodeType"] as? Int, (1...12).contains(type),
+    guard let id = domEventInteger(fields["nodeId"]), id > 0,
+      let type = domEventInteger(fields["nodeType"]), (1...12).contains(type),
       let name = fields["nodeName"] as? String, !name.isEmpty, name.utf8.count <= 128,
       let value = fields["nodeValue"] as? String, value.utf8.count <= 4_096,
       (0...20_000).contains(count)
     else { return nil }
-    let raw = fields["attributes"] as? [String] ?? []
+    let raw: [String]
+    if let value = fields["attributes"] {
+      guard let attributes = value as? [String] else { return nil }
+      raw = attributes
+    } else {
+      raw = []
+    }
     guard raw.count <= 64, raw.count.isMultiple(of: 2) else { return nil }
     var attributes: [ShaarDOMAttribute] = []
     for index in stride(from: 0, to: raw.count, by: 2) {
@@ -100,13 +113,8 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
   }
 
   private static func backendNodeID(_ value: Any?) -> Int? {
-    if let value = value as? Int, value > 0 { return value }
-    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
-      return nil
-    }
-    let parsed = number.intValue
-    guard parsed > 0 else { return nil }
-    return parsed
+    guard let value = domEventInteger(value), value > 0 else { return nil }
+    return value
   }
 
   public func replacing(
@@ -153,7 +161,7 @@ public struct ShaarDOMSnapshot: Equatable, Sendable {
     depth: Int, nodes: inout [ShaarDOMNode], seen: inout Set<Int>
   ) -> Int? {
     guard depth <= 40, nodes.count < 20_000,
-      let id = fields["nodeId"] as? Int, id > 0, seen.insert(id).inserted
+      let id = domEventInteger(fields["nodeId"]), id > 0, seen.insert(id).inserted
     else { return nil }
     let children = fields["children"] as? [[String: Any]] ?? []
     let shadows = fields["shadowRoots"] as? [[String: Any]] ?? []
@@ -229,7 +237,7 @@ public enum ShaarDOMEventRouter {
       rawLeaseID <= Int(UInt32.max), UInt32(rawLeaseID) == leaseID,
       let id = domEventInteger(root["eventID"]), (20...28).contains(id),
       let fields = root["data"] as? [String: Any],
-      let truncated = fields["truncated"] as? Bool,
+      let truncated = domEventBoolean(fields["truncated"]),
       let mutation = decodeMutation(id, fields)
     else { return nil }
     return ShaarDOMEvent(
@@ -243,7 +251,7 @@ public enum ShaarDOMEventRouter {
     if id == 21 || id == 26 {
       guard keys == ["parentNodeId", "previousNodeId", "node"],
         let parent = positive(fields["parentNodeId"]),
-        let previous = fields["previousNodeId"] as? Int, previous >= 0,
+        let previous = domEventInteger(fields["previousNodeId"]), previous >= 0,
         let rawNode = fields["node"] as? [String: Any],
         let node = ShaarDOMNode.decode(
           rawNode, parentID: parent,
@@ -290,7 +298,7 @@ public enum ShaarDOMEventRouter {
     if id == 28 {
       guard keys == ["nodeId", "childNodeCount"],
         let node = positive(fields["nodeId"]),
-        let count = fields["childNodeCount"] as? Int, (0...20_000).contains(count)
+        let count = domEventInteger(fields["childNodeCount"]), (0...20_000).contains(count)
       else { return nil }
       return .childCountUpdated(nodeID: node, count: count)
     }
@@ -298,7 +306,7 @@ public enum ShaarDOMEventRouter {
   }
 
   private static func positive(_ value: Any?) -> Int? {
-    guard let value = value as? Int, value > 0 else { return nil }
+    guard let value = domEventInteger(value), value > 0 else { return nil }
     return value
   }
 

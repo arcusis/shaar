@@ -33,8 +33,7 @@ constexpr size_t kMaximumURLBytes = 2 * 1024 * 1024;
 constexpr size_t kMaximumArgumentsBytes = 4 * 1024 * 1024;
 
 bool IsAllowedScheme(const std::string& scheme) {
-  return scheme == "http" || scheme == "https" || scheme == "file" ||
-         scheme == "about";
+  return scheme == "http" || scheme == "https" || scheme == "about";
 }
 
 bool HasOneScope(const shaar_scope& scope) {
@@ -135,10 +134,28 @@ shaar_error_code Go(content::NavigationController* controller, bool forward) {
 shaar_error_code Reload(content::NavigationController* controller,
                         bool bypass_cache) {
   if (!controller) return SHAAR_NOT_FOUND;
+  content::NavigationEntry* pending_entry = controller->GetPendingEntry();
+  if (pending_entry) {
+    content::NavigationEntry* committed_entry = controller->GetLastCommittedEntry();
+    const GURL target = ReloadTargetURL(
+        pending_entry->GetURL(),
+        committed_entry ? committed_entry->GetURL() : GURL());
+    content::NavigationController::LoadURLParams params(target);
+    params.transition_type = ui::PAGE_TRANSITION_RELOAD;
+    params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE
+                                      : content::ReloadType::NORMAL;
+    params.should_replace_current_entry = true;
+    controller->LoadURLWithParams(params);
+    return SHAAR_OK;
+  }
   controller->Reload(bypass_cache ? content::ReloadType::BYPASSING_CACHE
                                   : content::ReloadType::NORMAL,
                      true);
   return SHAAR_OK;
+}
+
+GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url) {
+  return pending_url.is_valid() ? pending_url : last_committed_url;
 }
 
 shaar_error_code Stop(content::WebContents* contents) {

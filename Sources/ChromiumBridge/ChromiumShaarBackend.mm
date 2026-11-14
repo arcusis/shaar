@@ -18,6 +18,8 @@
 #import <CoreFoundation/CoreFoundation.h>
 
 #include <dlfcn.h>
+#include <climits>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -62,6 +64,29 @@ NSString *String(shaar_bytes bytes) {
                                encoding:NSUTF8StringEncoding] ?: @"";
 }
 
+shaar_error_code ShaarWindowRequestCallback(
+    void *context,
+    shaar_bytes profile_id,
+    shaar_bytes request_type,
+    int user_gesture,
+    char *window_id_buffer,
+    size_t buffer_capacity,
+    size_t *window_id_size) {
+  if (window_id_size) *window_id_size = 0;
+  if (!NSThread.isMainThread || !context || !window_id_buffer ||
+      !buffer_capacity || !window_id_size || user_gesture != 1)
+    return SHAAR_INVALID_ARGUMENT;
+  ARCShaarRuntime *runtime = (__bridge ARCShaarRuntime *)context;
+  if (!runtime.onWindowRequest) return SHAAR_CANCELLED;
+  NSString *windowID = runtime.onWindowRequest(
+      String(profile_id), String(request_type), YES);
+  NSData *bytes = [windowID dataUsingEncoding:NSUTF8StringEncoding];
+  if (!bytes.length || bytes.length > buffer_capacity) return SHAAR_CANCELLED;
+  std::memcpy(window_id_buffer, bytes.bytes, bytes.length);
+  *window_id_size = bytes.length;
+  return SHAAR_OK;
+}
+
 shaar_error EmptyError() {
   shaar_error error = {};
   error.size = sizeof(error);
@@ -96,6 +121,7 @@ NSInteger HistoryQueryVisitsPerURL(NSInteger limit) {
 // submitted only when the loaded engine reports minor 13 or newer.
 static const uint32_t kShaarDeviceChooserABIMinor = 13;
 static const shaar_operation kShaarDeviceChooserDecision = (shaar_operation)1600;
+static const shaar_operation kShaarHTTPCredentialsReply = SHAAR_OP_HTTP_AUTH_CREDENTIALS_REPLY;
 
 static BOOL ShaarDeviceChooserKind(NSString *kind, BOOL *dismissed, BOOL *updated) {
   if ([kind isEqualToString:@"deviceChooserDismissed"]) {
@@ -124,6 +150,8 @@ static BOOL ShaarDeviceChooserID(NSString *value) {
 }
 
 struct Symbols {
+  using WindowChromeIDFunction = shaar_error_code (*)(
+      shaar_engine *, shaar_profile *, shaar_window *, int32_t *, shaar_error *);
   decltype(&shaar_abi_minor) abi_minor = nullptr;
   decltype(&shaar_engine_create) create = nullptr;
   decltype(&shaar_engine_run) run = nullptr;
@@ -132,11 +160,13 @@ struct Symbols {
   decltype(&shaar_profile_open) profile_open = nullptr;
   decltype(&shaar_window_open) window_open = nullptr;
   decltype(&shaar_window_close) window_close = nullptr;
+  WindowChromeIDFunction window_chrome_id = nullptr;
   decltype(&shaar_window_host_view) window_host_view = nullptr;
   decltype(&shaar_window_host_resize) window_host_resize = nullptr;
   decltype(&shaar_window_native_window) window_native_window = nullptr;
   decltype(&shaar_tab_open) tab_open = nullptr;
   decltype(&shaar_tab_find) tab_find = nullptr;
+  decltype(&shaar_tab_print) tab_print = nullptr;
   decltype(&shaar_tab_close) tab_close = nullptr;
   decltype(&shaar_tab_favicon_png) tab_favicon_png = nullptr;
   decltype(&shaar_tab_host_view) tab_host_view = nullptr;
@@ -156,10 +186,13 @@ struct Symbols {
     SHAAR_LOAD(profile_open, profile_open);
     SHAAR_LOAD(window_open, window_open);
     SHAAR_LOAD(window_close, window_close);
+    window_chrome_id = reinterpret_cast<WindowChromeIDFunction>(
+        dlsym(library, "shaar_window_chrome_id"));
     SHAAR_LOAD(window_host_view, window_host_view);
     SHAAR_LOAD(window_host_resize, window_host_resize);
     SHAAR_LOAD(window_native_window, window_native_window);
     SHAAR_LOAD(tab_open, tab_open);
+    SHAAR_LOAD(tab_print, tab_print);
     SHAAR_LOAD(tab_close, tab_close);
     SHAAR_LOAD(tab_favicon_png, tab_favicon_png);
     SHAAR_LOAD(tab_host_view, tab_host_view);
@@ -184,11 +217,14 @@ struct Symbols {
   NSString *_shaarPrimaryWindowID;
   NSMutableDictionary<NSString *, NSValue *> *_shaarProfiles;
   NSMutableDictionary<NSString *, NSMutableArray *> *_shaarProfileWaiters;
+  NSMutableDictionary<NSString *, id> *_shaarProfileDeleteWaiters;
   NSMutableDictionary<NSString *, NSValue *> *_shaarWindows;
+  NSMutableSet<NSString *> *_shaarRetiredWindowIDs;
   NSMutableDictionary<NSString *, NSValue *> *_shaarTabs;
   NSMutableDictionary<NSString *, NSString *> *_shaarTabWindows;
   NSMutableDictionary<NSString *, NSString *> *_shaarTabProfiles;
   NSMutableDictionary<NSString *, NSString *> *_shaarSelectedTabs;
+  NSMutableSet<NSString *> *_shaarClearedActiveTabs;
   NSMutableDictionary<NSString *, id> *_hostResizeObservers;
   NSMutableDictionary<NSString *, id> *_hostCloseObservers;
   NSMutableDictionary<NSString *, NSValue *> *_hostSizes;
@@ -197,10 +233,12 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarMediaRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarCaptureRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarDeviceChooserRequests;
+  NSMutableDictionary<NSString *, NSString *> *_shaarHTTPAuthRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarShareRequests;
   ShaarShareReplyFunction _shaarShareReply;
   NSMutableDictionary<NSString *, NSDictionary *> *_shaarInstallRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarPrintRequests;
+  NSMutableDictionary<NSString *, NSString *> *_shaarJavaScriptDialogRequests;
   ShaarPrintReplyFunction _shaarPrintReply;
   NSMutableDictionary<NSString *, NSString *> *_shaarSavePrompts;
   uint64_t _nextRequestID;
@@ -211,10 +249,12 @@ struct Symbols {
   BOOL _shaarDeviceChooserAvailable;
   BOOL _shaarWebShareAvailable;
   BOOL _shaarPrintAvailable;
+  BOOL _shaarJavaScriptDialogsAvailable;
   BOOL _shaarSavePromptsAvailable;
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
+  NSMutableSet<NSString *> *_shaarHttpsOnlyDirtyProfiles;
   NSMutableDictionary<NSString *, NSArray<NSString *> *> *_shaarProfileFilesBeforeOpen;
 }
 - (void)receiveEvent:(const shaar_event *)event;
@@ -383,6 +423,16 @@ static BOOL ARCInfoBool(id value) {
   return [value respondsToSelector:@selector(boolValue)] && [value boolValue];
 }
 
+static BOOL ARCReadJSONInteger(id value, int *result) {
+  if (![value isKindOfClass:NSNumber.class] ||
+      CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) return NO;
+  double number = [value doubleValue];
+  if (!std::isfinite(number) || std::trunc(number) != number ||
+      number < INT_MIN || number > INT_MAX) return NO;
+  *result = static_cast<int>(number);
+  return YES;
+}
+
 static BOOL ARCEnvironmentRequestsMockKeychain(void) {
   const char *value = getenv("SHAAR_MOCK_KEYCHAIN");
   if (!value) return NO;
@@ -439,11 +489,14 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarPrimaryWindowID = NSUUID.UUID.UUIDString;
   _shaarProfiles = [NSMutableDictionary dictionary];
   _shaarProfileWaiters = [NSMutableDictionary dictionary];
+  _shaarProfileDeleteWaiters = [NSMutableDictionary dictionary];
   _shaarWindows = [NSMutableDictionary dictionary];
+  _shaarRetiredWindowIDs = [NSMutableSet set];
   _shaarTabs = [NSMutableDictionary dictionary];
   _shaarTabWindows = [NSMutableDictionary dictionary];
   _shaarTabProfiles = [NSMutableDictionary dictionary];
   _shaarSelectedTabs = [NSMutableDictionary dictionary];
+  _shaarClearedActiveTabs = [NSMutableSet set];
   _hostResizeObservers = [NSMutableDictionary dictionary];
   _hostCloseObservers = [NSMutableDictionary dictionary];
   _hostSizes = [NSMutableDictionary dictionary];
@@ -451,12 +504,15 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarFindRequests = [NSMutableDictionary dictionary];
   _shaarMediaRequests = [NSMutableDictionary dictionary];
   _shaarHttpsOnly = [NSMutableDictionary dictionary];
+  _shaarHttpsOnlyDirtyProfiles = [NSMutableSet set];
   _shaarCaptureRequests = [NSMutableDictionary dictionary];
   _shaarInstallRequests = [NSMutableDictionary dictionary];
   _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
   _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
+  _shaarHTTPAuthRequests = [NSMutableDictionary dictionary];
   _shaarShareRequests = [NSMutableDictionary dictionary];
   _shaarPrintRequests = [NSMutableDictionary dictionary];
+  _shaarJavaScriptDialogRequests = [NSMutableDictionary dictionary];
   _shaarSavePrompts = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
@@ -484,6 +540,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarPrintReply = reinterpret_cast<ShaarPrintReplyFunction>(
       dlsym(_shaarLibrary, "shaar_print_reply"));
   _shaarPrintAvailable = _symbols.abi_minor() >= 16 && _shaarPrintReply != nullptr;
+  _shaarJavaScriptDialogsAvailable = _symbols.abi_minor() >= 17;
   _shaarSavePromptsAvailable = _symbols.abi_minor() >= kShaarSavePromptABIMinor;
   return self;
 }
@@ -502,15 +559,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   shaar_config config = {};
   config.size = sizeof(config);
   config.requested_major = SHAAR_ENGINE_ABI_MAJOR;
-  // Minor 7 remains the launch baseline; website media consent is gated below.
+  // Keep the startup contract at the original baseline; newer operations are gated by
+  // the loaded framework's reported ABI minor so older compatible engines can still launch.
   config.requested_minor = 7;
   config.data_root = Bytes(path);
   config.locale = Bytes(self.languageIdentifier ?: @"en");
   config.on_event = ShaarEventCallback;
   config.event_context = (__bridge void *)self;
+  config.on_window_request = ShaarWindowRequestCallback;
+  config.window_request_context = (__bridge void *)self;
   shaar_error error = EmptyError();
-  // The pinned engine adds --use-mock-keychain only inside SHAAR_ENGINE_TESTING.
-  // SHAAR_ENGINE_TESTING also enables fake media, disables renderer backgrounding and timer throttling, and maps trackertest.org to localhost.
+  // Verification builds alone enable the engine's mock keychain and test fixtures.
+#if defined(SHAAR_VERIFICATION)
   id mockKeychainSetting = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ShaarUseMockKeychain"];
   BOOL requested = ARCInfoBool(mockKeychainSetting) || ARCEnvironmentRequestsMockKeychain();
   BOOL adHoc = NO;
@@ -520,13 +580,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (testing) engineTesting = "1";
   if (mockKeychain) engineTesting = "1";
   setenv("SHAAR_ENGINE_TESTING", engineTesting, 1);
+#endif
   if (_symbols.create(&config, &_shaarEngine, &error) != SHAAR_OK) {
+#if defined(SHAAR_VERIFICATION)
     unsetenv("SHAAR_ENGINE_TESTING");
+#endif
     return 1;
   }
   _shaarTesting = testing;
   const shaar_error_code result = _symbols.run(_shaarEngine, &error);
+#if defined(SHAAR_VERIFICATION)
   unsetenv("SHAAR_ENGINE_TESTING");
+#endif
   // Remaining native handles are being torn down, not closed by the user.
   _shaarQuitting = YES;
   if (self.onQuitRequested) self.onQuitRequested();
@@ -546,6 +611,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarDeviceChooserRequests removeAllObjects];
   [_shaarShareRequests removeAllObjects];
   [_shaarInstallRequests removeAllObjects];
+  [_shaarJavaScriptDialogRequests removeAllObjects];
   [_shaarSavePrompts removeAllObjects];
   _symbols.release(_shaarEngine);
   _shaarEngine = nullptr;
@@ -571,6 +637,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   }
   if (event->session_id.size) {
     [self receivePrivateEvent:event payload:payload];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_PROFILE &&
+      ([kind isEqualToString:@"deleted"] || [kind isEqualToString:@"delete_failed"])) {
+    NSString *profileID = String(event->profile_id).uppercaseString;
+    void (^completion)(NSError *) = _shaarProfileDeleteWaiters[profileID];
+    [_shaarProfileDeleteWaiters removeObjectForKey:profileID];
+    if (completion) {
+      completion([kind isEqualToString:@"deleted"]
+                     ? nil
+                     : ShaarError(@"Chromium could not finish deleting the profile."));
+    }
     return;
   }
   if (event->kind == SHAAR_EVENT_ENGINE && [kind isEqualToString:@"engine.ready"]) {
@@ -599,6 +677,61 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   NSString *tabID = String(event->tab_id);
   NSString *profileID = String(event->profile_id).uppercaseString;
   BOOL websitePermissionDismissed = NO;
+  if (event->kind == SHAAR_EVENT_PERMISSION && !event->session_id.size &&
+      [kind isEqualToString:@"httpAuthRequested"]) {
+    NSString *requestID = payload[@"id"];
+    NSString *windowID = String(event->window_id);
+    NSString *realm = payload[@"realm"];
+    NSString *host = payload[@"host"];
+    if (![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] || !requestID.length ||
+        requestID.length > 128 || _shaarHTTPAuthRequests[requestID] ||
+        !_shaarTabs[tabID] || ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]] ||
+        ![realm isKindOfClass:NSString.class] || realm.length > 512 ||
+        ![host isKindOfClass:NSString.class] || !host.length || host.length > 255) return;
+    _shaarHTTPAuthRequests[requestID] = tabID;
+    NSMutableDictionary *request = [payload mutableCopy];
+    request[@"profileID"] = profileID; request[@"tabID"] = tabID; request[@"windowID"] = windowID;
+    if (self.onHTTPAuthRequest) self.onHTTPAuthRequest(request);
+    else [self resolveHTTPAuthRequestID:requestID tabID:tabID username:nil password:nil];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_JAVASCRIPT_DIALOG &&
+      _shaarJavaScriptDialogsAvailable && !event->session_id.size &&
+      [kind isEqualToString:@"javascriptDialogRequested"]) {
+    NSString *requestID = payload[@"id"];
+    NSString *windowID = String(event->window_id);
+    if (![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] || !requestID.length ||
+        requestID.length > 64 || _shaarJavaScriptDialogRequests[requestID] ||
+        !_shaarTabs[tabID] || ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+    _shaarJavaScriptDialogRequests[requestID] = tabID;
+    NSMutableDictionary *request = [payload mutableCopy];
+    request[@"profileID"] = profileID; request[@"tabID"] = tabID; request[@"windowID"] = windowID;
+    if (self.onJavaScriptDialogRequest) self.onJavaScriptDialogRequest(request);
+    else [self resolveJavaScriptDialogRequestID:requestID accepted:NO input:nil];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_PERMISSION && !event->session_id.size &&
+      [kind isEqualToString:@"httpAuthDismissed"]) {
+    NSString *requestID = payload[@"id"];
+    if (![payload[@"schemaVersion"] isEqual:@1] || ![requestID isKindOfClass:NSString.class] ||
+        ![_shaarHTTPAuthRequests[requestID] isEqualToString:tabID]) return;
+    [_shaarHTTPAuthRequests removeObjectForKey:requestID];
+    if (self.onHTTPAuthDismissed) self.onHTTPAuthDismissed(requestID);
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_JAVASCRIPT_DIALOG && _shaarJavaScriptDialogsAvailable &&
+      !event->session_id.size && [kind isEqualToString:@"javascriptDialogDismissed"]) {
+    NSString *requestID = payload[@"id"];
+    if (![payload[@"schemaVersion"] isEqual:@1] || ![requestID isKindOfClass:NSString.class] ||
+        ![_shaarJavaScriptDialogRequests[requestID] isEqualToString:tabID]) return;
+    [_shaarJavaScriptDialogRequests removeObjectForKey:requestID];
+    if (self.onJavaScriptDialogDismissed) self.onJavaScriptDialogDismissed(requestID);
+    return;
+  }
   if (event->kind == SHAAR_EVENT_PERMISSION &&
       ShaarWebsitePermissionEvent(kind, &websitePermissionDismissed)) {
     if (websitePermissionDismissed) {
@@ -670,7 +803,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     if (self.onDeviceChooserEvent) {
       self.onDeviceChooserEvent(chooserEvent);
     } else {
-      [self resolveDeviceChooserRequestID:requestID index:nil];
+      [self resolveDeviceChooserRequestID:requestID optionID:nil];
     }
   }
   if (event->kind == SHAAR_EVENT_PERMISSION &&
@@ -726,10 +859,20 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     return;
   }
   if (event->kind == SHAAR_EVENT_FIND) {
-    NSString *token = _shaarFindTokens[payload[@"requestID"]];
-    if (token && _shaarTabs[tabID] && self.onFindResult)
-      self.onFindResult(tabID, token, [payload[@"matchCount"] intValue],
-                        [payload[@"activeMatch"] intValue], [payload[@"final"] boolValue]);
+    id nativeRequestID = payload[@"requestID"];
+    NSString *token = [nativeRequestID isKindOfClass:NSString.class]
+        ? _shaarFindTokens[nativeRequestID] : nil;
+    int schemaVersion = 0, matchCount = 0, activeMatch = 0;
+    id finalValue = payload[@"final"];
+    if ([payload[@"kind"] isEqual:@"result"] &&
+        ARCReadJSONInteger(payload[@"schemaVersion"], &schemaVersion) && schemaVersion == 1 &&
+        ARCReadJSONInteger(payload[@"matchCount"], &matchCount) && matchCount >= 0 &&
+        ARCReadJSONInteger(payload[@"activeMatch"], &activeMatch) && activeMatch >= -1 &&
+        [finalValue isKindOfClass:NSNumber.class] &&
+        CFGetTypeID((__bridge CFTypeRef)finalValue) == CFBooleanGetTypeID() &&
+        token && [_shaarFindRequests[tabID] isEqualToString:nativeRequestID] &&
+        _shaarTabs[tabID] && self.onFindResult)
+      self.onFindResult(tabID, token, matchCount, activeMatch, [finalValue boolValue]);
     return;
   }
   if (event->kind == SHAAR_EVENT_BOOKMARK && !event->session_id.size &&
@@ -750,18 +893,30 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self adoptOpenedTabFromEvent:event payload:payload profileID:profileID];
     return;
   }
+  if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"activated"]) {
+    if (_shaarTabs[tabID] &&
+        [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
+        [String(event->window_id) isEqualToString:_shaarTabWindows[tabID]] &&
+        self.onTabActivated)
+      self.onTabActivated(tabID, profileID);
+    return;
+  }
   if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"closed"]) {
     for (NSString *requestID in [_shaarMediaRequests allKeysForObject:tabID])
       [self resolveWebsiteMediaRequestID:requestID accepted:NO];
     for (NSString *requestID in [_shaarCaptureRequests allKeysForObject:tabID])
       [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
     for (NSString *requestID in [_shaarDeviceChooserRequests allKeysForObject:tabID])
-      [self resolveDeviceChooserRequestID:requestID index:nil];
+      [self resolveDeviceChooserRequestID:requestID optionID:nil];
     for (NSString *requestID in [_shaarShareRequests allKeysForObject:tabID])
       [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
     [self cancelExtensionInstallRequestsForTabID:tabID];
     for (NSString *requestID in [_shaarPrintRequests allKeysForObject:tabID])
       [self resolvePrintRequestID:requestID accepted:NO];
+    for (NSString *requestID in [_shaarHTTPAuthRequests allKeysForObject:tabID])
+      [self resolveHTTPAuthRequestID:requestID tabID:tabID username:nil password:nil];
+    for (NSString *requestID in [_shaarJavaScriptDialogRequests allKeysForObject:tabID])
+      [self resolveJavaScriptDialogRequestID:requestID accepted:NO input:nil];
     for (NSString *requestID in [_shaarSavePrompts allKeysForObject:tabID])
       [self resolveSavePromptRequestID:requestID decision:@"dismiss"];
     NSString *mappedWindowID = _shaarTabWindows[tabID];
@@ -770,6 +925,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
     [_shaarTabs removeObjectForKey:tabID];
+    [_shaarClearedActiveTabs removeObject:tabID];
     [self forgetShaarMediaForTabID:tabID];
     [self stopFindingInTabID:tabID];
     [_shaarTabWindows removeObjectForKey:tabID];
@@ -837,6 +993,19 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     self.onRendererGone(tabID, _shaarTabProfiles[tabID] ?: @"", @"renderer_gone", 0);
 }
 
+- (void)resolveHTTPAuthRequestID:(NSString *)requestID tabID:(NSString *)tabID
+                        username:(NSString *)username password:(NSString *)password {
+  if (![_shaarHTTPAuthRequests[requestID] isEqualToString:tabID]) return;
+  [_shaarHTTPAuthRequests removeObjectForKey:requestID];
+  NSMutableDictionary *payload = [@{@"schemaVersion": @1, @"id": requestID,
+                                    @"cancelled": @(username == nil || password == nil)} mutableCopy];
+  if (username && password) {
+    payload[@"username"] = username;
+    payload[@"password"] = password;
+  }
+  [self submitTabID:tabID operation:kShaarHTTPCredentialsReply payload:payload];
+}
+
 - (NSValue *)loadedProfileValueForID:(NSString *)profileID {
   NSValue *value = _shaarProfiles[profileID];
   if (value) return value;
@@ -868,15 +1037,16 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (BOOL)setHttpsOnlyModeEnabled:(BOOL)enabled forProfileID:(NSString *)profileID {
   NSString *canonical = ARCCanonicalProfileID(profileID);
   if (!canonical) return NO;
-  NSNumber *previous = _shaarHttpsOnly[canonical];
-  BOOL changed = !previous || previous.boolValue != enabled;
-  _shaarHttpsOnly[canonical] = @(enabled);
-  if (_shaarUserDataDirectory && changed &&
-      !ARCWriteHttpsOnlyPreference(_shaarUserDataDirectory, canonical, enabled)) return NO;
-  if ([self loadedProfileValueForID:profileID]) {
-    return [self applyLiveHttpsOnly:enabled profileID:profileID];
-  }
-  return YES;
+  BOOL loaded = [self loadedProfileValueForID:profileID] != nil;
+  return ARCCommitHttpsOnlyModeChange(
+      _shaarHttpsOnly, _shaarHttpsOnlyDirtyProfiles, canonical, enabled, loaded,
+      ^BOOL(BOOL value) {
+        return !_shaarUserDataDirectory ||
+            ARCWriteHttpsOnlyPreference(_shaarUserDataDirectory, canonical, value);
+      },
+      ^BOOL(BOOL value) {
+        return [self applyLiveHttpsOnly:value profileID:profileID];
+      });
 }
 
 - (NSArray<NSString *> *)profileDirectoryEntriesBeforeOpenForProfileID:(NSString *)profileID {
@@ -963,7 +1133,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (NSView *)hostView { return [self hostViewForWindowID:_shaarPrimaryWindowID]; }
 
 - (BOOL)createWindowID:(NSString *)windowID error:(NSError **)error {
-  if ([self privateIdentityOccupied:windowID]) {
+  if ([_shaarRetiredWindowIDs containsObject:windowID] ||
+      [self privateIdentityOccupied:windowID]) {
     if (error) *error = ShaarError(@"Invalid or reused native window identity.");
     return NO;
   }
@@ -983,7 +1154,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     __weak ARCShaarRuntime *weakSelf = self;
     _hostCloseObservers[windowID] = [NSNotificationCenter.defaultCenter
         addObserverForName:NSWindowWillCloseNotification object:nativeWindow
-                     queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *notification) {
+                     queue:nil usingBlock:^(NSNotification *notification) {
+      if (weakSelf.onWindowClosing) weakSelf.onWindowClosing(windowID, YES);
       [weakSelf finishWindowID:windowID];
     }];
   }
@@ -993,8 +1165,12 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (BOOL)closeWindowID:(NSString *)windowID {
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   if (!window) return NO;
+  if (self.onWindowClosing) self.onWindowClosing(windowID, YES);
   shaar_error error = EmptyError();
-  if (_symbols.window_close(window, &error) != SHAAR_OK) return NO;
+  if (_symbols.window_close(window, &error) != SHAAR_OK) {
+    if (self.onWindowClosing) self.onWindowClosing(windowID, NO);
+    return NO;
+  }
   return YES;
 }
 
@@ -1009,6 +1185,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (void)finishWindowID:(NSString *)windowID {
   if (!_shaarWindows[windowID]) return;
+  [_shaarRetiredWindowIDs addObject:windowID];
   id observer = _hostResizeObservers[windowID];
   if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
   id closeObserver = _hostCloseObservers[windowID];
@@ -1017,8 +1194,14 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_hostCloseObservers removeObjectForKey:windowID];
   [_hostSizes removeObjectForKey:windowID];
   [_shaarSelectedTabs removeObjectForKey:windowID];
+  for (NSString *requestID in [_shaarShareRequests.allKeys copy]) {
+    NSString *tabID = _shaarShareRequests[requestID];
+    if ([_shaarTabWindows[tabID] isEqualToString:windowID])
+      [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
+  }
   for (NSString *tabID in [_shaarTabWindows.allKeys copy]) {
     if (![_shaarTabWindows[tabID] isEqualToString:windowID]) continue;
+    [_shaarClearedActiveTabs removeObject:tabID];
     [_shaarTabs removeObjectForKey:tabID];
     [_shaarTabWindows removeObjectForKey:tabID];
     [_shaarTabProfiles removeObjectForKey:tabID];
@@ -1026,6 +1209,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarWindows removeObjectForKey:windowID];
   [self closeExtensionPopupForWindowID:windowID];
   if (self.onWindowClosed) self.onWindowClosed(windowID, _shaarQuitting);
+  if (self.onWindowClosing) self.onWindowClosing(windowID, NO);
 }
 
 - (NSWindow *)windowForID:(NSString *)windowID {
@@ -1153,6 +1337,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (![_shaarSelectedTabs[windowID] isEqualToString:tabID])
     [self closeExtensionPopupForWindowID:windowID];
   _shaarSelectedTabs[windowID] = tabID;
+  [_shaarClearedActiveTabs removeObject:tabID];
   // Native notifications must unwind before reentering TabStripModel. Host
   // actions can activate immediately, without waiting behind Chromium's pump.
   __weak ARCShaarRuntime *weakSelf = self;
@@ -1185,6 +1370,21 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _symbols.tab_view_focus(_shaarEngine, window, tab, &error);
 }
 
+- (BOOL)supportsNativePrint { return _symbols.tab_print != nullptr; }
+
+- (BOOL)printTabID:(NSString *)tabID windowID:(NSString *)windowID profileID:(NSString *)profileID {
+  if (!NSThread.isMainThread || !_shaarEngine || !_symbols.tab_print ||
+      !tabID.length || !windowID.length || !profileID.length ||
+      ![_shaarSelectedTabs[windowID] isEqualToString:tabID] ||
+      ![_shaarTabWindows[tabID] isEqualToString:windowID] ||
+      [_shaarTabProfiles[tabID] caseInsensitiveCompare:profileID] != NSOrderedSame) return NO;
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  shaar_tab *tab = (shaar_tab *)_shaarTabs[tabID].pointerValue;
+  if (!window || !tab) return NO;
+  shaar_error error = EmptyError();
+  return _symbols.tab_print(tab, &error) == SHAAR_OK;
+}
+
 - (void)clearActiveTabInWindowID:(NSString *)windowID {
   NSString *tabID = _shaarSelectedTabs[windowID];
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
@@ -1192,6 +1392,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   if (window && tab) {
     shaar_error error = EmptyError();
     _symbols.tab_view_detach(_shaarEngine, window, tab, &error);
+    [_shaarClearedActiveTabs addObject:tabID];
   }
   [_shaarSelectedTabs removeObjectForKey:windowID];
 }
@@ -1443,6 +1644,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID
                 mode:(ARCPageReloadMode)mode {
   if (![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      [_shaarClearedActiveTabs containsObject:tabID] ||
       mode == ARCPageReloadModeNewRenderer) return NO;
   return [self submitTabID:tabID operation:SHAAR_OP_TAB_RELOAD
                   payload:@{@"schemaVersion": @1,
@@ -1467,7 +1669,15 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID {
-  return -1;  // Native Chromium window IDs are not part of the Shaar ABI.
+  if (!_shaarEngine || !_symbols.window_chrome_id) return -1;
+  shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  if (!profile || !window) return -1;
+  int32_t chromeID = -1;
+  shaar_error error = EmptyError();
+  const shaar_error_code status = _symbols.window_chrome_id(
+      _shaarEngine, profile, window, &chromeID, &error);
+  return status == SHAAR_OK ? chromeID : -1;
 }
 
 - (int)nativeTabIDForID:(NSString *)tabID {
@@ -1497,6 +1707,16 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [_shaarFindRequests removeObjectForKey:tabID];
   }
   return accepted;
+}
+
+- (BOOL)performPageZoomAction:(NSString *)action tabID:(NSString *)tabID
+                     profileID:(NSString *)profileID {
+  NSString *windowID = _shaarTabWindows[tabID];
+  if (![@[@"get", @"in", @"out", @"reset"] containsObject:action] ||
+      ![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      ![_shaarSelectedTabs[windowID] isEqualToString:tabID]) return NO;
+  return [self submitTabID:tabID operation:SHAAR_OP_TAB_ZOOM
+                   payload:@{@"schemaVersion": @1, @"action": action}];
 }
 
 - (void)stopFindingInTabID:(NSString *)tabID {
@@ -1743,16 +1963,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (NSURL *)shaarProfileDirectoryForID:(NSString *)profileID {
-  shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
-  if (!profile) return nil;
-  auto getPath = reinterpret_cast<decltype(&shaar_profile_get_path)>(
-      dlsym(_shaarLibrary, "shaar_profile_get_path"));
-  if (!getPath) return nil;
-  shaar_bytes path = {};
-  shaar_error error = EmptyError();
-  if (getPath(profile, &path, &error) != SHAAR_OK) return nil;
-  NSString *value = String(path);
-  return value.length ? [NSURL fileURLWithPath:value isDirectory:YES] : nil;
+  NSString *canonical = ARCCanonicalProfileID(profileID);
+  if (!canonical || !_shaarUserDataDirectory) return nil;
+  NSString *directoryName = [@"Profile " stringByAppendingString:canonical.lowercaseString];
+  return [_shaarUserDataDirectory URLByAppendingPathComponent:directoryName
+                                                 isDirectory:YES];
 }
 
 - (NSView *)shaarExtensionPopupViewForID:(NSString *)popupID
@@ -1774,18 +1989,6 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     _shaarQuitting = NO;
     if (self.onQuitCancelled) self.onQuitCancelled();
   }
-}
-
-- (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
-                contextID:(NSString *)contextID requestID:(NSString *)requestID
-                     text:(NSString *)text forward:(BOOL)forward {
-  if (self.onNotice) self.onNotice(@"Private page find is unsupported by this Shaar engine.");
-  return NO;
-}
-
-- (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
-                       contextID:(NSString *)contextID {
-  if (self.onNotice) self.onNotice(@"Private page find is unsupported by this Shaar engine.");
 }
 
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted {
@@ -1974,18 +2177,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   }
 }
 
-- (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(NSNumber *)index {
+- (void)resolveDeviceChooserRequestID:(NSString *)requestID optionID:(NSString *)optionID {
   if (!_shaarDeviceChooserAvailable) return;
   NSString *tabID = _shaarDeviceChooserRequests[requestID];
   if (!tabID) return;
   [_shaarDeviceChooserRequests removeObjectForKey:requestID];
-  BOOL select = index != nil && index.integerValue >= 0;
+  BOOL select = optionID.length > 0;
   NSMutableDictionary *payload = [@{
     @"schemaVersion": @1,
     @"id": requestID,
     @"action": select ? @"select" : @"cancel",
   } mutableCopy];
-  if (select) payload[@"index"] = @(index.integerValue);
+  if (select) payload[@"optionId"] = optionID;
   [self submitTabID:tabID operation:kShaarDeviceChooserDecision payload:payload];
 }
 
@@ -2106,6 +2309,19 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarPrintRequests removeObjectForKey:requestID];
   if (!_shaarPrintReply || !requestID.UTF8String) return;
   _shaarPrintReply(requestID.UTF8String, accepted ? 1 : 0);
+}
+
+- (void)resolveJavaScriptDialogRequestID:(NSString *)requestID accepted:(BOOL)accepted
+                                  input:(NSString *)input {
+  NSString *tabID = _shaarJavaScriptDialogRequests[requestID];
+  if (!tabID) return;
+  [_shaarJavaScriptDialogRequests removeObjectForKey:requestID];
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID) return;
+  NSDictionary *payload = @{@"schemaVersion": @1, @"id": requestID,
+    @"accepted": @(accepted), @"input": input ?: @""};
+  [self shaarSubmit:SHAAR_OP_JAVASCRIPT_DIALOG_REPLY profileID:profileID
+              tabID:tabID payload:payload completion:nil];
 }
 
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {

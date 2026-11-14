@@ -7,6 +7,7 @@ import BrowserCore
 import SwiftUI
 
 struct ProfileExtensionsSection: View {
+  static let extensionRowHeadingTraits: AccessibilityTraits = .isHeader
   let model: ExtensionManagerModel?
   let sharedModel: SharedExtensionSettingsModel?
   let pageOrigin: () -> String?
@@ -41,12 +42,12 @@ struct ProfileExtensionsSection: View {
     }
   }
 
-  static func toggleLabel(
-    extensionName: String, profileName: String, enabled: Bool,
+  static func toggleAccessibilityLabel(
+    extensionName: String, profileName: String,
     language: BrowserLanguage = .currentLaunchLanguage
   ) -> String {
     BrowserLocalization.format(
-      enabled ? "Disable %@ for %@" : "Enable %@ for %@", table: "Settings", language: language,
+      "Extension %@ for profile %@", table: "Settings", language: language,
       arguments: [.string(extensionName), .string(profileName)])
   }
 
@@ -129,6 +130,7 @@ private struct SharedExtensionSettingsSection: View {
         ForEach(model.rows) { row in
           VStack(alignment: .leading, spacing: 6) {
             Text(row.name).font(.headline)
+              .accessibilityAddTraits(ProfileExtensionsSection.extensionRowHeadingTraits)
             ForEach(ProfileExtensionsSection.sortedProfileIDs(for: row), id: \.self) { profileID in
               if let state = row.profiles[profileID] {
                 if let enabled = state.enabled {
@@ -143,8 +145,8 @@ private struct SharedExtensionSettingsSection: View {
                       })
                   )
                   .accessibilityLabel(
-                    ProfileExtensionsSection.toggleLabel(
-                      extensionName: row.name, profileName: state.name, enabled: enabled))
+                    ProfileExtensionsSection.toggleAccessibilityLabel(
+                      extensionName: row.name, profileName: state.name))
                 } else if state.failed {
                   HStack {
                     Text(state.name)
@@ -207,7 +209,9 @@ struct ExtensionManagerList: View {
               actions: ExtensionRowActions(
                 run: { run(item.id) },
                 setPinned: { model.setPinned(item.id, pinned: $0) },
-                setEnabled: { model.setEnabled(item.id, enabled: $0) },
+                setEnabled: { enabled in
+                  MainActor.assumeIsolated { model.setEnabled(item.id, enabled: enabled) }
+                },
                 showDetails: { showDetails(item.id) }))
           }
         }
@@ -264,6 +268,7 @@ private struct ExtensionInstallStatus: View {
 }
 
 struct ExtensionDetails: View {
+  static let detailsHeadingTraits: AccessibilityTraits = .isHeader
   let model: ExtensionManagerModel
   let item: ManagedExtension
   let pageOrigin: () -> String?
@@ -362,6 +367,7 @@ struct ExtensionDetails: View {
     if !values.isEmpty {
       VStack(alignment: .leading, spacing: 4) {
         Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+          .accessibilityAddTraits(Self.detailsHeadingTraits)
         ForEach(values, id: \.self) { value in
           Text(value).font(.caption).lineLimit(1).truncationMode(.middle)
         }

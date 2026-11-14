@@ -1,0 +1,122 @@
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
+@@ -237,6 +237,19 @@
+   ScheduleAnimationIfNeeded();
+ }
+ 
++void ScriptedAnimationController::EnqueueHiddenResizeEvent(Event* event) {
++  if (!InsertToPerFrameEventsMap(event))
++    return;
++  EnqueueEvent(event);
++}
++
++void ScriptedAnimationController::DispatchHiddenResizeEvents() {
++  DispatchEvents(base::BindRepeating([](Event* event) {
++    return event->type() == AtomicString("resize");
++  }));
++}
++
++
+ void ScriptedAnimationController::ScheduleAnimationIfNeeded(
+     cc::BeginMainFrameReason reason) {
+   if (!GetExecutionContext() || GetExecutionContext()->IsContextPaused())
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
+@@ -95,6 +95,8 @@
+   void ContextDestroyed() final {}
+ 
+   void DispatchMediaQueryListEventsAndCallbacks();
++  void EnqueueHiddenResizeEvent(Event*);
++  void DispatchHiddenResizeEvents();
+ 
+   LocalDOMWindow* GetWindow() const;
+   void ScheduleAnimationIfNeeded(
+diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
+--- a/third_party/blink/renderer/core/dom/document.cc
++++ b/third_party/blink/renderer/core/dom/document.cc
+@@ -6742,7 +6742,24 @@
+ void Document::EnqueueResizeEvent() {
+   Event* event = Event::Create(event_type_names::kResize);
+   event->SetTarget(domWindow());
+-  scripted_animation_controller_->EnqueuePerFrameEvent(event);
++  if (!hidden()) {
++    scripted_animation_controller_->EnqueuePerFrameEvent(event);
++    return;
++  }
++  scripted_animation_controller_->EnqueueHiddenResizeEvent(event);
++  if (hidden_resize_event_task_pending_)
++    return;
++  hidden_resize_event_task_pending_ = true;
++  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
++      FROM_HERE,
++      BindOnce(&Document::DispatchHiddenResizeEventTask, WrapPersistent(this)));
++}
++
++void Document::DispatchHiddenResizeEventTask() {
++  hidden_resize_event_task_pending_ = false;
++  if (!GetExecutionContext())
++    return;
++  scripted_animation_controller_->DispatchHiddenResizeEvents();
+ }
+ 
+ void Document::EnqueueMediaQueryChangeListeners(
+diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/renderer/core/dom/document.h
+--- a/third_party/blink/renderer/core/dom/document.h
++++ b/third_party/blink/renderer/core/dom/document.h
+@@ -3141,8 +3141,10 @@
+   Member<MediaQueryMatcher> media_query_matcher_;
+   bool write_recursion_is_too_deep_ = false;
+   unsigned write_recursion_depth_ = 0;
++  void DispatchHiddenResizeEventTask();
+ 
+   Member<ScriptedAnimationController> scripted_animation_controller_;
++  bool hidden_resize_event_task_pending_ = false;
+   void ElementDataCacheClearTimerFired(TimerBase*);
+   HeapTaskRunnerTimer<Document> element_data_cache_clear_timer_;
+ 
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
+@@ -6,6 +6,8 @@
+ 
+ #include <cmath>
+ #include <memory>
++
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "testing/gmock/include/gmock/gmock.h"
+@@ -179,6 +181,7 @@
+   EXPECT_EQ(1, observer.Order()[1]);
+ }
+ 
++
+ namespace {
+ 
+ class RunTaskCallback final : public FrameCallback {
+@@ -241,6 +244,23 @@
+                                           {{Controller(), false}});
+   EXPECT_FALSE(Controller().HasFrameCallback());
+ }
++
++TEST_F(ScriptedAnimationControllerTest,
++       HiddenDocumentResizeEventDispatchesWithoutAnimationFrame) {
++  GetPage().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
++                               /*is_initial_state=*/false);
++  TaskOrderObserver observer;
++  GetDocument().domWindow()->addEventListener(
++      AtomicString("resize"),
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(1)));
++
++  GetDocument().EnqueueResizeEvent();
++  EXPECT_TRUE(observer.Order().empty());
++
++  task_environment_.RunUntilIdle();
++  EXPECT_THAT(observer.Order(), testing::ElementsAre(1));
++}
++
+ 
+ TEST_F(ScriptedAnimationControllerTest, TestIsInRequestAnimationFrame) {
+   EXPECT_FALSE(Controller().GetExecutionContext()->IsInRequestAnimationFrame());

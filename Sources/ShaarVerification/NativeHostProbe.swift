@@ -105,12 +105,62 @@ private struct HostViewportWindowState {
 }
 
 enum NativeHostViewportValidation {
+  static func accountID(fromCookie cookie: String) -> String? {
+    let accounts = cookie.split(separator: ";").compactMap { item -> String? in
+      let pair = item.trimmingCharacters(in: .whitespaces).split(separator: "=", maxSplits: 1)
+      return pair.count == 2 && pair[0] == "account" ? String(pair[1]) : nil
+    }
+    guard accounts.count == 1, let account = accounts.first, !account.isEmpty else { return nil }
+    return account
+  }
+
+  static func documentFields(from document: [String: Any]) -> HostViewportDocumentFields? {
+    guard document["fixture"] as? String == "v1",
+      let instance = document["instance"] as? String,
+      let cookie = document["cookie"] as? String,
+      let accountID = accountID(fromCookie: cookie),
+      let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
+      let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
+      let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,
+      let pageFocusEventCount = (document["pageFocusEventCount"] as? NSNumber)?.intValue,
+      let pageBlurEventCount = (document["pageBlurEventCount"] as? NSNumber)?.intValue,
+      let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue
+    else { return nil }
+    return HostViewportDocumentFields(
+      accountID: accountID, instance: instance, cssWidth: cssWidth, cssHeight: cssHeight,
+      resizeEventCount: resizeEventCount, pageFocusEventCount: pageFocusEventCount,
+      pageBlurEventCount: pageBlurEventCount, devicePixelRatio: devicePixelRatio)
+  }
+
   static func sameCSSSize(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
     abs(lhs.width - rhs.width) <= 1 && abs(lhs.height - rhs.height) <= 1
   }
 
   static func deliveredResizeEvent(from previousCount: Int, to currentCount: Int) -> Bool {
     currentCount > previousCount
+  }
+}
+
+struct HostViewportDocumentFields: Equatable {
+  let accountID: String
+  let instance: String
+  let cssWidth: Double
+  let cssHeight: Double
+  let resizeEventCount: Int
+  let pageFocusEventCount: Int
+  let pageBlurEventCount: Int
+  let devicePixelRatio: Double
+}
+
+enum NativeHostIdentityCheckpointEvidence {
+  static func hasDistinctWindowIDs(retained: [UUID], closed: [UUID]) -> Bool {
+    Set(retained).count == retained.count
+      && Set(closed).count == closed.count
+      && Set(retained).isDisjoint(with: Set(closed))
+  }
+
+  static func hasDistinctTabIDs(_ ids: [UUID]) -> Bool {
+    Set(ids).count == ids.count
   }
 }
 
@@ -182,9 +232,14 @@ final class NativeHostProbe {
     self.host = host
     host.onClosed = { [weak self] id, quitting in self?.closures[id] = quitting }
     try host.restore()
-    checks += try await ProfileOnboardingProbe(
-      host: host, root: root, fixture: fixture, phase: phase
-    ).run()
+    if ProcessInfo.processInfo.environment["SHAAR_SKIP_PROFILE_DELETION"] != "1" {
+      checks += try await ProfileDeletionProbe(host: host, fixture: fixture).run()
+    }
+    if ProcessInfo.processInfo.environment["SHAAR_SKIP_PROFILE_ONBOARDING"] != "1" {
+      checks += try await ProfileOnboardingProbe(
+        host: host, root: root, fixture: fixture, phase: phase
+      ).run()
+    }
     let checkpoint = root.appending(path: "host-identities.json")
     var firstID: UUID
     var secondID: UUID
@@ -210,10 +265,12 @@ final class NativeHostProbe {
       _ = try await document(temporary)
       let temporaryProfileID = secondStore.session.selectedSpace.profileID
       let wrongProfileID = secondStore.session.profiles.first { $0.id != temporaryProfileID }!.id
-      try await verifyNativeNavigation(
-        tabID: temporary, store: secondStore, profileID: temporaryProfileID,
-        wrongProfileID: wrongProfileID, windowID: secondID.uuidString,
-        wrongWindowID: firstID.uuidString)
+      if ProcessInfo.processInfo.environment["SHAAR_SKIP_NATIVE_NAVIGATION"] != "1" {
+        try await verifyNativeNavigation(
+          tabID: temporary, store: secondStore, profileID: temporaryProfileID,
+          wrongProfileID: wrongProfileID, windowID: secondID.uuidString,
+          wrongWindowID: firstID.uuidString)
+      }
       try send(.closeTab)
       try await wait("host close-tab recovery") {
         host.contexts[secondID]?.store.session.closedTabs.contains { $0.id == temporary } == true
@@ -278,6 +335,16 @@ final class NativeHostProbe {
     } else {
       let saved = try JSONDecoder().decode(
         HostProbeIdentity.self, from: Data(contentsOf: checkpoint))
+      let retainedWindowIDs = [saved.first, saved.second] + [saved.engineWindow].compactMap { $0 }
+      let fixtureTabIDs =
+        [saved.firstTab, saved.secondTab]
+        + [saved.staleTab, saved.engineTab].compactMap { $0 }
+      guard
+        NativeHostIdentityCheckpointEvidence.hasDistinctWindowIDs(
+          retained: retainedWindowIDs, closed: saved.ordinarilyClosed)
+      else { throw HostProbeFailure("Saved native host window identities are not distinct.") }
+      guard NativeHostIdentityCheckpointEvidence.hasDistinctTabIDs(fixtureTabIDs)
+      else { throw HostProbeFailure("Saved native host tab identities are not distinct.") }
       quitReadiness.markIdentityCheckpointReady()
       authoredProfile = saved.authoredProfile
       renamedProfile = saved.renamedProfile
@@ -351,10 +418,14 @@ final class NativeHostProbe {
       tabID: secondTab, profileID: second.store.session.selectedSpace.profileID,
       windowID: second.nativeID, wrongWindowID: first.nativeID, staleTabID: staleTabID)
     focus(secondID)
-    let requested = try await EngineRequestedWindowProbe(
-      host: host, root: root, fixture: fixture, phase: phase
-    ).run(alpha: second, beta: first)
-    checks += requested.checks
+    var requestedWindowID: UUID?
+    if ProcessInfo.processInfo.environment["SHAAR_SKIP_ENGINE_REQUESTED_WINDOWS"] != "1" {
+      let requested = try await EngineRequestedWindowProbe(
+        host: host, root: root, fixture: fixture, phase: phase
+      ).run(alpha: second, beta: first)
+      checks += requested.checks
+      requestedWindowID = requested.retained
+    }
     try await verifyViewportLayout(
       first: first, firstTab: firstTab, second: second, secondTab: secondTab)
     focus(firstID)
@@ -611,15 +682,17 @@ final class NativeHostProbe {
     for (index, context) in [first, second].enumerated() {
       try await capture(context.hosting, index: index + 1)
     }
-    if let created = host.contexts[requested.retained] {
+    if let requestedWindowID, let created = host.contexts[requestedWindowID] {
       try await capture(created.hosting, index: 3)
     }
     try await captureEditor(second.store)
     try JSONEncoder().encode(
       HostProbeIdentity(
         first: firstID, second: secondID, firstTab: firstTab, secondTab: secondTab,
-        ordinarilyClosed: closedIDs, staleTab: staleTabID, engineWindow: requested.retained,
-        engineTab: host.contexts[requested.retained]?.store.session.selectedSpace.selectedTabID,
+        ordinarilyClosed: closedIDs, staleTab: staleTabID, engineWindow: requestedWindowID,
+        engineTab: requestedWindowID.flatMap {
+          host.contexts[$0]?.store.session.selectedSpace.selectedTabID
+        },
         authoredProfile: authoredProfile, renamedProfile: renamedProfile)
     ).write(to: checkpoint, options: .atomic)
     quitReadiness.markIdentityCheckpointReady()
@@ -879,16 +952,56 @@ final class NativeHostProbe {
   }
 
   private func settleViewportLayout(_ context: NativeBrowserContext) async throws {
-    for _ in 0..<4 {
+    var frameSampler = StableContainerFrameSampler()
+    var lastRendererSize: [String: Double]?
+    var expectedRendererSize = NSSize.zero
+    // The selected-space transition is a 350 ms spring. Give it time to begin and
+    // finish before accepting two consecutive stable container-frame samples.
+    for sampleIndex in 0..<67 {
       context.window.displayIfNeeded()
       context.contentView.layoutSubtreeIfNeeded()
       context.hosting.layoutSubtreeIfNeeded()
+      if let frame = viewportContainerFrame(context), frameSampler.sample(frame), sampleIndex >= 15,
+        let tabID = context.store.session.selectedSpace.selectedTabID,
+        let page = primary.runtime.view(forTabID: tabID.uuidString)
+      {
+        expectedRendererSize = page.frame.size
+        lastRendererSize = await rendererViewportSize(tabID: tabID)
+        if let size = lastRendererSize,
+          abs((size["width"] ?? 0) - Double(page.frame.width)) <= 1,
+          abs((size["height"] ?? 0) - Double(page.frame.height)) <= 1
+        {
+          return
+        }
+      }
       await Task.yield()
       try await Task.sleep(for: .milliseconds(30))
     }
-    context.window.displayIfNeeded()
-    context.contentView.layoutSubtreeIfNeeded()
-    context.hosting.layoutSubtreeIfNeeded()
+    throw HostProbeFailure(
+      "Native viewport renderer dimensions did not settle with its native frame within 2 seconds "
+        + "(expected \(expectedRendererSize), observed \(String(describing: lastRendererSize))).")
+  }
+
+  private func rendererViewportSize(tabID: UUID) async -> [String: Double]? {
+    await withCheckedContinuation { continuation in
+      primary.runtime.evaluate(
+        inTabID: tabID.uuidString,
+        script: "({width:window.innerWidth,height:window.innerHeight})"
+      ) { json in
+        let value = json?.data(using: .utf8).flatMap {
+          try? JSONSerialization.jsonObject(with: $0) as? [String: Double]
+        }
+        continuation.resume(returning: value)
+      }
+    }
+  }
+
+  private func viewportContainerFrame(_ context: NativeBrowserContext) -> CGRect? {
+    guard let tabID = context.store.session.selectedSpace.selectedTabID,
+      let page = primary.runtime.view(forTabID: tabID.uuidString),
+      let container = pageContainer(in: context.hosting, page: page)
+    else { return nil }
+    return container.convert(container.bounds, to: context.hosting)
   }
 
   private func captureNativeHitTesting(_ stage: String, context: NativeBrowserContext) throws {
@@ -970,19 +1083,7 @@ final class NativeHostProbe {
     try await settleViewportLayout(context)
     try captureNativeHitTesting(stage, context: context)
     let document = try await document(tabID)
-    guard document["fixture"] as? String == "v1",
-      let instance = document["instance"] as? String,
-      let cookie = document["cookie"] as? String,
-      let accountID = cookie.split(separator: ";").compactMap({ item -> String? in
-        let pair = item.trimmingCharacters(in: .whitespaces).split(separator: "=", maxSplits: 1)
-        return pair.count == 2 && pair[0] == "account" ? String(pair[1]) : nil
-      }).first,
-      let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
-      let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
-      let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,
-      let pageFocusEventCount = (document["pageFocusEventCount"] as? NSNumber)?.intValue,
-      let pageBlurEventCount = (document["pageBlurEventCount"] as? NSNumber)?.intValue,
-      let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue,
+    guard let fields = NativeHostViewportValidation.documentFields(from: document),
       let page = primary.runtime.view(forTabID: tabID.uuidString),
       let container = pageContainer(in: context.hosting, page: page),
       page.superview === container
@@ -1008,16 +1109,17 @@ final class NativeHostProbe {
       && containerFrame.maxX <= expectedMaxX + tolerance
     let pageMatchesContainer = pageFrame == containerBounds
     let cssMatchesNativePoints =
-      abs(cssWidth - Double(pageFrame.width)) <= 1
-      && abs(cssHeight - Double(pageFrame.height)) <= 1
+      abs(fields.cssWidth - Double(pageFrame.width)) <= 1
+      && abs(fields.cssHeight - Double(pageFrame.height)) <= 1
     return HostViewportSample(
       stage: stage, windowID: context.id, tabID: tabID,
       profileID: context.store.session.selectedSpace.profileID,
-      accountID: accountID, documentInstance: instance,
-      innerWidthCSSPixels: cssWidth, innerHeightCSSPixels: cssHeight,
-      resizeEventCount: resizeEventCount,
-      pageFocusEventCount: pageFocusEventCount, pageBlurEventCount: pageBlurEventCount,
-      devicePixelRatio: devicePixelRatio,
+      accountID: fields.accountID, documentInstance: fields.instance,
+      innerWidthCSSPixels: fields.cssWidth, innerHeightCSSPixels: fields.cssHeight,
+      resizeEventCount: fields.resizeEventCount,
+      pageFocusEventCount: fields.pageFocusEventCount,
+      pageBlurEventCount: fields.pageBlurEventCount,
+      devicePixelRatio: fields.devicePixelRatio,
       backingScaleFactor: Double(context.window.backingScaleFactor),
       sidebarVisible: context.store.sidebarIsVisible,
       windowFramePoints: HostViewportRect(context.window.frame),
@@ -1041,9 +1143,10 @@ final class NativeHostProbe {
       let json: String? = await withCheckedContinuation { continuation in
         primary.runtime.evaluate(
           inTabID: tabID.uuidString,
-          script: "({count:window.__arcusisResizeEvents||0})") {
-            continuation.resume(returning: $0)
-          }
+          script: "({count:window.__arcusisResizeEvents||0})"
+        ) {
+          continuation.resume(returning: $0)
+        }
       }
       if let data = json?.data(using: .utf8),
         let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -1221,15 +1324,21 @@ final class NativeHostProbe {
             """
         ) { continuation.resume(returning: $0) }
       }
-      if let data = json?.data(using: .utf8),
-        let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["fixture"] as? String == "v1", value["instance"] as? String != nil
-      {
+      if let value = Self.parseDocumentJSON(json) {
         return value
       }
       try await Task.sleep(for: .milliseconds(100))
     }
     throw HostProbeFailure("Native host fixture document not ready.")
+  }
+
+  static func parseDocumentJSON(_ json: String?) -> [String: Any]? {
+    guard let data = json?.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      value["fixture"] as? String == "v1",
+      let instance = value["instance"] as? String, !instance.isEmpty
+    else { return nil }
+    return value
   }
 
   private func verifyNativeNavigation(
@@ -1257,12 +1366,18 @@ final class NativeHostProbe {
     let rejectedURLs = [
       "javascript:location.href='about:blank'", "file:///etc/passwd", "mailto:test@example.invalid",
       "chrome://version", "about:blank#other", "https://", "http://127.0.0.1:99999/", "",
-    ].allSatisfy {
-      !runtime.navigateTabID(
-        tabIdentity, profileID: profileIdentity, windowID: windowID, url: $0)
+    ]
+    for url in rejectedURLs {
+      _ = runtime.navigateTabID(
+        tabIdentity, profileID: profileIdentity, windowID: windowID, url: url)
     }
+    try await Task.sleep(for: .milliseconds(300))
+    let currentURL = await currentLocation(tabID)
+    try expect(
+      currentURL == destination.absoluteString,
+      "native navigation rejects unsupported and invalid URLs [location=\(currentURL ?? "unavailable")]"
+    )
     try expect(rejectedOwners, "native navigation rejects wrong profile and window owners")
-    try expect(rejectedURLs, "native navigation rejects unsupported and invalid URLs")
     try await waitForLocation(destination.absoluteString, tabID: tabID)
     _ = try await document(tabID)
 
@@ -1300,6 +1415,18 @@ final class NativeHostProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw HostProbeFailure("Native navigation did not commit the expected fixture URL.")
+  }
+
+  private func currentLocation(_ tabID: UUID) async -> String? {
+    let json: String? = await withCheckedContinuation { continuation in
+      primary.runtime.evaluate(inTabID: tabID.uuidString, script: "({href:location.href})") {
+        continuation.resume(returning: $0)
+      }
+    }
+    guard let data = json?.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return nil }
+    return value["href"] as? String
   }
 
   private func verifyNativeFavicon(

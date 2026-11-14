@@ -12,6 +12,13 @@ private func findInteger(_ value: Any?) -> Int? {
   return Int(exactly: number.doubleValue)
 }
 
+private func findBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
 public enum ShaarFindOperation: UInt32, Sendable {
   case find = 900
   case stop = 901
@@ -89,7 +96,7 @@ public struct ShaarFindUpdate: Equatable, Sendable {
     _ event: ShaarCopiedEvent, expectedScope: ShaarFindScope,
     expectedTabID: String, expectedRequestID: UInt64
   ) -> ShaarFindUpdate? {
-    guard event.kind == 7,
+    guard expectedRequestID > 0, event.kind == 7,
       String(decoding: event.profileID, as: UTF8.self) == expectedScope.profileID,
       String(decoding: event.sessionID, as: UTF8.self) == (expectedScope.sessionID ?? ""),
       String(decoding: event.tabID, as: UTF8.self) == expectedTabID,
@@ -99,8 +106,10 @@ public struct ShaarFindUpdate: Equatable, Sendable {
       let request = object["requestID"] as? String,
       UInt64(request) == expectedRequestID,
       let count = findInteger(object["matchCount"]),
+      count >= 0,
       let active = findInteger(object["activeMatch"]),
-      let final = object["final"] as? Bool
+      active >= -1,
+      let final = findBoolean(object["final"])
     else { return nil }
     return ShaarFindUpdate(
       requestID: expectedRequestID, matchCount: count,

@@ -14,6 +14,7 @@ only when a maintainer is reviewing a new pin. Scorecard treats a committed
 import argparse
 import base64
 from dataclasses import dataclass
+import http.client
 import hashlib
 import json
 import os
@@ -22,6 +23,7 @@ import shutil
 import struct
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -134,13 +136,26 @@ def read_bounded(response, name):
     return data
 
 
-def download_url(url, name, destination):
+DOWNLOAD_ATTEMPTS = 3
+RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
+
+
+def download_url(url, name, destination, sleep=time.sleep):
     request = urllib.request.Request(url, headers={"User-Agent": "shaar-fetch-framework-devtools"})
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            destination.write_bytes(read_bounded(response, name))
-    except urllib.error.HTTPError as error:
-        raise ValueError(f"{name}: download failed from {url} ({error.code})") from error
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                payload = read_bounded(response, name)
+        except urllib.error.HTTPError as error:
+            if error.code not in RETRYABLE_STATUS or attempt == DOWNLOAD_ATTEMPTS:
+                raise ValueError(f"{name}: download failed from {url} ({error.code})") from error
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise ValueError(f"{name}: download failed from {url}: {error}") from error
+        else:
+            destination.write_bytes(payload)
+            return
+        sleep(2 ** attempt)
 
 
 def download_release(name, destination):
@@ -160,13 +175,25 @@ def archive_directory(explicit):
     return ROOT / "build" / "cache" / "framework-devtools"
 
 
+def validate_archive_directory(archive_dir):
+    if archive_dir.is_symlink():
+        raise ValueError(f"archive cache directory must not be a symlink: {archive_dir}")
+    if archive_dir.exists() and not archive_dir.is_dir():
+        raise ValueError(f"archive cache path is not a directory: {archive_dir}")
+
+
 def archive_matches(name, archive):
-    if not archive.is_file():
+    if archive.is_symlink() or not archive.is_file():
         return False
-    return hashlib.sha256(archive.read_bytes()).hexdigest() == PINS[name].sha256
+    with archive.open("rb") as source:
+        data = source.read(MAX_ARCHIVE_SIZE + 1)
+    if len(data) > MAX_ARCHIVE_SIZE:
+        return False
+    return hashlib.sha256(data).hexdigest() == PINS[name].sha256
 
 
 def install_pinned(name, archive_dir, download, source_label):
+    validate_archive_directory(archive_dir)
     archive_dir.mkdir(parents=True, exist_ok=True)
     archive = archive_dir / f"{name}.crx"
     with tempfile.NamedTemporaryFile(dir=archive_dir, delete=False) as temp:
@@ -188,6 +215,7 @@ def install_pinned(name, archive_dir, download, source_label):
 
 
 def ensure_archive(name, archive_dir, from_web_store):
+    validate_archive_directory(archive_dir)
     archive = archive_dir / f"{name}.crx"
     if not from_web_store and archive_matches(name, archive):
         return archive
@@ -199,7 +227,10 @@ def ensure_archive(name, archive_dir, from_web_store):
 
 def unpack(name, archive_path, destination):
     pin = PINS[name]
-    archive = archive_path.read_bytes()
+    with archive_path.open("rb") as source:
+        archive = source.read(MAX_ARCHIVE_SIZE + 1)
+    if len(archive) > MAX_ARCHIVE_SIZE:
+        raise ValueError(f"{name}: archive exceeds size limit")
     if hashlib.sha256(archive).hexdigest() != pin.sha256:
         raise ValueError(f"{name}: CRX SHA-256 mismatch; upstream version may have changed")
     public_key = public_key_for_id(archive, pin.extension_id)
@@ -279,9 +310,19 @@ def main():
 
 
 def validate_output_path(path: Path) -> Path:
-    if path.is_symlink():
-        raise ValueError(f"output must not be a symlink: {path}")
-    output = path.resolve()
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    current = Path(absolute.anchor)
+    platform_symlink_aliases = {Path("/var")} if sys.platform == "darwin" else set()
+    for component in absolute.parts[1:]:
+        if component == "..":
+            current = current.parent
+            continue
+        if component == ".":
+            continue
+        current /= component
+        if current.is_symlink() and current not in platform_symlink_aliases:
+            raise ValueError(f"output path must not traverse a symlink: {current}")
+    output = current.resolve()
     protected_roots = (ROOT.resolve(), Path(tempfile.gettempdir()).resolve())
     if output == output.parent or any(root == output or output in root.parents for root in protected_roots):
         raise ValueError(f"refusing unsafe output directory: {path}")

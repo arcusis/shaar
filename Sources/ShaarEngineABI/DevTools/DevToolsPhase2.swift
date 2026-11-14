@@ -12,6 +12,13 @@ private func phase2ReplyInteger(_ value: Any?) -> Int? {
   return Int(exactly: number.doubleValue)
 }
 
+private func phase2ReplyBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
 /// Fixed commands within the tab-scoped DevTools panel lease. Cookies and
 /// site-data clearing belong to the site-data adapter.
 public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
@@ -160,7 +167,7 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
       phase2ReplyInteger(root["schemaVersion"]) == 1,
       phase2ReplyInteger(root["commandID"]) == command.id,
       let rawItems = root["items"] as? [[String: Any]], rawItems.count <= 50,
-      let truncated = root["truncated"] as? Bool,
+      let truncated = phase2ReplyBoolean(root["truncated"]),
       Set(root.keys).isSubset(of: [
         "schemaVersion", "commandID", "items", "hasMore",
         "body", "base64Encoded", "documents", "nodes",
@@ -174,10 +181,11 @@ public struct ShaarDevToolsPhase2Reply: Equatable, Sendable {
     }
     let body = root["body"] as? String
     if root["body"] != nil && (body == nil || body!.utf8.count > bodyLimit) { return nil }
-    let encoded = root["base64Encoded"] as? Bool
+    let encoded = root["base64Encoded"].flatMap(phase2ReplyBoolean)
+    if root["base64Encoded"] != nil && encoded == nil { return nil }
     if (body == nil) != (encoded == nil) { return nil }
     if body != nil && command.id != 10 && command.id != 16 && command.id != 20 { return nil }
-    let hasMore = root["hasMore"] as? Bool
+    let hasMore = root["hasMore"].flatMap(phase2ReplyBoolean)
     if root["hasMore"] != nil && hasMore == nil { return nil }
     var counters: [String: Int] = [:]
     for key in ["documents", "nodes", "jsEventListeners"] {
@@ -271,12 +279,13 @@ public enum ShaarDevToolsPhase2EventRouter {
       event.payloadJSON.count <= 32_768,
       let root = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       Set(root.keys) == ["schemaVersion", "kind", "eventID", "leaseID", "data"],
-      root["schemaVersion"] as? Int == 1, root["kind"] as? String == "panelEvent",
-      let rawID = root["eventID"] as? Int,
+      phase2ReplyInteger(root["schemaVersion"]) == 1,
+      root["kind"] as? String == "panelEvent",
+      let rawID = phase2ReplyInteger(root["eventID"]),
       let id = ShaarDevToolsPhase2EventID(rawValue: rawID),
-      root["leaseID"] as? UInt32 == leaseID,
+      phase2ReplyInteger(root["leaseID"]) == Int(leaseID),
       let data = root["data"] as? [String: Any],
-      let truncated = data["truncated"] as? Bool
+      let truncated = phase2ReplyBoolean(data["truncated"])
     else { return nil }
     let allowed = allowedFields(id)
     guard Set(data.keys).isSubset(of: allowed) else { return nil }

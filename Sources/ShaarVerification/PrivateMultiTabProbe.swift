@@ -78,8 +78,14 @@ struct PrivateMultiTabProbe {
       if findMatches > 0 { break }
       try await Task.sleep(for: .milliseconds(50))
     }
+    let findState = owner.store.pageFind
+    let matchCount = findState?.matchCount.map { String($0) } ?? "nil"
     owner.store.dismissPageFind()
-    guard findMatches > 0 else { throw Failure("Private Find did not return page matches.") }
+    guard findMatches > 0 else {
+      throw Failure(
+        "Private Find did not return page matches [unavailable=\(findState?.unavailable ?? false), "
+          + "searching=\(findState?.searching ?? false), matchCount=\(matchCount)].")
+    }
     var reselected: [[String: Any]] = []
     for index in (0..<3).reversed() {
       let tabID = tabs[index]["tabID"] as! String
@@ -131,10 +137,13 @@ struct PrivateMultiTabProbe {
       let firstID = UUID(uuidString: tabs[0]["tabID"] as? String ?? ""),
       owner.store.moveTab(firstID, from: privateSpace, to: privateSpace, folderID: folder)
     else { throw Failure("Private sidebar could not create a folder or move a tab into it.") }
+    try await captureShell(owner, stage: "folder")
     owner.store.splitSelectedTab()
     guard owner.store.selectedSplit != nil else {
       throw Failure("Private tabs could not use the shared split model.")
     }
+    try await waitForSplitContainers(owner)
+    try await captureShell(owner, stage: "split")
     try workspace.flushSaves()
     guard try Data(contentsOf: file.url) == savedWorkspace else {
       throw Failure("Private tabs, folder or split changed the saved normal workspace.")
@@ -280,16 +289,33 @@ struct PrivateMultiTabProbe {
     let audit: [String: Any] = [
       "stage": stage,
       "containerCount": containers.count,
+      "attachedContainerCount": containers.filter { $0.pageView?.superview === $0 }.count,
+      "attachedPagesInWindowCount": containers.filter {
+        $0.pageView?.superview === $0 && $0.pageView?.window === owner.window
+      }.count,
+      "visiblePagesInWindowCount": containers.filter {
+        $0.pageView?.superview === $0 && $0.pageView?.window === owner.window
+          && $0.pageView?.isHidden == false && !$0.isHidden
+      }.count,
       "nativeViewPresent": native != nil,
       "nativeHidden": native?.isHidden ?? true,
       "nativeInWindow": native?.window === owner.window,
       "rawWindowSibling": native?.superview === owner.hosting.superview,
       "nativeFrame": NSStringFromRect(native?.frame ?? .zero),
       "containerFrames": containers.map { NSStringFromRect($0.frame) },
+      "nativeFrameInHost": native.map {
+        NSStringFromRect(owner.hosting.convert($0.bounds, from: $0))
+      } ?? NSStringFromRect(.zero),
+      "containerFramesInHost": containers.map {
+        NSStringFromRect(owner.hosting.convert($0.bounds, from: $0))
+      },
       "layerBacked": containers.map(\.wantsLayer),
-      "attached": containers.contains { $0.pageView === native },
+      "attached": containers.contains {
+        PrivateMultiTabEvidence.pageIsAttached(native, to: $0, retainedPage: $0.pageView)
+      },
       "attachedInWindow": containers.contains {
-        $0.pageView === native && $0.window === owner.window
+        PrivateMultiTabEvidence.pageIsAttached(native, to: $0, retainedPage: $0.pageView)
+          && native?.window === owner.window && $0.window === owner.window
       },
     ]
     let auditData = try JSONSerialization.data(
@@ -308,11 +334,24 @@ struct PrivateMultiTabProbe {
     else { throw Failure("Private shell capture was empty.") }
     try png.write(
       to: root.appending(path: "\(phase)-private-shell-\(stage).png"), options: .atomic)
-    if stage != "first-blank" {
+    if stage == "split" {
+      guard PrivateMultiTabEvidence.splitShellAudit(audit) else {
+        throw Failure("Private split pages are not attached to their host containers: \(audit).")
+      }
+    } else if stage != "first-blank" {
       guard PrivateMultiTabEvidence.liveShellAudit(audit, stage: stage) else {
         throw Failure("Private page container is not layer-backed: \(audit).")
       }
     }
+  }
+
+  private func waitForSplitContainers(_ owner: PrivateBrowserHost.Owner) async throws {
+    for _ in 0..<100 {
+      owner.hosting.layoutSubtreeIfNeeded()
+      if pageContainers(in: owner.hosting).count == 2 { return }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    throw Failure("Private split did not create two page containers.")
   }
 
   private func pageContainers(in view: NSView) -> [ChromiumPageContainerView] {
@@ -331,37 +370,64 @@ struct PrivateMultiTabProbe {
 }
 
 enum PrivateMultiTabEvidence {
+  @MainActor
+  static func pageIsAttached(_ page: NSView?, to container: NSView, retainedPage: NSView?) -> Bool {
+    guard let page, retainedPage === page else { return false }
+    return page.superview === container
+  }
+
   static func blankShellAudit(_ audit: [String: Any]) -> Bool {
-    audit["nativeViewPresent"] as? Bool == true
+    booleanEvidence(audit["nativeViewPresent"]) == true
       && liveShellAudit(audit, stage: "first-blank")
   }
 
   static func liveTabAudit(_ audit: [AnyHashable: Any]?, tabCount: Int) -> Bool {
-    audit?["sourceIsRegular"] as? Bool == true
-      && audit?["contextIsPrivate"] as? Bool == true
-      && audit?["contextDistinct"] as? Bool == true
-      && audit?["allWindowsUsePrivateActiveProfile"] as? Bool == true
-      && audit?["allTabsInNativeProfileBrowser"] as? Bool == true
-      && audit?["allWindowsDisplayOwnedWebContents"] as? Bool == true
+    booleanEvidence(audit?["sourceIsRegular"]) == true
+      && booleanEvidence(audit?["contextIsPrivate"]) == true
+      && booleanEvidence(audit?["contextDistinct"]) == true
+      && booleanEvidence(audit?["allWindowsUsePrivateActiveProfile"]) == true
+      && booleanEvidence(audit?["allTabsInNativeProfileBrowser"]) == true
+      && booleanEvidence(audit?["allWindowsDisplayOwnedWebContents"]) == true
       && integerEvidence(audit?["visibleNativeViewportCount"]) == 1
       && integerEvidence(audit?["tabCount"]) == tabCount
   }
 
   static func liveShellAudit(_ audit: [String: Any], stage: String) -> Bool {
-    audit["stage"] as? String == stage
-      && audit["containerCount"] as? Int == 1
-      && audit["layerBacked"] as? [Bool] == [true]
-      && audit["attached"] as? Bool == true
-      && audit["attachedInWindow"] as? Bool == true
-      && audit["nativeHidden"] as? Bool == false
-      && audit["rawWindowSibling"] as? Bool == false
+    guard
+      audit["stage"] as? String == stage,
+      integerEvidence(audit["containerCount"]) == 1,
+      booleanArrayEvidence(audit["layerBacked"]) == [true],
+      booleanEvidence(audit["attached"]) == true,
+      booleanEvidence(audit["attachedInWindow"]) == true,
+      booleanEvidence(audit["nativeHidden"]) == false,
+      booleanEvidence(audit["rawWindowSibling"]) == false,
+      let nativeFrame = audit["nativeFrameInHost"] as? String,
+      let containerFrames = audit["containerFramesInHost"] as? [String],
+      containerFrames.count == 1
+    else { return false }
+    let page = NSRectFromString(nativeFrame)
+    let container = NSRectFromString(containerFrames[0])
+    return !page.isEmpty && container.contains(page)
+  }
+
+  static func splitShellAudit(_ audit: [String: Any]) -> Bool {
+    audit["stage"] as? String == "split"
+      && integerEvidence(audit["containerCount"]) == 2
+      && integerEvidence(audit["attachedContainerCount"]) == 2
+      && integerEvidence(audit["attachedPagesInWindowCount"]) == 2
+      && integerEvidence(audit["visiblePagesInWindowCount"]) == 2
+      && booleanArrayEvidence(audit["layerBacked"]) == [true, true]
+      && booleanEvidence(audit["attached"]) == true
+      && booleanEvidence(audit["attachedInWindow"]) == true
+      && booleanEvidence(audit["nativeHidden"]) == false
+      && booleanEvidence(audit["rawWindowSibling"]) == false
   }
 
   static func liveSearch(_ evidence: [String: Any]?, host: String) -> Bool {
+    guard !host.isEmpty, evidence?["host"] as? String == host else { return false }
     let ready = evidence?["ready"] as? String
-    return evidence?["host"] as? String == host
-      && (ready == "interactive" || ready == "complete")
-      && (evidence?["textLength"] as? Int ?? 0) > 100
+    return (ready == "interactive" || ready == "complete")
+      && (integerEvidence(evidence?["textLength"]) ?? 0) > 100
   }
 
   static func lightSamples(_ bitmap: NSBitmapImageRep) -> Int? {
@@ -390,5 +456,22 @@ enum PrivateMultiTabEvidence {
       return Int(exactly: number.doubleValue)
     }
     return Int(number.stringValue)
+  }
+
+  private static func booleanEvidence(_ value: Any?) -> Bool? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) == CFBooleanGetTypeID()
+    else { return nil }
+    return number.boolValue
+  }
+
+  private static func booleanArrayEvidence(_ value: Any?) -> [Bool]? {
+    guard let values = value as? [Any] else { return nil }
+    var result: [Bool] = []
+    for value in values {
+      guard let boolean = booleanEvidence(value) else { return nil }
+      result.append(boolean)
+    }
+    return result
   }
 }

@@ -235,6 +235,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
       let row = SidebarTabRow(
         tabID: tabID,
         title: title,
+        address: "https://example.com",
         favicon: nil,
         isPinned: isPinned,
         isSelected: isSelected,

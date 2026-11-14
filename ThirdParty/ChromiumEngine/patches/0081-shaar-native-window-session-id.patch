@@ -1,0 +1,138 @@
+From: Shaar engineering
+Subject: [PATCH] Resolve 157 native window IDs through Chromium session IDs
+
+Port the per-profile Browser lookup and expose its validated Chromium session ID through the engine ABI.
+
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -482,6 +482,10 @@
+     shaar_bytes window_id, shaar_window **out, shaar_error *error);
+ SHAAR_EXPORT shaar_error_code shaar_window_close(
+     shaar_window *, shaar_error *error);
++/* Returns the real Chromium session ID for a regular profile window. */
++SHAAR_EXPORT shaar_error_code shaar_window_chrome_id(
++    shaar_engine *, shaar_profile *, shaar_window *, int32_t *out,
++    shaar_error *error);
+ SHAAR_EXPORT void *shaar_window_host_view(shaar_window *); /* borrowed NSView* */
+ SHAAR_EXPORT void *shaar_window_native_window(shaar_window *); /* borrowed NSWindow* */
+ SHAAR_EXPORT shaar_error_code shaar_tab_open(
+--- a/chrome/browser/shaar/shaar_engine.exports
++++ b/chrome/browser/shaar/shaar_engine.exports
+@@ -25,6 +25,7 @@
+ _shaar_private_session_tracker_allowance
+ _shaar_window_open
+ _shaar_window_close
++_shaar_window_chrome_id
+ _shaar_tab_find
+ _shaar_tab_open
+ _shaar_tab_close
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
+@@ -162,6 +162,15 @@
+     if (entry.engine == engine && entry.handle == window)
+       return entry.browser;
+   return nullptr;
++}
++
++Browser* BrowserTabRegistryImpl::FindBrowserForProfile(
++    shaar_engine* engine, shaar_window* window, std::string_view profile_id) {
++  WindowState* state = FindWindowState(engine, window);
++  if (!state || profile_id.empty() || state->closing)
++    return nullptr;
++  auto found = state->browsers_by_profile.find(std::string(profile_id));
++  return found == state->browsers_by_profile.end() ? nullptr : found->second;
+ }
+ 
+ bool BrowserTabRegistryImpl::IsSelectedWebContents(
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
+@@ -69,6 +69,8 @@
+     std::unordered_set<Browser*> pending_closes;
+   };
+   Browser* FindBrowser(shaar_engine*, shaar_window*) override;
++  Browser* FindBrowserForProfile(shaar_engine*, shaar_window*,
++                                 std::string_view profile_id);
+   bool IsSelectedWebContents(shaar_engine*, shaar_window*, shaar_tab*,
+                              content::WebContents*) override;
+   std::optional<SelectedRegularTab> FindSelectedRegularTab(
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers_unittest.cc
+@@ -94,6 +94,24 @@
+   EXPECT_FALSE(ValidatePlacement({"a", "b", "c"}, {"a", "b", "c"},
+                                  {"b"}));
+   EXPECT_FALSE(ValidatePlacement({"a", "b"}, {"a", "b"}, {"outside"}));
++}
++
++TEST(ShaarWindowsTabsHandlersTest, WindowRegistryResolvesBrowserByProfile) {
++  BrowserTabRegistryImpl registry;
++  auto* engine = reinterpret_cast<shaar_engine*>(1);
++  auto* window = reinterpret_cast<shaar_window*>(2);
++  auto* alpha = reinterpret_cast<Browser*>(3);
++  auto* beta = reinterpret_cast<Browser*>(4);
++  ASSERT_TRUE(registry.ReserveWindow(engine, window, "native-window"));
++  ASSERT_NE(registry.EnsureWindowState(engine, window, alpha, "alpha"), nullptr);
++  ASSERT_NE(registry.EnsureWindowState(engine, window, beta, "beta"), nullptr);
++
++  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "alpha"), alpha);
++  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "beta"), beta);
++  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "missing"), nullptr);
++  EXPECT_EQ(registry.FindBrowserForProfile(
++                reinterpret_cast<shaar_engine*>(5), window, "alpha"),
++            nullptr);
+ }
+ 
+ TEST(ShaarWindowsTabsHandlersTest, PlaceHandlerRejectsWrongOperationBeforeMutation) {
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
+@@ -44,6 +44,7 @@
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
++#include "components/sessions/core/session_id.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
+ #include "ui/gfx/image/image.h"
+@@ -716,6 +717,43 @@
+   for (Browser* browser : pending)
+     if (browser && browser->GetWindow())
+       browser->GetWindow()->Close();
++  return Result(SHAAR_OK, error);
++}
++
++extern "C" SHAAR_EXPORT shaar_error_code shaar_window_chrome_id(
++    shaar_engine* engine,
++    shaar_profile* profile_handle,
++    shaar_window* window,
++    int32_t* out,
++    shaar_error* error) {
++  if (out)
++    *out = -1;
++  if (!pthread_main_np() || !engine || !profile_handle || !window || !out)
++    return Result(SHAAR_INVALID_ARGUMENT, error);
++  if (!shaar::EngineIsLive(engine))
++    return Result(SHAAR_NOT_FOUND, error);
++  window = LiveWindow(window);
++  if (!window || window->engine != engine)
++    return Result(SHAAR_NOT_FOUND, error);
++  if (window->kind != SHAAR_WINDOW_REGULAR)
++    return Result(SHAAR_WRONG_SESSION, error);
++
++  auto* services = shaar::EngineContext().profile_services;
++  Profile* profile = services ? services->ResolveProfile(engine, profile_handle)
++                              : nullptr;
++  const std::string_view profile_id =
++      profile ? services->ProfileID(engine, profile_handle) : std::string_view();
++  if (!profile || profile_id.empty())
++    return Result(SHAAR_NOT_FOUND, error);
++
++  Browser* browser = shaar::windows_tabs::Registry().FindBrowserForProfile(
++      engine, window, profile_id);
++  if (!browser || browser->GetProfile() != profile)
++    return Result(SHAAR_NOT_FOUND, error);
++  const SessionID& session_id = browser->GetSessionID();
++  if (!session_id.is_valid())
++    return Result(SHAAR_NOT_FOUND, error);
++  *out = session_id.id();
+   return Result(SHAAR_OK, error);
+ }
+ 

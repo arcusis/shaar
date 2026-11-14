@@ -16,19 +16,25 @@ struct DesktopCaptureConsentTests {
     return store
   }
 
-  private func request(_ store: BrowserStore, id: String = UUID().uuidString)
+  private func request(
+    _ store: BrowserStore, id: String = UUID().uuidString,
+    frameID: String = "0123456789abcdef0123456789abcdef"
+  )
     throws -> DesktopCaptureRequest
   {
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    return try #require(
+    let capture = try #require(
       DesktopCaptureRequest(payload: [
         "id": id,
         "profileID": store.session.selectedSpace.profileID.uuidString,
         "tabID": tab.id.uuidString,
         "pageURL": tab.url.absoluteString,
         "origin": "https://meet.google.com",
-        "frameID": "0123456789abcdef0123456789abcdef",
+        "frameID": frameID,
       ]))
+    store.rememberPermissionFrame(
+      tab.id, frameID: capture.frameID, origin: capture.requestingOrigin)
+    return capture
   }
 
   @Test func parsesSecureDesktopCaptureRequestAndBuildsConsentIdentity() throws {
@@ -193,6 +199,25 @@ struct DesktopCaptureConsentTests {
     #expect(enumerationCount == 1)
   }
 
+  @Test func screenRecordingSettingsButtonOpensSystemSettings() throws {
+    let browserStore = store()
+    let capture = try request(browserStore)
+    var openedURL: URL?
+    let picker = DesktopCapturePicker(
+      request: capture,
+      store: browserStore,
+      openSettings: { openedURL = $0 }
+    )
+
+    let button = try #require(picker.settingsButton(for: true))
+    #expect(button.title == PanelsL10n.string("Open Settings"))
+    #expect(
+      MacPermission.screenRecording.settingsURL?.absoluteString.contains("Privacy_ScreenCapture")
+        == true)
+    button.action()
+    #expect(openedURL == MacPermission.screenRecording.settingsURL)
+  }
+
   @Test func rejectsMalformedOrInsecureDesktopCapturePayloads() throws {
     let original = try request(store(), id: UUID().uuidString)
     let valid: [String: Any] = [
@@ -212,6 +237,8 @@ struct DesktopCaptureConsentTests {
       ("pageURL", "file:///tmp/page" as Any),
       ("origin", "http://meet.google.com" as Any),
       ("origin", "https://meet.google.com/path" as Any),
+      ("origin", "https://meet.google.com:99999" as Any),
+      ("origin", "http://localhost:99999" as Any),
       ("frameID", 4 as Any),
       ("frameID", "wrong-frame" as Any),
     ] {
@@ -226,9 +253,12 @@ struct DesktopCaptureConsentTests {
       #expect(DesktopCaptureRequest(payload: missing) == nil)
     }
 
-    var localHTTP = valid
-    localHTTP["origin"] = "http://localhost:3000"
-    #expect(DesktopCaptureRequest(payload: localHTTP) != nil)
+    for host in ["localhost", "video.localhost", "127.0.0.2", "[::1]"] {
+      var localHTTP = valid
+      localHTTP["pageURL"] = "http://\(host):3000/call"
+      localHTTP["origin"] = "http://\(host):3000"
+      #expect(DesktopCaptureRequest(payload: localHTTP) != nil)
+    }
   }
 
   @Test func resolvesOnlyPresentedCurrentRequestAndCancelsDismissedRequest() throws {
@@ -300,6 +330,74 @@ struct DesktopCaptureConsentTests {
     #expect(rendererDecisions == [nil])
   }
 
+  @Test func closingPinnedNativeTabCancelsItsPresentedCaptureRequest() throws {
+    let browser = store()
+    let capture = try request(browser)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: capture.frameID, origin: capture.requestingOrigin)
+    var decisions: [String?] = []
+    browser.onDesktopCaptureDecision = { _, sourceID in decisions.append(sourceID) }
+    #expect(browser.requestDesktopCapture(capture))
+    browser.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    browser.togglePin(capture.tabID)
+    browser.nativeTabClosed(capture.tabID)
+    #expect(browser.session.page(forTabID: capture.tabID) != nil)
+    #expect(decisions == [nil])
+    #expect(browser.sheet == nil)
+  }
+
+  @Test func permissionFrameChangeImmediatelyCancelsPresentedCaptureRequest() throws {
+    let browser = store()
+    let capture = try request(browser)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: capture.frameID, origin: capture.requestingOrigin)
+    var decisions: [String?] = []
+    browser.onDesktopCaptureDecision = { _, sourceID in decisions.append(sourceID) }
+    #expect(browser.requestDesktopCapture(capture))
+    browser.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    #expect(browser.sheet?.id == capture.sheetID)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: "fedcba9876543210fedcba9876543210",
+      origin: capture.requestingOrigin)
+    #expect(decisions == [nil])
+    #expect(browser.sheet == nil)
+    browser.resolveDesktopCapture(capture.id, sourceID: "screen:1:0")
+    #expect(decisions == [nil])
+  }
+
+  @Test func permissionFrameOriginChangeImmediatelyCancelsPresentedCaptureRequest() throws {
+    let browser = store()
+    let capture = try request(browser)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: capture.frameID, origin: capture.requestingOrigin)
+    var decisions: [String?] = []
+    browser.onDesktopCaptureDecision = { _, sourceID in decisions.append(sourceID) }
+
+    #expect(browser.requestDesktopCapture(capture))
+    browser.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: capture.frameID, origin: URL(string: "https://other.example")!)
+
+    #expect(decisions == [nil])
+    #expect(browser.sheet == nil)
+  }
+
+  @Test func forgettingPermissionFrameImmediatelyCancelsPresentedCaptureRequest() throws {
+    let browser = store()
+    let capture = try request(browser)
+    browser.rememberPermissionFrame(
+      capture.tabID, frameID: capture.frameID, origin: capture.requestingOrigin)
+    var decisions: [String?] = []
+    browser.onDesktopCaptureDecision = { _, sourceID in decisions.append(sourceID) }
+
+    #expect(browser.requestDesktopCapture(capture))
+    browser.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
+    browser.forgetPermissionFrame(capture.tabID, matching: capture.frameID)
+
+    #expect(decisions == [nil])
+    #expect(browser.sheet == nil)
+  }
+
   @Test func aPageTitleCannotOpenTheCaptureSheet() throws {
     let store = store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
@@ -325,6 +423,7 @@ struct DesktopCaptureConsentTests {
     #expect(store.sheet == nil)
 
     payload["tabID"] = capture.tabID.uuidString
+    payload["frameID"] = capture.frameID
     payload["sourceTypes"] = ["printer"]
     #expect(DesktopCaptureRequest(payload: payload) == nil)
     payload["sourceTypes"] = ["tab"]
@@ -337,6 +436,24 @@ struct DesktopCaptureConsentTests {
     store.resolveDesktopCapture(tabsOnly.id, sourceID: "tab:\(capture.tabID.uuidString):0")
     #expect(decision == "tab:\(capture.tabID.uuidString):0")
     #expect(store.sheet == nil)
+  }
+
+  @Test func rejectsCaptureRequestsFromAStaleFrameBeforePresentingConsent() throws {
+    let staleFrameStore = store()
+    let staleFrameRequest = try request(staleFrameStore)
+    staleFrameStore.rememberPermissionFrame(
+      staleFrameRequest.tabID, frameID: "fedcba9876543210fedcba9876543210",
+      origin: staleFrameRequest.requestingOrigin)
+    #expect(!staleFrameStore.requestDesktopCapture(staleFrameRequest))
+    #expect(staleFrameStore.sheet == nil)
+
+    let staleOriginStore = store()
+    let staleOriginRequest = try request(staleOriginStore)
+    staleOriginStore.rememberPermissionFrame(
+      staleOriginRequest.tabID, frameID: staleOriginRequest.frameID,
+      origin: URL(string: "https://other.example")!)
+    #expect(!staleOriginStore.requestDesktopCapture(staleOriginRequest))
+    #expect(staleOriginStore.sheet == nil)
   }
 
   @Test func rejectsMalformedOrUnlistedCaptureTokens() throws {
@@ -356,19 +473,40 @@ struct DesktopCaptureConsentTests {
     #expect(!DesktopCaptureSource.isValidToken("tab:not-a-uuid:0"))
   }
 
-  @Test func deniesCaptureWhenRememberedFrameOrOriginChanged() throws {
+  @Test func rejectsCaptureRequestWhenRememberedFrameOrOriginChanged() throws {
+    let store = store()
+    let capture = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.rememberPermissionFrame(
+      tab.id, frameID: capture.frameID,
+      origin: URL(string: "https://other.example")!)
+    #expect(!store.requestDesktopCapture(capture))
+    #expect(store.sheet == nil)
+  }
+
+  @Test func rejectsCaptureRequestFromReplacedFrame() throws {
     let store = store()
     let capture = try request(store)
     let tab = try #require(store.session.selectedSpace.selectedTab)
     store.rememberPermissionFrame(
       tab.id, frameID: "fedcba9876543210fedcba9876543210",
-      origin: URL(string: "https://other.example")!)
-    #expect(store.requestDesktopCapture(capture))
-    store.setDesktopCaptureSources(["screen:1:0"], for: capture.id)
-    var decision: String?
-    store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID }
-    store.resolveDesktopCapture(capture.id, sourceID: "screen:1:0")
-    #expect(decision == nil)
+      origin: capture.requestingOrigin)
+
+    #expect(!store.requestDesktopCapture(capture))
+    #expect(store.sheet == nil)
+  }
+
+  @Test func staleCaptureRequestDoesNotReplaceCurrentFrameProvenance() throws {
+    let store = store()
+    let stale = try request(store)
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.nativeTabChanged(
+      tab.id, url: URL(string: "https://meet.google.com/new-call")!, title: "New call")
+    let current = try request(store, frameID: "fedcba9876543210fedcba9876543210")
+
+    #expect(!store.requestDesktopCapture(stale))
+    #expect(store.requestDesktopCapture(current))
+    #expect(store.sheet?.id == current.sheetID)
   }
 
   @Test func privateWindowListsOnlyItsOwnTab() throws {
@@ -426,12 +564,14 @@ struct DesktopCaptureConsentTests {
     var session = store().session
     let profileID = session.selectedSpace.profileID
     let requestingTabID = try #require(session.selectedSpace.selectedTab?.id)
-    #expect(session.insertNativeTab(
-      BrowserTab(url: URL(string: "about:blank")!), profileID: profileID,
-      openerID: requestingTabID, foreground: false) != nil)
-    #expect(session.insertNativeTab(
-      BrowserTab(url: URL(string: "devtools://devtools/bundled/js_app.html")!),
-      profileID: profileID, openerID: requestingTabID, foreground: false) != nil)
+    #expect(
+      session.insertNativeTab(
+        BrowserTab(url: URL(string: "about:blank")!), profileID: profileID,
+        openerID: requestingTabID, foreground: false) != nil)
+    #expect(
+      session.insertNativeTab(
+        BrowserTab(url: URL(string: "devtools://devtools/bundled/js_app.html")!),
+        profileID: profileID, openerID: requestingTabID, foreground: false) != nil)
 
     let sources = DesktopCaptureCatalog.tabSources(
       session: session,
@@ -442,11 +582,35 @@ struct DesktopCaptureConsentTests {
     #expect(sources.map(\.id) == ["tab:\(requestingTabID.uuidString):0"])
   }
 
+  @Test func emptySourceMessageDoesNotClaimUnrequestedKindsAreMissing() {
+    let empty = DesktopCaptureCatalog.listing(tabs: [], screens: [], screenAccessFailed: false)
+
+    #expect(empty.error == DesktopCaptureCatalog.emptySources)
+    #expect(!DesktopCaptureCatalog.emptySources.contains("tabs"))
+  }
+
+  @Test func screenRecordingFailureOffersSettingsLinkOnlyForThatFailure() throws {
+    let emptyListing = DesktopCaptureCatalog.listing(
+      tabs: [], screens: [], screenAccessFailed: true)
+    let action = try #require(DesktopCaptureCatalog.settingsAction(for: emptyListing))
+    #expect(action.title == PanelsL10n.string("Open Settings"))
+    #expect(action.destination == MacPermission.screenRecording.settingsURL)
+
+    let partialListing = DesktopCaptureCatalog.listing(
+      tabs: [DesktopCaptureSource(id: "tab:00000000-0000-0000-0000-000000000001:0",
+        name: "Meet", kind: .tab)], screens: [], screenAccessFailed: true)
+    #expect(DesktopCaptureCatalog.settingsAction(for: partialListing) == action)
+    let noPermissionIssue = DesktopCaptureCatalog.listing(
+      tabs: [], screens: [], screenAccessFailed: false)
+    #expect(DesktopCaptureCatalog.settingsAction(for: noPermissionIssue) == nil)
+  }
+
   @Test func tabSourceFallsBackToPageHostWhenSavedTitleIsBlank() throws {
     let original = store().session
-    let spaceIndex = try #require(original.spaces.firstIndex {
-      $0.profileID == original.selectedSpace.profileID
-    })
+    let spaceIndex = try #require(
+      original.spaces.firstIndex {
+        $0.profileID == original.selectedSpace.profileID
+      })
     var spaces = original.spaces
     let tabIndex = try #require(spaces[spaceIndex].tabs.indices.first)
     let tabID = spaces[spaceIndex].tabs[tabIndex].id
@@ -468,6 +632,16 @@ struct DesktopCaptureConsentTests {
     #expect(sources.first?.label == PanelsL10n.format("Tab: %@", .string("meet.google.com")))
   }
 
+  @Test func windowNamesFallBackWhenScreenCaptureKitOmitsOwnerOrTitle() {
+    #expect(DesktopCaptureCatalog.windowName(owner: "", title: "Meeting") == "Meeting")
+    #expect(DesktopCaptureCatalog.windowName(owner: "Browser", title: " \n") == "Browser")
+    #expect(
+      DesktopCaptureCatalog.windowName(owner: nil, title: nil) == PanelsL10n.string("Window"))
+    #expect(
+      DesktopCaptureCatalog.windowName(owner: " Browser ", title: " Meeting ")
+        == "Browser — Meeting")
+  }
+
   @Test func catalogExposesOnlyRequestedCaptureSourceKinds() throws {
     let store = store()
     let base = try request(store)
@@ -476,6 +650,8 @@ struct DesktopCaptureConsentTests {
         id: "tab:\(base.tabID.uuidString):0", name: "Current", kind: .tab),
       DesktopCaptureSource(id: "screen:0:0", name: "Invalid Display", kind: .display),
       DesktopCaptureSource(id: "screen:1:0", name: "Display", kind: .display),
+      DesktopCaptureSource(id: "screen:3:0", name: "Wrong kind", kind: .window),
+      DesktopCaptureSource(id: "screen:1:0", name: "Duplicate Display", kind: .display),
       DesktopCaptureSource(id: "window:0:0", name: "Invalid Window", kind: .window),
       DesktopCaptureSource(id: "window:2:0", name: "Notes", kind: .window),
     ]

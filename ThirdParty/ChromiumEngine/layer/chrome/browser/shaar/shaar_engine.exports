@@ -7,6 +7,8 @@ _shaar_engine_release
 _shaar_test_keep_alive_state
 _shaar_test_load_component_extension
 _shaar_submit
+_shaar_print_reply
+_shaar_share_reply
 _shaar_cancel_request
 _shaar_profile_open
 _shaar_profile_create
@@ -25,8 +27,11 @@ _shaar_private_session_tracker_status
 _shaar_private_session_tracker_allowance
 _shaar_window_open
 _shaar_window_close
+_shaar_window_chrome_id
+_shaar_tab_find
 _shaar_tab_open
 _shaar_tab_close
+_shaar_tab_print
 _shaar_window_host_view
 _shaar_window_native_window
 _shaar_tab_host_view

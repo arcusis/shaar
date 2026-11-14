@@ -12,7 +12,7 @@ from pathlib import Path
 import sys
 from urllib.parse import unquote, urlparse
 
-from ci_support import swift_source_files
+from ci_support import output_file, swift_source_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +53,19 @@ def missing_sources(document: dict, expected: set[str], root: Path) -> list[str]
     return sorted(expected - extracted_paths(document, root))
 
 
+def write_coverage_report(report_path: Path, result: dict) -> None:
+    output = report_path.with_name("coverage.json")
+    if output.parent.is_symlink():
+        raise ValueError(f"coverage output directory must not be a symlink: {output.parent}")
+    if output.resolve() == report_path.resolve():
+        raise ValueError("extraction input and coverage output paths must differ")
+    if output.is_symlink():
+        raise ValueError(f"coverage output path must not be a symlink: {output}")
+    if output.exists() and not output.is_file():
+        raise ValueError(f"coverage output path is not a regular file: {output}")
+    output.write_text(json.dumps(result, indent=2) + "\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
@@ -63,17 +76,20 @@ def main() -> int:
     try:
         document = json.loads(options.report.read_text(encoding="utf-8"))
         missing = missing_sources(document, expected, ROOT)
+        result = {"scope": options.scope, "expected": len(expected), "missing": missing,
+                  "revision": os.environ.get("GITHUB_SHA", "local")}
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        summary_path = output_file(Path(summary)) if summary else None
+        write_coverage_report(options.report, result)
     except (OSError, UnicodeError, ValueError) as error:
         print(f"Invalid CodeQL extraction report: {error}", file=sys.stderr)
         return 2
-    result = {"scope": options.scope, "expected": len(expected), "missing": missing, "revision": os.environ.get("GITHUB_SHA", "local")}
-    options.report.with_name("coverage.json").write_text(json.dumps(result, indent=2) + "\n")
     message = f"Swift CodeQL ({options.scope}): {len(expected) - len(missing)}/{len(expected)} tracked source files extracted"
     print(message)
     for name in missing:
         print(f"Missing extraction: {name}")
-    if os.environ.get("GITHUB_STEP_SUMMARY"):
-        with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
+    if summary_path:
+        with summary_path.open("a") as output:
             output.write(f"### Swift extraction coverage\n\n{message}.\n")
     return int(bool(missing))
 

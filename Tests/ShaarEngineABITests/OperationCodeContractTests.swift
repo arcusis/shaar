@@ -7,7 +7,7 @@ import Testing
 
 @testable import ShaarEngineABI
 
-@Test func SwiftOperationIDsMatchThePublicCABI() {
+@Test func swiftOperationIDsMatchThePublicCABI() {
   let mappings = [
     ShaarNavigationOperation.navigate.rawValue == UInt32(SHAAR_OP_TAB_NAVIGATE.rawValue),
     ShaarNavigationOperation.go.rawValue == UInt32(SHAAR_OP_TAB_GO.rawValue),

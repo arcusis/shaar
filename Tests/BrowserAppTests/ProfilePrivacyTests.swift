@@ -12,6 +12,62 @@ import Testing
 
 @Suite @MainActor
 struct ProfilePrivacyTests {
+  @Test func privacyMutationProgressLabelDescribesItsActiveOperation() async {
+    let backend = ProfileSettingsStub()
+    let profileID = UUID()
+    backend.delayedProfile = profileID
+    let model = ProfilePrivacyModel(profileID: profileID, backend: backend)
+
+    let clearing = Task { await model.clear(siteData: true) }
+    for _ in 0..<100 where backend.loadContinuation == nil { await Task.yield() }
+    #expect(backend.loadContinuation != nil)
+    #expect(model.busy)
+    #expect(model.busyMessage == SettingsL10n.string("Clearing site data…"))
+    backend.loadContinuation?.resume()
+    await clearing.value
+    #expect(!model.busy && model.busyMessage == nil)
+  }
+
+  @Test func sitePermissionsLoadingLabelHasHebrewTranslation() {
+    #expect(
+      BrowserLocalization.string("Loading site permissions…", table: "Settings", language: .hebrew)
+        == "טעינת הרשאות אתרים…")
+  }
+
+  @Test func privacyMutationProgressLabelsHaveHebrewTranslations() {
+    #expect(
+      BrowserLocalization.string("Clearing site data…", table: "Settings", language: .hebrew)
+        == "ניקוי נתוני האתר…")
+    #expect(
+      BrowserLocalization.string("Clearing cache…", table: "Settings", language: .hebrew)
+        == "ניקוי המטמון…")
+    #expect(
+      BrowserLocalization.string(
+        "Resetting site permissions…", table: "Settings", language: .hebrew)
+        == "איפוס הרשאות האתר…")
+    #expect(
+      BrowserLocalization.string(
+        "Updating third-party cookie setting…", table: "Settings", language: .hebrew)
+        == "עדכון הגדרת קובצי Cookie של צד שלישי…")
+  }
+
+  @Test func permissionsLoadingAccessibilityLabelIsLocalized() {
+    #expect(
+      ProfilePrivacyAccessibility.loadingPermissionsLabel(language: .english)
+        == "Loading site permissions")
+    #expect(
+      ProfilePrivacyAccessibility.loadingPermissionsLabel(language: .hebrew)
+        == "טעינת הרשאות אתרים")
+  }
+
+  @Test func busyAccessibilityLabelUsesTheActiveOperationMessage() {
+    let clearingCache = SettingsL10n.string("Clearing cache…")
+    #expect(ProfilePrivacyAccessibility.progressLabel(for: clearingCache) == clearingCache)
+    #expect(
+      ProfilePrivacyAccessibility.progressLabel(for: nil)
+        == ProfilePrivacyAccessibility.loadingPermissionsLabel())
+  }
+
   @Test func settingsUseSelectedShaarRuntimeForPrivacyBackend() throws {
     let runtime = ARCShaarRuntime()
     let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
@@ -62,6 +118,26 @@ struct ProfilePrivacyTests {
     await observer.value
 
     #expect(resumedOnCancellation)
+  }
+
+  @Test func cancelledPrivacyLoadDoesNotPublishLateProfileState() async throws {
+    let profile = UUID()
+    let backend = ProfileSettingsStub()
+    backend.delayedProfile = profile
+    let model = ProfilePrivacyModel(profileID: profile, backend: backend)
+    let load = Task { await model.load() }
+    for _ in 0..<100 where backend.loadContinuation == nil { await Task.yield() }
+    try #require(backend.loadContinuation != nil)
+
+    load.cancel()
+    backend.loadContinuation?.resume()
+    await load.value
+
+    #expect(!model.loaded)
+    #expect(model.sites.isEmpty)
+    #expect(model.failure == nil)
+    #expect(!model.busy)
+    #expect(backend.calls.map(\.0) == ["load"])
   }
 
   @Test func readableStoreWithoutAnHttpsOnlyKeyStillAppliesOn() async throws {
@@ -123,6 +199,22 @@ struct ProfilePrivacyTests {
       model.failure == SettingsL10n.string("Could not load profile privacy settings. Try again."))
   }
 
+  @Test func cancelledProfileLoadDoesNotShowAFailure() async {
+    let backend = ProfileSettingsStub()
+    let id = UUID()
+    backend.suspendedProfile = id
+    let model = ProfilePrivacyModel(profileID: id, backend: backend)
+    let load = Task { await model.load() }
+    for _ in 0..<100 where !model.busy { await Task.yield() }
+    #expect(model.busy)
+
+    load.cancel()
+    await load.value
+
+    #expect(!model.busy)
+    #expect(model.failure == nil)
+  }
+
   @Test func supportedCookiePolicyReadsBackAndFailureKeepsPreviousValue() async {
     let backend = ProfileSettingsStub()
     let id = UUID()
@@ -136,8 +228,9 @@ struct ProfilePrivacyTests {
     await model.setCookiesBlocked(false)
     #expect(model.cookiesBlocked == true)
     #expect(
-      model.failure == SettingsL10n.string(
-        "Could not update the third-party cookie setting. Try again."))
+      model.failure
+        == SettingsL10n.string(
+          "Could not update the third-party cookie setting. Try again."))
   }
 
   @Test func ignoredCookiePolicyWriteReportsFailureAfterReadback() async {
@@ -174,7 +267,10 @@ struct ProfilePrivacyTests {
     let selected = UUID()
     let other = UUID()
     backend.exceptions[selected] = [
-      "https://example.test": ["camera": ["value": "allow", "isDefault": false]]
+      "https://example.test": [
+        "camera": ["value": "allow", "isDefault": false],
+        "protocolHandlers": ["value": "allow", "isDefault": false],
+      ]
     ]
     backend.exceptions[other] = [
       "https://other.test": ["camera": ["value": "block", "isDefault": false]]
@@ -184,6 +280,9 @@ struct ProfilePrivacyTests {
     #expect(model.loaded && model.failure == nil)
     #expect(model.sites.map(\.id) == ["https://example.test"])
     #expect(model.sites.first?.permissions.first?.value == .allow)
+    #expect(model.sites.first?.permissions.contains {
+      $0.id == "protocolHandlers" && $0.title == SettingsL10n.string("Protocol Handlers")
+    } == true)
     #expect(model.cookiesBlocked == nil)
     await model.setCookiesBlocked(true)
     #expect(!backend.calls.contains { $0.0 == "cookies" })
@@ -215,6 +314,24 @@ struct ProfilePrivacyTests {
     await pending.value
     #expect(old.sites.map(\.id) == ["https://first.test"])
     #expect(current.sites.isEmpty && current.profileID == second)
+  }
+
+  @Test func cancelledClearDoesNotPublishItsLateFailure() async {
+    let backend = ProfileSettingsStub()
+    let profile = UUID()
+    backend.delayedProfile = profile
+    let model = ProfilePrivacyModel(profileID: profile, backend: backend)
+    let clear = Task { await model.clear(siteData: false) }
+    while backend.loadContinuation == nil { await Task.yield() }
+
+    clear.cancel()
+    backend.failureAction = "cache"
+    backend.loadContinuation?.resume()
+    await clear.value
+
+    #expect(model.failure == nil)
+    #expect(model.message == nil)
+    #expect(!model.busy)
   }
 
   @Test func engineFailureNeverReportsClearOrRevokeSuccess() async {
@@ -391,7 +508,7 @@ private final class HttpsOnlyLoadSpy: ARCShaarRuntime {
 
 @MainActor
 private final class PendingProfileLoadRuntime: ARCChromiumRuntime {
-  var completion: ((Error?) -> Void)?
+  nonisolated(unsafe) var completion: ((Error?) -> Void)?
   override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {
     self.completion = completion
   }
@@ -406,6 +523,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   var ignoreCookieWrites = false
   var managedCookieProfiles: Set<UUID> = []
   var delayedProfile: UUID?
+  var suspendedProfile: UUID?
   var loadContinuation: CheckedContinuation<Void, Never>?
 
   func record(_ action: String, _ id: UUID) throws {
@@ -414,6 +532,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   }
   func loadProfile(_ id: UUID) async throws {
     try record("load", id)
+    if id == suspendedProfile { try await Task.sleep(for: .seconds(60)) }
     if id == delayedProfile {
       await withCheckedContinuation { loadContinuation = $0 }
     }

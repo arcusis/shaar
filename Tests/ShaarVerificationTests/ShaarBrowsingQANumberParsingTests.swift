@@ -19,4 +19,12 @@ import Testing
     #expect(ShaarBrowsingQA.wholeNumber("200.5") == nil)
     #expect(ShaarBrowsingQA.wholeNumber("999999999999999999999999999999") == nil)
   }
+
+  @Test func reloadDuringNavigationRequiresASecondFixtureRequest() {
+    #expect(!ShaarBrowsingQA.reloadDuringNavigationWasFetched(nil))
+    #expect(!ShaarBrowsingQA.reloadDuringNavigationWasFetched("1"))
+    #expect(ShaarBrowsingQA.reloadDuringNavigationWasFetched("2"))
+    #expect(ShaarBrowsingQA.reloadDuringNavigationWasFetched("3"))
+    #expect(!ShaarBrowsingQA.reloadDuringNavigationWasFetched("loading"))
+  }
 }

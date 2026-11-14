@@ -50,6 +50,8 @@ import Testing
     #expect(directURL?.absoluteString == "https://example.com/path?q=1")
     #expect(NavigationInput.destination(for: "javascript:alert(1)", searchEngine: engine) == nil)
     #expect(NavigationInput.destination(for: "file:///etc/passwd", searchEngine: engine) == nil)
+    #expect(NavigationInput.destination(for: "chrome://settings", searchEngine: engine) == nil)
+    #expect(NavigationInput.destination(for: "devtools://devtools/bundled/js_app.html", searchEngine: engine) == nil)
     #expect(NavigationInput.destination(for: "custom://host", searchEngine: engine) == nil)
   }
 }
@@ -72,10 +74,12 @@ import Testing
       == "https://LOCALHOST:3000/path")
 }
 
-@Test func navigationRejectsOutOfRangeWebPorts() {
-  let invalid = URL(string: "https://example.com:99999")!
-  #expect(!NavigationInput.isWebURL(invalid))
-  #expect(NavigationInput.address(for: invalid.absoluteString) == nil)
+@Test func navigationRejectsInvalidWebPorts() {
+  for invalid in [URL(string: "https://example.com:0")!, URL(string: "https://example.com:99999")!]
+  {
+    #expect(!NavigationInput.isWebURL(invalid))
+    #expect(NavigationInput.address(for: invalid.absoluteString) == nil)
+  }
   #expect(NavigationInput.address(for: "https://example.com:65535")?.port == 65535)
 }
 
@@ -87,13 +91,33 @@ import Testing
     .first { $0.name == "q" }?.value
   #expect(destination.host() == "www.google.com")
   #expect(query == input)
-  #expect(NavigationInput.address(for: "https://alice@example.com")?.host() == "example.com")
+  #expect(NavigationInput.address(for: "https://alice@example.com") == nil)
   #expect(
     NavigationInput.address(for: "example.com/path@alice")?.absoluteString
       == "https://example.com/path@alice")
 
   let result = CommandSearch.results(for: input, in: BrowserSession.fresh()).first
   #expect(result?.action == .open(destination))
+}
+
+@Test func navigationRejectsCredentialsEmbeddedInWebURLAuthority() {
+  var session = BrowserSession.fresh()
+  let initialTabCount = session.selectedSpace.tabs.count
+  for input in [
+    "https://alice@example.com", "https://alice:secret@example.com",
+    "https://alice%40example.com:secret@example.com",
+  ] {
+    #expect(NavigationInput.address(for: input) == nil)
+    #expect(NavigationInput.destination(for: input) == nil)
+    if let url = URL(string: input) {
+      #expect(!NavigationInput.isWebURL(url))
+      #expect(session.open(url) == nil)
+      #expect(session.selectedSpace.tabs.count == initialTabCount)
+    }
+  }
+  #expect(
+    NavigationInput.address(for: "https://example.com/path@alice")?.absoluteString
+      == "https://example.com/path@alice")
 }
 
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {

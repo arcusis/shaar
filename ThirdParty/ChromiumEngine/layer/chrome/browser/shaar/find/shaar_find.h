@@ -15,4 +15,10 @@ shaar_error_code HandleFindOperation(
 
 extern "C" void shaar_find_register(ShaarModuleRegistry* registry);
 
+// Applies a preset page zoom step or restores the default level.
+shaar_error_code HandlePageZoomOperation(
+    shaar::ShaarEngineContext*, shaar_engine*, shaar_scope, shaar_window*,
+    shaar_tab*, shaar_operation, shaar_bytes, shaar_request_id,
+    shaar_reply_fn, void*, shaar_error*);
+
 #endif  // CHROME_BROWSER_SHAAR_FIND_SHAAR_FIND_H_

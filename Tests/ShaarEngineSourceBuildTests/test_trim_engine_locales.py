@@ -6,8 +6,10 @@
 
 import importlib.util
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +20,43 @@ SPEC.loader.exec_module(TRIM)
 
 
 class TrimEngineLocalesTests(unittest.TestCase):
+    def test_main_refuses_current_symlink_that_redirects_outside_framework(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stage = root / "stage"
+            framework = stage / "Chromium Framework.framework"
+            (framework / "Versions").mkdir(parents=True)
+            external_resources = root / "outside" / "Resources"
+            for locale in ("en", "he", "fr"):
+                (external_resources / f"{locale}.lproj").mkdir(parents=True)
+            current = framework / "Versions/Current"
+            current.symlink_to(external_resources.parent, target_is_directory=True)
+
+            with (patch.object(TRIM, "STAGE", stage),
+                  patch.object(sys, "argv", ["trim-engine-locales.py", str(framework)]),
+                  self.assertRaisesRegex(SystemExit, "outside the framework")):
+                TRIM.main()
+
+            self.assertTrue((external_resources / "fr.lproj").is_dir())
+
+    def test_removed_byte_count_excludes_symlink_target_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            resources = root / "Resources"
+            resources.mkdir()
+            (resources / "en.lproj").mkdir()
+            (resources / "he.lproj").mkdir()
+            removed = resources / "fr.lproj"
+            removed.mkdir()
+            target = root / "outside.pak"
+            target.write_bytes(b"not removed")
+            (removed / "alias.pak").symlink_to(target)
+
+            result = TRIM.trim_locales(resources)
+
+            self.assertEqual(result["removedBytes"], 0)
+            self.assertTrue(target.exists())
+
     def test_keeps_supported_languages_and_unrelated_resources(self):
         with tempfile.TemporaryDirectory() as temporary:
             resources = Path(temporary)
@@ -65,6 +104,44 @@ class TrimEngineLocalesTests(unittest.TestCase):
             self.assertTrue((resources / "fr.lproj").is_symlink())
             self.assertTrue((resources / "en.lproj").is_dir())
             self.assertTrue(outside.is_dir())
+
+    def test_resources_symlink_cannot_redirect_trimming_outside_stage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stage = root / "stage"
+            framework = stage / "Chromium.framework"
+            (framework / "Versions").mkdir(parents=True)
+            external_resources = root / "external/Resources"
+            external_resources.mkdir(parents=True)
+            for name in ("en.lproj", "he.lproj", "fr.lproj"):
+                (external_resources / name).mkdir()
+            (framework / "Versions/Current").symlink_to(
+                external_resources.parent, target_is_directory=True
+            )
+            with patch.object(TRIM, "STAGE", stage), patch(
+                "sys.argv", ["trim-engine-locales.py", str(framework)]
+            ):
+                with self.assertRaisesRegex(SystemExit, "outside the framework"):
+                    TRIM.main()
+            self.assertTrue((external_resources / "fr.lproj").is_dir())
+
+    def test_removed_bytes_excludes_symlink_targets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            resources = root / "Resources"
+            resources.mkdir()
+            for name in ("en.lproj", "he.lproj"):
+                (resources / name).mkdir()
+            external = root / "large-external-resource"
+            external.write_bytes(b"external" * 100)
+            french = resources / "fr.lproj"
+            french.mkdir()
+            (french / "strings.pak").symlink_to(external)
+
+            result = TRIM.trim_locales(resources)
+
+            self.assertEqual(result["removedBytes"], 0)
+            self.assertTrue(external.exists())
 
 
 if __name__ == "__main__":

@@ -11,23 +11,40 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum WebsitePermissionProbeArguments {
+  static func value(after flag: String, in arguments: [String]) -> String? {
+    guard arguments.filter({ $0 == flag }).count == 1,
+      let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1),
+      !arguments[index + 1].hasPrefix("--")
+    else {
+      return nil
+    }
+    return arguments[index + 1]
+  }
+}
+
 /// The run passes only when camera and microphone work and the four website prompts appear.
 enum WebsitePermissionProbeVerdict {
   static let websitePrompts = ["geolocation", "notifications", "midi", "protocol"]
 
   static func passed(
     error: String?, mediaPrompted: Bool, mediaTracks: Bool, hidden: Bool,
-    unexpectedSurfaces: [String], promptedNames: [String]
+    unexpectedSurfaces: [String], promptedNames: [String],
+    rememberedKinds: [String] = [], openedProtocols: Set<String> = []
   ) -> Bool {
     let appeared = websitePrompts.allSatisfy { promptedNames.contains($0) }
+    let remembered = ["geolocation", "notifications", "midi"].allSatisfy {
+      rememberedKinds.contains($0)
+    }
     return error == nil && mediaPrompted && mediaTracks && hidden && unexpectedSurfaces.isEmpty
-      && appeared
+      && appeared && remembered
+      && Set(["web+shaarparity", "mailto"]).isSubset(of: openedProtocols)
   }
 }
 
 /// Hidden loopback check for the website permission sheet.
 /// Camera and microphone must still arrive through the existing media event.
-/// Geolocation, notifications, MIDI, and protocol handlers are recorded either way.
+/// The three remembered grants are read back from Chromium site settings after Allow.
 @MainActor
 final class WebsitePermissionPromptProbe {
   private let runtime: ARCShaarRuntime
@@ -43,15 +60,17 @@ final class WebsitePermissionPromptProbe {
   private var mediaPrompted = false
   private var mediaTracks = false
   private var unexpectedSurfaces: [String] = []
+  private var openedProtocols: Set<String> = []
   private var checks: [Check] = []
   private var screenshots: [String] = []
   private var previewWindow: NSWindow?
 
   private init(arguments: [String]) throws {
     func value(after flag: String) throws -> String {
-      guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
-      else { throw Failure("Missing \(flag).") }
-      return arguments[index + 1]
+      guard let value = WebsitePermissionProbeArguments.value(after: flag, in: arguments) else {
+        throw Failure("Missing \(flag).")
+      }
+      return value
     }
 
     let framework = URL(filePath: try value(after: "--probe-framework"))
@@ -135,9 +154,44 @@ final class WebsitePermissionPromptProbe {
       for page in FixturePage.checks {
         checks.append(await run(page))
       }
+      await verifyRegisteredHandlerLinks()
       finish(error: nil)
     } catch {
       finish(error: error.localizedDescription)
+    }
+  }
+
+  private func verifyRegisteredHandlerLinks() async {
+    for (scheme, registrationPath, target) in [
+      ("web+shaarparity", "protocol", "web+shaarparity:hello"),
+      ("mailto", "mailto", "mailto:probe@example.invalid"),
+    ] {
+      let source = fixture.appending(path: registrationPath)
+      guard engine?.navigateCurrentPage(to: source) == true,
+        await waitForPage(source, title: registrationPath)
+      else { continue }
+      _ = await evaluate("location.assign('\(target)'); true")
+      let deadline = Date().addingTimeInterval(8)
+      while Date() < deadline {
+        if let external = store.externalAppRequests.first {
+          store.resolveExternalApp(external.id, accepted: false)
+        }
+        guard let url = store.session.selectedPage?.tab.url,
+          let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else {
+          await pause(100)
+          continue
+        }
+        if components.path == "/handled",
+          components.queryItems?.contains(where: {
+            $0.name == "u" && ($0.value ?? "").contains(target)
+          }) == true
+        {
+          openedProtocols.insert(scheme)
+          break
+        }
+        await pause(100)
+      }
     }
   }
 
@@ -172,6 +226,9 @@ final class WebsitePermissionPromptProbe {
           }
         }
         store.resolveWebsitePermission(request.id, accepted: page.allow)
+        if page.verifyRemembered {
+          check.remembered = await rememberedPermission(page.name, url: url)
+        }
       }
       if let external = store.externalAppRequests.first {
         check.externalScheme = external.scheme
@@ -179,7 +236,7 @@ final class WebsitePermissionPromptProbe {
       }
       if let result = await evaluate("window.parityResult"), result["outcome"] != nil {
         check.result = result
-        if page.name != "protocol" || check.captured { break }
+        if page.kind != "protocolHandler" || check.captured { break }
       }
       await pause(100)
     }
@@ -188,6 +245,27 @@ final class WebsitePermissionPromptProbe {
       mediaTracks = mediaTracksReady(check.result)
     }
     return check
+  }
+
+  private func rememberedPermission(_ name: String, url: URL) async -> Bool {
+    guard let engine else { return false }
+    let permission: SitePermission
+    switch name {
+    case "geolocation": permission = .location
+    case "notifications": permission = .notifications
+    case "midi": permission = .midi
+    default: return false
+    }
+    let model = SiteControlsModel(
+      target: SiteControlTarget(
+        tabID: tabID, profileID: store.session.selectedSpace.profileID, url: url),
+      backend: engine)
+    for _ in 0..<10 {
+      await model.load()
+      if model.permissionValues[permission] == .allow { return true }
+      await pause(100)
+    }
+    return false
   }
 
   private func waitForLiveTab() async -> Bool {
@@ -340,7 +418,9 @@ final class WebsitePermissionPromptProbe {
     }
     passed = WebsitePermissionProbeVerdict.passed(
       error: error, mediaPrompted: mediaPrompted, mediaTracks: mediaTracks, hidden: hidden,
-      unexpectedSurfaces: unexpectedSurfaces, promptedNames: prompts)
+      unexpectedSurfaces: unexpectedSurfaces, promptedNames: prompts,
+      rememberedKinds: checks.filter(\.remembered).map(\.name),
+      openedProtocols: openedProtocols)
     let report: [String: Any] = [
       "schemaVersion": 1,
       "probeMode": "website-permission-prompt",
@@ -351,6 +431,8 @@ final class WebsitePermissionPromptProbe {
       "allWindowsHidden": hidden,
       "unexpectedSurfaces": unexpectedSurfaces,
       "prompts": prompts,
+      "openedProtocols": openedProtocols.sorted(),
+      "rememberedPermissions": checks.filter(\.remembered).map(\.name),
       "checks": checks.map(\.json),
       "screenshots": screenshots,
       "error": error ?? "",
@@ -383,16 +465,23 @@ final class WebsitePermissionPromptProbe {
     let kind: String?
     let allow: Bool
     let wait: TimeInterval
+    var verifyRemembered = false
 
     static let checks = [
       FixturePage(name: "media", path: "media", kind: nil, allow: true, wait: 8),
       FixturePage(
-        name: "geolocation", path: "geolocation", kind: "location", allow: false, wait: 7),
+        name: "geolocation", path: "geolocation", kind: "location", allow: true, wait: 7,
+        verifyRemembered: true),
       FixturePage(
-        name: "notifications", path: "notifications", kind: "notifications", allow: false, wait: 6),
-      FixturePage(name: "midi", path: "midi", kind: "midi", allow: false, wait: 6),
+        name: "notifications", path: "notifications", kind: "notifications", allow: true, wait: 6,
+        verifyRemembered: true),
       FixturePage(
-        name: "protocol", path: "protocol", kind: "protocolHandler", allow: false, wait: 4),
+        name: "midi", path: "midi", kind: "midi", allow: true, wait: 6,
+        verifyRemembered: true),
+      FixturePage(
+        name: "protocol", path: "protocol", kind: "protocolHandler", allow: true, wait: 4),
+      FixturePage(
+        name: "mailto", path: "mailto", kind: "protocolHandler", allow: true, wait: 4),
     ]
   }
 
@@ -406,6 +495,7 @@ final class WebsitePermissionPromptProbe {
     var externalScheme = ""
     var surfaces: [String] = []
     var captured = false
+    var remembered = false
     var result: [String: Any] = [:]
 
     var prompted: Bool {
@@ -422,6 +512,7 @@ final class WebsitePermissionPromptProbe {
         "clicked": clicked,
         "kinds": kinds,
         "prompted": prompted,
+        "remembered": remembered,
         "outcome": result["outcome"] as? String ?? outcome,
         "handledURL": handledURL,
         "externalScheme": externalScheme,

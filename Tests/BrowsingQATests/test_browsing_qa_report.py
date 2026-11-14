@@ -2,10 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+from contextlib import redirect_stderr
 from datetime import datetime, timezone
+import io
 import importlib.util
+import re
+import shutil
+import sys
 import subprocess
+import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -19,6 +26,80 @@ GIBIBYTE = 1024 ** 3
 
 
 class BrowsingQAReportTests(unittest.TestCase):
+    def test_main_rejects_colliding_report_paths_before_app_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            receipt = root / "report.json"
+            with patch.object(sys, "argv", [
+                "test-browsing-qa.py", "--app", str(root / "missing.app"),
+                "--receipt", str(receipt), "--markdown", str(root / "nested" / ".." / "report.json"),
+            ]), patch.object(PROBE, "run_suite") as run_suite:
+                errors = io.StringIO()
+                with redirect_stderr(errors), self.assertRaises(SystemExit) as exit_error:
+                    PROBE.main()
+            self.assertEqual(exit_error.exception.code, 2)
+            self.assertIn("receipt and markdown output paths must differ", errors.getvalue())
+            run_suite.assert_not_called()
+
+    def test_receipt_and_markdown_outputs_must_not_resolve_to_the_same_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            receipt = root / "reports" / "receipt.json"
+            receipt.parent.mkdir()
+            (receipt.parent / "unused").mkdir()
+            receipt.write_text("preserve this", encoding="utf-8")
+            markdown = root / "reports" / "unused" / ".." / "receipt.json"
+
+            with self.assertRaisesRegex(ValueError, "receipt and markdown output paths must differ"):
+                PROBE.write_receipt(receipt, markdown, root / "ShaarVerification", [])
+
+            self.assertEqual(receipt.read_text(encoding="utf-8"), "preserve this")
+
+    def test_slow_reload_fixture_numbers_requests_per_run_path(self):
+        original = PROBE.Fixture.slow_reload_requests
+        PROBE.Fixture.slow_reload_requests = {}
+        try:
+            self.assertEqual(PROBE.Fixture.next_slow_reload_request("/run-a"), 1)
+            self.assertEqual(PROBE.Fixture.next_slow_reload_request("/run-a"), 2)
+            self.assertEqual(PROBE.Fixture.next_slow_reload_request("/run-b"), 1)
+        finally:
+            PROBE.Fixture.slow_reload_requests = original
+
+    def test_receipt_and_markdown_paths_must_not_collide_or_follow_symlinks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shared = root / "report.json"
+            shared.write_text("preserve this", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "receipt and markdown output paths must differ"):
+                PROBE.write_receipt(shared, shared, root / "app", [])
+            self.assertEqual(shared.read_text(encoding="utf-8"), "preserve this")
+
+            target = root / "outside.json"
+            target.write_text("preserve target", encoding="utf-8")
+            receipt = root / "receipt.json"
+            receipt.symlink_to(target)
+            with self.assertRaisesRegex(ValueError, "output path must not be a symlink"):
+                PROBE.write_receipt(receipt, root / "table.md", root / "app", [])
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve target")
+
+    def test_heavy_scroll_requires_page_event_before_attributing_no_growth(self):
+        fixture = (ROOT / "scripts/test-browsing-qa.py").read_text()
+        source = (ROOT / "Sources/ShaarVerification/ShaarBrowsingQA.swift").read_text()
+        self.assertIn("window.__scrollEvents=0", fixture)
+        self.assertIn("window.__scrollEvents++", fixture)
+        self.assertIn('script: "window.__scrollEvents||0"', source)
+        self.assertIn('row(\n        "heavy-scroll", "blocked",', source)
+
+    def test_heavy_scroll_requires_lazy_load_threshold_before_attributing_no_growth(self):
+        fixture = (ROOT / "scripts/test-browsing-qa.py").read_text()
+        source = (ROOT / "Sources/ShaarVerification/ShaarBrowsingQA.swift").read_text()
+        self.assertIn("window.__scrollLoadThresholdReached=false", fixture)
+        self.assertIn(
+            "window.__scrollLoadThresholdReached=true;if(feed.children.length<200)add(100)",
+            fixture)
+        self.assertIn('script: "window.__scrollLoadThresholdReached?1:0"', source)
+        self.assertIn("the feed did not reach its lazy-load threshold", source)
+
     def test_fifty_tabs_always_run(self):
         allowed, reason = PROBE.allow_overload(50, None, None, None)
         self.assertTrue(allowed)
@@ -64,6 +145,33 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertEqual(PROBE.scenario_result(passed, 0, False, []), "pass")
         empty = {"passed": True, "rows": []}
         self.assertEqual(PROBE.scenario_result(empty, 0, False, []), "fail")
+        unknown = {"passed": True, "rows": [{"status": "skipped"}]}
+        self.assertEqual(PROBE.scenario_result(unknown, 0, False, []), "fail")
+        malformed = {"passed": True, "rows": [None]}
+        self.assertEqual(PROBE.scenario_result(malformed, 0, False, []), "fail")
+
+    def test_malformed_rows_fail_the_scenario_without_crashing(self):
+        report = {"passed": True, "rows": [None]}
+        self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+
+    def test_unknown_or_missing_row_status_cannot_pass_the_scenario(self):
+        for row in ({"status": "unknown"}, {}, {"status": ["pass"]}):
+            with self.subTest(row=row):
+                report = {"passed": True, "rows": [row]}
+                self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+
+    def test_unhashable_row_status_does_not_crash_note_formatting(self):
+        notes = PROBE.row_notes({"rows": [{"status": ["fail"]}]}, "")
+        self.assertIn("malformed scenario row status", notes.lower())
+
+    def test_visible_window_evidence_cannot_pass_the_scenario(self):
+        for visible in (False, 0, "false"):
+            with self.subTest(visible=visible):
+                report = {
+                    "passed": True, "rows": [{"status": "pass"}],
+                    "allWindowsHidden": visible,
+                }
+                self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
 
     def test_deliberate_renderer_kill_matches_pid_and_time(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
@@ -85,6 +193,21 @@ class BrowsingQAReportTests(unittest.TestCase):
         text_only = "EXC_CRASH SIGKILL"
         self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, text_only, finished))
         self.assertTrue(PROBE.crash_counts_against_suite("windows", report, match, finished))
+
+    def test_boolean_signal_pid_cannot_hide_a_renderer_crash(self):
+        finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
+        report = {"rows": [
+            {
+                "name": "renderer-kill",
+                "status": "pass",
+                "signaledPIDs": [True],
+                "signaledAt": "2026-11-10T12:00:05+00:00",
+            },
+            {"name": "renderer-recover", "status": "pass"},
+        ]}
+        crash = '{"pid" : 1, "captureTime" : "2026-11-10 07:00:10.0000 -0500"}'
+        self.assertFalse(PROBE.deliberate_renderer_kill(report, crash, finished))
+        self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, crash, finished))
 
     def test_make_clip_timeout_returns_no_bytes(self):
         def expired(*_args, **_kwargs):
@@ -123,6 +246,103 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertIn("| windows | fail | 12 | 1 MiB | none | drop / rejected |", table)
         self.assertTrue(table.startswith("| Scenario |"))
 
+    def test_malformed_rows_are_reported_without_crashing_note_formatting(self):
+        notes = PROBE.row_notes({"rows": [None]}, "")
+        self.assertIn("malformed scenario row", notes.lower())
 
+    def test_malformed_status_scalar_fails_without_crashing_report_formatting(self):
+        report = {"passed": True, "rows": [{"status": []}]}
+        self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+        notes = PROBE.row_notes(report, "")
+        self.assertIn("malformed scenario row status", notes.lower())
+
+    def test_invalid_utf8_report_is_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_bytes(b"\xff")
+            self.assertEqual(PROBE.read_report(report), {})
+
+    def test_report_removed_after_existence_check_is_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_text("{}")
+            with patch.object(PROBE.Path, "read_text", side_effect=FileNotFoundError):
+                self.assertEqual(PROBE.read_report(report), {})
+
+    def test_malformed_renderer_rows_cannot_hide_a_crash(self):
+        finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
+        report = {"rows": [None]}
+        self.assertTrue(
+            PROBE.crash_counts_against_suite("renderer", report, "EXC_CRASH", finished))
+        self.assertFalse(PROBE.deliberate_renderer_kill(report, "EXC_CRASH", finished))
+
+    def test_scroll_fixture_appends_rows_only_after_scroll_and_stops_at_200(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node.js is required to execute the fixture script")
+        fixture = PROBE.Fixture.document(None, "/scroll", "").decode()
+        match = re.search(r"<script>(.*?)</script>", fixture, re.DOTALL)
+        self.assertIsNotNone(match)
+        runner = r"""
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+let source = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => source += chunk);
+process.stdin.on('end', () => {
+  const feed = {
+    children: [], listeners: {}, scrollTop: 80, clientHeight: 100, scrollHeight: 180,
+    appendChild(row) { this.children.push(row); },
+    addEventListener(name, callback) { this.listeners[name] = callback; },
+  };
+  const document = {
+    getElementById(id) { assert.equal(id, 'feed'); return feed; },
+    createElement(tag) { assert.equal(tag, 'div'); return {textContent: ''}; },
+  };
+  const page = {document};
+  page.window = page;
+  vm.runInNewContext(source, page);
+  assert.equal(feed.children.length, 100, 'initial rows');
+  feed.listeners.scroll();
+  assert.equal(feed.children.length, 200, 'rows after first scroll');
+  feed.listeners.scroll();
+  assert.equal(feed.children.length, 200, 'row cap after later scroll');
+});
+"""
+        completed = subprocess.run(
+            [node, "-e", runner], input=match.group(1), text=True,
+            capture_output=True, timeout=10, check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_malformed_rows_are_reported_without_crashing_note_formatting(self):
+        notes = PROBE.row_notes({"rows": [None]}, "")
+        self.assertIn("malformed scenario row", notes.lower())
+
+    def test_malformed_status_scalar_fails_without_crashing_report_formatting(self):
+        report = {"passed": True, "rows": [{"status": []}]}
+        self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+        notes = PROBE.row_notes(report, "")
+        self.assertIn("malformed scenario row status", notes.lower())
+
+    def test_invalid_utf8_report_is_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_bytes(b"\xff")
+            self.assertEqual(PROBE.read_report(report), {})
+
+    def test_report_removed_after_existence_check_is_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_text("{}")
+            with patch.object(PROBE.Path, "read_text", side_effect=FileNotFoundError):
+                self.assertEqual(PROBE.read_report(report), {})
+
+    def test_malformed_renderer_rows_cannot_hide_a_crash(self):
+        finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
+        report = {"rows": [None]}
+        self.assertTrue(
+            PROBE.crash_counts_against_suite("renderer", report, "EXC_CRASH", finished))
+        self.assertFalse(PROBE.deliberate_renderer_kill(report, "EXC_CRASH", finished))
 if __name__ == "__main__":
     unittest.main()

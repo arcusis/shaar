@@ -12,15 +12,22 @@
 +PRODUCT_INSTALLER_FULLNAME=Shaar Installer
 +PRODUCT_INSTALLER_SHORTNAME=Shaar Installer
  COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Chromium Authors. All rights reserved.
--MAC_BUNDLE_ID=org.chromium.Chromium
+-MAC_BUNDLE_ID=io.ungoogled-software.ungoogled-chromium
 +MAC_BUNDLE_ID=com.arcusis.shaar.engine
  MAC_CREATOR_CODE=Cr24
 -MAC_TEAM_ID=
 +MAC_TEAM_ID=F9Z784RA6D
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
-@@ -480,8 +480,9 @@
+@@ -487,15 +487,16 @@
+   copy("copy_first_run") {
+     sources = [ "app/FirstRun" ]
      outputs = [ "$root_out_dir/First Run" ]
+   }
+ 
+   copy("copy_minibranch") {
+     sources = [ "//build/util/MINIBRANCH" ]
+     outputs = [ "$root_out_dir/MINIBRANCH" ]
    }
  } else if (is_mac) {
 -  chrome_helper_name = chrome_product_full_name + " Helper"

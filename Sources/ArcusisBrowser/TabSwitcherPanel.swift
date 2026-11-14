@@ -19,13 +19,14 @@ final class TabSwitcherController {
     let favoriteIDsByProfile = Dictionary(
       grouping: store.session.favorites, by: \.profileID
     ).mapValues { Set($0.map(\.id)) }
-    let availableBySpace = Dictionary(uniqueKeysWithValues: store.session.spaces.map { space in
-      let favoriteIDs = favoriteIDsByProfile[space.profileID] ?? []
-      let favoritePageIDs = store.session.favoritePages.compactMap { page in
-        favoriteIDs.contains(page.favoriteID) ? page.tab.id : nil
-      }
-      return (space.id, space.tabs.map(\.id) + favoritePageIDs)
-    })
+    let availableBySpace = Dictionary(
+      uniqueKeysWithValues: store.session.spaces.map { space in
+        let favoriteIDs = favoriteIDsByProfile[space.profileID] ?? []
+        let favoritePageIDs = store.session.favoritePages.compactMap { page in
+          favoriteIDs.contains(page.favoriteID) ? page.tab.id : nil
+        }
+        return (space.id, space.tabs.map(\.id) + favoritePageIDs)
+      })
     recency.reconcile(availableBySpace: availableBySpace)
     if let tab = store.session.selectedPage?.tab.id {
       recency.record(tab, in: store.session.selectedSpaceID)
@@ -128,7 +129,8 @@ struct TabSwitcherPanel: View {
               .padding(8)
               .background(
                 index == controller.index ? Color.accentColor.opacity(0.25) : .clear,
-                in: RoundedRectangle(cornerRadius: 6))
+                in: RoundedRectangle(cornerRadius: 6)
+              )
               .accessibilityElement(children: .combine)
               .accessibilityLabel(tab.title)
               .accessibilityAddTraits(index == controller.index ? .isSelected : [])

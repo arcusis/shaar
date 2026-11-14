@@ -71,7 +71,7 @@ public enum ShaarHistoryEventRouter {
       let profileString = String(data: event.profileID, encoding: .utf8),
       let profileID = UUID(uuidString: profileString), knownProfiles.contains(profileID),
       let object = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
-      object["schemaVersion"] as? Int == 1,
+      historyInteger(object["schemaVersion"]) == 1,
       let kind = object["kind"] as? String,
       ["changed", "visit", "modified", "deleted"].contains(kind)
     else { return nil }
@@ -132,6 +132,7 @@ public struct ShaarHistoryAdapter: Sendable {
         let title = row["title"] as? String,
         let count = historyInteger(row["visitCount"]), count >= 0,
         let visits = historyTimestamps(row["visits"]), visits.count <= maxVisitsPerURL,
+        count >= visits.count,
         visits.allSatisfy({ $0 >= 0 }), seen.insert(rawURL).inserted
       else { throw ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row") }
       return ShaarHistoryEntry(url: url, title: title, visitCount: count, visits: visits)
@@ -161,7 +162,13 @@ public struct ShaarHistoryAdapter: Sendable {
   {
     guard ["safari", "chrome", "arc", "firefox"].contains(source),
       (1...5000).contains(pages.count),
-      pages.allSatisfy({ !$0.visits.isEmpty && $0.visits.allSatisfy({ $0 >= 0 }) })
+      pages.allSatisfy({ page in
+        guard let url = URL(string: page.url),
+          ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+          url.host != nil
+        else { return false }
+        return !page.visits.isEmpty && page.visits.allSatisfy({ $0 >= 0 })
+      })
     else {
       throw ShaarHistoryAdapterError.invalidResponse("invalid import batch")
     }

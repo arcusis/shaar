@@ -17,15 +17,58 @@ struct PrintDocumentTitleTests {
 
   @Test func fallsBackAndRemovesControlCharacters() {
     #expect(PrintDocumentTitle.make(pageTitle: "\n\t", productName: "Shaar") == "Shaar")
-    #expect(PrintDocumentTitle.make(pageTitle: "First\nSecond", productName: "Shaar") == "First Second")
-    #expect(PrintDocumentTitle.make(pageTitle: "First\u{2028}Second", productName: "Shaar") == "First Second")
-    #expect(PrintDocumentTitle.make(pageTitle: "First\u{2029}Second", productName: "Shaar") == "First Second")
+    #expect(
+      PrintDocumentTitle.make(pageTitle: "First\nSecond", productName: "Shaar") == "First Second")
+    #expect(
+      PrintDocumentTitle.make(pageTitle: " First \n\t Second ", productName: "Shaar")
+        == "First Second")
+    #expect(
+      PrintDocumentTitle.make(pageTitle: "First\u{2028}Second", productName: "Shaar")
+        == "First Second")
+    #expect(
+      PrintDocumentTitle.make(pageTitle: "First\u{2029}Second", productName: "Shaar")
+        == "First Second")
+  }
+
+  @Test func preservesEmojiJoinersInDefaultPDFName() {
+    let family = "👩‍👩‍👧‍👦"
+    #expect(PrintDocumentTitle.make(pageTitle: family, productName: "Shaar") == family)
+
+    let persian = "می\u{200C}روم"
+    #expect(PrintDocumentTitle.make(pageTitle: persian, productName: "Shaar") == persian)
+  }
+
+  @Test func preservesEmojiTagSequencesInPDFNames() {
+    let englandFlag = "🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}"
+    #expect(PrintDocumentTitle.make(pageTitle: englandFlag, productName: "Shaar") == englandFlag)
+  }
+
+  @Test func fallsBackWhenPageTitleHasNoVisibleFilenameCharacters() {
+    #expect(
+      PrintDocumentTitle.make(pageTitle: "\u{200C}\u{200D}", productName: "Shaar") == "Shaar")
+
+    let tagOnly = "\u{E0067}\u{E0062}\u{E007F}"
+    #expect(PrintDocumentTitle.make(pageTitle: tagOnly, productName: "Shaar") == "Shaar")
+    #expect(PrintDocumentTitle.make(pageTitle: "\u{FE0F}", productName: "Shaar") == "Shaar")
   }
 
   @Test func capsPageTitleLength() {
     let result = PrintDocumentTitle.make(
       pageTitle: String(repeating: "a", count: 200), productName: "Shaar")
     #expect(result.count == 120)
+  }
+
+  @Test func capsMultibytePDFNamesWithoutSplittingGraphemeClusters() {
+    let title = String(repeating: "a\u{0301}", count: 100)
+    let result = PrintDocumentTitle.make(pageTitle: title, productName: "Shaar")
+
+    #expect(result.utf8.count <= 180)
+    #expect(result == String(title.prefix(result.count)))
+  }
+
+  @Test func fallsBackWhenOneGraphemeExceedsTheFilenameByteLimit() {
+    let title = "a" + String(repeating: "\u{0301}", count: 100)
+    #expect(PrintDocumentTitle.make(pageTitle: title, productName: "Shaar") == "Shaar")
   }
 
   @Test func removesBidiFormattingAndFilenameSeparators() {

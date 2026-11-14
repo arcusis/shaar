@@ -130,7 +130,7 @@ cache_folder_name=Shaar
 if $with_verification; then
   executable=ShaarVerification
   bundle_identifier=$SHAAR_VERIFICATION_BUNDLE_IDENTIFIER
-  scratch_path="build/swiftpm/verification"
+  scratch_path=${SHAAR_BUNDLE_VERIFICATION_SCRATCH_PATH:-build/swiftpm/verification}
   app="build/Shaar Verification.app"
 elif $with_engine; then
   executable=ArcusisBrowser
@@ -164,8 +164,8 @@ swift_build() {
 mkdir -p "$scratch_path"
 if $with_verification; then
   # ShaarVerification imports the app module with @testable. Its own scratch path keeps
-  # testing-enabled objects out of the shipping build, which never passes -enable-testing.
-  swift_build --product "$executable" -Xswiftc -enable-testing
+  # testing-enabled objects out of the shipping build, which never enables this build setting.
+  SHAAR_PACKAGE_VERIFICATION_BUILD=1 swift_build --product "$executable" -Xswiftc -enable-testing
 else
   swift_build --product "$executable"
 fi

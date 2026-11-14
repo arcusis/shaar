@@ -198,6 +198,55 @@ class DevToolsFrontend157Tests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "Missing overlay"):
                 stage.stage(overlay, destination)
 
+    def test_stage_rejects_symlinked_destination_before_writing_outside_tree(self):
+        stage = load_stage()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            external = root / "external"
+            external.mkdir()
+            sentinel = external / "keep.txt"
+            sentinel.write_text("leave untouched")
+            destination = root / "front_end" / "panels" / "shaar"
+            destination.parent.mkdir(parents=True)
+            destination.symlink_to(external, target_is_directory=True)
+
+            with self.assertRaisesRegex(SystemExit, "destination.*symlink"):
+                stage.stage(PANEL, destination)
+
+            self.assertEqual(list(external.iterdir()), [sentinel])
+            self.assertEqual(sentinel.read_text(), "leave untouched")
+            self.assertFalse((external / "shaar-meta.ts").exists())
+
+    def test_stage_rejects_symlinked_nested_destination_directory(self):
+        stage = load_stage()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "front_end" / "panels" / "shaar"
+            (destination / "build-info").mkdir(parents=True)
+            external = root / "external"
+            external.mkdir()
+            nested = destination / "build-info"
+            nested.rmdir()
+            nested.symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(SystemExit, "destination symlink"):
+                stage.stage(PANEL, destination)
+            self.assertFalse((external / "BuildInfoPanel.ts").exists())
+
+    def test_stage_rejects_symlinked_panels_parent(self):
+        stage = load_stage()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            front_end = root / "front_end"
+            front_end.mkdir()
+            external = root / "external"
+            external.mkdir()
+            panels = front_end / "panels"
+            panels.symlink_to(external, target_is_directory=True)
+            destination = panels / "shaar"
+            with self.assertRaisesRegex(SystemExit, "symlinked panels directory"):
+                stage.stage(PANEL, destination)
+            self.assertFalse((external / "shaar-meta.ts").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

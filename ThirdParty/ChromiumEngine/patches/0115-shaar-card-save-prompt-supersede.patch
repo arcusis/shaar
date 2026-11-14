@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
+--- a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
++++ b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
+@@ -1,4 +1,7 @@
+ namespace shaar::save_prompts {
++void SupersedeSavePrompts(content::WebContents* contents)
++    __attribute__((weak_import));
++
+ bool OfferSavePrompt(content::WebContents* contents,
+                      const char* prompt,
+                      const char* detail,
+@@ -134,6 +137,8 @@
+     if (current_bubble_type_ == PaymentsBubbleType::kUploadComplete)
+       HideBubble(/*initiated_by_bubble_manager=*/false);
+     const std::string detail =
+         base::UTF16ToUTF8(card.NetworkAndLastFourDigits());
++    if (shaar::save_prompts::SupersedeSavePrompts)
++      shaar::save_prompts::SupersedeSavePrompts(web_contents());
+     SetupLocalSave(card, options, std::move(save_card_prompt_callback));
+     auto decision = base::BindOnce(

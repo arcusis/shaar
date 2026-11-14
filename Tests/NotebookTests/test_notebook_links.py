@@ -52,6 +52,27 @@ class NotebookLinksTests(unittest.TestCase):
         for name in ("One", "Two", "Three", "Four"):
             self.assertIn(f"Note not linked from any index: {name}.md", result.stderr)
 
+    def test_escaped_wiki_markup_does_not_satisfy_index_membership(self):
+        result = self.run_check({"_INDEX_Main.md": r"\[[One]]", "One.md": "# One"})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Note not linked from any index: One.md", result.stderr)
+
+    def test_unclosed_html_comment_does_not_link_remaining_notes(self):
+        result = self.run_check({
+            "_INDEX_Main.md": "[[Linked]]\n<!-- [[CommentedOut]]",
+            "Linked.md": "", "CommentedOut.md": "",
+        })
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Note not linked from any index: CommentedOut.md", result.stderr)
+
+    def test_html_comment_marker_inside_fence_does_not_hide_following_index_links(self):
+        result = self.run_check({
+            "_INDEX_Main.md": "```html\n<!-- example comment\n```\n[[Visible]]",
+            "Visible.md": "# Visible",
+        })
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_wrong_case_or_missing_target_does_not_count(self):
         result = self.run_check({"_INDEX_Main.md": "[[note]]\n[[Missing]]", "Note.md": ""})
         self.assertEqual(result.returncode, 1)
@@ -104,7 +125,43 @@ class NotebookLinksTests(unittest.TestCase):
                 cwd=directory, capture_output=True, text=True, check=False,
             )
             self.assertEqual(result.returncode, 1)
-            self.assertIn("Notebook root must not be a symlink", result.stderr)
+            self.assertIn("Notebook root and its parent must not be symlinks", result.stderr)
+
+    def test_notebook_below_symlinked_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "Notebook"
+            notebook.mkdir()
+            (notebook / "_INDEX_Main.md").write_text("[[Note]]", encoding="utf-8")
+            (notebook / "Note.md").write_text("# Note", encoding="utf-8")
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(root, target_is_directory=True)
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--notebook", str(linked_parent / "Notebook")],
+                cwd=directory, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Notebook root and its parent must not be symlinks", result.stderr)
+    def test_notebook_prefix_in_nested_index_resolves_from_notebook_root(self):
+        result = self.run_check({
+            "_INDEX_Main.md": "[[nested/_INDEX_Nested]]",
+            "nested/_INDEX_Nested.md": "[[Notebook/Target]]",
+            "Target.md": "# Root target",
+        })
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_non_directory_notebook_argument_gets_a_direct_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "notebook.md"
+            path.write_text("# Not a vault", encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--notebook", str(path)],
+                cwd=directory, capture_output=True, text=True, check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Notebook path is not a directory:", result.stderr)
+            self.assertNotIn("No _INDEX_*.md files found", result.stderr)
 
 
 if __name__ == "__main__":

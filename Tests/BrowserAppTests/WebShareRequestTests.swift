@@ -9,9 +9,11 @@ import Testing
 @testable import ArcusisBrowser
 
 @Test func webShareRequestAcceptsSecureOriginsAndBuildsItems() throws {
-  let request = try #require(WebShareRequest(payload: sharePayload(
-    origin: "https://example.com", title: "Hello", text: "World",
-    url: "https://example.com/article")))
+  let request = try #require(
+    WebShareRequest(
+      payload: sharePayload(
+        origin: "https://example.com", title: "Hello", text: "World",
+        url: "https://example.com/article")))
 
   #expect(request.originLabel == "https://example.com")
   #expect(request.url?.absoluteString == "https://example.com/article")
@@ -19,8 +21,16 @@ import Testing
   #expect(request.sheetID == "web-share-\(request.id)")
 }
 
+@Test func webShareRequestResolvesRelativeURLAgainstTheRequestingPage() throws {
+  let request = try #require(WebShareRequest(payload: sharePayload(
+    url: "../shared?source=web-share")))
+
+  #expect(request.url == URL(string: "https://example.com/shared?source=web-share"))
+}
+
 @Test func webShareConsentOriginIncludesItsLocalhostPort() throws {
-  let request = try #require(WebShareRequest(payload: sharePayload(origin: "http://localhost:3000")))
+  let request = try #require(
+    WebShareRequest(payload: sharePayload(origin: "http://localhost:3000")))
   #expect(request.originLabel == "http://localhost:3000")
 }
 
@@ -34,6 +44,22 @@ import Testing
   for origin in ["https://example.com:65536", "http://localhost:65536"] {
     #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
   }
+}
+
+@Test func webShareRequestRejectsAnEmptyExplicitOriginPort() {
+  for origin in ["https://example.com:", "http://localhost:"] {
+    #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
+  }
+}
+
+@Test func webShareRequestRejectsZeroPortURLs() {
+  for origin in ["https://example.com:0", "http://localhost:0"] {
+    #expect(WebShareRequest(payload: sharePayload(origin: origin)) == nil)
+  }
+
+  var payload = sharePayload()
+  payload["pageURL"] = "https://example.com:0/article"
+  #expect(WebShareRequest(payload: payload) == nil)
 }
 
 @Test func webShareRequestRequiresRealBooleanActivationAndContent() {
@@ -55,6 +81,9 @@ import Testing
   payload = sharePayload()
   payload["url"] = "file:///tmp/private"
   #expect(WebShareRequest(payload: payload) == nil)
+
+  payload = sharePayload(url: "https://alice:secret@example.com/private")
+  #expect(WebShareRequest(payload: payload) == nil)
 }
 
 @Test func webShareRequestBoundsTitleTextAndURLByUTF8Bytes() {
@@ -74,6 +103,24 @@ import Testing
   #expect(WebShareRequest(payload: payload) != nil)
 
   payload["url"] = "https://example.com/" + String(repeating: "é", count: 2040)
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
+@Test func webShareRequestRejectsAnEmptyExplicitSharedURLPort() {
+  var payload = sharePayload()
+  payload["url"] = "https://shared.example:"
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
+@Test func webShareRequestRejectsAnEmptyExplicitPageURLPort() {
+  var payload = sharePayload()
+  payload["pageURL"] = "https://example.com:"
+  #expect(WebShareRequest(payload: payload) == nil)
+}
+
+@Test func webShareRequestBoundsTheCanonicalURLAfterEscaping() {
+  var payload = sharePayload(url: "https://example.com/" + String(repeating: "é", count: 700))
+  #expect((payload["url"] as? String)?.utf8.count ?? 0 < 4096)
   #expect(WebShareRequest(payload: payload) == nil)
 }
 

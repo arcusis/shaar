@@ -227,7 +227,7 @@ final class InspectorDetailsModel {
       if matches(inspector, id: selection.id, generation: generation, tab: tab),
         !(error is CancellationError)
       {
-        failure = error.localizedDescription
+        failure = Self.failureMessage(for: error)
       }
     }
   }
@@ -307,7 +307,8 @@ final class InspectorDetailsModel {
   }
 
   func selectComponent(_ identity: Int) async {
-    guard let inspector, tree?.nodes.contains(where: { $0.id == identity }) == true,
+    guard !Task.isCancelled, let inspector,
+      tree?.nodes.contains(where: { $0.id == identity }) == true,
       inspector.selection?.id == selectedID
     else { return }
     let generation = inspector.documentGeneration
@@ -332,7 +333,7 @@ final class InspectorDetailsModel {
       if request == componentRequest,
         matches(inspector, id: element, generation: generation, tab: .component)
       {
-        failure = error.localizedDescription
+        failure = Self.failureMessage(for: error)
       }
     }
   }
@@ -435,8 +436,10 @@ final class InspectorDetailsModel {
   }
 
   func saveAsset(url: String, frameID: String) async {
+    guard !Task.isCancelled else { return }
     do {
       let data = try await resourceData(url: url, frameID: frameID)
+      guard !Task.isCancelled else { return }
       let panel = NSSavePanel()
       let filename = (URL(string: url)?.lastPathComponent ?? "asset").unicodeScalars.map {
         CharacterSet.controlCharacters.contains($0) || "/\\:".unicodeScalars.contains($0)
@@ -446,6 +449,17 @@ final class InspectorDetailsModel {
         filename.isEmpty || [".", ".."].contains(filename) ? "asset" : String(filename.prefix(160))
       guard await panel.begin() == .OK, let destination = panel.url else { return }
       try data.write(to: destination, options: .atomic)
-    } catch { failure = error.localizedDescription }
+    } catch is CancellationError {
+      return
+    } catch {
+      failure = Self.failureMessage(for: error)
+    }
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return error.localizedDescription
+    }
+    return InspectorDetailsL10n.string("Inspector details could not be loaded. Try again.")
   }
 }

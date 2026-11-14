@@ -7,6 +7,9 @@ import ChromiumBridgeVerification
 import Foundation
 import Testing
 
+@testable import ArcusisBrowser
+@testable import ShaarVerification
+
 @Suite struct ExternalAppProbeConfigurationTests {
   private func fixture() throws -> URL {
     let root = FileManager.default.temporaryDirectory.appending(
@@ -74,5 +77,39 @@ import Testing
     #expect(
       ARCProbeExternalAppLaunchAuditForTesting(
         target, [["url": target, "remembered": false]], unmarked, true) == nil)
+  }
+
+  @Test @MainActor func parsedAuditRequiresIntegerCountsAndAJSONBooleanFlag() {
+    let valid = ExternalAppConsentProbe.parseAudit([
+      "count": 2, "matchingCount": 1, "allUnremembered": true,
+    ])
+    #expect(valid?.count == 2 && valid?.matchingCount == 1 && valid?.allUnremembered == true)
+
+    for malformed: [String: Any] in [
+      ["count": true, "matchingCount": 1, "allUnremembered": true],
+      ["count": 2, "matchingCount": false, "allUnremembered": true],
+      ["count": 2, "matchingCount": 1, "allUnremembered": 1],
+      ["count": 2.0, "matchingCount": 1, "allUnremembered": true],
+    ] {
+      #expect(ExternalAppConsentProbe.parseAudit(malformed) == nil)
+    }
+  }
+
+  @Test @MainActor func runIdentityParserRequiresCanonicalUUIDAndIntegerSchema() throws {
+    let runID = "C766672E-AB82-4F84-8ED3-2C6D75AEB1D1"
+    let valid = try JSONSerialization.data(withJSONObject: ["schema": 1, "runID": runID])
+    #expect(ExternalAppConsentProbe.decodeRunID(valid) == runID)
+
+    let booleanSchema = try JSONSerialization.data(
+      withJSONObject: ["schema": true, "runID": runID])
+    #expect(ExternalAppConsentProbe.decodeRunID(booleanSchema) == nil)
+
+    let lowercaseID = try JSONSerialization.data(
+      withJSONObject: ["schema": 1, "runID": runID.lowercased()])
+    #expect(ExternalAppConsentProbe.decodeRunID(lowercaseID) == nil)
+
+    let unexpectedKey = try JSONSerialization.data(
+      withJSONObject: ["schema": 1, "runID": runID, "privateData": "ignored"])
+    #expect(ExternalAppConsentProbe.decodeRunID(unexpectedKey) == nil)
   }
 }

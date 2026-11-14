@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 import SwiftUI
 
@@ -32,6 +33,21 @@ final class ExternalAppConsentProbe {
     var targetByApproval: [String] = []
     var cleanup: [String: Any] = [:]
     var complete = false
+  }
+
+  static func isComplete(_ evidence: Evidence) -> Bool {
+    evidence.checks.allSatisfy { $0 }
+      && evidence.approvedRequests == 2
+      && evidence.launchCount == 2
+      && evidence.deniedRequests >= 6
+      && isTrueJSONBoolean(evidence.cleanup["passed"])
+  }
+
+  private static func isTrueJSONBoolean(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+      return false
+    }
+    return number.boolValue
   }
 
   private let engine: BrowserEngine
@@ -100,11 +116,7 @@ final class ExternalAppConsentProbe {
       quitDenied && engineClosed && primaryWindowClosed && pending == 0
       && audits.count == 2 && audits.allSatisfy { $0.count == 2 }
     evidence.checks[14] = audits.count == 2 && audits.allSatisfy(\.allUnremembered)
-    evidence.complete =
-      evidence.checks.allSatisfy { $0 }
-      && evidence.approvedRequests == 2 && evidence.launchCount == 2
-      && evidence.deniedRequests >= 6
-      && (evidence.cleanup["passed"] as? Bool == true)
+    evidence.complete = Self.isComplete(evidence)
     return evidence
   }
 
@@ -478,12 +490,29 @@ final class ExternalAppConsentProbe {
     throw failure("No installed external-protocol handler available.")
   }
 
-  private func audit(_ target: String) -> (count: Int, matchingCount: Int, allUnremembered: Bool)? {
-    guard let value = runtime.probeExternalAppLaunchAudit(forURL: target) as? [String: Any],
-      let count = value["count"] as? Int, let matching = value["matchingCount"] as? Int,
-      let unremembered = value["allUnremembered"] as? Bool
+  static func parseAudit(_ value: [String: Any]?) -> (
+    count: Int, matchingCount: Int, allUnremembered: Bool
+  )? {
+    guard let value,
+      let count = strictInteger(value["count"]),
+      let matching = strictInteger(value["matchingCount"]),
+      let unremembered = value["allUnremembered"] as? NSNumber,
+      CFGetTypeID(unremembered) == CFBooleanGetTypeID()
     else { return nil }
-    return (count, matching, unremembered)
+    return (count, matching, unremembered.boolValue)
+  }
+
+  private static func strictInteger(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
+      return nil
+    }
+    let encoding = String(cString: number.objCType)
+    guard encoding != "f", encoding != "d" else { return nil }
+    return value as? Int
+  }
+
+  private func audit(_ target: String) -> (count: Int, matchingCount: Int, allUnremembered: Bool)? {
+    Self.parseAudit(runtime.probeExternalAppLaunchAudit(forURL: target) as? [String: Any])
   }
 
   private func evaluate(_ tab: UUID, _ script: String) async -> Any? {
@@ -540,7 +569,7 @@ final class ExternalAppConsentProbe {
     self.secondaryWindowID = nil
   }
 
-  private static func loadRunIdentity(root: URL, phase: String) throws -> Evidence {
+  static func loadRunIdentity(root: URL, phase: String) throws -> Evidence {
     let url = root.appending(path: "external-app-consent-run.json")
     if phase == "initial" {
       try? FileManager.default.removeItem(
@@ -559,12 +588,7 @@ final class ExternalAppConsentProbe {
       return Evidence(runID: runID)
     }
     guard let data = try? Data(contentsOf: url),
-      let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      Set(metadata.keys) == ["schema", "runID"],
-      let schema = metadata["schema"] as? NSNumber,
-      CFGetTypeID(schema) != CFBooleanGetTypeID(), schema == 1,
-      let runID = metadata["runID"] as? String,
-      UUID(uuidString: runID)?.uuidString == runID
+      let runID = decodeRunID(data)
     else { throw ProbeFailure("External consent run identity is malformed or missing.") }
     guard
       let priorData = try? Data(
@@ -573,6 +597,17 @@ final class ExternalAppConsentProbe {
       prior["runID"] as? String == runID
     else { throw ProbeFailure("External consent phases have inconsistent run identity.") }
     return Evidence(runID: runID)
+  }
+
+  static func decodeRunID(_ data: Data) -> String? {
+    guard let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(metadata.keys) == ["schema", "runID"],
+      let schema = metadata["schema"] as? NSNumber,
+      CFGetTypeID(schema) != CFBooleanGetTypeID(), schema == 1,
+      let runID = metadata["runID"] as? String,
+      UUID(uuidString: runID)?.uuidString == runID
+    else { return nil }
+    return runID
   }
 
   private func failure(_ text: String) -> ProbeFailure { ProbeFailure(text) }

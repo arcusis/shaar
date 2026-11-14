@@ -10,6 +10,8 @@ import Testing
 private final class FakeDevToolsEngine: ShaarDevToolsSubmitting, @unchecked Sendable {
   private let lock = NSLock()
   private var stored: ShaarDevToolsRequest?
+  private let reply: Data
+  init(reply: Data = Data("{\"schemaVersion\":1}".utf8)) { self.reply = reply }
   var request: ShaarDevToolsRequest? {
     lock.lock()
     defer { lock.unlock() }
@@ -22,7 +24,7 @@ private final class FakeDevToolsEngine: ShaarDevToolsSubmitting, @unchecked Send
     lock.lock()
     stored = request
     lock.unlock()
-    Task { completion(.success(Data("{\"schemaVersion\":1}".utf8))) }
+    Task { completion(.success(reply)) }
     return 91
   }
 }
@@ -49,6 +51,28 @@ struct DevToolsTests {
     #expect(root["capability"] as? UInt32 == ShaarDevToolsCapability.inspector.rawValue)
     #expect(root["command"] as? UInt32 == ShaarDevToolsCommand.domGetDocument.rawValue)
     #expect((root["params"] as? [String: Int])?["depth"] == 2)
+  }
+
+  @Test func panelOpenRejectsBooleanLeaseEnvelopeFields() async throws {
+    for reply in [
+      #"{"schemaVersion":true,"leaseID":42}"#,
+      #"{"schemaVersion":1,"leaseID":true}"#,
+    ] {
+      let fake = FakeDevToolsEngine(reply: Data(reply.utf8))
+      let adapter = try #require(ShaarDevToolsAdapter(engine: fake))
+      let result = await withCheckedContinuation { continuation in
+        do {
+          _ = try adapter.openPanel(
+            scope: ShaarNavigationScope(profileID: "profile-a"),
+            windowID: "window-a", tabID: "tab-a") {
+              continuation.resume(returning: $0)
+            }
+        } catch {
+          continuation.resume(returning: .failure(error as? ShaarEngineError ?? .invalidEvent("unexpected")))
+        }
+      }
+      #expect(result == .failure(.invalidEvent("invalid panel lease reply")))
+    }
   }
 
   @Test func commandCapabilitiesAndCookieCommandsFailClosed() throws {
@@ -176,6 +200,16 @@ struct DevToolsTests {
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         event, scope: scope, windowID: "window-a", tabID: "tab-a")?.open == true)
+    for numericOpen in ["0", "1"] {
+      let numericEvent = ShaarCopiedEvent(
+        sequence: event.sequence, kind: event.kind, profileID: event.profileID,
+        sessionID: event.sessionID, windowID: event.windowID, tabID: event.tabID,
+        payloadJSON: Data(
+          #"{"schemaVersion":1,"kind":"frontendState","open":\#(numericOpen)}"#.utf8))
+      #expect(
+        ShaarDevToolsEventRouter.decodeFrontendState(
+          numericEvent, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
+    }
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         event, scope: ShaarNavigationScope(profileID: "profile-a"),
@@ -190,6 +224,16 @@ struct DevToolsTests {
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         withSensitiveField, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
+
+    let booleanVersion = ShaarCopiedEvent(
+      sequence: 19, kind: 14, profileID: Data("profile-a".utf8),
+      sessionID: Data("private-a".utf8), windowID: Data("window-a".utf8),
+      tabID: Data("tab-a".utf8),
+      payloadJSON: Data(
+        #"{"schemaVersion":true,"kind":"frontendState","open":true}"#.utf8))
+    #expect(
+      ShaarDevToolsEventRouter.decodeFrontendState(
+        booleanVersion, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
   }
 
   @Test func shaarDefaultConstructsAdapter() {

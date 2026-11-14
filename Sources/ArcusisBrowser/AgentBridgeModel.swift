@@ -21,7 +21,9 @@ enum AgentBridgeOperation: Int {
 struct AgentBridgeConnection: Equatable, Identifiable {
   let index: Int
   var id: Int { index }
-  var title: String { "Local agent \(index)" }
+  var title: String {
+    ShellL10n.format("Local agent %d", arguments: [.integer(index)])
+  }
 }
 
 enum AgentBridgeSetup {
@@ -95,7 +97,7 @@ struct AgentBridgeStatus: Equatable {
         components.port == port, components.user == nil, components.password == nil,
         components.query == nil, components.fragment == nil,
         components.path.hasPrefix("/devtools/browser/"),
-        components.path.count > "/devtools/browser/".count,
+        Self.isBrowserEndpointPath(components.path),
         endpoint.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || ":/.-_[]".contains($0)) }
         )
       else {
@@ -109,6 +111,17 @@ struct AgentBridgeStatus: Equatable {
       throw AgentBridgeFailure.invalidReply
     }
     return .disabled
+  }
+
+  private static func isBrowserEndpointPath(_ path: String) -> Bool {
+    let prefix = "/devtools/browser/"
+    guard path.hasPrefix(prefix) else { return false }
+    let identifier = path.dropFirst(prefix.count).utf8
+    return (1...128).contains(identifier.count)
+      && identifier.allSatisfy {
+        ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122)
+          || $0 == 45 || $0 == 95
+      }
   }
 }
 
@@ -129,6 +142,7 @@ final class AgentBridgeModel {
   @ObservationIgnored private var committedOrigin: String?
   @ObservationIgnored private let request: Request
   @ObservationIgnored private var revision = 0
+  @ObservationIgnored private var statusRequestID: UUID?
   @ObservationIgnored private var closed = false
   @ObservationIgnored private var clipboardCleanupTask: Task<Void, Never>?
 
@@ -153,11 +167,14 @@ final class AgentBridgeModel {
   func refresh() {
     guard !closed else { return }
     let current = revision
+    let requestID = UUID()
+    statusRequestID = requestID
     let currentTarget = target
     request(.status, currentTarget) { [weak self] result, error in
-      guard let self, self.revision == current else { return }
-      if let error {
-        self.failure = error.localizedDescription
+      guard let self, self.revision == current, self.statusRequestID == requestID else { return }
+      self.statusRequestID = nil
+      if error != nil {
+        self.failure = ShellL10n.string("The Agent Bridge request failed. Try again.")
         return
       }
       do {
@@ -178,7 +195,7 @@ final class AgentBridgeModel {
     guard ["http", "https"].contains(target.url.scheme?.lowercased() ?? ""),
       target.origin != nil
     else {
-      failure = "Agent control requires a web page."
+      failure = ShellL10n.string("Agent control requires a web page.")
       return
     }
     busy = true
@@ -199,8 +216,8 @@ final class AgentBridgeModel {
       }
       self.busy = false
       self.pendingOrigin = nil
-      if let error {
-        self.failure = error.localizedDescription
+      if error != nil {
+        self.failure = ShellL10n.string("The Agent Bridge request failed. Try again.")
         return
       }
       self.acceptEnabled(result ?? [:])
@@ -313,15 +330,17 @@ final class AgentBridgeModel {
   }
 
   private func revoke(_ old: SiteControlTarget) {
+    revision += 1
+    let current = revision
     busy = true
     revocationUnconfirmed = true
     oneTimeToken = nil
     canCopySetup = false
     request(.disable, old) { [weak self] _, error in
-      guard let self, !self.closed else { return }
+      guard let self, !self.closed, self.revision == current else { return }
       self.busy = false
-      if let error {
-        self.failure = error.localizedDescription
+      if error != nil {
+        self.failure = ShellL10n.string("The Agent Bridge request failed. Try again.")
       } else {
         self.clear()
       }

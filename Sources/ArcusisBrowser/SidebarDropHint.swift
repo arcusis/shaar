@@ -17,7 +17,7 @@ struct SidebarDropHint: View {
   }
 
   private var reduceSidebarMotion: Bool {
-    accessibilityOverrides.reduceMotion ?? reduceMotion
+    accessibilityOverrides.reduceMotionEnabled(systemSetting: reduceMotion)
   }
 
   var body: some View {

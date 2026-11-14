@@ -67,6 +67,13 @@ enum FirstRunStep: Int, CaseIterable {
 }
 
 struct FirstRunSetupView: View {
+  static func progressAccessibilityLabel(for step: FirstRunStep) -> String {
+    SettingsL10n.format(
+      "Step %d of %d", .integer(step.rawValue + 1), .integer(FirstRunStep.allCases.count))
+  }
+
+  static let stepHeadingTraits: AccessibilityTraits = .isHeader
+
   let store: BrowserStore
   let location: FirstRunLocation
   let onFinish: () -> Void
@@ -74,6 +81,7 @@ struct FirstRunSetupView: View {
   @State private var showImport = false
   @State private var defaultStatus = false
   @State private var defaultError: String?
+
   @State private var spaceName: String
   @State private var spaceError: String?
 
@@ -88,13 +96,22 @@ struct FirstRunSetupView: View {
     _spaceName = State(initialValue: store.session.selectedSpace.name)
   }
 
+  static func defaultBrowserFailure(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.string(
+      "Could not set this app as the default browser.", table: "Settings", language: language)
+  }
+
   var body: some View {
     HStack(spacing: 0) {
       brandPanel
       VStack(alignment: .leading, spacing: 0) {
         progress
         VStack(alignment: .leading, spacing: 16) {
-          Text(step.title).font(.largeTitle.weight(.semibold))
+          Text(step.title)
+            .font(.largeTitle.weight(.semibold))
+            .accessibilityAddTraits(Self.stepHeadingTraits)
           stepContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -144,7 +161,9 @@ struct FirstRunSetupView: View {
       }
     }
     .padding(.horizontal, 36).padding(.top, 30)
-    .accessibilityHidden(true)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(Self.progressAccessibilityLabel(for: step))
+    .accessibilityAddTraits(.updatesFrequently)
   }
 
   private static var brandIcon: NSImage {
@@ -273,7 +292,7 @@ struct FirstRunSetupView: View {
       do {
         try await DefaultBrowserService.makeDefault()
         defaultError = nil
-      } catch { defaultError = error.localizedDescription }
+      } catch { defaultError = SettingsL10n.string("Could not set this app as the default browser.") }
       defaultStatus = DefaultBrowserService.isDefault()
     }
   }

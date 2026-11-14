@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import io
 import os
 import sys
 import tempfile
@@ -48,6 +49,15 @@ class LicenseHeaderTests(unittest.TestCase):
         })
         self.assertEqual(missing, [])
 
+    def test_c_and_cpp_sources_require_the_notice(self):
+        names = ("Sources/native.c", "Sources/native.cc", "Sources/native.cpp")
+        missing = self._missing({name: "int main(void) { return 0; }\n" for name in names})
+        self.assertEqual(missing, [Path(name) for name in names])
+
+        valid = {name: "\n".join(check_license_headers.expected_notice(Path(name))) + "\n"
+                 for name in names}
+        self.assertEqual(self._missing(valid), [])
+
     def test_reports_missing_or_displaced_notice(self):
         missing = self._missing({
             "Sources/Bare.swift": "import Foundation\n",
@@ -63,6 +73,12 @@ class LicenseHeaderTests(unittest.TestCase):
         (self.root / "linked.py").symlink_to(external)
         self.assertEqual(check_license_headers.files_missing_notice(self.root, [Path("linked.py")]),
                          [Path("linked.py")])
+
+    def test_unreadable_source_reports_a_direct_error(self):
+        path = self.root / "invalid.py"
+        path.write_bytes(b"\xff\xfe")
+        with self.assertRaisesRegex(ValueError, "cannot read tracked source for license header check: invalid.py"):
+            check_license_headers.files_missing_notice(self.root, [Path("invalid.py")])
 
     def test_skips_third_party_and_other_file_types(self):
         missing = self._missing({
@@ -84,6 +100,27 @@ class LicenseHeaderTests(unittest.TestCase):
             paths = check_license_headers.tracked_files(self.root)
         self.assertEqual(paths, [Path(os.fsdecode(raw_name))])
 
+    def test_unreadable_tracked_file_reports_its_path_without_traceback(self):
+        source = self.root / "broken.py"
+        source.write_bytes(b"\xff")
+        errors = io.StringIO()
+        with (patch.object(check_license_headers, "REPOSITORY_ROOT", self.root),
+              patch.object(check_license_headers, "tracked_files", return_value=[Path("broken.py")]),
+              patch("sys.stderr", errors)):
+            self.assertEqual(check_license_headers.main(), 1)
+        self.assertIn("Cannot read tracked file for MPL-2.0 header check: broken.py", errors.getvalue())
+        self.assertNotIn("Traceback", errors.getvalue())
+
+    def test_main_reports_invalid_utf8_source_without_traceback(self):
+        (self.root / "broken.py").write_bytes(b"\xff\xfe")
+        error_output = io.StringIO()
+        with (patch.object(check_license_headers, "REPOSITORY_ROOT", self.root),
+              patch.object(check_license_headers, "tracked_files", return_value=[Path("broken.py")]),
+              patch.object(check_license_headers.sys, "stderr", error_output)):
+            status = check_license_headers.main()
+        self.assertEqual(status, 1)
+        self.assertIn("Cannot read tracked file for MPL-2.0 header check: broken.py", error_output.getvalue())
+        self.assertNotIn("Traceback", error_output.getvalue())
 
 if __name__ == "__main__":
     unittest.main()

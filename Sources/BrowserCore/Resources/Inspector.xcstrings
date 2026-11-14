@@ -1,104 +1,1718 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "A11y": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"A11y"}},"he":{"stringUnit":{"state":"translated","value":"נגישות"}}}},
-    "Copy context and screenshot (Command-Shift-C)": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy context and screenshot (Command-Shift-C)"}},"he":{"stringUnit":{"state":"translated","value":"העתקת ההקשר וצילום האלמנט (Command-Shift-C)"}}}},
-    "Copying…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copying…"}},"he":{"stringUnit":{"state":"translated","value":"ההעתקה מתבצעת…"}}}},
-    "Copy options": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy options"}},"he":{"stringUnit":{"state":"translated","value":"אפשרויות העתקה"}}}},
-    "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
-    "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},
-    "Editor": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Editor"}},"he":{"stringUnit":{"state":"translated","value":"עורך"}}}},
-    "Show location": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show location"}},"he":{"stringUnit":{"state":"translated","value":"הצגת מיקום"}}}},
-    "Source location is not exposed for this element.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Source location is not exposed for this element."}},"he":{"stringUnit":{"state":"translated","value":"מיקום קוד המקור אינו זמין עבור האלמנט הזה."}}}},
-    "agent context": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"agent context"}},"he":{"stringUnit":{"state":"translated","value":"הקשר לסוכן"}}}},
-    "Copy selector": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy selector"}},"he":{"stringUnit":{"state":"translated","value":"העתקת סלקטור"}}}},
-    "CSS selector": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"CSS selector"}},"he":{"stringUnit":{"state":"translated","value":"סלקטור CSS"}}}},
-    "Playwright locator": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Playwright locator"}},"he":{"stringUnit":{"state":"translated","value":"מאתר Playwright"}}}},
-    "Copy element": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy element"}},"he":{"stringUnit":{"state":"translated","value":"העתקת האלמנט"}}}},
-    "Copy with notes": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy with notes"}},"he":{"stringUnit":{"state":"translated","value":"העתקה עם ההערות"}}}},
-    "Copy image": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy image"}},"he":{"stringUnit":{"state":"translated","value":"העתקת התמונה"}}}},
-    "Include computed styles, CSS rules and page diagnostics": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Include computed styles, CSS rules and page diagnostics"}},"he":{"stringUnit":{"state":"translated","value":"כולל סגנונות מחושבים, כללי CSS ונתוני אבחון של העמוד"}}}},
-    "Copied %@ to clipboard": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copied %@ to clipboard"}},"he":{"stringUnit":{"state":"translated","value":"ההעתקה ללוח הושלמה: %@"}}}},
-    "Copied element to clipboard": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copied element to clipboard"}},"he":{"stringUnit":{"state":"translated","value":"האלמנט הועתק ללוח"}}}},
-    "Copied image to clipboard": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copied image to clipboard"}},"he":{"stringUnit":{"state":"translated","value":"התמונה הועתקה ללוח"}}}},
-    "Copied notes to clipboard": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copied notes to clipboard"}},"he":{"stringUnit":{"state":"translated","value":"ההערות הועתקו ללוח"}}}},
-    "element": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"element"}},"he":{"stringUnit":{"state":"translated","value":"האלמנט"}}}},
-    "image": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"image"}},"he":{"stringUnit":{"state":"translated","value":"התמונה"}}}},
-    "notes": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"notes"}},"he":{"stringUnit":{"state":"translated","value":"ההערות"}}}},
-    "layout": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"layout"}},"he":{"stringUnit":{"state":"translated","value":"הפריסה"}}}},
-    "typography": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"typography"}},"he":{"stringUnit":{"state":"translated","value":"הטיפוגרפיה"}}}},
-    "colors": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"colors"}},"he":{"stringUnit":{"state":"translated","value":"הצבעים"}}}},
-    "color": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"color"}},"he":{"stringUnit":{"state":"translated","value":"הצבע"}}}},
-    "width": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"width"}},"he":{"stringUnit":{"state":"translated","value":"הרוחב"}}}},
-    "height": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"height"}},"he":{"stringUnit":{"state":"translated","value":"הגובה"}}}},
-    "Styles": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Styles"}},"he":{"stringUnit":{"state":"translated","value":"סגנונות"}}}},
-    "Code": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Code"}},"he":{"stringUnit":{"state":"translated","value":"קוד"}}}},
-    "List": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"List"}},"he":{"stringUnit":{"state":"translated","value":"רשימה"}}}},
-    "Show CSS code": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show CSS code"}},"he":{"stringUnit":{"state":"translated","value":"הצגת קוד CSS"}}}},
-    "Show property list": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show property list"}},"he":{"stringUnit":{"state":"translated","value":"הצגת רשימת מאפיינים"}}}},
-    "Copy code": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy code"}},"he":{"stringUnit":{"state":"translated","value":"העתקת הקוד"}}}},
-    "Collapsed": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Collapsed"}},"he":{"stringUnit":{"state":"translated","value":"מכווץ"}}}},
-    "Expanded": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Expanded"}},"he":{"stringUnit":{"state":"translated","value":"מורחב"}}}},
-    "Unlock element": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Unlock element"}},"he":{"stringUnit":{"state":"translated","value":"שחרור נעילת האלמנט"}}}},
-    "Lock element": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Lock element"}},"he":{"stringUnit":{"state":"translated","value":"נעילת האלמנט"}}}},
-    "Display": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Display"}},"he":{"stringUnit":{"state":"translated","value":"תצוגה"}}}},
-    "Font": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Font"}},"he":{"stringUnit":{"state":"translated","value":"גופן"}}}},
-    "Add feedback": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Add feedback"}},"he":{"stringUnit":{"state":"translated","value":"הוספת משוב"}}}},
-    "Lock an element to add a note.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Lock an element to add a note."}},"he":{"stringUnit":{"state":"translated","value":"יש לנעול אלמנט כדי להוסיף הערה."}}}},
-    "Describe feedback…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Describe feedback…"}},"he":{"stringUnit":{"state":"translated","value":"תיאור המשוב…"}}}},
-    "Add note": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Add note"}},"he":{"stringUnit":{"state":"translated","value":"הוספת הערה"}}}},
-    "Clear notes": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Clear notes"}},"he":{"stringUnit":{"state":"translated","value":"ניקוי ההערות"}}}},
-    "Notes stay in this tab across page navigation.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Notes stay in this tab across page navigation."}},"he":{"stringUnit":{"state":"translated","value":"ההערות נשמרות בלשונית זו גם במעבר בין עמודים."}}}},
-    "Siblings": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Siblings"}},"he":{"stringUnit":{"state":"translated","value":"אלמנטים אחים"}}}},
-    "Exit": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Exit"}},"he":{"stringUnit":{"state":"translated","value":"יציאה"}}}},
-    "On": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"On"}},"he":{"stringUnit":{"state":"translated","value":"פעיל"}}}},
-    "Off": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Off"}},"he":{"stringUnit":{"state":"translated","value":"כבוי"}}}},
-    "Contrast": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Contrast"}},"he":{"stringUnit":{"state":"translated","value":"ניגודיות"}}}},
-    "%@ passes": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%@ passes"}},"he":{"stringUnit":{"state":"translated","value":"%@ עומד בתקן"}}}},
-    "%@ fails": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%@ fails"}},"he":{"stringUnit":{"state":"translated","value":"%@ אינו עומד בתקן"}}}},
-    "matched rules": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"matched rules"}},"he":{"stringUnit":{"state":"translated","value":"כללי ה-CSS התואמים"}}}},
-    "XPath": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"XPath"}},"he":{"stringUnit":{"state":"translated","value":"XPath"}}}},
-    "Width": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Width"}},"he":{"stringUnit":{"state":"translated","value":"רוחב"}}}},
-    "Height": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Height"}},"he":{"stringUnit":{"state":"translated","value":"גובה"}}}},
-    "Top": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Top"}},"he":{"stringUnit":{"state":"translated","value":"למעלה"}}}},
-    "Right": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Right"}},"he":{"stringUnit":{"state":"translated","value":"מימין"}}}},
-    "Bottom": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Bottom"}},"he":{"stringUnit":{"state":"translated","value":"למטה"}}}},
-    "Left": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Left"}},"he":{"stringUnit":{"state":"translated","value":"משמאל"}}}},
-    "%@ %@: %@": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%@ %@: %@"}},"he":{"stringUnit":{"state":"translated","value":"%@ %@: %@"}}}},
-    "Stylesheet %@": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Stylesheet %@"}},"he":{"stringUnit":{"state":"translated","value":"גיליון סגנון %@"}}}},
-    "Add note for selected element": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Add note for selected element"}},"he":{"stringUnit":{"state":"translated","value":"הוספת הערה לאלמנט שנבחר"}}}},
-    "Back to element": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Back to element"}},"he":{"stringUnit":{"state":"translated","value":"חזרה לאלמנט"}}}},
-    "Change": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Change"}},"he":{"stringUnit":{"state":"translated","value":"שינוי"}}}},
-    "Choose an element outside form controls.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Choose an element outside form controls."}},"he":{"stringUnit":{"state":"translated","value":"יש לבחור אלמנט שאינו שדה טופס."}}}},
-    "Clear": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Clear"}},"he":{"stringUnit":{"state":"translated","value":"ניקוי"}}}},
-    "Copy all for AI": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy all for AI"}},"he":{"stringUnit":{"state":"translated","value":"העתקת הכול ל-AI"}}}},
-    "Copy context and element PNG (Command-Shift-C)": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy context and element PNG (Command-Shift-C)"}},"he":{"stringUnit":{"state":"translated","value":"העתקת ההקשר ותמונת האלמנט בפורמט PNG (Command-Shift-C)"}}}},
-    "Copy for AI": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for AI"}},"he":{"stringUnit":{"state":"translated","value":"העתקה ל-AI"}}}},
-    "Delete a note to restore the remaining cleared notes.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Delete a note to restore the remaining cleared notes."}},"he":{"stringUnit":{"state":"translated","value":"יש למחוק הערה כדי לפנות מקום לשחזור שאר ההערות שנוקו."}}}},
-    "Delete note": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Delete note"}},"he":{"stringUnit":{"state":"translated","value":"מחיקת הערה"}}}},
-    "Describe a change, question or important detail…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Describe a change, question or important detail…"}},"he":{"stringUnit":{"state":"translated","value":"תיאור שינוי, שאלה או פרט חשוב…"}}}},
-    "Detailed": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Detailed"}},"he":{"stringUnit":{"state":"translated","value":"מידע מפורט"}}}},
-    "Detailed context exceeds the copy limit.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Detailed context exceeds the copy limit."}},"he":{"stringUnit":{"state":"translated","value":"ההקשר המפורט חורג ממגבלת ההעתקה."}}}},
-    "Element context exceeds the copy limit.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Element context exceeds the copy limit."}},"he":{"stringUnit":{"state":"translated","value":"ההקשר של האלמנט חורג ממגבלת ההעתקה."}}}},
-    "Element context is unavailable.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Element context is unavailable."}},"he":{"stringUnit":{"state":"translated","value":"ההקשר של האלמנט אינו זמין."}}}},
-    "Element copied with PNG": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Element copied with PNG"}},"he":{"stringUnit":{"state":"translated","value":"האלמנט הועתק עם תמונת PNG"}}}},
-    "Feedback for selected element": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Feedback for selected element"}},"he":{"stringUnit":{"state":"translated","value":"משוב על האלמנט שנבחר"}}}},
-    "Important": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Important"}},"he":{"stringUnit":{"state":"translated","value":"חשוב"}}}},
-    "Intent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Intent"}},"he":{"stringUnit":{"state":"translated","value":"סוג המשוב"}}}},
-    "Note added": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Note added"}},"he":{"stringUnit":{"state":"translated","value":"ההערה נוספה"}}}},
-    "Notes": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Notes"}},"he":{"stringUnit":{"state":"translated","value":"הערות"}}}},
-    "Notes cleared": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Notes cleared"}},"he":{"stringUnit":{"state":"translated","value":"ההערות נוקו"}}}},
-    "Notes copied and cleared": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Notes copied and cleared"}},"he":{"stringUnit":{"state":"translated","value":"ההערות הועתקו ונוקו"}}}},
-    "Notes restored": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Notes restored"}},"he":{"stringUnit":{"state":"translated","value":"ההערות שוחזרו"}}}},
-    "Notes stay in this tab across page navigation. Form controls are omitted from copied context.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Notes stay in this tab across page navigation. Form controls are omitted from copied context."}},"he":{"stringUnit":{"state":"translated","value":"ההערות נשמרות בלשונית זו גם במעבר בין עמודים. שדות טופס אינם נכללים בהקשר המועתק."}}}},
-    "Notes · %1$lld/50": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Notes · %1$lld/50"}},"he":{"stringUnit":{"state":"translated","value":"הערות · %1$lld/50"}}}},
-    "Preparing…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Preparing…"}},"he":{"stringUnit":{"state":"translated","value":"בהכנה…"}}}},
-    "Question": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Question"}},"he":{"stringUnit":{"state":"translated","value":"שאלה"}}}},
-    "The clipboard could not be written.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The clipboard could not be written."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להעתיק ללוח."}}}},
-    "The element image is invalid.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The element image is invalid."}},"he":{"stringUnit":{"state":"translated","value":"תמונת האלמנט אינה תקינה."}}}},
-    "The page changed during the private capture. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The page changed during the private capture. Try again."}},"he":{"stringUnit":{"state":"translated","value":"העמוד השתנה במהלך הצילום. יש לנסות שוב."}}}},
-    "The private element capture could not start.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The private element capture could not start."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להתחיל בצילום האלמנט תוך הסתרת שדות הטופס."}}}},
-    "Undo clear (%1$lld)": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Undo clear (%1$lld)"}},"he":{"stringUnit":{"state":"translated","value":"ביטול הניקוי (%1$lld)"}}}},
+    "Could not copy the selected element. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not copy the selected element. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להעתיק את הרכיב שנבחר. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
+    "Could not get the source details. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not get the source details. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לקבל את פרטי המקור. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
+    "This source is no longer available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This source is no longer available."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המקור הזה כבר אינו זמין."
+          }
+        }
+      }
+    },
+    "This source is no longer in the page resource tree.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This source is no longer in the page resource tree."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המקור הזה כבר אינו מופיע בעץ המשאבים של הדף."
+          }
+        }
+      }
+    },
+    "Source content is unavailable or exceeds 5 MiB.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source content is unavailable or exceeds 5 MiB."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תוכן המקור אינו זמין או שגודלו חורג מ־5 MiB."
+          }
+        }
+      }
+    },
+    "Could not complete the page audit. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not complete the page audit. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להשלים את בדיקת הדף. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
+    "A11y": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A11y"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נגישות"
+          }
+        }
+      }
+    },
+    "Copy context and screenshot (Command-Shift-C)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy context and screenshot (Command-Shift-C)"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת ההקשר וצילום האלמנט (Command-Shift-C)"
+          }
+        }
+      }
+    },
+    "Copying…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copying…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההעתקה מתבצעת…"
+          }
+        }
+      }
+    },
+    "Copy options": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy options"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אפשרויות העתקה"
+          }
+        }
+      }
+    },
+    "Open source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open source"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת קוד המקור"
+          }
+        }
+      }
+    },
+    "Copy for agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy for agent"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקה לסוכן"
+          }
+        }
+      }
+    },
+    "Editor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editor"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עורך"
+          }
+        }
+      }
+    },
+    "Show location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show location"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת מיקום"
+          }
+        }
+      }
+    },
+    "Source location is not exposed for this element.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source location is not exposed for this element."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מיקום קוד המקור אינו זמין עבור האלמנט הזה."
+          }
+        }
+      }
+    },
+    "agent context": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "agent context"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הקשר לסוכן"
+          }
+        }
+      }
+    },
+    "Copy selector": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy selector"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת סלקטור"
+          }
+        }
+      }
+    },
+    "CSS selector": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CSS selector"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סלקטור CSS"
+          }
+        }
+      }
+    },
+    "Playwright locator": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playwright locator"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מאתר Playwright"
+          }
+        }
+      }
+    },
+    "Copy element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת האלמנט"
+          }
+        }
+      }
+    },
+    "Copy with notes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy with notes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקה עם ההערות"
+          }
+        }
+      }
+    },
+    "Copy image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy image"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת התמונה"
+          }
+        }
+      }
+    },
+    "Include computed styles, CSS rules and page diagnostics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include computed styles, CSS rules and page diagnostics"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כולל סגנונות מחושבים, כללי CSS ונתוני אבחון של העמוד"
+          }
+        }
+      }
+    },
+    "Copied %@ to clipboard": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied %@ to clipboard"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההעתקה ללוח הושלמה: %@"
+          }
+        }
+      }
+    },
+    "Copied element to clipboard": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied element to clipboard"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "האלמנט הועתק ללוח"
+          }
+        }
+      }
+    },
+    "Copied image to clipboard": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied image to clipboard"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התמונה הועתקה ללוח"
+          }
+        }
+      }
+    },
+    "Copied notes to clipboard": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied notes to clipboard"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההערות הועתקו ללוח"
+          }
+        }
+      }
+    },
+    "element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "האלמנט"
+          }
+        }
+      }
+    },
+    "image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "image"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התמונה"
+          }
+        }
+      }
+    },
+    "notes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "notes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההערות"
+          }
+        }
+      }
+    },
+    "layout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "layout"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפריסה"
+          }
+        }
+      }
+    },
+    "typography": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "typography"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הטיפוגרפיה"
+          }
+        }
+      }
+    },
+    "colors": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "colors"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצבעים"
+          }
+        }
+      }
+    },
+    "color": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "color"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצבע"
+          }
+        }
+      }
+    },
+    "width": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "width"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הרוחב"
+          }
+        }
+      }
+    },
+    "height": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "height"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגובה"
+          }
+        }
+      }
+    },
+    "Styles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Styles"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגנונות"
+          }
+        }
+      }
+    },
+    "Code": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קוד"
+          }
+        }
+      }
+    },
+    "List": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רשימה"
+          }
+        }
+      }
+    },
+    "Show CSS code": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show CSS code"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת קוד CSS"
+          }
+        }
+      }
+    },
+    "Show property list": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show property list"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת רשימת מאפיינים"
+          }
+        }
+      }
+    },
+    "Copy code": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy code"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת הקוד"
+          }
+        }
+      }
+    },
+    "Collapsed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapsed"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מכווץ"
+          }
+        }
+      }
+    },
+    "Expanded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expanded"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מורחב"
+          }
+        }
+      }
+    },
+    "Unlock element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שחרור נעילת האלמנט"
+          }
+        }
+      }
+    },
+    "Lock element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נעילת האלמנט"
+          }
+        }
+      }
+    },
+    "Display": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תצוגה"
+          }
+        }
+      }
+    },
+    "Font": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Font"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גופן"
+          }
+        }
+      }
+    },
+    "Add feedback": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add feedback"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת משוב"
+          }
+        }
+      }
+    },
+    "Lock an element to add a note.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock an element to add a note."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יש לנעול אלמנט כדי להוסיף הערה."
+          }
+        }
+      }
+    },
+    "Describe feedback…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe feedback…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תיאור המשוב…"
+          }
+        }
+      }
+    },
+    "Add note": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add note"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת הערה"
+          }
+        }
+      }
+    },
+    "Clear notes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear notes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניקוי ההערות"
+          }
+        }
+      }
+    },
+    "Notes stay in this tab across page navigation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes stay in this tab across page navigation."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההערות נשמרות בלשונית זו גם במעבר בין עמודים."
+          }
+        }
+      }
+    },
+    "Siblings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siblings"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אלמנטים אחים"
+          }
+        }
+      }
+    },
+    "Exit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יציאה"
+          }
+        }
+      }
+    },
+    "On": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פעיל"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כבוי"
+          }
+        }
+      }
+    },
+    "Contrast": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contrast"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניגודיות"
+          }
+        }
+      }
+    },
+    "%@ passes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ passes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ עומד בתקן"
+          }
+        }
+      }
+    },
+    "%@ fails": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fails"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ אינו עומד בתקן"
+          }
+        }
+      }
+    },
+    "matched rules": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "matched rules"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כללי ה-CSS התואמים"
+          }
+        }
+      }
+    },
+    "XPath": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XPath"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XPath"
+          }
+        }
+      }
+    },
+    "Width": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Width"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רוחב"
+          }
+        }
+      }
+    },
+    "Height": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Height"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גובה"
+          }
+        }
+      }
+    },
+    "Top": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "למעלה"
+          }
+        }
+      }
+    },
+    "Right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מימין"
+          }
+        }
+      }
+    },
+    "Bottom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "למטה"
+          }
+        }
+      }
+    },
+    "Left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "משמאל"
+          }
+        }
+      }
+    },
+    "%@ %@: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@: %@"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@: %@"
+          }
+        }
+      }
+    },
+    "Edit %@ %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit %@ %@"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עריכת %@ %@"
+          }
+        }
+      }
+    },
+    "Edit %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit %@"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עריכת %@"
+          }
+        }
+      }
+    },
+    "Stylesheet %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stylesheet %@"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גיליון סגנון %@"
+          }
+        }
+      }
+    },
+    "Add note for selected element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add note for selected element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת הערה לאלמנט שנבחר"
+          }
+        }
+      }
+    },
+    "Back to element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חזרה לאלמנט"
+          }
+        }
+      }
+    },
+    "Change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שינוי"
+          }
+        }
+      }
+    },
+    "Choose an element outside form controls.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an element outside form controls."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יש לבחור אלמנט שאינו שדה טופס."
+          }
+        }
+      }
+    },
+    "Clear": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניקוי"
+          }
+        }
+      }
+    },
+    "Copy all for AI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy all for AI"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת הכול ל-AI"
+          }
+        }
+      }
+    },
+    "Copy context and element PNG (Command-Shift-C)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy context and element PNG (Command-Shift-C)"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת ההקשר ותמונת האלמנט בפורמט PNG (Command-Shift-C)"
+          }
+        }
+      }
+    },
+    "Copy for AI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy for AI"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקה ל-AI"
+          }
+        }
+      }
+    },
+    "Delete a note to restore the remaining cleared notes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete a note to restore the remaining cleared notes."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יש למחוק הערה כדי לפנות מקום לשחזור שאר ההערות שנוקו."
+          }
+        }
+      }
+    },
+    "Delete note": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete note"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקת הערה"
+          }
+        }
+      }
+    },
+    "Describe a change, question or important detail…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe a change, question or important detail…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תיאור שינוי, שאלה או פרט חשוב…"
+          }
+        }
+      }
+    },
+    "Detailed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detailed"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מידע מפורט"
+          }
+        }
+      }
+    },
+    "Detailed context exceeds the copy limit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detailed context exceeds the copy limit."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההקשר המפורט חורג ממגבלת ההעתקה."
+          }
+        }
+      }
+    },
+    "Element context exceeds the copy limit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Element context exceeds the copy limit."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההקשר של האלמנט חורג ממגבלת ההעתקה."
+          }
+        }
+      }
+    },
+    "Element context is unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Element context is unavailable."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההקשר של האלמנט אינו זמין."
+          }
+        }
+      }
+    },
+    "Element copied with PNG": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Element copied with PNG"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "האלמנט הועתק עם תמונת PNG"
+          }
+        }
+      }
+    },
+    "Feedback for selected element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feedback for selected element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "משוב על האלמנט שנבחר"
+          }
+        }
+      }
+    },
+    "Important": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Important"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חשוב"
+          }
+        }
+      }
+    },
+    "Intent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intent"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סוג המשוב"
+          }
+        }
+      }
+    },
+    "Note added": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note added"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההערה נוספה"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הערות"
+          }
+        }
+      }
+    },
+    "Notes cleared": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes cleared"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההערות נוקו"
+          }
+        }
+      }
+    },
+    "Notes copied and cleared": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes copied and cleared"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההערות הועתקו ונוקו"
+          }
+        }
+      }
+    },
+    "Notes restored": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes restored"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההערות שוחזרו"
+          }
+        }
+      }
+    },
+    "Notes stay in this tab across page navigation. Form controls are omitted from copied context.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes stay in this tab across page navigation. Form controls are omitted from copied context."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההערות נשמרות בלשונית זו גם במעבר בין עמודים. שדות טופס אינם נכללים בהקשר המועתק."
+          }
+        }
+      }
+    },
+    "Notes · %1$lld/50": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes · %1$lld/50"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הערות · %1$lld/50"
+          }
+        }
+      }
+    },
+    "Preparing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בהכנה…"
+          }
+        }
+      }
+    },
+    "Question": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Question"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שאלה"
+          }
+        }
+      }
+    },
+    "The clipboard could not be written.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The clipboard could not be written."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להעתיק ללוח."
+          }
+        }
+      }
+    },
+    "The element image is invalid.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The element image is invalid."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תמונת האלמנט אינה תקינה."
+          }
+        }
+      }
+    },
+    "The page changed during the private capture. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page changed during the private capture. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העמוד השתנה במהלך הצילום. יש לנסות שוב."
+          }
+        }
+      }
+    },
+    "The private element capture could not start.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The private element capture could not start."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להתחיל בצילום האלמנט תוך הסתרת שדות הטופס."
+          }
+        }
+      }
+    },
+    "Undo clear (%1$lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo clear (%1$lld)"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ביטול הניקוי (%1$lld)"
+          }
+        }
+      }
+    },
+    "Working…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העבודה מתבצעת…"
+          }
+        }
+      }
+    },
     "Inspector": {
       "localizations": {
         "en": {
@@ -1235,62 +2849,162 @@
     },
     "Cancel": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },
-        "he": { "stringUnit": { "state": "translated", "value": "ביטול" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ביטול"
+          }
+        }
       }
     },
     "New rule": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "New rule" } },
-        "he": { "stringUnit": { "state": "translated", "value": "כלל חדש" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New rule"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כלל חדש"
+          }
+        }
       }
     },
     "Selector": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Selector" } },
-        "he": { "stringUnit": { "state": "translated", "value": "בורר" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selector"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בורר"
+          }
+        }
       }
     },
     "Add property": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Add property" } },
-        "he": { "stringUnit": { "state": "translated", "value": "הוספת מאפיין" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add property"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת מאפיין"
+          }
+        }
       }
     },
     "Turn property off": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Turn property off" } },
-        "he": { "stringUnit": { "state": "translated", "value": "כיבוי מאפיין" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn property off"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כיבוי מאפיין"
+          }
+        }
       }
     },
     "Turn property on": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Turn property on" } },
-        "he": { "stringUnit": { "state": "translated", "value": "הפעלת מאפיין" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn property on"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעלת מאפיין"
+          }
+        }
       }
     },
     "Inherited": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Inherited" } },
-        "he": { "stringUnit": { "state": "translated", "value": "בירושה" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inherited"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בירושה"
+          }
+        }
       }
     },
     "Pseudo-element %@": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Pseudo-element %@" } },
-        "he": { "stringUnit": { "state": "translated", "value": "פסאודו-אלמנט %@" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pseudo-element %@"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פסאודו-אלמנט %@"
+          }
+        }
       }
     },
     "This rule cannot be edited from the page.": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "This rule cannot be edited from the page." } },
-        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לערוך את הכלל הזה מתוך הדף." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This rule cannot be edited from the page."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לערוך את הכלל הזה מתוך הדף."
+          }
+        }
       }
     },
     "Invalid selector.": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Invalid selector." } },
-        "he": { "stringUnit": { "state": "translated", "value": "בורר לא תקין." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid selector."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בורר לא תקין."
+          }
+        }
       }
     },
     "Applies to this element until reload. Empty value removes the override.": {
@@ -1439,8 +3153,18 @@
     },
     "Show the winning rule": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Show the winning rule" } },
-        "he": { "stringUnit": { "state": "translated", "value": "הצגת הכלל המנצח" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the winning rule"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת הכלל המנצח"
+          }
+        }
       }
     },
     "All computed properties": {
@@ -2143,6 +3867,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "נתיב JS"
+          }
+        }
+      }
+    },
+    "[URL omitted]": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[URL omitted]"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כתובת URL הושמטה"
+          }
+        }
+      }
+    },
+    "Could not complete the page style change. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not complete the page style change. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להשלים את שינוי הסגנון. כדאי לנסות שוב."
           }
         }
       }

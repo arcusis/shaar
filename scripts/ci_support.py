@@ -46,6 +46,8 @@ def junit_totals(report: Path) -> dict[str, int]:
     root = ET.parse(report).getroot()
     suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
     leaves = [suite for suite in suites if not suite.findall("testsuite")]
+    if not leaves:
+        raise ValueError("JUnit report contains no test suites")
     totals = {}
     for key in ("tests", "failures", "errors", "skipped"):
         values = []
@@ -62,19 +64,30 @@ def junit_totals(report: Path) -> dict[str, int]:
     return totals
 
 
+def output_file(path: Path) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"CI evidence output must not be a symlink: {path}")
+    return path
+
+
 class Commands:
     def __init__(self, stage: str):
+        if not stage or Path(stage).name != stage or stage in {".", ".."}:
+            raise ValueError("CI stage must be a single directory name")
         self.directory = ROOT / "build/ci" / stage
+        for path in (ROOT / "build", ROOT / "build/ci", self.directory):
+            if path.is_symlink():
+                raise ValueError(f"CI output path must not be a symlink: {path}")
         self.directory.mkdir(parents=True, exist_ok=True)
         self.results = []
         metadata = dict(revision=os.environ.get("GITHUB_SHA", "local"),
                         toolchain=os.environ.get("CI_TOOLCHAIN_ID", "local"))
-        (self.directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+        output_file(self.directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
     def run(self, name: str, arguments: list[str], *, cwd: Path = ROOT, env=None) -> int:
         print(f"::group::{name}", flush=True)
         started = time.monotonic()
-        log = self.directory / f"{name}.log"
+        log = output_file(self.directory / f"{name}.log")
         try:
             with log.open("w") as output:
                 with subprocess.Popen(
@@ -86,7 +99,7 @@ class Commands:
                         output.write(line)
                     status = process.wait()
         except OSError as error:
-            log.write_text(str(error))
+            output_file(log).write_text(str(error))
             print(error, flush=True)
             status = 127
         self.results.append(dict(name=name, command=arguments, status=status,
@@ -96,14 +109,16 @@ class Commands:
         return status
 
     def write_reports(self) -> None:
-        (self.directory / "commands.json").write_text(json.dumps(self.results, indent=2) + "\n")
+        commands_json = output_file(self.directory / "commands.json")
+        commands_xml = output_file(self.directory / "commands.xml")
+        commands_json.write_text(json.dumps(self.results, indent=2) + "\n")
         suite = ET.Element("testsuite", name=self.directory.name, tests=str(len(self.results)),
                            failures=str(sum(item["status"] != 0 for item in self.results)))
         for item in self.results:
             case = ET.SubElement(suite, "testcase", name=item["name"], time=str(item["seconds"]))
             if item["status"]:
                 ET.SubElement(case, "failure", message=f"Exit {item['status']}; see {item['name']}.log")
-        ET.ElementTree(suite).write(self.directory / "commands.xml", encoding="utf-8", xml_declaration=True)
+        ET.ElementTree(suite).write(commands_xml, encoding="utf-8", xml_declaration=True)
 
     def finish(self) -> int:
         invalid_reports = []
@@ -117,14 +132,14 @@ class Commands:
                 name = f"invalid-report-{report.name}"
                 action = "parse" if isinstance(error, (ET.ParseError, OSError)) else "validate"
                 message = f"Could not {action} {report.name}: {error}"
-                (self.directory / f"{name}.log").write_text(message + "\n")
+                output_file(self.directory / f"{name}.log").write_text(message + "\n")
                 self.results.append(dict(name=name, command=["validate XML report", str(report)],
                                          status=1, seconds=0.0))
                 invalid_reports.append(message)
         self.write_reports()
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
-            with Path(summary).open("a") as output:
+            with output_file(Path(summary)).open("a") as output:
                 output.write(f"### {self.directory.name}\n\nCommit: `{os.environ.get('GITHUB_SHA', 'local')}`\n\n")
                 output.write("| Check | Exit | Seconds |\n| --- | ---: | ---: |\n")
                 for item in self.results:

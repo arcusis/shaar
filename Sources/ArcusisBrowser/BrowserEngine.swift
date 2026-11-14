@@ -47,6 +47,8 @@ final class BrowserEngine {
   var developmentPages: [UUID: DevelopmentPage] = [:]
   var developmentPageURLs: [UUID: URL] = [:]
   var developmentProbedURLs: [UUID: URL] = [:]
+  var developmentProbeRequests: [UUID: UUID] = [:]
+  var developmentProbeTasks: [UUID: Task<Void, Never>] = [:]
   let downloads: DownloadsModel
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -82,6 +84,7 @@ final class BrowserEngine {
   @ObservationIgnored let sleepingTabs = SleepingTabScheduler()
   @ObservationIgnored var memoryPressureSource: DispatchSourceMemoryPressure?
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
+  @ObservationIgnored private var delayedRefreshTasks: [UUID: Task<Void, Never>] = [:]
   private(set) var favicons: [UUID: NSImage] = [:]
   /// Site host last associated with each tab's icon. An empty query for that host
   /// leaves the icon in place. A different host drops the live icon and the saved file.
@@ -89,6 +92,13 @@ final class BrowserEngine {
   /// Last image written for a tab. Loading ticks update the live icon without changing this,
   /// so the bitmap compare still sees the saved icon when the page finishes loading.
   @ObservationIgnored private var persistedFaviconImages: [UUID: NSImage] = [:]
+
+  isolated deinit {
+    suspensionTask?.cancel()
+    memoryPressureSource?.cancel()
+    delayedRefreshTasks.values.forEach { $0.cancel() }
+    developmentProbeTasks.values.forEach { $0.cancel() }
+  }
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
     favicons[tabID] = image
@@ -167,6 +177,17 @@ final class BrowserEngine {
       url: url.absoluteString)
   }
 
+  @discardableResult
+  func performPageZoomAction(_ action: String, tabID: UUID) -> Bool {
+    guard !isClosed, let store, let page = store.session.selectedPage,
+      page.tab.id == tabID,
+      runtime.windowID(forTabID: page.tab.id.uuidString) == windowID,
+      let profileID = store.session.profileID(forTabID: page.tab.id)
+    else { return false }
+    return runtime.performPageZoomAction(
+      action, tabID: page.tab.id.uuidString, profileID: profileID.uuidString)
+  }
+
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
     presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false,
@@ -222,6 +243,7 @@ final class BrowserEngine {
       self.suspensionTask?.cancel()
       self.memoryPressureSource?.cancel()
       self.memoryPressureSource = nil
+      self.cancelDelayedRefreshes()
       for model in self.inspectors.values where model.isOpen { model.close() }
       self.inspectors.removeAll()
       for model in self.developerModels.values { model.close() }
@@ -229,6 +251,8 @@ final class BrowserEngine {
       self.developmentPages.removeAll()
       self.developmentPageURLs.removeAll()
       self.developmentProbedURLs.removeAll()
+      self.developmentProbeRequests.removeAll()
+      self.cancelDevelopmentProbeTasks()
       self.extensionPanel = nil
       self.store?.dismissPageFind()
       self.liveTabs.removeAll()
@@ -312,7 +336,10 @@ final class BrowserEngine {
         completion(PanelsL10n.string("The browser engine is unavailable."))
         return
       }
-      let done: @MainActor (Error?) -> Void = { error in completion(error?.localizedDescription) }
+      let done: @MainActor (Error?) -> Void = { error in
+        completion(
+          error == nil ? nil : PanelsL10n.string("Could not update the Library. Try again."))
+      }
       switch mutation {
       case .bookmark(let operation):
         self.events.applyBookmarkOperation(
@@ -404,6 +431,9 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolvePrint(id, windowID: self.windowID, accepted: accepted)
     }
+    store.onJavaScriptDialogDecision = { [weak self] id, accepted, input in
+      self?.events.resolveJavaScriptDialog(id, accepted: accepted, input: input)
+    }
     callbacks.onDesktopCaptureRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard let request = DesktopCaptureRequest(payload: payload),
@@ -444,6 +474,23 @@ final class BrowserEngine {
         return
       }
     }
+    callbacks.onJavaScriptDialogRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String,
+        let request = JavaScriptDialogRequest(payload: payload), let store = self.store
+      else {
+        if let id = payload["id"] as? String {
+          self?.runtime.resolveJavaScriptDialogRequestID(id, accepted: false, input: nil)
+        }
+        return
+      }
+      guard store.requestJavaScriptDialog(request) else {
+        self.runtime.resolveJavaScriptDialogRequestID(id, accepted: false, input: nil)
+        return
+      }
+    }
+    callbacks.onJavaScriptDialogDismissed = { [weak store] id in
+      store?.dismissJavaScriptDialog(id)
+    }
     callbacks.onWebsiteMediaRequest = { [weak self] payload in
       self?.requestWebsitePermission(payload)
     }
@@ -462,12 +509,28 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveExternalApp(id, windowID: self.windowID, accepted: accepted)
     }
-    store.onDeviceChooserDecision = { [weak self] request, index in
-      self?.settleDeviceChooser(request, optionIndex: index)
+    store.onDeviceChooserDecision = { [weak self] request, optionID in
+      self?.settleDeviceChooser(request, optionID: optionID)
+    }
+    store.onHTTPAuthDecision = { [weak self] request, username, password in
+      self?.events.resolveHTTPAuth(request, username: username, password: password)
     }
     callbacks.onDeviceChooserEvent = { [weak self] payload in
       self?.receiveDeviceChooser(payload)
     }
+    callbacks.onHTTPAuthRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let request = HTTPAuthRequest(payload: payload),
+        let store = self.store, store.requestHTTPAuth(request)
+      else {
+        if let tabID = payload["tabID"] as? String {
+          self.events.rejectHTTPAuth(id, tabID: tabID,
+                                     windowID: payload["windowID"] as? String ?? "")
+        }
+        return
+      }
+    }
+    callbacks.onHTTPAuthDismissed = { [weak store] id in store?.dismissHTTPAuth(id) }
     callbacks.onExternalAppRequest = { [weak self] payload in self?.requestExternalApp(payload) }
     callbacks.onExternalAppDismissed = { [weak self] id in
       self?.store?.resolveExternalApp(id, accepted: false)
@@ -501,15 +564,13 @@ final class BrowserEngine {
     }
     store.onInstallDecision = { [weak self] id, accepted in
       guard let self else { return }
-        self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
-        if accepted {
-          Task { [weak self] in
-            for delay in Self.extensionInstallRefreshDelaysMilliseconds {
-              do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
-              guard let self else { return }
-            self.refreshExtensions()
-            ExtensionManagerModel.refreshInstalled()
-          }
+      self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
+      if accepted {
+        self.scheduleDelayedRefreshes(after: Self.extensionInstallRefreshDelaysMilliseconds) {
+          [weak self] in
+          guard let self else { return }
+          self.refreshExtensions()
+          ExtensionManagerModel.refreshInstalled()
         }
       }
     }
@@ -588,8 +649,10 @@ final class BrowserEngine {
         self.events.router.tabOwnerWindowID(for: identity) == nil,
         let id = UUID(uuidString: identity)
       else { return }
+      self.store?.dismissHTTPAuth(forTabID: id)
       if self.tabsAwaitingProfileReassignment.remove(id) != nil {
         self.pages[id] = nil
+        self.cancelDevelopmentProbe(tabID: id)
         DispatchQueue.main.async { [weak self] in self?.reconcile() }
         return
       }
@@ -605,6 +668,8 @@ final class BrowserEngine {
       self.developmentPages[id] = nil
       self.developmentPageURLs[id] = nil
       self.developmentProbedURLs[id] = nil
+      self.developmentProbeRequests[id] = nil
+      self.cancelDevelopmentProbe(tabID: id)
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
       self.clearFavicon(id)
@@ -762,7 +827,7 @@ final class BrowserEngine {
       events.router.forgetTab(id.uuidString, windowID: windowID)
       liveTabs.remove(id)
       failedTabs.insert(id)
-      notice = error.localizedDescription
+      notice = ShellL10n.string("This tab could not be opened. Try reloading it.")
     }
   }
 
@@ -841,6 +906,8 @@ final class BrowserEngine {
       developmentPages[removed] = nil
       developmentPageURLs[removed] = nil
       developmentProbedURLs[removed] = nil
+      developmentProbeRequests[removed] = nil
+      cancelDevelopmentProbe(tabID: removed)
       mediaAccess[removed] = nil
       forgetMedia(removed)
       clearFavicon(removed)
@@ -892,7 +959,7 @@ final class BrowserEngine {
           events.router.forgetTab(tab.id.uuidString, windowID: windowID)
           liveTabs.remove(tab.id)
           failedTabs.insert(tab.id)
-          notice = error.localizedDescription
+          notice = ShellL10n.string("This tab could not be opened. Try reloading it.")
         }
       }
     }
@@ -923,7 +990,7 @@ final class BrowserEngine {
         events.router.forgetTab(page.tab.id.uuidString, windowID: windowID)
         liveTabs.remove(page.tab.id)
         failedTabs.insert(page.tab.id)
-        notice = error.localizedDescription
+        notice = ShellL10n.string("This tab could not be opened. Try reloading it.")
       }
     }
     for profile in loadedProfiles {
@@ -935,7 +1002,7 @@ final class BrowserEngine {
         else { return nil }
         return page.tab
       }
-      let ordered = tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned } + favoriteTabs
+      let ordered = Self.orderedTabs(tabs, favorites: favoriteTabs)
       let positions = ordered.map { NativeTabPlacement(id: $0.id, pinned: $0.isPinned) }
       if lastTabOrders[profile] != positions,
         runtime.placeTabIDs(
@@ -957,6 +1024,13 @@ final class BrowserEngine {
     }
     if waitingToHidePlayingVideo { return }
     activateReconciledSelection()
+  }
+
+  static func orderedTabs(_ tabs: [BrowserTab], favorites: [BrowserTab]) -> [BrowserTab] {
+    let partition = tabs.reduce(into: (pinned: [BrowserTab](), unpinned: [BrowserTab]())) {
+      if $1.isPinned { $0.pinned.append($1) } else { $0.unpinned.append($1) }
+    }
+    return partition.pinned + partition.unpinned + favorites
   }
 
   /// Selects the current page. Picture-in-picture may defer this until the page
@@ -1017,36 +1091,66 @@ final class BrowserEngine {
   private func finishLoadingProfile(_ profile: UUID, error: Error?) async {
     loadingProfiles.remove(profile)
     guard !isClosed else { return }
-    if let error {
+    if error != nil {
       failedProfiles.insert(profile)
-      notice = error.localizedDescription
+      notice = ShellL10n.string("Could not load this profile. Try again.")
     } else {
       do {
         if let directory = store?.preferences.downloadDirectory(for: profile),
           let downloadDirectoryApplier
         {
-          guard let acknowledged = try await downloadDirectoryApplier(profile, directory) else {
-            throw CocoaError(.fileWriteUnknown)
+          do {
+            let acknowledged = try await downloadDirectoryApplier(profile, directory)
+            if store?.preferences.downloadDirectory(for: profile) == directory {
+              guard let acknowledged else { throw CocoaError(.fileWriteUnknown) }
+              recordDownloadDirectoryAcknowledgement(
+                acknowledged, requested: directory, for: profile)
+            }
+          } catch {
+            if store?.preferences.downloadDirectory(for: profile) == directory { throw error }
           }
-          store?.preferences.setDownloadDirectory(acknowledged, for: profile)
         }
         loadedProfiles.insert(profile)
         store?.library.refresh(profile, section: .bookmarks)
         store?.library.refresh(profile, section: .history)
-        Task { [weak self] in
-          // Download history initializes asynchronously and can return an empty early list.
-          for delay in [300, 700, 2000] {
-            try? await Task.sleep(for: .milliseconds(delay))
-            guard let self, !self.isClosed else { return }
-            self.runtime.refreshDownloads(forProfileID: profile.uuidString)
-          }
+        // Download history initializes asynchronously and can return an empty early list.
+        scheduleDelayedRefreshes(after: [300, 700, 2_000]) { [weak self] in
+          guard let self else { return }
+          self.runtime.refreshDownloads(forProfileID: profile.uuidString)
         }
       } catch {
         failedProfiles.insert(profile)
-        notice = error.localizedDescription
+        notice = ShellL10n.string("Could not load this profile. Try again.")
       }
     }
     DispatchQueue.main.async { [weak self] in self?.reconcile() }
+  }
+
+  var pendingDelayedRefreshTaskCount: Int { delayedRefreshTasks.count }
+
+  func scheduleDelayedRefreshes(
+    after delays: [Int], action: @escaping @MainActor () -> Void
+  ) {
+    let id = UUID()
+    delayedRefreshTasks[id] = Task { @MainActor [weak self] in
+      defer { self?.delayedRefreshTasks[id] = nil }
+      for delay in delays {
+        do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
+        guard let self, !self.isClosed else { return }
+        action()
+      }
+    }
+  }
+
+  private func cancelDelayedRefreshes() {
+    let tasks = Array(delayedRefreshTasks.values)
+    delayedRefreshTasks.removeAll()
+    tasks.forEach { $0.cancel() }
+  }
+
+  func recordDownloadDirectoryAcknowledgement(_ acknowledged: URL, requested: URL, for profile: UUID) {
+    guard store?.preferences.downloadDirectory(for: profile) == requested else { return }
+    store?.preferences.setDownloadDirectory(acknowledged, for: profile)
   }
 
   func refreshExtensions() {
@@ -1120,7 +1224,7 @@ final class BrowserEngine {
     guard let tab = store?.session.selectedPage?.tab.id else { return }
     extensionPanel = nil
     do { try runtime.executeExtensionID(id, tabID: tab.uuidString) } catch {
-      notice = error.localizedDescription
+      notice = PanelsL10n.string("Could not run the extension. Try again.")
     }
   }
 

@@ -11,6 +11,7 @@ import re
 import subprocess
 
 LABEL = "code-scanning"
+GH_API_TIMEOUT_SECONDS = 30
 TITLE_MARKER = re.compile(r"^\[code-scanning #(\d+)\] ")
 
 
@@ -18,14 +19,21 @@ def gh(*args: str, payload: dict | None = None) -> dict | list:
     command = ["gh", "api", *args]
     if payload is not None:
         command += ["--input", "-"]
-    output = subprocess.check_output(command, text=True, input=json.dumps(payload) if payload else None)
+    output = subprocess.check_output(command, text=True, input=json.dumps(payload) if payload else None,
+                                     timeout=GH_API_TIMEOUT_SECONDS)
     return json.loads(output) if output.strip() else {}
 
 
 def paged(path: str) -> list[dict]:
     items, page = [], 1
     while True:
-        batch = gh(f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}")
+        page_path = f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}"
+        batch = gh(page_path)
+        if not isinstance(batch, list):
+            raise ValueError(f"GitHub API returned a non-list response for {page_path}")
+        for index, item in enumerate(batch):
+            if not isinstance(item, dict):
+                raise ValueError(f"GitHub API returned a non-object entry {index} for {page_path}")
         items.extend(batch)
         if len(batch) < 100:
             return items

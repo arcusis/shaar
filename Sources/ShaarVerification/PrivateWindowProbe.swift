@@ -43,6 +43,7 @@ final class PrivateWindowProbe {
   private var privateContexts: [String] = []
   private var expectedPrivateCallbackOwners: [String: String] = [:]
   private var privateChangedTabs: Set<String> = []
+  private var privateLoadingStates: [String: Bool] = [:]
   private var privateSelectedTabs: Set<String> = []
   private var privateClosedTabs: Set<String> = []
   private var privateClosedWindows: Set<String> = []
@@ -81,6 +82,8 @@ final class PrivateWindowProbe {
     "lastCloseReopenClearsPrivateData", "normalSelectionUnchanged", "staleContextRejected",
     "closedWindowRejected", "cleanupChildrenClosed", "cleanupContextsRetired",
     "productHostOwnsPrivateNativeWindow", "productCommandTUsesPrivateOpaqueSearch",
+    "productPrivateHostRemainsAttachedAcrossTabs",
+    "productPrivateHostRemainsAttachedAfterTabClose",
     "productAlphabetSearchDoesNotOpenPicker", "productFirstPrivateTabRenders",
     "productSecondPrivateTabRenders", "productThirdPrivateTabRenders",
     "productPrivateWindowCloseLeavesNoData",
@@ -619,9 +622,10 @@ final class PrivateWindowProbe {
     previousPrivateTabSelected = runtime.onPrivateTabSelected
     previousPrivateTabClosed = runtime.onPrivateTabClosed
     previousPrivateWindowClosed = runtime.onPrivateWindowClosed
-    runtime.onPrivateTabChanged = { context, window, tab, _, _, _, _, _ in
+    runtime.onPrivateTabChanged = { context, window, tab, _, _, loading, _, _ in
       if self.expectedPrivateCallbackOwners[tab] == "\(context)|\(window)" {
         self.privateChangedTabs.insert(tab)
+        self.privateLoadingStates[tab] = loading
       }
     }
     runtime.onPrivateTabSelected = { context, window, tab in
@@ -690,13 +694,48 @@ final class PrivateWindowProbe {
       try await waitForPrivateReload(
         tab, path: second.path, priorInstance: priorInstance)
     else { return false }
-    guard runtime.goBackPrivateTabID(tab, windowID: window, contextID: context),
-      try await waitForPrivatePath(tab, firstPath: first.path)
+
+    let slow = fixture.appending(path: "private-window-\(marker)-slow")
+    privateLoadingStates[tab] = false
+    guard runtime.navigatePrivateTabID(
+      tab, windowID: window, contextID: context, url: slow.absoluteString),
+      try await waitForPrivateLoading(tab, loading: true)
     else { return false }
-    guard runtime.goForwardPrivateTabID(tab, windowID: window, contextID: context),
+    guard runtime.reloadPrivateTabID(tab, windowID: window, contextID: context),
+      try await waitForPrivateRepeatedRequest(tab, path: slow.path)
+    else { return false }
+
+    guard runtime.goBackPrivateTabID(tab, windowID: window, contextID: context),
       try await waitForPrivatePath(tab, firstPath: second.path)
     else { return false }
+    guard runtime.goForwardPrivateTabID(tab, windowID: window, contextID: context),
+      try await waitForPrivatePath(tab, firstPath: slow.path)
+    else { return false }
     return true
+  }
+
+  private func waitForPrivateLoading(_ tab: String, loading: Bool) async throws -> Bool {
+    for _ in 0..<100 {
+      if privateLoadingStates[tab] == loading { return true }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    return false
+  }
+
+  private func waitForPrivateRepeatedRequest(_ tab: String, path: String) async throws -> Bool {
+    for _ in 0..<100 {
+      if let value = try? await readPrivate(tab),
+        value["path"] as? String == path,
+        value["fixture"] as? String == "v1",
+        let instance = value["instance"] as? String,
+        UUID(uuidString: instance) != nil,
+        Self.privateNavigationRequestWasRepeated(value["privateRequest"])
+      {
+        return true
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    return false
   }
 
   private func waitForPrivatePath(_ tab: String, firstPath path: String) async throws -> Bool {
@@ -744,7 +783,7 @@ final class PrivateWindowProbe {
       runtime.evaluatePrivateProbeTabID(
         tab,
         script:
-          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:(()=>{try{return localStorage.getItem('private')}catch{return null}})(), session:(()=>{try{return sessionStorage.getItem('private')}catch{return null}})(), path:location.pathname, instance:window.arcusisInstance})"
+          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:(()=>{try{return localStorage.getItem('private')}catch{return null}})(), session:(()=>{try{return sessionStorage.getItem('private')}catch{return null}})(), path:location.pathname, instance:window.arcusisInstance, privateRequest:document.documentElement.dataset.privateRequest||''})"
       ) { continuation.resume(returning: $0) }
     }
     guard let json, let data = json.data(using: .utf8) else {
@@ -931,6 +970,22 @@ final class PrivateWindowProbe {
     } ?? []
   }
 
+  static func evidencePassed(
+    checks: [String: Bool], expectedFailures: [String: String]
+  ) -> Bool {
+    !checkNames.isEmpty && checkNames.allSatisfy { name in
+      if checks[name] == true { return true }
+      return name == "productSecondPrivateTabRenders"
+        && checks[name] == false
+        && expectedFailures[name] == "Issue #417: second private tab may display a black page."
+    }
+  }
+
+  static func privateNavigationRequestWasRepeated(_ value: Any?) -> Bool {
+    guard let request = value as? String, let count = Int(request) else { return false }
+    return count >= 2
+  }
+
   private func normalSelectionRetained() -> Bool {
     let after = runtime.normalProbeSelectionAudit(forTabID: normalTab)
     let beforeSelected = normalSelectionBefore["selectedNativeTab"] as? Bool == true
@@ -1018,13 +1073,7 @@ final class PrivateWindowProbe {
   }
 
   private var requiredChecksPassed: Bool {
-    Self.checkNames.allSatisfy { name in
-      if checks[name] == true { return true }
-      return name == "productSecondPrivateTabRenders"
-        && checks[name] == false
-        && expectedPrivateFailures[name]
-          == "Issue #417: second private tab may display a black page."
-    }
+    Self.evidencePassed(checks: checks, expectedFailures: expectedPrivateFailures)
   }
 }
 

@@ -3,9 +3,19 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
+
+@Test func libraryFooterProgressLabelIsLocalized() {
+  #expect(LibraryPanelFooterAccessibility.footerProgressLabel(language: .english) == "Updating Library…")
+  #expect(LibraryPanelFooterAccessibility.footerProgressLabel(language: .hebrew) == "הספרייה מתעדכנת…")
+}
+
+@Test @MainActor func libraryPanelTitleIsAHeading() {
+  #expect(LibraryPanel.titleAccessibilityTraits.contains(.isHeader))
+}
 
 @Test func bookmarkFolderStateUsesTheSelectedLanguage() {
   #expect(
@@ -28,4 +38,9 @@ import Testing
     LibraryHistoryAccessibility.removeLabel(
       title: "Home", address: "https://first.test", language: .hebrew)
       == "הסרת \u{2068}Home\u{2069} בכתובת \u{2068}https://first.test\u{2069} מההיסטוריה")
+}
+
+@Test func libraryLoadingLabelIsLocalized() {
+  #expect(LibraryPanelAccessibility.loadingLabel(language: .english) == "Loading library")
+  #expect(LibraryPanelAccessibility.loadingLabel(language: .hebrew) == "הספרייה בטעינה")
 }

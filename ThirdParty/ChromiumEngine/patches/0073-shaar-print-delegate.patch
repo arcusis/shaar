@@ -1,0 +1,75 @@
+diff --git a/chrome/browser/printing/print_view_manager.cc b/chrome/browser/printing/print_view_manager.cc
+index 25f1aa604a..f1ba21ec31 100644
+--- a/chrome/browser/printing/print_view_manager.cc
++++ b/chrome/browser/printing/print_view_manager.cc
+@@ -20,6 +20,9 @@
+ #include "chrome/browser/printing/print_preview_dialog_controller.h"
+ #include "chrome/browser/printing/printer_query.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/shaar/printing/shaar_print.h"
++#endif
+ #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/device_event_log/device_event_log.h"
+@@ -576,6 +579,21 @@ void PrintViewManager::OnScriptedPrintPreviewCallback(
+     }
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  rfh = content::RenderFrameHost::FromID(rfh_id);
++  if (shaar::printing::IsActive()) {
++    if (!rfh || rfh != print_preview_rfh_ || !rfh->IsActive()) {
++      OnPrintPreviewRequestRejected(rfh_id);
++      return;
++    }
++    shaar::printing::Request(
++        web_contents(), rfh,
++        base::BindOnce(&PrintViewManager::OnShaarPrintDecision,
++                       weak_factory_.GetWeakPtr(), rfh_id));
++    return;
++  }
++#endif
++
+   auto* dialog_controller = PrintPreviewDialogController::GetInstance();
+   CHECK(dialog_controller);
+   mojom::RequestPrintPreviewParams params;
+@@ -587,6 +605,23 @@ void PrintViewManager::OnScriptedPrintPreviewCallback(
+   PrintPreviewAllowedForTesting();
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++void PrintViewManager::OnShaarPrintDecision(
++    content::GlobalRenderFrameHostId rfh_id,
++    bool accepted) {
++  if (print_preview_state_ != SCRIPTED_PREVIEW)
++    return;
++  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(rfh_id);
++  if (!accepted || !rfh || rfh != print_preview_rfh_ || !rfh->IsActive()) {
++    OnPrintPreviewRequestRejected(rfh_id);
++    return;
++  }
++
++  if (!PrintForSystemDialogNow(base::BindOnce([] {})))
++    OnPrintPreviewRequestRejected(rfh_id);
++}
++#endif
++
+ void PrintViewManager::RequestPrintPreview(
+     mojom::RequestPrintPreviewParamsPtr params) {
+   content::RenderFrameHost& rfh = CurrentTargetFrame();
+diff --git a/chrome/browser/printing/print_view_manager.h b/chrome/browser/printing/print_view_manager.h
+index fa223e1add..3b7fb0d423 100644
+--- a/chrome/browser/printing/print_view_manager.h
++++ b/chrome/browser/printing/print_view_manager.h
+@@ -129,6 +129,10 @@ class PrintViewManager : public PrintViewManagerBase,
+   // `should_proceed`, continues to show the print preview or cancels it.
+   void OnScriptedPrintPreviewCallback(content::GlobalRenderFrameHostId rfh_id,
+                                       bool should_proceed);
++#if BUILDFLAG(IS_MAC)
++  void OnShaarPrintDecision(content::GlobalRenderFrameHostId rfh_id,
++                            bool accepted);
++#endif
+ 
+   // Helper method for RequestPrintPreview(), called from
+   // RejectPrintPreviewRequestIfRestricted(). Based on value of

@@ -11,6 +11,12 @@ import XCTest
 
 @MainActor
 final class LibrarySpacesOverviewTests: XCTestCase {
+  func testSpaceSelectionAccessibilityTraitTracksSelection() {
+    XCTAssertTrue(LibrarySpacesOverview.spaceSelectionTraits(isSelected: true).contains(.isSelected))
+    XCTAssertFalse(
+      LibrarySpacesOverview.spaceSelectionTraits(isSelected: false).contains(.isSelected))
+  }
+
   func testFolderSearchPathBenchmark() throws {
     let profile = BrowserProfile(name: "Scale")
     let folders = (0..<300).map { index in
@@ -34,6 +40,38 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     }
     print("folderSearchPathBenchmark: \(start.duration(to: .now))")
     XCTAssertEqual(count, 10)
+  }
+
+  func testFolderPathLookupPreservesMatchingAncestry() throws {
+    let profile = BrowserProfile(name: "Daily")
+    let folderIDs = (0..<150).map { _ in UUID() }
+    let folders = folderIDs.enumerated().map { index, id in
+      BrowserFolder(
+        id: id, name: "Folder \(index)", parentID: index == 0 ? nil : folderIDs[index - 1],
+        isPinned: false)
+    }
+    let tabs = (0..<500).map { index in
+      BrowserTab(
+        url: URL(string: "https://example.com/\(index)")!, title: "Needle page \(index)",
+        isPinned: false, folderID: folderIDs[index % folderIDs.count])
+    }
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Work", symbol: "tray", tint: .ocean,
+      tabs: tabs, folders: folders)
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+    let start = ContinuousClock.now
+    for _ in 0..<10 {
+      _ = LibrarySpacesOverviewModel.cards(in: session, query: "Folder 149")
+    }
+    print("librarySpacesFolderPathBenchmark: \(start.duration(to: .now))")
+
+    let card = try XCTUnwrap(LibrarySpacesOverviewModel.cards(in: session, query: "Folder 149").first)
+    let expectedItemIDs = Set(
+      folderIDs.map { "folder-\($0)" }
+        + [149, 299, 449].map { "tab-\(tabs[$0].id)" })
+    XCTAssertEqual(Set(card.items.map(\.id)), expectedItemIDs)
   }
 
   func testTodayFoldersAndNestedTabsAppearInSpaceCard() throws {
@@ -123,6 +161,20 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     XCTAssertEqual(
       LibrarySpacesOverviewModel.cards(in: session, query: "Projects").first?.items.map(\.id),
       expected)
+  }
+
+  func testTabAccessibilityLabelFallsBackForWhitespaceOnlyTitles() {
+    let address = "https://example.com/page"
+    XCTAssertEqual(
+      LibrarySpaceItemsAccessibility.tabLabel(title: "", address: address),
+      address)
+    XCTAssertEqual(
+      LibrarySpaceItemsAccessibility.tabLabel(title: " \n\t", address: address),
+      address)
+    XCTAssertEqual(LibrarySpaceItemsAccessibility.tabLabel(title: address, address: address), address)
+    XCTAssertEqual(
+      LibrarySpaceItemsAccessibility.tabLabel(title: " Article ", address: address),
+      " Article , \(address)")
   }
 
   func testSearchRetainsNestedFolderContextForMatchingTabOrParentFolder() throws {

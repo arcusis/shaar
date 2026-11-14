@@ -21,6 +21,13 @@ struct InspectorScreenshotCache {
     let manager = FileManager.default
     try manager.createDirectory(
       at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    let directoryValues = try directory.resourceValues(forKeys: [
+      .isDirectoryKey, .isSymbolicLinkKey,
+    ])
+    guard directoryValues.isDirectory == true, directoryValues.isSymbolicLink != true else {
+      throw CocoaError(.fileWriteNoPermission)
+    }
+    try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     let cutoff = now.addingTimeInterval(-7 * 24 * 60 * 60)
     for file in try manager.contentsOfDirectory(
       at: directory,

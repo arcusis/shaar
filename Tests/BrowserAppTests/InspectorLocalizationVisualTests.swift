@@ -155,6 +155,7 @@ final class InspectorLocalizationVisualTests: XCTestCase {
       for key in [
         "Copy for AI", "Notes", "Intent", "Change", "Question", "Important",
         "Copy all for AI", "Delete note",
+        "Working…",
       ] {
         XCTAssertNotEqual(InspectorL10n.string(key), key, "Translated Inspector copy/notes: \(key)")
       }

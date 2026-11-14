@@ -15,8 +15,9 @@ final class SidebarRevealFramesTests: XCTestCase {
       selected: CGRect(x: 1, y: 2, width: 30, height: 20), selectedID: selectedID,
       viewport: CGRect(x: 0, y: 0, width: 300, height: 400))
 
-    frames.merge(SidebarRevealFrames(
-      selected: CGRect(x: 5, y: 6, width: 40, height: 25), selectedID: replacementID))
+    frames.merge(
+      SidebarRevealFrames(
+        selected: CGRect(x: 5, y: 6, width: 40, height: 25), selectedID: replacementID))
 
     XCTAssertEqual(frames.selected, CGRect(x: 5, y: 6, width: 40, height: 25))
     XCTAssertEqual(frames.selectedID, replacementID)

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/shaar/media/shaar_media.h"
 #include "chrome/browser/shaar/media/shaar_media_permission.h"
+#include "chrome/browser/shaar/media/shaar_desktop_capture.h"
 
 #include <algorithm>
 #include <cmath>
@@ -346,6 +347,25 @@ public:
       shaar_tab *tab, shaar_operation operation, shaar_bytes args_json,
       shaar_request_id request_id, shaar_reply_fn reply, void *reply_context,
       shaar_error *error) override {
+    if (operation == SHAAR_OP_MEDIA_CAPTURE_REPLY) {
+      auto args = ParseArguments(args_json);
+      const std::string *prompt_id =
+          args ? args->FindString("promptID") : nullptr;
+      const std::string *decision =
+          args ? args->FindString("decision") : nullptr;
+      const std::string *source_token =
+          args ? args->FindString("sourceToken") : nullptr;
+      if (!prompt_id || !decision || !source_token || !reply || !request_id)
+        return Fail(error, SHAAR_INVALID_ARGUMENT,
+                    "capture reply is missing required fields");
+      const shaar_error_code result = shaar::desktop_capture::Resolve(
+          engine, window, tab, *prompt_id, *decision, *source_token);
+      if (result != SHAAR_OK)
+        return Fail(error, result, "capture prompt is stale or invalid");
+      Reply(ReplyContext{request_id, reply, reply_context},
+            base::DictValue().Set("schemaVersion", 1));
+      return SHAAR_OK;
+    }
     if (operation != SHAAR_OP_MEDIA_SET_AUTO_PIP)
       return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "media capture controls are not connected");
@@ -591,15 +611,13 @@ class MediaTracker final : public content::WebContentsObserver {
 
   void MediaStartedPlaying(const MediaPlayerInfo&,
                            const content::MediaPlayerId&) override {
-    if (!timer_.IsRunning()) {
-      timer_.Start(FROM_HERE, base::Milliseconds(500), this,
-                   &MediaTracker::Refresh);
-    }
+    timer_.Stop();
     Refresh();
   }
 
   void MediaStoppedPlaying(const MediaPlayerInfo&, const content::MediaPlayerId&,
                            MediaStoppedReason) override {
+    timer_.Stop();
     Refresh();
   }
 
@@ -693,6 +711,15 @@ class MediaTracker final : public content::WebContentsObserver {
       timer_.Stop();
     } else {
       element_states[contents_] = std::move(best_state_);
+      // Observer callbacks handle play/pause promptly. Back off while paused,
+      // and schedule the next sample after this one has completed so slow
+      // renderers cannot accumulate UI-thread work.
+      const std::string* playback =
+          element_states[contents_].FindString("playbackState");
+      timer_.Start(FROM_HERE,
+                   playback && *playback == "playing" ? base::Seconds(2)
+                                                       : base::Seconds(10),
+                   this, &MediaTracker::Refresh);
     }
     EmitChangedState();
   }
@@ -733,7 +760,7 @@ class MediaTracker final : public content::WebContentsObserver {
   shaar_engine* engine_;
   content::WebContents* contents_;
   std::string profile_id_, session_id_, window_id_, tab_id_;
-  base::RepeatingTimer timer_;
+  base::OneShotTimer timer_;
   int pending_ = 0;
   double best_score_ = -1;
   base::DictValue best_state_;

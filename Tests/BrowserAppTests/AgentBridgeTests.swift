@@ -12,6 +12,81 @@ import XCTest
 
 @MainActor
 final class AgentBridgeTests: XCTestCase {
+  func testOlderStatusRefreshCannotReplaceTheLatestReply() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    var replies: [AgentBridgeModel.Reply] = []
+    let model = AgentBridgeModel(target: target) { operation, _, reply in
+      if operation == .status { replies.append(reply) }
+    }
+
+    model.refresh()
+    model.refresh()
+    replies[1](
+      [
+        "schemaVersion": 1, "enabled": true, "port": 9222,
+        "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id", "connectionCount": 1,
+      ], nil)
+    replies[0](["schemaVersion": 1, "enabled": false, "port": 0, "connectionCount": 0], nil)
+
+    XCTAssertTrue(model.status.enabled)
+    XCTAssertTrue(model.isConnected)
+  }
+
+  func testAgentBridgeSectionTitlesAreVoiceOverHeadings() {
+    XCTAssertEqual(AgentBridgeAccessibility.headingTraits, .isHeader)
+  }
+
+  func testAgentBridgeExplainsThatItNeedsAWebPage() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(fileURLWithPath: "/tmp/example.html"))
+    let model = AgentBridgeModel(target: target) { _, _, _ in
+      XCTFail("A non-web target must not call the Agent Bridge")
+    }
+
+    model.enable()
+
+    XCTAssertEqual(model.failure, ShellL10n.string("Agent control requires a web page."))
+  }
+
+  func testBackendFailuresUseLocalizedRecoveryCopy() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    let backendError = NSError(
+      domain: "AgentBridgeTests", code: 9,
+      userInfo: [NSLocalizedDescriptionKey: "Raw English agent bridge error."])
+    let expected = ShellL10n.string("The Agent Bridge request failed. Try again.")
+
+    let statusModel = AgentBridgeModel(target: target) { _, _, reply in
+      reply(nil, backendError)
+    }
+    statusModel.refresh()
+    XCTAssertEqual(statusModel.failure, expected)
+
+    let enableModel = AgentBridgeModel(target: target) { _, _, reply in
+      reply(nil, backendError)
+    }
+    enableModel.enable()
+    XCTAssertEqual(enableModel.failure, expected)
+
+    let disconnectModel = AgentBridgeModel(target: target) { operation, _, reply in
+      if operation == .enable {
+        reply(
+          [
+            "schemaVersion": 1, "enabled": true, "port": 9222,
+            "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
+            "connectionCount": 0, "token": String(repeating: "a", count: 43),
+          ], nil)
+      } else {
+        reply(nil, backendError)
+      }
+    }
+    disconnectModel.enable()
+    disconnectModel.disable()
+    XCTAssertEqual(disconnectModel.failure, expected)
+    XCTAssertTrue(disconnectModel.revocationUnconfirmed)
+  }
+
   func testStatusRejectsSecretsAndInvalidPorts() throws {
     XCTAssertThrowsError(
       try AgentBridgeStatus.decode([
@@ -32,6 +107,21 @@ final class AgentBridgeTests: XCTestCase {
       try AgentBridgeStatus.decode([
         "schemaVersion": 1, "enabled": false, "port": 9222,
         "connectionCount": 1,
+      ]))
+  }
+
+  func testStatusRejectsNestedAndTraversalWebSocketPaths() {
+    for path in ["/devtools/browser/../json/version", "/devtools/browser/id/extra"] {
+      XCTAssertThrowsError(
+        try AgentBridgeStatus.decode([
+          "schemaVersion": 1, "enabled": true, "port": 9222,
+          "wsEndpoint": "ws://127.0.0.1:9222\(path)", "connectionCount": 1,
+        ]))
+    }
+    XCTAssertNoThrow(
+      try AgentBridgeStatus.decode([
+        "schemaVersion": 1, "enabled": true, "port": 9222,
+        "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id_123-abc", "connectionCount": 1,
       ]))
   }
 
@@ -133,6 +223,28 @@ final class AgentBridgeTests: XCTestCase {
     XCTAssertFalse(model.hasOneTimeToken)
   }
 
+  func testOlderStatusRefreshCannotOverwriteTheLatestReply() {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    var replies: [AgentBridgeModel.Reply] = []
+    let model = AgentBridgeModel(target: target) { operation, _, reply in
+      if operation == .status { replies.append(reply) }
+    }
+
+    model.refresh()
+    model.refresh()
+    replies[1](
+      [
+        "schemaVersion": 1, "enabled": true, "port": 9222,
+        "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id", "connectionCount": 2,
+      ], nil)
+    replies[0](
+      ["schemaVersion": 1, "enabled": false, "connectionCount": 0], nil)
+
+    XCTAssertTrue(model.status.enabled)
+    XCTAssertEqual(model.status.connectionCount, 2)
+  }
+
   func testFailedDisconnectKeepsWarningUntilConfirmed() {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
@@ -157,6 +269,40 @@ final class AgentBridgeTests: XCTestCase {
     XCTAssertTrue(model.needsBanner)
     model.disable()
     disableReply?(["schemaVersion": 1], nil)
+    XCTAssertFalse(model.needsBanner)
+  }
+
+  func testOlderRevocationFailureCannotClearNewerPendingRevocation() {
+    let first = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
+    var disableReplies: [AgentBridgeModel.Reply] = []
+    let model = AgentBridgeModel(target: first) { operation, _, reply in
+      if operation == .enable {
+        reply(
+          [
+            "schemaVersion": 1, "enabled": true, "port": 9222,
+            "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
+            "connectionCount": 1, "token": String(repeating: "a", count: 43),
+          ], nil)
+      } else if operation == .disable {
+        disableReplies.append(reply)
+      }
+    }
+
+    model.enable()
+    model.disable()
+    model.update(
+      target: SiteControlTarget(
+        tabID: first.tabID, profileID: first.profileID,
+        url: URL(string: "https://other.test/")!), committed: true)
+    XCTAssertEqual(disableReplies.count, 2)
+
+    disableReplies[0](nil, AgentBridgeFailure.invalidReply)
+    XCTAssertTrue(model.busy)
+    XCTAssertTrue(model.revocationUnconfirmed)
+    XCTAssertNil(model.failure)
+
+    disableReplies[1](["schemaVersion": 1], nil)
     XCTAssertFalse(model.needsBanner)
   }
 

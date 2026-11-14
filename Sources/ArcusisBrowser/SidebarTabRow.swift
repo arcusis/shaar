@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import SwiftUI
 
 /// How a sidebar tab title is measured. The close control stays in the row for focus,
@@ -23,10 +24,30 @@ enum SidebarTabTitle {
     painted.range(of: #"Shaar DevTools\b"#, options: [.regularExpression, .caseInsensitive]) != nil
   }
 
-  static func accessibilityLabel(title: String, isSleeping: Bool) -> String {
-    guard isSleeping else { return title }
-    return ShellL10n.format(
-      "%@, %@", arguments: [.string(title), .string(ShellL10n.string("Sleeping"))])
+  static func accessibilityLabel(
+    title: String, address: String, isSleeping: Bool, isPinned: Bool = false,
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    var label = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? address : title
+    let states = [
+      isPinned ? BrowserLocalization.string("Pinned", table: "Shell", language: language) : nil,
+      isSleeping ? BrowserLocalization.string("Sleeping", table: "Shell", language: language) : nil,
+    ]
+    for state in states.compactMap({ $0 }) {
+      label = BrowserLocalization.format(
+        "%@, %@", table: "Shell", language: language,
+        arguments: [.string(label), .string(state)])
+    }
+    return label
+  }
+
+  static func closeAccessibilityLabel(
+    title: String, address: String,
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    let label = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? address : title
+    return BrowserLocalization.format(
+      "Close %@", table: "Shell", language: language, arguments: [.string(label)])
   }
 }
 
@@ -38,6 +59,7 @@ struct SidebarTabRow: View {
 
   let tabID: UUID
   let title: String
+  let address: String
   let favicon: NSImage?
   let isPinned: Bool
   let isSelected: Bool
@@ -90,7 +112,9 @@ struct SidebarTabRow: View {
     .buttonStyle(.plain)
     .frame(maxWidth: .infinity, alignment: .leading)
     .focused($focusedControl, equals: .select)
-    .accessibilityLabel(SidebarTabTitle.accessibilityLabel(title: title, isSleeping: isSleeping))
+    .accessibilityLabel(
+      SidebarTabTitle.accessibilityLabel(
+        title: title, address: address, isSleeping: isSleeping, isPinned: isPinned))
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .accessibilityAction(named: ShellL10n.text("Close tab"), onClose)
     .accessibilityIdentifier("sidebar-tab-select-\(tabID.uuidString)")
@@ -120,8 +144,9 @@ struct SidebarTabRow: View {
     .opacity(showsClose ? 1 : 0)
     .allowsHitTesting(showsClose)
     .accessibilityHidden(!showsClose)
-    .accessibilityLabel(ShellL10n.format("Close %@", arguments: [.string(title)]))
-    .help(ShellL10n.format("Close %@", arguments: [.string(title)]))
+    .accessibilityLabel(
+      SidebarTabTitle.closeAccessibilityLabel(title: title, address: address))
+    .help(SidebarTabTitle.closeAccessibilityLabel(title: title, address: address))
     .accessibilityIdentifier("sidebar-tab-close-\(tabID.uuidString)")
   }
 }

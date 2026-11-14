@@ -7,15 +7,20 @@ import BrowserCore
 import SwiftUI
 
 public enum BrowserLaunch {
+  private static let previewOptionFlags: Set<String> = [
+    "--render-preview", "--command", "--command-query", "--command-filter", "--compact",
+    "--hide-sidebar", "--space-editor", "--extension-consent", "--recent-downloads",
+    "--settings", "--settings-profiles", "--settings-profile-editor", "--sleeping-tab",
+    "--first-run-step", "--first-run-from-dmg",
+  ]
+
   @MainActor public static func run() {
     BrowserLanguage.applyToCurrentProcess()
     let arguments = CommandLine.arguments
-    if let index = arguments.firstIndex(of: "--render-preview"),
-      arguments.indices.contains(index + 1)
-    {
+    if let previewPath = previewOutputPath(in: arguments) {
       do {
         try renderPreview(
-          to: URL(filePath: arguments[index + 1]), showCommand: arguments.contains("--command"),
+          to: URL(filePath: previewPath), showCommand: arguments.contains("--command"),
           commandQuery: value(after: "--command-query", in: arguments),
           commandFilter: value(after: "--command-filter", in: arguments)
             .flatMap(CommandFilter.init(rawValue:)),
@@ -54,10 +59,19 @@ public enum BrowserLaunch {
     BrowserApplication.main()
   }
 
-  private static func value(after flag: String, in arguments: [String]) -> String? {
+  static func value(after flag: String, in arguments: [String]) -> String? {
     guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
     else { return nil }
-    return arguments[index + 1]
+    let value = arguments[index + 1]
+    return previewOptionFlags.contains(value) ? nil : value
+  }
+
+  static func previewOutputPath(in arguments: [String]) -> String? {
+    guard let index = arguments.firstIndex(of: "--render-preview"),
+      arguments.indices.contains(index + 1)
+    else { return nil }
+    let path = arguments[index + 1]
+    return previewOptionFlags.contains(path) ? nil : path
   }
 
   @MainActor private static func renderPreview(

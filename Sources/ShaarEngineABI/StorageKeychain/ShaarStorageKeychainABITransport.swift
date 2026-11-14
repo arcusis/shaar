@@ -69,6 +69,9 @@ private let storageKeychainReply: shaar_reply_fn = { context, result in
     else {
       throw ShaarEngineError.invalidEvent("storage-keychain result does not match request")
     }
+    guard result.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+      throw ShaarEngineError.invalidEvent("short storage-keychain error")
+    }
     let message = String(
       decoding: try copyStorageKeychainBytes(result.error.message), as: UTF8.self)
     try ShaarStatusCode.decode(
@@ -138,6 +141,11 @@ public struct ShaarStorageKeychainABITransport: ShaarStorageKeychainTransport,
       }
       if status != 0 {
         Unmanaged<StorageKeychainReplyBox>.fromOpaque(replyContext).release()
+        guard immediateError.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+          continuation.resume(
+            throwing: ShaarEngineError.invalidEvent("short storage-keychain error"))
+          return
+        }
         let message =
           (try? String(
             decoding: copyStorageKeychainBytes(immediateError.message), as: UTF8.self)) ?? ""

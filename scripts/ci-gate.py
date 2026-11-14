@@ -7,12 +7,29 @@
 
 import json
 import os
+import sys
 from pathlib import Path
+
+from ci_support import output_file
 
 
 def advisory_stages(raw: str | None) -> set[str]:
     """Stages named in the CI_ADVISORY_STAGES repository variable report but do not block."""
     return {name.strip() for name in (raw or "").split(",") if name.strip()}
+
+
+def parse_needs(raw: str) -> dict:
+    """Parse the GitHub needs context and reject malformed stage results clearly."""
+    try:
+        needs = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"CI_NEEDS is not valid JSON: {error.msg}") from error
+    if not isinstance(needs, dict):
+        raise ValueError("CI_NEEDS must be a JSON object mapping stages to results")
+    for name, item in needs.items():
+        if not isinstance(item, dict) or not isinstance(item.get("result"), str):
+            raise ValueError(f"CI_NEEDS entry {name!r} must contain a string result")
+    return needs
 
 
 def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
@@ -48,13 +65,33 @@ def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
 
 
 def main() -> int:
-    needs = json.loads(os.environ["CI_NEEDS"])
+    raw_needs = os.environ.get("CI_NEEDS")
+    if not raw_needs:
+        print("CI required gate: missing or empty environment variable CI_NEEDS", file=sys.stderr)
+        return 2
+    try:
+        needs = parse_needs(raw_needs)
+    except ValueError as error:
+        print(f"CI gate error: {error}", file=sys.stderr)
+        return 1
+
+    required = ("CI_FULL", "CI_NIGHTLY", "GITHUB_STEP_SUMMARY")
+    missing = next((name for name in required if not os.environ.get(name)), None)
+    if missing:
+        print(f"CI required gate: missing or empty environment variable {missing}", file=sys.stderr)
+        return 2
+    for name in ("CI_FULL", "CI_NIGHTLY", "CI_WEBSITE", "CI_BROWSING", "CI_SHIPPING_GUARD"):
+        value = os.environ.get(name)
+        if value is not None and value not in ("true", "false"):
+            print(f"CI required gate: {name} must be 'true' or 'false'", file=sys.stderr)
+            return 2
+
     errors = gate_errors(needs, os.environ["CI_FULL"] == "true", os.environ["CI_NIGHTLY"] == "true",
                          os.environ.get("CI_WEBSITE") == "true",
                          os.environ.get("CI_BROWSING") == "true",
                          os.environ.get("CI_SHIPPING_GUARD") == "true",
                          advisory_stages(os.environ.get("CI_ADVISORY_STAGES")))
-    with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
+    with output_file(Path(os.environ["GITHUB_STEP_SUMMARY"])).open("a") as output:
         output.write("### CI required\n\n| Stage | Result |\n| --- | --- |\n")
         for name, item in sorted(needs.items()):
             output.write(f"| {name} | {item['result']} |\n")

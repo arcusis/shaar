@@ -477,6 +477,16 @@
         }
       }
     },
+    "Could not load this Library section. Try again.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לטעון את החלק הזה בספרייה. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
     "The saved session contains invalid spaces, profiles, or tabs.": {
       "localizations": {
         "he": {

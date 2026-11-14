@@ -27,6 +27,10 @@ private final class PrivateParityRuntime: ARCChromiumRuntime {
 
 @Suite @MainActor
 struct PrivateParityTests {
+  @Test func privateStartPageTitleIsVoiceOverHeading() {
+    #expect(PrivateStartPage.titleAccessibilityTraits == .isHeader)
+  }
+
   private func makeStore(source: UUID = UUID()) throws -> BrowserStore {
     BrowserStore(
       privateSession: try BrowserSession.privateWindow(

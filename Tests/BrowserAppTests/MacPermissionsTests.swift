@@ -7,15 +7,18 @@ import Testing
 @testable import ArcusisBrowser
 
 @Test func macPermissionsExposeStableIdentityAndPresentation() {
-  #expect(MacPermission.allCases.map(\.id) == [
-    "camera", "microphone", "location", "notifications", "screenRecording",
-  ])
-  #expect(MacPermission.allCases.map(\.symbol) == [
-    "camera", "mic", "location", "bell.badge", "rectangle.dashed.badge.record",
-  ])
-  #expect(MacPermission.allCases.map(\.title) == [
-    "Camera", "Microphone", "Location", "Notifications", "Screen Recording",
-  ])
+  #expect(
+    MacPermission.allCases.map(\.id) == [
+      "camera", "microphone", "location", "notifications", "screenRecording",
+    ])
+  #expect(
+    MacPermission.allCases.map(\.symbol) == [
+      "camera", "mic", "location", "bell.badge", "rectangle.dashed.badge.record",
+    ])
+  #expect(
+    MacPermission.allCases.map(\.title) == [
+      "Camera", "Microphone", "Location", "Notifications", "Screen Recording",
+    ])
 }
 
 @Test func macPermissionsLinkToTheirSystemSettingsPrivacyPanes() throws {

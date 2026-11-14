@@ -49,8 +49,21 @@ def localized_forms(value, catalog, key, language):
     return forms
 
 
+def reject_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        result[key] = value
+    return result
+
+
+def load_json_without_duplicate_keys(text):
+    return json.loads(text, object_pairs_hook=reject_duplicate_keys)
+
+
 def validate_catalog(path):
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = load_json_without_duplicate_keys(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{path.name}: catalog root must be an object")
     if data.get("sourceLanguage") != "en":
@@ -229,6 +242,60 @@ def localization_key_literals(expression):
     return swift_string_literals(expression)
 
 
+def strip_swift_comments(source):
+    """Blank line and nested block comments without changing source line numbers."""
+    result = list(source)
+    index = 0
+    quote = None
+    while index < len(source):
+        if quote:
+            if quote == '"""' and source.startswith('"""', index):
+                quote = None
+                index += 3
+            elif quote != '"""' and source[index] == "\\":
+                index += 2
+            elif quote != '"""' and source[index] == quote:
+                quote = None
+                index += 1
+            else:
+                index += 1
+            continue
+        if source.startswith('"""', index):
+            quote = '"""'
+            index += 3
+            continue
+        if source[index] == '"':
+            quote = '"'
+            index += 1
+            continue
+        if source.startswith("//", index):
+            end = source.find("\n", index)
+            end = len(source) if end == -1 else end
+            for position in range(index, end):
+                result[position] = " "
+            index = end
+            continue
+        if source.startswith("/*", index):
+            end = index + 2
+            depth = 1
+            while end < len(source) and depth:
+                if source.startswith("/*", end):
+                    depth += 1
+                    end += 2
+                elif source.startswith("*/", end):
+                    depth -= 1
+                    end += 2
+                else:
+                    end += 1
+            for position in range(index, end):
+                if result[position] != "\n":
+                    result[position] = " "
+            index = end
+            continue
+        index += 1
+    return "".join(result)
+
+
 def first_argument(source, open_paren):
     depth = 1
     index = open_paren + 1
@@ -311,29 +378,56 @@ def validate_source_references(root, catalogs, include_app=False):
         strings = json.loads(catalog.read_text(encoding="utf-8"))["strings"]
         catalog_keys[catalog.stem] = set(strings)
         for key, entry in strings.items():
-            hebrew = entry.get("localizations", {}).get("he", {}).get("stringUnit", {}).get("value")
-            if hebrew is not None and hebrew != key:
+            hebrew = entry.get("localizations", {}).get("he", {})
+            string_unit = hebrew.get("stringUnit")
+            if isinstance(string_unit, dict):
+                hebrew_values = [string_unit.get("value")]
+            else:
+                plural = hebrew.get("variations", {}).get("plural", {})
+                hebrew_values = [
+                    form.get("stringUnit", {}).get("value")
+                    for form in plural.values()
+                    if isinstance(form, dict)
+                    and isinstance(form.get("stringUnit"), dict)
+                ]
+            if any(value is not None and value != key for value in hebrew_values):
                 translated_text_keys.add(key)
     wrappers = {"BrowserLocalization": "Core", "ShellL10n": "Shell",
                 "SettingsL10n": "Settings", "PanelsL10n": "Panels",
                 "InspectorL10n": "Inspector", "InspectorDetailsL10n": "InspectorDetails",
                 "InspectorToolsL10n": "InspectorTools"}
     call = re.compile(r"\b(" + "|".join(map(re.escape, wrappers)) + r")\.(?:string|text|format|plural)\s*\(")
-    direct_text = re.compile(r'\bText\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)')
+    direct_text = re.compile(r'\b(Text)\s*\(\s*("(?:[^"\\]|\\.)*")')
+    direct_control_text = re.compile(
+        r'\b(Button|ColorPicker|DatePicker|Label|LabeledContent|Menu|NavigationLink|Picker|'
+        r'ProgressView|Section|SecureField|TextField|Toggle)'
+        r'\s*\(\s*("(?:[^"\\]|\\.)*")'
+    )
     direct_accessibility_text = re.compile(
         r'\.(help|accessibilityLabel|accessibilityHint)\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)'
     )
     source_root = root / "Sources" if include_app else root / "Sources/BrowserCore"
     for path in sorted(source_root.rglob("*.swift")):
         source = path.read_text(encoding="utf-8")
-        for match in direct_text.finditer(source):
-            key = decode_swift_literal(match.group(1))
+        cleaned = strip_swift_comments(source)
+        for match in direct_text.finditer(cleaned):
+            control, literal = match.groups()
+            key = decode_swift_literal(literal)
             if key in translated_text_keys:
                 line = source.count("\n", 0, match.start()) + 1
                 raise ValueError(
-                    f"unlocalized Text for catalog key {key!r} ({path.relative_to(root)}:{line})"
+                    f"unlocalized {control} for catalog key {key!r} ({path.relative_to(root)}:{line})"
                 )
-        for match in direct_accessibility_text.finditer(source):
+        for match in direct_control_text.finditer(cleaned):
+            control, literal = match.groups()
+            key = decode_swift_literal(literal)
+            if key in translated_text_keys:
+                line = source.count("\n", 0, match.start()) + 1
+                raise ValueError(
+                    f"unlocalized {control} title for catalog key {key!r} "
+                    f"({path.relative_to(root)}:{line})"
+                )
+        for match in direct_accessibility_text.finditer(cleaned):
             modifier, literal = match.groups()
             key = decode_swift_literal(literal)
             if key in translated_text_keys:
@@ -341,13 +435,13 @@ def validate_source_references(root, catalogs, include_app=False):
                 raise ValueError(
                     f"unlocalized {modifier} for catalog key {key!r} ({path.relative_to(root)}:{line})"
                 )
-        for match in call.finditer(source):
+        for match in call.finditer(cleaned):
             wrapper = match.group(1)
-            argument = first_argument(source, match.end() - 1)
+            argument = first_argument(cleaned, match.end() - 1)
             for key in localization_key_literals(argument):
                 table = wrappers[wrapper]
                 if wrapper == "BrowserLocalization":
-                    suffix = source[match.end():match.end() + 240]
+                    suffix = cleaned[match.end():match.end() + 240]
                     explicit = re.search(r"\btable\s*:\s*\"((?:[^\"\\]|\\.)*)\"", suffix)
                     if explicit:
                         table = decode_swift_literal('"' + explicit.group(1) + '"')
@@ -411,7 +505,11 @@ def validate_source_references(root, catalogs, include_app=False):
 def main():
     if len(sys.argv) != 3:
         raise SystemExit("Usage: compile-localizations.py PACKAGE_ROOT OUTPUT_DIR")
-    root, output = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
+    root = Path(sys.argv[1]).resolve()
+    output_argument = Path(sys.argv[2])
+    if output_argument.is_symlink():
+        raise SystemExit(f"Localization output directory must not be a symlink: {output_argument}")
+    output = output_argument.resolve()
     core = root / "Sources/BrowserCore/Resources"
     catalogs = sorted(core.glob("*.xcstrings")) + sorted((root / "Resources/Localizations").glob("*.xcstrings"))
     if not catalogs:

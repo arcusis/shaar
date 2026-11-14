@@ -6,6 +6,24 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
+enum ProfileOnboardingAccessibility {
+  static func signInProgressLabel(
+    provider: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Finish signing in to %@ in the sign-in window.", table: "Settings", language: language,
+      arguments: [.string(provider)])
+  }
+
+  static func stepLabel(
+    stepIndex: Int, stepCount: Int, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Step %d of %d", table: "Settings", language: language,
+      arguments: [.integer(stepIndex), .integer(stepCount)])
+  }
+}
+
 /// One choice per step, followed by an optional account and a summary.
 struct ProfileOnboardingView: View {
   let model: ProfileOnboardingModel
@@ -41,7 +59,8 @@ struct ProfileOnboardingView: View {
   }
 }
 
-private struct OnboardingStepHeader: View {
+struct OnboardingStepHeader: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let step: ProfileOnboardingStep
 
   var body: some View {
@@ -51,15 +70,22 @@ private struct OnboardingStepHeader: View {
           Capsule().fill(progressColor(reached: item.rawValue <= step.rawValue)).frame(height: 4)
         }
       }
-      .accessibilityHidden(true)
+      .accessibilityRepresentation {
+        ProgressView(
+          value: Double(step.rawValue + 1), total: Double(ProfileOnboardingStep.allCases.count))
+          .accessibilityLabel(
+            ProfileOnboardingAccessibility.stepLabel(
+              stepIndex: step.rawValue + 1, stepCount: ProfileOnboardingStep.allCases.count))
+      }
       Text(
-        SettingsL10n.format(
-          "Step %d of %d", .integer(step.rawValue + 1),
-          .integer(ProfileOnboardingStep.allCases.count))
+        ProfileOnboardingAccessibility.stepLabel(
+          stepIndex: step.rawValue + 1, stepCount: ProfileOnboardingStep.allCases.count)
       )
       .font(.caption)
       .foregroundStyle(.secondary)
+      .accessibilityHidden(true)
       Text(step.title).font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.headingTraits)
     }
   }
 
@@ -121,9 +147,9 @@ private struct AccountConnectStep: View {
       } else if let provider = model.connecting {
         HStack(spacing: 10) {
           ProgressView().controlSize(.small)
+            .accessibilityLabel(ProfileOnboardingAccessibility.signInProgressLabel(provider: provider.title))
           Text(
-            SettingsL10n.format(
-              "Finish signing in to %@ in the sign-in window.", .string(provider.title))
+            ProfileOnboardingAccessibility.signInProgressLabel(provider: provider.title)
           )
           .foregroundStyle(.secondary)
         }

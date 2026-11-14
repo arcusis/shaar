@@ -4,12 +4,17 @@
 
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct WebsitePermissionConsentTests {
+  @Test func permissionConsentTitleIsVoiceOverHeading() {
+    #expect(WebsitePermissionConsent.headingTraits == .isHeader)
+  }
+
   private func store() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://meet.google.com/example")!))
@@ -104,6 +109,35 @@ struct WebsitePermissionConsentTests {
     #expect(WebsitePermissionKind.protocolHandler.symbol == "link")
     let allowsOneTime = request.kinds.allSatisfy { $0.supportsOneTimeGrant }
     #expect(!allowsOneTime)
+  }
+
+  @Test func locationNotificationsAndMidiUseLocalizedSharedConsentAndRememberedGrants() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let cases: [(WebsitePermissionKind, String, String)] = [
+      (.location, "location", "know your location"),
+      (.notifications, "notifications", "show notifications"),
+      (.midi, "MIDI devices", "use and reprogram your MIDI devices"),
+    ]
+    for (index, (kind, title, purpose)) in cases.enumerated() {
+      let request = try #require(
+        WebsitePermissionRequest(
+          id: "permission-\(index)", profileID: store.session.selectedSpace.profileID,
+          tabID: tab.id, pageURL: tab.url,
+          requestingOrigin: URL(string: "https://meet.google.com")!, kinds: [kind]))
+      #expect(kind.title == PanelsL10n.string(title))
+      #expect(kind.purpose == PanelsL10n.string(purpose))
+      #expect(
+        WebsitePermissionPersistence.forGrant(isPrivate: false, kinds: request.kinds) == .profile)
+      #expect(WebsitePermissionSheetCopy.allowButton(isPrivate: false, oneTime: false) == "Allow")
+      #expect(
+        WebsitePermissionSheetCopy.duration(isPrivate: false, oneTime: false)
+          == PanelsL10n.string(
+            "The site keeps this permission in this profile until you change it."))
+      #expect(store.requestWebsitePermission(request))
+      #expect(store.sheet?.id == "permission-\(request.id)")
+      store.resolveWebsitePermission(request.id, accepted: true)
+    }
   }
 
   @Test func permissionPromptDismissesPendingSplitCommand() throws {

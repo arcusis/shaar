@@ -36,6 +36,62 @@ struct BrowserWorkspaceStoreTests {
     try manager.workspace.validate()
   }
 
+  @Test func crossWindowTransferClearsSourceTransientTabState() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let tabID = try #require(source.session.selectedSpace.selectedTabID)
+    source.noteTabSleeping(tabID)
+    source.tabDrag = TabDrag(tabID: tabID, fromSplitPane: false)
+    source.splitTabRecency = [tabID]
+    source.pendingSplitPlacement = SplitPlacement(target: tabID, edge: .right)
+    let transfer = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID, tabID: tabID)
+    source.sidebarDrag = transfer
+
+    #expect(source.sleepingTabIDs == [tabID])
+    #expect(source.tabDrag?.tabID == tabID)
+    #expect(source.splitTabRecency == [tabID])
+    #expect(source.pendingSplitPlacement?.target == tabID)
+    #expect(source.sidebarDrag == transfer)
+    #expect(destination.acceptSidebarDrop(transfer, into: destination.session.selectedSpaceID))
+    #expect(source.sleepingTabIDs.isEmpty)
+    #expect(source.tabDrag == nil)
+    #expect(source.splitTabRecency.isEmpty)
+    #expect(source.pendingSplitPlacement == nil)
+    #expect(source.sidebarDrag == nil)
+  }
+
+  @Test func roundTripTransferCannotReuseTheOriginalPermissionFrame() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let sourceID = manager.workspace.windows[0].id
+    let destinationID = try manager.newWindow(from: sourceID)
+    let source = try #require(manager.stores[sourceID])
+    let destination = try #require(manager.stores[destinationID])
+    let tab = try #require(source.session.selectedSpace.selectedTab)
+    let origin = try #require(URL(string: "https://example.com"))
+    let frameID = String(repeating: "a", count: 32)
+    source.rememberPermissionFrame(tab.id, frameID: frameID, origin: origin)
+    let request = try #require(
+      WebsitePermissionRequest(
+        id: "old-window-frame", profileID: source.session.selectedSpace.profileID,
+        tabID: tab.id, pageURL: tab.url, requestingOrigin: origin, kinds: [.camera],
+        frameID: frameID))
+
+    let toDestination = SidebarTransfer.tab(
+      sessionID: source.dragSessionID, sourceSpaceID: source.session.selectedSpaceID,
+      tabID: tab.id)
+    #expect(
+      destination.acceptSidebarDrop(toDestination, into: destination.session.selectedSpaceID))
+    let backToSource = SidebarTransfer.tab(
+      sessionID: destination.dragSessionID, sourceSpaceID: destination.session.selectedSpaceID,
+      tabID: tab.id)
+    #expect(source.acceptSidebarDrop(backToSource, into: source.session.selectedSpaceID))
+    #expect(!source.websitePermissionIsCurrent(request))
+  }
+
   @Test func pinnedAndPrivateWindowTransfersAreRefusedWithNotices() throws {
     let manager = try BrowserWorkspaceStore(initialSession: fixture())
     let sourceID = manager.workspace.windows[0].id
@@ -437,6 +493,20 @@ struct BrowserWorkspaceStoreTests {
     #expect(manager.workspace == before)
     #expect(manager.stores[secondID] == nil && closed.storageNotice != nil)
     #expect(throws: WorkspaceError.self) { try manager.focusWindow(secondID) }
+    #expect(manager.workspace == before)
+  }
+
+  @Test func retiredWindowStoreCannotReassignSharedSpaceProfile() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let secondID = try manager.newWindow(from: manager.workspace.windows[0].id)
+    let retiredStore = try #require(manager.stores[secondID])
+    let spaceID = retiredStore.session.selectedSpaceID
+    let replacementProfileID = try #require(
+      retiredStore.session.profiles.first { $0.id != retiredStore.session.selectedSpace.profileID }?.id)
+    try manager.removeWindow(secondID)
+    let before = manager.workspace
+
+    #expect(!retiredStore.setSpaceProfile(spaceID, to: replacementProfileID))
     #expect(manager.workspace == before)
   }
 }

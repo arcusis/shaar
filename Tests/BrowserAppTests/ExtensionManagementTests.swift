@@ -22,6 +22,17 @@ struct ExtensionManagementTests {
     }
   }
 
+  @Test @MainActor func manageOperationRepliesReturnToTheMainActor() async {
+    let reply: Bool = await withCheckedContinuation { continuation in
+      DispatchQueue.global().async {
+        ExtensionManageDelivery.deliver("ok") { value in
+          continuation.resume(returning: Thread.isMainThread && value == "ok")
+        }
+      }
+    }
+    #expect(reply)
+  }
+
   @Test @MainActor func rowCallbacksAreSendableForSwiftUIBindings() {
     var enabled = false
     let actions = ExtensionRowActions(
@@ -56,6 +67,33 @@ struct ExtensionManagementTests {
     let json = try #require(String(data: data, encoding: .utf8))
     let rows = try #require(ARCVisibleShaarExtensionRows(json))
     #expect(rows.compactMap { $0["id"] as? String } == [userPDF, policyExtension])
+  }
+
+  @Test func shaarListRejectsBooleanExtensionLocations() throws {
+    let reply: [String: Any] = [
+      "schemaVersion": 1,
+      "extensions": [[
+        "id": String(repeating: "a", count: 32), "name": "Example",
+        "version": "1.0", "source": true,
+      ]],
+    ]
+    let data = try JSONSerialization.data(withJSONObject: reply)
+    let json = try #require(String(data: data, encoding: .utf8))
+    let rows = try #require(ARCVisibleShaarExtensionRows(json))
+    #expect(rows.isEmpty)
+  }
+
+  @Test func shaarListRejectsBooleanSchemaVersion() throws {
+    let reply: [String: Any] = [
+      "schemaVersion": true,
+      "extensions": [[
+        "id": String(repeating: "a", count: 32), "name": "Example",
+        "version": "1.0", "source": 4,
+      ]],
+    ]
+    let data = try JSONSerialization.data(withJSONObject: reply)
+    let json = try #require(String(data: data, encoding: .utf8))
+    #expect(ARCVisibleShaarExtensionRows(json) == nil)
   }
 
   @Test func popupCloseLabelNamesTheExtensionInBothLanguages() {
@@ -133,6 +171,93 @@ struct ExtensionManagementTests {
     #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
   }
 
+  @Test @MainActor func iconLoaderRejectsSymlinkedInstalledManifest() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let folder = root.appending(path: "\(validID)/2.1_0")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try png(size: 16).write(to: folder.appending(path: "icon.png"))
+    let externalManifest = root.appending(path: "external-manifest.json")
+    try Data(#"{"icons":{"16":"icon.png"}}"#.utf8).write(to: externalManifest)
+    try FileManager.default.createSymbolicLink(
+      at: folder.appending(path: "manifest.json"), withDestinationURL: externalManifest)
+
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
+  }
+
+  @Test @MainActor func iconLoaderRejectsIconSymlinksOutsideTheExtensionFolder() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let folder = root.appending(path: "\(validID)/2.1_0")
+    try FileManager.default.createDirectory(
+      at: folder.appending(path: "icons"), withIntermediateDirectories: true)
+    let externalIcon = root.appending(path: "private.png")
+    try png(size: 32).write(to: externalIcon)
+    try FileManager.default.createSymbolicLink(
+      at: folder.appending(path: "icons/private.png"), withDestinationURL: externalIcon)
+    try Data(#"{"icons":{"32":"icons/private.png"}}"#.utf8)
+      .write(to: folder.appending(path: "manifest.json"))
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
+  }
+
+  @Test @MainActor func iconLoaderRejectsOversizedInstalledIcon() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let folder = root.appending(path: "\(validID)/2.1_0")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let bitmap = try #require(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: 1536, pixelsHigh: 1536, bitsPerSample: 8,
+        samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+        bytesPerRow: 0, bitsPerPixel: 0))
+    let pixels = try #require(bitmap.bitmapData)
+    var state: UInt32 = 1
+    for index in 0..<(1536 * 1536 * 4) {
+      state = state &* 1_664_525 &+ 1_013_904_223
+      pixels[index] = index % 4 == 3 ? 255 : UInt8(truncatingIfNeeded: state >> 24)
+    }
+    let iconData = try #require(bitmap.representation(using: .png, properties: [:]))
+    #expect(iconData.count > 4 * 1_048_576)
+    try iconData.write(to: folder.appending(path: "icon.png"))
+    try Data(#"{"icons":{"1536":"icon.png"}}"#.utf8)
+      .write(to: folder.appending(path: "manifest.json"))
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
+  }
+
+  @Test @MainActor func iconLoaderRejectsOversizedInstalledManifest() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let folder = root.appending(path: "\(validID)/2.1_0")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try png(size: 16).write(to: folder.appending(path: "icon.png"))
+    let padding = String(repeating: "x", count: 1_048_576)
+    let manifest = "{\"icons\":{\"16\":\"icon.png\"},\"padding\":\"\(padding)\"}"
+    try Data(manifest.utf8).write(to: folder.appending(path: "manifest.json"))
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
+  }
+
+  @Test @MainActor func iconLoaderRejectsSymlinkedExtensionAndVersionFolders() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let extensions = root.appending(path: "Extensions", directoryHint: .isDirectory)
+    let externalFolder = root.appending(path: "Outside/\(validID)/2.1_0")
+    try FileManager.default.createDirectory(
+      at: externalFolder, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: extensions, withIntermediateDirectories: true)
+    try png(size: 16).write(to: externalFolder.appending(path: "icon.png"))
+    try Data(#"{"icons":{"16":"icon.png"}}"#.utf8)
+      .write(to: externalFolder.appending(path: "manifest.json"))
+    let extensionLink = extensions.appending(path: validID, directoryHint: .isDirectory)
+    try FileManager.default.createSymbolicLink(
+      at: extensionLink, withDestinationURL: externalFolder.deletingLastPathComponent())
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: extensions) == nil)
+    try FileManager.default.removeItem(at: extensionLink)
+    let versionLink = extensionLink.appending(path: "2.1_0", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: extensionLink, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: versionLink, withDestinationURL: externalFolder)
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: extensions) == nil)
+  }
+
   @Test func unpackedFolderRequiresAManifestV3Directory() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -178,6 +303,9 @@ struct ExtensionManagementTests {
     #expect(ExtensionPageOrigin.accepts("https://[::1]"))
     #expect(!ExtensionPageOrigin.accepts("https://::1"))
     #expect(!ExtensionPageOrigin.accepts("https://example.com:443"))
+    #expect(
+      ExtensionPageOrigin.string(from: URL(string: "https://example.com:65536/path")!) == nil)
+    #expect(!ExtensionPageOrigin.accepts("https://example.com:65536"))
     #expect(
       ExtensionPageOrigin.string(from: URL(string: "https://user:pass@example.com/a?q=1#h")!)
         == "https://example.com")

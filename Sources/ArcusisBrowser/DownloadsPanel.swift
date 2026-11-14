@@ -5,21 +5,40 @@
 import BrowserCore
 import SwiftUI
 
+enum DownloadAccessibility {
+  static func progressLabel(
+    filename: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Download progress for %@", table: "Panels", language: language,
+      arguments: [.string(filename)])
+  }
+}
+
+enum DownloadsPanelAccessibility {
+  static let titleTraits: AccessibilityTraits = .isHeader
+}
+
 struct DownloadsPanel: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let store: BrowserStore
   let engine: BrowserEngine
   let profileID: UUID
   @Environment(\.dismiss) private var dismiss
+
+  static var titleAccessibilityTraits: AccessibilityTraits { .isHeader }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
           Text(PanelsL10n.string("Downloads")).font(.title2.weight(.semibold))
+            .accessibilityAddTraits(Self.headingTraits)
           Text(profileName).font(.callout).foregroundStyle(.secondary)
         }
         Spacer()
-        Button(PanelsL10n.string("Done")) { dismiss() }.keyboardShortcut(.cancelAction)
+        Button(PanelsL10n.string("Done"), role: .cancel) { dismiss() }
+          .keyboardShortcut(.cancelAction)
       }
       if store.session.selectedSpace.profileID != profileID {
         ContentUnavailableView(
@@ -65,8 +84,10 @@ struct DownloadsPanel: View {
         if item.state == .downloading && !item.dangerous {
           if let progress = item.progress {
             ProgressView(value: progress)
+              .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
           } else {
             ProgressView().controlSize(.small)
+              .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
           }
           Text(byteStatus(item)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }

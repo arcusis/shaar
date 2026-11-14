@@ -67,7 +67,8 @@ private func orderedSession() throws -> BrowserSession {
   let beforeStart = ContinuousClock.now
   var beforeItems: [PinnedSidebarItem] = []
   for _ in 0..<40 {
-    beforeItems = space.pinnedItems(includingCollapsed: true)
+    beforeItems =
+      space.pinnedItems(includingCollapsed: true)
       + space.items(isPinned: false, includingCollapsed: true)
   }
   let before = beforeStart.duration(to: .now)
@@ -77,6 +78,46 @@ private func orderedSession() throws -> BrowserSession {
   let after = afterStart.duration(to: .now)
   print("orderedSidebarItemsIndexBenchmark: before=\(before), after=\(after)")
   #expect(beforeItems == afterItems)
+}
+
+@Test func sidebarSeparateSectionsFocusedBenchmark() {
+  let profileID = UUID()
+  let folderIDs = (0..<100).map { _ in UUID() }
+  let folders = folderIDs.enumerated().map { index, id in
+    BrowserFolder(id: id, name: "Folder \(index)", isPinned: index.isMultiple(of: 2))
+  }
+  let tabs = (0..<1_000).map { index in
+    BrowserTab(
+      url: URL(string: "https://example.com/\(index)")!, title: "Tab \(index)",
+      isPinned: index.isMultiple(of: 2), folderID: folderIDs[index % folderIDs.count])
+  }
+  let space = BrowserSpace(
+    profileID: profileID, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs, folders: folders)
+
+  let beforeStart = ContinuousClock.now
+  var beforePinned: [PinnedSidebarItem] = []
+  var beforeUnpinned: [PinnedSidebarItem] = []
+  for _ in 0..<20 {
+    beforePinned = space.pinnedItems()
+    _ = space.pinnedItems()
+    _ = space.pinnedItems()
+    beforeUnpinned = space.items(isPinned: false)
+  }
+  let before = beforeStart.duration(to: .now)
+
+  let afterStart = ContinuousClock.now
+  var afterSections: BrowserSidebarItemSections?
+  for _ in 0..<20 { afterSections = space.sidebarItemSections() }
+  let after = afterStart.duration(to: .now)
+  print("sidebarSeparateSectionsFocusedBenchmark: before=\(before), after=\(after)")
+  #expect(afterSections?.pinned == beforePinned && afterSections?.unpinned == beforeUnpinned)
+  #expect(durationSeconds(after) < durationSeconds(before) * 0.75)
+}
+
+private func durationSeconds(_ duration: Duration) -> Double {
+  let components = duration.components
+  return Double(components.seconds) + Double(components.attoseconds) / 1e18
 }
 
 @Test func selectedTabMoveFollowsItsLiveIdentityWithinTheSameProfile() throws {

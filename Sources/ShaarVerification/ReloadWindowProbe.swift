@@ -9,6 +9,14 @@ import ChromiumBridgeVerification
 
 @testable import ArcusisBrowser
 
+enum ReloadWindowProbeEvidence {
+  static func isCrossSiteLoopbackNavigation(source: URL, destination: String?) -> Bool {
+    guard let destination = destination.flatMap(URL.init(string:)) else { return false }
+    return source.scheme == "http" && source.host == "127.0.0.1"
+      && destination.scheme == "http" && destination.host == "localhost"
+  }
+}
+
 /// Hidden, two-origin link and failed-page reload exercise for issue 1066.
 @MainActor
 final class ReloadWindowProbe {
@@ -163,7 +171,14 @@ final class ReloadWindowProbe {
       try expect(gestureResult != nil, "NATIVE NEEDED: trusted offscreen click for \(name)")
     }
     let destination = try await destinationTab(
-      name: name, source: source, prior: prior, host: host, gestureResult: gestureResult)
+      name: name, source: source, ownerID: ownerID, prior: prior, host: host,
+      gestureResult: gestureResult)
+    let createdTabs = Set(
+      host.contexts.values.flatMap { $0.store.session.spaces.flatMap(\.tabs) }.map(\.id)
+    ).subtracting(prior)
+    try expect(
+      Self.hasSingleDestinationTab(createdTabs, destination: destination),
+      "\(name) creates exactly one destination tab")
     if elementID != "plain" {
       let clicked = try require(await document(source, runtime: runtime), "No source document")
       try expect(
@@ -172,8 +187,19 @@ final class ReloadWindowProbe {
     }
     let page = try require(await document(destination, runtime: runtime), "No destination document")
     let destinationURL = (page["href"] as? String).flatMap(URL.init(string:))
+    if elementID != "plain" {
+      let sourcePage = try require(await document(source, runtime: runtime), "No source document after opening destination")
+      try expect(
+        Self.newWindowDestinationPassed(
+          sourceTabID: source, destinationTabID: destination,
+          sourceHref: sourcePage["href"] as? String ?? "",
+          destinationHref: page["href"] as? String ?? "",
+          marker: page["marker"] as? String ?? ""),
+        "\(name) opens a distinct destination tab and leaves its source on the first origin")
+    }
     try expect(
-      originA.host == "127.0.0.1" && destinationURL?.host == "localhost",
+      ReloadWindowProbeEvidence.isCrossSiteLoopbackNavigation(
+        source: originA, destination: destinationURL?.absoluteString),
       "\(name) navigates between distinct loopback sites")
     try expect(
       page["marker"] as? String == "Cross-site destination loaded",
@@ -186,7 +212,7 @@ final class ReloadWindowProbe {
   }
 
   private func destinationTab(
-    name: String, source: UUID, prior: Set<UUID>, host: NativeBrowserHost,
+    name: String, source: UUID, ownerID: UUID, prior: Set<UUID>, host: NativeBrowserHost,
     gestureResult: String?
   ) async throws -> UUID {
     var found: UUID?
@@ -194,7 +220,10 @@ final class ReloadWindowProbe {
       try await wait("\(name) destination") {
         for context in host.contexts.values {
           for tab in context.store.session.spaces.flatMap(\.tabs)
-          where tab.id == source || !prior.contains(tab.id) {
+          where Self.isDestinationCandidate(
+            tabID: tab.id, sourceID: source, prior: prior,
+            candidateOwnerID: context.id, ownerID: ownerID, requiresNewTab: name != "plain")
+          {
             if let page = await document(tab.id, runtime: runtime),
               (page["href"] as? String)?.contains("/cross-site-b") == true
             {
@@ -245,6 +274,10 @@ final class ReloadWindowProbe {
           "({href:location.href,marker:document.getElementById('destination')?.innerText||'',clicked:document.documentElement.dataset.clicked||'',trusted:document.documentElement.dataset.trusted||''})"
       ) { continuation.resume(returning: $0) }
     }
+    return Self.parseDocumentJSON(value)
+  }
+
+  static func parseDocumentJSON(_ value: String?) -> [String: Any]? {
     guard let value, let data = value.data(using: .utf8) else { return nil }
     return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
   }
@@ -256,6 +289,15 @@ final class ReloadWindowProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw Failure("Timed out waiting for \(label)")
+  }
+
+  static func isDestinationCandidate(
+    tabID: UUID, sourceID: UUID, prior: Set<UUID>,
+    candidateOwnerID: UUID, ownerID: UUID, requiresNewTab: Bool
+  ) -> Bool {
+    guard candidateOwnerID == ownerID else { return false }
+    if requiresNewTab { return tabID != sourceID && !prior.contains(tabID) }
+    return tabID == sourceID || !prior.contains(tabID)
   }
 
   private func require<T>(_ value: T?, _ message: String) throws -> T {
@@ -299,9 +341,25 @@ final class ReloadWindowProbe {
     return "Reload action accepts destroyed tab (\(detail))"
   }
 
+  nonisolated static func newWindowDestinationPassed(
+    sourceTabID: UUID, destinationTabID: UUID, sourceHref: String,
+    destinationHref: String, marker: String
+  ) -> Bool {
+    guard sourceTabID != destinationTabID,
+      let source = URL(string: sourceHref), let destination = URL(string: destinationHref)
+    else { return false }
+    return source.host == "127.0.0.1" && source.path == "/cross-site-a"
+      && destination.host == "localhost" && destination.path == "/cross-site-b"
+      && marker == "Cross-site destination loaded"
+  }
+
   private struct Failure: LocalizedError {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
+  }
+
+  static func hasSingleDestinationTab(_ createdIDs: Set<UUID>, destination: UUID) -> Bool {
+    createdIDs.count == 1 && createdIDs.contains(destination)
   }
 }

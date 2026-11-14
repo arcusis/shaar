@@ -2,8 +2,23 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
 import ShaarEngineABIC
+
+private func devToolsJSONBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
+private func devToolsEnvelopeInteger(_ value: Any?) -> Int? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) != CFBooleanGetTypeID()
+  else { return nil }
+  return Int(exactly: number.doubleValue)
+}
 
 public enum ShaarDevToolsOperation: UInt32, Sendable {
   case call = 1000
@@ -192,12 +207,15 @@ private let shaarDevToolsABICallback: shaar_reply_fn = { context, result in
     guard value.size >= UInt32(MemoryLayout<shaar_result>.size),
       value.request_id == box.expectedRequestID
     else { throw ShaarEngineError.invalidEvent("invalid DevTools result envelope") }
+    guard value.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+      throw ShaarEngineError.invalidEvent("short DevTools error")
+    }
     try ShaarStatusCode.decode(
       UInt32(value.error.code.rawValue), platformCode: value.error.platform_code,
       message: String(decoding: try copyDevToolsBytes(value.error.message), as: UTF8.self))
     let data = try copyDevToolsBytes(value.payload_json)
     guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      root["schemaVersion"] as? Int == 1
+      devToolsEnvelopeInteger(root["schemaVersion"]) == 1
     else { throw ShaarEngineError.invalidEvent("invalid DevTools response payload") }
     box.completion(.success(data))
   } catch let error as ShaarEngineError {
@@ -252,6 +270,9 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
     }
     guard status == 0 else {
       Unmanaged<ShaarDevToolsReplyBox>.fromOpaque(context).release()
+      guard immediateError.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+        throw ShaarEngineError.invalidEvent("short DevTools error")
+      }
       try ShaarStatusCode.decode(
         status, platformCode: immediateError.platform_code,
         message: String(decoding: try copyDevToolsBytes(immediateError.message), as: UTF8.self))
@@ -336,8 +357,8 @@ public struct ShaarDevToolsAdapter: Sendable {
         result.flatMap { payload in
           guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
             Set(object.keys) == ["schemaVersion", "leaseID"],
-            object["schemaVersion"] as? Int == 1,
-            let leaseID = object["leaseID"] as? Int,
+            devToolsEnvelopeInteger(object["schemaVersion"]) == 1,
+            let leaseID = devToolsEnvelopeInteger(object["leaseID"]),
             leaseID > 0, let value = UInt32(exactly: leaseID)
           else { return .failure(.invalidEvent("invalid panel lease reply")) }
           return .success(value)
@@ -462,6 +483,11 @@ public struct ShaarDevToolsFrontendState: Equatable, Sendable {
 }
 
 public enum ShaarDevToolsEventRouter {
+  private static func isJSONBoolean(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber else { return false }
+    return CFGetTypeID(number) == CFBooleanGetTypeID()
+  }
+
   public static func decodeFrontendState(
     _ event: ShaarCopiedEvent,
     scope: ShaarNavigationScope,
@@ -474,9 +500,9 @@ public enum ShaarDevToolsEventRouter {
       event.windowID == Data(windowID.utf8),
       event.tabID == Data(tabID.utf8),
       let payload = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
-      payload["schemaVersion"] as? Int == 1,
+      devToolsEnvelopeInteger(payload["schemaVersion"]) == 1,
       payload["kind"] as? String == "frontendState",
-      let open = payload["open"] as? Bool,
+      let open = devToolsJSONBoolean(payload["open"]),
       Set(payload.keys) == ["schemaVersion", "kind", "open"]
     else { return nil }
     return ShaarDevToolsFrontendState(open: open)

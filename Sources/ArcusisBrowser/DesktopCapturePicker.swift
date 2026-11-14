@@ -3,10 +3,17 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import CoreGraphics
+import AppKit
 import ScreenCaptureKit
 import SwiftUI
 
 struct DesktopCaptureSource: Identifiable, Equatable {
+  private static let maximumDisplayNameLength = 120
+  private static let bidirectionalFormattingScalars: Set<UInt32> = [
+    0x061C, 0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E,
+    0x2066, 0x2067, 0x2068, 0x2069,
+  ]
+
   enum Kind: Equatable { case display, window, tab }
   let id: String
   let name: String
@@ -40,6 +47,30 @@ struct DesktopCaptureSource: Identifiable, Equatable {
     case .tab: "rectangle.on.rectangle"
     }
   }
+
+  private var displayName: String {
+    let visibleScalars = String.UnicodeScalarView(
+      name.unicodeScalars.filter { !Self.bidirectionalFormattingScalars.contains($0.value) })
+    let singleLine = String(visibleScalars).split(whereSeparator: \.isWhitespace).joined(
+      separator: " ")
+    guard singleLine.count > Self.maximumDisplayNameLength else { return singleLine }
+    return String(singleLine.prefix(Self.maximumDisplayNameLength - 1)) + "…"
+  }
+}
+
+struct DesktopCaptureSettingsButton {
+  let title: String
+  let action: () -> Void
+}
+
+@MainActor
+private final class DesktopCaptureSourceLoadCoordinator {
+  private(set) var generation = 0
+
+  func beginLoad() -> Int {
+    generation += 1
+    return generation
+  }
 }
 
 @MainActor
@@ -50,10 +81,14 @@ struct DesktopCapturePicker: View {
   private let requestScreenRecordingAccess: () -> Bool
   private let shareableContent: () async throws -> SCShareableContent
   private let screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])?
+  private let openSettings: (URL) -> Void
   @State private var sources: [DesktopCaptureSource] = []
   @State private var loading = true
   @State private var error: String?
   @State private var note: String?
+  @State private var needsScreenRecordingAccess = false
+  @State private var settingsAction: DesktopCaptureSettingsAction?
+  @State private var sourceLoadCoordinator = DesktopCaptureSourceLoadCoordinator()
 
   init(
     request: DesktopCaptureRequest,
@@ -63,7 +98,8 @@ struct DesktopCapturePicker: View {
     shareableContent: @escaping () async throws -> SCShareableContent = {
       try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     },
-    screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])? = nil
+    screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])? = nil,
+    openSettings: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
   ) {
     self.request = request
     self.store = store
@@ -71,6 +107,16 @@ struct DesktopCapturePicker: View {
     self.requestScreenRecordingAccess = requestScreenRecordingAccess
     self.shareableContent = shareableContent
     self.screenSourcesProvider = screenSourcesProvider
+    self.openSettings = openSettings
+  }
+
+  func settingsButton(for needsAccess: Bool) -> DesktopCaptureSettingsButton? {
+    guard needsAccess,
+      let url = MacPermission.screenRecording.settingsURL
+    else { return nil }
+    return DesktopCaptureSettingsButton(
+      title: PanelsL10n.string("Open Settings"),
+      action: { openSettings(url) })
   }
 
   var pickerContent: DesktopCapturePickerContent {
@@ -87,6 +133,9 @@ struct DesktopCapturePicker: View {
       error: displayedError,
       note: displayedNote,
       onRetry: { await reloadSources() },
+      needsScreenRecordingAccess: needsScreenRecordingAccess,
+      settingsButton: settingsButton(for: needsScreenRecordingAccess),
+      settingsAction: settingsAction,
       onSelect: { store.resolveDesktopCapture(request.id, sourceID: $0) },
       onCancel: { store.resolveDesktopCapture(request.id, sourceID: nil) }
     )
@@ -94,21 +143,24 @@ struct DesktopCapturePicker: View {
 
   var body: some View {
     pickerContent
-    .padding(24)
-    .frame(width: 480)
-    .task { await loadSources() }
-    .interactiveDismissDisabled()
+      .padding(24)
+      .frame(width: 480)
+      .task { await loadSources() }
+      .interactiveDismissDisabled()
   }
 
   func loadSources() async {
     guard !Task.isCancelled else { return }
+    let loadGeneration = sourceLoadCoordinator.beginLoad()
     let tabs = DesktopCaptureCatalog.tabSources(
       session: store.session, profileID: request.profileID, requestingTabID: request.tabID
     )
     var screens: [DesktopCaptureSource] = []
     let wantsScreen = request.allows(.display) || request.allows(.window)
-    var screenAccessFailed =
-      wantsScreen && !hasScreenRecordingAccess() && !requestScreenRecordingAccess()
+    let hasAccess = !wantsScreen || hasScreenRecordingAccess()
+    let screenAccessFailed =
+      wantsScreen && !hasAccess && !requestScreenRecordingAccess()
+    var screenEnumerationFailed = false
     if wantsScreen && !screenAccessFailed {
       do {
         if let screenSourcesProvider {
@@ -116,19 +168,28 @@ struct DesktopCapturePicker: View {
         } else {
           screens = try await screenSources(from: shareableContent())
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+          sourceLoadCoordinator.generation == loadGeneration
+        else { return }
       } catch {
-        guard !Task.isCancelled else { return }
-        screenAccessFailed = true
+        guard !Task.isCancelled,
+          sourceLoadCoordinator.generation == loadGeneration
+        else { return }
+        screenEnumerationFailed = true
       }
     }
-    guard !Task.isCancelled else { return }
+    guard !Task.isCancelled,
+      sourceLoadCoordinator.generation == loadGeneration
+    else { return }
     let listing = DesktopCaptureCatalog.listing(
       tabs: DesktopCaptureCatalog.allowedSources(tabs, for: request),
       screens: DesktopCaptureCatalog.allowedSources(screens, for: request),
-      screenAccessFailed: screenAccessFailed)
+      screenAccessFailed: screenAccessFailed,
+      screenEnumerationFailed: screenEnumerationFailed)
+    needsScreenRecordingAccess = screenAccessFailed
     sources = listing.sources
     store.setDesktopCaptureSources(listing.sources.map(\.id), for: request.id)
+    settingsAction = DesktopCaptureCatalog.settingsAction(for: listing)
     error = listing.error.map(PanelsL10n.string)
     note = listing.note.map(PanelsL10n.string)
     loading = false
@@ -144,14 +205,8 @@ struct DesktopCapturePicker: View {
   private func screenSources(from content: SCShareableContent) -> [DesktopCaptureSource] {
     let windows = content.windows.compactMap { window -> DesktopCaptureSource? in
       guard window.windowID != 0, window.isOnScreen else { return nil }
-      let owner = window.owningApplication?.applicationName ?? PanelsL10n.string("Window")
-      let title = window.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let name: String
-      if let title, !title.isEmpty {
-        name = "\(owner) — \(title)"
-      } else {
-        name = owner
-      }
+      let name = DesktopCaptureCatalog.windowName(
+        owner: window.owningApplication?.applicationName, title: window.title)
       return DesktopCaptureSource(id: "window:\(window.windowID):0", name: name, kind: .window)
     }
     let displays = content.displays.map { display in
@@ -169,12 +224,16 @@ struct DesktopCapturePicker: View {
 }
 
 struct DesktopCapturePickerContent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let request: DesktopCaptureRequest
   let sources: [DesktopCaptureSource]
   let loading: Bool
   let error: String?
   var note: String? = nil
   var onRetry: () async -> Void = {}
+  var needsScreenRecordingAccess = false
+  var settingsButton: DesktopCaptureSettingsButton? = nil
+  var settingsAction: DesktopCaptureSettingsAction? = nil
   let onSelect: (String) -> Void
   let onCancel: () -> Void
 
@@ -182,9 +241,10 @@ struct DesktopCapturePickerContent: View {
     VStack(alignment: .leading, spacing: 16) {
       Text(PanelsL10n.string("Choose what to share"))
         .font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.headingTraits)
       Text(request.displayOrigin)
-      .font(.callout).foregroundStyle(.secondary)
-      .textSelection(.enabled)
+        .font(.callout).foregroundStyle(.secondary)
+        .textSelection(.enabled)
       if let note {
         Text(note).font(.callout).foregroundStyle(.secondary)
       }
@@ -194,6 +254,9 @@ struct DesktopCapturePickerContent: View {
         }
         .accessibilityIdentifier("desktop-capture-retry")
       }
+      if needsScreenRecordingAccess, let settingsButton {
+        Button(settingsButton.title, action: settingsButton.action)
+      }
       if loading {
         ProgressView(PanelsL10n.string("Looking for screens, windows, and tabs…"))
           .frame(maxWidth: .infinity, minHeight: 120)
@@ -201,7 +264,7 @@ struct DesktopCapturePickerContent: View {
         ContentUnavailableView(error, systemImage: "rectangle.dashed.badge.record")
       } else if sources.isEmpty {
         ContentUnavailableView(
-          PanelsL10n.string("No screens, windows, or tabs are available"), systemImage: "display")
+          PanelsL10n.string(DesktopCaptureCatalog.emptySources), systemImage: "display")
       } else {
         List(sources) { source in
           Button {
@@ -215,6 +278,10 @@ struct DesktopCapturePickerContent: View {
         }
         .listStyle(.inset)
         .frame(minHeight: 150, maxHeight: 330)
+      }
+      if !needsScreenRecordingAccess, let action = settingsAction {
+        Link(action.title, destination: action.destination)
+          .font(.callout)
       }
       HStack {
         Spacer()
@@ -231,12 +298,12 @@ extension DesktopCaptureSource {
   var label: String {
     switch kind {
     case .display:
-      return PanelsL10n.format("Screen: %@", .string(name))
+      return PanelsL10n.format("Screen: %@", .string(displayName))
     case .window:
-      return PanelsL10n.format("Window: %@", .string(name))
+      return PanelsL10n.format("Window: %@", .string(displayName))
     case .tab:
       if isRequestingTab { return PanelsL10n.string("This Tab") }
-      return PanelsL10n.format("Tab: %@", .string(name))
+      return PanelsL10n.format("Tab: %@", .string(displayName))
     }
   }
 }

@@ -10,6 +10,12 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum NativeSelectionActivationReportValidation {
+  static func isForToken(_ report: [String: Any], _ token: String) -> Bool {
+    report["token"] as? String == token
+  }
+}
+
 /// Real MV3 activation of authored pages, using hidden windows and disposable profiles only.
 @MainActor
 final class NativeSelectionProbe {
@@ -21,6 +27,7 @@ final class NativeSelectionProbe {
   private var runtime: ARCChromiumRuntime { primary.runtime }
   private var checks: [String] = []
   private var observations: [[String: Any]] = []
+  private var activationTitleByToken: [String: String] = [:]
   private var popupHosts: [NSWindow] = []
   private var hosting: NSHostingView<AnyView>?
 
@@ -128,7 +135,7 @@ final class NativeSelectionProbe {
     let rapidReport = try await activationReport(rapid, in: a.id)
     observations.append(rapidReport)
     try expect(
-      rapidReport["tabID"] as? Int32 == runtime.nativeTabID(forID: a.id.uuidString),
+      rapidReport["title"] as? String == activationTitleByToken[rapid],
       "rapid extension activations retain the final real native target")
     for tab in [a.id, b.id, betaTab.id] {
       try expect(
@@ -160,8 +167,7 @@ final class NativeSelectionProbe {
         && runtime.view(forExtensionPopupID: secondaryPopup) != nil,
       "target-window activation closes only its stale popup")
     try expect(
-      store.session.spaces.flatMap(\.tabs) == primaryBefore.spaces.flatMap(\.tabs)
-        && store.session.profiles == primaryBefore.profiles,
+      tabOwnerships(store.session) == tabOwnerships(primaryBefore),
       "native activation changes selection without duplicating or reassigning live pages")
     try store.flushSaves()
     try expect(
@@ -185,9 +191,11 @@ final class NativeSelectionProbe {
     let hiddenReport = try await activationReport(hidden, in: betaTab.id)
     observations.append(hiddenReport)
     try expect(
-      hiddenReport["tabID"] as? Int32
-        == runtime.nativeTabID(forID: bases[1].selectedTabID!.uuidString)
-        && store.session == beforeHidden && store.pageFind?.id == find,
+      hiddenReport["title"] as? String == activationTitleByToken[hidden]
+        && store.session.selectedSpaceID == beforeHidden.selectedSpaceID
+        && store.session.selectedSpace.profileID == beforeHidden.selectedSpace.profileID
+        && store.session.selectedSpace.selectedTabID == beforeHidden.selectedSpace.selectedTabID
+        && store.pageFind?.id == find,
       "real activation in an inactive profile cannot steal visible account, selection, or Find")
     secondary.extensionPanel = nil
     store.dismissPageFind()
@@ -248,9 +256,11 @@ final class NativeSelectionProbe {
   ) async throws -> String {
     let popup = try await popup(engine)
     let token = UUID().uuidString
+    let titles = try await activationTitles(for: tabs, token: token)
+    activationTitleByToken[token] = titles.last
     let payload: [String: Any] = [
       "action": "activate-probe", "token": token, "port": fixture.port!,
-      "tabIDs": tabs.map { runtime.nativeTabID(forID: $0.uuidString) },
+      "tabTitles": titles,
       "windowID": runtime.chromeWindowID(forProfileID: profile.uuidString, windowID: windowID),
     ]
     let json = String(data: try JSONSerialization.data(withJSONObject: payload), encoding: .utf8)!
@@ -258,6 +268,25 @@ final class NativeSelectionProbe {
     // the sender. The worker stores its result; no popup acknowledgement is required.
     dispatchActivation(popup: popup, json: json)
     return token
+  }
+
+  private func activationTitles(for tabs: [UUID], token: String) async throws -> [String] {
+    var titles: [String] = []
+    for tab in tabs {
+      let title = "Shaar activation \(token) \(tab.uuidString)"
+      let literal = String(data: try JSONEncoder().encode(title), encoding: .utf8)!
+      let result: String? = await withCheckedContinuation { continuation in
+        runtime.evaluate(
+          inTabID: tab.uuidString,
+          script: "document.title = \(literal); document.title"
+        ) { continuation.resume(returning: $0) }
+      }
+      guard result?.contains(title) == true else {
+        throw NativeSelectionFailure("Activation target title was not set.")
+      }
+      titles.append(title)
+    }
+    return titles
   }
 
   private func dispatchActivation(popup: String, json: String) {
@@ -278,8 +307,11 @@ final class NativeSelectionProbe {
       }
       if let data = json?.data(using: .utf8),
         let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["token"] as? String == token
+        NativeSelectionActivationReportValidation.isForToken(value, token)
       {
+        guard value["title"] as? String == activationTitleByToken[token] else {
+          throw NativeSelectionFailure("Extension activation selected an unexpected tab.")
+        }
         return value
       }
       try await Task.sleep(for: .milliseconds(100))
@@ -293,6 +325,12 @@ final class NativeSelectionProbe {
     }
     guard let data = json?.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  }
+
+  private func tabOwnerships(_ session: BrowserSession) -> [String] {
+    session.spaces.flatMap { space in
+      space.tabs.map { "\($0.id.uuidString):\(space.id.uuidString):\(space.profileID.uuidString)" }
+    }.sorted()
   }
 
   private func document(_ tab: UUID) async throws -> [String: Any] {

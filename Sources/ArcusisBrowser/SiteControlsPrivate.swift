@@ -21,6 +21,16 @@ final class PrivateSiteControlsModel: Identifiable {
   @ObservationIgnored private var changeRevision = 0
   @ObservationIgnored private var readRevision = 0
 
+  static func loadFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string(
+      "Could not load private site cookie settings. Try again.", table: "Shell", language: language)
+  }
+
+  static func updateFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string(
+      "Could not update private site cookie settings. Try again.", table: "Shell", language: language)
+  }
+
   init?(
     tabID: String, windowID: String, contextID: String, url: URL,
     runtime: ARCChromiumRuntime
@@ -58,7 +68,7 @@ final class PrivateSiteControlsModel: Identifiable {
       guard !Task.isCancelled, currentRead == readRevision, currentChange == changeRevision else {
         return
       }
-      failure = error.localizedDescription
+      failure = Self.loadFailure()
     }
   }
 
@@ -73,15 +83,20 @@ final class PrivateSiteControlsModel: Identifiable {
     do {
       try await runtime.setPrivateCookiesAllowed(
         value, tabID: tabID, windowID: windowID, contextID: contextID, origin: origin)
+      guard !Task.isCancelled else { return }
       let applied = try await runtime.privateCookies(
         forTabID: tabID, windowID: windowID, contextID: contextID, origin: origin
       ).boolValue
+      guard !Task.isCancelled else { return }
       allowed = applied
       failure =
         applied == value
         ? nil
         : ARCBridgeLocalizedString("The private cookie setting was not applied.")
-    } catch { failure = error.localizedDescription }
+    } catch {
+      guard !Task.isCancelled else { return }
+      failure = Self.updateFailure()
+    }
   }
 }
 
@@ -109,11 +124,15 @@ struct PrivateSiteControlsButton: View {
 }
 
 struct PrivateSiteControlsPanel: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
+
   let model: PrivateSiteControlsModel
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      ShellL10n.text("Private site controls").font(.headline)
+      ShellL10n.text("Private site controls")
+        .font(.headline)
+        .accessibilityAddTraits(Self.headingTraits)
       Text(model.origin)
         .font(.caption)
         .foregroundStyle(.secondary)

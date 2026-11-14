@@ -7,9 +7,15 @@ import Foundation
 extension BrowserEngine {
   func receiveDeviceChooser(_ payload: [String: Any]) {
     guard let id = payload["id"] as? String, let kind = payload["kind"] as? String else { return }
-    guard payload["windowID"] as? String == windowID, let store else {
+    guard payload["windowID"] as? String == windowID else {
       if kind == "deviceChooserRequested" {
-        events.resolveDeviceChooser(id, windowID: windowID, index: nil)
+        events.resolveDeviceChooser(id, windowID: windowID, optionID: nil)
+      }
+      return
+    }
+    guard let store else {
+      if kind != "deviceChooserDismissed" {
+        events.resolveDeviceChooser(id, windowID: windowID, optionID: nil)
       }
       return
     }
@@ -21,7 +27,7 @@ extension BrowserEngine {
         store.updateDeviceChooser(request)
       else {
         store.dismissDeviceChooserFromEngine(id)
-        events.resolveDeviceChooser(id, windowID: windowID, index: nil)
+        events.resolveDeviceChooser(id, windowID: windowID, optionID: nil)
         return
       }
     case "deviceChooserRequested":
@@ -29,16 +35,16 @@ extension BrowserEngine {
       guard let request = deviceChooserRequest(payload, store: store),
         store.requestDeviceChooser(request)
       else {
-        events.resolveDeviceChooser(id, windowID: windowID, index: nil)
+        events.resolveDeviceChooser(id, windowID: windowID, optionID: nil)
         return
       }
     default:
-      events.resolveDeviceChooser(id, windowID: windowID, index: nil)
+      events.resolveDeviceChooser(id, windowID: windowID, optionID: nil)
     }
   }
 
-  func settleDeviceChooser(_ request: DeviceChooserRequest, optionIndex: Int?) {
-    events.resolveDeviceChooser(request.id, windowID: windowID, index: optionIndex)
+  func settleDeviceChooser(_ request: DeviceChooserRequest, optionID: String?) {
+    events.resolveDeviceChooser(request.id, windowID: windowID, optionID: optionID)
   }
 
   private func deviceChooserRequest(

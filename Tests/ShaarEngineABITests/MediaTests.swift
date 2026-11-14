@@ -77,6 +77,22 @@ private actor FakeMediaTransport: ShaarMediaTransport {
   #expect(mute["value"] as? Bool == true)
 }
 
+@Test func captureCancellationOmitsTheSourceToken() async throws {
+  let fake = FakeMediaTransport("{}")
+  let adapter = ShaarMediaAdapter(transport: fake)
+  try await adapter.replyToCapture(
+    scope: ShaarMediaScope(profileID: "profile", tabID: "tab"), promptID: "prompt", token: nil)
+  let calls = await fake.calls
+  #expect(calls.count == 1)
+  #expect(calls[0].1 == .captureReply)
+  let arguments = try #require(
+    JSONSerialization.jsonObject(with: calls[0].2) as? [String: Any])
+  #expect(arguments["schemaVersion"] as? Int == 1)
+  #expect(arguments["promptID"] as? String == "prompt")
+  #expect(arguments["decision"] as? String == "cancel")
+  #expect(arguments["sourceToken"] == nil)
+}
+
 @Test func tenSecondSeekCommandsCarryOffsets() async throws {
   let fake = FakeMediaTransport("{}")
   let scope = ShaarMediaScope(profileID: "profile", tabID: "tab")

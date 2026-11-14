@@ -77,6 +77,14 @@ PAGES = {
         } catch (error) { fail(error); }
       };
     """,
+    "mailto": """
+      document.getElementById('parity-action').onclick = () => {
+        try {
+          navigator.registerProtocolHandler('mailto', location.origin + '/handled?u=%s');
+          finish({outcome:'registered'});
+        } catch (error) { fail(error); }
+      };
+    """,
     "handled": "finish({outcome:'handled', href:location.href});",
 }
 
@@ -110,7 +118,7 @@ class Fixture(BaseHTTPRequestHandler):
 
 def dishonest_protocol(checks):
     for check in checks:
-        if check.get("name") != "protocol" or not check.get("prompted"):
+        if check.get("name") not in {"protocol", "mailto"} or not check.get("prompted"):
             continue
         kinds = set(check.get("kinds") or [])
         if "protocolHandler" not in kinds:
@@ -129,10 +137,20 @@ def crash_names():
     return {item.name for item in CRASHES.iterdir() if "Shaar" in item.name or "shaar" in item.name}
 
 
+def evidence_directory(value: str) -> Path:
+    path = Path(value)
+    if path.is_symlink():
+        raise argparse.ArgumentTypeError(f"evidence directory must not be a symlink: {path}")
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(
+            f"evidence directory parent must not be a symlink: {path.parent}")
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path)
-    parser.add_argument("--evidence", required=True, type=Path)
+    parser.add_argument("--evidence", required=True, type=evidence_directory)
     options = parser.parse_args()
     app = options.app.resolve()
     evidence = options.evidence.resolve()
@@ -179,6 +197,10 @@ def main():
             new_crashes = sorted(crash_names() - before)
             prompted = set(payload.get("prompts") or [])
             required = {"geolocation", "notifications", "midi", "protocol"}
+            remembered = set(payload.get("rememberedPermissions") or [])
+            required_remembered = {"geolocation", "notifications", "midi"}
+            missing_prompts = required - prompted
+            missing_remembered = required_remembered - remembered
             summary = {
                 "exitCode": process.returncode,
                 "passed": payload.get("passed"),
@@ -186,7 +208,12 @@ def main():
                 "mediaTracks": payload.get("mediaTracks"),
                 "allWindowsHidden": payload.get("allWindowsHidden"),
                 "prompts": sorted(prompted),
-                "missingPrompts": sorted(required - prompted),
+                "missingPrompts": sorted(missing_prompts),
+                "rememberedPermissions": sorted(remembered),
+                "missingRememberedPermissions": sorted(missing_remembered),
+                "verdictFailed": (
+                    payload.get("passed") is not True or missing_prompts != set()
+                    or missing_remembered != set()),
                 "newCrashes": new_crashes,
                 "error": payload.get("error", ""),
             }
@@ -196,12 +223,15 @@ def main():
                 and payload.get("mediaPrompted") and payload.get("mediaTracks")
                 and payload.get("allWindowsHidden")
                 and not payload.get("unexpectedSurfaces")
-                and not payload.get("error"))
+                and not payload.get("error") and payload.get("passed") is True
+                and not missing_prompts and not missing_remembered)
+            opened_protocols = set(payload.get("openedProtocols") or [])
+            expected_protocols = {"web+shaarparity", "mailto"}
             if not completed:
                 raise SystemExit(1)
             if dishonest_protocol(payload.get("checks") or []):
                 raise SystemExit(1)
-            if not payload.get("passed") or required - prompted:
+            if expected_protocols - opened_protocols:
                 raise SystemExit(2)
         server.shutdown()
 

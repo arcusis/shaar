@@ -47,10 +47,18 @@ FOUNDATION_EXPORT BOOL ARCProbeNativeHoldAuditVisible(
   BOOL ownerCurrent, BOOL nativeHold);
 /// Trusted clicks are limited to authored fixture element ids.
 FOUNDATION_EXPORT BOOL ARCProbeTrustedClickElementAllowed(NSString * _Nullable elementID);
+/// Trusted wheel input is limited to the authored infinite-scroll fixture.
+FOUNDATION_EXPORT BOOL ARCProbeTrustedScrollElementAllowed(NSString * _Nullable elementID);
 
 @interface ARCShaarRuntime (TrustedProbeClick)
 /// Trusted click on an authored fixture element. Requires testing mode and a hidden window.
 - (void)submitTrustedProbeClickInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                            completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+@end
+
+@interface ARCShaarRuntime (TrustedProbeScroll)
+/// Trusted wheel scroll over an authored fixture element. Requires testing mode and hidden windows.
+- (void)submitTrustedProbeScrollInTabID:(NSString *)tabID elementID:(NSString *)elementID
                             completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 @end
 
@@ -79,6 +87,8 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeShaarMediaPublicState(NSDicti
 /// Injects a scoped media event into a runtime without creating an engine or window.
 FOUNDATION_EXPORT NSDictionary *ARCProbeShaarMediaEventDispatch(
   NSDictionary *payload, BOOL validOwner);
+FOUNDATION_EXPORT NSDictionary *ARCProbePrivateShaarMediaEventDispatch(
+  NSDictionary *payload);
 /// Injects save-prompt events for fixture tab OWNED-TAB. `abiReady` stands in for minor 12.
 FOUNDATION_EXPORT NSDictionary *ARCProbeShaarSavePromptDispatch(
   NSArray<NSDictionary *> *payloads, NSString *tabID, BOOL abiReady);
@@ -86,6 +96,8 @@ FOUNDATION_EXPORT NSDictionary *ARCProbeDesktopCaptureEventDispatch(
     NSDictionary *payload, BOOL validOwner);
 FOUNDATION_EXPORT NSDictionary *ARCProbeWebShareEventDispatch(
     NSDictionary *payload, uint32_t abiMinor, BOOL validOwner, BOOL replyAvailable);
+/// Verifies closing one native window cancels only the web shares owned by its tabs.
+FOUNDATION_EXPORT NSDictionary *ARCProbeWebShareWindowCloseDispatch(void);
 FOUNDATION_EXPORT NSDictionary *ARCProbePrintEventDispatch(
     NSDictionary *payload, uint32_t abiMinor, BOOL validOwner);
 /// Injects a DevTools open-URL event and records its validated app callback.

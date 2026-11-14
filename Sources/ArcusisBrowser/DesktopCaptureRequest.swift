@@ -24,20 +24,14 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
       let frameID = payload["frameID"] as? String,
       Self.isFrameToken(frameID),
       NavigationInput.isWebURL(pageURL),
-      requestingOrigin.host() != nil,
+      NavigationInput.isWebURL(requestingOrigin),
       requestingOrigin.path.isEmpty || requestingOrigin.path == "/",
       requestingOrigin.query == nil,
       requestingOrigin.fragment == nil,
       requestingOrigin.user == nil,
       requestingOrigin.password == nil
     else { return nil }
-    let scheme = requestingOrigin.scheme?.lowercased()
-    let secureOrigin =
-      scheme == "https"
-      || (scheme == "http"
-        && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(
-          requestingOrigin.host()?.lowercased() ?? ""))
-    guard secureOrigin else { return nil }
+    guard WebsitePermissionRequest.isSecureWebOrigin(requestingOrigin) else { return nil }
     guard let allowedKinds = Self.allowedKinds(from: payload["sourceTypes"]) else { return nil }
     self.id = id
     self.profileID = profileID

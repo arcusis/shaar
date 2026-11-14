@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import CoreFoundation
 import Foundation
 import Observation
 
@@ -130,7 +131,10 @@ final class DownloadsModel {
       notices[profileID] = PanelsL10n.string("Download controls are unavailable.")
       return false
     }
-    onCommand(action, id, profileID) { [weak self] error in self?.notices[profileID] = error }
+    onCommand(action, id, profileID) { [weak self] error in
+      guard let self, self.records[profileID]?[id]?.actions.contains(action) == true else { return }
+      self.notices[profileID] = error
+    }
     return true
   }
 
@@ -146,12 +150,24 @@ final class DownloadsModel {
       item.profileID == profileID, item.canOpen, let url = item.fileURL
     else { return nil }
     let resolvedURL = url.resolvingSymlinksInPath()
+    if records[profileID]?[id] != nil {
+      guard let directory = folder?.directoryURL ?? profileDirectory?(profileID),
+        Self.isContained(resolvedURL, in: directory)
+      else { return nil }
+    }
     guard
       let values = try? resolvedURL.resourceValues(forKeys: [.isRegularFileKey, .isReadableKey]),
       values.isRegularFile == true, values.isReadable == true,
       FileManager.default.isReadableFile(atPath: resolvedURL.path)
     else { return nil }
     return resolvedURL
+  }
+
+  private static func isContained(_ file: URL, in directory: URL) -> Bool {
+    let root = directory.resolvingSymlinksInPath().standardizedFileURL.path
+    let path = file.standardizedFileURL.path
+    let prefix = root.hasSuffix("/") ? root : root + "/"
+    return path != root && path.hasPrefix(prefix)
   }
 
   func fileActionFailed(profileID: UUID) {
@@ -164,12 +180,21 @@ final class DownloadsModel {
       let state = (record["state"] as? String).flatMap(DownloadState.init(rawValue:)),
       let paused = record["paused"] as? Bool, let dangerous = record["dangerous"] as? Bool,
       let privateItem = record["offTheRecord"] as? Bool,
-      let received = record["received"] as? Double, let total = record["total"] as? Double,
-      let start = record["startTime"] as? Double
+      let received = numericValue(record["received"]),
+      let total = numericValue(record["total"]),
+      let start = numericValue(record["startTime"])
     else { return nil }
     return BrowserDownload(
       id: id, profileID: profileID, filename: filename, path: path, sourceURL: address,
       state: state, paused: paused, dangerous: dangerous, offTheRecord: privateItem,
       received: received, total: total, startTime: start)
+  }
+
+  private func numericValue(_ value: Any?) -> Double? {
+    guard let value else { return nil }
+    if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+      return nil
+    }
+    return value as? Double
   }
 }

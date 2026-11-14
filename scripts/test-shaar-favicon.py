@@ -27,6 +27,14 @@ def png() -> bytes:
             + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
+def copy_evidence(source: Path, destination: Path) -> None:
+    if destination.is_symlink():
+        raise ValueError(f"favicon evidence output must not be a symlink: {destination}")
+    if destination.exists() and not destination.is_file():
+        raise ValueError(f"favicon evidence output is not a regular file: {destination}")
+    destination.write_bytes(source.read_bytes())
+
+
 class Fixture(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path.startswith("/icon.png"):
@@ -60,9 +68,9 @@ def run_probe(app: Path, root: Path, data: Path, report: Path, page: str,
     evidence.mkdir(parents=True, exist_ok=True)
     sidebar = root / "favicon-sidebar.png"
     if sidebar.exists():
-        (evidence / f"{report.stem}.png").write_bytes(sidebar.read_bytes())
+        copy_evidence(sidebar, evidence / f"{report.stem}.png")
     if report.exists():
-        (evidence / report.name).write_text(report.read_text())
+        copy_evidence(report, evidence / report.name)
     if process.returncode or not report.exists():
         raise AssertionError(
             f"favicon probe exit={process.returncode}: {process.stderr[-2500:]} "
@@ -70,9 +78,18 @@ def run_probe(app: Path, root: Path, data: Path, report: Path, page: str,
     return process, json.loads(report.read_text())
 
 
+def verification_app_path(value: str) -> Path:
+    app = Path(value)
+    executable = app / "Contents/MacOS/ShaarVerification"
+    if not app.is_dir() or not executable.is_file():
+        raise argparse.ArgumentTypeError(
+            f"verification app is missing or incomplete: {app}")
+    return app
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", required=True, type=Path)
+    parser.add_argument("--app", required=True, type=verification_app_path)
     options = parser.parse_args()
     app = options.app.resolve()
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
@@ -107,7 +124,7 @@ def main() -> None:
             evidence.mkdir(parents=True, exist_ok=True)
             sidebar = root / "favicon-sidebar.png"
             if sidebar.exists():
-                (evidence / "favicon-sidebar-after-relaunch.png").write_bytes(sidebar.read_bytes())
+                copy_evidence(sidebar, evidence / "favicon-sidebar-after-relaunch.png")
             print(json.dumps({
                 "exitCode": 0,
                 "faviconObserved": True,

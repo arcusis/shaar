@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -31,6 +32,16 @@ func resourceBundle() -> Bundle { .module }
 
 
 class PackagedResourceSourceTests(unittest.TestCase):
+    def test_invalid_utf8_source_reports_its_path_without_traceback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / check.SHIPPING_SOURCE_ROOTS[0] / "Invalid.swift"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"let value = \xff\n")
+
+            with self.assertRaisesRegex(ValueError, "cannot read shipping Swift source.*Invalid.swift"):
+                check.violations_in_tree(root)
+
     def test_repository_keeps_module_inside_the_packaged_helper(self):
         self.assertEqual(check.violations_in_tree(ROOT), [])
 
@@ -52,6 +63,22 @@ class PackagedResourceSourceTests(unittest.TestCase):
         source = 'let message = "Bundle.module is only available in development"'
         self.assertEqual(check.violations_in_source(source, "Sources/BrowserCore/Example.swift"), [])
 
+    def test_module_reference_in_block_comments_is_ignored(self):
+        source = """\
+/* Bundle.module is only a comment */
+/* A longer comment starts here
+   Bundle.module remains comment text
+   /* Swift block comments can nest. Bundle.module is still ignored. */
+*/
+let value = 1
+"""
+        self.assertEqual(check.violations_in_source(source, "Sources/BrowserCore/Example.swift"), [])
+    def test_module_references_inside_single_and_multiline_block_comments_are_ignored(self):
+        source = "/* Bundle.module */\n/* explanation\n /* nested Bundle.module */\n*/\nlet url = Bundle.module"
+        violations = check.violations_in_source(source, "Sources/BrowserCore/Example.swift")
+        self.assertEqual(len(violations), 1)
+        self.assertIn(":5:", violations[0])
+
     def test_module_reference_in_interpolated_string_text_is_ignored(self):
         source = 'let message = "Bundle.module is text, not code: \\(label)"'
         self.assertEqual(check.violations_in_source(source, "Sources/BrowserCore/Example.swift"), [])
@@ -63,6 +90,11 @@ class PackagedResourceSourceTests(unittest.TestCase):
     def test_module_reference_in_raw_string_interpolation_is_still_checked(self):
         source = 'let message = #"Bundle: \\#(Bundle.module)"#'
         self.assertEqual(len(check.violations_in_source(source, "Sources/BrowserCore/Example.swift")), 1)
+
+    def test_raw_string_embedded_quote_does_not_hide_following_code(self):
+        source = 'let message = #"embedded " quote"#; _ = Bundle.module'
+        violations = check.violations_in_source(source, "Sources/BrowserCore/Example.swift")
+        self.assertEqual(len(violations), 1)
 
     def test_shipping_scan_skips_verification_sources(self):
         roots = set(check.SHIPPING_SOURCE_ROOTS)

@@ -1,6 +1,34 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Could not create the bug report. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not create the bug report. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן ליצור את דוח התקלה. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
+    "Could not apply developer settings. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not apply developer settings. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להחיל את הגדרות הפיתוח. כדאי לנסות שוב." } }
+      }
+    },
+    "The page-tools request could not be completed. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The page-tools request could not be completed. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להשלים את הבקשה מכלי הדף. כדאי לנסות שוב." } }
+      }
+    },
     "Tech stack": {
       "localizations": {
         "en": {
@@ -605,6 +633,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "כותרות Cookie ו‑Authorization מוסתרות כברירת מחדל. כתובות URL, הודעות מסוף ותוכן צילום המסך אינם מוסתרים. שום מידע אינו מועלה."
+          }
+        }
+      }
+    },
+    "Sensitive header values are redacted by default. Console text redacts common credential patterns and strips URL credentials, queries and fragments. URL paths, screenshots and unrecognized secrets may still contain sensitive data. Nothing is uploaded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensitive header values are redacted by default. Console text redacts common credential patterns and strips URL credentials, queries and fragments. URL paths, screenshots and unrecognized secrets may still contain sensitive data. Nothing is uploaded."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ערכים רגישים בכותרות מוסתרים כברירת מחדל. טקסט המסוף מסתיר דפוסים נפוצים של פרטי התחברות ומסיר פרטי התחברות, שאילתות ומקטעים מכתובות URL. נתיבי URL, צילומי מסך וסודות שלא זוהו עדיין עלולים להכיל מידע רגיש. שום מידע אינו מועלה."
           }
         }
       }
@@ -1649,6 +1693,22 @@
         }
       }
     },
+    "The developer tools returned no result.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The developer tools returned no result."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כלי הפיתוח לא החזירו תוצאה."
+          }
+        }
+      }
+    },
     "The page changed. Try again.": {
       "localizations": {
         "en": {
@@ -1713,6 +1773,12 @@
         }
       }
     },
+    "The bug report could not be saved. Check available storage and try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The bug report could not be saved. Check available storage and try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לשמור את דוח הבאגים. בדקו שיש מספיק מקום אחסון ונסו שוב." } }
+      }
+    },
     "The report exceeds its supported size.": {
       "localizations": {
         "en": {
@@ -1771,19 +1837,19 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "בקשה אחרונה אחת"
+                  "value": "בקשה אחת שנשלחה לאחרונה"
                 }
               },
               "two": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "שתי בקשות אחרונות"
+                  "value": "שתי בקשות שנשלחו לאחרונה"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d בקשות אחרונות"
+                  "value": "%d בקשות שנשלחו לאחרונה"
                 }
               }
             }
@@ -1817,19 +1883,19 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "הודעה אחרונה אחת"
+                  "value": "הודעה אחת שנרשמה לאחרונה"
                 }
               },
               "two": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "שתי הודעות אחרונות"
+                  "value": "שתי הודעות שנרשמו לאחרונה"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d הודעות אחרונות"
+                  "value": "%d הודעות שנרשמו לאחרונה"
                 }
               }
             }

@@ -35,6 +35,9 @@ final class ExtensionManagerModel {
   private(set) var status: String?
   private var requestID = UUID()
   private var developerModeRequestID = UUID()
+  private var extensionAccessRequestID = UUID()
+  private var statusRequestID = UUID()
+  private var iconVersions: [String: String] = [:]
 
   static func shared(
     runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID
@@ -137,57 +140,55 @@ final class ExtensionManagerModel {
   }
 
   func setDeveloperMode(_ enabled: Bool) {
-    let request = UUID()
+    let request = beginStatusRequest()
     developerModeRequestID = request
     let previousValue = developerMode
     developerMode = enabled
-    status = nil
     preferences?.setExtensionDeveloperMode(enabled, for: profileID)
     submitDeveloperMode(enabled) { [weak self] reply in
       guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .updated:
-        self.status = nil
+        self.updateStatus(nil, for: request)
       case .unsupported:
         self.restoreDeveloperMode(previousValue)
-        self.status = ExtensionInstallNotice.needsNewerEngine
+        self.updateStatus(ExtensionInstallNotice.needsNewerEngine, for: request)
       case .prompted, .failed:
         self.restoreDeveloperMode(previousValue)
-        self.status = ExtensionInstallNotice.developerModeFailed
+        self.updateStatus(ExtensionInstallNotice.developerModeFailed, for: request)
       }
     }
   }
 
   private func verifyStoredDeveloperMode() {
-    let request = UUID()
+    let request = beginStatusRequest()
     developerModeRequestID = request
     submitDeveloperMode(true) { [weak self] reply in
       guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .updated:
-        self.status = nil
+        self.updateStatus(nil, for: request)
       case .unsupported:
         self.restoreDeveloperMode(false)
-        self.status = ExtensionInstallNotice.needsNewerEngine
+        self.updateStatus(ExtensionInstallNotice.needsNewerEngine, for: request)
       case .prompted, .failed:
         self.restoreDeveloperMode(false)
-        self.status = ExtensionInstallNotice.developerModeFailed
+        self.updateStatus(ExtensionInstallNotice.developerModeFailed, for: request)
       }
     }
   }
 
   func loadUnpacked(at url: URL, tabID: UUID?) {
+    let request = beginStatusRequest()
+    developerModeRequestID = request
     guard developerMode else {
-      status = SettingsL10n.string("Turn on Developer mode to load an unpacked extension.")
+      updateStatus(SettingsL10n.string("Turn on Developer mode to load an unpacked extension."), for: request)
       return
     }
     guard let path = ExtensionUnpackedFolder.directory(url) else {
-      status = SettingsL10n.string("Choose a folder that contains a Manifest V3 extension.")
+      updateStatus(SettingsL10n.string("Choose a folder that contains a Manifest V3 extension."), for: request)
       return
     }
-    let request = UUID()
-    developerModeRequestID = request
-    status = nil
     var payload: [String: Any] = [
       "schemaVersion": 1, "action": "loadUnpacked", "path": path,
     ]
@@ -201,27 +202,29 @@ final class ExtensionManagerModel {
         self.submitUnpackedLoad(payload, tabID: tabID, request: request)
       case .unsupported:
         self.restoreDeveloperMode(false)
-        self.status = ExtensionInstallNotice.needsNewerEngine
+        self.updateStatus(ExtensionInstallNotice.needsNewerEngine, for: request)
       case .prompted, .failed:
         self.restoreDeveloperMode(false)
-        self.status = ExtensionInstallNotice.installFailed
+        self.updateStatus(ExtensionInstallNotice.installFailed, for: request)
       }
     }
   }
 
-  private func submitUnpackedLoad(_ payload: [String: Any], tabID: UUID?, request: UUID) {
+  private func submitUnpackedLoad(
+    _ payload: [String: Any], tabID: UUID?, request: UUID
+  ) {
     submitManage(payload, tabID: tabID) { [weak self] reply in
       guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .prompted:
-        self.status = nil
+        self.updateStatus(nil, for: request)
       case .updated:
-        self.status = nil
+        self.updateStatus(nil, for: request)
         self.refresh()
       case .unsupported:
-        self.status = ExtensionInstallNotice.needsNewerEngine
+        self.updateStatus(ExtensionInstallNotice.needsNewerEngine, for: request)
       case .failed:
-        self.status = ExtensionInstallNotice.installFailed
+        self.updateStatus(ExtensionInstallNotice.installFailed, for: request)
       }
     }
   }
@@ -232,18 +235,20 @@ final class ExtensionManagerModel {
   }
 
   func setIncognitoEnabled(_ id: String, enabled: Bool) {
+    let request = beginStatusRequest()
+    extensionAccessRequestID = request
     guard BrowserExtension.isValidID(id) else {
-      status = ExtensionInstallNotice.privateAccessRefused
+      updateStatus(ExtensionInstallNotice.privateAccessRefused, for: request)
       return
     }
-    status = nil
     submitManage(
       [
         "schemaVersion": 1, "action": "setIncognitoEnabled", "extensionId": id,
         "enabled": enabled,
       ], tabID: nil
     ) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.extensionAccessRequestID == request,
+        self.statusRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -257,18 +262,20 @@ final class ExtensionManagerModel {
   func setSiteAccess(
     _ access: ExtensionSiteAccess, extensionID: String, origin: String, tabID: UUID?
   ) {
+    let request = beginStatusRequest()
+    extensionAccessRequestID = request
     guard BrowserExtension.isValidID(extensionID), ExtensionPageOrigin.accepts(origin) else {
-      status = ExtensionInstallNotice.siteAccessRefused
+      updateStatus(ExtensionInstallNotice.siteAccessRefused, for: request)
       return
     }
-    status = nil
     submitManage(
       [
         "schemaVersion": 1, "action": "setSiteAccess", "extensionId": extensionID,
         "access": access.rawValue, "origin": origin,
       ], tabID: tabID
     ) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.extensionAccessRequestID == request,
+        self.statusRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -289,13 +296,23 @@ final class ExtensionManagerModel {
       completion: completion)
   }
 
+  private func beginStatusRequest() -> UUID {
+    let request = UUID()
+    statusRequestID = request
+    status = nil
+    return request
+  }
+
+  private func updateStatus(_ value: String?, for request: UUID) {
+    guard statusRequestID == request else { return }
+    status = value
+  }
+
   private func mutate(_ operation: ExtensionManagementOperation) {
     guard let runtime, ExtensionManagementOperation.isValidProfileID(profileID.uuidString) else {
       return
     }
-    runtime.manageExtensions(operation, profileID: profileID) { [weak self] _ in
-      Task { @MainActor [weak self] in self?.refresh() }
-    }
+    runtime.manageExtensions(operation, profileID: profileID) { [weak self] _ in self?.refresh() }
   }
 
   private func submitManage(
@@ -315,9 +332,24 @@ final class ExtensionManagerModel {
     guard let directory = runtime.extensionsDirectory(forProfileID: profileID.uuidString) else {
       return
     }
-    for item in extensions where icons[item.id] == nil {
+    let updated = Self.updatedIconCache(
+      extensions: extensions, icons: icons, versions: iconVersions, directory: directory)
+    icons = updated.icons
+    iconVersions = updated.versions
+  }
+
+  static func updatedIconCache(
+    extensions: [ManagedExtension], icons: [String: NSImage], versions: [String: String],
+    directory: URL
+  ) -> (icons: [String: NSImage], versions: [String: String]) {
+    let currentIDs = Set(extensions.map(\.id))
+    var icons = icons.filter { currentIDs.contains($0.key) }
+    var versions = versions.filter { currentIDs.contains($0.key) }
+    for item in extensions where versions[item.id] != item.version || icons[item.id] == nil {
       icons[item.id] = ExtensionIconLoader.icon(
         for: item.id, version: item.version, in: directory)
+      versions[item.id] = item.version
     }
+    return (icons, versions)
   }
 }

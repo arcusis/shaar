@@ -40,9 +40,16 @@ final class ChromiumPageContainerView: NSView {
         .filter({ $0.shownTabID == tabID && $0.window === window })
         .max(by: { $0.selectionOrder < $1.selectionOrder })
     else { return false }
-    _ = target.attach(page)
+    _ = target.select(
+      page, tabID: tabID, liveTabs: Set(target.retainedPages.keys).union([tabID]))
     page.isHidden = false
     return page.superview === target && page.window === window
+  }
+
+  static func latestLiveContainer(for tabID: UUID) -> ChromiumPageContainerView? {
+    live.allObjects
+      .filter { $0.shownTabID == tabID }
+      .max { $0.selectionOrder < $1.selectionOrder }
   }
 
   private(set) weak var pageView: NSView?
@@ -50,10 +57,15 @@ final class ChromiumPageContainerView: NSView {
   private var shownTabID: UUID?
   private var selectionOrder: UInt64 = 0
 
+  /// Tears down a private representable while allowing another live container to reclaim its page.
+  static func dismantlePrivatePage(_ container: ChromiumPageContainerView) {
+    container.dismantle()
+  }
+
   @discardableResult
   func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
     Self.live.add(self)
-    shownTabID = page == nil ? nil : tabID
+    shownTabID = liveTabs.contains(tabID) ? tabID : nil
     Self.nextSelectionOrder &+= 1
     selectionOrder = Self.nextSelectionOrder
     wantsLayer = true
@@ -98,7 +110,7 @@ final class ChromiumPageContainerView: NSView {
     shownTabID = nil
     attach(nil)
     for (tabID, page) in owned {
-      Self.live.allObjects.first { $0.shownTabID == tabID }?.attach(page)
+      Self.latestLiveContainer(for: tabID)?.attach(page)
     }
   }
 

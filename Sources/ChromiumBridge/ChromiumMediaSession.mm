@@ -6,6 +6,7 @@
 #import "ChromiumMediaSession.h"
 #import "ChromiumShaarFeatureTransport.h"
 #import <objc/runtime.h>
+#include <CoreFoundation/CoreFoundation.h>
 #include <cmath>
 
 NSString *const ARCMediaSessionMessage = @"arcusisMediaSession";
@@ -16,6 +17,11 @@ NSString *const ARCPictureInPictureCommandMessage = @"arcusisPictureInPicture";
 
 static const NSUInteger ARCMediaTextLimit = 300;
 static const NSUInteger ARCMediaArtworkLimit = 2048;
+
+static BOOL ARCMediaIsJSONBoolean(id value) {
+  return [value isKindOfClass:NSNumber.class] &&
+      CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID();
+}
 
 // The script keeps the page's own handlers so actions behave exactly like the page's
 // media keys. It falls back to the playing element only where the outcome is certain.
@@ -216,7 +222,7 @@ static NSArray<NSString *> *ARCMediaActions(id value) {
 }
 
 static BOOL ARCMediaFlag(id value) {
-  return [value isKindOfClass:NSNumber.class] && [value boolValue];
+  return ARCMediaIsJSONBoolean(value) && [value boolValue];
 }
 
 static id ARCMediaVolume(id value) {
@@ -344,9 +350,8 @@ static void ShaarPublishPictureInPicture(ARCShaarRuntime *runtime, NSString *tab
     NSNumber *camera = payload[@"camera"];
     NSNumber *microphone = payload[@"microphone"];
     NSNumber *screen = payload[@"screen"];
-    if (![camera isKindOfClass:NSNumber.class] ||
-        ![microphone isKindOfClass:NSNumber.class] ||
-        ![screen isKindOfClass:NSNumber.class]) return;
+    if (!ARCMediaIsJSONBoolean(camera) || !ARCMediaIsJSONBoolean(microphone) ||
+        !ARCMediaIsJSONBoolean(screen)) return;
     if (self.onMediaAccess) {
       self.onMediaAccess(tabID, @{@"camera": camera, @"microphone": microphone,
                                   @"screen": screen});

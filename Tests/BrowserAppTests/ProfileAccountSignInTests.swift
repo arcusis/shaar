@@ -12,6 +12,19 @@ import Testing
 
 @Suite @MainActor
 struct ProfileAccountSignInTests {
+  @Test func missingSignInPageLoadingLabelIsLocalized() {
+    #expect(ProfileAccountSignInAccessibility.loadingLabel == SettingsL10n.string("Loading sign-in…"))
+  }
+
+  @Test func loadingPageAccessibilityLabelIsLocalized() {
+    #expect(
+      ProfileAccountSignInAccessibility.loadingPageLabel(language: .english)
+        == "Loading sign-in page…")
+    #expect(
+      ProfileAccountSignInAccessibility.loadingPageLabel(language: .hebrew)
+        == "טעינת דף ההתחברות…")
+  }
+
   @Test func hiddenSignInOwnsItsWindowUntilCancellationAndFinishesOnce() throws {
     let runtime = SignInWindowTestRuntime()
     let profile = BrowserProfile(id: UUID(), name: "Work")
@@ -33,6 +46,31 @@ struct ProfileAccountSignInTests {
     flow.cancel()
     #expect(finishCount == 1)
     #expect(runtime.closedIDs == [windowID])
+  }
+
+  @Test func cancellingSignInClosesOwnedPopupWindowsAndFinishesOnce() throws {
+    let runtime = SignInWindowTestRuntime()
+    let flow = try ProfileAccountSignIn(
+      events: BrowserRuntimeEvents(runtime: runtime),
+      profile: BrowserProfile(id: UUID(), name: "Work"),
+      provider: .google, purpose: .signIn, visible: false)
+    let primaryWindowID = flow.engine.windowID
+    let popupWindowID = try #require(flow.requestedWindow(type: "popup"))
+    var finishCount = 0
+    flow.onFinished = { _ in finishCount += 1 }
+
+    #expect(flow.ownsWindow(primaryWindowID))
+    #expect(flow.ownsWindow(popupWindowID))
+    #expect(flow.windowIDs == [primaryWindowID, popupWindowID])
+
+    flow.cancel()
+    flow.cancel()
+
+    #expect(finishCount == 1)
+    #expect(flow.windowIDs.isEmpty)
+    #expect(!flow.ownsWindow(primaryWindowID))
+    #expect(!flow.ownsWindow(popupWindowID))
+    #expect(runtime.closedIDs == [popupWindowID, primaryWindowID])
   }
 }
 

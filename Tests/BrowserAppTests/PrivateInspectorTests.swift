@@ -17,6 +17,7 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
   var ended: [String] = []
   var opened = false
   var toggleError: Error?
+  var pendingAuditReplies: [@MainActor @Sendable ([String: Any]?, Error?) -> Void] = []
 
   override func view(forPrivateTabID tabID: String, windowID: String, contextID: String) -> NSView?
   {
@@ -44,6 +45,10 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
     }
     calls.append(method)
     if let expression = params["expression"] as? String { expressions.append(expression) }
+    if (params["expression"] as? String)?.contains("axe.version !== '4.14.0'") == true {
+      pendingAuditReplies.append(completion)
+      return
+    }
     completion(["result": ["value": 42]], nil)
   }
 
@@ -57,6 +62,41 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
 }
 
 @Suite @MainActor struct PrivateInspectorTests {
+  @Test func cancelledAuditCannotClearTheReplacementOperation() async throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PrivateInspectorRuntime()
+    runtime.tabID = tabID.uuidString
+    runtime.pageView = NSView()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "private-context", windowID: "private-window",
+      firstTabID: tabID, store: store)
+    session.toggleInspector()
+    let audit = try #require(session.inspectors[tabID]?.details.audit)
+
+    audit.run()
+    for _ in 0..<100 where runtime.pendingAuditReplies.count < 1 { await Task.yield() }
+    #expect(runtime.pendingAuditReplies.count == 1)
+    audit.cancel()
+    audit.run()
+    for _ in 0..<100 where runtime.pendingAuditReplies.count < 2 { await Task.yield() }
+    #expect(runtime.pendingAuditReplies.count == 2)
+
+    let reply: [String: Any] = ["result": ["value": [
+      "scope": "page", "violations": 0, "incomplete": 0, "findings": [], "truncated": false,
+    ]]]
+    runtime.pendingAuditReplies[0](reply, nil)
+    try await Task.sleep(for: .milliseconds(10))
+    #expect(audit.busy)
+
+    runtime.pendingAuditReplies[1](reply, nil)
+    try await Task.sleep(for: .milliseconds(10))
+    #expect(!audit.busy)
+    #expect(audit.report?.scope == "page")
+    session.retireInspectors()
+  }
+
   @Test func privateDeveloperToolsFailureUsesLocalizedNotice() throws {
     let tabID = UUID()
     let store = BrowserStore(
@@ -73,8 +113,10 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
 
     session.toggleChromiumDeveloperTools()
 
-    #expect(session.failure == ShellL10n.string(
-      "Could not open developer tools in this private window. Try again."))
+    #expect(
+      session.failure
+        == ShellL10n.string(
+          "Could not open developer tools in this private window. Try again."))
   }
 
   @Test func closingReleasedInspectorStillRemovesRendererShield() async throws {
@@ -89,7 +131,7 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
       firstTabID: tabID, store: store)
     let target = try #require(session.inspectorTarget)
     var model: InspectorModel? = InspectorModel(target: target, privateSession: session)
-    weak var released = model
+    weak let released = model
     model?.open()
     model?.close()
     model = nil

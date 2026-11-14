@@ -5,6 +5,31 @@
 import BrowserCore
 import Foundation
 
+struct VerificationHarnessLaunch {
+  var framework: URL
+  var output: URL
+  var page: URL?
+  var remainder: String?
+}
+
+enum VerificationHarnessArguments {
+  static func launch(
+    _ flag: String, arguments: [String], frameworksURL: URL?
+  ) -> VerificationHarnessLaunch? {
+    guard arguments.filter({ $0 == flag }).count == 1,
+      let index = arguments.firstIndex(of: flag),
+      arguments.indices.contains(index + 2),
+      let frameworksURL
+    else { return nil }
+    let remainder = arguments.indices.contains(index + 3) ? arguments[index + 3] : nil
+    return VerificationHarnessLaunch(
+      framework: frameworksURL.appending(path: "Chromium Framework.framework"),
+      output: URL(fileURLWithPath: arguments[index + 1]),
+      page: URL(string: arguments[index + 2]),
+      remainder: remainder)
+  }
+}
+
 @main
 enum ShaarVerificationMain {
   @MainActor static func main() {
@@ -57,6 +82,8 @@ enum ShaarVerificationMain {
     }
     if CommandLine.arguments.contains("--probe-profile-providers")
       || CommandLine.arguments.contains("--probe-profile-fixture")
+      || CommandLine.arguments.contains("--probe-profile-signin")
+      || CommandLine.arguments.contains("--probe-profile-signout")
     {
       exit(ProfileOnboardingProbe.runStandalone(arguments: CommandLine.arguments))
     }
@@ -111,25 +138,12 @@ enum ShaarVerificationMain {
     exit(EngineProbe.run(arguments: CommandLine.arguments))
   }
 
-  private struct HarnessLaunch {
-    var framework: URL
-    var output: URL
-    var page: URL?
-    var remainder: String?
-  }
-
   /// Launch arguments for one moved smoke or probe. Nil when the flag is absent or incomplete.
-  private static func harnessLaunch(_ flag: String, _ arguments: [String]) -> HarnessLaunch? {
-    guard let index = arguments.firstIndex(of: flag),
-      arguments.indices.contains(index + 2),
-      let frameworks = Bundle.main.privateFrameworksURL
-    else { return nil }
-    let remainder = arguments.indices.contains(index + 3) ? arguments[index + 3] : nil
-    return HarnessLaunch(
-      framework: frameworks.appending(path: "Chromium Framework.framework"),
-      output: URL(fileURLWithPath: arguments[index + 1]),
-      page: URL(string: arguments[index + 2]),
-      remainder: remainder)
+  private static func harnessLaunch(_ flag: String, _ arguments: [String])
+    -> VerificationHarnessLaunch?
+  {
+    VerificationHarnessArguments.launch(
+      flag, arguments: arguments, frameworksURL: Bundle.main.privateFrameworksURL)
   }
 
   /// Runs a harness that used to dispatch from the shipping executable.

@@ -179,7 +179,7 @@ enum GoogleAccountList {
   /// Entries look like `["gaia.l.a", 1, name, email, photo, …]`; the first is the primary account.
   /// Returns nil until the body is the account list, and an empty array when no one is signed in.
   static func accounts(fromBody text: String) -> [ConnectedAccount]? {
-    guard
+    guard text.utf8.count <= 1_048_576,
       let root = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [Any],
       root.count > 1, let entries = root[1] as? [[Any]]
     else { return nil }
@@ -197,7 +197,10 @@ enum GoogleAccountList {
   /// addresses are kept.
   static func photoURL(from value: String) -> URL? {
     let address = value.hasPrefix("//") ? "https:" + value : value
-    guard let url = URL(string: address), url.scheme == "https", url.host() != nil else {
+    guard let url = URL(string: address), url.scheme == "https", url.host() != nil,
+      url.user == nil, url.password == nil,
+      url.port.map({ (0...65535).contains($0) }) ?? true
+    else {
       return nil
     }
     return url

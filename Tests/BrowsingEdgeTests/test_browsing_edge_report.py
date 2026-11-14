@@ -116,6 +116,38 @@ class BrowsingEdgeReportTests(unittest.TestCase):
             ]),
         )
 
+    def test_receipt_writer_rejects_symlinked_file_and_parent(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            external = Path(outside)
+            sentinel = external / "sentinel.json"
+            sentinel.write_text("preserve", encoding="utf-8")
+
+            linked_file = root / "receipt.json"
+            linked_file.symlink_to(sentinel)
+            with self.assertRaisesRegex(ValueError, "receipt path must not be a symlink"):
+                PROBE.write_receipt(linked_file, {"passed": True})
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
+
+            linked_parent = root / "linked"
+            linked_parent.symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "receipt directory must not be a symlink"):
+                PROBE.write_receipt(linked_parent / "receipt.json", {"passed": True})
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
+            self.assertFalse((external / "receipt.json").exists())
+
+    def test_receipt_writer_rejects_paths_inside_verification_app(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory) / "Verification.app"
+            executable = app / "Contents/MacOS/ShaarVerification"
+            executable.parent.mkdir(parents=True)
+            executable.write_text("executable", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "receipt path must be outside the verification app"):
+                PROBE.write_receipt(executable, {"passed": True}, app)
+
+            self.assertEqual(executable.read_text(encoding="utf-8"), "executable")
+
     def test_note_cap_fails_a_hidden_windows_row_that_claims_a_pass(self):
         rows = [{"name": "Hidden windows", "passed": True, "proven": True}]
         harness = {"passed": True, "proven": True}
@@ -137,7 +169,11 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         fixture = PROBE.SCROLL.decode()
         self.assertIn('window.__scrollEvents = 0', fixture)
         self.assertIn('window.__scrollEvents += 1', fixture)
-        self.assertIn('addEventListener("scroll"', fixture)
+        self.assertIn('root.addEventListener("scroll"', fixture)
+        self.assertIn('window.__pageScrollEvents = 0', fixture)
+        self.assertIn('window.__pageScrollEvents += 1', fixture)
+        self.assertIn('window.addEventListener("scroll"', fixture)
+        self.assertIn('height:180vh', fixture)
 
     def test_scroll_fixture_requires_scrollend_listener_delivery(self):
         fixture = PROBE.SCROLL.decode()
@@ -147,3 +183,34 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
         self.assertIn('let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0', source)
         self.assertIn('scrollEvents > 0 && scrollEndEvents > 0', source)
+        self.assertIn(
+            'window.scrollTo(0, document.documentElement.scrollHeight)', source)
+        self.assertIn('let pageScrollEvents = number(second?["pageScrollEvents"]) ?? 0', source)
+        self.assertIn('scrollEvents > 0 && scrollEndEvents > 0 && pageScrollEvents > 0', source)
+
+    def test_scroll_failure_is_unproven_without_a_page_event(self):
+        source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
+        self.assertIn(
+            'proven: scrollFailureIsAttributable(scrollEvents: scrollEvents)', source)
+
+    def test_scroll_probe_samples_before_issuing_its_first_scroll(self):
+        source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
+        baseline = source.index('let first = await scrollState(runtime, context, triggerScroll: false)')
+        trigger = source.index('_ = await scrollState(runtime, context, triggerScroll: true)')
+        self.assertLess(baseline, trigger)
+        self.assertIn(
+            'var second = await scrollState(runtime, context, triggerScroll: false)', source)
+
+    def test_scroll_probe_waits_for_delayed_fixture_rows(self):
+        fixture = PROBE.SCROLL.decode()
+        self.assertIn('setTimeout(function () { add(400); }, 600)', fixture)
+        source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
+        self.assertIn('let growthDeadline = Date().addingTimeInterval(2)', source)
+        self.assertIn('while Date() < growthDeadline', source)
+        self.assertIn(
+            'scrollRowsHaveGrown(\n        beforeCount: firstCount, afterCount: number(second?["count"]) ?? 0)',
+            source)
+
+    def test_media_fixture_rejects_a_paused_video_with_dimensions(self):
+        fixture = PROBE.MEDIA.decode()
+        self.assertIn('!video.paused && video.videoWidth > 0', fixture)

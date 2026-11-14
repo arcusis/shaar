@@ -97,6 +97,7 @@ final class InspectorPageToolsModel {
   @ObservationIgnored private var storageUpdated = Date.distantPast
   @ObservationIgnored private var pollTask: Task<Void, Never>?
   @ObservationIgnored private var updateWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+  @ObservationIgnored var lifecycleID = UUID()
 
   var pendingUpdateWaiterCount: Int { updateWaiters.count }
 
@@ -108,6 +109,7 @@ final class InspectorPageToolsModel {
   func start() {
     guard !active else { return }
     active = true
+    lifecycleID = UUID()
     pollTask = Task { [weak self] in
       while !Task.isCancelled {
         if let self, self.active { await self.refresh() } else { return }
@@ -160,6 +162,7 @@ final class InspectorPageToolsModel {
 
   func stop() {
     active = false
+    lifecycleID = UUID()
     pollTask?.cancel()
     pollTask = nil
     developer.setPerformanceEnabled(false)
@@ -228,6 +231,7 @@ final class InspectorPageToolsModel {
     guard !busy, active, let inspector, inspector.isOpen, let engine = inspector.engine,
       engine.pages[inspector.target.tabID]?.loading == false
     else { return }
+    let lifecycle = lifecycleID
     guard inspector.target.origin != nil else {
       failure = InspectorToolsL10n.string("Page tools require an HTTP or HTTPS page.")
       return
@@ -238,7 +242,8 @@ final class InspectorPageToolsModel {
     let destination = inspector.target
     do {
       try await recording()
-      guard active, generation == inspector.documentGeneration, destination == inspector.target
+      guard isCurrent(lifecycle), generation == inspector.documentGeneration,
+        destination == inspector.target
       else { return }
       if epoch != generation {
         epoch = generation
@@ -252,14 +257,14 @@ final class InspectorPageToolsModel {
       }
       if tool == .overview {
         let value = try await developer.evaluate("globalThis.__shaarBugReportV1.tech()") ?? []
-        try receiveTechnologies(value, generation: generation)
+        try receiveTechnologies(value, generation: generation, lifecycle: lifecycle)
       }
       if tool == .vitals {
         if !developer.performanceEnabled { developer.setPerformanceEnabled(true) }
         try await developer.refreshPerformance()
         let metrics =
           try await developer.call("Performance.getMetrics")["metrics"] as? [[String: Any]] ?? []
-        guard active, generation == inspector.documentGeneration else { return }
+        guard isCurrent(lifecycle), generation == inspector.documentGeneration else { return }
         if let task = metrics.first(where: { $0["name"] as? String == "TaskDuration" })?["value"]
           as? Double,
           let clock = metrics.first(where: { $0["name"] as? String == "Timestamp" })?["value"]
@@ -272,23 +277,28 @@ final class InspectorPageToolsModel {
         }
       }
       if tool == .storage && Date().timeIntervalSince(storageUpdated) > 10 {
-        try await loadStorage()
+        try await loadStorage(lifecycle: lifecycle)
       }
-      guard active, inspector.isOpen, generation == inspector.documentGeneration,
+      guard isCurrent(lifecycle), inspector.isOpen,
+        generation == inspector.documentGeneration,
         destination == inspector.target
       else { return }
-      try receive(snapshot, generation: generation)
+      try receive(snapshot, generation: generation, lifecycle: lifecycle)
     } catch {
-      if active, generation == inspector.documentGeneration, !(error is CancellationError) {
-        failure = error.localizedDescription
+      if isCurrent(lifecycle), generation == inspector.documentGeneration,
+        !(error is CancellationError)
+      {
+        failure = Self.failureMessage(for: error)
         signalUpdate()
       }
     }
   }
 
   /// Accept one bounded page snapshot only while its requesting document remains open.
-  func receive(_ snapshot: [String: Any], generation: Int) throws {
-    guard active, let inspector, inspector.isOpen, generation == inspector.documentGeneration else {
+  func receive(_ snapshot: [String: Any], generation: Int, lifecycle: UUID? = nil) throws {
+    guard active, lifecycle == nil || lifecycle == lifecycleID,
+      let inspector, inspector.isOpen, generation == inspector.documentGeneration
+    else {
       throw CancellationError()
     }
     let encoded = try JSONSerialization.data(withJSONObject: snapshot)
@@ -330,8 +340,10 @@ final class InspectorPageToolsModel {
     signalUpdate()
   }
 
-  func receiveTechnologies(_ value: Any, generation: Int) throws {
-    guard active, let inspector, inspector.isOpen, generation == inspector.documentGeneration else {
+  func receiveTechnologies(_ value: Any, generation: Int, lifecycle: UUID? = nil) throws {
+    guard active, lifecycle == nil || lifecycle == lifecycleID,
+      let inspector, inspector.isOpen, generation == inspector.documentGeneration
+    else {
       throw CancellationError()
     }
     let data = try JSONSerialization.data(withJSONObject: value)
@@ -352,14 +364,19 @@ final class InspectorPageToolsModel {
     signals = rows.filter { names.insert($0.name).inserted }
   }
 
-  func loadStorage() async throws {
-    guard active, let inspector, inspector.isOpen else { throw CancellationError() }
+  func loadStorage(lifecycle: UUID? = nil) async throws {
+    let lifecycle = lifecycle ?? lifecycleID
+    guard active, lifecycle == lifecycleID,
+      let inspector, inspector.isOpen
+    else { throw CancellationError() }
     let generation = inspector.documentGeneration
     let area = storageArea
     if area == "cookies" {
       let result = try await developer.call(
         "Network.getCookies", params: ["urls": [developer.target.url.absoluteString]])
-      guard active, area == storageArea, generation == inspector.documentGeneration else {
+      guard active, lifecycle == lifecycleID, area == storageArea,
+        generation == inspector.documentGeneration
+      else {
         throw CancellationError()
       }
       let rows = (result["cookies"] as? [[String: Any]]) ?? []
@@ -372,13 +389,17 @@ final class InspectorPageToolsModel {
       }
     } else {
       let value = try await expression("storage", arguments: [storageArea])
-      try receiveStorage(value, area: area, generation: generation)
+      try receiveStorage(value, area: area, generation: generation, lifecycle: lifecycle)
     }
+    guard active, lifecycle == lifecycleID else { throw CancellationError() }
     storageUpdated = Date()
   }
 
-  func receiveStorage(_ value: [String: Any], area: String, generation: Int) throws {
-    guard active, let inspector, inspector.isOpen, area == storageArea, area != "cookies",
+  func receiveStorage(
+    _ value: [String: Any], area: String, generation: Int, lifecycle: UUID? = nil
+  ) throws {
+    guard active, lifecycle == nil || lifecycle == lifecycleID,
+      let inspector, inspector.isOpen, area == storageArea, area != "cookies",
       generation == inspector.documentGeneration
     else { throw CancellationError() }
     let data = try JSONSerialization.data(withJSONObject: value["items"] ?? [])
@@ -399,6 +420,10 @@ final class InspectorPageToolsModel {
     storageLimited = value["truncated"] as? Bool == true
   }
 
+  private func isCurrent(_ lifecycle: UUID) -> Bool {
+    active && lifecycleID == lifecycle
+  }
+
   func storageValue(key: String) async throws -> String {
     let result = try await expression("readStorage", arguments: [storageArea, key])
     return result["value"] as? String ?? ""
@@ -412,7 +437,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = error.localizedDescription
+      failure = Self.failureMessage(for: error)
     }
   }
 
@@ -447,7 +472,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = error.localizedDescription
+      failure = Self.failureMessage(for: error)
     }
   }
 
@@ -463,7 +488,7 @@ final class InspectorPageToolsModel {
       failure = nil
     } catch {
       guard active, !Task.isCancelled, !(error is CancellationError) else { return }
-      failure = error.localizedDescription
+      failure = Self.failureMessage(for: error)
     }
   }
 
@@ -492,6 +517,13 @@ final class InspectorPageToolsModel {
       throw InspectorFailure(InspectorToolsL10n.backendError(bounded))
     }
     return value
+  }
+
+  static func failureMessage(for error: Error) -> String {
+    if error is InspectorFailure || error is DeveloperModeFailure {
+      return error.localizedDescription
+    }
+    return InspectorToolsL10n.string("The page-tools request could not be completed. Try again.")
   }
 
   isolated deinit { pollTask?.cancel() }

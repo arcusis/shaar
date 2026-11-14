@@ -5,9 +5,23 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import CoreFoundation
 import Foundation
 
 @testable import ArcusisBrowser
+
+enum InspectorIdleSmokeEvidence {
+  static func acceptsPageURL(_ pageURL: URL?) -> Bool {
+    guard let pageURL else { return false }
+    return pageURL.scheme == "http" && pageURL.host == "127.0.0.1"
+  }
+}
+
+enum InspectorIdlePollEvidence {
+  static func stayedBackedOff(_ calls: Int) -> Bool {
+    (2...12).contains(calls)
+  }
+}
 
 /// Opens Inspector on one loopback page in the hidden verification app and counts
 /// how often it reads the page once the selection has stopped changing.
@@ -16,7 +30,7 @@ import Foundation
 
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?) -> Int32 {
     verdictPassed = false
-    guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else { return 2 }
+    guard let pageURL, InspectorIdleSmokeEvidence.acceptsPageURL(pageURL) else { return 2 }
     let root = outputURL.deletingLastPathComponent().appending(path: "profile")
     do {
       let workspace = try BrowserWorkspaceStore(
@@ -70,7 +84,7 @@ import Foundation
       try await Task.sleep(for: .seconds(5))
       let calls = try await pollCalls(model)
       let hidden = host.contexts.values.allSatisfy { !$0.window.isVisible }
-      let backedOff = (2...12).contains(calls)
+      let backedOff = InspectorIdlePollEvidence.stayedBackedOff(calls)
       verdictPassed = backedOff && hidden && model.isOpen
       write(
         [
@@ -122,9 +136,23 @@ import Foundation
 
   private static func pollCalls(_ model: InspectorModel) async throws -> Int {
     let value = try await model.evaluate("globalThis.__shaarInspectorPollCalls")
-    if let calls = value as? Int { return calls }
-    if let calls = value as? Double { return Int(calls) }
-    throw Failure("Inspector poll counter was missing")
+    guard let calls = pollCallCount(from: value) else {
+      throw Failure("Inspector poll counter was missing or malformed")
+    }
+    return calls
+  }
+
+  static func pollCallCount(from value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return nil }
+    let encoding = String(cString: number.objCType)
+    let count =
+      encoding == "f" || encoding == "d"
+      ? Int(exactly: number.doubleValue)
+      : Int(number.stringValue)
+    guard let count, count >= 0 else { return nil }
+    return count
   }
 
   private static let pollCounter = """

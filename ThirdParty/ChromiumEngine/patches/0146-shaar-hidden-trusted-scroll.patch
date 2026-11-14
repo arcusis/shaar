@@ -1,0 +1,244 @@
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -59,6 +59,7 @@
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/render_widget_host.h"
+ #include "third_party/blink/public/common/input/web_mouse_event.h"
++#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+ #include "ui/gfx/geometry/point_f.h"
+ #include "content/public/browser/visibility.h"
+ #include "content/public/common/isolated_world_ids.h"
+@@ -386,17 +387,37 @@
+       blink::WebInputEvent::kNoModifiers, now));
+ }
+ 
++void DispatchTrustedScroll(content::RenderWidgetHost* widget, int x, int y) {
++  const gfx::PointF point(x, y);
++  blink::WebMouseWheelEvent event(blink::WebInputEvent::Type::kMouseWheel,
++                                  blink::WebInputEvent::kNoModifiers,
++                                  base::TimeTicks::Now());
++  event.SetPositionInWidget(point);
++  event.SetPositionInScreen(point);
++  event.delta_y = -600;
++  event.wheel_ticks_y = -5;
++  event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
++  event.event_action = blink::WebMouseWheelEvent::EventAction::kScrollVertical;
++  widget->ForwardWheelEvent(event);
++  event.delta_y = 0;
++  event.wheel_ticks_y = 0;
++  event.phase = blink::WebMouseWheelEvent::kPhaseEnded;
++  widget->ForwardWheelEvent(event);
++}
++
+ // A never-shown page does not composite, so paint-holding commit deferral
+ // stays set and the renderer drops mouse down. Show the renderer without
+ // ordering its window, wait out the deadline, force one frame, then click.
+-class ProbeTrustedClick final
+-    : public base::RefCountedThreadSafe<ProbeTrustedClick> {
++class ProbeTrustedInput final
++    : public base::RefCountedThreadSafe<ProbeTrustedInput> {
+  public:
+-  ProbeTrustedClick(ReplyContext reply,
++  ProbeTrustedInput(ReplyContext reply,
+                     int x,
+                     int y,
+-                    std::string element_id)
+-      : reply_(reply), x_(x), y_(y), element_id_(std::move(element_id)) {}
++                    std::string element_id,
++                    bool scroll = false)
++      : reply_(reply), x_(x), y_(y), element_id_(std::move(element_id)),
++        scroll_(scroll) {}
+ 
+   void Start(content::WebContents* contents) {
+     contents_ = contents->GetWeakPtr();
+@@ -406,18 +427,18 @@
+       return;
+     }
+     timer_.Start(FROM_HERE, kProbeCaptureTimeout,
+-                 base::BindOnce(&ProbeTrustedClick::OnTimeout,
++                 base::BindOnce(&ProbeTrustedInput::OnTimeout,
+                                 base::WrapRefCounted(this)));
+     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+         FROM_HERE,
+-        base::BindOnce(&ProbeTrustedClick::ForceFrame,
++        base::BindOnce(&ProbeTrustedInput::ForceFrame,
+                        base::WrapRefCounted(this)),
+         kProbeClickCommitDelay);
+   }
+ 
+  private:
+-  friend class base::RefCountedThreadSafe<ProbeTrustedClick>;
+-  ~ProbeTrustedClick() = default;
++  friend class base::RefCountedThreadSafe<ProbeTrustedInput>;
++  ~ProbeTrustedInput() = default;
+ 
+   content::RenderWidgetHostImpl* Activate() {
+     auto* contents = contents_.get();
+@@ -437,7 +458,7 @@
+       return;
+     }
+     widget->GetSnapshotFromBrowser(
+-        base::BindOnce(&ProbeTrustedClick::OnFrame,
++        base::BindOnce(&ProbeTrustedInput::OnFrame,
+                        base::WrapRefCounted(this)),
+         /*from_surface=*/true);
+   }
+@@ -465,7 +486,7 @@
+         "{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()";
+     frame->ExecuteJavaScriptForTests(
+         base::UTF8ToUTF16(script),
+-        base::BindOnce(&ProbeTrustedClick::OnElementPoint,
++        base::BindOnce(&ProbeTrustedInput::OnElementPoint,
+                        base::WrapRefCounted(this)),
+         content::ISOLATED_WORLD_ID_GLOBAL);
+   }
+@@ -493,13 +514,16 @@
+       Fail();
+       return;
+     }
+-    DispatchTrustedClick(widget, x, y);
++    if (scroll_)
++      DispatchTrustedScroll(widget, x, y);
++    else
++      DispatchTrustedClick(widget, x, y);
+     finished_ = true;
+     timer_.Stop();
+     Reply(reply_, SHAAR_OK, R"({"schemaVersion":1,"submitted":true})");
+     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+         FROM_HERE,
+-        base::BindOnce(&ProbeTrustedClick::ReleaseLease,
++        base::BindOnce(&ProbeTrustedInput::ReleaseLease,
+                        base::WrapRefCounted(this)),
+         kProbeClickLeaseHold);
+   }
+@@ -512,7 +536,7 @@
+     finished_ = true;
+     timer_.Stop();
+     capturer_.RunAndReset();
+-    Reply(reply_, SHAAR_NOT_READY, {}, "trusted click could not be sent");
++    Reply(reply_, SHAAR_NOT_READY, {}, "trusted input could not be sent");
+   }
+ 
+   void ReleaseLease() { capturer_.RunAndReset(); }
+@@ -521,6 +545,7 @@
+   int x_;
+   int y_;
+   std::string element_id_;
++  bool scroll_;
+   base::WeakPtr<content::WebContents> contents_;
+   base::ScopedClosureRunner capturer_;
+   base::OneShotTimer timer_;
+@@ -1410,6 +1435,15 @@
+   return true;
+ }
+ 
++bool ParseProbeScrollArguments(shaar_bytes args_json,
++                               std::string* element_id) {
++  int x = 0;
++  int y = 0;
++  return element_id &&
++         ParseProbeClickArguments(args_json, &x, &y, element_id) &&
++         !element_id->empty();
++}
++
+ bool ParseNodeProbePort(shaar_bytes args_json, int* port) {
+   if (!port || !args_json.data || args_json.size > 128)
+     return false;
+@@ -1579,7 +1613,8 @@
+           R"({"schemaVersion":1,"submitted":true})");
+     return SHAAR_OK;
+   }
+-  if (operation == SHAAR_OP_PROBE_TRUSTED_CLICK) {
++  if (operation == SHAAR_OP_PROBE_TRUSTED_CLICK ||
++      operation == SHAAR_OP_PROBE_TRUSTED_SCROLL) {
+     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+     const bool selected = context->browser_tabs->IsSelectedWebContents(
+         engine, window, tab, contents);
+@@ -1588,20 +1623,26 @@
+                            shaar::windows_tabs::HasNeverShownPageHost(window, contents),
+                            contents->GetLastCommittedURL()) || !scope.profile ||
+         scope.private_session)
+-      return Fail(error, SHAAR_POLICY_BLOCKED, "trusted click probe is unavailable");
++      return Fail(error, SHAAR_POLICY_BLOCKED, "trusted input probe is unavailable");
+     int x = 0;
+     int y = 0;
+     std::string element_id;
+-    if (!ParseProbeClickArguments(args_json, &x, &y, &element_id))
+-      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid trusted click point");
++    const bool scroll = operation == SHAAR_OP_PROBE_TRUSTED_SCROLL;
++    const bool parsed = scroll
++        ? ParseProbeScrollArguments(args_json, &element_id)
++        : ParseProbeClickArguments(args_json, &x, &y, &element_id);
++    if (!parsed)
++      return Fail(error, SHAAR_INVALID_ARGUMENT,
++                  scroll ? "invalid trusted scroll element"
++                         : "invalid trusted click point");
+     auto* view = contents->GetRenderWidgetHostView();
+     if (!view || !view->GetRenderWidgetHost() ||
+         (element_id.empty() &&
+          (x >= view->GetViewBounds().width() || y >= view->GetViewBounds().height())))
+-      return Fail(error, SHAAR_NOT_READY, "trusted click viewport unavailable");
+-    base::MakeRefCounted<ProbeTrustedClick>(
++      return Fail(error, SHAAR_NOT_READY, "trusted input viewport unavailable");
++    base::MakeRefCounted<ProbeTrustedInput>(
+         ReplyContext{request_id, reply, reply_context}, x, y,
+-        std::move(element_id))
++        std::move(element_id), scroll)
+         ->Start(contents);
+     return SHAAR_OK;
+   }
+--- a/chrome/browser/shaar/devtools/shaar_devtools.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools.h
+@@ -66,6 +66,7 @@
+                               int* x,
+                               int* y,
+                               std::string* element_id);
++bool ParseProbeScrollArguments(shaar_bytes args_json, std::string* element_id);
+ bool ParseNodeProbePort(shaar_bytes args_json, int* port);
+ bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
+                               std::string* popup_id, std::string* expression);
+--- a/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc
+@@ -17,6 +17,9 @@
+                      &shaar::devtools::HandleDevToolsOperation);
+   registry->Register(SHAAR_OP_PROBE_TRUSTED_CLICK, SHAAR_OP_PROBE_NODE_LIVE,
+                      &shaar::devtools::HandleDevToolsOperation);
++  registry->Register(SHAAR_OP_PROBE_TRUSTED_SCROLL,
++                     SHAAR_OP_PROBE_TRUSTED_SCROLL,
++                     &shaar::devtools::HandleDevToolsOperation);
+   registry->Register(SHAAR_OP_PROBE_POPUP_EVALUATE, SHAAR_OP_PROBE_POPUP_CAPTURE,
+                      &shaar::devtools::HandleDevToolsOperation);
+   registry->Register(SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL,
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -98,6 +98,11 @@
+       Bytes(R"({"schemaVersion":1,"elementID":"parity-action"})"), &x,
+       &y, &element_id));
+   EXPECT_EQ("parity-action", element_id);
++  EXPECT_TRUE(ParseProbeScrollArguments(
++      Bytes(R"({"schemaVersion":1,"elementID":"feed"})"), &element_id));
++  EXPECT_EQ("feed", element_id);
++  EXPECT_FALSE(ParseProbeScrollArguments(
++      Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &element_id));
+   for (const std::string invalid : {
+            R"({"schemaVersion":1,"x":-1,"y":2})",
+            R"({"schemaVersion":1,"x":20,"y":8192})",
+@@ -903,6 +908,7 @@
+   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CALL));
+   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_PROBE_CAPTURE_TAB));
+   EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_TRUSTED_CLICK));
++  EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_TRUSTED_SCROLL));
+   EXPECT_EQ(&HandleDevToolsOperation, registry.Find(SHAAR_OP_PROBE_NODE_LIVE));
+   EXPECT_EQ(&HandleDevToolsOperation,
+             registry.Find(SHAAR_OP_PROBE_POPUP_EVALUATE));
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -224,6 +224,8 @@
+   // Testing only: inspect a popup owned by the selected fixture tab.
+   SHAAR_OP_PROBE_POPUP_EVALUATE = 1095,
+   SHAAR_OP_PROBE_POPUP_CAPTURE = 1096,
++  // Testing only: send a native wheel event to an authored fixture element.
++  SHAAR_OP_PROBE_TRUSTED_SCROLL = 1097,
+   // END devtools operation IDs.
+ 
+   // BEGIN media

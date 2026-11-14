@@ -10,6 +10,14 @@ import Testing
 
 @Suite @MainActor
 struct DownloadsTests {
+  @Test func downloadsPanelTitleIsAHeading() {
+    #expect(DownloadsPanel.titleAccessibilityTraits.contains(.isHeader))
+  }
+
+  @Test func downloadsPanelTitleIsVoiceOverHeading() {
+    #expect(DownloadsPanel.headingTraits == .isHeader)
+  }
+
   private let id = "8ce51349-a188-4bad-bd1c-011b48e48ca6"
   private func record(
     state: String = "downloading", paused: Bool = false, privateItem: Bool = false
@@ -79,6 +87,20 @@ struct DownloadsTests {
     #expect(model.notices[b] == nil)
   }
 
+  @Test func removedDownloadDoesNotReceiveItsLateActionError() {
+    let model = DownloadsModel()
+    let profile = UUID()
+    model.changed(record(), profileID: profile)
+    var finish: (@MainActor @Sendable (String?) -> Void)?
+    model.onCommand = { _, _, _, completion in finish = completion }
+
+    #expect(model.perform(.pause, id: id, profileID: profile, selectedProfileID: profile))
+    model.removed(id, profileID: profile)
+    finish?("Could not pause")
+
+    #expect(model.notices[profile] == nil)
+  }
+
   @Test func downloadsPresentationCannotReplaceConsentAndClosesOnProfileChange() throws {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com")!))
@@ -141,7 +163,7 @@ extension DownloadsTests {
     defer { try? FileManager.default.removeItem(at: root) }
     let file = root.appending(path: "file.txt")
     try Data("contents".utf8).write(to: file)
-    let model = DownloadsModel()
+    let model = DownloadsModel(profileDirectory: { _ in root })
     let profile = UUID()
     var finished = record(state: "finished")
     finished["path"] = file.path
@@ -155,6 +177,22 @@ extension DownloadsTests {
     try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
     #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
     try FileManager.default.removeItem(at: file)
+    #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
+  }
+
+  @Test func dragRejectsEngineRecordsOutsideTheProfileDownloadsDirectory() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let downloads = root.appending(path: "Downloads", directoryHint: .isDirectory)
+    let outside = root.appending(path: "private.txt")
+    try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+    try Data("private".utf8).write(to: outside)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let model = DownloadsModel(profileDirectory: { _ in downloads })
+    let profile = UUID()
+    var finished = record(state: "finished")
+    finished["path"] = outside.path
+    model.changed(finished, profileID: profile)
+
     #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
   }
 
@@ -174,5 +212,14 @@ extension DownloadsTests {
     #expect(status("cancelled") == "Cancelled")
     #expect(status("finished", dangerous: true) == "Blocked")
     #expect(Set(LibraryMediaKind.allCases.map(\.symbol)).count == LibraryMediaKind.allCases.count)
+  }
+
+  @Test func progressAccessibilityLabelNamesTheFileInEnglishAndHebrew() {
+    #expect(
+      DownloadAccessibility.progressLabel(filename: "report.zip", language: .english)
+        == "Download progress for report.zip")
+    #expect(
+      DownloadAccessibility.progressLabel(filename: "report.zip", language: .hebrew)
+        == "התקדמות הורדה עבור \u{2068}report.zip\u{2069}")
   }
 }

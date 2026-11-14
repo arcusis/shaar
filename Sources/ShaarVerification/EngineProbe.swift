@@ -11,6 +11,58 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum EngineProbeMeasurementArguments {
+  static let flag = "--probe-measure-tabs"
+  static let supportedCounts: Set<Int> = [1, 10, 30, 50, 100]
+
+  static func tabCount(in arguments: [String]) -> Int? {
+    guard arguments.filter({ $0 == flag }).count == 1 else { return nil }
+    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
+      return nil
+    }
+    return Int(arguments[index + 1])
+  }
+
+  static func hasValidTabCount(in arguments: [String]) -> Bool {
+    guard arguments.contains(flag) else { return true }
+    guard let count = tabCount(in: arguments) else { return false }
+    return supportedCounts.contains(count)
+  }
+
+  static func conflictsWithOtherMode(arguments: [String], conflictingFlags: [String]) -> Bool {
+    conflictingFlags.filter { $0 != flag }.contains(where: arguments.contains)
+  }
+
+  static func modeDependencyFailure(arguments: [String], tabCount: Int?) -> String? {
+    let eager = arguments.contains("--probe-measure-eager")
+    let sleeping = arguments.contains("--probe-measure-sleeping")
+    let inspector = arguments.contains("--probe-measure-inspector")
+    if eager && tabCount == nil { return "Eager measurement requires --probe-measure-tabs." }
+    if inspector && tabCount == nil {
+      return "Inspector measurement requires --probe-measure-tabs."
+    }
+    if sleeping && (tabCount == nil || !eager) {
+      return "Sleeping measurement requires eagerly loaded measurement tabs."
+    }
+    return nil
+  }
+}
+
+enum EngineProbeSnapshotValidation {
+  static func isAuthoredFixture(_ snapshot: [String: Any]) -> Bool {
+    snapshot["fixture"] as? String == "v1"
+  }
+}
+
+enum EngineProbeFixtureURL {
+  static func isLoopback(_ fixture: URL?) -> Bool {
+    guard let fixture, fixture.scheme == "http", fixture.host() == "127.0.0.1",
+      let port = fixture.port
+    else { return false }
+    return (1...65_535).contains(port)
+  }
+}
+
 /// Uses only a marked, disposable directory and an authored loopback fixture.
 /// No window is ordered onscreen and no existing browser profiles are opened.
 @MainActor
@@ -36,9 +88,6 @@ final class EngineProbe {
   private let devModeOnly: Bool
   private let mediaSessionOnlyMode: Bool
   private let devtoolsRouteOnlyMode: Bool
-  /// Counts the hidden footprint runner is allowed to open. 50 and 100 exist so
-  /// #1058 and #1467 can measure the same bundle without a one-off probe.
-  private static let measurementTabCounts: Set<Int> = [1, 10, 30, 50, 100]
   private let measurementTabCount: Int?
   private let measurementEager: Bool
   private let measurementSleeping: Bool
@@ -218,8 +267,8 @@ final class EngineProbe {
         try String(contentsOf: root.appending(path: ".arcusis-probe"), encoding: .utf8)
           == "arcusis-engine-probe-v1\n",
         ["initial", "restart"].contains(phase),
-        let fixture = URL(string: try value("--probe-url")), fixture.scheme == "http",
-        fixture.host() == "127.0.0.1", fixture.port != nil
+        let fixture = URL(string: try value("--probe-url")),
+        EngineProbeFixtureURL.isLoopback(fixture)
       else {
         throw ProbeFailure("Probe requires a marked temporary directory and loopback fixture.")
       }
@@ -239,28 +288,18 @@ final class EngineProbe {
       let devModeOnly = arguments.contains("--probe-dev-mode-only")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
       let devtoolsRouteOnlyMode = arguments.contains("--probe-devtools-route-only")
-      let measurementTabCount: Int? = {
-        guard let index = arguments.firstIndex(of: "--probe-measure-tabs"),
-          arguments.indices.contains(index + 1)
-        else { return nil }
-        return Int(arguments[index + 1])
-      }()
+      let measurementTabCount = EngineProbeMeasurementArguments.tabCount(in: arguments)
       let measurementEager = arguments.contains("--probe-measure-eager")
       let measurementSleeping = arguments.contains("--probe-measure-sleeping")
       let measurementInspector = arguments.contains("--probe-measure-inspector")
-      guard !measurementEager || measurementTabCount != nil else {
-        throw ProbeFailure("Eager measurement requires --probe-measure-tabs.")
+      if let failure = EngineProbeMeasurementArguments.modeDependencyFailure(
+        arguments: arguments, tabCount: measurementTabCount)
+      {
+        throw ProbeFailure(failure)
       }
-      guard !measurementInspector || measurementTabCount != nil else {
-        throw ProbeFailure("Inspector measurement requires --probe-measure-tabs.")
+      guard EngineProbeMeasurementArguments.hasValidTabCount(in: arguments) else {
+        throw ProbeFailure("Measurement tab count must be 1, 10, 30, 50, or 100.")
       }
-      guard !measurementSleeping || (measurementTabCount != nil && measurementEager) else {
-        throw ProbeFailure("Sleeping measurement requires eagerly loaded measurement tabs.")
-      }
-      guard
-        measurementTabCount.map({ measurementTabCounts.contains($0) }) ?? !arguments.contains(
-          "--probe-measure-tabs")
-      else { throw ProbeFailure("Measurement tab count must be 1, 10, 30, 50, or 100.") }
       guard localizationMode == arguments.contains("--probe-localization") else {
         throw ProbeFailure("Localization mode dispatch mismatch.")
       }
@@ -320,8 +359,8 @@ final class EngineProbe {
           || !conflictingFlags.filter({ $0 != "--probe-devtools-route-only" }).contains(
             where: arguments.contains),
         measurementTabCount == nil
-          || !conflictingFlags.filter({ $0 != "--probe-measure-tabs" }).contains(
-            where: arguments.contains),
+          || !EngineProbeMeasurementArguments.conflictsWithOtherMode(
+            arguments: arguments, conflictingFlags: conflictingFlags),
         !localizationMode
           || !conflictingFlags.filter({ $0 != "--probe-localization" }).contains(
             where: arguments.contains)
@@ -450,11 +489,14 @@ final class EngineProbe {
     for _ in 0..<80 {
       if let result = try? await evaluate(tab, script) as? [String: Any] {
         receivedJavaScript = true
-        if result["fixture"] as? String == "v1" { return result }
+        if EngineProbeSnapshotValidation.isAuthoredFixture(result) { return result }
       }
       try await Task.sleep(for: .milliseconds(100))
     }
-    let detail = "JavaScript response received: \(receivedJavaScript)."
+    let safeState = try? await evaluate(
+      tab, "({url:location.href,title:document.title,ready:document.readyState})")
+    let detail =
+      "JavaScript response received: \(receivedJavaScript); page=\(String(describing: safeState))."
     throw ProbeFailure("Loopback fixture did not load in \(tab); \(detail)")
   }
 
@@ -510,17 +552,14 @@ final class EngineProbe {
   }
 
   private func warmUpSameProfileSpaceSwitches(_ tabIDs: [String]) async throws {
-    guard
-      tabIDs.count == SwitchProbeMetrics.expectedSpaceWarmupCount,
-      Set(tabIDs).count == SwitchProbeMetrics.expectedSpaceWarmupCount
-    else {
-      throw ProbeFailure("Space switch warm-up count does not match its measurement contract.")
-    }
     let selectedTabID = store.session.selectedSpace.selectedTabID?.uuidString
-    let orderedTabIDs =
-      tabIDs.filter { $0 != selectedTabID }
-      + tabIDs.filter { $0 == selectedTabID }
-    for (index, tabID) in orderedTabIDs.enumerated() {
+    guard
+      let warmupTabIDs = SwitchProbeMetrics.spaceWarmupSequence(
+        tabIDs: tabIDs, selectedTabID: selectedTabID)
+    else {
+      throw ProbeFailure("Space switch warm-up targets do not match their measurement contract.")
+    }
+    for (index, tabID) in warmupTabIDs.enumerated() {
       guard
         let space = store.session.spaces.first(where: {
           $0.profileID.uuidString == profileA && $0.tabs.contains { $0.id.uuidString == tabID }
@@ -869,6 +908,27 @@ final class EngineProbe {
         try expect(
           store.session == before, "private fixture leaves normal model and selection unchanged")
       }
+      if ProcessInfo.processInfo.environment["SHAAR_NATIVE_WINDOW_ONLY"] == "1" {
+        checks += try await runNativeWindowOnlyProbe()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      if ProcessInfo.processInfo.environment["SHAAR_NATIVE_HOST_ONLY"] == "1" {
+        guard let browserEngine else {
+          throw ProbeFailure("Native-host-only probe engine is missing.")
+        }
+        checks += try await ExtensionProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
+        ).run()
+        fixtureStage = "NativeHost"
+        checks += try await NativeHostProbe(
+          primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       fixtureStage = "normal-switches"
       guard
         let alphaSpace = store.session.spaces.first(where: {
@@ -1013,6 +1073,10 @@ final class EngineProbe {
       try renderShell(name: "\(phase)-command.png")
       store.dismissCommand()
       if let browserEngine {
+        fixtureStage = "Reopen"
+        checks += try await ReopenProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
+        ).run()
         fixtureStage = "Extension"
         checks += try await ExtensionProbe(
           runtime: runtime, engine: browserEngine, store: store,
@@ -1042,10 +1106,6 @@ final class EngineProbe {
         ).run()
         fixtureStage = "Folder"
         checks += try await FolderProbe(
-          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
-        ).run()
-        fixtureStage = "Reopen"
-        checks += try await ReopenProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
         ).run()
         fixtureStage = "Library"
@@ -1128,6 +1188,35 @@ final class EngineProbe {
       try await Task.sleep(for: .seconds(2))
       finish(error: nil)
     } catch { finish(error: error) }
+  }
+
+  private func runNativeWindowOnlyProbe() async throws -> [String] {
+    guard store.session.spaces.count >= 3 else {
+      throw ProbeFailure("Native-window probe requires three restored profile Spaces.")
+    }
+    let primaryWindowID = runtime.primaryWindowID
+    let secondaryWindowID = UUID().uuidString
+    let secondaryTabID = UUID().uuidString
+    try runtime.createWindowID(secondaryWindowID)
+    defer { _ = runtime.closeWindowID(secondaryWindowID) }
+    try runtime.openTabID(
+      secondaryTabID, profileID: profileA, windowID: secondaryWindowID,
+      url: fixture.absoluteString)
+    fixtureStage = "NativeWindow"
+    var primaryChromeID: Int32 = -1
+    var secondaryChromeID: Int32 = -1
+    for _ in 0..<100 {
+      primaryChromeID = runtime.chromeWindowID(
+        forProfileID: profileA, windowID: primaryWindowID)
+      secondaryChromeID = runtime.chromeWindowID(
+        forProfileID: profileA, windowID: secondaryWindowID)
+      if primaryChromeID >= 0 && secondaryChromeID >= 0 { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    try expect(
+      primaryChromeID >= 0 && secondaryChromeID >= 0 && primaryChromeID != secondaryChromeID,
+      "same-profile native windows have distinct real Chromium window IDs")
+    return checks
   }
 
   /// Opens the shipping inspector and arms a read counter before the idle window.
@@ -1631,6 +1720,24 @@ final class EngineProbe {
   }
 }
 
+enum EngineProbeMeasurementTabCount: Equatable {
+  case absent
+  case valid(Int)
+  case invalid
+
+  private static let allowed: Set<Int> = [1, 10, 30, 50, 100]
+
+  static func parse(arguments: [String]) -> Self {
+    let indexes = arguments.indices.filter { arguments[$0] == "--probe-measure-tabs" }
+    guard !indexes.isEmpty else { return .absent }
+    guard indexes.count == 1, let index = indexes.first else { return .invalid }
+    guard arguments.indices.contains(index + 1),
+      let count = Int(arguments[index + 1]), allowed.contains(count)
+    else { return .invalid }
+    return .valid(count)
+  }
+}
+
 private struct ProbeFailure: LocalizedError {
   let message: String
   init(_ message: String) { self.message = message }
@@ -1645,6 +1752,7 @@ enum ProbeTimeout {
   }
 
   static func scale(from value: String?) -> Double {
-    max(1, value.flatMap(Double.init) ?? 1)
+    guard let scale = value.flatMap(Double.init), scale.isFinite else { return 1 }
+    return max(1, scale)
   }
 }

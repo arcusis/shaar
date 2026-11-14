@@ -16,8 +16,13 @@
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 #include "components/permissions/permission_prompt.h"
+#include "components/permissions/request_type.h"
 
 namespace shaar::permissions {
+
+// Maps Chromium website permission requests onto the app-owned consent kinds.
+std::optional<std::string_view> PermissionKindForRequestType(
+    ::permissions::RequestType type);
 
 // Token and navigation captured for the frame that asked. The live snapshot
 // must still be that frame, active, and inside the same tab.

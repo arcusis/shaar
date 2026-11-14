@@ -11,18 +11,21 @@ import Testing
     "frameTree": [
       "frame": ["id": "root"],
       "resources": [["url": "https://example.com/root.js"]],
-      "childFrames": [[
-        "frame": ["id": "child"],
-        "resources": [["url": "https://example.com/child.js"]],
-      ]],
-    ],
+      "childFrames": [
+        [
+          "frame": ["id": "child"],
+          "resources": [["url": "https://example.com/child.js"]],
+        ]
+      ],
+    ]
   ]
 
   #expect(
     ShaarInspectorSourceLoader.frameID(for: "https://example.com/root.js", in: reply) == "root")
   #expect(
     ShaarInspectorSourceLoader.frameID(for: "https://example.com/child.js", in: reply) == "child")
-  #expect(ShaarInspectorSourceLoader.frameID(for: "https://example.com/missing.js", in: reply) == nil)
+  #expect(
+    ShaarInspectorSourceLoader.frameID(for: "https://example.com/missing.js", in: reply) == nil)
 }
 
 @Test @MainActor func inspectorSourceLoaderHonorsFrameAndResourceSearchBounds() {
@@ -39,7 +42,7 @@ import Testing
 
   let resources = (0..<1_025).map { ["url": "https://example.com/\($0).js"] }
   let reply: [String: Any] = [
-    "frameTree": ["frame": ["id": "root"], "resources": resources],
+    "frameTree": ["frame": ["id": "root"], "resources": resources]
   ]
   #expect(
     ShaarInspectorSourceLoader.frameID(for: "https://example.com/1023.js", in: reply) == "root")

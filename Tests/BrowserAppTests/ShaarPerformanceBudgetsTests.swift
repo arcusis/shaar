@@ -19,6 +19,12 @@ import Testing
     #expect(result.passed == 4)
     #expect(result.failed == 0)
     #expect(result.unavailable == 1)
+    #expect(
+      result.accessibilityDescription(language: .english)
+        == "Route budget: 4 passed, 0 over, 1 unavailable")
+    #expect(
+      result.accessibilityDescription(language: .hebrew)
+        == "תקציב המסלולים: 4 תקינים, 0 חורגים, 1 לא זמינים")
     #expect(result.metrics.first { $0.name == "JavaScript" }?.status == .unavailable)
     let report = ShaarPerformanceBudgetReport(result: result)
     #expect(report.route == "/dashboard" && report.passed == 4 && report.unavailable == 1)

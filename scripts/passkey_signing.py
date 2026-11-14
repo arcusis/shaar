@@ -69,6 +69,8 @@ def passkey_problems(passkeys: dict) -> list[str]:
 
 def entitlement_matches(key: str, expected, actual) -> bool:
     if key != "keychain-access-groups":
+        if isinstance(expected, bool):
+            return type(actual) is bool and actual is expected
         return actual == expected
     if not isinstance(actual, list) or not isinstance(expected, list):
         return False
@@ -106,8 +108,11 @@ def profile_problems(profile: dict, now: datetime | None = None) -> list[str]:
     if not isinstance(entitlements, dict):
         problems.append("profile has no entitlements")
         return problems
-    if entitlements.get("com.apple.security.get-task-allow") is True:
+    debugger_access = entitlements.get("com.apple.security.get-task-allow", False)
+    if debugger_access is True:
         problems.append("profile allows a debugger")
+    elif debugger_access is not False:
+        problems.append("profile has an invalid debugger entitlement")
     for key, expected in required_entitlements().items():
         if key not in entitlements:
             problems.append(f"profile is missing {key}")

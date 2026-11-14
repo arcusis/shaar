@@ -49,8 +49,7 @@ final class WebShareProbe {
         "The web share probe requires Shaar Verification.app and its bundled Chromium framework."
       )
     }
-    guard let page = URL(string: try value(after: "--probe-url")),
-      page.scheme == "http", page.host == "127.0.0.1"
+    guard let page = Self.authoredLoopbackPageURL(try value(after: "--probe-url"))
     else { throw Failure("The web share probe requires an authored loopback page.") }
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
@@ -183,14 +182,8 @@ final class WebShareProbe {
   private func boundRequest(id: String = UUID().uuidString) -> WebShareRequest? {
     guard let tab = store.session.page(forTabID: tabID)?.tab,
       let profile = store.session.profileID(forTabID: tabID),
-      var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false)
+      let origin = Self.originURL(for: pageURL)
     else { return nil }
-    components.path = ""
-    components.query = nil
-    components.fragment = nil
-    components.user = nil
-    components.password = nil
-    guard let origin = components.url else { return nil }
     return WebShareRequest(payload: [
       "id": id,
       "profileID": profile.uuidString,
@@ -205,6 +198,18 @@ final class WebShareProbe {
     ])
   }
 
+  static func originURL(for pageURL: URL) -> URL? {
+    guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
+      return nil
+    }
+    components.path = ""
+    components.query = nil
+    components.fragment = nil
+    components.user = nil
+    components.password = nil
+    return components.url
+  }
+
   private func evaluate(_ script: String) async -> String? {
     await withCheckedContinuation { continuation in
       runtime.evaluate(inTabID: tabID.uuidString, script: script) { raw in
@@ -217,6 +222,13 @@ final class WebShareProbe {
     let data = try? JSONSerialization.data(withJSONObject: [value])
     let encoded = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[\"\"]"
     return String(encoded.dropFirst().dropLast())
+  }
+
+  nonisolated static func authoredLoopbackPageURL(_ value: String) -> URL? {
+    guard let page = URL(string: value), page.scheme == "http", page.host == "127.0.0.1",
+      page.user == nil, page.password == nil
+    else { return nil }
+    return page
   }
 
   private func pause() async {

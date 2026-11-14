@@ -60,11 +60,51 @@ private func fakeShaarNavigationSubmit(
   return shaar_error_code(rawValue: 0)
 }
 
+@_cdecl("fake_shaar_navigation_submit_boolean_schema")
+private func fakeShaarNavigationSubmitBooleanSchema(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ args: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard let reply, let replyContext else { return shaar_error_code(rawValue: 1) }
+  let contextAddress = UInt(bitPattern: replyContext)
+  DispatchQueue.global().async {
+    deliverFakeNavigationReply(
+      reply, contextAddress: contextAddress, requestID: requestID, booleanSchemaVersion: true)
+  }
+  return shaar_error_code(rawValue: 0)
+}
+
+@_cdecl("fake_shaar_navigation_submit_invalid_slice")
+private func fakeShaarNavigationSubmitInvalidSlice(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ args: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard let reply, let replyContext else { return shaar_error_code(rawValue: 1) }
+  let contextAddress = UInt(bitPattern: replyContext)
+  DispatchQueue.global().async {
+    let context = UnsafeMutableRawPointer(bitPattern: contextAddress)!
+    var result = shaar_result(
+      size: UInt32(MemoryLayout<shaar_result>.size), request_id: requestID,
+      error: shaar_error(
+        size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
+        platform_code: 0, message: shaar_bytes(data: nil, size: 0)),
+      payload_json: shaar_bytes(data: nil, size: 1))
+    reply(context, &result)
+  }
+  return shaar_error_code(rawValue: 0)
+}
+
 private func deliverFakeNavigationReply(
-  _ reply: shaar_reply_fn, contextAddress: UInt, requestID: UInt64
+  _ reply: shaar_reply_fn, contextAddress: UInt, requestID: UInt64,
+  booleanSchemaVersion: Bool = false
 ) {
   let context = UnsafeMutableRawPointer(bitPattern: contextAddress)!
-  let response = Data("{\"schemaVersion\":1}".utf8)
+  let response = Data(
+    (booleanSchemaVersion ? "{\"schemaVersion\":true}" : "{\"schemaVersion\":1}").utf8)
   response.withUnsafeBytes { rawBuffer in
     let payload = rawBuffer.bindMemory(to: CChar.self)
     let resultError = shaar_error(
@@ -78,11 +118,76 @@ private func deliverFakeNavigationReply(
   }
 }
 
+@_cdecl("fake_shaar_navigation_submit_short_error")
+private func fakeShaarNavigationSubmitShortError(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ args: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard let reply, let replyContext else { return shaar_error_code(rawValue: 1) }
+  let response = Data("{\"schemaVersion\":1}".utf8)
+  response.withUnsafeBytes { rawBuffer in
+    let payload = rawBuffer.bindMemory(to: CChar.self)
+    let resultError = shaar_error(
+      size: 0, code: shaar_error_code(rawValue: 4), platform_code: 0,
+      message: shaar_bytes(data: nil, size: 0))
+    let resultPayload = shaar_bytes(data: payload.baseAddress, size: payload.count)
+    var result = shaar_result(
+      size: UInt32(MemoryLayout<shaar_result>.size), request_id: requestID,
+      error: resultError, payload_json: resultPayload)
+    reply(replyContext, &result)
+  }
+  return shaar_error_code(rawValue: 0)
+}
+
 private struct FakeNavigationSymbols: ShaarSymbolResolving {
   func symbol(named: String) -> UnsafeRawPointer? {
     guard named == "shaar_submit" else { return nil }
     let function =
       fakeShaarNavigationSubmit
+      as @convention(c) (
+        OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+        shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+        UnsafeMutablePointer<shaar_error>?
+      ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
+  }
+}
+
+private struct FakeBooleanNavigationSymbols: ShaarSymbolResolving {
+  func symbol(named: String) -> UnsafeRawPointer? {
+    guard named == "shaar_submit" else { return nil }
+    let function =
+      fakeShaarNavigationSubmitBooleanSchema
+      as @convention(c) (
+        OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+        shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+        UnsafeMutablePointer<shaar_error>?
+      ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
+  }
+}
+
+private struct FakeShortNavigationErrorSymbols: ShaarSymbolResolving {
+  func symbol(named: String) -> UnsafeRawPointer? {
+    guard named == "shaar_submit" else { return nil }
+    let function =
+      fakeShaarNavigationSubmitShortError
+      as @convention(c) (
+        OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+        shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+        UnsafeMutablePointer<shaar_error>?
+      ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
+  }
+}
+
+private struct FakeInvalidSliceNavigationSymbols: ShaarSymbolResolving {
+  func symbol(named: String) -> UnsafeRawPointer? {
+    guard named == "shaar_submit" else { return nil }
+    let function =
+      fakeShaarNavigationSubmitInvalidSlice
       as @convention(c) (
         OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
         shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
@@ -215,9 +320,30 @@ struct ShaarNavigationAdapterTests {
     }
   }
 
+  @Test func snapshotRejectsNumericBooleanFields() {
+    let base =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"committed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
+    let failure =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
+    let invalid = [
+      base.replacingOccurrences(of: #""loading":false"#, with: #""loading":1"#),
+      base.replacingOccurrences(of: #""canGoBack":false"#, with: #""canGoBack":0"#),
+      base.replacingOccurrences(of: #""canGoForward":false"#, with: #""canGoForward":1"#),
+      base.replacingOccurrences(of: #""sameDocument":false"#, with: #""sameDocument":0"#),
+      failure.replacingOccurrences(of: #""isMainFrame":true"#, with: #""isMainFrame":1"#),
+    ]
+    for payload in invalid {
+      #expect(throws: ShaarEngineError.self) {
+        try ShaarNavigationSnapshot.decode(Data(payload.utf8))
+      }
+    }
+  }
+
   @Test func snapshotIntegerFieldsRejectBooleansAndFractions() {
-    let base = #"{"kind":"navigation","schemaVersion":1,"phase":"committed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
-    let failures = #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
+    let base =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"committed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
+    let failures =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
     let invalid = [
       base.replacingOccurrences(of: #""schemaVersion":1"#, with: #""schemaVersion":true"#),
       base.replacingOccurrences(of: #""generation":4"#, with: #""generation":true"#),
@@ -232,6 +358,56 @@ struct ShaarNavigationAdapterTests {
     }
   }
 
+  @Test func snapshotBooleanFieldsRejectNumericValues() {
+    let base =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"committed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
+    for field in ["loading", "canGoBack", "canGoForward", "sameDocument"] {
+      for numeric in ["0", "1"] {
+        let payload = base.replacingOccurrences(
+          of: #""\#(field)":false"#, with: #""\#(field)":\#(numeric)"#)
+        #expect(throws: ShaarEngineError.self) {
+          try ShaarNavigationSnapshot.decode(Data(payload.utf8))
+        }
+      }
+    }
+    let failed =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
+    let numericMainFrame = failed.replacingOccurrences(
+      of: #""isMainFrame":true"#, with: #""isMainFrame":1"#)
+    #expect(throws: ShaarEngineError.self) {
+      try ShaarNavigationSnapshot.decode(Data(numericMainFrame.utf8))
+    }
+  }
+
+  @Test func snapshotPreservesLargeIntegerFieldsExactly() throws {
+    let rawInteger = 9_007_199_254_740_993
+    let rawGeneration = UInt64(rawInteger)
+    let payload = Data(
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":9007199254740993,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":9007199254740993,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#.utf8)
+
+    let snapshot = try ShaarNavigationSnapshot.decode(payload)
+    #expect(snapshot.generation == rawGeneration)
+    #expect(snapshot.failure?.netError == rawInteger)
+  }
+
+  @Test func snapshotBooleanFieldsRejectNumericJSONValues() {
+    let base =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"committed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
+    let failure =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
+    let invalid = [
+      base.replacingOccurrences(of: #""loading":false"#, with: #""loading":1"#),
+      base.replacingOccurrences(of: #""canGoBack":false"#, with: #""canGoBack":0"#),
+      base.replacingOccurrences(of: #""canGoForward":false"#, with: #""canGoForward":1"#),
+      base.replacingOccurrences(of: #""sameDocument":false"#, with: #""sameDocument":0"#),
+      failure.replacingOccurrences(of: #""isMainFrame":true"#, with: #""isMainFrame":1"#),
+    ]
+    for payload in invalid {
+      #expect(throws: ShaarEngineError.self) {
+        try ShaarNavigationSnapshot.decode(Data(payload.utf8))
+      }
+    }
+  }
   @Test func shippingChoiceUsesShaar() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)
     #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) != nil)
@@ -256,4 +432,59 @@ struct ShaarNavigationAdapterTests {
     }
     #expect(String(decoding: response, as: UTF8.self) == "{\"schemaVersion\":1}")
   }
+
+  @Test func concreteTransportRejectsShortNestedError() async throws {
+    let transport = try ShaarNavigationABITransport(
+      resolver: FakeShortNavigationErrorSymbols(), handleResolver: FakeHandleResolver())
+    let adapter = try #require(ShaarNavigationAdapter(implementation: .shaar, transport: transport))
+    let result = await withCheckedContinuation {
+      (continuation: CheckedContinuation<Result<Data, ShaarEngineError>, Never>) in
+      do {
+        _ = try adapter.submit(
+          .stop, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
+          tabID: "tab", completion: { continuation.resume(returning: $0) })
+      } catch {
+        continuation.resume(returning: .failure(error as? ShaarEngineError ?? .invalidEvent("submit failed")))
+      }
+    }
+    #expect(result == .failure(.invalidEvent("short navigation error")))
+  }
+
+  @Test func concreteTransportRejectsBooleanReplySchemaVersion() async throws {
+    let transport = try ShaarNavigationABITransport(
+      resolver: FakeBooleanNavigationSymbols(), handleResolver: FakeHandleResolver())
+    let adapter = try #require(ShaarNavigationAdapter(implementation: .shaar, transport: transport))
+    let result = await withCheckedContinuation {
+      (continuation: CheckedContinuation<Result<Data, ShaarEngineError>, Never>) in
+      do {
+        _ = try adapter.submit(
+          .reload, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
+          tabID: "tab", completion: { continuation.resume(returning: $0) })
+      } catch {
+        continuation.resume(returning: .failure(error as? ShaarEngineError ?? .invalidEvent("submit failed")))
+      }
+    }
+    #expect(result == .failure(.invalidEvent("invalid navigation result payload")))
+  }
+  @Test func concreteTransportRejectsNonemptyNilResultBytes() async throws {
+    let transport = try ShaarNavigationABITransport(
+      resolver: FakeInvalidSliceNavigationSymbols(), handleResolver: FakeHandleResolver())
+    let adapter = try #require(ShaarNavigationAdapter(implementation: .shaar, transport: transport))
+    await #expect(throws: ShaarEngineError.self) {
+      try await withCheckedThrowingContinuation {
+        (continuation: CheckedContinuation<Void, Error>) in
+        do {
+          _ = try adapter.submit(
+            .stop, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
+            tabID: "tab"
+          ) { result in
+            continuation.resume(with: result.map { _ in () }.mapError { $0 as Error })
+          }
+        } catch {
+          continuation.resume(throwing: error)
+        }
+      }
+    }
+  }
+
 }

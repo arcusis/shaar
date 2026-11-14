@@ -121,6 +121,25 @@ struct ShaarProfileAdapterTests {
     #expect(adapter.loadedProfileIDs == [id])
   }
 
+  @Test @MainActor func zeroNativeHandlesAreRejectedForOpenAndCreate() async {
+    let fake = FakeProfileEngine()
+    let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
+    let openedID = "4a4d4885-d38a-4b4a-bc03-b12f634bff09"
+    let createdID = "4a4d4885-d38a-4b4a-bc03-b12f634bff10"
+
+    fake.nextHandle = 0
+    await #expect(throws: ShaarProfileError.staleHandle) {
+      try await adapter.open(profileID: openedID)
+    }
+    #expect(adapter.loadedProfileIDs.isEmpty)
+
+    fake.nextHandle = 0
+    await #expect(throws: ShaarProfileError.staleHandle) {
+      try await adapter.create(profileID: createdID, displayName: "Work")
+    }
+    #expect(adapter.loadedProfileIDs.isEmpty)
+  }
+
   @Test @MainActor func closeReleasesTheOpaqueHandleAndRejectsLaterCalls() async throws {
     let fake = FakeProfileEngine()
     let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
@@ -168,6 +187,12 @@ struct ShaarProfileAdapterTests {
       adapter.receive(malformed)
       #expect(adapter.loadedProfileIDs == [id])
     }
+    let childScopedProfileEvent = ShaarCopiedEvent(
+      sequence: 11, kind: 2, profileID: Data(id.utf8), sessionID: Data("private".utf8),
+      windowID: Data("window".utf8), tabID: Data("tab".utf8),
+      payloadJSON: Data(#"{"kind":"deleted","schemaVersion":1}"#.utf8))
+    adapter.receive(childScopedProfileEvent)
+    #expect(adapter.loadedProfileIDs == [id])
     #expect(delivered == nil)
   }
 }

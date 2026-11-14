@@ -45,6 +45,11 @@ public enum PinnedSidebarItem: Identifiable, Equatable, Sendable {
   }
 }
 
+public struct BrowserSidebarItemSections: Equatable, Sendable {
+  public let pinned: [PinnedSidebarItem]
+  public let unpinned: [PinnedSidebarItem]
+}
+
 private enum FolderWalk {
   case folder(BrowserFolder, Int)
   case tabs(UUID, Int)
@@ -75,6 +80,37 @@ private struct FolderItemsSection {
         }
       case .tabs(let folder, let depth):
         result += (members[folder] ?? []).map { .tab($0, depth: depth) }
+      }
+    }
+    return result
+  }
+
+  func reachableFolderCount() -> Int {
+    var stack = Array(folders.filter { $0.parentID == nil }.reversed())
+    var visited: Set<UUID> = []
+    while let folder = stack.popLast() {
+      guard visited.insert(folder.id).inserted else { continue }
+      stack += children[folder.id] ?? []
+    }
+    return visited.count
+  }
+
+  func orderedTabs() -> [BrowserTab] {
+    var result = rootTabs
+    var stack: [FolderWalk] = folders.filter { $0.parentID == nil }.reversed().map {
+      .folder($0, 0)
+    }
+    var visited: Set<UUID> = []
+    while let item = stack.popLast() {
+      switch item {
+      case .folder(let folder, let depth):
+        guard visited.insert(folder.id).inserted else { continue }
+        stack.append(.tabs(folder.id, depth + 1))
+        for child in (children[folder.id] ?? []).reversed() {
+          stack.append(.folder(child, depth + 1))
+        }
+      case .tabs(let folder, _):
+        result += members[folder] ?? []
       }
     }
     return result
@@ -119,6 +155,14 @@ private struct FolderItemsIndex {
       unpinned.items(includingCollapsed: includingCollapsed)
     }
   }
+
+  func reachableFolderCount(isPinned: Bool) -> Int {
+    if isPinned { pinned.reachableFolderCount() } else { unpinned.reachableFolderCount() }
+  }
+
+  func orderedTabs() -> [BrowserTab] {
+    pinned.orderedTabs() + unpinned.orderedTabs()
+  }
 }
 
 extension BrowserSpace {
@@ -132,20 +176,28 @@ extension BrowserSpace {
       isPinned: isPinned, includingCollapsed: includingCollapsed)
   }
 
+  func reachableFolderCount(isPinned: Bool) -> Int {
+    FolderItemsIndex(tabs: [], folders: folders, onlyPinned: isPinned)
+      .reachableFolderCount(isPinned: isPinned)
+  }
+
   public func orderedSidebarItems(includingCollapsed: Bool = false) -> [PinnedSidebarItem] {
+    let sections = sidebarItemSections(includingCollapsed: includingCollapsed)
+    return sections.pinned + sections.unpinned
+  }
+
+  public func sidebarItemSections(includingCollapsed: Bool = false)
+    -> BrowserSidebarItemSections
+  {
     let index = FolderItemsIndex(tabs: tabs, folders: folders)
-    return index.items(isPinned: true, includingCollapsed: includingCollapsed)
-      + index.items(isPinned: false, includingCollapsed: includingCollapsed)
+    return BrowserSidebarItemSections(
+      pinned: index.items(isPinned: true, includingCollapsed: includingCollapsed),
+      unpinned: index.items(isPinned: false, includingCollapsed: includingCollapsed))
   }
 
   /// Hidden folder contents retain their logical/native order and live documents.
   public var orderedTabs: [BrowserTab] {
-    let index = FolderItemsIndex(tabs: tabs, folders: folders)
-    return (index.items(isPinned: true, includingCollapsed: true)
-      + index.items(isPinned: false, includingCollapsed: true)).compactMap {
-        if case .tab(let tab, _) = $0 { return tab }
-        return nil
-      }
+    FolderItemsIndex(tabs: tabs, folders: folders).orderedTabs()
   }
 
   public func folderPath(to id: UUID?) -> [BrowserFolder] {

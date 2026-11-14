@@ -29,8 +29,12 @@ enum PanelsL10n {
   }
 
   static func string(_ key: String) -> String {
+    string(key, language: BrowserLanguage.currentLaunchLanguage)
+  }
+
+  static func string(_ key: String, language: BrowserLanguage) -> String {
     BrowserLocalization.string(
-      key, table: "Panels", language: BrowserLanguage.currentLaunchLanguage)
+      key, table: "Panels", language: language)
   }
 
   static func format(_ key: String, _ arguments: BrowserFormatArgument...) -> String {

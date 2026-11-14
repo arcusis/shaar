@@ -30,7 +30,7 @@ import Testing
 
 @Test func continuationRequiresTheBrowsingWebActivityType() throws {
   let activity = NSUserActivity(activityType: "com.example.unrelated")
-  activity.webpageURL = try #require(URL(string: "https://handoff.example/"))
+  activity.webpageURL = URL(string: "https://handoff.example/")
 
   #expect(BrowserHandoff.continuationURL(for: activity) == nil)
   var continued = false

@@ -80,6 +80,8 @@ source_set("engine") {
     "site_data/shaar_site_data_lifecycle_adapter.cc",
     # END site_data
     # BEGIN extensions
+    "extensions/shaar_extension_install.cc",
+    "extensions/shaar_extension_install.h",
     "extensions/shaar_extensions.cc",
     "extensions/shaar_extensions.h",
     "extensions/shaar_extension_views.mm",
@@ -89,6 +91,8 @@ source_set("engine") {
     "find/shaar_find.cc",
     "find/shaar_find.h",
     "find/shaar_find_lifecycle_adapter.cc",
+    "find/shaar_page_zoom.cc",
+    "find/shaar_page_zoom.h",
     # END find
     # BEGIN devtools
     "devtools/shaar_devtools.cc",
@@ -107,11 +111,25 @@ source_set("engine") {
     "media/shaar_media_lifecycle_adapter.cc",
     "media/shaar_media_permission.cc",
     "media/shaar_media_permission.h",
+    "media/shaar_desktop_capture.cc",
+    "media/shaar_desktop_capture.h",
     # END media
     # BEGIN permissions
     "permissions/shaar_permission_prompt.cc",
     "permissions/shaar_permission_prompt.h",
     # END permissions
+    # BEGIN printing
+    "printing/shaar_print.cc",
+    "printing/shaar_print.h",
+    # END printing
+    # BEGIN login
+    "login/shaar_login.cc",
+    "login/shaar_login.h",
+    # END login
+    # BEGIN webshare
+    "webshare/shaar_webshare.cc",
+    "webshare/shaar_webshare.h",
+    # END webshare
     # BEGIN storage_keychain
     "storage_keychain/shaar_storage_keychain.cc",
     "storage_keychain/shaar_storage_keychain.h",
@@ -124,6 +142,8 @@ source_set("engine") {
     # BEGIN save_prompts
     "save_prompts/shaar_save_prompts.cc",
     "save_prompts/shaar_save_prompts.h",
+    "javascript_dialogs/shaar_javascript_dialogs.cc",
+    "javascript_dialogs/shaar_javascript_dialogs.h",
     # END save_prompts
   ]
   cflags_objcc = [ "-fobjc-arc" ]
@@ -162,6 +182,7 @@ source_set("engine") {
     # END site_data
     # BEGIN find
     "//components/find_in_page",
+    "//components/zoom",
     # END find
     # BEGIN storage_keychain
     "//components/os_crypt/common:keychain_password_mac",
@@ -188,6 +209,7 @@ source_set("engine") {
     "//url",
     # BEGIN extensions
     "//chrome/browser/extensions:extensions",
+    "//components/crx_file",
     "//extensions/common",
     # END extensions
   ]
@@ -309,7 +331,7 @@ test("shaar_extensions_unittests") {
 # END extensions
 # BEGIN find
 test("shaar_find_unittests") {
-  sources = [ "find/shaar_find_unittest.cc" ]
+  sources = [ "find/shaar_find_unittest.cc", "find/shaar_page_zoom_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END find
@@ -356,10 +378,13 @@ test("shaar_layer_unittests") {
     "downloads/shaar_downloads_unittest.cc",
     "extensions/shaar_extensions_unittest.cc",
     "find/shaar_find_unittest.cc",
+    "find/shaar_page_zoom_unittest.cc",
     "history/shaar_history_unittest.cc",
     "lifecycle/shaar_module_registry_unittest.cc",
+    "login/shaar_login_unittest.cc",
     "media/shaar_media_unittest.cc",
     "save_prompts/shaar_save_prompts_unittest.cc",
+    "javascript_dialogs/shaar_javascript_dialogs_unittest.cc",
     "navigation/shaar_navigation_unittest.cc",
     "permissions/shaar_permission_prompt_unittest.cc",
     "private_sessions/shaar_private_sessions_unittest.cc",

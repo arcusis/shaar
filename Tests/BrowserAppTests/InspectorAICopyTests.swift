@@ -11,6 +11,17 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorAICopyTests {
+  @Test func backendFailuresUseLocalizedCopyRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorAICopyModel.failureMessage(for: error)
+        == InspectorL10n.string("Could not copy the selected element. Try again."))
+    let known = InspectorFailure("Lock an element first.")
+    #expect(
+      InspectorAICopyModel.failureMessage(for: known)
+        == InspectorL10n.display(known.localizedDescription))
+  }
+
   private func inspector() -> InspectorModel {
     let model = InspectorModel(
       target: .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!),
@@ -18,6 +29,35 @@ import Testing
     model.open()
     return model
   }
+
+  @Test func cancelledCopyDoesNotStartInspectorRequestOrShowFailure() async throws {
+    let model = inspector()
+    defer { model.close() }
+    try model.receive(InspectorPanelTests.fixtureSelection())
+
+    let copy = Task { @MainActor in await model.aiCopy.copy(.element) }
+    copy.cancel()
+    await copy.value
+
+    #expect(model.aiCopy.failure == nil)
+    #expect(!model.aiCopy.busy)
+  }
+
+  @Test func cancelledNoteDoesNotStartInspectorRequestOrShowFailure() async throws {
+    let model = inspector()
+    defer { model.close() }
+    try model.receive(InspectorPanelTests.fixtureSelection())
+    model.aiCopy.feedback = "Add a label"
+
+    let note = Task { @MainActor in await model.aiCopy.addNote() }
+    note.cancel()
+    await note.value
+
+    #expect(model.aiCopy.notes.isEmpty)
+    #expect(model.aiCopy.failure == nil)
+    #expect(!model.aiCopy.busy)
+  }
+
   @Test func notesStayPerTabAcrossNavigationAndCloseAndUndoPreservesNewNotes() throws {
     let one = inspector()
     let two = inspector()
@@ -101,6 +141,7 @@ import Testing
   @Test func screenshotCachePrunesOnlyOwnedOldFilesAndKeepsPrivatePermissions() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
     defer { try? FileManager.default.removeItem(at: root) }
     let now = Date.now
     let old = root.appending(path: "123-section.png")
@@ -125,7 +166,38 @@ import Testing
     let permissions =
       try FileManager.default.attributesOfItem(atPath: saved.path)[.posixPermissions] as? NSNumber
     #expect(permissions?.intValue == 0o600)
+    let directoryPermissions =
+      try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber
+    #expect(directoryPermissions?.intValue == 0o700)
   }
+
+  @Test func screenshotCacheRejectsSymlinkedDirectory() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let target = root.appending(path: "outside", directoryHint: .isDirectory)
+    let directory = root.appending(path: "Inspector", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createSymbolicLink(at: directory, withDestinationURL: target)
+
+    #expect(throws: CocoaError.self) {
+      try InspectorScreenshotCache(directory: directory).save(Data([1, 2, 3]), tag: "section")
+    }
+    #expect(try FileManager.default.contentsOfDirectory(atPath: target.path).isEmpty)
+  }
+
+  @Test func screenshotCacheTightensExistingDirectoryPermissions() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+
+    _ = try InspectorScreenshotCache(directory: root).save(Data([1, 2, 3]), tag: "private")
+
+    let permissions =
+      try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber
+    #expect(permissions?.intValue == 0o700)
+  }
+
   @Test func unavailableOrClosedSelectionFailsWithoutTouchingClipboard() async throws {
     let model = inspector()
     defer { model.close() }

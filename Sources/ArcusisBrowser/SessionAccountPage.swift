@@ -69,7 +69,7 @@ enum SessionAccountPage {
   }
 
   static func account(from text: String, provider: AccountProvider) -> ConnectedAccount? {
-    guard let data = text.data(using: .utf8),
+    guard text.utf8.count <= 512 * 1_024, let data = text.data(using: .utf8),
       let value = try? JSONDecoder().decode(Snapshot.self, from: data),
       let url = URL(string: value.url), provider.isSignedInPage(url),
       let email = MicrosoftSignInPage.email(in: url, pageText: value.email),
@@ -86,10 +86,13 @@ enum SessionAccountPage {
   /// Starts one asynchronous, cookie-aware image read, then subsequent polls collect it.
   /// Canvas enforces origin/CORS rules. Failure leaves initials rather than copying credentials.
   static func photoScript(url: URL) -> String? {
-    let secure = url.scheme == "https" && url.host != nil
+    let secure = url.scheme == "https" && url.host != nil && url.user == nil && url.password == nil
     let blobOrigin =
       url.scheme == "blob" ? URL(string: String(url.absoluteString.dropFirst(5))) : nil
-    guard secure || (blobOrigin?.scheme == "https" && blobOrigin?.host != nil),
+    guard
+      secure
+        || (blobOrigin?.scheme == "https" && blobOrigin?.host != nil
+          && blobOrigin?.user == nil && blobOrigin?.password == nil),
       let encoded = try? JSONEncoder().encode(url.absoluteString),
       let literal = String(data: encoded, encoding: .utf8)
     else { return nil }
@@ -128,7 +131,8 @@ enum SessionAccountPage {
     }
     if source.scheme == "blob",
       let origin = URL(string: String(source.absoluteString.dropFirst(5))),
-      origin.scheme == "https", origin.host == URL(string: snapshot.url)?.host
+      origin.scheme == "https", origin.host == URL(string: snapshot.url)?.host,
+      origin.user == nil, origin.password == nil
     {
       return source
     }

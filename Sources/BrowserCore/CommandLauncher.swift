@@ -193,12 +193,7 @@ public enum CommandLauncher {
   {
     let profileID = session.selectedSpace.profileID
     let favoriteIDs = Set(session.favorites(for: profileID).map(\.id))
-    let openURLs =
-      session.selectedSpace.tabs.map(\.url)
-      + session.favoritePages.filter {
-        favoriteIDs.contains($0.favoriteID)
-      }.map(\.tab.url)
-    let open = Set(openURLs.map { pageKey($0.absoluteString) })
+    let open = openPageKeys(in: session, favoriteIDs: favoriteIDs)
     var top = TopRanked<BrowserHistoryEntry>(limit: mostVisitedLimit) {
       ($0.visitCount, $0.lastVisit) > ($1.visitCount, $1.lastVisit)
     }
@@ -210,6 +205,25 @@ public enum CommandLauncher {
     return top.items.map {
       CommandResult.history($0, subtitle: CommandText.domain(of: $0.destination))
     }
+  }
+
+  /// Builds the set without allocating intermediate URL and key arrays.
+  static func openPageKeys(in session: BrowserSession) -> Set<String> {
+    let profileID = session.selectedSpace.profileID
+    let favoriteIDs = Set(session.favorites.lazy.filter { $0.profileID == profileID }.map(\.id))
+    return openPageKeys(in: session, favoriteIDs: favoriteIDs)
+  }
+
+  static func openPageKeys(in session: BrowserSession, favoriteIDs: Set<UUID>) -> Set<String> {
+    var keys: Set<String> = []
+    keys.reserveCapacity(session.selectedSpace.tabs.count + session.favoritePages.count)
+    for tab in session.selectedSpace.tabs {
+      keys.insert(pageKey(tab.url.absoluteString))
+    }
+    for page in session.favoritePages where favoriteIDs.contains(page.favoriteID) {
+      keys.insert(pageKey(page.tab.url.absoluteString))
+    }
+    return keys
   }
 
   // MARK: Typed query
@@ -266,8 +280,8 @@ public enum CommandLauncher {
     let profileID = session.selectedSpace.profileID
     let results = sources.history.lazy
       .filter {
-        $0.profileID == profileID && $0.destination != nil
-          && CommandText.matches(query, CommandFields.history($0))
+        $0.profileID == profileID && CommandText.matches(query, CommandFields.history($0))
+          && $0.destination != nil
       }
       .prefix(filteredLimit)
       .map { CommandResult.history($0, subtitle: CommandText.domain(of: $0.destination)) }
@@ -281,8 +295,8 @@ public enum CommandLauncher {
     let profileID = session.selectedSpace.profileID
     let results = sources.bookmarks.lazy
       .filter {
-        $0.profileID == profileID && $0.destination != nil
-          && CommandText.matches(query, CommandFields.bookmark($0))
+        $0.profileID == profileID && CommandText.matches(query, CommandFields.bookmark($0))
+          && $0.destination != nil
       }
       .prefix(filteredLimit)
       .map { CommandResult.bookmark($0, subtitle: CommandText.domain(of: $0.destination)) }
@@ -342,13 +356,15 @@ public enum CommandLauncher {
     if let scheme = components?.scheme?.lowercased() {
       components?.scheme = scheme
       if (scheme == "https" && components?.port == 443)
-        || (scheme == "http" && components?.port == 80) {
+        || (scheme == "http" && components?.port == 80)
+      {
         components?.port = nil
       }
     }
     if let host = components?.host {
       let normalizedHost = host.lowercased()
-      components?.host = normalizedHost.hasSuffix(".")
+      components?.host =
+        normalizedHost.hasSuffix(".")
         ? String(normalizedHost.dropLast()) : normalizedHost
     }
     components?.fragment = nil

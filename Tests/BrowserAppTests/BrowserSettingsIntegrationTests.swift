@@ -10,6 +10,20 @@ import Testing
 
 @Suite @MainActor
 struct BrowserSettingsIntegrationTests {
+  @Test func clearHistoryRouteSelectsPrivacyAndRequestsConfirmation() throws {
+    let fixture = fixture()
+    let workspace = try BrowserWorkspaceStore(initialSession: fixture.session)
+    let controller = BrowserSettingsController(
+      workspace: workspace, preferences: BrowserPreferencesStore(), presentation: .hiddenProbe)
+
+    controller.showClearHistory(for: fixture.alpha.id)
+
+    #expect(controller.selectedProfileID == fixture.alpha.id)
+    #expect(controller.initialSection == .privacy)
+    #expect(controller.confirmsClearHistoryOnAppear)
+    #expect(controller.window?.isVisible == false)
+  }
+
   @Test func addExtensionsOpensInLastFocusedWindowForProfile() throws {
     let session = fixture().session
     let manager = try BrowserWorkspaceStore(initialSession: session)

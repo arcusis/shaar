@@ -111,10 +111,19 @@ def scenario_result(report: dict, exit_code: int | None, timed_out: bool, crashe
         return "fail"
     if "passed" not in report:
         return "fail"
-    rows = report.get("rows") or []
-    if any(row.get("status") == "fail" for row in rows):
+    if "allWindowsHidden" in report and report["allWindowsHidden"] is not True:
         return "fail"
-    if not rows or report.get("passed") is not True or exit_code not in (0, None):
+    rows = report.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return "fail"
+    if any(
+        not isinstance(row, dict)
+        or not isinstance(row.get("status"), str)
+        or row.get("status") not in {"pass", "blocked"}
+        for row in rows
+    ):
+        return "fail"
+    if report.get("passed") is not True or exit_code not in (0, None):
         return "fail"
     if all(row.get("status") == "blocked" for row in rows):
         return "blocked"
@@ -127,9 +136,12 @@ def crash_counts_against_suite(
     """A deliberate renderer SIGKILL is evidence for the recovery row, not a second defect."""
     if scenario != "renderer" or finished is None:
         return True
-    recovered = any(
-        row.get("name") == "renderer-recover" and row.get("status") == "pass"
-        for row in report.get("rows") or []
+    rows = report.get("rows")
+    recovered = isinstance(rows, list) and any(
+        isinstance(row, dict)
+        and row.get("name") == "renderer-recover"
+        and row.get("status") == "pass"
+        for row in rows
     )
     return not (recovered and deliberate_renderer_kill(report, crash_text, finished))
 
@@ -137,9 +149,15 @@ def crash_counts_against_suite(
 def deliberate_renderer_kill(report: dict, crash_text: str, finished: datetime) -> bool:
     signaled: set[int] = set()
     signaled_at = None
-    for row in report.get("rows") or []:
-        for pid in row.get("signaledPIDs") or []:
-            if isinstance(pid, int):
+    rows = report.get("rows")
+    if not isinstance(rows, list):
+        return False
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        pids = row.get("signaledPIDs")
+        for pid in pids if isinstance(pids, list) else []:
+            if isinstance(pid, int) and not isinstance(pid, bool):
                 signaled.add(pid)
         parsed = parse_signaled_at(row.get("signaledAt"))
         if parsed is not None:
@@ -359,15 +377,25 @@ def read_report(path: Path) -> dict:
         return {}
     try:
         value = json.loads(path.read_text())
-    except json.JSONDecodeError:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return {}
     return value if isinstance(value, dict) else {}
 
 
 def row_notes(report: dict, extra: str) -> str:
     parts = [extra] if extra else []
-    for row in report.get("rows") or []:
-        if row.get("status") in {"fail", "blocked"}:
+    rows = report.get("rows")
+    if not isinstance(rows, list):
+        return " ".join(parts + ["Malformed scenario rows."])
+    for row in rows:
+        if not isinstance(row, dict):
+            parts.append("Malformed scenario row.")
+            continue
+        status = row.get("status")
+        if not isinstance(status, str) or status not in {"pass", "fail", "blocked"}:
+            parts.append("Malformed scenario row status.")
+            continue
+        if status in {"fail", "blocked"}:
             parts.append(f"{row.get('name')}: {row.get('detail') or ''}".strip())
     return " ".join(parts)
 
@@ -425,6 +453,15 @@ class Fixture(BaseHTTPRequestHandler):
     icon = b""
     clip = b""
     heavy = b""
+    slow_reload_lock = threading.Lock()
+    slow_reload_requests: dict[str, int] = {}
+
+    @classmethod
+    def next_slow_reload_request(cls, path: str) -> int:
+        with cls.slow_reload_lock:
+            request = cls.slow_reload_requests.get(path, 0) + 1
+            cls.slow_reload_requests[path] = request
+            return request
 
     def do_GET(self) -> None:
         try:
@@ -439,6 +476,12 @@ class Fixture(BaseHTTPRequestHandler):
         if path == "/slow":
             time.sleep(1.5)
             self.send_bytes(page("slow", "<p>slow</p>"), "text/html; charset=utf-8")
+            return
+        if path.startswith("/slow-reload/"):
+            request = self.next_slow_reload_request(path)
+            time.sleep(1.5)
+            body = f'<script>document.documentElement.dataset.reloadRequest="{request}"</script>'
+            self.send_bytes(page("slow reload", body), "text/html; charset=utf-8")
             return
         if path == "/heavy":
             self.send_bytes(self.heavy, "text/html; charset=utf-8")
@@ -480,7 +523,9 @@ class Fixture(BaseHTTPRequestHandler):
 const feed=document.getElementById('feed');
 function add(n){for(let i=0;i<n;i++){const row=document.createElement('div');row.textContent=String(feed.children.length);feed.appendChild(row);}}
 add(100);
-feed.addEventListener('scroll',()=>{if(feed.children.length<200)add(100);});
+window.__scrollEvents=0;
+window.__scrollLoadThresholdReached=false;
+feed.addEventListener('scroll',()=>{window.__scrollEvents++;if(feed.scrollTop+feed.clientHeight>=feed.scrollHeight-80){window.__scrollLoadThresholdReached=true;if(feed.children.length<200)add(100);}});
 </script>""")
         if path == "/webgl":
             return page("webgl", """
@@ -663,7 +708,18 @@ def run_suite(
     return results
 
 
+def validate_report_paths(path: Path, markdown_path: Path) -> None:
+    if path.resolve() == markdown_path.resolve():
+        raise ValueError("Browsing QA receipt and markdown output paths must differ")
+
+
 def write_receipt(path: Path, markdown_path: Path, executable: Path, results: list[dict]) -> None:
+    validate_report_paths(path, markdown_path)
+    for output in (path, markdown_path):
+        if output.is_symlink():
+            raise ValueError(f"Browsing QA output path must not be a symlink: {output}")
+        if output.exists() and not output.is_file():
+            raise ValueError(f"Browsing QA output path is not a regular file: {output}")
     receipt = {
         "verificationExecutable": str(executable),
         "clipBytes": len(Fixture.clip),
@@ -686,10 +742,15 @@ def main() -> None:
         scenarios = parse_scenarios(options.scenarios)
     except UnknownScenario as error:
         parser.error(str(error))
+    try:
+        validate_report_paths(options.receipt, options.markdown)
+    except ValueError as error:
+        parser.error(str(error))
     executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
         parser.error(f"Missing verification app: {executable}")
     with tempfile.TemporaryDirectory(prefix="shaar-browsing-qa-") as temporary:
+        Fixture.slow_reload_requests = {}
         Fixture.icon = favicon_png()
         Fixture.clip = make_clip(Path(temporary))
         Fixture.heavy = page("heavy", "<div id=heavy>" + ("<div></div>" * 20000) + "</div>")

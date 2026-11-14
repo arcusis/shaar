@@ -103,6 +103,95 @@ final class PictureInPictureControlsTests: XCTestCase {
     XCTAssertEqual(commands.last, .close)
   }
 
+  func testPendingAttachmentStopsPollingWhenControlsDeinitialize() async throws {
+    var lookups = 0
+    weak var weakControls: PictureInPictureControls?
+    do {
+      let controls = PictureInPictureControls()
+      weakControls = controls
+      controls.attach(
+        tabID: UUID(),
+        finding: {
+          lookups += 1
+          return nil
+        },
+        video: { nil })
+      await Task.yield()
+      XCTAssertEqual(lookups, 1)
+    }
+
+    XCTAssertNil(weakControls)
+    let lookupsAtDeinitialization = lookups
+    try await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(lookups, lookupsAtDeinitialization)
+  }
+
+  func testDetachBeforePendingAttachmentStartsPreventsLateReattach() async {
+    let video = transparentWindow()
+    defer { video.close() }
+    let controls = PictureInPictureControls()
+    let tab = UUID()
+
+    controls.attach(tabID: tab, finding: { video }, video: { nil })
+    controls.detach()
+    await Task.yield()
+    XCTAssertFalse(controls.isAttached)
+    XCTAssertNil(controls.tabID)
+  }
+
+  func testDetachingBeforeAttachmentTaskStartsPreventsLateWindowAttachment() async {
+    let video = transparentWindow()
+    defer { video.close() }
+    let controls = PictureInPictureControls()
+    var findCount = 0
+
+    controls.attach(tabID: UUID(), finding: {
+      findCount += 1
+      return video
+    }, video: { nil })
+    controls.detach()
+    await Task.yield()
+
+    XCTAssertEqual(findCount, 0)
+    XCTAssertFalse(controls.isAttached)
+    XCTAssertNil(controls.tabID)
+  }
+
+  func testDeallocatingControlsStopsPendingWindowPolling() async {
+    var findCount = 0
+    var controls: PictureInPictureControls? = PictureInPictureControls()
+    weak let weakControls = controls
+
+    controls?.attach(tabID: UUID(), finding: {
+      findCount += 1
+      return nil
+    }, video: { nil })
+    await Task.yield()
+    XCTAssertEqual(findCount, 1)
+
+    controls = nil
+    XCTAssertNil(weakControls)
+    try? await Task.sleep(for: .milliseconds(150))
+
+    XCTAssertEqual(findCount, 1)
+  }
+
+  func testDeallocatingControlsRemovesItsChildPanel() throws {
+    let video = transparentWindow()
+    defer { video.close() }
+    var controls: PictureInPictureControls? = PictureInPictureControls()
+    weak let weakControls = controls
+    controls?.attach(to: video, tabID: UUID(), video: nil)
+    let panel = try XCTUnwrap(controls?.panel)
+    XCTAssertTrue(video.childWindows?.contains(panel) == true)
+
+    controls = nil
+
+    XCTAssertNil(weakControls)
+    XCTAssertFalse(video.childWindows?.contains(panel) == true)
+    XCTAssertFalse(panel.isVisible)
+  }
+
   func testCaptureControlsOverVideo() throws {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let cases: [(String, PictureInPictureControlsView.Presentation, Int)] = [

@@ -15,4 +15,8 @@ final class ProfileNameEditorTests: XCTestCase {
   func testSaveValuePreservesInteriorWhitespace() {
     XCTAssertEqual(ProfileNameEditor.trimmedName("Work profile"), "Work profile")
   }
+
+  func testEditorTitleIsVoiceOverHeading() {
+    XCTAssertTrue(ProfileNameEditor.headingTraits.contains(.isHeader))
+  }
 }

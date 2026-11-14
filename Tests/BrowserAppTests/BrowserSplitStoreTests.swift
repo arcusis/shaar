@@ -188,6 +188,23 @@ final class BrowserSplitStoreTests: XCTestCase {
     store.tabDragCleanupTask?.cancel()
   }
 
+  func testDeinitializingStoreCancelsDragCleanupTasks() throws {
+    var session = BrowserSession.fresh()
+    let tab = try XCTUnwrap(session.open(URL(string: "https://drag.example")!))
+    var store: BrowserStore? = BrowserStore(session: session)
+    let spaceID = try XCTUnwrap(store?.session.selectedSpaceID)
+    _ = store?.beginTabDrag(tab, spaceID: spaceID, fromSplitPane: false)
+    let sidebarTask = try XCTUnwrap(store?.sidebarDragCleanupTask)
+    let tabTask = try XCTUnwrap(store?.tabDragCleanupTask)
+    weak var releasedStore: BrowserStore? = store
+
+    store = nil
+
+    XCTAssertNil(releasedStore)
+    XCTAssertTrue(sidebarTask.isCancelled)
+    XCTAssertTrue(tabTask.isCancelled)
+  }
+
   func testDropEdgeFollowsNearestSide() {
     let size = CGSize(width: 400, height: 300)
     XCTAssertEqual(SplitDropZone.edge(at: CGPoint(x: 20, y: 150), in: size), .left)
@@ -198,6 +215,8 @@ final class BrowserSplitStoreTests: XCTestCase {
 
   func testSplitDropPreviewRespectsReduceMotion() {
     XCTAssertNil(SplitDropZone.previewAnimation(reduceMotion: true))
+    XCTAssertNil(SplitDropZone.previewAnimation(reduceMotion: true, override: false))
+    XCTAssertNil(SplitDropZone.previewAnimation(reduceMotion: false, override: true))
     XCTAssertNotNil(SplitDropZone.previewAnimation(reduceMotion: false))
   }
 

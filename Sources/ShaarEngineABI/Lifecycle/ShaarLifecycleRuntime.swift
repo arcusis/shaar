@@ -47,8 +47,11 @@ private struct LifecycleFrameworkSymbols: ShaarSymbolResolving {
   }
 }
 
-private func lifecycleErrorMessage(_ bytes: ShaarBytes) -> String {
-  guard bytes.size > 0, let data = bytes.data else { return "" }
+private func lifecycleErrorMessage(_ bytes: ShaarBytes) throws -> String {
+  guard bytes.size >= 0, bytes.size == 0 || bytes.data != nil else {
+    throw ShaarEngineError.invalidEvent("invalid lifecycle error message slice")
+  }
+  guard let data = bytes.data, bytes.size > 0 else { return "" }
   return data.withMemoryRebound(to: UInt8.self, capacity: bytes.size) {
     String(decoding: UnsafeBufferPointer(start: $0, count: bytes.size), as: UTF8.self)
   }
@@ -215,8 +218,11 @@ private func receiveShaarEvent(
   }
 
   private static func decode(_ result: UInt32, error: ShaarLifecycleError) throws {
+    guard error.size >= UInt32(MemoryLayout<ShaarLifecycleError>.size) else {
+      throw ShaarEngineError.invalidEvent("short lifecycle error")
+    }
     let code = result == 0 ? error.code : result
     try ShaarStatusCode.decode(
-      code, platformCode: error.platformCode, message: lifecycleErrorMessage(error.message))
+      code, platformCode: error.platformCode, message: try lifecycleErrorMessage(error.message))
   }
 }

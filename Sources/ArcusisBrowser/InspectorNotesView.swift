@@ -6,11 +6,15 @@ import SwiftUI
 
 struct InspectorNotesView: View {
   @Bindable var model: InspectorAICopyModel
+
+  static var sectionHeadingTraits: AccessibilityTraits { .isHeader }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
         VStack(alignment: .leading, spacing: 8) {
           Text(InspectorL10n.string("Add feedback")).font(.system(size: 11, weight: .semibold))
+            .accessibilityAddTraits(Self.sectionHeadingTraits)
           if !model.canCopy {
             Text(InspectorL10n.string("Lock an element to add a note.")).font(.system(size: 11))
               .foregroundStyle(
@@ -48,6 +52,7 @@ struct InspectorNotesView: View {
         Divider()
         HStack(spacing: 7) {
           Text(InspectorL10n.string("Notes")).font(.system(size: 11, weight: .semibold))
+            .accessibilityAddTraits(Self.sectionHeadingTraits)
           Text("\(model.notes.count)/50").font(.system(size: 10, design: .monospaced))
             .foregroundStyle(.tertiary)
           Spacer(minLength: 0)
@@ -88,9 +93,9 @@ struct InspectorNotesView: View {
               .foregroundStyle(.secondary)
               .lineLimit(1).truncationMode(.middle).help(note.context.selector)
               .environment(\.layoutDirection, .leftToRight)
-            Text(InspectorAIFormatter.url(note.context.url)).font(.system(size: 10))
+            Text(InspectorL10n.display(InspectorAIFormatter.url(note.context.url))).font(.system(size: 10))
               .foregroundStyle(.secondary)
-              .lineLimit(1).truncationMode(.middle).help(InspectorAIFormatter.url(note.context.url))
+              .lineLimit(1).truncationMode(.middle).help(InspectorL10n.display(InspectorAIFormatter.url(note.context.url)))
               .environment(\.layoutDirection, .leftToRight)
           }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
             .background(.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
@@ -101,7 +106,10 @@ struct InspectorNotesView: View {
         Text(InspectorL10n.string("Notes stay in this tab across page navigation."))
           .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(
             horizontal: false, vertical: true)
-        if model.busy { ProgressView().controlSize(.small) }
+        if model.busy {
+          ProgressView().controlSize(.small)
+            .accessibilityLabel(InspectorL10n.string("Working…"))
+        }
         if let value = model.status,
           ![
             "Copied element to clipboard", "Copied image to clipboard", "Copied notes to clipboard",

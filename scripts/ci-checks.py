@@ -49,6 +49,13 @@ def main() -> int:
     parser.add_argument("--docs-only", action="store_true", help="Run checks needed for a docs-only diff")
     parser.add_argument("--skip-python", action="store_true", help="Run platform-independent gates without Python tests")
     options = parser.parse_args()
+    incompatible = [name for name, selected in (
+        ("--snapshot-only", options.snapshot_only),
+        ("--docs-only", options.docs_only),
+        ("--skip-python", options.skip_python),
+    ) if selected]
+    if options.pins_only and incompatible:
+        parser.error("--pins-only cannot be combined with " + ", ".join(incompatible))
     errors = pin_errors(ROOT)
     for error in errors:
         print(error, file=sys.stderr)

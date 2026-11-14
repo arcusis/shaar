@@ -8,6 +8,12 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func browserImportPickerCancellationDoesNotProduceAnErrorMessage() {
+  #expect(LibraryImportErrorPresentation.message(for: CancellationError()) == nil)
+  #expect(LibraryImportErrorPresentation.message(for: CocoaError(.userCancelled)) == nil)
+  #expect(LibraryImportErrorPresentation.message(for: CocoaError(.fileReadNoPermission)) != nil)
+}
+
 @Test @MainActor func browserImportFeedsBothProfileLibraryPathsInOrder() {
   let library = BrowserLibraryModel()
   let profile = UUID()

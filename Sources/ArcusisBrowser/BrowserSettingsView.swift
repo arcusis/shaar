@@ -7,6 +7,10 @@ import BrowserCore
 import SwiftUI
 
 enum BrowserSettingsAccessibility {
+  static func profileSelectionTraits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
+
   static func openSpaceLabel(
     name: String, language: BrowserLanguage = .currentLaunchLanguage
   ) -> String {
@@ -114,6 +118,8 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct BrowserSettingsView: View {
+  static let profilesHeadingTraits: AccessibilityTraits = .isHeader
+
   let profiles: [BrowserSettingsProfile]
   let searchEngines: [BrowserSettingsChoice]
   @Binding var selectedProfileID: UUID?
@@ -205,7 +211,8 @@ struct BrowserSettingsView: View {
     clearHistory: ((UUID) async throws -> Void)? = nil,
     httpsOnlyModeEnabled: @escaping (UUID) -> Bool,
     onSetHttpsOnlyMode: @escaping (UUID, Bool) -> Bool,
-    initialSection: BrowserSettingsSection = .general
+    initialSection: BrowserSettingsSection = .general,
+    confirmsClearHistoryOnAppear: Bool = false
   ) {
     self.profiles = profiles
     self.searchEngines = searchEngines
@@ -236,6 +243,12 @@ struct BrowserSettingsView: View {
     self.httpsOnlyModeEnabled = httpsOnlyModeEnabled
     self.onSetHttpsOnlyMode = onSetHttpsOnlyMode
     _selectedSection = State(initialValue: initialSection)
+    _confirmHistory = State(initialValue: confirmsClearHistoryOnAppear)
+  }
+
+  static func historyClearFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string(
+      "Could not clear history. Try again.", table: "Settings", language: language)
   }
 
   var body: some View {
@@ -526,8 +539,7 @@ struct BrowserSettingsView: View {
               try await clearHistory(id)
               historyMessage = SettingsL10n.string("History cleared.")
             } catch {
-              historyMessage = SettingsL10n.format(
-                "Could not clear history: %@", .string(error.localizedDescription))
+              historyMessage = SettingsL10n.string("Could not clear history. Try again.")
             }
             clearingHistory = false
           }
@@ -576,7 +588,9 @@ struct BrowserSettingsView: View {
     HStack(spacing: 0) {
       VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text(SettingsL10n.string("Profiles")).font(.headline)
+          Text(SettingsL10n.string("Profiles"))
+            .font(.headline)
+            .accessibilityAddTraits(Self.profilesHeadingTraits)
           Spacer()
           Button(action: onAddProfile) {
             Image(systemName: "plus")
@@ -610,6 +624,9 @@ struct BrowserSettingsView: View {
             )
             .contentShape(Rectangle())
           }.buttonStyle(.plain)
+            .accessibilityAddTraits(
+              BrowserSettingsAccessibility.profileSelectionTraits(
+                isSelected: selectedProfileID == profile.id))
         }
         Spacer()
       }
@@ -792,11 +809,15 @@ enum ProfileNameEditPolicy {
 }
 
 struct BrowserLanguageRestartPrompt: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
+
   let onRestart: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text(SettingsL10n.string("Restart Shaar to apply")).font(.headline)
+      Text(SettingsL10n.string("Restart Shaar to apply"))
+        .font(.headline)
+        .accessibilityAddTraits(Self.headingTraits)
       Text(SettingsL10n.string("Your windows and tabs will be restored."))
         .font(.caption).foregroundStyle(.secondary)
       Button(SettingsL10n.string("Restart Shaar"), action: onRestart)

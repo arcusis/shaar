@@ -6,10 +6,34 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 import SwiftUI
 
 @testable import ArcusisBrowser
+
+enum BitwardenProbeEvidence {
+  static func hasEnabledAddToChromeButton(_ buttons: [[String: Any]]) -> Bool {
+    buttons.contains { button in
+      guard let text = button["text"] as? String,
+        text.lowercased() == "add to chrome",
+        let disabled = button["disabled"] as? NSNumber,
+        CFGetTypeID(disabled) == CFBooleanGetTypeID()
+      else { return false }
+      return !disabled.boolValue
+    }
+  }
+}
+
+enum BitwardenStoreButtonValidation {
+  static func hasEnabledInstallButton(in page: [String: Any]) -> Bool {
+    guard let buttons = page["buttons"] as? [[String: Any]] else { return false }
+    return buttons.contains {
+      ($0["text"] as? String)?.lowercased() == "add to chrome"
+        && $0["disabled"] as? Bool != true
+    }
+  }
+}
 
 /// Opt-in public-store compatibility test in an empty disposable profile.
 @MainActor
@@ -85,12 +109,7 @@ final class BitwardenProbe {
               buttons:[...document.querySelectorAll('button,[role="button"]')].map(b=>
                 ({text:(b.innerText || b.getAttribute('aria-label') || '').trim(), disabled:b.disabled || b.getAttribute('aria-disabled')==='true'}))})
             """) ?? [:]
-        if let buttons = page["buttons"] as? [[String: Any]],
-          buttons.contains(where: {
-            ($0["text"] as? String)?.lowercased() == "add to chrome"
-              && $0["disabled"] as? Bool != true
-          })
-        {
+        if BitwardenStoreButtonValidation.hasEnabledInstallButton(in: page) {
           buttonReady = true
           break
         }

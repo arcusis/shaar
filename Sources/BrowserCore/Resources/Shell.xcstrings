@@ -1,6 +1,21 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Could not load private cookie settings.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load private cookie settings."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את הגדרות העוגיות בגלישה פרטית."}}}},
+    "Could not update private cookie settings. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not update private cookie settings. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לעדכן את הגדרות העוגיות בגלישה פרטית. כדאי לנסות שוב."}}}},
+    "Could not load this profile. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load this profile. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את הפרופיל. כדאי לנסות שוב."}}}},
+    "Previous Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Previous Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הקודם"}}}},
+    "Next Window": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Next Window"}},"he":{"stringUnit":{"state":"translated","value":"החלון הבא"}}}},
+    "Browser sidebar": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Browser sidebar"}},"he":{"stringUnit":{"state":"translated","value":"סרגל הצד של הדפדפן"}}}},
+    "Enter Full Screen": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Enter Full Screen"}},"he":{"stringUnit":{"state":"translated","value":"כניסה למסך מלא"}}}},
+    "Emoji & Symbols": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Emoji & Symbols"}},"he":{"stringUnit":{"state":"translated","value":"אימוג׳י וסמלים"}}}},
+    "Paste and Match Style": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Paste and Match Style"}},"he":{"stringUnit":{"state":"translated","value":"הדבקה והתאמת סגנון"}}}},
+    "Could not complete the browser window action. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not complete the browser window action. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להשלים את הפעולה בחלון הדפדפן. כדאי לנסות שוב."}}}},
+    "Could not complete the site action. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not complete the site action. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להשלים את הפעולה באתר. כדאי לנסות שוב."}}}},
+    "Changes could not be saved. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Changes could not be saved. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשמור את השינויים. כדאי לנסות שוב."}}}},
+    "Window changes could not be saved. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Window changes could not be saved. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשמור את השינויים בחלון. נסו שוב."}}}},
+    "The Agent Bridge request failed. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The Agent Bridge request failed. Try again."}},"he":{"stringUnit":{"state":"translated","value":"בקשת הגישור לסוכן נכשלה. כדאי לנסות שוב."}}}},
+    "Could not open the private tab. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not open the private tab. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לפתוח את הלשונית הפרטית. כדאי לנסות שוב."}}}},
     "Coverage": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Coverage"}},"he":{"stringUnit":{"state":"translated","value":"כיסוי"}}}},
     "Script": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Script"}},"he":{"stringUnit":{"state":"translated","value":"סקריפט"}}}},
     "Style sheet": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Style sheet"}},"he":{"stringUnit":{"state":"translated","value":"גיליון סגנון"}}}},
@@ -56,6 +71,8 @@
     "Could not update this permission. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not update this permission. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לעדכן את ההרשאה הזו. כדאי לנסות שוב."}}}},
     "Could not complete the %@ action. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not complete the %@ action. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להשלים את הפעולה %@. כדאי לנסות שוב."}}}},
     "Could not load this site’s certificate. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load this site’s certificate. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את האישור של האתר הזה. כדאי לנסות שוב."}}}},
+    "Could not load private site cookie settings. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load private site cookie settings. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את הגדרות קובצי ה-Cookie של האתר בחלון הפרטי. כדאי לנסות שוב."}}}},
+    "Could not update private site cookie settings. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not update private site cookie settings. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לעדכן את הגדרות קובצי ה-Cookie של האתר בחלון הפרטי. כדאי לנסות שוב."}}}},
     "different regions": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"different regions"}},"he":{"stringUnit":{"state":"translated","value":"אזורים שונים"}}}},
     "Chromium page is unavailable for comparison": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Chromium page is unavailable for comparison"}},"he":{"stringUnit":{"state":"translated","value":"דף Chromium אינו זמין להשוואה"}}}},
     "Only HTTP and HTTPS pages can be compared": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Only HTTP and HTTPS pages can be compared"}},"he":{"stringUnit":{"state":"translated","value":"אפשר להשוות רק דפי HTTP ו-HTTPS"}}}},
@@ -69,6 +86,7 @@
     "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
     "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},
     "Open DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open DevTools"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי הפיתוח"}}}},
+    "Could not run this extension. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not run this extension. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להפעיל את התוסף. כדאי לנסות שוב."}}}},
     "Live DOM tree is unavailable for this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Live DOM tree is unavailable for this tab"}},"he":{"stringUnit":{"state":"translated","value":"עץ ה-DOM החי אינו זמין ללשונית זו"}}}},
     "hidden": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"hidden"}},"he":{"stringUnit":{"state":"translated","value":"מוסתר"}}}},
     "%d of %d": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%d of %d"}},"he":{"stringUnit":{"state":"translated","value":"%d מתוך %d"}}}},
@@ -263,6 +281,7 @@
     "Allow or block camera access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block camera access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למצלמה באתר הזה"}}}},
     "Allow or block location access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block location access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למיקום באתר הזה"}}}},
     "Allow or block notifications for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block notifications for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של התראות מהאתר הזה"}}}},
+    "Allow or block MIDI device access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block MIDI device access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה להתקני MIDI באתר הזה"}}}},
     "Allow or block pop-ups and redirects for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block pop-ups and redirects for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של חלונות קופצים והפניות באתר הזה"}}}},
     "Allow or mute sound for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or mute sound for this site"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה או השתקה של צליל באתר הזה"}}}},
     "Allow or block automatic picture-in-picture for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block automatic picture-in-picture for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של תמונה בתוך תמונה אוטומטית באתר הזה"}}}},
@@ -460,6 +479,12 @@
             "value": "לשונית שמורה כבר משויכת לחלון אחר."
           }
         }
+      }
+    },
+    "This tab could not be opened. Try reloading it.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This tab could not be opened. Try reloading it." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את הלשונית. כדאי לנסות לטעון אותה מחדש." } }
       }
     },
     "This tab could not be reopened after its profile changed.": {
@@ -1326,6 +1351,22 @@
         }
       }
     },
+    "Folder name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder name"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שם התיקייה"
+          }
+        }
+      }
+    },
     "Folders can move only between spaces sharing a profile.": {
       "localizations": {
         "en": {
@@ -1486,6 +1527,22 @@
         }
       }
     },
+    "Clear History…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear History…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקת ההיסטוריה…"
+          }
+        }
+      }
+    },
     "Show All History": {
       "localizations": {
         "en": {
@@ -1522,6 +1579,12 @@
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Could not open developer tools in this private window. Try again." } },
         "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את כלי הפיתוח בחלון הפרטי. כדאי לנסות שוב." } }
+      }
+    },
+    "Could not open developer tools. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not open developer tools. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את כלי הפיתוח. כדאי לנסות שוב." } }
       }
     },
     "Loading profile…": {
@@ -1988,6 +2051,7 @@
         }
       }
     },
+    "MIDI devices": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"MIDI devices"}},"he":{"stringUnit":{"state":"translated","value":"התקני MIDI"}}}},
     "Open Bookmark": {
       "localizations": {
         "en": {
@@ -2128,6 +2192,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "הדבקה"
+          }
+        }
+      }
+    },
+    "Paste and Go": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste and Go"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדבקה ומעבר"
           }
         }
       }
@@ -2301,6 +2381,30 @@
         "he": { "stringUnit": { "state": "translated", "value": "למטה" } }
       }
     },
+    "Leave": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Leave" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לעזוב" } }
+      }
+    },
+    "Leave this page?": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Leave this page?" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לעזוב את הדף?" } }
+      }
+    },
+    "This page says": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This page says" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הדף הזה אומר" } }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "OK" } },
+        "he": { "stringUnit": { "state": "translated", "value": "אישור" } }
+      }
+    },
     "Cancel": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },
@@ -2399,6 +2503,24 @@
         }
       }
     },
+    "Actual Size": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Actual Size" } },
+        "he": { "stringUnit": { "state": "translated", "value": "גודל בפועל" } }
+      }
+    },
+    "Zoom In": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Zoom In" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הגדלה" } }
+      }
+    },
+    "Zoom Out": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Zoom Out" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הקטנה" } }
+      }
+    },
     "Reload": {
       "localizations": {
         "en": {
@@ -2491,6 +2613,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "פתיחה מחדש של הלשונית האחרונה שנסגרה"
+          }
+        }
+      }
+    },
+    "Reopen Last Closed Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen Last Closed Window"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת החלון האחרון שנסגר מחדש"
           }
         }
       }
@@ -2607,6 +2745,18 @@
         }
       }
     },
+    "Print…": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Print…" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הדפסה…" } }
+      }
+    },
+    "Could not open print panel": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not open print panel" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לפתוח את לוח ההדפסה" } }
+      }
+    },
     "Search tabs, spaces, or the web": {
       "localizations": {
         "en": {
@@ -2619,22 +2769,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "חיפוש בלשוניות, במרחבים או באינטרנט"
-          }
-        }
-      }
-    },
-    "Secure": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Secure"
-          }
-        },
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "מאובטח"
           }
         }
       }
@@ -3157,6 +3291,22 @@
         }
       }
     },
+    "Today's tabs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today's tabs"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשוניות היום"
+          }
+        }
+      }
+    },
     "Toggle sidebar": {
       "localizations": {
         "en": {
@@ -3643,6 +3793,8 @@
         }
       }
     },
+    "Agent control requires a web page.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Agent control requires a web page."}},"he":{"stringUnit":{"state":"translated","value":"שליטת סוכן זמינה רק בדפי אינטרנט."}}}},
+    "Local agent %d": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Local agent %d"}},"he":{"stringUnit":{"state":"translated","value":"סוכן מקומי %d"}}}},
     "Agent disconnect not confirmed": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Agent disconnect not confirmed"}},"he":{"stringUnit":{"state":"translated","value":"הניתוק מהסוכן לא אושר"}}}},
     "Agent connected to this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Agent connected to this tab"}},"he":{"stringUnit":{"state":"translated","value":"הסוכן מחובר ללשונית הזו"}}}},
     "Waiting for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Waiting for agent"}},"he":{"stringUnit":{"state":"translated","value":"ממתינים לסוכן"}}}},
@@ -3665,8 +3817,9 @@
     "Revoke ends this tab's session for every connected agent.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Revoke ends this tab's session for every connected agent."}},"he":{"stringUnit":{"state":"translated","value":"ביטול הגישה יסיים את ההפעלה של כל הסוכנים המחוברים ללשונית הזו."}}}},
     "Retry disconnect": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Retry disconnect"}},"he":{"stringUnit":{"state":"translated","value":"ניסיון חוזר לניתוק"}}}},
     "Disconnect": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Disconnect"}},"he":{"stringUnit":{"state":"translated","value":"ניתוק"}}}},
-    "%d connected agents": {"localizations":{"en":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"1 connected agent"}},"other":{"stringUnit":{"state":"translated","value":"%d connected agents"}}}}},"he":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"סוכן מחובר אחד"}},"two":{"stringUnit":{"state":"translated","value":"%d סוכנים מחוברים"}},"other":{"stringUnit":{"state":"translated","value":"%d סוכנים מחוברים"}}}}}}},
+    "%d connected agents": {"localizations":{"en":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"1 connected agent"}},"other":{"stringUnit":{"state":"translated","value":"%d connected agents"}}}}},"he":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"סוכן מחובר אחד"}},"two":{"stringUnit":{"state":"translated","value":"שני סוכנים מחוברים"}},"other":{"stringUnit":{"state":"translated","value":"%d סוכנים מחוברים"}}}}}}},
     "The agent bridge returned an invalid reply.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The agent bridge returned an invalid reply."}},"he":{"stringUnit":{"state":"translated","value":"גישור הסוכנים החזיר תשובה לא תקינה."}}}},
+    "Route budget: %1$d passed, %2$d over, %3$d unavailable": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Route budget: %1$d passed, %2$d over, %3$d unavailable"}},"he":{"stringUnit":{"state":"translated","value":"תקציב המסלולים: %1$d תקינים, %2$d חורגים, %3$d לא זמינים"}}}},
     "Getter threw an exception": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Getter threw an exception"}},"he":{"stringUnit":{"state":"translated","value":"קריאת ה-getter זרקה חריגה"}}}}},
   "version": "1.0"
 }

@@ -2,9 +2,35 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import BrowserCore
+@testable import BrowserCore
+import CoreFoundation
 import Foundation
 import Testing
+
+@Test func historyEntryConstructionFocusedBenchmark() throws {
+  let profile = UUID()
+  let visits = (0..<32).map { NSNumber(value: Double($0 + 1) * 1_000) }
+  let payload: [String: Any] = [
+    "u": "https://example.com/account", "t": "Example", "n": 32, "v": visits,
+  ]
+  let start = ContinuousClock.now
+  var checksum = 0
+  for _ in 0..<5_000 {
+    let entry = try BrowserHistoryEntry(profileID: profile, payload: payload)
+    checksum += Int(entry.lastVisit.timeIntervalSince1970)
+  }
+  print("historyEntryConstructionFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(checksum == 160_000)
+}
+
+@Test func latestValidHistoryVisitFindsMaximumAndRejectsInvalidInput() {
+  #expect(
+    BrowserHistoryEntry.latestValidVisit(
+      in: [NSNumber(value: 1_000), NSNumber(value: 3_000), NSNumber(value: 2_000)]) == 3_000)
+  #expect(BrowserHistoryEntry.latestValidVisit(in: []) == nil)
+  #expect(BrowserHistoryEntry.latestValidVisit(in: [NSNumber(value: true)]) == nil)
+  #expect(BrowserHistoryEntry.latestValidVisit(in: [NSNumber(value: Double.nan)]) == nil)
+}
 
 @Test func bookmarkTreePreservesHierarchyAndUnsupportedAddressesWithoutExecutingThem() throws {
   let profile = UUID()
@@ -39,9 +65,10 @@ import Testing
   let ids = (0..<2_000).map { _ in UUID() }
   let tree = try BookmarkTree(
     profileID: UUID(),
-    payload: bookmarkPayload(children: ids.map {
-      ["id": $0.uuidString, "k": "u", "t": "Page", "u": "https://example.com"]
-    }))
+    payload: bookmarkPayload(
+      children: ids.map {
+        ["id": $0.uuidString, "k": "u", "t": "Page", "u": "https://example.com"]
+      }))
   let started = ContinuousClock.now
   var found = 0
   for id in ids {
@@ -132,6 +159,55 @@ import Testing
       try BrowserHistoryEntry(profileID: profile, payload: value)
     }
   }
+}
+
+@Test func historyVisitMaximumAllocationBenchmark() {
+  let visitGroups = (0..<100).map { group in
+    (0..<5_000).map { visit in NSNumber(value: Double(group * 5_000 + visit)) }
+  }
+  var beforeSamples: [Duration] = []
+  var afterSamples: [Duration] = []
+  var beforeMaximum = 0.0
+  var afterMaximum = 0.0
+  for _ in 0..<3 {
+    let beforeStart = ContinuousClock.now
+    for visits in visitGroups {
+      let valid = visits.allSatisfy {
+        CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue.isFinite
+          && $0.doubleValue >= 0
+          && $0.doubleValue <= Date.distantFuture.timeIntervalSince1970 * 1000
+      }
+      if valid { beforeMaximum += visits.map(\.doubleValue).max() ?? 0 }
+    }
+    beforeSamples.append(beforeStart.duration(to: .now))
+    let afterStart = ContinuousClock.now
+    for visits in visitGroups {
+      afterMaximum += BrowserHistoryEntry.validatedLatestVisit(in: visits) ?? 0
+    }
+    afterSamples.append(afterStart.duration(to: .now))
+  }
+  #expect(beforeMaximum == afterMaximum)
+  let before = beforeSamples.sorted()[beforeSamples.count / 2]
+  let after = afterSamples.sorted()[afterSamples.count / 2]
+  print("historyVisitMaximumAllocationBenchmark: before=\(before), after=\(after)")
+  #expect(after < before * 0.8)
+}
+
+@Test func historyEntryDecodingFocusedBenchmark() throws {
+  let profileID = UUID()
+  let visits = (0..<16).map { NSNumber(value: 1_700_000_000_000 + $0 * 1_000) }
+  let rows = (0..<2_000).map { index in
+    [
+      "u": "https://history.example/page-\(index)", "t": "History page \(index)",
+      "n": visits.count, "v": visits,
+    ] as [String: Any]
+  }
+
+  let start = ContinuousClock.now
+  let entries = try rows.map { try BrowserHistoryEntry(profileID: profileID, payload: $0) }
+  print("historyEntryDecodingFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(entries.count == rows.count)
+  #expect(entries.allSatisfy { $0.visitCount == visits.count })
 }
 
 @Test func whitespaceOnlyHistoryTitleFallsBackToHost() throws {

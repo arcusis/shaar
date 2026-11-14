@@ -17,6 +17,10 @@ if [[ ! -d "$app/Contents" || "$(basename "$app")" != "Shaar.app" ]]; then
   echo "Expected a Shaar.app bundle" >&2
   exit 2
 fi
+if [[ -L "$output" ]]; then
+  echo "Output must not be a symlink: $output" >&2
+  exit 2
+fi
 if [[ -e "$output" ]]; then
   echo "Output already exists: $output" >&2
   exit 2

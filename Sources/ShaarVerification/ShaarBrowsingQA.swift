@@ -6,10 +6,32 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Darwin
 import Foundation
+import os
 
 @testable import ArcusisBrowser
+
+@MainActor private final class HeavyPageRunLoopSampler {
+  private(set) var maximumDelayMs = 0
+  private(set) var samples = 0
+  private var task: Task<Void, Never>?
+
+  func start() {
+    task = Task {
+      while !Task.isCancelled {
+        let before = Date()
+        try? await Task.sleep(for: .milliseconds(50))
+        guard !Task.isCancelled else { break }
+        maximumDelayMs = max(maximumDelayMs, Int(Date().timeIntervalSince(before) * 1000) - 50)
+        samples += 1
+      }
+    }
+  }
+
+  func stop() { task?.cancel() }
+}
 
 /// Hidden verification exercise for everyday browsing. The Python driver owns memory samples.
 @MainActor enum ShaarBrowsingQA {
@@ -26,7 +48,7 @@ import Foundation
   }
 
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?, scenario: String) -> Int32 {
-    guard let pageURL, pageURL.scheme == "http", pageURL.host == "127.0.0.1" else {
+    guard let pageURL, isLoopbackFixtureURL(pageURL) else {
       write(["passed": false, "error": "Loopback http base URL is required."], to: outputURL)
       return 2
     }
@@ -151,8 +173,21 @@ import Foundation
     guard keepHidden(&rows, "overload-open") else { return rows }
 
     let extraStarted = Date()
+    let beforeExtraCount = tabCount(context, space: space)
+    let beforeExtraTabID = context.store.session.selectedSpace.selectedTabID
     context.store.perform(.open(url(base, path: "/light", query: "n=extra")))
-    let extraReady = await until(attempts: 150, condition: { settled(context, path: "/light") })
+    let extraReady = await until(
+      attempts: 150,
+      condition: {
+        guard let selected = context.store.session.selectedSpace.selectedTab else { return false }
+        return Self.overloadExtraTabPassed(
+          beforeCount: beforeExtraCount,
+          afterCount: tabCount(context, space: space),
+          beforeTabID: beforeExtraTabID,
+          selectedTabID: selected.id,
+          selectedURL: selected.url,
+          settled: settled(context, path: "/light"))
+      })
     rows.append(
       row(
         "overload-next-tab", extraReady ? "pass" : "fail",
@@ -252,20 +287,44 @@ import Foundation
       ))
 
     let slowStarted = Date()
-    guard context.engine.navigateCurrentPage(to: url(base, path: "/slow")) else {
+    let reloadPath = "/slow-reload/\(UUID().uuidString)"
+    let reloadTarget = url(base, path: reloadPath, query: "reloadTarget=1")
+    guard context.engine.navigateCurrentPage(to: reloadTarget) else {
       rows.append(row("churn-reload-during-load", "fail", "The slow navigation was rejected."))
       return rows
     }
     let inFlight = await until(attempts: 40, condition: { pageIsLoading(context) })
     let stillLoading = pageIsLoading(context)
     let reloaded = inFlight && stillLoading && context.store.reloadCurrentPage()
-    let settledSlow = await until(attempts: 200, condition: { settled(context, path: "/slow") })
+    let settledSlow = await until(attempts: 200) {
+      settled(context, path: reloadPath)
+        && matchesReloadTarget(
+          context.store.session.selectedPage?.tab.url.absoluteString, expected: reloadTarget)
+    }
+    let reloadRequests = await evaluate(
+      runtime, tab: current,
+      script: "document.documentElement.dataset.reloadRequest || ''")
+    let repeatedRequest = reloadDuringNavigationWasFetched(reloadRequests)
     let landed = context.store.session.selectedPage?.tab.url.path ?? "nothing"
     rows.append(
       row(
-        "churn-reload-during-load", reloaded && settledSlow ? "pass" : "fail",
-        "Reload during load inFlight=\(stillLoading), reload=\(reloaded), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
+        "churn-reload-during-load",
+        reloaded && settledSlow && repeatedRequest ? "pass" : "fail",
+        "Reload during load inFlight=\(stillLoading), reload=\(reloaded), requests=\(reloadRequests ?? "missing"), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
         ["elapsedMs": milliseconds(since: slowStarted)]))
+    runtime.goBack(inTabID: current.uuidString)
+    let backPath = await until(attempts: 100, condition: { settled(context, path: "/nav/1") })
+      ? context.store.session.selectedPage?.tab.url.path : nil
+    runtime.goForward(inTabID: current.uuidString)
+    let forwardPath = await until(attempts: 100, condition: { settled(context, path: reloadPath) })
+      ? context.store.session.selectedPage?.tab.url.path : nil
+    let reloadHistoryOK = reloadHistoryPreserved(
+      backPath: backPath, forwardPath: forwardPath, expectedReloadPath: reloadPath)
+    rows.append(
+      row(
+        "churn-reload-history", reloadHistoryOK ? "pass" : "fail",
+        "Back after reload reached \(backPath ?? "nothing"); forward reached \(forwardPath ?? "nothing")."
+      ))
     let failures = context.store.rendererFailures.count
     rows.append(
       row(
@@ -325,10 +384,13 @@ import Foundation
       let destinationSelectedTab =
         destination.store.session.selectedSpace.selectedTabID?.uuidString ?? "none"
       let destinationEngineAttached = destination.store.engine === destination.engine
+      let movedCompletely = Self.windowsDragPassed(
+        accepted: accepted, sourceStillHasTab: stayed,
+        destinationHasTab: destinationHasTab, engineMoved: engineMoved)
       rows.append(
         row(
-          "windows-drag", accepted && !stayed && engineMoved ? "pass" : "fail",
-          accepted && !stayed && engineMoved
+          "windows-drag", movedCompletely ? "pass" : "fail",
+          movedCompletely
             ? "The tab moved into the other window and its live engine owner followed."
             : "Drop accepted=\(accepted), stayed in source=\(stayed), destination has tab=\(destinationHasTab), selected=\(destinationSelectedTab), engine attached=\(destinationEngineAttached), engine closed=\(destination.engine.isClosed), live=\(destination.engine.liveTabs.contains(movedTab)), owner=\(destination.engine.runtime.windowID(forTabID: movedTab.uuidString) ?? "none"), destination=\(destination.engine.windowID), notice=\(destination.engine.notice ?? "none")."
         ))
@@ -439,11 +501,13 @@ import Foundation
       })
     let finalPath = context.store.session.selectedPage?.tab.url.path ?? ""
     let profileNow = context.store.session.spaces.first { $0.id == personal }?.profileID
+    let profileSwitchPassed = profileSwitchNavigationPassed(
+      switched: switched, settled: switchedPage, profileMatched: profileNow == otherProfile,
+      landedPath: finalPath, rendererFailures: context.store.rendererFailures.count)
     rows.append(
       row(
         "windows-profile",
-        switched && switchedPage && profileNow == otherProfile
-          && context.store.rendererFailures.isEmpty ? "pass" : "fail",
+        profileSwitchPassed ? "pass" : "fail",
         "Mid-load profile switch accepted=\(switched), settled=\(switchedPage), failures=\(context.store.rendererFailures.count), ended on \(finalPath)."
       ))
     _ = keepHidden(&rows, "windows-done")
@@ -502,6 +566,10 @@ import Foundation
   private static func heavy(
     context: NativeBrowserContext, runtime: ARCShaarRuntime, base: URL
   ) async -> [[String: Any]] {
+    let log = OSLog(subsystem: "com.arcusis.browser.verification", category: "HeavyPage")
+    let signpost = OSSignpostID(log: log)
+    os_signpost(.begin, log: log, name: "HeavyPage", signpostID: signpost)
+    defer { os_signpost(.end, log: log, name: "HeavyPage", signpostID: signpost) }
     var rows: [[String: Any]] = []
     let started = Date()
     context.store.perform(.open(url(base, path: "/heavy")))
@@ -518,6 +586,7 @@ import Foundation
         "heavy-dom", count == "20000" ? "pass" : "fail",
         "Large page reported \(count ?? "nothing") nodes in \(milliseconds(since: started)) ms.",
         ["elapsedMs": milliseconds(since: started)]))
+    os_signpost(.event, log: log, name: "HeavyDOMReady", signpostID: signpost)
 
     context.store.perform(.open(url(base, path: "/scroll")))
     guard await until(attempts: 100, condition: { settled(context, path: "/scroll") }),
@@ -526,28 +595,53 @@ import Foundation
       rows.append(row("heavy-scroll", "fail", "The scroll page did not load."))
       return rows
     }
-    let primed = wholeNumber(
-      await evaluate(
-        runtime, tab: scrollID,
-        script:
-          "(()=>{const feed=document.getElementById('feed');if(!feed)return 0;const before=feed.children.length;feed.scrollTop=feed.scrollHeight;return before;})()"
-      ))
-    let before = primed ?? 0
-    var after = before
-    let grew = await untilReady(attempts: 40) {
-      after =
-        wholeNumber(
-          await evaluate(
-            runtime, tab: scrollID,
-            script:
-              "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
-          )) ?? 0
-      return before == 100 && after > before
+    let before = wholeNumber(
+      await evaluate(runtime, tab: scrollID, script: "document.getElementById('feed')?.children.length ?? 0")
+    ) ?? 0
+    let scrolled = await trustedScroll(runtime, tab: scrollID, element: "feed")
+    var deliveredScroll = false
+    if scrolled {
+      deliveredScroll = await untilReady(attempts: 20) {
+        (wholeNumber(await evaluate(runtime, tab: scrollID, script: "window.__scrollEvents||0")) ?? 0) > 0
+      }
     }
-    rows.append(
-      row(
+    var reachedLoadThreshold = false
+    if deliveredScroll {
+      reachedLoadThreshold = await untilReady(attempts: 20) {
+        (wholeNumber(await evaluate(
+          runtime, tab: scrollID,
+          script: "window.__scrollLoadThresholdReached?1:0"
+        )) ?? 0) == 1
+      }
+    }
+    if !scrolled {
+      rows.append(row(
+        "heavy-scroll", "blocked",
+        "A trusted wheel event could not be submitted to the feed; row growth was not attributable."
+      ))
+    } else if !deliveredScroll {
+      rows.append(row(
+        "heavy-scroll", "blocked",
+        "The trusted wheel input did not deliver a scroll event to the page; row growth was not attributable."
+      ))
+    } else if !reachedLoadThreshold {
+      rows.append(row(
+        "heavy-scroll", "blocked",
+        "A page scroll event arrived, but the feed did not reach its lazy-load threshold."
+      ))
+    } else {
+      var after = before
+      let grew = await untilReady(attempts: 40) {
+        after = wholeNumber(await evaluate(
+          runtime, tab: scrollID,
+          script: "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
+        )) ?? 0
+        return before == 100 && after > before
+      }
+      rows.append(row(
         "heavy-scroll", grew ? "pass" : "fail",
-        "Scroll grew from \(before) to \(after) nodes."))
+        "Trusted scroll submitted=\(scrolled); rows grew from \(before) to \(after)."))
+    }
 
     context.store.perform(.open(url(base, path: "/webgl")))
     guard await until(attempts: 100, condition: { settled(context, path: "/webgl") }),
@@ -560,6 +654,7 @@ import Foundation
       runtime, tab: webglID, script: "document.documentElement.dataset.webgl==='1'?1:0")
     rows.append(
       row("heavy-webgl", webgl == "1" ? "pass" : "fail", "WebGL dataset is \(webgl ?? "empty")."))
+    os_signpost(.event, log: log, name: "HeavyWebGLReady", signpostID: signpost)
 
     context.store.perform(.open(url(base, path: "/video")))
     guard await until(attempts: 100, condition: { settled(context, path: "/video") }),
@@ -570,6 +665,9 @@ import Foundation
     }
     let clipReady = await evaluate(
       runtime, tab: videoID, script: "document.documentElement.dataset.clip==='0'?0:1")
+    let sampler = HeavyPageRunLoopSampler()
+    sampler.start()
+    os_signpost(.event, log: log, name: "HeavyVideoReady", signpostID: signpost)
     if clipReady == "0" {
       rows.append(
         row(
@@ -591,6 +689,12 @@ import Foundation
           "heavy-video", clicked && playbackStarted(playback) ? "pass" : "fail",
           "Play click=\(clicked), state \(playback ?? "nothing")."))
     }
+    sampler.stop()
+    os_signpost(.event, log: log, name: "HeavyVideoDone", signpostID: signpost)
+    rows.append(row(
+      "heavy-main-run-loop", sampler.samples >= 2 && sampler.maximumDelayMs <= 1000 ? "pass" : "fail",
+      "\(sampler.samples) samples at 50 ms; maximum main run-loop delay \(sampler.maximumDelayMs) ms.",
+      ["samples": sampler.samples, "maximumDelayMs": sampler.maximumDelayMs]))
     rows.append(
       row(
         "picture-in-picture", "blocked",
@@ -907,8 +1011,32 @@ import Foundation
     return context.engine.pages[id]?.loading == false && context.engine.liveTabs.contains(id)
   }
 
+  static func matchesReloadTarget(_ value: String?, expected: URL) -> Bool {
+    guard let value, let actual = URL(string: value) else { return false }
+    return actual == expected
+  }
+
   private static func tabCount(_ context: NativeBrowserContext, space: UUID) -> Int {
     context.store.session.spaces.first { $0.id == space }?.tabs.count ?? 0
+  }
+
+  static func overloadExtraTabPassed(
+    beforeCount: Int, afterCount: Int, beforeTabID: UUID?, selectedTabID: UUID?,
+    selectedURL: URL, settled: Bool
+  ) -> Bool {
+    guard afterCount == beforeCount + 1,
+      let beforeTabID, let selectedTabID, beforeTabID != selectedTabID,
+      selectedURL.path == "/light",
+      URLComponents(url: selectedURL, resolvingAgainstBaseURL: false)?.queryItems?.contains(
+        where: { $0.name == "n" && $0.value == "extra" }) == true
+    else { return false }
+    return settled
+  }
+
+  static func windowsDragPassed(
+    accepted: Bool, sourceStillHasTab: Bool, destinationHasTab: Bool, engineMoved: Bool
+  ) -> Bool {
+    accepted && !sourceStillHasTab && destinationHasTab && engineMoved
   }
 
   private static func liveCount(_ context: NativeBrowserContext) -> Int {
@@ -950,11 +1078,40 @@ import Foundation
     return Int(text)
   }
 
+  static func reloadDuringNavigationWasFetched(_ value: String?) -> Bool {
+    guard let requestCount = wholeNumber(value) else { return false }
+    return requestCount >= 2
+  }
+
+  static func reloadHistoryPreserved(
+    backPath: String?, forwardPath: String?, expectedReloadPath: String
+  ) -> Bool {
+    backPath == "/nav/1" && forwardPath == expectedReloadPath
+  }
+
+  static func isLoopbackFixtureURL(_ value: URL?) -> Bool {
+    guard let value, value.scheme == "http", value.host == "127.0.0.1",
+      value.port.map({ (1...65_535).contains($0) }) == true,
+      let components = URLComponents(url: value, resolvingAgainstBaseURL: false),
+      components.user == nil, components.password == nil
+    else { return false }
+    return true
+  }
+
+  static func profileSwitchNavigationPassed(
+    switched: Bool, settled: Bool, profileMatched: Bool, landedPath: String,
+    rendererFailures: Int
+  ) -> Bool {
+    switched && settled && profileMatched && landedPath == "/slow" && rendererFailures == 0
+  }
+
   static func playbackStarted(_ value: String?) -> Bool {
     guard let evidence = playbackEvidence(value),
-      let paused = evidence["paused"] as? Bool,
-      let width = evidence["width"] as? Int,
-      let error = evidence["error"] as? Int
+      let paused = jsonBoolean(evidence["paused"]),
+      let width = integer(evidence["width"]),
+      let error = integer(evidence["error"]),
+      evidence["click"] as? String == "true",
+      evidence["playResult"] as? String == "resolved"
     else { return false }
     return !paused && width > 0 && error == 0
   }
@@ -974,6 +1131,16 @@ import Foundation
   ) async -> Bool {
     await withCheckedContinuation { continuation in
       runtime.submitTrustedProbeClick(inTabID: tab.uuidString, elementID: element) {
+        continuation.resume(returning: $0)
+      }
+    }
+  }
+
+  private static func trustedScroll(
+    _ runtime: ARCShaarRuntime, tab: UUID, element: String
+  ) async -> Bool {
+    await withCheckedContinuation { continuation in
+      runtime.submitTrustedProbeScroll(inTabID: tab.uuidString, elementID: element) {
         continuation.resume(returning: $0)
       }
     }
@@ -1126,16 +1293,50 @@ import Foundation
 
   static func playbackSettled(_ value: String?) -> Bool {
     guard let evidence = playbackEvidence(value) else { return false }
-    if let error = evidence["error"] as? Int, error != 0 { return true }
-    guard let paused = evidence["paused"] as? Bool,
-      let width = evidence["width"] as? Int
+    let error: Int?
+    if let rawError = evidence["error"] {
+      guard let parsedError = integer(rawError) else { return false }
+      error = parsedError
+    } else {
+      error = nil
+    }
+    if let error, error != 0 { return true }
+    guard let playResult = evidence["playResult"] as? String, playResult != "pending" else {
+      return false
+    }
+    if playResult != "resolved" { return true }
+    guard let paused = jsonBoolean(evidence["paused"]),
+      let width = integer(evidence["width"])
     else { return false }
     return !paused && width > 0
+  }
+
+  private static func integer(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return nil }
+    return number as? Int
+  }
+
+  private static func jsonBoolean(_ value: Any?) -> Bool? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) == CFBooleanGetTypeID()
+    else { return nil }
+    return number.boolValue
   }
 
   private static func playbackEvidence(_ value: String?) -> [String: Any]? {
     guard let value, let data = value.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  }
+
+  private static func playbackInteger(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID(),
+      number.doubleValue.isFinite,
+      let exact = Int(exactly: number.doubleValue)
+    else { return nil }
+    return exact
   }
 
   private static func row(

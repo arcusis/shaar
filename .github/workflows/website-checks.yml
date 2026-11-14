@@ -66,7 +66,7 @@ jobs:
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           ready=false
           for _attempt in $(seq 1 60); do
-            if curl -fsS http://localhost:8787/ > /dev/null; then
+            if curl --connect-timeout 1 --max-time 2 -fsS http://localhost:8787/ > /dev/null; then
               ready=true
               break
             fi

@@ -111,7 +111,8 @@ enum ExtensionPageOrigin {
     guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
       let scheme = components.scheme?.lowercased(),
       scheme == "http" || scheme == "https",
-      let host = components.host?.lowercased(), !host.isEmpty
+      let host = components.host?.lowercased(), !host.isEmpty,
+      components.port.map({ (0...65535).contains($0) }) ?? true
     else { return nil }
     let bareHost =
       host.hasPrefix("[") && host.hasSuffix("]")
@@ -230,19 +231,46 @@ enum ExtensionIconLoader {
     -> NSImage?
   {
     guard BrowserExtension.isValidID(extensionID) else { return nil }
+    let resolvedExtensionsDirectory = extensionsDirectory.resolvingSymlinksInPath()
+      .standardizedFileURL
     let root = extensionsDirectory.appending(path: extensionID, directoryHint: .isDirectory)
+    let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL
+    guard Self.isContained(resolvedRoot, in: resolvedExtensionsDirectory) else { return nil }
     guard
       let folder = try? FileManager.default.contentsOfDirectory(
         at: root, includingPropertiesForKeys: nil
-      ).first(where: { $0.lastPathComponent.hasPrefix("\(version)_") }),
-      let data = try? Data(contentsOf: folder.appending(path: "manifest.json")),
+      ).first(where: { $0.lastPathComponent.hasPrefix("\(version)_") })
+    else { return nil }
+    let resolvedFolder = folder.resolvingSymlinksInPath().standardizedFileURL
+    guard Self.isContained(resolvedFolder, in: resolvedRoot) else { return nil }
+    let manifestURL = resolvedFolder.appending(path: "manifest.json")
+    guard
+      let manifestValues = try? manifestURL.resourceValues(
+        forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
+      manifestValues.isRegularFile == true, manifestValues.isSymbolicLink != true,
+      let manifestSize = manifestValues.fileSize, manifestSize <= 1_048_576,
+      let data = try? Data(contentsOf: manifestURL), data.count <= 1_048_576,
       let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let relative = largestIcon(in: manifest)
     else { return nil }
-    let file = folder.appending(path: relative).standardizedFileURL
+    let file = resolvedFolder.appending(path: relative).standardizedFileURL
     // Manifest paths are untrusted; never read outside the extension's own folder.
-    guard file.path.hasPrefix(folder.standardizedFileURL.path + "/") else { return nil }
-    return NSImage(contentsOf: file)
+    guard Self.isContained(file, in: resolvedFolder) else { return nil }
+    let resolvedFile = file.resolvingSymlinksInPath().standardizedFileURL
+    guard Self.isContained(resolvedFile, in: resolvedFolder),
+      let iconValues = try? resolvedFile.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+      iconValues.isRegularFile == true,
+      let iconSize = iconValues.fileSize, iconSize <= 4 * 1_048_576,
+      let data = try? Data(contentsOf: resolvedFile), data.count <= 4 * 1_048_576
+    else { return nil }
+    return NSImage(data: data)
+  }
+
+  private static func isContained(_ child: URL, in parent: URL) -> Bool {
+    let parentPath = parent.standardizedFileURL.path
+    let childPath = child.standardizedFileURL.path
+    let prefix = parentPath.hasSuffix("/") ? parentPath : parentPath + "/"
+    return childPath != parentPath && childPath.hasPrefix(prefix)
   }
 
   private static func largestIcon(in manifest: [String: Any]) -> String? {
@@ -262,7 +290,19 @@ enum ExtensionIconLoader {
 enum ExtensionManageDelivery {
   static func deliver(
     _ reply: ExtensionManageReply,
-    to completion: @escaping @MainActor (ExtensionManageReply) -> Void
+    to completion: @escaping @MainActor @Sendable (ExtensionManageReply) -> Void
+  ) {
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { completion(reply) }
+      return
+    }
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated { completion(reply) }
+    }
+  }
+
+  static func deliver(
+    _ reply: String?, to completion: @escaping @MainActor @Sendable (String?) -> Void
   ) {
     if Thread.isMainThread {
       MainActor.assumeIsolated { completion(reply) }
@@ -278,7 +318,7 @@ extension ARCChromiumRuntime {
   /// Submits one extension-manage payload and interprets legacy refusal codes by action.
   func submitExtensionManage(
     profileID: UUID, tabID: UUID?, payload: [String: Any],
-    completion: @escaping @MainActor (ExtensionManageReply) -> Void
+    completion: @escaping @MainActor @Sendable (ExtensionManageReply) -> Void
   ) {
     let action = payload["action"] as? String
     submitExtensionManage(
@@ -292,10 +332,13 @@ extension ARCChromiumRuntime {
   /// Runs one extension-management operation; the bridge builds the script from fixed templates.
   func manageExtensions(
     _ operation: ExtensionManagementOperation, profileID: UUID,
-    completion: @escaping @Sendable (String?) -> Void
+    completion: @escaping @MainActor @Sendable (String?) -> Void
   ) {
     manageExtensions(
       forProfileID: profileID.uuidString, operation: operation.bridgeOperation,
-      extensionID: operation.extensionID, enabled: operation.enabled, completion: completion)
+      extensionID: operation.extensionID, enabled: operation.enabled
+    ) { json in
+      ExtensionManageDelivery.deliver(json, to: completion)
+    }
   }
 }

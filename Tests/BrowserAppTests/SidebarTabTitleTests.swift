@@ -25,9 +25,55 @@ import Vision
   }
 
   @Test func tabAccessibilityLabelIncludesSleepingState() {
-    #expect(SidebarTabTitle.accessibilityLabel(title: "News", isSleeping: false) == "News")
     #expect(
-      SidebarTabTitle.accessibilityLabel(title: "News", isSleeping: true) == "News, Sleeping")
+      SidebarTabTitle.accessibilityLabel(
+        title: "News", address: "https://news.example", isSleeping: false) == "News")
+    #expect(
+      SidebarTabTitle.accessibilityLabel(
+        title: "News", address: "https://news.example", isSleeping: true)
+        == "News, Sleeping")
+  }
+
+  @Test func tabAccessibilityLabelFallsBackToAddressForBlankTitles() {
+    let address = "https://news.example/page"
+    #expect(
+      SidebarTabTitle.accessibilityLabel(title: "", address: address, isSleeping: false)
+        == address)
+    #expect(
+      SidebarTabTitle.accessibilityLabel(title: " \n\t", address: address, isSleeping: false)
+        == address)
+    #expect(
+      SidebarTabTitle.accessibilityLabel(
+        title: " \n\t", address: address, isSleeping: true, isPinned: true,
+        language: .english) == "\(address), Pinned, Sleeping")
+  }
+
+  @Test func closeAccessibilityLabelFallsBackToAddressForBlankTitles() {
+    let address = "https://news.example/page"
+    #expect(
+      SidebarTabTitle.closeAccessibilityLabel(
+        title: "News", address: address, language: .english) == "Close News")
+    #expect(
+      SidebarTabTitle.closeAccessibilityLabel(
+        title: " \n\t", address: address, language: .english) == "Close \(address)")
+  }
+
+  @Test func tabAccessibilityLabelIncludesPinnedAndSleepingStates() {
+    #expect(
+      SidebarTabTitle.accessibilityLabel(
+        title: "News", address: "https://news.example", isSleeping: false, isPinned: true,
+        language: .english)
+        == "News, Pinned")
+    #expect(
+      SidebarTabTitle.accessibilityLabel(
+        title: "News", address: "https://news.example", isSleeping: true, isPinned: true,
+        language: .english)
+        == "News, Pinned, Sleeping")
+    #expect(
+      SidebarTabTitle.accessibilityLabel(
+        title: "News", address: "https://news.example", isSleeping: false, isPinned: true,
+        language: .hebrew)
+        == "News, \u{2068}נעוצים\u{2069}")
   }
 
   @Test func restingRowShowsTheFullDevToolsTitle() throws {
@@ -61,6 +107,7 @@ import Vision
     let row = SidebarTabRow(
       tabID: UUID(uuidString: "30000000-0000-0000-0000-000000000099")!,
       title: title,
+      address: "https://example.com",
       favicon: nil,
       isPinned: false,
       isSelected: true,

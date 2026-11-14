@@ -186,6 +186,38 @@ struct ShaarEngineABITests {
     }
   }
 
+  @Test func eventCopyRejectsInvalidNonProfileByteSlices() {
+    var invalidSession = engineEvent(sequence: 3)
+    invalidSession.session_id = shaar_bytes(data: nil, size: 1)
+    #expect(throws: ShaarEngineError.invalidEvent("invalid session ID slice")) {
+      try ShaarEventCopy.copy(invalidSession)
+    }
+
+    var invalidWindow = engineEvent(sequence: 4)
+    invalidWindow.window_id = shaar_bytes(data: nil, size: 1)
+    #expect(throws: ShaarEngineError.invalidEvent("invalid window ID slice")) {
+      try ShaarEventCopy.copy(invalidWindow)
+    }
+
+    var invalidTab = engineEvent(sequence: 5)
+    invalidTab.tab_id = shaar_bytes(data: nil, size: 1)
+    #expect(throws: ShaarEngineError.invalidEvent("invalid tab ID slice")) {
+      try ShaarEventCopy.copy(invalidTab)
+    }
+
+    var invalidPayload = engineEvent(sequence: 6)
+    invalidPayload.payload_json = shaar_bytes(data: nil, size: 1)
+    #expect(throws: ShaarEngineError.invalidEvent("invalid payload JSON slice")) {
+      try ShaarEventCopy.copy(invalidPayload)
+    }
+
+    var negativeLength = engineEvent(sequence: 7)
+    negativeLength.payload_json = shaar_bytes(data: nil, size: -1)
+    #expect(throws: ShaarEngineError.invalidEvent("invalid payload JSON slice")) {
+      try ShaarEventCopy.copy(negativeLength)
+    }
+  }
+
   @Test func frameworkLoadFailureHasItsOwnTypedError() {
     let frameworkURL = URL(fileURLWithPath: "/no/such/Shaar.framework")
     do {

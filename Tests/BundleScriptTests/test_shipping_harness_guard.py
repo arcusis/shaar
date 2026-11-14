@@ -210,13 +210,24 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
 
+    def test_engine_testing_read_is_allowed_in_verification_compile_guard(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            'const char *testing = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        self.assertEqual(GUARD.findings(self.root), [])
+
     def test_engine_testing_start_write_is_allowed(self):
         self.plant(
             "Sources/ChromiumBridge/ChromiumShaarBackend.mm",
             "- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {\n"
+            "#if defined(SHAAR_VERIFICATION)\n"
             "  // The pinned engine reads SHAAR_ENGINE_TESTING.\n"
             "  setenv(\"SHAAR_ENGINE_TESTING\", engineTesting, 1);\n"
             "  unsetenv(\"SHAAR_ENGINE_TESTING\");\n"
+            "#endif\n"
             "}\n",
         )
         self.assertEqual(GUARD.findings(self.root), [])
@@ -231,6 +242,18 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
 
+    def test_engine_testing_shipping_else_branch_fails(self):
+        self.plant(
+            "Sources/ChromiumBridge/ChromiumShaarBackend.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            '  setenv("SHAAR_ENGINE_TESTING", "1", 1);\n'
+            "#else\n"
+            '  getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
     def test_engine_testing_after_url_string_is_not_hidden_as_comment(self):
         self.plant(
             "Sources/ChromiumBridge/Planted.mm",
@@ -238,6 +261,18 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         )
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_verification_popup_fixture_id_is_rejected_from_shipping_sources(self):
+        self.plant(
+            "Sources/ShaarVerification/ProfileOnboardingProbe.swift",
+            'let marker = "onboarding-popup-probe"\n',
+        )
+        self.plant(
+            "Sources/ArcusisBrowser/Planted.swift",
+            'let marker = "onboarding-popup-probe"\n',
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("onboarding-popup-probe" in item for item in found), found)
 
     def test_engine_testing_in_lookalike_start_method_is_not_allowed(self):
         self.plant(
@@ -248,6 +283,63 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         )
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_engine_testing_read_in_verification_else_branch_fails(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            '  const char *verification = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#else\n"
+            '  const char *shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(":4: SHAAR_ENGINE_TESTING", found[0])
+
+    def test_engine_testing_read_in_verification_elif_branch_is_allowed(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(OTHER_FEATURE)\n"
+            '  const char *shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#elif defined(SHAAR_VERIFICATION)\n"
+            '  const char *verification = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#else\n"
+            '  const char *also_shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertEqual(len(found), 2, found)
+        self.assertTrue(all(":2:" in item or ":6:" in item for item in found), found)
+
+    def test_nested_conditionals_keep_the_outer_verification_branch_scope(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            "  #if defined(OPTIONAL_FIXTURE)\n"
+            '    const char *nested = getenv("SHAAR_ENGINE_TESTING");\n'
+            "  #endif\n"
+            '  const char *verification = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#else\n"
+            '  const char *shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(":7: SHAAR_ENGINE_TESTING", found[0])
+
+    def test_ifdef_verification_branch_is_allowed_but_else_is_not(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#ifdef SHAAR_VERIFICATION\n"
+            '  const char *verification = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#else\n"
+            '  const char *shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(":4: SHAAR_ENGINE_TESTING", found[0])
 
     def test_probe_operation_reference_fails_in_shipping_source_and_binary(self):
         operation = "SHAAR_OP_PROBE_PLANTED_FIXTURE"
@@ -297,9 +389,11 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         )
         self.assertEqual(GUARD.engine_testing_findings(source, source.read_text()), [])
 
-    def test_engine_testing_string_in_the_binary_is_allowed(self):
+    def test_engine_testing_string_in_the_binary_fails(self):
         self.binary.write_bytes(b"prefix SHAAR_ENGINE_TESTING suffix")
-        self.assertEqual(GUARD.findings(self.root, self.binary), [])
+        found = GUARD.findings(self.root, self.binary)
+        self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
     def test_forged_chooser_channel_fails_in_shipping_source(self):
         self.plant(
             "Sources/ArcusisBrowser/Planted.swift",

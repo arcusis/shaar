@@ -5,11 +5,13 @@
 import SwiftUI
 
 struct InspectorPanel: View {
+  @Environment(\.layoutDirection) private var layoutDirection
   @Bindable var model: InspectorModel
   var layout: InspectorLayoutSnapshot? = nil
   @State private var copyButtonFrame = CGRect.zero
   @State private var breadcrumbPosition: Int?
   @State private var showsAgentBridge = false
+  static var titleAccessibilityTraits: AccessibilityTraits { .isHeader }
   var body: some View {
     GeometryReader { geometry in
       VStack(spacing: 0) {
@@ -104,7 +106,9 @@ struct InspectorPanel: View {
   private var header: some View {
     HStack(spacing: 7) {
       Image(systemName: "viewfinder").font(.system(size: 12)).foregroundStyle(.secondary)
+        .accessibilityHidden(true)
       Text(InspectorL10n.string("Inspector")).font(.system(size: 12, weight: .semibold))
+        .accessibilityAddTraits(Self.titleAccessibilityTraits)
       Spacer()
       if let bridge = model.engine?.developerModels[model.target.tabID]?.agentBridge {
         let presentation = AgentBridgePresentation(model: bridge)
@@ -256,7 +260,10 @@ struct InspectorPanel: View {
         ForEach(selection.ancestors) { ancestor in
           HStack(spacing: 3) {
             if ancestor.id != selection.ancestors.first?.id {
-              Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(.tertiary)
+              Image(
+                systemName: InspectorL10n.forwardChevron(
+                  isRightToLeft: layoutDirection == .rightToLeft))
+                .font(.system(size: 6)).foregroundStyle(.tertiary)
             }
             Button {
               model.selectAncestor(ancestor.id)

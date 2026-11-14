@@ -6,19 +6,47 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import Foundation
 import ObjectiveC
 
 @testable import ArcusisBrowser
+
+enum PlatformParityPreferenceEvidence {
+  static func excerpt(_ root: [String: Any]) -> [String: String] {
+    var values: [String: String] = [:]
+    func store(_ key: String, _ value: Any?) {
+      guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+        return
+      }
+      values[key] = number.boolValue ? "true" : "false"
+    }
+    let safe = root["safebrowsing"] as? [String: Any]
+    store("safebrowsing.enabled", safe?["enabled"])
+    store("safebrowsing.enhanced", safe?["enhanced"])
+    store("https_only_mode_enabled", root["https_only_mode_enabled"])
+    let autofill = root["autofill"] as? [String: Any]
+    store("autofill.profile_enabled", autofill?["profile_enabled"])
+    store("autofill.credit_card_enabled", autofill?["credit_card_enabled"])
+    store("credentials_enable_service", root["credentials_enable_service"])
+    if let profile = root["profile"] as? [String: Any],
+      let mode = profile["cookie_controls_mode"] as? NSNumber,
+      CFGetTypeID(mode) != CFBooleanGetTypeID()
+    {
+      values["profile.cookie_controls_mode"] = mode.stringValue
+    }
+    return values
+  }
+}
 
 /// Hidden audit of web-platform prompts, pickers, and delegates.
 /// Runs in the verification harness. Loopback fixtures only; windows stay off screen.
 @MainActor enum PlatformParityProbe {
   static func run(frameworkURL: URL, outputURL: URL, httpBase: URL?, httpsBase: URL?) -> Int32 {
     guard let httpBase, httpBase.scheme == "http", httpBase.host == "127.0.0.1",
-      httpBase.port != nil,
+      httpBase.port.map({ (1...65_535).contains($0) }) == true,
       let httpsBase, httpsBase.scheme == "https", httpsBase.host == "127.0.0.1",
-      httpsBase.port != nil
+      httpsBase.port.map({ (1...65_535).contains($0) }) == true
     else { return 2 }
     let directory = outputURL.deletingLastPathComponent()
     do {
@@ -1093,32 +1121,10 @@ private struct ParitySnapshot {
       guard let data = try? Data(contentsOf: url),
         let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
       else { continue }
-      let excerpt = preferenceExcerpt(root)
+      let excerpt = PlatformParityPreferenceEvidence.excerpt(root)
       if found.isEmpty || excerpt["safebrowsing.enabled"] != nil { found = excerpt }
     }
     return found
-  }
-
-  private func preferenceExcerpt(_ root: [String: Any]) -> [String: String] {
-    var values: [String: String] = [:]
-    func store(_ key: String, _ value: Any?) {
-      guard let value = value as? Bool else { return }
-      values[key] = value ? "true" : "false"
-    }
-    let safe = root["safebrowsing"] as? [String: Any]
-    store("safebrowsing.enabled", safe?["enabled"])
-    store("safebrowsing.enhanced", safe?["enhanced"])
-    store("https_only_mode_enabled", root["https_only_mode_enabled"])
-    let autofill = root["autofill"] as? [String: Any]
-    store("autofill.profile_enabled", autofill?["profile_enabled"])
-    store("autofill.credit_card_enabled", autofill?["credit_card_enabled"])
-    store("credentials_enable_service", root["credentials_enable_service"])
-    if let profile = root["profile"] as? [String: Any],
-      let mode = profile["cookie_controls_mode"] as? NSNumber
-    {
-      values["profile.cookie_controls_mode"] = mode.stringValue
-    }
-    return values
   }
 
   private func publish() {

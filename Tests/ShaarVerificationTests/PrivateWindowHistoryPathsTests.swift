@@ -19,4 +19,19 @@ import Testing
     #expect(PrivateWindowProbe.historyPaths(nil).isEmpty)
     #expect(PrivateWindowProbe.historyPaths([]).isEmpty)
   }
+
+  @Test func historyRowsRequireAnAbsoluteURLWithAHost() {
+    let rows: [[AnyHashable: Any]] = [
+      ["u": "relative/path"],
+      ["u": "https:///missing-host/path"],
+    ]
+    #expect(PrivateWindowProbe.historyPaths(rows).isEmpty)
+  }
+
+  @Test func privateInFlightReloadNeedsARepeatedFixtureRequest() {
+    #expect(!PrivateWindowProbe.privateNavigationRequestWasRepeated(nil))
+    #expect(!PrivateWindowProbe.privateNavigationRequestWasRepeated("1"))
+    #expect(PrivateWindowProbe.privateNavigationRequestWasRepeated("2"))
+    #expect(!PrivateWindowProbe.privateNavigationRequestWasRepeated("loading"))
+  }
 }

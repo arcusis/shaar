@@ -2,11 +2,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import Testing
 
 @testable import ArcusisBrowser
 
 struct InspectorToolsL10nTests {
+  @Test func cookieRejectionUsesHebrewCatalogText() {
+    #expect(
+      InspectorToolsL10n.backendError("Chromium rejected this cookie.", language: .hebrew)
+        == "Chromium דחה את קובץ ה‑Cookie.")
+  }
+
   @Test func backendErrorTranslatesOnlyKnownStorageMessages() {
     for message in [
       "Storage is not available in this document.",

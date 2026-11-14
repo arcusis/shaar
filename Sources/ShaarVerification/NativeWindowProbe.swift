@@ -6,8 +6,48 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 
 @testable import ArcusisBrowser
+
+enum NativeWindowProbeEvidence {
+  static func webStoreFit(_ value: [String: Any]) -> (width: Int, overflow: Int)? {
+    guard let result = NativeWindowFitEvidence.parse(value) else { return nil }
+    return (result.width, result.overflow)
+  }
+}
+
+struct NativeWindowFitEvidence: Equatable {
+  let width: Int
+  let overflow: Int
+
+  static func parse(_ value: [String: Any]) -> Self? {
+    guard value["fixture"] as? String == "web-store-fit",
+      let width = exactInteger(value["width"]),
+      let overflow = exactInteger(value["overflow"])
+    else { return nil }
+    return Self(width: width, overflow: overflow)
+  }
+
+  private static func exactInteger(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+      number.doubleValue.isFinite,
+      number.doubleValue.rounded(.towardZero) == number.doubleValue,
+      number.compare(NSNumber(value: Int.min)) != .orderedAscending,
+      number.compare(NSNumber(value: Int.max)) != .orderedDescending
+    else { return nil }
+    return number.intValue
+  }
+}
+
+enum NativeWindowDocumentValidation {
+  static func isReady(_ value: [String: Any], differentFrom oldInstance: String? = nil) -> Bool {
+    guard value["fixture"] as? String == "v1",
+      let instance = value["instance"] as? String, !instance.isEmpty
+    else { return false }
+    return instance != oldInstance
+  }
+}
 
 /// Exercises native window ownership without creating a second application store or showing a window.
 @MainActor
@@ -246,8 +286,10 @@ final class NativeWindowProbe {
         requestID: UUID().uuidString, text: "OrbitFindMarker", forward: true),
       "clearing another window preserves primary selected-tab controls")
     runtime.stopFinding(inTabID: first.uuidString)
+    runtime.activateProfileID(b.uuidString, windowID: second)
     runtime.activateTabID(tabB.uuidString)
     try attach(tabB, to: second)
+    try await waitForTabSelection(tabB)
     popupPayloads[second] = nil
     try runtime.executeExtensionID(extensionID, tabID: tabB.uuidString)
     let betaPopup = try await popupID(in: second)
@@ -283,11 +325,12 @@ final class NativeWindowProbe {
         && runtime.nativeTabID(forID: tabB.uuidString) == -1
         && runtime.view(forExtensionPopupID: betaPopup) == nil,
       "confirmed native window closure releases only its own tabs and popup")
-    var retired = false
-    do { try runtime.createWindowID(second) } catch { retired = true }
     try expect(
-      retired && !runtime.closeWindowID(second),
-      "closed native identities cannot revive stale window controls")
+      !runtime.closeWindowID(second) && runtime.window(forID: second) == nil
+        && runtime.hostView(forWindowID: second) == nil
+        && runtime.nativeTabID(forID: tabA.uuidString) == -1
+        && runtime.nativeTabID(forID: tabB.uuidString) == -1,
+      "closed native identities leave stale window controls inactive")
     for space in bases {
       let id = space.selectedTabID!
       try expect(
@@ -392,11 +435,11 @@ final class NativeWindowProbe {
       {
         last = value
       }
-      if last["fixture"] as? String == "web-store-fit", let width = last["width"] as? Int,
-        let overflow = last["overflow"] as? Int, ready((width, overflow))
+      if let measurement = NativeWindowFitEvidence.parse(last),
+        ready((measurement.width, measurement.overflow))
       {
         observations["webStoreFit:\(label)"] = last
-        return (width, overflow)
+        return (measurement.width, measurement.overflow)
       }
       try await Task.sleep(for: .milliseconds(100))
     }
@@ -479,8 +522,7 @@ final class NativeWindowProbe {
       }
       if let data = json?.data(using: .utf8),
         let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["fixture"] as? String == "v1", let instance = value["instance"] as? String,
-        instance != old
+        NativeWindowDocumentValidation.isReady(value, differentFrom: old)
       {
         return value
       }
@@ -495,6 +537,20 @@ final class NativeWindowProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw NativeWindowFailure("Timed out: \(label).")
+  }
+
+  private func waitForTabSelection(_ tabID: UUID) async throws {
+    var audit: [AnyHashable: Any] = [:]
+    for _ in 0..<100 {
+      audit = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+      if audit["selectedNativeTab"] as? Bool == true
+        && audit["displayedNativeWebContents"] as? Bool == true
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw NativeWindowFailure("Beta tab was not selected before its extension popup: \(audit)")
   }
 
   private func expect(_ condition: Bool, _ message: String) throws {

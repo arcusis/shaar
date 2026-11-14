@@ -1,5 +1,9 @@
 # Verification
 
+- [[Chromium_157_Release_Runbook]]
+- [[Chromium_157_Release_Publish_Checklist]]
+- [[Chromium_157_Release_Notes]]
+- [[Chromium_157_Release_QA]]
 - [[Private_Fixture_Readiness]]
 - [[Crash_Sweep_2026-11-12]]
 - [[CI_Pipeline_Design]]
@@ -22,6 +26,7 @@
 - [[Abrupt_Restart_Durability]]
 - [[Session_Durability]]
 - [[Quit_Exit_Verification]]
+- [[Chromium_157_Release_QA_Results]]
 - [[Notebook_Maintenance]]
 - [[Bitwarden_Compatibility]]
 - [[Project_State]]

@@ -50,6 +50,52 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertTrue(page.window === browser)
   }
 
+  func testRestoreDoesNotMovePageIntoSameTabIDInAnotherWindow() {
+    let tab = UUID()
+    let page = NSView()
+    let targetWindow = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    let otherWindow = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    targetWindow.isReleasedWhenClosed = false
+    otherWindow.isReleasedWhenClosed = false
+    targetWindow.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    otherWindow.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    defer { targetWindow.close(); otherWindow.close() }
+    let foreignContainer = ChromiumPageContainerView()
+    otherWindow.contentView?.addSubview(foreignContainer)
+    _ = foreignContainer.select(page, tabID: tab, liveTabs: [tab])
+    XCTAssertFalse(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tab, in: targetWindow))
+    XCTAssertTrue(page.superview === foreignContainer)
+    XCTAssertTrue(page.window === otherWindow)
+  }
+
+  func testPrivateNativeActivationRestoresPageToItsContainer() {
+    let tab = UUID()
+    let page = NSView()
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let root = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    window.contentView = root
+    defer { window.close() }
+    let hosting = NSView(frame: root.bounds)
+    let container = ChromiumPageContainerView(frame: root.bounds)
+    root.addSubview(hosting)
+    hosting.addSubview(container)
+    container.select(page, tabID: tab, liveTabs: [tab])
+    root.addSubview(page)
+    XCTAssertTrue(page.superview === root)
+    XCTAssertFalse(window.isVisible)
+    XCTAssertTrue(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tab, in: window))
+    XCTAssertTrue(page.superview === container)
+    XCTAssertTrue(page.window === window)
+    XCTAssertFalse(window.isVisible)
+  }
+
   func testOutgoingContainerHandsPageBackOnTeardown() {
     let tab = UUID()
     let page = NSView()
@@ -63,6 +109,25 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     outgoing.dismantle()
     XCTAssertTrue(page.superview === incoming)
     XCTAssertTrue(incoming.pageView === page)
+  }
+
+  func testOutgoingContainerHandsPageToMostRecentlySelectedContainer() {
+    let tabID = UUID()
+    let page = NSView()
+    let stale = ChromiumPageContainerView()
+    let latest = ChromiumPageContainerView()
+    let outgoing = ChromiumPageContainerView()
+
+    stale.select(page, tabID: tabID, liveTabs: [tabID])
+    latest.select(page, tabID: tabID, liveTabs: [tabID])
+    outgoing.select(page, tabID: tabID, liveTabs: [tabID])
+    XCTAssertTrue(ChromiumPageContainerView.latestLiveContainer(for: tabID) === outgoing)
+
+    outgoing.dismantle()
+
+    XCTAssertTrue(ChromiumPageContainerView.latestLiveContainer(for: tabID) === latest)
+    XCTAssertTrue(page.superview === latest)
+    XCTAssertFalse(page.superview === stale)
   }
 
   func testMultiTabSelectionRoundTripRetainsOnlyLivePages() {
@@ -114,6 +179,52 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     XCTAssertNil(secondPage.superview)
     XCTAssertTrue(firstPage.superview === container)
     XCTAssertTrue(firstPage.isHidden)
+  }
+
+  func testPrivatePageSelectionRetainsOtherTabsAndHandsOffOnTeardown() {
+    let firstID = UUID()
+    let secondID = UUID()
+    let firstPage = NSView()
+    let secondPage = NSView()
+    let outgoing = ChromiumPageContainerView()
+    let incoming = ChromiumPageContainerView()
+
+    XCTAssertTrue(
+      outgoing.select(firstPage, tabID: firstID, liveTabs: [firstID, secondID]))
+    XCTAssertTrue(
+      outgoing.select(secondPage, tabID: secondID, liveTabs: [firstID, secondID]))
+    XCTAssertTrue(firstPage.isHidden)
+    XCTAssertTrue(firstPage.superview === outgoing)
+    XCTAssertFalse(secondPage.isHidden)
+
+    XCTAssertTrue(
+      incoming.select(firstPage, tabID: firstID, liveTabs: [firstID, secondID]))
+    outgoing.select(firstPage, tabID: firstID, liveTabs: [firstID, secondID])
+    ChromiumPageContainerView.dismantlePrivatePage(outgoing)
+
+    XCTAssertTrue(firstPage.superview === incoming)
+    XCTAssertTrue(incoming.pageView === firstPage)
+    XCTAssertNil(secondPage.superview)
+  }
+
+  func testSelectedTabCanBeRestoredAfterItsNativeViewIsTemporarilyMissing() {
+    let tabID = UUID()
+    let page = NSView()
+    let frame = NSRect(x: 0, y: 0, width: 500, height: 400)
+    let window = NSWindow(contentRect: frame, styleMask: [], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let container = ChromiumPageContainerView(frame: frame)
+    window.contentView?.addSubview(container)
+    defer { window.close() }
+
+    XCTAssertFalse(container.select(nil, tabID: tabID, liveTabs: [tabID]))
+    XCTAssertTrue(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tabID, in: window))
+    XCTAssertTrue(page.superview === container)
+    XCTAssertTrue(container.pageView === page)
+
+    XCTAssertFalse(container.select(nil, tabID: tabID, liveTabs: []))
+    XCTAssertFalse(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tabID, in: window))
+    XCTAssertNil(page.superview)
   }
 
   func testContainerLayoutKeepsNativeDockClickAreaUncovered() {

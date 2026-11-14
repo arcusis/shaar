@@ -68,6 +68,16 @@ struct ShaarHistoryAdapterTests {
     }
   }
 
+  @Test func queryRejectsVisitCountBelowReturnedTimestamps() async throws {
+    let fake = FakeHistoryEngine(
+      reply: #"{"schemaVersion":1,"entries":[{"url":"https://example.test/","title":"A","visitCount":0,"visits":[1]}]}"#)
+    await #expect(
+      throws: ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row")
+    ) {
+      try await ShaarHistoryAdapter(engine: fake).query(profileID: UUID())
+    }
+  }
+
   @Test func insertDeleteWatchAreBoundToExplicitProfile() async throws {
     let profile = UUID()
     let fake = FakeHistoryEngine(
@@ -168,6 +178,22 @@ struct ShaarHistoryAdapterTests {
     #expect(await fake.calls.isEmpty)
   }
 
+  @Test func insertRejectsNonWebURLsBeforeSubmit() async throws {
+    let fake = FakeHistoryEngine(reply: #"{"schemaVersion":1}"#)
+    let adapter = ShaarHistoryAdapter(engine: fake)
+
+    for url in [
+      "file:///tmp/private.txt", "javascript:alert(1)", "https:example.test/path",
+    ] {
+      await #expect(throws: ShaarHistoryAdapterError.invalidResponse("invalid import batch")) {
+        try await adapter.insert(
+          profileID: UUID(), source: "firefox",
+          pages: [.init(url: url, visits: [1])])
+      }
+    }
+    #expect(await fake.calls.isEmpty)
+  }
+
   @Test func eventRouterRequiresKnownRegularProfileAndValidHistoryEnvelope() {
     let profile = UUID()
     let id = Data(profile.uuidString.utf8)
@@ -177,6 +203,13 @@ struct ShaarHistoryAdapterTests {
       windowID: Data(), tabID: Data(), payloadJSON: payload)
     #expect(
       ShaarHistoryEventRouter.changedProfile(for: regular, knownProfiles: [profile]) == profile)
+    let booleanSchemaEvent = ShaarCopiedEvent(
+      sequence: 4, kind: 11, profileID: id, sessionID: Data(),
+      windowID: Data(), tabID: Data(),
+      payloadJSON: Data(#"{"schemaVersion":true,"kind":"changed"}"#.utf8))
+    #expect(
+      ShaarHistoryEventRouter.changedProfile(
+        for: booleanSchemaEvent, knownProfiles: [profile]) == nil)
     let privateEvent = ShaarCopiedEvent(
       sequence: 3, kind: 11, profileID: id,
       sessionID: Data("private-session".utf8), windowID: Data(),
@@ -184,5 +217,20 @@ struct ShaarHistoryAdapterTests {
     #expect(
       ShaarHistoryEventRouter.changedProfile(for: privateEvent, knownProfiles: [profile]) == nil)
     #expect(ShaarHistoryEventRouter.changedProfile(for: regular, knownProfiles: []) == nil)
+    let booleanVersion = ShaarCopiedEvent(
+      sequence: 4, kind: 11, profileID: id, sessionID: Data(),
+      windowID: Data(), tabID: Data(),
+      payloadJSON: Data(#"{"schemaVersion":true,"kind":"changed"}"#.utf8))
+    #expect(
+      ShaarHistoryEventRouter.changedProfile(for: booleanVersion, knownProfiles: [profile]) == nil)
+  }
+
+  @Test func historyEventSchemaVersionMustBeAnInteger() {
+    let profile = UUID()
+    let event = ShaarCopiedEvent(
+      sequence: 1, kind: 11, profileID: Data(profile.uuidString.utf8), sessionID: Data(),
+      windowID: Data(), tabID: Data(),
+      payloadJSON: Data(#"{"schemaVersion":true,"kind":"changed"}"#.utf8))
+    #expect(ShaarHistoryEventRouter.changedProfile(for: event, knownProfiles: [profile]) == nil)
   }
 }

@@ -25,6 +25,22 @@ enum LibraryMutation {
   }
 }
 
+enum LibraryHistoryRows {
+  static func parse(profileID: UUID, rows: [[String: Any]]) throws -> [BrowserHistoryEntry] {
+    var entries: [BrowserHistoryEntry] = []
+    entries.reserveCapacity(rows.count)
+    var addresses: Set<String> = []
+    addresses.reserveCapacity(rows.count)
+    for row in rows {
+      let entry = try BrowserHistoryEntry(profileID: profileID, payload: row)
+      guard addresses.insert(entry.id).inserted else { throw LibraryDataError.invalidHistory }
+      entries.append(entry)
+    }
+    entries.sort { $0.lastVisit > $1.lastVisit }
+    return entries
+  }
+}
+
 @MainActor @Observable
 final class BrowserLibraryModel {
   private(set) var bookmarks: [UUID: BookmarkTree] = [:]
@@ -41,6 +57,22 @@ final class BrowserLibraryModel {
   @ObservationIgnored private var generations: [LibraryKey: UUID] = [:]
   @ObservationIgnored private var pendingRefresh: [LibraryKey: Task<Void, Never>] = [:]
   @ObservationIgnored private var dirty: Set<LibraryKey> = []
+
+  static func loadFailure(
+    _ error: Error, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    switch error {
+    case LibraryDataError.invalidBookmarks:
+      return BrowserLocalization.string(
+        "The engine returned invalid bookmark data.", language: language)
+    case LibraryDataError.invalidHistory:
+      return BrowserLocalization.string(
+        "The engine returned invalid history data.", language: language)
+    default:
+      return BrowserLocalization.string(
+        "Could not load this Library section. Try again.", language: language)
+    }
+  }
 
   func notice(_ profile: UUID, section: LibrarySection) -> String? {
     let key = LibraryKey(profileID: profile, section: section)
@@ -80,13 +112,9 @@ final class BrowserLibraryModel {
           guard let rows = payload as? [[String: Any]] else {
             throw LibraryDataError.invalidHistory
           }
-          let entries = try rows.map { try BrowserHistoryEntry(profileID: profile, payload: $0) }
-          guard Set(entries.map(\.id)).count == entries.count else {
-            throw LibraryDataError.invalidHistory
-          }
-          self.history[profile] = entries.sorted { $0.lastVisit > $1.lastVisit }
+          self.history[profile] = try LibraryHistoryRows.parse(profileID: profile, rows: rows)
         }
-      } catch { self.notices[key] = error.localizedDescription }
+      } catch { self.notices[key] = Self.loadFailure(error) }
       if self.dirty.remove(key) != nil { self.invalidate(profile, section: section) }
     }
   }
@@ -176,11 +204,12 @@ final class BrowserLibraryModel {
     mutating.insert(key)
     pendingRefresh.removeValue(forKey: key)?.cancel()
     dirty.remove(key)
-    generations[key] = UUID()
+    let token = UUID()
+    generations[key] = token
     loading.remove(key)
     notices[key] = nil
     onMutation(profile, mutation) { [weak self] error in
-      guard let self else { return }
+      guard let self, self.generations[key] == token else { return }
       self.mutating.remove(key)
       // The pinned bookmark apply endpoint does not emit change events for its own writes.
       self.refresh(profile, section: mutation.section)

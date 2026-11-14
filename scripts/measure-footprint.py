@@ -102,6 +102,8 @@ def parse_tab_counts(text):
         if count not in ALLOWED_TAB_COUNTS:
             allowed = ", ".join(str(item) for item in ALLOWED_TAB_COUNTS)
             raise SystemExit(f"tab count must be one of {allowed}: {count}")
+        if count in counts:
+            raise SystemExit(f"tab count is duplicated: {count}")
         counts.append(count)
     if not counts:
         raise SystemExit("at least one tab count is required")
@@ -116,6 +118,15 @@ def positive_seconds(text):
     if seconds <= 0:
         raise argparse.ArgumentTypeError("must be greater than zero")
     return seconds
+
+
+def write_sample_copy(destination: Path, text: str) -> None:
+    if destination.parent.is_symlink():
+        raise OSError(f"main-thread sample directory must not be a symlink: {destination.parent}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+        raise OSError(f"main-thread sample path must be a regular file: {destination}")
+    destination.write_text(text)
 
 
 def main_thread_sample(pid, copy_path=None):
@@ -140,9 +151,7 @@ def main_thread_sample(pid, copy_path=None):
             }
         text = Path(path).read_text(errors="replace")
         if copy_path is not None:
-            destination = Path(copy_path)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(text)
+            write_sample_copy(Path(copy_path), text)
         return parse_main_thread_sample(text)
     except (OSError, subprocess.TimeoutExpired) as error:
         return {"mainThreadSample": "unavailable", "mainThreadSampleError": str(error)}
@@ -442,6 +451,17 @@ def compare_sleeping_rss(cases):
     return comparisons
 
 
+def write_report(path: Path, result: dict) -> None:
+    if path.parent.is_symlink():
+        raise ValueError(f"performance report directory must not be a symlink: {path.parent}")
+    if path.is_symlink():
+        raise ValueError(f"performance report path must not be a symlink: {path}")
+    if path.exists() and not path.is_file():
+        raise ValueError(f"performance report path is not a regular file: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, indent=2) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path, default=Path("build/Shaar Verification.app"))
@@ -526,8 +546,7 @@ def main():
     }
     if sleeping_comparison is not None:
         result["sleepingComparison"] = sleeping_comparison
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, indent=2) + "\n")
+    write_report(args.output, result)
     print(json.dumps(result, indent=2))
 
 

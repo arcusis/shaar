@@ -21,9 +21,13 @@ final class BrowserRuntimeClient {
   var onDesktopCaptureDismissed: ((String) -> Void)?
   var onWebShareRequest: (([String: Any]) -> Void)?
   var onPrintRequest: (([String: Any]) -> Void)?
+  var onJavaScriptDialogRequest: (([String: Any]) -> Void)?
+  var onJavaScriptDialogDismissed: ((String) -> Void)?
   var onExternalAppRequest: (([String: Any]) -> Void)?
   var onExternalAppDismissed: ((String) -> Void)?
   var onDeviceChooserEvent: (([String: Any]) -> Void)?
+  var onHTTPAuthRequest: (([String: Any]) -> Void)?
+  var onHTTPAuthDismissed: ((String) -> Void)?
   var onSavePromptRequest: (([String: Any]) -> Void)?
   var onSavePromptDismissed: ((String) -> Void)?
   var onMediaAccess: ((String, [String: NSNumber]) -> Void)?
@@ -65,7 +69,7 @@ enum BrowserRoutingError: Error, LocalizedError {
 final class BrowserRuntimeRouter {
   enum Context: CaseIterable {
     case popup, installation, media, desktopCapture, webShare, print, externalApp, deviceChooser,
-      savePrompt
+      httpAuth, javascriptDialog, savePrompt
   }
 
   private struct Subscription {
@@ -74,6 +78,7 @@ final class BrowserRuntimeRouter {
   private var subscriptions: [String: Subscription] = [:]
   private var retiredWindows: Set<String> = []
   private var tabOwners: [String: String] = [:]
+  private var closingWindows: Set<String> = []
   private var contexts: [Context: [String: String]] = [:]
   private(set) var isQuitting = false
 
@@ -117,8 +122,16 @@ final class BrowserRuntimeRouter {
   func tabClosed(_ id: String, windowID: String) {
     guard tabOwners[id] == windowID else { return }
     tabOwners[id] = nil
-    guard !isQuitting else { return }
+    guard !isQuitting, !closingWindows.contains(windowID) else { return }
     subscriptions[windowID]?.client?.onTabClosed?(id, windowID)
+  }
+
+  func setWindowClosing(_ closing: Bool, id: String) {
+    if closing {
+      closingWindows.insert(id)
+    } else {
+      closingWindows.remove(id)
+    }
   }
 
   /// A context can only be introduced by a bound tab in the declared window.

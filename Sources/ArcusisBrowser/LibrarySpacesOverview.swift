@@ -7,6 +7,10 @@ import BrowserCore
 import SwiftUI
 
 struct LibrarySpacesOverview: View {
+  static func spaceSelectionTraits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
+
   let store: BrowserStore
   let query: String
   let onSelectSpace: (UUID) -> Void
@@ -119,7 +123,7 @@ private struct LibrarySpaceCardView: View {
           .font(.system(size: 22, weight: .light)).foregroundStyle(.secondary)
         Text(PanelsL10n.string("No tabs or folders")).font(.callout).foregroundStyle(.secondary)
         Text(PanelsL10n.string("This Space is ready when you are."))
-          .font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center)
+          .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .accessibilityElement(children: .combine)
@@ -198,6 +202,8 @@ private struct LibrarySpaceCardHeader: View {
       .help(PanelsL10n.format("Select %@", .string(space.name)))
       .accessibilityLabel(
         PanelsL10n.format("Select Space %@, Profile %@", .string(space.name), .string(profileName)))
+      .accessibilityAddTraits(
+        LibrarySpacesOverview.spaceSelectionTraits(isSelected: store.session.selectedSpaceID == space.id))
       Button {
         guard
           LibrarySpacesOverviewModel.canEdit(
@@ -346,9 +352,17 @@ private struct LibrarySpaceItemsView: View {
     .buttonStyle(.plain)
     .help("\(tab.title)\n\(tab.url.absoluteString)")
     .accessibilityLabel(
-      "\(tab.title.isEmpty ? tab.url.absoluteString : tab.title), \(tab.url.absoluteString)"
-    )
+      LibrarySpaceItemsAccessibility.tabLabel(title: tab.title, address: tab.url.absoluteString))
     .accessibilityAddTraits(selected ? .isSelected : [])
+  }
+}
+
+enum LibrarySpaceItemsAccessibility {
+  static func tabLabel(title: String, address: String) -> String {
+    let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedTitle.isEmpty, title != address else { return address }
+    let accessibleTitle = title
+    return "\(accessibleTitle), \(address)"
   }
 }
 
@@ -384,16 +398,16 @@ enum LibrarySpacesOverviewModel {
       let spaceMatches =
         needle.isEmpty || contains(space.name, needle) || contains(profile?.name ?? "", needle)
       var items = space.orderedSidebarItems(includingCollapsed: true).compactMap {
-          item -> LibrarySpaceCardItem? in
-          switch item {
-          case .folder(let folder, let depth): return .folder(folder, depth: depth)
-          case .tab(let tab, let depth): return .tab(tab, depth: depth)
-          }
+        item -> LibrarySpaceCardItem? in
+        switch item {
+        case .folder(let folder, let depth): return .folder(folder, depth: depth)
+        case .tab(let tab, let depth): return .tab(tab, depth: depth)
         }
+      }
       if !spaceMatches && !needle.isEmpty {
-        let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
         let foldersByID = Dictionary(
           space.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
         var folderPathCache: [UUID: [UUID]] = [:]
         func folderPathIDs(to id: UUID?) -> [UUID] {
           guard let id else { return [] }
@@ -458,6 +472,19 @@ enum LibrarySpacesOverviewModel {
 
   private static func tabMatches(_ tab: BrowserTab, _ query: String) -> Bool {
     contains(tab.title, query) || contains(tab.url.absoluteString, query)
+  }
+
+  private static func folderPath(
+    to id: UUID?, in foldersByID: [UUID: BrowserFolder]
+  ) -> [BrowserFolder] {
+    var path: [BrowserFolder] = []
+    var next = id
+    var visited: Set<UUID> = []
+    while let current = next, let folder = foldersByID[current], visited.insert(current).inserted {
+      path.append(folder)
+      next = folder.parentID
+    }
+    return path
   }
 
   private static func contains(_ value: String, _ query: String) -> Bool {

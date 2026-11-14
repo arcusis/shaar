@@ -5,6 +5,10 @@
 import SwiftUI
 
 struct InspectorStorageView: View {
+  static func entryAccessibilityTraits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
+
   @Bindable var model: InspectorPageToolsModel
   @State private var selected: String?
   @State private var key = ""
@@ -150,6 +154,7 @@ struct InspectorStorageView: View {
         .background(selected == id ? Color.accentColor.opacity(0.08) : .clear)
         .contentShape(Rectangle()).overlay(alignment: .bottom) { Divider() }
     }.buttonStyle(.plain)
+      .accessibilityAddTraits(Self.entryAccessibilityTraits(isSelected: selected == id))
   }
 
   private func select(_ row: InspectorPageToolsModel.StorageRow) {
@@ -173,8 +178,9 @@ struct InspectorStorageView: View {
 
   private func refresh() {
     Task {
-      do { try await model.loadStorage() }
-      catch { self.error = InspectorToolsL10n.backendError(error.localizedDescription) }
+      do { try await model.loadStorage() } catch {
+        self.error = InspectorToolsL10n.backendError(error.localizedDescription)
+      }
     }
   }
 

@@ -24,15 +24,18 @@ enum InspectorToolsL10n {
 
   static func text(_ key: String) -> Text { Text(string(key)) }
 
-  /// Translate only fixed errors emitted by the shipped storage diagnostics script.
-  static func backendError(_ message: String) -> String {
+  /// Translate known Inspector Tools errors while preserving unknown page-provided details.
+  static func backendError(
+    _ message: String, language: BrowserLanguage = BrowserLanguage.currentLaunchLanguage
+  ) -> String {
     switch message {
     case "Storage is not available in this document.",
       "Value exceeds the 256K-character editor limit.",
       "Storage could not be read.",
       "Storage key or value exceeds the editor limit.",
-      "Storage could not be changed; it may be restricted or full.":
-      string(message)
+      "Storage could not be changed; it may be restricted or full.",
+      "Chromium rejected this cookie.":
+      BrowserLocalization.string(message, table: "InspectorTools", language: language)
     default:
       message
     }

@@ -4,6 +4,12 @@
 
 import SwiftUI
 
+enum InspectorCopyButtonVisibility {
+  static func isVisible(hovered: Bool, keyboardFocused: Bool, accessibilityFocused: Bool) -> Bool {
+    hovered || keyboardFocused || accessibilityFocused
+  }
+}
+
 struct InspectorSection<Content: View>: View {
   let title: String
   let identifier: String
@@ -13,13 +19,20 @@ struct InspectorSection<Content: View>: View {
   @ViewBuilder let content: () -> Content
   @Environment(\.inspectorPresentation) private var presentation
   @Environment(\.inspectorSectionScope) private var scope
+  @Environment(\.layoutDirection) private var layoutDirection
   @State private var collapsed = false
   @State private var showingCode = false
   @State private var hovered = false
   @FocusState private var copyFocused: Bool
+  @AccessibilityFocusState private var copyAccessibilityFocused: Bool
   private var key: String { scope + ":" + identifier }
   private var isCollapsed: Bool { presentation?.collapsedSections.contains(key) ?? collapsed }
   private var isCode: Bool { presentation?.codeSections.contains(key) ?? showingCode }
+
+  static func disclosureSymbol(isCollapsed: Bool, rightToLeft: Bool) -> String {
+    guard isCollapsed else { return "chevron.down" }
+    return rightToLeft ? "chevron.left" : "chevron.right"
+  }
 
   init(
     _ title: String, id: String? = nil, copy: (() -> Void)? = nil, code: String? = nil,
@@ -44,7 +57,9 @@ struct InspectorSection<Content: View>: View {
           }
         } label: {
           HStack(spacing: 6) {
-            Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+            Image(
+              systemName: Self.disclosureSymbol(
+                isCollapsed: isCollapsed, rightToLeft: layoutDirection == .rightToLeft))
               .font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary).frame(width: 9)
             Text(title).font(.system(size: 11, weight: .semibold))
             Spacer(minLength: 0)
@@ -81,7 +96,12 @@ struct InspectorSection<Content: View>: View {
             InspectorL10n.format("Copy %@", arguments: [.string(title)]), symbol: "doc.on.doc",
             action: copy
           )
-          .focused($copyFocused).opacity(hovered || copyFocused ? 1 : 0)
+          .focused($copyFocused)
+          .accessibilityFocused($copyAccessibilityFocused)
+          .opacity(
+            InspectorCopyButtonVisibility.isVisible(
+              hovered: hovered, keyboardFocused: copyFocused,
+              accessibilityFocused: copyAccessibilityFocused) ? 1 : 0)
         }
       }.frame(minHeight: 34).padding(.horizontal, 12)
       if !isCollapsed {
@@ -156,6 +176,7 @@ struct InspectorProperty: View {
   let copyLabel: String
   @State private var hovered = false
   @FocusState private var copyFocused: Bool
+  @AccessibilityFocusState private var copyAccessibilityFocused: Bool
   init(_ title: String, value: String, copyLabel: String? = nil, copy: @escaping (String) -> Void) {
     self.title = title
     self.value = value
@@ -173,7 +194,13 @@ struct InspectorProperty: View {
       } label: {
         Image(systemName: "doc.on.doc").font(.system(size: 10))
       }
-      .buttonStyle(.plain).focused($copyFocused).opacity(hovered || copyFocused ? 1 : 0)
+      .buttonStyle(.plain)
+      .focused($copyFocused)
+      .accessibilityFocused($copyAccessibilityFocused)
+      .opacity(
+        InspectorCopyButtonVisibility.isVisible(
+          hovered: hovered, keyboardFocused: copyFocused,
+          accessibilityFocused: copyAccessibilityFocused) ? 1 : 0)
       .accessibilityLabel(InspectorL10n.format("Copy %@", arguments: [.string(copyLabel)]))
       .help(InspectorL10n.format("Copy %@", arguments: [.string(copyLabel)]))
     }.frame(minHeight: 24).contentShape(Rectangle()).onHover { hovered = $0 }.help(value)

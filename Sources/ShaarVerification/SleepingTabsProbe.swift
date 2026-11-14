@@ -150,7 +150,7 @@ import Foundation
     }
   }
 
-  private static func probeFailure(
+  static func probeFailure(
     capable: Bool, sleeping: Bool, awake: Bool, stillListed: Bool, stillLive: Bool, hidden: Bool,
     wasOpen: Bool, rendererFailures: Int
   ) -> String? {

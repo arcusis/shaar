@@ -11,6 +11,8 @@ import Testing
 @MainActor
 private final class PrivateCookieAsyncRuntime: ARCChromiumRuntime {
   var actualAllowed = false
+  var readError: Error?
+  var writeError: Error?
   var delayNextRead = false
   var delayNextWrite = false
   var finishRead: (@MainActor @Sendable () -> Void)?
@@ -20,7 +22,15 @@ private final class PrivateCookieAsyncRuntime: ARCChromiumRuntime {
     forTabID tabID: String, windowID: String, contextID: String, origin: String,
     completion: @escaping @MainActor @Sendable (NSNumber?, Error?) -> Void
   ) {
+    if let readError {
+      completion(nil, readError)
+      return
+    }
     let snapshot = actualAllowed
+    if let readError {
+      completion(nil, readError)
+      return
+    }
     if delayNextRead {
       delayNextRead = false
       finishRead = { completion(NSNumber(value: snapshot), nil) }
@@ -33,6 +43,10 @@ private final class PrivateCookieAsyncRuntime: ARCChromiumRuntime {
     _ allowed: Bool, tabID: String, windowID: String, contextID: String, origin: String,
     completion: @escaping @MainActor @Sendable (Error?) -> Void
   ) {
+    if let writeError {
+      completion(writeError)
+      return
+    }
     if delayNextWrite {
       delayNextWrite = false
       finishWrite = {
@@ -45,6 +59,8 @@ private final class PrivateCookieAsyncRuntime: ARCChromiumRuntime {
     }
   }
 }
+
+private struct PrivateCookieFailure: Error {}
 
 @MainActor
 private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> PrivateSiteControlsModel {
@@ -88,6 +104,25 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
   #expect(model.failure == nil)
 }
 
+@MainActor @Test func cancelledPrivateCookieWriteDoesNotPublishLateReadback() async throws {
+  let runtime = PrivateCookieAsyncRuntime()
+  let model = try privateCookieModel(runtime)
+  await model.load()
+  runtime.delayNextWrite = true
+  let write = Task { await model.setAllowed(true) }
+  for _ in 0..<100 where runtime.finishWrite == nil { await Task.yield() }
+  #expect(runtime.finishWrite != nil)
+
+  write.cancel()
+  runtime.finishWrite?()
+  await write.value
+
+  #expect(runtime.actualAllowed)
+  #expect(model.allowed == false)
+  #expect(model.failure == nil)
+  #expect(!model.saving)
+}
+
 @MainActor @Test func olderPrivateCookieReadCannotReplaceNewerRefresh() async throws {
   let runtime = PrivateCookieAsyncRuntime()
   let model = try privateCookieModel(runtime)
@@ -124,4 +159,29 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
   runtime.finishRead?()
   await refresh.value
   #expect(model.allowed == true)
+}
+
+@MainActor @Test func privateCookieFailuresUseLocalizedRecoveryCopy() async throws {
+  let readRuntime = PrivateCookieAsyncRuntime()
+  readRuntime.readError = NSError(domain: "PrivateCookie", code: 1)
+  let readModel = try privateCookieModel(readRuntime)
+  await readModel.load()
+  #expect(
+    readModel.failure
+      == ShellL10n.string("Could not load private site cookie settings. Try again."))
+  #expect(
+    PrivateSiteControlsModel.loadFailure(language: .hebrew)
+      == "לא ניתן לטעון את הגדרות קובצי ה-Cookie של האתר בחלון הפרטי. כדאי לנסות שוב.")
+
+  let writeRuntime = PrivateCookieAsyncRuntime()
+  let writeModel = try privateCookieModel(writeRuntime)
+  await writeModel.load()
+  writeRuntime.writeError = NSError(domain: "PrivateCookie", code: 2)
+  await writeModel.setAllowed(true)
+  #expect(
+    writeModel.failure
+      == ShellL10n.string("Could not update private site cookie settings. Try again."))
+  #expect(
+    PrivateSiteControlsModel.updateFailure(language: .hebrew)
+      == "לא ניתן לעדכן את הגדרות קובצי ה-Cookie של האתר בחלון הפרטי. כדאי לנסות שוב.")
 }

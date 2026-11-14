@@ -78,11 +78,15 @@ for (const [family, file, name] of [
 await writeAsset("licenses/MPL-2.0.txt", license);
 
 await build({
-  entryPoints: [resolve(root, "src/client.ts")],
-  outfile: resolve(output, "assets/client.js"),
+  entryPoints: {
+    client: resolve(root, "src/site-client.ts"),
+    home: resolve(root, "src/client.ts"),
+  },
+  outdir: resolve(output, "assets"),
   bundle: true,
   minify: true,
   format: "iife",
+  entryNames: "[name]",
   target: "es2022",
   banner: { js: `/* ${notice} */` },
 });

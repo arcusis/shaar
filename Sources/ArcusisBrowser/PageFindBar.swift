@@ -5,6 +5,8 @@
 import SwiftUI
 
 struct PageFindBar: View {
+  static let closeShortcut = KeyboardShortcut.cancelAction
+
   let store: BrowserStore
   let state: PageFindState
   @FocusState private var queryIsFocused: Bool
@@ -18,12 +20,12 @@ struct PageFindBar: View {
         PanelsL10n.string("Find in page"),
         text: Binding(
           get: { isCurrent ? store.pageFind?.query ?? "" : "" },
-          set: { if isCurrent { store.updatePageFindQuery($0) } })
+          set: { updateQuery($0) })
       )
       .textFieldStyle(.roundedBorder)
       .accessibilityLabel(PanelsL10n.string("Find in page"))
       .focused($queryIsFocused)
-      .onSubmit { if isCurrent { store.movePageFind(forward: true) } }
+      .onSubmit { move(forward: true) }
       .onExitCommand { close() }
       Text(state.status)
         .font(.caption.monospacedDigit())
@@ -32,7 +34,7 @@ struct PageFindBar: View {
         .accessibilityLabel(state.status)
         .accessibilityAddTraits(.updatesFrequently)
       Button {
-        if isCurrent { store.movePageFind(forward: false) }
+        move(forward: false)
       } label: {
         Image(systemName: "chevron.up")
       }
@@ -40,14 +42,15 @@ struct PageFindBar: View {
       .accessibilityLabel(PanelsL10n.string("Previous match"))
       .help(PanelsL10n.string("Previous match (Shift-Command-G)"))
       Button {
-        if isCurrent { store.movePageFind(forward: true) }
+        move(forward: true)
       } label: {
         Image(systemName: "chevron.down")
       }
       .disabled(!state.canMove)
       .accessibilityLabel(PanelsL10n.string("Next match"))
       .help(PanelsL10n.string("Next match (Command-G)"))
-      Button(PanelsL10n.string("Done")) { close() }
+      Button(PanelsL10n.string("Done"), role: .cancel) { close() }
+        .keyboardShortcut(Self.closeShortcut)
         .help(PanelsL10n.string("Close find (Escape)"))
     }
     .controlSize(.small)
@@ -57,6 +60,16 @@ struct PageFindBar: View {
   }
 
   private var isCurrent: Bool { store.pageFind?.id == state.id && state.matches(store.session) }
+
+  func updateQuery(_ query: String) {
+    guard isCurrent else { return }
+    store.updatePageFindQuery(query)
+  }
+
+  func move(forward: Bool) {
+    guard isCurrent else { return }
+    store.movePageFind(forward: forward)
+  }
 
   func close() {
     guard isCurrent else { return }

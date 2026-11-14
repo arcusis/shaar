@@ -26,7 +26,9 @@ struct ProfileNameEditor: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text(SettingsL10n.string(title)).font(.headline)
+      Text(SettingsL10n.string(title))
+        .font(.headline)
+        .accessibilityAddTraits(Self.headingTraits)
       TextField(SettingsL10n.string("Profile name"), text: $name)
         .accessibilityLabel(SettingsL10n.string("Profile name"))
         .focused($isNameFocused)
@@ -39,7 +41,8 @@ struct ProfileNameEditor: View {
         Button(SettingsL10n.string("Cancel"), role: .cancel, action: onCancel)
           .keyboardShortcut(.cancelAction)
         Button(SettingsL10n.string(initialName.isEmpty ? "Create" : "Save")) {
-          errorMessage = onSave(Self.trimmedName(name))
+          errorMessage =
+            onSave(Self.trimmedName(name))
             ? nil : SettingsL10n.string("Profile could not be saved.")
         }
         .keyboardShortcut(.defaultAction)
@@ -54,4 +57,6 @@ struct ProfileNameEditor: View {
   static func trimmedName(_ name: String) -> String {
     name.trimmingCharacters(in: .whitespacesAndNewlines)
   }
+
+  static let headingTraits: AccessibilityTraits = .isHeader
 }

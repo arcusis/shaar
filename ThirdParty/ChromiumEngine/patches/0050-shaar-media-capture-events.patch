@@ -1,46 +1,8 @@
---- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
-+++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h
-@@ -59,6 +59,8 @@
-   Browser* FindBrowser(shaar_engine*, shaar_window*) override;
-   bool IsSelectedWebContents(shaar_engine*, shaar_window*, shaar_tab*,
-                              content::WebContents*) override;
-+  std::optional<SelectedRegularTab> FindRegularTab(
-+      shaar_engine*, content::WebContents*) const;
-   std::optional<SelectedRegularTab> FindSelectedRegularTab(
-       shaar_engine*, content::WebContents*) const;
-   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
---- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
-+++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
-@@ -166,6 +166,29 @@
-   return state && contents && owner && state->active_browser == owner &&
-          FindWebContents(engine, window, tab) == contents &&
-          owner->tab_strip_model()->GetActiveWebContents() == contents;
-+}
-+
-+std::optional<SelectedRegularTab>
-+BrowserTabRegistryImpl::FindRegularTab(
-+    shaar_engine* engine, content::WebContents* contents) const {
-+  if (!engine || !contents || EngineQuitRequested(engine))
-+    return std::nullopt;
-+  for (const auto& tab : tabs_) {
-+    if (tab.engine != engine || tab.contents != contents || !tab.browser ||
-+        tab.browser->GetProfile()->IsOffTheRecord())
-+      continue;
-+    for (const auto& window : windows_) {
-+      if (window.engine != engine || window.handle != tab.window ||
-+          window.closing)
-+        continue;
-+      for (const auto& [profile_id, browser] : window.browsers_by_profile) {
-+        if (browser == tab.browser)
-+          return SelectedRegularTab{tab.window, tab.handle, profile_id,
-+                                    window.window_id, tab.id};
-+      }
-+    }
-+  }
-+  return std::nullopt;
- }
- 
- std::optional<SelectedRegularTab>
+From: Shaar engineering
+Subject: [PATCH] Report active media capture state to the app
+
+Observe Chromium capture indicator changes and publish scoped events for registered regular tabs.
+
 --- a/chrome/browser/shaar/media/shaar_media_permission.h
 +++ b/chrome/browser/shaar/media/shaar_media_permission.h
 @@ -18,6 +18,9 @@
@@ -70,7 +32,7 @@
  #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
  #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
  #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
-@@ -110,7 +113,75 @@
+@@ -111,7 +114,75 @@
           frame->GetLastCommittedOrigin().GetURL() == pending.origin;
  }
  
@@ -156,7 +118,7 @@
  #include "chrome/browser/shaar/private_sessions/shaar_private_trackers.h"
  #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
  #include "content/public/browser/browser_context.h"
-@@ -267,6 +268,7 @@
+@@ -270,6 +271,7 @@
      return;
    g_state.host_keep_alive = CreateHostKeepAlive();
    g_state.ready = true;
@@ -164,7 +126,7 @@
    Emit(engine, kReady);
    if (g_state.safe_storage_unavailable)
      SafeStorageUnavailable();
-@@ -297,6 +299,7 @@
+@@ -300,6 +302,7 @@
    g_state.host_keep_alive.reset();
    shaar::windows_tabs::Registry().BeginEngineQuit(engine);
    shaar_history::StopObservingLifecycle(engine);

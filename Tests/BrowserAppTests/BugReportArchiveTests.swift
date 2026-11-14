@@ -4,18 +4,23 @@
 
 import Foundation
 import Testing
+
 @testable import ArcusisBrowser
 
 struct BugReportArchiveTests {
   @Test func harRedactsURLCredentialsQueryValuesAndFragments() throws {
-    let secretURL = "https://report-user:fixture-password@report.localhost/data?token=fixture-token&mode=private#fixture-fragment"
+    let secretURL =
+      "https://report-user:fixture-password@report.localhost/data?token=fixture-token&mode=private#fixture-fragment"
     let report = BugReportArchive.har(
       snapshot: [
         "resources": [["url": secretURL, "start": 0.0, "duration": 1.0]],
-        "network": [[
-          "url": secretURL, "start": 0.0, "end": 1.0,
-          "error": "Failed https://error-user:error-password@report.localhost/data?token=error-token#error-fragment",
-        ]],
+        "network": [
+          [
+            "url": secretURL, "start": 0.0, "end": 1.0,
+            "error":
+              "Failed https://error-user:error-password@report.localhost/data?token=error-token#error-fragment",
+          ]
+        ],
       ],
       includeSensitiveHeaders: false, version: "test")
     let encoded = try JSONSerialization.data(withJSONObject: report)
@@ -31,6 +36,9 @@ struct BugReportArchiveTests {
     let entries = try #require(log["entries"] as? [[String: Any]])
     let request = try #require(entries.first?["request"] as? [String: Any])
     let query = try #require(request["queryString"] as? [[String: String]])
-    #expect(query == [["name": "token", "value": "[redacted]"], ["name": "mode", "value": "[redacted]"]])
+    #expect(
+      query == [
+        ["name": "token", "value": "[redacted]"], ["name": "mode", "value": "[redacted]"],
+      ])
   }
 }

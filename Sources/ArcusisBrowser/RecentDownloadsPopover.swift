@@ -17,6 +17,17 @@ struct RecentDownloadsPopover: View {
   let backdrop: Color
   private let referenceDate: Date
 
+  static func progressAccessibilityValue(
+    for item: BrowserDownload, language: BrowserLanguage
+  ) -> String? {
+    guard item.state == .downloading, !item.dangerous, let progress = item.progress else {
+      return nil
+    }
+    return BrowserLocalization.plural(
+      "%d percent", count: Int((progress * 100).rounded()),
+      table: "Panels", language: language)
+  }
+
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var revealed = false
   @State private var thumbnails: [String: NSImage] = [:]
@@ -39,7 +50,7 @@ struct RecentDownloadsPopover: View {
 
   var body: some View {
     // Arc lists the newest download closest to the footer.
-    let shown = Array(items.prefix(5).reversed())
+    let shown = Self.presentedItems(items)
     VStack(alignment: .leading, spacing: 10) {
       if shown.isEmpty {
         Text(PanelsL10n.string("No recent downloads")).font(.callout).foregroundStyle(.secondary)
@@ -64,6 +75,10 @@ struct RecentDownloadsPopover: View {
     .onExitCommand(perform: dismiss)
     .accessibilityElement(children: .contain)
     .accessibilityLabel(PanelsL10n.string("Recent downloads for current profile"))
+  }
+
+  static func presentedItems(_ items: [BrowserDownload]) -> [BrowserDownload] {
+    Array(items.prefix(5).reversed())
   }
 
   private func revealAnimation(stepsFromFooter: Int) -> Animation {
@@ -95,8 +110,10 @@ struct RecentDownloadsPopover: View {
           if item.state == .downloading && !item.dangerous {
             if let progress = item.progress {
               ProgressView(value: progress)
+                .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
             } else if !item.paused {
               ProgressView().controlSize(.small)
+                .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
             }
             Text(byteStatus(item)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
           }
@@ -154,11 +171,18 @@ struct RecentDownloadsPopover: View {
   }
 
   private func accessibilityLabel(for item: BrowserDownload, stateLabel: String) -> String {
-    let details = item.state == .downloading && !item.dangerous ? [byteStatus(item)] : []
+    let progress = Self.progressAccessibilityValue(for: item, language: .currentLaunchLanguage)
+    let details = item.state == .downloading && !item.dangerous
+      ? [progress, byteStatus(item)].compactMap { $0 } : []
     let formatter = ListFormatter()
     formatter.locale = PanelsL10n.formattingLocale()
     return formatter.string(from: [item.filename, stateLabel] + details + [relativeAge(item)])
       ?? ([item.filename, stateLabel] + details + [relativeAge(item)]).joined(separator: ", ")
+  }
+
+  static func progressLabel(for progress: Double?) -> String? {
+    guard let progress else { return nil }
+    return PanelsL10n.plural("%d percent", count: Int((progress * 100).rounded()))
   }
 
   private func relativeAge(_ item: BrowserDownload) -> String {

@@ -10,6 +10,26 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorDetailsTests {
+  @Test func componentRowTraitsReflectSelection() {
+    #expect(InspectorComponentAccessibility.traits(isSelected: true).contains(.isSelected))
+    #expect(!InspectorComponentAccessibility.traits(isSelected: false).contains(.isSelected))
+  }
+
+  @Test func selectedComponentRowsExposeTheirSelectionState() {
+    #expect(
+      InspectorDetailsView.componentSelectionTraits(isSelected: true).contains(.isSelected))
+    #expect(!InspectorDetailsView.componentSelectionTraits(isSelected: false).contains(.isSelected))
+  }
+
+  @Test func backendFailuresUseLocalizedInspectorDetailsRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorDetailsModel.failureMessage(for: error)
+        == InspectorDetailsL10n.string("Inspector details could not be loaded. Try again."))
+    let known = InspectorFailure("This asset is no longer selected.")
+    #expect(InspectorDetailsModel.failureMessage(for: known) == known.localizedDescription)
+  }
+
   @Test func componentSnapshotsValidateIdentityAndRenderFrameworkData() async throws {
     let inspector = try makeInspector(tab: .component)
     defer { inspector.close() }
@@ -126,6 +146,34 @@ import Testing
       }
       inspector.close()
     }
+  }
+
+  @Test func cancelledComponentSelectionDoesNotStartOrPublishFailure() async throws {
+    let inspector = try makeInspector(tab: .component)
+    defer { inspector.close() }
+    let model = inspector.details
+    try model.receive(
+      .component(tree("React"), nil), selectionID: 8, generation: inspector.documentGeneration)
+
+    let selection = Task { @MainActor in await model.selectComponent(1) }
+    selection.cancel()
+    await selection.value
+
+    #expect(model.failure == nil)
+    #expect(model.selectedComponent == 1)
+  }
+
+  @Test func cancelledAssetSaveDoesNotPublishFailure() async throws {
+    let inspector = try makeInspector(tab: .assets)
+    defer { inspector.close() }
+
+    let save = Task { @MainActor in
+      await inspector.details.saveAsset(url: "https://example.com/image.png", frameID: "frame")
+    }
+    save.cancel()
+    await save.value
+
+    #expect(inspector.details.failure == nil)
   }
 
   @Test func malformedAssetDimensionsAndOversizedPayloadsAreRejected() throws {

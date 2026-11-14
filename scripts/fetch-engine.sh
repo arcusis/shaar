@@ -6,6 +6,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [[ $(uname -m) == arm64 ]] || { echo 'Pinned engine requires Apple silicon.' >&2; exit 1; }
+build_root="$PWD/build"
+cache="$build_root/EngineCache"
+if [[ -L "$build_root" || -L "$cache" ]]; then
+  echo 'Engine cache root must not be a symlink.' >&2; exit 1
+fi
+if [[ ( -e "$build_root" && ! -d "$build_root" ) || ( -e "$cache" && ! -d "$cache" ) ]]; then
+  echo 'Engine cache root must be a directory.' >&2; exit 1
+fi
 pin=ThirdParty/ChromiumEngine/pin.json
 jq -e '.schemaVersion == 1 and .sourceKind == "shaar" and
   (.releaseTag | test("^engine-157\\.0\\.8103\\.51-shaar\\.[1-9][0-9]*$")) and
@@ -17,19 +25,43 @@ checksum=$(jq -er .sha256 "$pin")
 [[ $asset == "ShaarEngine-${tag#engine-}.tar.xz" ]] || {
   echo 'Shaar engine asset and tag do not match.' >&2; exit 1;
 }
-cache="$PWD/build/EngineCache"
 archive="$cache/$asset"
+[[ ! -L "$PWD/build" && ! -L "$cache" ]] || {
+  echo 'Refusing symlinked engine cache directory.' >&2; exit 1;
+}
 mkdir -p "$cache"
+if [[ -L "$archive" || -L "$archive.partial" ]]; then
+  echo 'Engine archive cache paths must not be symlinks.' >&2
+  exit 1
+fi
 verify() { [[ $(shasum -a 256 "$1" | cut -d ' ' -f 1) == "$checksum" ]]; }
 if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   echo "Fetching pinned Shaar engine $tag..." >&2
-  curl --fail --location --connect-timeout 30 --max-time 900 --retry 3 --retry-max-time 180 \
+  if curl --fail --location --connect-timeout 30 --max-time 900 --retry 3 --retry-max-time 180 \
     "https://github.com/arcusis/shaar/releases/download/$tag/$asset" \
-    --output "$archive.partial" >&2
-  verify "$archive.partial" || { echo 'Engine checksum mismatch; refusing extraction.' >&2; exit 1; }
+    --output "$archive.partial" >&2; then
+    :
+  else
+    status=$?
+    rm -f "$archive.partial"
+    exit "$status"
+  fi
+  if ! verify "$archive.partial"; then
+    rm -f "$archive.partial"
+    echo 'Engine checksum mismatch; refusing extraction.' >&2
+    exit 1
+  fi
   mv "$archive.partial" "$archive"
 fi
+python3 scripts/engine_patches.py --verify-archive "$archive" || {
+  echo 'Engine archive has an incomplete patch receipt; refusing extraction.' >&2
+  exit 1
+}
 destination="$cache/${checksum:0:16}"
+if [[ -L "$destination" || ( -e "$destination" && ! -d "$destination" ) ]]; then
+  echo 'Engine cache destination must be a regular directory.' >&2
+  exit 1
+fi
 if [[ ! -f "$destination/.verified-$checksum" ]]; then
   archive_paths=$(tar -tf "$archive") || {
     echo 'Cannot inspect engine archive; refusing extraction.' >&2
@@ -66,4 +98,9 @@ python3 scripts/engine_payload.py --archive "$archive" --framework "$framework" 
   echo 'Engine payload verification failed; refusing bundle.' >&2
   exit 1
 }
+if ! /usr/bin/grep -a -q 'capture_changed' \
+  "$framework/Versions/Current/Chromium Framework"; then
+  echo 'Engine is missing the required capture indicator event.' >&2
+  exit 1
+fi
 printf '%s\n' "$framework"

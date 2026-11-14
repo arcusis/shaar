@@ -22,6 +22,27 @@ private func workspaceFixture() throws -> BrowserSession {
   return session
 }
 
+@Test func sessionFolderRowsValidationFocusedBenchmark() throws {
+  let profile = BrowserProfile(name: "Folders")
+  let folders = (0..<300).map { index in
+    BrowserFolder(name: "Folder \(index)", isPinned: index.isMultiple(of: 2))
+  }
+  let tabs = (0..<1_000).map { index in
+    let folder = folders[index % folders.count]
+    return BrowserTab(
+      url: URL(string: "https://example.test/\(index)")!,
+      isPinned: folder.isPinned, folderID: folder.id)
+  }
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Folders", symbol: "folder", tint: .ocean,
+    tabs: tabs, folders: folders)
+  let session = try BrowserSession(profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+  let start = ContinuousClock.now
+  for _ in 0..<20 { try session.validate() }
+  print("sessionFolderRowsValidationFocusedBenchmark: \(start.duration(to: .now))")
+}
+
 @Test func workspaceUpdatePinnedReferenceMapFocusedBenchmark() throws {
   let profile = BrowserProfile(name: "Scale")
   let spaces = (0..<20).map { spaceIndex in
@@ -43,6 +64,27 @@ private func workspaceFixture() throws -> BrowserSession {
   for _ in 0..<5 { try workspace.updateWindow(windowID, session: session) }
   print("workspaceUpdatePinnedReferenceMapFocusedBenchmark: \(start.duration(to: .now))")
   #expect(workspace.window(windowID)?.pins.count == 10_000)
+}
+
+@Test func sessionFolderValidationFocusedBenchmark() throws {
+  let profile = BrowserProfile(name: "Folders")
+  let folders = (0..<300).map { index in
+    BrowserFolder(name: "Folder \(index)", isPinned: index.isMultiple(of: 2))
+  }
+  let tabs = (0..<1_000).map { index in
+    let folder = folders[index % folders.count]
+    return BrowserTab(
+      url: URL(string: "https://example.test/\(index)")!,
+      isPinned: folder.isPinned, folderID: folder.id)
+  }
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Folders", symbol: "folder", tint: .ocean,
+    tabs: tabs, folders: folders)
+  let session = try BrowserSession(profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+  let start = ContinuousClock.now
+  for _ in 0..<20 { try session.validate() }
+  print("sessionFolderValidationFocusedBenchmark: \(start.duration(to: .now))")
 }
 
 @Test func workspaceMigrationPreservesLegacyBytesIDsAndRecoveryUntilExplicitSave() throws {
@@ -86,6 +128,29 @@ private func workspaceFixture() throws -> BrowserSession {
       with: initial.spaces.flatMap(\.tabs).map(\.id)))
   #expect(second.pins.map(\.pinID) == first.pins.map(\.pinID))
   #expect(workspace.windows[0].session == initial)
+  try workspace.validate()
+}
+
+@Test func restoringClosedWindowRestoresItsLocalTabsAndRecoveryState() throws {
+  var workspace = try BrowserWorkspace(session: workspaceFixture())
+  let original = try #require(workspace.windows.first)
+  let geometry = WorkspaceWindowGeometry(x: 40, y: 60, width: 900, height: 700)
+  try workspace.setGeometry(geometry, for: original.id)
+  let closedWindow = try #require(workspace.window(original.id))
+  try workspace.removeWindow(original.id)
+
+  let restoredID = try workspace.restoreWindow(closedWindow)
+  let restored = try #require(workspace.window(restoredID))
+  let originalSpace = try #require(closedWindow.session.spaces.first)
+  let restoredSpace = try #require(restored.session.spaces.first { $0.id == originalSpace.id })
+  let originalPinIDs = Set(originalSpace.tabs.filter(\.isPinned).map(\.id))
+  let restoredPinIDs = Set(restoredSpace.tabs.filter(\.isPinned).map(\.id))
+
+  #expect(restored.geometry == geometry)
+  #expect(restoredSpace.tabs.filter { !$0.isPinned } == originalSpace.tabs.filter { !$0.isPinned })
+  #expect(restoredSpace.selectedTabID == originalSpace.selectedTabID)
+  #expect(restored.session.closedTabs == closedWindow.session.closedTabs)
+  #expect(restoredPinIDs.isDisjoint(with: originalPinIDs))
   try workspace.validate()
 }
 

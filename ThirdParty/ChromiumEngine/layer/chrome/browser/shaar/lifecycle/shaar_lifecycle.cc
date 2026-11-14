@@ -28,6 +28,7 @@
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/history/shaar_history.h"
+#include "chrome/browser/shaar/media/shaar_media_permission.h"
 #include "chrome/browser/shaar/private_sessions/shaar_private_trackers.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "content/public/browser/browser_context.h"
@@ -270,6 +271,7 @@ void EngineReady(shaar_engine* engine) {
     return;
   g_state.host_keep_alive = CreateHostKeepAlive();
   g_state.ready = true;
+  shaar::media::StartCaptureObserving(engine);
   Emit(engine, kReady);
   if (g_state.safe_storage_unavailable)
     SafeStorageUnavailable();
@@ -300,6 +302,7 @@ void EngineWillShutDown(shaar_engine* engine) {
   g_state.host_keep_alive.reset();
   shaar::windows_tabs::Registry().BeginEngineQuit(engine);
   shaar_history::StopObservingLifecycle(engine);
+  shaar::media::StopCaptureObserving();
   shaar::windows_tabs::StopObservingLifecycle();
   Emit(engine, kWillShutDown);
 }

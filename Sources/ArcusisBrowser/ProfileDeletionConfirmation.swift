@@ -6,6 +6,7 @@ import BrowserCore
 import SwiftUI
 
 struct ProfileDeletionConfirmation: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let profile: BrowserSettingsProfile
   let profiles: [BrowserSettingsProfile]
   let onDeleteProfile: (UUID, UUID?) async throws -> Void
@@ -24,13 +25,21 @@ struct ProfileDeletionConfirmation: View {
     self.profiles = profiles
     self.onDeleteProfile = onDeleteProfile
     self.onDismiss = onDismiss
-    _destinationID = State(initialValue: profiles.first(where: { $0.id != profile.id })?.id)
+    _destinationID = State(
+      initialValue: Self.initialDestinationID(for: profile.id, in: profiles))
     _removeSpaces = State(initialValue: removeSpaces)
+  }
+
+  static func initialDestinationID(
+    for profileID: UUID, in profiles: [BrowserSettingsProfile]
+  ) -> UUID? {
+    profiles.first(where: { $0.id != profileID })?.id
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text(SettingsL10n.format("Delete %@?", .string(profile.name))).font(.headline)
+        .accessibilityAddTraits(Self.headingTraits)
       Text(
         SettingsL10n.string(
           "Favorites and profile preferences will be removed. Chromium will schedule deletion of cookies, site data, history, cache and extensions. This cannot be undone."

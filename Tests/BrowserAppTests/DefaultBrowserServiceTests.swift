@@ -9,6 +9,12 @@ import Testing
 
 @Suite @MainActor
 struct DefaultBrowserServiceTests {
+  @Test func firstRunDefaultBrowserFailureUsesHebrewRecoveryCopy() {
+    #expect(
+      FirstRunSetupView.defaultBrowserFailure(language: .hebrew)
+        == "לא ניתן להגדיר את האפליקציה כדפדפן ברירת המחדל.")
+  }
+
   @Test func bundleWithoutAnIdentifierIsNeverReportedAsDefault() {
     let application = FileManager.default.temporaryDirectory
       .appending(path: "Missing-\(UUID().uuidString).app")

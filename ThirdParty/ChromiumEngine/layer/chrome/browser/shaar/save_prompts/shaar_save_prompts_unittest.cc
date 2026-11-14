@@ -7,6 +7,7 @@
 #include <string>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -39,14 +40,58 @@ TEST(ShaarSavePromptTest, NeverAppliesOnlyToANewPassword) {
   EXPECT_EQ(shaar::save_prompts::DecisionCode("password", false, nullptr), 0);
 }
 
+TEST(ShaarSavePromptTest, DecisionRequestIDsUseBoundedDecimalForm) {
+  EXPECT_FALSE(shaar::save_prompts::IsValidDecisionRequestID(""));
+  EXPECT_TRUE(shaar::save_prompts::IsValidDecisionRequestID("1"));
+  EXPECT_TRUE(shaar::save_prompts::IsValidDecisionRequestID(Repeat('9', 20)));
+  EXPECT_FALSE(shaar::save_prompts::IsValidDecisionRequestID(Repeat('9', 21)));
+  EXPECT_FALSE(shaar::save_prompts::IsValidDecisionRequestID("12x"));
+  EXPECT_FALSE(shaar::save_prompts::IsValidDecisionRequestID("12\xC2\xA0"));
+}
+
 TEST(ShaarSavePromptTest, DetailDropsControlsAndKeepsUtf8Boundaries) {
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("a\nb\x7f" "c"), "abc");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("a\xC2\x85" "b"), "ab");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xC2\x9F"), "");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("user\xC2\x85" "name"),
+            "username");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(Repeat('a', 121)).size(), 120u);
   const std::string bounded =
       Repeat('a', 119) + "\xC3\xA9";
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(bounded), Repeat('a', 119));
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail("\xC3\xA9"), "\xC3\xA9");
   EXPECT_EQ(shaar::save_prompts::SanitizeDetail(""), "");
+}
+
+TEST(ShaarSavePromptTest, PageURLRemovesCredentialsQueryAndFragment) {
+  const GURL input(
+      "https://user:secret@example.com/login?next=%2Fhome#token");
+  EXPECT_EQ(shaar::save_prompts::CleanPageURLForSavePrompt(input),
+            GURL("https://example.com/login"));
+}
+
+TEST(ShaarSavePromptTest, PageURLRejectsNonWebSchemes) {
+  EXPECT_FALSE(shaar::save_prompts::CleanPageURLForSavePrompt(
+                   GURL("file:///tmp/page"))
+                   .is_valid());
+  EXPECT_FALSE(shaar::save_prompts::CleanPageURLForSavePrompt(
+                   GURL("javascript:alert(1)"))
+                   .is_valid());
+}
+
+TEST(ShaarSavePromptTest, DetailDropsUnicodeFormattingControls) {
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("user\xE2\x80\xAE" "admin"),
+            "useradmin");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("left\xE2\x81\xA6" "right"),
+            "leftright");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("עברית"), "עברית");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail(
+                Repeat('a', 119) + "\xE2\x80\xAE" "b"),
+            Repeat('a', 119) + "b");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("soft\xC2\xAD" "hyphen"),
+            "softhyphen");
+  EXPECT_EQ(shaar::save_prompts::SanitizeDetail("bom\xEF\xBB\xBF" "text"),
+            "bomtext");
 }
 
 TEST(ShaarSavePromptTest, RegistersItsModuleAndOperationHandler) {

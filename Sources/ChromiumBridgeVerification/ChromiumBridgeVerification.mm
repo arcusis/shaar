@@ -19,6 +19,10 @@
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 
+@interface ARCShaarRuntime (WebShareWindowProbe)
+- (void)finishWindowID:(NSString *)windowID;
+@end
+
 @interface ARCShaarRuntime (DesktopCaptureProbeResolution)
 - (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID;
 @end
@@ -34,6 +38,16 @@
   self.captureResolutionCount += 1;
   self.resolvedCapturePromptID = requestID;
   self.resolvedCaptureSourceID = sourceID;
+}
+@end
+
+@interface ARCPrivateMediaProbeRuntime : ARCShaarRuntime
+@end
+
+@implementation ARCPrivateMediaProbeRuntime
+- (shaar_engine *)privateEngineHandle { return (shaar_engine *)1; }
+- (shaar_profile *)privateProfileHandleForID:(NSString *)profileID {
+  return (shaar_profile *)1;
 }
 @end
 
@@ -152,11 +166,15 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
   ARCShaarRuntime *runtime = [ARCShaarRuntime new];
   NSMutableArray *media = [NSMutableArray array];
   NSMutableArray *pip = [NSMutableArray array];
+  NSMutableArray *access = [NSMutableArray array];
   runtime.onMediaSessionChanged = ^(NSString *tabID, NSDictionary *state) {
     [media addObject:state ?: NSNull.null];
   };
   runtime.onPictureInPictureChanged = ^(NSString *tabID, BOOL active) {
     [pip addObject:@(active)];
+  };
+  runtime.onMediaAccess = ^(NSString *tabID, NSDictionary *state) {
+    [access addObject:state];
   };
   NSString *tabID = @"OWNED-TAB";
   NSString *profileID = @"OWNED-PROFILE";
@@ -181,7 +199,82 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
   event.tab_id = {tabID.UTF8String, tabID.length};
   event.payload_json = {(const char *)data.bytes, data.length};
   [runtime receiveEvent:&event];
-  return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count)};
+  return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count),
+           @"accessCount": @(access.count)};
+}
+
+NSDictionary *ARCProbePrivateShaarMediaEventDispatch(NSDictionary *payload) {
+  ARCPrivateMediaProbeRuntime *runtime = [ARCPrivateMediaProbeRuntime new];
+  __block NSUInteger accessCount = 0;
+  runtime.onPrivateMediaAccess = ^(NSString *contextID, NSString *windowID,
+                                   NSString *tabID, NSDictionary *state) {
+    accessCount += 1;
+  };
+  NSString *contextID = @"PRIVATE-CONTEXT";
+  NSString *profileID = @"PRIVATE-PROFILE";
+  NSString *windowID = @"PRIVATE-WINDOW";
+  NSString *tabID = @"PRIVATE-TAB";
+  NSMutableDictionary *state = ARCPrivateShaarState(runtime);
+  state[@"contexts"] = [@{contextID: @{
+    @"sourceProfileID": profileID,
+    @"windows": [NSMutableArray arrayWithObject:windowID],
+    @"session": [NSValue valueWithPointer:(void *)1],
+  }} mutableCopy];
+  state[@"windows"] = [@{windowID: @{
+    @"contextID": contextID, @"tabs": [NSMutableArray arrayWithObject:tabID],
+  }} mutableCopy];
+  state[@"tabs"] = [@{tabID: @{
+    @"contextID": contextID, @"windowID": windowID,
+  }} mutableCopy];
+  NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  shaar_event event = {};
+  event.size = sizeof(event);
+  event.kind = SHAAR_EVENT_MEDIA;
+  event.profile_id = {profileID.UTF8String, profileID.length};
+  event.session_id = {contextID.UTF8String, contextID.length};
+  event.window_id = {windowID.UTF8String, windowID.length};
+  event.tab_id = {tabID.UTF8String, tabID.length};
+  event.payload_json = {(const char *)data.bytes, data.length};
+  [runtime receivePrivateEvent:&event payload:payload];
+  return @{@"accessCount": @(accessCount)};
+}
+
+NSDictionary *ARCProbeShaarSavePromptDispatch(
+    NSArray<NSDictionary *> *payloads, NSString *tabID, BOOL abiReady) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  Ivar available = class_getInstanceVariable(runtime.class, "_shaarSavePromptsAvailable");
+  if (available) {
+    void *address = (__bridge void *)runtime;
+    *reinterpret_cast<BOOL *>(static_cast<uint8_t *>(address) + ivar_getOffset(available)) = abiReady;
+  }
+  NSMutableArray *requests = [NSMutableArray array];
+  NSMutableArray *dismissals = [NSMutableArray array];
+  runtime.onSavePromptRequest = ^(NSDictionary *request) { [requests addObject:request ?: @{}]; };
+  runtime.onSavePromptDismissed = ^(NSString *requestID) { [dismissals addObject:requestID ?: @""]; };
+  NSString *ownedTab = @"OWNED-TAB", *profileID = @"OWNED-PROFILE", *windowID = @"OWNED-WINDOW";
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabs"),
+                 [@{ownedTab: [NSValue valueWithPointer:(void *)1]} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabProfiles"),
+                 [@{ownedTab: profileID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
+                 [@{ownedTab: windowID} mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarSavePrompts"),
+                 [NSMutableDictionary dictionary]);
+  for (NSDictionary *payload in payloads) {
+    NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+    if (!data) continue;
+    NSString *eventTab = tabID.length ? tabID : ownedTab;
+    shaar_event event = {};
+    event.size = sizeof(event);
+    event.kind = SHAAR_EVENT_SAVE_PROMPT;
+    event.profile_id = {profileID.UTF8String, profileID.length};
+    event.window_id = {windowID.UTF8String, windowID.length};
+    event.tab_id = {eventTab.UTF8String, eventTab.length};
+    event.payload_json = {(const char *)data.bytes, data.length};
+    [runtime receiveEvent:&event];
+  }
+  return @{@"requestCount": @(requests.count), @"dismissCount": @(dismissals.count),
+           @"id": requests.count ? requests.firstObject[@"id"] ?: @"" : @""};
 }
 
 NSDictionary *ARCProbeShaarSavePromptDispatch(
@@ -305,6 +398,52 @@ NSDictionary *ARCProbeWebShareEventDispatch(NSDictionary *payload, uint32_t abiM
     @"received": received ?: @{},
     @"replyID": [NSString stringWithUTF8String:gProbeShareReplyID.c_str()] ?: @"",
     @"replyOutcome": @(gProbeShareReplyOutcome),
+  };
+}
+
+NSDictionary *ARCProbeWebShareWindowCloseDispatch(void) {
+  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
+  NSString *closedWindowID = NSUUID.UUID.UUIDString;
+  NSString *otherWindowID = NSUUID.UUID.UUIDString;
+  NSString *closedTabID = NSUUID.UUID.UUIDString;
+  NSString *otherTabID = NSUUID.UUID.UUIDString;
+  NSString *closedRequestID = NSUUID.UUID.UUIDString;
+  NSString *otherRequestID = NSUUID.UUID.UUIDString;
+  auto setIvar = ^(const char *name, const void *value, size_t size) {
+    Ivar ivar = class_getInstanceVariable(runtime.class, name);
+    if (!ivar) return;
+    void *address = (__bridge void *)runtime;
+    std::memcpy(static_cast<uint8_t *>(address) + ivar_getOffset(ivar), value, size);
+  };
+  BOOL available = YES;
+  setIvar("_shaarWebShareAvailable", &available, sizeof(available));
+  using ReplyFunction = shaar_error_code (*)(const char *, int);
+  ReplyFunction reply = ProbeShareReply;
+  setIvar("_shaarShareReply", &reply, sizeof(reply));
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarWindows"),
+                 [@{
+                   closedWindowID: [NSValue valueWithPointer:(void *)1],
+                   otherWindowID: [NSValue valueWithPointer:(void *)2],
+                 } mutableCopy]);
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
+                 [@{closedTabID: closedWindowID, otherTabID: otherWindowID} mutableCopy]);
+  NSMutableDictionary *pending = [@{
+    closedRequestID: closedTabID,
+    otherRequestID: otherTabID,
+  } mutableCopy];
+  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarShareRequests"),
+                 pending);
+  gProbeShareReplyID.clear();
+  gProbeShareReplyOutcome = -1;
+
+  [runtime finishWindowID:closedWindowID];
+
+  return @{
+    @"closedRequestID": closedRequestID,
+    @"otherRequestID": otherRequestID,
+    @"replyID": [NSString stringWithUTF8String:gProbeShareReplyID.c_str()] ?: @"",
+    @"replyOutcome": @(gProbeShareReplyOutcome),
+    @"pendingRequestCount": @(pending.count),
   };
 }
 
@@ -1073,9 +1212,14 @@ void ARCCompletePrivateQuitDialogCancellation(
   static NSString *const kAuthoredClipGesture =
       @"(()=>{const c=document.getElementById('clip');c.currentTime=5;"
        "c.play().then(()=>c.requestPictureInPicture());return {opened:true};})()";
+  static NSString *const kAuthoredOnboardingPopupGesture =
+      @"(()=>{window.fixturePopup=window.open(window.fixturePopupURL,'_blank',"
+       "'popup,width=520,height=680');return !!window.fixturePopup;})()";
   BOOL clipGesture = [script isEqualToString:kAuthoredClipGesture];
+  BOOL onboardingPopupGesture = [script isEqualToString:kAuthoredOnboardingPopupGesture];
   if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed() ||
-      (![script isEqualToString:kAuthoredGesture] && !clipGesture)) {
+      (![script isEqualToString:kAuthoredGesture] && !clipGesture &&
+       !onboardingPopupGesture)) {
     completion(nil);
     return;
   }
@@ -1085,6 +1229,25 @@ void ARCCompletePrivateQuitDialogCancellation(
   if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID
                             windowID:windowID]) {
     completion(nil);
+    return;
+  }
+  if (onboardingPopupGesture) {
+    [runtime shaarDevToolsCall:@"Runtime.evaluate"
+        params:@{@"expression": script, @"returnByValue": @YES, @"userGesture": @YES}
+        capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+        profileID:profileID windowID:windowID
+        completion:^(NSDictionary *reply, NSError *error) {
+          if (error) {
+            NSData *data = [NSJSONSerialization dataWithJSONObject:@{
+              @"error": error.localizedDescription ?: @"DevTools evaluation failed"
+            } options:NSJSONWritingFragmentsAllowed error:nil];
+            completion(data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil);
+            return;
+          }
+          NSDictionary *remote = [reply[@"result"] isKindOfClass:NSDictionary.class]
+              ? reply[@"result"] : nil;
+          completion([remote[@"value"] boolValue] ? @"true" : nil);
+        }];
     return;
   }
   BOOL submitted = [runtime shaarDevToolsSubmit:SHAAR_OP_PROBE_MEDIA_GESTURE
@@ -1419,6 +1582,7 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
 
 static const shaar_operation kProbePopupEvaluateOperation = static_cast<shaar_operation>(1095);
 static const shaar_operation kProbePopupCaptureOperation = static_cast<shaar_operation>(1096);
+static const shaar_operation kProbePopupTrustedClickOperation = static_cast<shaar_operation>(1097);
 
 static NSDictionary *ProbePopupOwner(ARCShaarRuntime *runtime, NSString *popupID) {
   if (!ProbeCaptureAllowed() || !ARCProbePopupIdentifier(popupID)) return nil;
@@ -1441,9 +1605,13 @@ extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
   NSSet<NSString *> *allowed = [NSSet setWithArray:@[
     @"blank", @"popup", @"plain", @"performance-input",
     @"arcusis-download-probe", @"window-client-download",
-    @"external-consent-probe", @"arcusis-private-quit-activation",
-    @"parity-action"]];
+    @"external-consent-probe", @"arcusis-private-quit-activation", @"engine-window-request",
+    @"engine-window-create", @"parity-action"]];
   return [allowed containsObject:elementID];
+}
+
+extern "C" BOOL ARCProbeTrustedScrollElementAllowed(NSString *elementID) {
+  return [elementID isEqualToString:@"feed"];
 }
 
 using ShaarQuitPrepare = shaar_error_code (*)(
@@ -1727,6 +1895,44 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
 
 @end
 
+@implementation ARCShaarRuntime (TrustedProbeScroll)
+
+- (void)submitTrustedProbeScrollInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                            completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
+  if (!completion) return;
+  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (!testing || std::strcmp(testing, "1") != 0 ||
+      !ARCProbeTrustedScrollElementAllowed(elementID)) {
+    completion(NO);
+    return;
+  }
+  NSView *view = [self viewForTabID:tabID];
+  if (!view.window || view.window.isVisible) {
+    completion(NO);
+    return;
+  }
+  for (NSWindow *window in NSApp.windows) {
+    if (window.isVisible) {
+      completion(NO);
+      return;
+    }
+  }
+  NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [self windowIDForTabID:tabID];
+  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+    completion(NO);
+    return;
+  }
+  [self shaarDevToolsSubmit:1097 tabID:tabID profileID:profileID windowID:windowID
+                   payload:@{@"schemaVersion": @1, @"elementID": elementID}
+                completion:^(NSDictionary *reply, NSError *error) {
+    if (error) NSLog(@"Trusted probe scroll: %@", error.localizedDescription);
+    completion(!error && [reply[@"submitted"] boolValue]);
+  }];
+}
+
+@end
+
 @implementation ARCShaarRuntime (DeviceChooserProbe)
 
 - (void)evaluateDeviceChooserProbeInTabID:(NSString *)tabID
@@ -1945,6 +2151,34 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
       return;
     }
     completion(ARCProbePNGFromDevToolsResult(reply));
+  }];
+}
+
+- (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
+              completion:(void (^)(BOOL))completion {
+  if (!completion || ![title isEqualToString:@"Create window"] ||
+      !ARCProbeTrustedClickElementAllowed(@"engine-window-create")) {
+    if (completion) completion(NO);
+    return;
+  }
+  NSDictionary *owner = ProbePopupOwner(self, popupID);
+  if (!owner) {
+    completion(NO);
+    return;
+  }
+  NSString *tabID = owner[@"tabID"];
+  NSString *profileID = owner[@"profileID"];
+  NSString *windowID = owner[@"windowID"];
+  __weak ARCShaarRuntime *weakRuntime = self;
+  [self shaarDevToolsSubmit:kProbePopupTrustedClickOperation tabID:tabID
+                  profileID:profileID windowID:windowID
+                    payload:@{@"schemaVersion": @1, @"popupId": popupID,
+                              @"elementID": @"engine-window-create"}
+                  completion:^(NSDictionary *reply, NSError *error) {
+    ARCShaarRuntime *runtime = weakRuntime;
+    NSDictionary *current = runtime ? ProbePopupOwner(runtime, popupID) : nil;
+    completion(!error && [reply[@"submitted"] boolValue] &&
+               [current isEqualToDictionary:owner]);
   }];
 }
 

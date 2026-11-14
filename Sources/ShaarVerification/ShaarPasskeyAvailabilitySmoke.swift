@@ -106,7 +106,7 @@ import Foundation
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
   }
 
-  private static func availabilityReport(state: [String: Any], quiet: Bool) -> [String: Any] {
+  static func availabilityReport(state: [String: Any], quiet: Bool) -> [String: Any] {
     let passkey = state["passkey"] as? String ?? ""
     let publicKeyCredential = state["publicKeyCredential"] as? Bool ?? false
     let platformAuthenticator = state["platformAuthenticator"] as? Bool ?? false

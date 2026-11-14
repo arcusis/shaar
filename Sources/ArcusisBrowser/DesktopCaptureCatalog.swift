@@ -11,15 +11,49 @@ struct DesktopCaptureListing: Equatable {
   var error: String?
 }
 
+struct DesktopCaptureSettingsAction: Equatable {
+  let title: String
+  let destination: URL
+}
+
 enum DesktopCaptureCatalog {
   static let screenAccessNote =
     "Screen Recording access is unavailable. Check Privacy & Security settings."
-  static let emptySources = "No screens, windows, or tabs are available"
+  static let screenEnumerationNote = "Screen sources could not be loaded. Try again."
+  static let emptySources = "No sharing sources match this request."
+
+  static func settingsAction(for message: String?) -> DesktopCaptureSettingsAction? {
+    guard message == screenAccessNote, let destination = MacPermission.screenRecording.settingsURL
+    else { return nil }
+    return DesktopCaptureSettingsAction(
+      title: PanelsL10n.string("Open Settings"), destination: destination)
+  }
+
+  static func settingsAction(for listing: DesktopCaptureListing) -> DesktopCaptureSettingsAction? {
+    settingsAction(for: listing.note ?? listing.error)
+  }
 
   static func allowedSources(
     _ sources: [DesktopCaptureSource], for request: DesktopCaptureRequest
   ) -> [DesktopCaptureSource] {
-    sources.filter { DesktopCaptureSource.isValidToken($0.id) && request.allows($0.kind) }
+    var seen: Set<String> = []
+    return sources.filter {
+      guard DesktopCaptureSource.kind(forToken: $0.id) == $0.kind, request.allows($0.kind) else {
+        return false
+      }
+      return seen.insert($0.id).inserted
+    }
+  }
+
+  static func windowName(owner: String?, title: String?) -> String {
+    let owner = owner?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let title = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return switch (owner.isEmpty, title.isEmpty) {
+    case (false, false): "\(owner) — \(title)"
+    case (false, true): owner
+    case (true, false): title
+    case (true, true): PanelsL10n.string("Window")
+    }
   }
 
   static func tabSources(
@@ -47,14 +81,22 @@ enum DesktopCaptureCatalog {
   }
 
   static func listing(
-    tabs: [DesktopCaptureSource], screens: [DesktopCaptureSource], screenAccessFailed: Bool
+    tabs: [DesktopCaptureSource], screens: [DesktopCaptureSource], screenAccessFailed: Bool,
+    screenEnumerationFailed: Bool = false
   ) -> DesktopCaptureListing {
     let sources = tabs + screens
     if sources.isEmpty {
-      let message = screenAccessFailed ? screenAccessNote : emptySources
+      let message: String
+      if screenEnumerationFailed {
+        message = screenEnumerationNote
+      } else {
+        message = screenAccessFailed ? screenAccessNote : emptySources
+      }
       return DesktopCaptureListing(sources: [], note: nil, error: message)
     }
     return DesktopCaptureListing(
-      sources: sources, note: screenAccessFailed ? screenAccessNote : nil, error: nil)
+      sources: sources,
+      note: screenAccessFailed ? screenAccessNote : (screenEnumerationFailed ? screenEnumerationNote : nil),
+      error: nil)
   }
 }

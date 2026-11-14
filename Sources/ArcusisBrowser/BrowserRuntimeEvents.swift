@@ -10,10 +10,11 @@ final class BrowserRuntimeEvents {
   let runtime: ARCChromiumRuntime
   let router = BrowserRuntimeRouter()
   var onWindowClosed: ((String, Bool) -> Void)?
-  var onDeviceChooserResolution: ((String, String, Int?) -> Void)?
+  var onDeviceChooserResolution: ((String, String, String?) -> Void)?
+  var onTabClosed: ((String, String) -> Void)?
   var onQuitRequested: (() -> Void)?
   var onQuitCancelled: (() -> Void)?
-  var onWindowRequest: (@MainActor @Sendable (String, String) -> String?)? {
+  var onWindowRequest: (@MainActor @Sendable (String, String, Bool) -> String?)? {
     didSet { runtime.onWindowRequest = onWindowRequest }
   }
   var onWindowShowRequest: (@MainActor @Sendable (String, Bool) -> Void)? {
@@ -34,6 +35,9 @@ final class BrowserRuntimeEvents {
     runtime.onWindowClosed = { [weak self] id, quitting in
       self?.windowClosed(id, quitting: quitting)
     }
+    runtime.onWindowClosing = { [weak self] id, closing in
+      self?.router.setWindowClosing(closing, id: id)
+    }
     runtime.onNotice = { [weak self] message in
       for client in self?.router.clients ?? [] { client.onNotice?(message) }
     }
@@ -43,6 +47,7 @@ final class BrowserRuntimeEvents {
     }
     runtime.onTabClosed = { [weak self] id, windowID in
       self?.router.tabClosed(id, windowID: windowID)
+      self?.onTabClosed?(id, windowID)
     }
     runtime.onTabActivated = { [weak self] id, profile in
       guard self?.router.isQuitting == false else { return }
@@ -179,6 +184,23 @@ final class BrowserRuntimeEvents {
       }
       receive(payload)
     }
+    runtime.onJavaScriptDialogRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String,
+        let client = self.router.claim(.javascriptDialog, id: id, payload: payload),
+        let receive = client.onJavaScriptDialogRequest
+      else {
+        if let id = payload["id"] as? String {
+          self?.runtime.resolveJavaScriptDialogRequestID(id, accepted: false, input: nil)
+        }
+        return
+      }
+      receive(payload)
+    }
+    runtime.onJavaScriptDialogDismissed = { [weak self] id in
+      guard let client = self?.router.client(for: .javascriptDialog, id: id, removing: true)
+      else { return }
+      client.onJavaScriptDialogDismissed?(id)
+    }
     runtime.onExternalAppRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard !self.router.owns(.externalApp, id: id) else { return }
@@ -203,7 +225,7 @@ final class BrowserRuntimeEvents {
         guard let client = self.router.claim(.deviceChooser, id: id, payload: payload),
           let receive = client.onDeviceChooserEvent
         else {
-          self.runtime.resolveDeviceChooserRequestID(id, index: nil)
+          self.runtime.resolveDeviceChooserRequestID(id, optionID: nil)
           return
         }
         receive(payload)
@@ -221,7 +243,24 @@ final class BrowserRuntimeEvents {
         if let owner = self.router.client(for: .deviceChooser, id: id)?.windowID {
           _ = self.router.consume(.deviceChooser, id: id, windowID: owner)
         }
-        self.runtime.resolveDeviceChooserRequestID(id, index: nil)
+        self.runtime.resolveDeviceChooserRequestID(id, optionID: nil)
+        return
+      }
+      receive(payload)
+    }
+    runtime.onHTTPAuthRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let client = self.router.claim(.httpAuth, id: id, payload: payload) else {
+        if let tabID = payload["tabID"] as? String {
+          self.runtime.resolveHTTPAuthRequestID(id, tabID: tabID, username: nil, password: nil)
+        }
+        return
+      }
+      guard let receive = client.onHTTPAuthRequest else {
+        _ = self.router.consume(.httpAuth, id: id, windowID: client.windowID)
+        if let tabID = payload["tabID"] as? String {
+          self.runtime.resolveHTTPAuthRequestID(id, tabID: tabID, username: nil, password: nil)
+        }
         return
       }
       receive(payload)
@@ -235,6 +274,9 @@ final class BrowserRuntimeEvents {
         return
       }
       receive(payload)
+    }
+    runtime.onHTTPAuthDismissed = { [weak self] id in
+      self?.router.client(for: .httpAuth, id: id, removing: true)?.onHTTPAuthDismissed?(id)
     }
     runtime.onSavePromptDismissed = { [weak self] id in
       self?.router.client(for: .savePrompt, id: id, removing: true)?.onSavePromptDismissed?(id)
@@ -312,18 +354,40 @@ final class BrowserRuntimeEvents {
     runtime.resolvePrintRequestID(id, accepted: accepted)
   }
 
+  func resolveJavaScriptDialog(_ id: String, accepted: Bool, input: String?) {
+    guard router.client(for: .javascriptDialog, id: id, removing: true) != nil else { return }
+    runtime.resolveJavaScriptDialogRequestID(id, accepted: accepted, input: input)
+  }
+
   func resolveExternalApp(_ id: String, windowID: String, accepted: Bool) {
     guard router.consume(.externalApp, id: id, windowID: windowID) else { return }
     runtime.resolveExternalAppRequestID(id, accepted: accepted)
   }
 
-  func resolveDeviceChooser(_ id: String, windowID: String, index: Int?) {
+  func resolveDeviceChooser(_ id: String, windowID: String, optionID: String?) {
     guard router.consume(.deviceChooser, id: id, windowID: windowID) else { return }
     if let onDeviceChooserResolution {
-      onDeviceChooserResolution(id, windowID, index)
+      onDeviceChooserResolution(id, windowID, optionID)
       return
     }
-    runtime.resolveDeviceChooserRequestID(id, index: index.map(NSNumber.init(value:)))
+    runtime.resolveDeviceChooserRequestID(id, optionID: optionID)
+  }
+
+  func resolveHTTPAuth(_ request: HTTPAuthRequest, username: String?, password: String?) {
+    guard router.consume(.httpAuth, id: request.id, windowID: request.windowID) else { return }
+    runtime.resolveHTTPAuthRequestID(
+      request.id, tabID: request.tabID.uuidString,
+      username: username, password: password)
+  }
+
+  func rejectHTTPAuth(_ id: String, tabID: String, windowID: String) {
+    guard router.consume(.httpAuth, id: id, windowID: windowID) else { return }
+    runtime.resolveHTTPAuthRequestID(id, tabID: tabID, username: nil, password: nil)
+  }
+
+  func resolveSavePrompt(_ id: String, windowID: String, decision: String) {
+    guard router.consume(.savePrompt, id: id, windowID: windowID) else { return }
+    runtime.resolveSavePromptRequestID(id, decision: decision)
   }
 
   func resolveSavePrompt(_ id: String, windowID: String, decision: String) {

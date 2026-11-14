@@ -9,10 +9,62 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+enum HttpsOnlyProbeEvidence {
+  static let fixtureMarker = "plain-http-loaded"
+
+  enum Verdict: Equatable {
+    case waiting
+    case unexpectedHttpPage
+    case upgradeWarning
+    case loadedHttpFixture
+  }
+
+  static func verdict(href: String, text: String, expectsUpgrade: Bool) -> Verdict {
+    let loadedFixture = text.contains(fixtureMarker)
+    let warned =
+      text.range(of: "HTTPS", options: .caseInsensitive) != nil
+      || text.range(of: "not secure", options: .caseInsensitive) != nil
+    if expectsUpgrade {
+      if loadedFixture { return .unexpectedHttpPage }
+      if warned && !text.isEmpty { return .upgradeWarning }
+    } else if loadedFixture && href.hasPrefix("http:") {
+      return .loadedHttpFixture
+    }
+    return .waiting
+  }
+}
+
+enum HttpsOnlyPageEvidence: Equatable {
+  case retry
+  case passed
+  case failed(String)
+
+  static func evaluate(
+    href: String, text: String, expectsUpgrade: Bool, windowsHidden: Bool,
+    fixtureMarker: String
+  ) -> HttpsOnlyPageEvidence {
+    let loadedFixture = text.contains(fixtureMarker)
+    let warned =
+      text.range(of: "HTTPS", options: .caseInsensitive) != nil
+      || text.range(of: "not secure", options: .caseInsensitive) != nil
+    if expectsUpgrade {
+      if loadedFixture {
+        return .failed("Public HTTP page loaded without an HTTPS-only warning.")
+      }
+      if warned && !text.isEmpty {
+        return windowsHidden ? .passed : .failed("The HTTPS-only warning was visible on screen.")
+      }
+    } else if loadedFixture && href.hasPrefix("http:") {
+      return windowsHidden ? .passed : .failed("The HTTP fixture was visible on screen.")
+    }
+    return .retry
+  }
+}
+
 /// Hidden check that a public HTTP page on a non-default port shows the HTTPS-only interstitial.
 @MainActor
 final class HttpsOnlyProbe {
-  static let fixtureMarker = "plain-http-loaded"
+  static let fixtureMarker = HttpsOnlyProbeEvidence.fixtureMarker
   private static let pageScript =
     "({href:location.href,ready:document.readyState,text:(document.body&&document.body.innerText)||''})"
 
@@ -145,32 +197,17 @@ final class HttpsOnlyProbe {
     let text = page["text"] as? String ?? ""
     lastHref = href
     lastText = text
-    let loadedFixture = text.contains(Self.fixtureMarker)
-    let warned =
-      text.range(of: "HTTPS", options: .caseInsensitive) != nil
-      || text.range(of: "not secure", options: .caseInsensitive) != nil
-    if expectsUpgrade {
-      if loadedFixture {
-        finish(error: "Public HTTP page loaded without an HTTPS-only warning.")
-        return
-      }
-      if warned && !text.isEmpty {
-        guard windowsHidden else {
-          finish(error: "The HTTPS-only warning was visible on screen.")
-          return
-        }
-        finish(passed: true)
-        return
-      }
-    } else if loadedFixture && href.hasPrefix("http:") {
-      guard windowsHidden else {
-        finish(error: "The HTTP fixture was visible on screen.")
-        return
-      }
+    switch HttpsOnlyPageEvidence.evaluate(
+      href: href, text: text, expectsUpgrade: expectsUpgrade, windowsHidden: windowsHidden,
+      fixtureMarker: Self.fixtureMarker)
+    {
+    case .retry:
+      scheduleRead()
+    case .passed:
       finish(passed: true)
-      return
+    case .failed(let message):
+      finish(error: message)
     }
-    scheduleRead()
   }
 
   private var windowsHidden: Bool {

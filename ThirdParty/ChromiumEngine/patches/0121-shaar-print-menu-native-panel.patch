@@ -1,0 +1,136 @@
+--- a/chrome/browser/printing/print_view_manager.cc
++++ b/chrome/browser/printing/print_view_manager.cc
+@@ -12,6 +12,7 @@
+ #include <vector>
+ 
+ #include "base/check.h"
++#include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/no_destructor.h"
+ #include "base/observer_list.h"
+@@ -187,6 +188,13 @@
+ 
+ bool PrintViewManager::PrintPreviewNow(content::RenderFrameHost* rfh,
+                                        bool has_selection) {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    if (has_selection) {
++      return PrintNow(rfh, /*print_selection_only=*/true);
++    }
++    return BasicPrint(rfh);
++  }
++
+   return PrintPreview(rfh,
+ #if BUILDFLAG(IS_CHROMEOS)
+                       mojo::NullAssociatedRemote(),
+--- a/chrome/browser/printing/print_view_manager_unittest.cc
++++ b/chrome/browser/printing/print_view_manager_unittest.cc
+@@ -7,6 +7,7 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
+ #include "base/containers/span.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+@@ -14,6 +15,7 @@
+ #include "base/memory/read_only_shared_memory_region.h"
+ #include "base/memory/ref_counted_memory.h"
+ #include "base/memory/scoped_refptr.h"
++#include "base/test/scoped_command_line.h"
+ #include "base/notreached.h"
+ #include "base/run_loop.h"
+ #include "base/test/bind.h"
+@@ -379,6 +381,65 @@
+ };
+ #endif  // BUILDFLAG(IS_WIN)
+ 
++TEST_F(PrintViewManagerTest, ShaarEmbedderMenuPrintUsesNativePath) {
++  class PrintNowObserver final : public PrintViewManagerBase::TestObserver {
++   public:
++    void OnPrintNow(const content::RenderFrameHost* rfh) override {
++      print_requested = true;
++    }
++    bool print_requested = false;
++  } observer;
++
++  base::test::ScopedCommandLine command_line;
++  command_line.GetProcessCommandLine()->AppendSwitch("shaar-embedder");
++  content::RenderFrameHost* main_frame = web_contents()->GetPrimaryMainFrame();
++  content::RenderFrameHostTester::For(main_frame)
++      ->InitializeRenderFrameIfNeeded();
++
++  PrintViewManager::CreateForWebContents(web_contents());
++  PrintViewManager* print_view_manager =
++      PrintViewManager::FromWebContents(web_contents());
++  ASSERT_TRUE(print_view_manager);
++  print_view_manager->AddTestObserver(observer);
++
++  EXPECT_TRUE(print_view_manager->PrintPreviewNow(
++      main_frame, /*has_selection=*/false));
++  EXPECT_TRUE(observer.print_requested);
++  EXPECT_FALSE(print_view_manager->print_preview_rfh());
++
++  print_view_manager->RemoveTestObserver(observer);
++}
++
++TEST_F(PrintViewManagerTest,
++       ShaarEmbedderMenuPrintSelectionUsesNativePath) {
++  class PrintNowObserver final : public PrintViewManagerBase::TestObserver {
++   public:
++    void OnPrintNow(const content::RenderFrameHost* rfh) override {
++      print_requested = true;
++    }
++    bool print_requested = false;
++  } observer;
++
++  base::test::ScopedCommandLine command_line;
++  command_line.GetProcessCommandLine()->AppendSwitch("shaar-embedder");
++  content::RenderFrameHost* main_frame = web_contents()->GetPrimaryMainFrame();
++  content::RenderFrameHostTester::For(main_frame)
++      ->InitializeRenderFrameIfNeeded();
++
++  PrintViewManager::CreateForWebContents(web_contents());
++  PrintViewManager* print_view_manager =
++      PrintViewManager::FromWebContents(web_contents());
++  ASSERT_TRUE(print_view_manager);
++  print_view_manager->AddTestObserver(observer);
++
++  EXPECT_TRUE(print_view_manager->PrintPreviewNow(
++      main_frame, /*has_selection=*/true));
++  EXPECT_TRUE(observer.print_requested);
++  EXPECT_FALSE(print_view_manager->print_preview_rfh());
++
++  print_view_manager->RemoveTestObserver(observer);
++}
++
+ TEST_F(PrintViewManagerTest, PrintSubFrameAndDestroy) {
+   content::RenderFrameHostTester::For(web_contents()->GetPrimaryMainFrame())
+       ->InitializeRenderFrameIfNeeded();
+--- a/chrome/browser/printing/print_view_manager_base.h
++++ b/chrome/browser/printing/print_view_manager_base.h
+@@ -82,10 +82,8 @@
+   // asynchronous, the actual printing will not be completed on the return of
+   // this function. Returns false if printing is impossible at the moment.
+   virtual bool PrintNow(content::RenderFrameHost* rfh);
+-#if BUILDFLAG(IS_ANDROID)
+   virtual bool PrintNow(content::RenderFrameHost* rfh,
+                         bool print_selection_only);
+-#endif
+ 
+   // Like PrintNow(), but for the node under the context menu, instead of the
+   // entire frame.
+--- a/chrome/browser/printing/print_view_manager_base.cc
++++ b/chrome/browser/printing/print_view_manager_base.cc
+@@ -154,12 +154,10 @@
+   return PrintNowImpl(rfh, /*print_selection_only=*/false);
+ }
+ 
+-#if BUILDFLAG(IS_ANDROID)
+ bool PrintViewManagerBase::PrintNow(content::RenderFrameHost* rfh,
+                                     bool print_selection_only) {
+   return PrintNowImpl(rfh, print_selection_only);
+ }
+-#endif
+ 
+ bool PrintViewManagerBase::PrintNowImpl(content::RenderFrameHost* rfh,
+                                         bool print_selection_only) {

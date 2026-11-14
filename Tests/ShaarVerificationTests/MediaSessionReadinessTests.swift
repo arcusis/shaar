@@ -89,6 +89,21 @@ import Testing
   #expect(parsed.pictureInPicture?.isLive == true)
 }
 
+@Test func shaarMediaStateRejectsNumericBooleanSubstitutes() throws {
+  let payload = try #require(
+    ARCProbeShaarMediaPublicState([
+      "schemaVersion": 1, "playbackState": "playing", "supportedActions": [],
+      "hasVideo": 1, "canSeek": 1, "tabMuted": 1, "silent": 1,
+      "pipVideoState": "inPictureInPicture", "pipVideoIsLive": 1,
+    ]) as? [String: Any])
+  #expect(payload["hasVideo"] as? Bool == false)
+  #expect(payload["canSeek"] as? Bool == false)
+  #expect(payload["muted"] as? Bool == false)
+  #expect(payload["silent"] as? Bool == false)
+  let pip = try #require(payload["pictureInPicture"] as? [String: Any])
+  #expect(pip["live"] as? Bool == false)
+}
+
 @Test func shaarMediaEventsReachOnlyTheirOwnedTab() throws {
   let event: [String: Any] = [
     "schemaVersion": 1, "kind": "state_changed",
@@ -104,6 +119,27 @@ import Testing
   #expect(owned["pipCount"] as? Int == 1)
   #expect(foreign["mediaCount"] as? Int == 0)
   #expect(foreign["pipCount"] as? Int == 0)
+}
+
+@Test func shaarMediaCaptureFlagsMustBeJSONBooleans() {
+  let event: [String: Any] = [
+    "schemaVersion": 1, "kind": "capture_changed",
+    "camera": 1, "microphone": false, "screen": false,
+  ]
+  let result = ARCProbeShaarMediaEventDispatch(event, true)
+  #expect(result["accessCount"] as? Int == 0)
+}
+
+@Test func privateShaarMediaCaptureFlagsMustBeJSONBooleans() {
+  for key in ["camera", "microphone", "screen"] {
+    var event: [String: Any] = [
+      "schemaVersion": 1, "kind": "capture_changed",
+      "camera": false, "microphone": false, "screen": false,
+    ]
+    event[key] = 1
+    let result = ARCProbePrivateShaarMediaEventDispatch(event)
+    #expect(result["accessCount"] as? Int == 0)
+  }
 }
 
 @Test func desktopCaptureRequestsReachTheObjectiveCReceivePathForOwnedTabs() throws {
@@ -174,6 +210,14 @@ import Testing
   #expect((missingReply["received"] as? [String: Any])?.isEmpty == true)
   #expect(missingReply["replyID"] as? String == "")
   #expect(missingReply["replyOutcome"] as? Int == -1)
+}
+
+@Test func closingAWindowCancelsOnlyItsPendingWebShareRequests() throws {
+  let result = ARCProbeWebShareWindowCloseDispatch()
+
+  #expect(result["replyID"] as? String == result["closedRequestID"] as? String)
+  #expect(result["replyOutcome"] as? Int == 0)
+  #expect(result["pendingRequestCount"] as? Int == 1)
 }
 
 @Test func printRequestsRequireABI16AndOwnedLiveTabOnTheObjectiveCReceivePath() throws {

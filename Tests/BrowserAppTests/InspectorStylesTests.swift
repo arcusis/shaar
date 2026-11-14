@@ -10,11 +10,26 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorStylesTests {
+  @Test func backendFailuresUseLocalizedPageStyleRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorStylesModel.failureMessage(for: error)
+        == InspectorL10n.string("Could not complete the page style change. Try again."))
+    let known = InspectorFailure("CSS could not be applied.")
+    #expect(
+      InspectorStylesModel.failureMessage(for: known)
+        == InspectorL10n.display(known.localizedDescription))
+  }
+
   @Test func declarationToggleNameIdentifiesTheProperty() {
     let enabled = InspectorDeclaration(name: "color", value: "red", disabled: false)
     let disabled = InspectorDeclaration(name: "color", value: "red", disabled: true)
     #expect(InspectorStylesView.declarationToggleAccessibilityLabel(for: enabled) == "color")
     #expect(InspectorStylesView.declarationToggleAccessibilityLabel(for: disabled) == "color")
+  }
+
+  @Test func matchedRulesLoadingIndicatorHasAccessibleLabel() {
+    #expect(InspectorStylesView.matchedRulesLoadingAccessibilityLabel == "Reading styles…")
   }
 
   @Test func authoredDeclarationsPreserveFallbacksAndKeepDisabledRows() {
@@ -106,6 +121,89 @@ import Testing
     }
     #expect(model.rules.isEmpty && model.computed.isEmpty && model.selectedID == nil)
     await #expect(throws: InspectorFailure.self) { _ = try await model.screenshot() }
+  }
+
+  @Test func cancelledStyleEditDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let edit = Task { @MainActor in await inspector.styles.edit(property: "color", value: "red", important: false) }
+    edit.cancel()
+    await edit.value
+
+    #expect(inspector.styles.failure == nil)
+  }
+
+  @Test func cancelledOverlayToggleDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+    try inspector.styles.receive(
+      rules: [], computed: [.init(name: "display", value: "grid")], selectionID: 8,
+      generation: inspector.documentGeneration)
+
+    let toggle = Task { @MainActor in await inspector.styles.toggleOverlay() }
+    toggle.cancel()
+    await toggle.value
+
+    #expect(!inspector.styles.overlay)
+    #expect(inspector.styles.failure == nil)
+  }
+
+  @Test func cancelledRuleAdditionDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let addition = Task { @MainActor in await inspector.styles.addRule(selector: ".new-rule") }
+    addition.cancel()
+    await addition.value
+
+    #expect(inspector.styles.failure == nil)
+  }
+
+  @Test func cancelledStyleUndoDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let undo = Task { @MainActor in await inspector.styles.undo() }
+    undo.cancel()
+    await undo.value
+
+    #expect(inspector.styles.failure == nil)
+  }
+
+  @Test func cancelledScreenshotDoesNotStartCapture() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let capture = Task { @MainActor in try await inspector.styles.screenshot() }
+    capture.cancel()
+    await #expect(throws: CancellationError.self) { try await capture.value }
+
+    #expect(!inspector.styles.capturing)
+  }
+
+  @Test func cancelledPseudoToggleDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let toggle = Task { @MainActor in await inspector.styles.togglePseudo("hover") }
+    toggle.cancel()
+    await toggle.value
+
+    #expect(inspector.styles.forcedPseudos.isEmpty)
+    #expect(inspector.styles.failure == nil)
   }
 
   @Test func nativeCSSPanelRendersGridFlexAndSourceLimitStates() async throws {

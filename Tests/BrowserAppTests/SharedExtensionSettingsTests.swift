@@ -87,18 +87,92 @@ private actor DelayedSettingsExtensionsTransport: ShaarExtensionsTransport {
 
   private static func list(enabled: Bool) -> Data {
     Data(
-      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.2","enabled":\#(enabled),"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#.utf8)
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.2","enabled":\#(enabled),"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#
+        .utf8)
+  }
+}
+
+private actor CancelledManageSettingsTransport: ShaarExtensionsTransport {
+  func submitExtensions(
+    profileID: UUID, operation: ShaarExtensionsOperation, arguments: Data
+  ) async throws -> Data {
+    if operation == .list {
+      return Data(
+        #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.2","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#.utf8)
+    }
+    throw CancellationError()
+  }
+}
+
+private actor DelayedReconcileExtensionsTransport: ShaarExtensionsTransport {
+  private var firstManageStarted = false
+  private var firstManageWaiter: CheckedContinuation<Void, Never>?
+  private var firstManageReply: CheckedContinuation<Data, Never>?
+  private var manageCount = 0
+
+  func submitExtensions(
+    profileID: UUID, operation: ShaarExtensionsOperation, arguments: Data
+  ) async throws -> Data {
+    if operation == .list {
+      return Data(#"{"schemaVersion":1,"extensions":[]}"#.utf8)
+    }
+    manageCount += 1
+    if manageCount == 1 {
+      firstManageStarted = true
+      firstManageWaiter?.resume()
+      firstManageWaiter = nil
+      return await withCheckedContinuation { firstManageReply = $0 }
+    }
+    return Data(#"{"schemaVersion":1,"installed":true}"#.utf8)
+  }
+
+  func waitForFirstManage() async {
+    guard !firstManageStarted else { return }
+    await withCheckedContinuation { firstManageWaiter = $0 }
+  }
+
+  func releaseFirstAsQueued() {
+    firstManageReply?.resume(returning: Data(#"{"schemaVersion":1,"queued":true}"#.utf8))
+    firstManageReply = nil
   }
 }
 
 @Suite("Shared extension Settings")
 struct SharedExtensionSettingsTests {
+  @Test @MainActor func staleReconcileCannotReplaceNewerProfileResult() async throws {
+    let profileID = UUID()
+    let extensionID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+    ).write(to: file)
+    let transport = DelayedReconcileExtensionsTransport()
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter, profiles: { [profileID: "Work"] })
+    await model.reload()
+
+    let older = Task { await model.reconcile(profileID: profileID) }
+    await transport.waitForFirstManage()
+    await model.reconcile(profileID: profileID)
+    #expect(model.rows.first?.profiles[profileID]?.pending == false)
+
+    await transport.releaseFirstAsQueued()
+    await older.value
+    #expect(model.rows.first?.id == extensionID)
+    #expect(model.rows.first?.profiles[profileID]?.pending == false)
+    #expect(model.rows.first?.profiles[profileID]?.failed == false)
+  }
+
   @Test @MainActor func olderExtensionReloadCannotReplaceNewerState() async throws {
     let profileID = UUID()
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
     try Data(
-      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#
+        .utf8
     ).write(to: file)
     let transport = DelayedSettingsExtensionsTransport()
     let adapter = ShaarExtensionsAdapter(shaar: transport)
@@ -134,6 +208,51 @@ struct SharedExtensionSettingsTests {
     await model.setEnabled(false, extensionID: row.id, profileID: profileID)
     #expect(model.rows.first?.profiles[profileID]?.enabled == true)
     #expect(model.error == SettingsL10n.string("Could not update the extension. Try again."))
+  }
+
+  @Test @MainActor func cancelledToggleDoesNotShowFailure() async throws {
+    let profileID = UUID()
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+    ).write(to: file)
+    let transport = CancelledManageSettingsTransport()
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter, profiles: { [profileID: "Work"] })
+    await model.reload()
+    let row = try #require(model.rows.first)
+
+    let toggle = Task { @MainActor in
+      await model.setEnabled(false, extensionID: row.id, profileID: profileID)
+    }
+    toggle.cancel()
+    await toggle.value
+
+    #expect(model.error == nil)
+  }
+
+  @Test @MainActor func cancelledReconcileDoesNotStartExtensionRequests() async throws {
+    let profileID = UUID()
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+    ).write(to: file)
+    let transport = SettingsExtensionsTransport(profiles: [profileID: true])
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter, profiles: { [profileID: "Work"] })
+
+    let reconcile = Task { @MainActor in await model.reconcile(profileID: profileID) }
+    reconcile.cancel()
+    await reconcile.value
+
+    let calls = await transport.calls
+    #expect(calls.isEmpty)
   }
 
   @Test @MainActor func listFailureExplainsWhyExtensionsAreMissing() async throws {

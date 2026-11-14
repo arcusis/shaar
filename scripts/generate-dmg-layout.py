@@ -37,8 +37,14 @@ def background_alias():
     return Alias(volume=volume, target=target).to_bytes()
 
 
-def main():
-    output = pathlib.Path(__file__).resolve().parent.parent / "Resources/Installer/.DS_Store"
+def main(output=None):
+    output = pathlib.Path(output) if output is not None else (
+        pathlib.Path(__file__).resolve().parent.parent / "Resources/Installer/.DS_Store"
+    )
+    if output.is_symlink():
+        raise ValueError(f"DMG layout output must not be a symlink: {output}")
+    if output.exists() and not output.is_file():
+        raise ValueError(f"DMG layout output is not a regular file: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     with DSStore.open(str(output), "w+") as store:
         store["."]["vSrn"] = ("long", 1)

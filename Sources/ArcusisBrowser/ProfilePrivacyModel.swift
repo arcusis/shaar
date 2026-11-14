@@ -232,6 +232,7 @@ final class ProfilePrivacyModel {
   private(set) var cookiesBlocked: Bool?
   private(set) var cookiesManaged = false
   private(set) var busy = false
+  private(set) var busyMessage: String?
   private(set) var loaded = false
   private(set) var failure: String?
   private(set) var message: String?
@@ -250,41 +251,57 @@ final class ProfilePrivacyModel {
   }
 
   func load() async {
-    await run(failureMessage: "Could not load profile privacy settings. Try again.") {
+    await run(
+      progressMessage: "Loading site permissions…",
+      failureMessage: "Could not load profile privacy settings. Try again.") {
       try await self.backend.loadProfile(self.profileID)
+      try Task.checkCancellation()
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
       self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
       try await self.refreshPermissions()
+      try Task.checkCancellation()
       self.loaded = true
     }
   }
 
   func clear(siteData: Bool) async {
-    await run(failureMessage: "Could not clear this profile's data. Try again.") {
+    await run(
+      progressMessage: siteData ? "Clearing site data…" : "Clearing cache…",
+      failureMessage: "Could not clear this profile's data. Try again.") {
       try await self.backend.loadProfile(self.profileID)
+      try Task.checkCancellation()
       if siteData {
         try await self.backend.clearSiteData(self.profileID)
       } else {
         try await self.backend.clearCache(self.profileID)
       }
+      try Task.checkCancellation()
       self.message = SettingsL10n.string(siteData ? "Site data cleared." : "Cache cleared.")
     }
   }
 
   func resetPermissions(origin: String) async {
     guard sites.contains(where: { $0.id == origin }) else { return }
-    await run(failureMessage: "Could not reset site permissions. Try again.") {
+    await run(
+      progressMessage: "Resetting site permissions…",
+      failureMessage: "Could not reset site permissions. Try again.") {
       try await self.backend.loadProfile(self.profileID)
+      try Task.checkCancellation()
       try await self.backend.resetPermissions(self.profileID, origin: origin)
+      try Task.checkCancellation()
       try await self.refreshPermissions()
+      try Task.checkCancellation()
       self.message = Self.resetPermissionsMessage(origin: origin)
     }
   }
 
   func setCookiesBlocked(_ blocked: Bool) async {
     guard cookiesBlocked != nil, !cookiesManaged else { return }
-    await run(failureMessage: "Could not update the third-party cookie setting. Try again.") {
+    await run(
+      progressMessage: "Updating third-party cookie setting…",
+      failureMessage: "Could not update the third-party cookie setting. Try again.") {
       try await self.backend.setThirdPartyCookiesBlocked(blocked, profileID: self.profileID)
+      try Task.checkCancellation()
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
       self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
       if self.cookiesBlocked != blocked {
@@ -297,22 +314,36 @@ final class ProfilePrivacyModel {
 
   private func refreshPermissions() async throws {
     let origins = try await backend.permissionOrigins(profileID)
+    try Task.checkCancellation()
     var result: [ProfilePermissionSite] = []
     for origin in Set(origins).sorted() {
       let settings = try await backend.permissions(profileID, origin: origin)
+      try Task.checkCancellation()
       let permissions = try ProfileSitePermission.exceptions(settings)
       if !permissions.isEmpty { result.append(.init(id: origin, permissions: permissions)) }
     }
     sites = result
   }
 
-  private func run(failureMessage: String? = nil, _ operation: () async throws -> Void) async {
+  private func run(
+    progressMessage: String, failureMessage: String? = nil, _ operation: () async throws -> Void
+  ) async {
     guard !busy else { return }
     busy = true
+    busyMessage = SettingsL10n.string(progressMessage)
     failure = nil
     message = nil
-    defer { busy = false }
-    do { try await operation() } catch {
+    defer {
+      busy = false
+      busyMessage = nil
+    }
+    do {
+      try await operation()
+      guard !Task.isCancelled else { return }
+    } catch is CancellationError {
+      return
+    } catch {
+      guard !Task.isCancelled else { return }
       if error is ProfilePermissionDataError {
         failure = error.localizedDescription
       } else {

@@ -27,6 +27,7 @@ final class PrivateBrowserHost {
   private let presentsWindows: Bool
   private let preferences: BrowserPreferencesStore
   private let profileIsDownloading: (UUID) -> Bool
+  private let reportError: (Error) -> Void
   private var owners: [String: Owner] = [:]
   private var contextsBySource: [String: String] = [:]
   private var windowsByContext: [String: Set<String>] = [:]
@@ -41,6 +42,7 @@ final class PrivateBrowserHost {
     toggleFullScreen: @escaping (NSWindow) -> Void = { $0.toggleFullScreen(nil) },
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
     profileIsDownloading: @escaping (UUID) -> Bool = { _ in false },
+    reportError: @escaping (Error) -> Void = { NSApp.presentError($0) },
     sourceProfileID: @escaping () -> String?
   ) {
     self.runtime = runtime
@@ -49,6 +51,7 @@ final class PrivateBrowserHost {
     self.toggleFullScreen = toggleFullScreen
     self.preferences = preferences
     self.profileIsDownloading = profileIsDownloading
+    self.reportError = reportError
     self.sourceProfileID = sourceProfileID
   }
 
@@ -209,11 +212,9 @@ final class PrivateBrowserHost {
     pendingWindowRequests[contextID] = [(windowID, tabID)]
     let runtime = self.runtime
     runtime.createPrivateContextID(contextID, sourceProfileID: source) {
-      [weak self, runtime] success, _ in
+      [weak self, runtime] success, error in
       guard let self else {
-        if success, !runtime.releasePrivateContextID(contextID) {
-          _ = runtime.releasePrivateContextID(contextID)
-        }
+        if success { Self.retryContextRelease(contextID, runtime: runtime) }
         return
       }
       if self.isDetached {
@@ -228,7 +229,22 @@ final class PrivateBrowserHost {
         }
         return
       }
-      guard success, !self.runtime.isQuitting, self.contextsBySource[source] == contextID,
+      guard success else {
+        self.pendingWindowRequests.removeValue(forKey: contextID)
+        if self.contextsBySource[source] == contextID {
+          self.contextsBySource.removeValue(forKey: source)
+        }
+        self.windowsByContext.removeValue(forKey: contextID)
+        if !self.runtime.isQuitting {
+          self.reportError(
+            error ?? NSError(
+              domain: "org.arcusis.shaar.private-window", code: 1,
+              userInfo: [NSLocalizedDescriptionKey: "The private window context could not be created."]
+            ))
+        }
+        return
+      }
+      guard !self.runtime.isQuitting, self.contextsBySource[source] == contextID,
         self.windowsByContext[contextID] != nil
       else {
         self.pendingWindowRequests.removeValue(forKey: contextID)
@@ -238,7 +254,7 @@ final class PrivateBrowserHost {
         if self.windowsByContext[contextID]?.isEmpty == true {
           self.windowsByContext.removeValue(forKey: contextID)
         }
-        if success, self.windowsByContext[contextID] == nil {
+        if self.windowsByContext[contextID] == nil {
           self.releaseContext(contextID)
         }
         return
@@ -255,7 +271,7 @@ final class PrivateBrowserHost {
   static func supportsPrivateCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .bookmarkPage, .bookmarks, .history, .downloads, .extensions, .settings,
-      .newMiniWindow, .checkForUpdates:
+      .newMiniWindow, .checkForUpdates, .print:
       false
     default: true
     }
@@ -265,11 +281,20 @@ final class PrivateBrowserHost {
     guard let owner = activeOwner, !runtime.isQuitting,
       Self.supportsPrivateCommand(command), owner.store.sheet == nil
     else { return false }
-    return Self.windowCanPerform(command, store: owner.store)
+    return Self.windowCanPerform(
+      command, store: owner.store, pasteboard: .general,
+      searchEngine: preferences.searchEngine(for: owner.store.session.selectedSpace.profileID))
   }
 
-  static func windowCanPerform(_ command: BrowserMenuCommand, store: BrowserStore) -> Bool {
+  static func windowCanPerform(
+    _ command: BrowserMenuCommand, store: BrowserStore,
+    pasteboard: NSPasteboard = .general, searchEngine: BrowserSearchEngine = .google
+  ) -> Bool {
     return switch command {
+    case .back:
+      store.session.selectedPage.flatMap { store.privatePage?.pages[$0.tab.id] }?.canGoBack == true
+    case .forward:
+      store.session.selectedPage.flatMap { store.privatePage?.pages[$0.tab.id] }?.canGoForward == true
     case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
     case .developerTools, .chromiumDeveloperTools, .inspector:
       !store.commandIsOpen && store.privatePage?.inspectorTarget != nil
@@ -281,10 +306,13 @@ final class PrivateBrowserHost {
     case .addFavorite: store.canFavoriteCurrentPage
     case .nextSpace, .previousSpace: store.canCycleSpace
     case .reload, .hardReload: store.canReloadCurrentPage
+    case .zoomIn, .zoomOut, .actualSize: store.session.selectedPage != nil
     case .find: store.canFindCurrentPage
     case .findNext, .findPrevious: store.pageFind?.canMove == true
     case .sharePage:
       !store.commandIsOpen && NativeBrowserHost.shareURL(for: store) != nil
+    case .pasteAndGo:
+      PasteAndGoCommand.destination(in: pasteboard, searchEngine: searchEngine) != nil
     default: true
     }
   }
@@ -293,6 +321,10 @@ final class PrivateBrowserHost {
     guard let owner = activeOwner, canPerform(command) else { return }
     let store = owner.store
     switch command {
+    case .back:
+      if let id = store.session.selectedPage?.tab.id { owner.page.goBack(id) }
+    case .forward:
+      if let id = store.session.selectedPage?.tab.id { owner.page.goForward(id) }
     case .developerTools: owner.page.toggleChromiumDeveloperTools()
     case .chromiumDeveloperTools: owner.page.toggleChromiumDeveloperTools()
     case .inspector: owner.page.toggleInspector()
@@ -331,10 +363,21 @@ final class PrivateBrowserHost {
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: _ = store.reloadCurrentPage()
     case .hardReload: _ = store.reloadCurrentPage(.bypassingCache)
+    case .zoomIn, .zoomOut, .actualSize:
+      _ = PageZoomMenuRouter.route(command, focusedTabID: store.session.selectedPage?.tab.id) {
+        action, tab in
+        runtime.performPrivatePageZoomAction(
+          action, tabID: tab.uuidString, windowID: owner.windowID, contextID: owner.contextID)
+      }
     case .sharePage:
       if let url = NativeBrowserHost.shareURL(for: store) {
         NativeBrowserHost.presentSharePicker(for: url, in: owner.window)
       }
+    case .pasteAndGo:
+      _ = PasteAndGoCommand.route(
+        in: .general, store: store,
+        searchEngine: preferences.searchEngine(for: store.session.selectedSpace.profileID),
+        navigate: owner.page.navigateCurrentPage(to:))
     case .find: store.showPageFind()
     case .findNext: store.movePageFind(forward: true)
     case .findPrevious: store.movePageFind(forward: false)
@@ -368,8 +411,10 @@ final class PrivateBrowserHost {
     guard let nativeWindow = runtime.window(forPrivateWindowID: window, contextID: context),
       let container = runtime.hostView(forPrivateWindowID: window, contextID: context)
     else {
-      runtime.closePrivateWindowID(window, contextID: context) { [weak self] closed in
-        if closed { self?.releaseEmptyContext(context, source: source) }
+      runtime.closePrivateWindowID(window, contextID: context) { [weak self] _ in
+        // The runtime may report that the window is already gone. Either way this
+        // host never acquired it, so release the context if no other owner needs it.
+        self?.releaseEmptyContext(context, source: source)
       }
       return
     }
@@ -459,6 +504,15 @@ final class PrivateBrowserHost {
     for context in Array(contextsAwaitingRelease) { releaseContext(context) }
   }
 
+  private static func retryContextRelease(_ context: String, runtime: ARCChromiumRuntime) {
+    guard !runtime.isQuitting else { return }
+    guard !runtime.releasePrivateContextID(context) else { return }
+    Task { @MainActor in
+      do { try await Task.sleep(for: .seconds(1)) } catch { return }
+      retryContextRelease(context, runtime: runtime)
+    }
+  }
+
   private func releaseContext(_ context: String) {
     if runtime.releasePrivateContextID(context) {
       contextsAwaitingRelease.remove(context)
@@ -473,16 +527,15 @@ final class PrivateBrowserHost {
   }
 
   private func scheduleContextReleaseRetry() {
-    guard !isDetached, !runtime.isQuitting, !contextsAwaitingRelease.isEmpty,
+    guard !runtime.isQuitting, !contextsAwaitingRelease.isEmpty,
       contextReleaseRetryTask == nil
     else { return }
-    contextReleaseRetryTask = Task { @MainActor [weak self] in
+    contextReleaseRetryTask = Task { @MainActor in
       do {
         try await Task.sleep(for: .seconds(1))
       } catch {
         return
       }
-      guard let self else { return }
       self.contextReleaseRetryTask = nil
       self.retryPendingContextReleases()
     }

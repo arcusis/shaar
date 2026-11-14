@@ -101,11 +101,14 @@ private struct FirefoxProfileImporter: BrowserProfileImporter {
 }
 
 private func rejectPrivateProfile(_ url: URL) throws {
-  let names = url.standardizedFileURL.pathComponents.suffix(3).map { $0.lowercased() }
+  let resolved = url.resolvingSymlinksInPath().standardizedFileURL
+  let names = resolved.pathComponents.map { $0.lowercased() }
+  let profileNames = names.suffix(3)
   let markers = ["incognito", "inprivate", "guest profile", "guest", "private browsing"]
   if names.contains(where: { name in
     markers.contains { marker in
-      name.range(of: "\\b\(marker)\\b", options: .regularExpression) != nil
+      if marker == "guest" && !profileNames.contains(name) { return false }
+      return name.range(of: "\\b\(marker)\\b", options: .regularExpression) != nil
     }
   }) {
     throw BrowserImport.ImportError.privateProfile
@@ -248,37 +251,64 @@ private func isFirefoxRootFolder(
   return nodes[folder.parent]?.parent == 0
 }
 
+struct BrowserImportAddressCache {
+  private var lastAddress: String?
+  private var lastAddressIsValid = false
+
+  mutating func accepts(_ address: String) -> Bool {
+    guard lastAddress != address else { return lastAddressIsValid }
+    lastAddress = address
+    lastAddressIsValid = LibraryAddress.destination(address) != nil
+    return lastAddressIsValid
+  }
+}
+
 private func groupedHistory(
   _ rows: [[String: BrowserImportSQLite.Value]], source: BrowserImportSource,
   date: (BrowserImportSQLite.Value) -> Date?
 ) -> [BrowserImportItem] {
-  var grouped: [String: (String, [Date])] = [:]
-  var order: [String] = []
+  var groupIndexes: [String: Int] = [:]
+  var groups: [(
+    address: String, title: String, visits: [Date], needsSort: Bool, lastVisit: Date?
+  )] = []
+  var addressCache = BrowserImportAddressCache()
   for row in rows {
-    guard let address = row["url"]?.string, LibraryAddress.destination(address) != nil,
+    guard let address = row["url"]?.string else { continue }
+    let existingIndex = groupIndexes[address]
+    guard existingIndex != nil || addressCache.accepts(address),
       let rawVisit = row["visit_time"], let visit = date(rawVisit)
     else { continue }
-    if grouped[address] == nil {
-      order.append(address)
-      grouped[address] = (title: row["title"]?.string ?? "", visits: [])
+    let index: Int
+    if let existingIndex {
+      index = existingIndex
+    } else {
+      index = groups.count
+      groupIndexes[address] = index
+      groups.append((
+        address: address, title: row["title"]?.string ?? "", visits: [], needsSort: false,
+        lastVisit: nil))
     }
     let title = row["title"]?.string ?? ""
     if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      grouped[address, default: (title, [])].0 = title
+      groups[index].title = title
     }
-    grouped[address, default: (title, [])].1.append(visit)
+    if let lastVisit = groups[index].lastVisit, visit < lastVisit {
+      groups[index].needsSort = true
+    }
+    groups[index].lastVisit = visit
+    groups[index].visits.append(visit)
   }
-  return order.compactMap { address in
-    guard let (title, visits) = grouped[address], !visits.isEmpty else { return nil }
+  return groups.compactMap { group in
+    guard !group.visits.isEmpty else { return nil }
     let displayTitle: String
-    if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      displayTitle = URL(string: address)?.host() ?? address
+    if group.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      displayTitle = URL(string: group.address)?.host() ?? group.address
     } else {
-      displayTitle = title
+      displayTitle = group.title
     }
     return BrowserImportItem(
-      kind: .history, source: source, title: displayTitle, address: address,
-      visitTimes: visits.sorted())
+      kind: .history, source: source, title: displayTitle, address: group.address,
+      visitTimes: group.needsSort ? group.visits.sorted() : group.visits)
   }
 }
 

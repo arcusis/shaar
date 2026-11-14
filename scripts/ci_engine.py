@@ -36,10 +36,12 @@ def matching_pr_bundle_run_id(response: dict, pr_number: int, repository_full_na
         return ""
     runs = [
         run
-        for run in response.get("workflow_runs", [])
+        for run in (response.get("workflow_runs") or [])
+        if isinstance(run, dict)
         if run.get("conclusion") == "success"
         and (run.get("head_repository") or {}).get("full_name") == repository_full_name
-        and any(pr.get("number") == pr_number for pr in run.get("pull_requests", []))
+        and any(pr.get("number") == pr_number
+                for pr in (run.get("pull_requests") or []) if isinstance(pr, dict))
     ]
     if not runs:
         return ""
@@ -118,7 +120,19 @@ def context(root: Path) -> dict:
             "engine": pin["sha256"]}
 
 
+def validate_archive_outputs(directory: Path) -> None:
+    if directory.is_symlink() or not directory.is_dir():
+        raise ValueError(f"Verification archive output directory is not a regular directory: {directory}")
+    for name in ("verification.tar.gz", "bundle.json"):
+        path = directory / name
+        if path.is_symlink():
+            raise ValueError(f"Verification archive output must not be a symlink: {path}")
+        if path.exists() and not path.is_file():
+            raise ValueError(f"Verification archive output is not a regular file: {path}")
+
+
 def archive_bundle(root: Path, directory: Path) -> None:
+    validate_archive_outputs(directory)
     bundle = root / "build" / BUNDLE_NAME
     if not bundle.is_dir() or bundle.is_symlink():
         raise ValueError("Verification bundle is missing")
@@ -130,7 +144,15 @@ def archive_bundle(root: Path, directory: Path) -> None:
 
 
 def validate_bundle_archive(root: Path, directory: Path) -> Path:
-    metadata = json.loads((directory / "bundle.json").read_text())
+    metadata_path = directory / "bundle.json"
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(
+            f"Verification bundle metadata is missing or invalid: {metadata_path}: {error}"
+        ) from error
+    if not isinstance(metadata, dict):
+        raise ValueError(f"Verification bundle metadata must be a JSON object: {metadata_path}")
     if any(metadata.get(key) != value for key, value in context(root).items()):
         raise ValueError("Verification bundle source tree, build inputs, toolchain or engine pin differs")
     archive = directory / "verification.tar.gz"
@@ -142,6 +164,8 @@ def validate_bundle_archive(root: Path, directory: Path) -> Path:
 def restore_bundle(root: Path, directory: Path) -> None:
     archive = validate_bundle_archive(root, directory)
     destination = root / "build"
+    if destination.is_symlink() or not destination.is_dir():
+        raise ValueError("Verification bundle destination is not a directory")
     bundle_destination = destination / BUNDLE_NAME
     if bundle_destination.exists() or bundle_destination.is_symlink():
         raise ValueError("Verification bundle destination already exists")

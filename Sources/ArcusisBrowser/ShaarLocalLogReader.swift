@@ -5,7 +5,13 @@
 import Foundation
 
 struct ShaarLocalLogReader {
+  private struct FileIdentity: Equatable {
+    let system: UInt64
+    let file: UInt64
+  }
+
   let file: URL
+  private var fileIdentity: FileIdentity?
   private var offset: UInt64 = 0
   private var pending = ""
 
@@ -14,7 +20,25 @@ struct ShaarLocalLogReader {
   mutating func readLines() throws -> [String] {
     guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
       let size = (attributes[.size] as? NSNumber)?.uint64Value
-    else { return [] }
+    else {
+      if !FileManager.default.fileExists(atPath: file.path) {
+        fileIdentity = nil
+        offset = 0
+        pending = ""
+      }
+      return []
+    }
+    let identity: FileIdentity? = {
+      guard let system = (attributes[.systemNumber] as? NSNumber)?.uint64Value,
+        let file = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
+      else { return nil }
+      return FileIdentity(system: system, file: file)
+    }()
+    if let fileIdentity, let identity, fileIdentity != identity {
+      offset = 0
+      pending = ""
+    }
+    fileIdentity = identity
     if size < offset {
       offset = 0
       pending = ""

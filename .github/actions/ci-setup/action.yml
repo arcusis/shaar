@@ -25,7 +25,7 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: .venv
-        key: python-${{ runner.os }}-${{ runner.arch }}-3.13-${{ inputs.mode == 'codeql' && 'stdlib' || hashFiles('scripts/*requirements.txt') }}
+        key: python-${{ runner.os }}-${{ runner.arch }}-3.13-${{ inputs.mode == 'codeql' && 'stdlib' || inputs.mode == 'engine-probe' && 'stdlib' || inputs.mode == 'shipping' && 'shipping' || 'release' }}-${{ hashFiles('scripts/*requirements.txt') }}
     - name: Configure Python and report toolchain
       id: toolchain
       shell: bash
@@ -71,6 +71,8 @@ runs:
           ~/Library/Caches/org.swift.swiftpm
           ~/.cache/org.swift.swiftpm
         key: swift-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+        restore-keys: |
+          swift-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-
     - name: Cache pinned engine archive independently
       if: inputs.mode == 'fast' || inputs.mode == 'verification' || inputs.mode == 'shipping'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -83,6 +85,8 @@ runs:
       with:
         path: build/ci-tool-archives
         key: ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci-tools.json') }}
+        restore-keys: |
+          ci-tool-archives-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Install verified fast-check binaries
       if: inputs.tools == 'true'
       shell: bash

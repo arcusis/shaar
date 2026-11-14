@@ -81,42 +81,49 @@ class InstallScope {
   ~InstallScope() { --InstallDepth(); }
 };
 
+}  // namespace
+
+std::optional<std::string_view> PermissionKindForRequestType(
+    ::permissions::RequestType type) {
+  if (type == ::permissions::RequestType::kCameraStream)
+    return "camera";
+  if (type == ::permissions::RequestType::kMicStream)
+    return "microphone";
+  if (type == ::permissions::RequestType::kGeolocation)
+    return "location";
+  if (type == ::permissions::RequestType::kNotifications)
+    return "notifications";
+  if (type == ::permissions::RequestType::kClipboard)
+    return "clipboard";
+  if (type == ::permissions::RequestType::kMidiSysex)
+    return "midi";
+  if (type == ::permissions::RequestType::kMultipleDownloads)
+    return "multipleDownloads";
+  if (type == ::permissions::RequestType::kWindowManagement)
+    return "windowManagement";
+  if (type == ::permissions::RequestType::kLocalFonts)
+    return "localFonts";
+  if (type == ::permissions::RequestType::kStorageAccess)
+    return "storageAccess";
+  if (type == ::permissions::RequestType::kRegisterProtocolHandler)
+    return "protocolHandler";
+  return std::nullopt;
+}
+
+namespace {
+
 std::optional<std::string_view> KindFor(
     const ::permissions::PermissionRequest& request) {
   const std::optional<::permissions::RequestType> type =
       request.request_type_if_present();
-  if (!type)
-    return std::nullopt;
-  if (*type == ::permissions::RequestType::kCameraStream)
-    return "camera";
-  if (*type == ::permissions::RequestType::kMicStream)
-    return "microphone";
-  if (*type == ::permissions::RequestType::kGeolocation)
-    return "location";
-  if (*type == ::permissions::RequestType::kNotifications)
-    return "notifications";
-  if (*type == ::permissions::RequestType::kClipboard)
-    return "clipboard";
-  if (*type == ::permissions::RequestType::kMidiSysex)
-    return "midi";
-  if (*type == ::permissions::RequestType::kMultipleDownloads)
-    return "multipleDownloads";
-  if (*type == ::permissions::RequestType::kWindowManagement)
-    return "windowManagement";
-  if (*type == ::permissions::RequestType::kLocalFonts)
-    return "localFonts";
-  if (*type == ::permissions::RequestType::kStorageAccess)
-    return "storageAccess";
-  if (*type == ::permissions::RequestType::kRegisterProtocolHandler)
-    return "protocolHandler";
-  return std::nullopt;
+  return type ? PermissionKindForRequestType(*type) : std::nullopt;
 }
 
 bool OneTimeGrant(const std::vector<std::string>& kinds) {
   if (kinds.empty())
     return false;
   for (const std::string_view kind : kinds) {
-    if (kind != "camera" && kind != "microphone" && kind != "location")
+    if (kind != "camera" && kind != "microphone")
       return false;
   }
   return true;

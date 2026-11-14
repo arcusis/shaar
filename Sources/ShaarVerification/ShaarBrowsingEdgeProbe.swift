@@ -277,7 +277,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     report.add(await checkDownloadLink(context, runtime, pageURL))
     report.add(contentsOf: await checkPopups(context, runtime, pageURL))
     report.add(await checkHang(context, runtime, pageURL))
-    report.add(await checkCrash(context))
+    report.add(await checkCrash(context, runtime, pageURL))
     report.add(contentsOf: await checkDialogs(context, runtime, pageURL, dialogs))
     cancelActiveDownloads(context)
     let stray = visibleWindowLabels()
@@ -330,10 +330,17 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   ) async -> Double? {
     let json = await evaluate(
       runtime, tab: selectedID(context), script: "({scale:window.devicePixelRatio})", seconds: 3)
-    guard let value = object(from: json)?["scale"] else { return nil }
-    if let number = value as? NSNumber { return number.doubleValue }
-    if let number = value as? Double { return number }
-    return nil
+    return Self.pageScale(from: json)
+  }
+
+  static func pageScale(from json: String?) -> Double? {
+    guard let value = object(from: json)?["scale"],
+      let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID(),
+      number.doubleValue.isFinite,
+      number.doubleValue > 0
+    else { return nil }
+    return number.doubleValue
   }
 
   private static func scaleChanged(_ before: Double?, _ after: Double?) -> Bool {
@@ -452,11 +459,19 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     guard await open(context, runtime, page, path: "/scroll", marker: "scroll") else {
       return makeRow("Infinite scroll", false, "Scroll page did not become ready")
     }
-    let first = await scrollState(runtime, context)
-    try? await Task.sleep(for: .milliseconds(400))
-    let second = await scrollState(runtime, context)
-    let ping = await evaluate(runtime, tab: selectedID(context), script: "({ok:true})", seconds: 3)
+    let first = await scrollState(runtime, context, triggerScroll: false)
     let firstCount = number(first?["count"]) ?? 0
+    _ = await scrollState(runtime, context, triggerScroll: true)
+    var second = await scrollState(runtime, context, triggerScroll: false)
+    let growthDeadline = Date().addingTimeInterval(2)
+    while Date() < growthDeadline
+      && !scrollRowsHaveGrown(
+        beforeCount: firstCount, afterCount: number(second?["count"]) ?? 0)
+    {
+      try? await Task.sleep(for: .milliseconds(50))
+      second = await scrollState(runtime, context, triggerScroll: false)
+    }
+    let ping = await evaluate(runtime, tab: selectedID(context), script: "({ok:true})", seconds: 3)
     let secondCount = number(second?["count"]) ?? 0
     let height = number(second?["height"]) ?? 0
     let client = number(second?["client"]) ?? 0
@@ -464,8 +479,9 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let frames = number(second?["frames"]) ?? 0
     let scrollEvents = number(second?["scrollEvents"]) ?? 0
     let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0
+    let pageScrollEvents = number(second?["pageScrollEvents"]) ?? 0
     let scrollable = height > client + 40 && top > 0
-    let grew = secondCount >= firstCount + 200
+    let grew = scrollRowsHaveGrown(beforeCount: firstCount, afterCount: secondCount)
     guard frames > 0 else {
       return makeRow(
         "Infinite scroll", false,
@@ -478,27 +494,36 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
         "Box did not scroll. rows \(firstCount), top \(top), height \(height), client \(client), frames \(frames)",
         proven: false)
     }
-    let passed = grew && scrollEvents > 0 && scrollEndEvents > 0 && ping != nil
+    let passed =
+      grew && scrollEvents > 0 && scrollEndEvents > 0 && pageScrollEvents > 0
+      && ping != nil
       && failure(context) == nil && windowsHidden()
     return makeRow(
       "Infinite scroll", passed,
-      "rows \(firstCount) then \(secondCount), scroll events \(scrollEvents), scrollend events \(scrollEndEvents), top \(top), height \(height), client \(client), frames \(frames), responsive \(ping != nil)"
+      "rows \(firstCount) then \(secondCount), scroll events \(scrollEvents), scrollend events \(scrollEndEvents), page scroll events \(pageScrollEvents), top \(top), height \(height), client \(client), frames \(frames), responsive \(ping != nil)",
+      proven: scrollFailureIsAttributable(scrollEvents: scrollEvents)
     )
   }
 
-  private static func scrollState(_ runtime: ARCShaarRuntime, _ context: NativeBrowserContext) async
-    -> [String: Any]?
-  {
+  private static func scrollState(
+    _ runtime: ARCShaarRuntime, _ context: NativeBrowserContext, triggerScroll: Bool
+  ) async -> [String: Any]? {
     let json = await evaluate(
       runtime, tab: selectedID(context),
-      script: """
-        (()=>{const root=document.getElementById('root'); if(!root) return {count:0,top:0,height:0,client:0};
-        const last=root.lastElementChild; if(last) last.scrollIntoView({block:'end'});
-        root.scrollTop=root.scrollHeight;
-        return {count:root.children.length,top:root.scrollTop,height:root.scrollHeight,client:root.clientHeight,frames:window.__frames||0,scrollEvents:window.__scrollEvents||0,scrollEndEvents:window.__scrollEndEvents||0};})()
-        """,
-      seconds: 5)
+      script: scrollStateScript(triggerScroll: triggerScroll),
+      seconds: 1)
     return object(from: json)
+  }
+
+  nonisolated static func scrollStateScript(triggerScroll: Bool) -> String {
+    let scroll = triggerScroll
+      ? "const last=root.lastElementChild; if(last) last.scrollIntoView({block:'end'}); root.scrollTop=root.scrollHeight; window.scrollTo(0, document.documentElement.scrollHeight);"
+      : ""
+    return """
+      (()=>{const root=document.getElementById('root'); if(!root) return {count:0,top:0,height:0,client:0};
+      \(scroll)
+      return {count:root.children.length,top:root.scrollTop,height:root.scrollHeight,client:root.clientHeight,frames:window.__frames||0,scrollEvents:window.__scrollEvents||0,scrollEndEvents:window.__scrollEndEvents||0,pageScrollEvents:window.__pageScrollEvents||0};})()
+      """
   }
 
   private static func checkMedia(
@@ -516,8 +541,8 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       runtime, tab: selectedID(context), script: "window.__edgeMedia || {}", seconds: 5)
     let media = object(from: json) ?? [:]
     let pixel = numbers(media["pixel"])
-    let webgl = flag(media["webgl"]) == true
-    let video = flag(media["video"]) == true
+    let webgl = flag(media["webgl"]) == true && webGLPixelIsPainted(pixel)
+    let video = videoIsPlaying(media)
     let vendor = media["vendor"] as? String ?? ""
     let error = media["error"] as? String ?? ""
     return [
@@ -638,6 +663,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       return makeRow("Download", false, "Opening an attachment URL did not start a download")
     }
     var pauseDetail = "pause not reached"
+    var pauseVerified = false
     if item.state == .downloading && !item.paused {
       let asked = context.engine.downloads.perform(
         .pause, id: item.id, profileID: profile, selectedProfileID: profile)
@@ -645,6 +671,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
         context.engine.runtime.refreshDownloads(forProfileID: profile.uuidString)
         return downloadItems(context, profile).first { $0.id == item.id }?.paused == true
       }
+      pauseVerified = Self.downloadPauseWasVerified(asked: asked, held: held)
       let pausedBytes =
         downloadItems(context, profile).first { $0.id == item.id }?.receivedBytes ?? 0
       try? await Task.sleep(for: .milliseconds(800))
@@ -672,7 +699,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let good =
       bytes?.starts(with: Data("edge-download-ok\n".utf8)) == true && bytes?.count == 256 * 1024
     removeOwnedDownload(item.fileURL)
-    let passed = finished && showed && good && !item.dangerous && windowsHidden()
+    let passed = pauseVerified && finished && showed && good && !item.dangerous && windowsHidden()
     return makeRow(
       "Download", passed,
       "\(pauseDetail); sheet \(showed); finished \(finished); bytes \(bytes?.count ?? -1); dangerous \(item.dangerous); path \(item.fileURL?.path ?? "")"
@@ -716,7 +743,8 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     var rows: [[String: Any]] = []
     for (name, element) in [("target=_blank", "blank"), ("window.open", "popup")] {
       let before = tabIDs(context)
-      let clicked = await click(runtime, tab: selectedID(context), element: element)
+      let source = selectedID(context)
+      let clicked = await click(runtime, tab: source, element: element)
       let adopted = await wait(seconds: 8) {
         tabIDs(context).subtracting(before).isEmpty == false
       }
@@ -725,10 +753,18 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       let sameWindow = created.allSatisfy { id in
         runtime.windowID(forTabID: id.uuidString) == context.nativeID
       }
+      let sourceRetained = source.map { sourceID in
+        context.store.session.spaces.flatMap(\.tabs).contains {
+          $0.id == sourceID && $0.url.path == "/popups"
+        }
+      } ?? false
+      let adoptedSingleDestination = popupAdoptionPassed(
+        createdTabCount: created.count, destinationReady: destination,
+        sourceRetained: sourceRetained)
       rows.append(
         makeRow(
-          name, clicked && adopted && destination && sameWindow && windowsHidden(),
-          "clicked \(clicked), adopted \(adopted), destination \(destination), same window \(sameWindow), tabs \(created.count)",
+          name, clicked && adoptedSingleDestination && sameWindow && windowsHidden(),
+          "clicked \(clicked), adopted \(adopted), destination \(destination), source retained \(sourceRetained), same window \(sameWindow), tabs \(created.count)",
           proven: clicked))
       await closeTabs(context, created)
     }
@@ -819,10 +855,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let left =
       (snap["ready"] as? String) == "find" || (snap["href"] as? String ?? "").contains("/find")
     let exercised = clicked && isArmed
-    let passed = exercised && !fresh.isEmpty && windowsHidden()
+    let hidden = windowsHidden()
+    let passed = beforeUnloadProbePassed(
+      exercised: exercised, dialogCount: fresh.count, navigated: left, windowsHidden: hidden)
     return makeRow(
       "beforeunload", passed,
-      "clicked \(clicked), armed \(isArmed), dialog \(fresh.count), navigated \(left), \(describe(fresh))",
+      "clicked \(clicked), armed \(isArmed), dialog \(fresh.count), navigated \(left), hidden \(hidden), \(describe(fresh))",
       proven: exercised)
   }
 
@@ -892,7 +930,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       "wedged \(wedged), reload asked \(reloaded), recovered \(recovered) via \(how)")
   }
 
-  private static func checkCrash(_ context: NativeBrowserContext) async -> [String: Any] {
+  private static func checkCrash(
+    _ context: NativeBrowserContext, _ runtime: ARCShaarRuntime, _ page: URL
+  ) async -> [String: Any] {
+    guard await open(context, runtime, page, path: "/crash", marker: "crash") else {
+      return makeRow("Sad tab", false, "Crash recovery page did not become ready")
+    }
     guard let tab = selectedID(context) else {
       return makeRow("Sad tab", false, "No selected tab", proven: false)
     }
@@ -919,9 +962,18 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let restored = await wait(seconds: 8) {
       context.store.rendererFailures[tab] == nil && context.engine.pages[tab]?.loading == false
     }
+    let recovery = object(from: await evaluate(
+      runtime, tab: tab,
+      script: "({marker:document.getElementById('marker')?.textContent||''})", seconds: 3))
+    let marker = recovery?["marker"] as? String
+    let responsive = await ping(runtime, context, seconds: 3)
+    let hidden = windowsHidden()
+    let passed = crashRecoveryPassed(
+      started: started, restored: restored, marker: marker, responsive: responsive,
+      windowsHidden: hidden)
     return makeRow(
-      "Sad tab", started && restored && windowsHidden(),
-      "status \(failure.status), reload \(started), restored \(restored), killed \(killed)")
+      "Sad tab", passed,
+      "status \(failure.status), reload \(started), restored \(restored), marker \(marker ?? "missing"), responsive \(responsive), hidden \(hidden), killed \(killed)")
   }
 
   private static func recover(_ context: NativeBrowserContext, _ runtime: ARCShaarRuntime) async {
@@ -958,6 +1010,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       if object(from: json)?["marker"] as? String == "Popup destination loaded" { return true }
     }
     return false
+  }
+
+  nonisolated static func popupAdoptionPassed(
+    createdTabCount: Int, destinationReady: Bool, sourceRetained: Bool
+  ) -> Bool {
+    createdTabCount == 1 && destinationReady && sourceRetained
   }
 
   private static func open(
@@ -1106,7 +1164,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     return components.url
   }
 
-  private static func object(from json: String?) -> [String: Any]? {
+  static func object(from json: String?) -> [String: Any]? {
     guard let data = json?.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
   }
@@ -1312,6 +1370,18 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     edgeProbeWrite(value, to: url)
   }
 
+  nonisolated static func beforeUnloadProbePassed(
+    exercised: Bool, dialogCount: Int, navigated: Bool, windowsHidden: Bool
+  ) -> Bool {
+    exercised && dialogCount > 0 && navigated && windowsHidden
+  }
+
+  nonisolated static func crashRecoveryPassed(
+    started: Bool, restored: Bool, marker: String?, responsive: Bool, windowsHidden: Bool
+  ) -> Bool {
+    started && restored && marker == "crash-target" && responsive && windowsHidden
+  }
+
   nonisolated static func number(_ value: Any?) -> Int? {
     guard let number = value as? NSNumber,
       CFGetTypeID(number) != CFBooleanGetTypeID()
@@ -1330,10 +1400,33 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     return number.boolValue
   }
 
+  nonisolated static func webGLPixelIsPainted(_ pixel: [Int]) -> Bool {
+    pixel.count == 4 && pixel.allSatisfy { (0...255).contains($0) }
+      && pixel[3] > 0 && pixel[0..<3].contains { $0 > 0 }
+  }
+
+  nonisolated static func downloadPauseWasVerified(asked: Bool, held: Bool) -> Bool {
+    asked && held
+  }
+
   nonisolated static func numbers(_ value: Any?) -> [Int] {
     if let values = value as? [Any] { return values.compactMap { number($0) } }
     if let values = value as? NSArray { return values.compactMap { number($0) } }
     return []
+  }
+
+  nonisolated static func videoIsPlaying(_ media: [String: Any]) -> Bool {
+    flag(media["video"]) == true
+      && flag(media["paused"]) == false
+      && (number(media["videoWidth"]) ?? 0) > 0
+  }
+
+  nonisolated static func scrollFailureIsAttributable(scrollEvents: Int) -> Bool {
+    scrollEvents > 0
+  }
+
+  nonisolated static func scrollRowsHaveGrown(beforeCount: Int, afterCount: Int) -> Bool {
+    afterCount >= beforeCount + 200
   }
 }
 

@@ -61,19 +61,43 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
   public init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
     id = try values.decode(String.self, forKey: .id)
+    guard !id.isEmpty else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .id, in: values, debugDescription: "Expected a nonempty download ID")
+    }
     url = try values.decode(String.self, forKey: .url)
     filename = try values.decode(String.self, forKey: .filename)
     path = try values.decode(String.self, forKey: .path)
     state = try values.decode(State.self, forKey: .state)
     paused = try values.decode(Bool.self, forKey: .paused)
-    received = try values.decodeInteger(forKey: .received)
-    total = try values.decodeInteger(forKey: .total)
-    speed = try values.decodeInteger(forKey: .speed)
+    let decodedReceived = try values.decodeInteger(forKey: .received)
+    guard decodedReceived >= 0 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .received, in: values, debugDescription: "Expected nonnegative bytes received")
+    }
+    received = decodedReceived
+    let decodedTotal = try values.decodeInteger(forKey: .total)
+    guard decodedTotal == -1 || decodedTotal >= 0 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .total, in: values, debugDescription: "Expected nonnegative total or unknown size")
+    }
+    total = decodedTotal
+    let decodedSpeed = try values.decodeInteger(forKey: .speed)
+    guard decodedSpeed >= 0 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .speed, in: values, debugDescription: "Expected nonnegative download speed")
+    }
+    speed = decodedSpeed
     mimeType = try values.decode(String.self, forKey: .mimeType)
     dangerous = try values.decode(Bool.self, forKey: .dangerous)
     offTheRecord = try values.decode(Bool.self, forKey: .offTheRecord)
     error = try values.decodeIfPresent(String.self, forKey: .error)
-    startTime = try values.decodeInteger(forKey: .startTime)
+    let decodedStartTime = try values.decodeInteger(forKey: .startTime)
+    guard decodedStartTime >= 0 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .startTime, in: values, debugDescription: "Expected nonnegative start time")
+    }
+    startTime = decodedStartTime
   }
 }
 
@@ -96,6 +120,7 @@ public enum ShaarDownloadAction: String, Codable, Sendable {
 }
 
 public enum ShaarDownloadsError: Error, Equatable, Sendable {
+  case invalidControl
   case malformedResponse
   case unsafeTarget
   case engine(ShaarStatusCode, message: String)
@@ -174,11 +199,14 @@ public struct ShaarDownloadsAdapter: Sendable {
     let data = try await transport.submit(
       operation: Self.listOperation, arguments: Self.json(["schemaVersion": 1]))
     let envelope = try JSONDecoder().decode(ListReply.self, from: data)
-    guard envelope.schemaVersion == 1 else { throw ShaarDownloadsError.malformedResponse }
+    guard envelope.schemaVersion == 1,
+      Set(envelope.downloads.map(\.id)).count == envelope.downloads.count
+    else { throw ShaarDownloadsError.malformedResponse }
     return envelope.downloads
   }
 
   public func control(_ action: ShaarDownloadAction, id: String) async throws {
+    guard !id.isEmpty else { throw ShaarDownloadsError.invalidControl }
     let args = try Self.json(["schemaVersion": 1, "downloadId": id, "action": action.rawValue])
     let response = try await transport.submit(operation: Self.controlOperation, arguments: args)
     guard response.isEmpty || response == Data("{}".utf8) else {

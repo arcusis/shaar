@@ -19,6 +19,27 @@ import Testing
   #expect(CleanLink.clean(url) == url)
 }
 
+@Test func cleanLinkRemovesURLCredentialsEvenWithoutTrackingParameters() {
+  let input = URL(string: "https://user:secret@example.com/private")!
+
+  let cleaned = CleanLink.clean(input)
+
+  #expect(cleaned.absoluteString == "https://example.com/private")
+  #expect(cleaned.user == nil)
+  #expect(cleaned.password == nil)
+}
+
+@Test func cleanLinkPreservesQueryEncodingWhenRemovingCredentials() {
+  let input = URL(
+    string:
+      "https://user:secret@storage.example.com/object%2Fprivate?download=https%3A%2F%2Fexample.com%2Ffile&sig=abc"
+  )!
+
+  #expect(
+    CleanLink.clean(input).absoluteString
+      == "https://storage.example.com/object%2Fprivate?download=https%3A%2F%2Fexample.com%2Ffile&sig=abc")
+}
+
 @Test func cleanLinkRemovesSocialTrackingAndPreservesPageParameters() {
   #expect(
     CleanLink.clean(URL(string: "https://www.instagram.com/p/abc/?igsh=one&utm_source=x")!)

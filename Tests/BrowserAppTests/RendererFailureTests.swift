@@ -10,6 +10,10 @@ import Testing
 
 @Suite
 struct RendererFailureTests {
+  @Test @MainActor func recoveryTitleIsVoiceOverHeading() {
+    #expect(FailedPageView.headingTraits.contains(.isHeader))
+  }
+
   @Test(arguments: ["oom", "evicted"])
   func memoryFailuresExplainTheRecoveryChoice(status: String) {
     let failure = RendererFailure(

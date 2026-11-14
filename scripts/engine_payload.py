@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import hashlib
 import json
 import lzma
@@ -23,6 +24,7 @@ from typing import BinaryIO
 
 CHUNK_SIZE = 1024 * 1024
 MAX_ARCHIVE_SIZE = 2 * 1024 * 1024 * 1024
+MAX_PIN_FILE_SIZE = 64 * 1024
 MAX_TOTAL_MEMBER_SIZE = 4 * 1024 * 1024 * 1024
 MAX_FRAMEWORK_TOTAL_SIZE = MAX_TOTAL_MEMBER_SIZE
 MAX_DECOMPRESSED_ARCHIVE_SIZE = 5 * 1024 * 1024 * 1024
@@ -47,6 +49,13 @@ PAGE_SIZE_ARM64 = 0x4000
 
 class PayloadError(Exception):
     """Input could not be safely compared."""
+
+
+class _UniqueKeyDict(dict):
+    def __setitem__(self, key, value):
+        if key in self:
+            raise ValueError("plist contains duplicate dictionary key")
+        super().__setitem__(key, value)
 
 
 def _safe_archive_path(raw: str) -> str:
@@ -264,6 +273,7 @@ def _archive_inventory(archive: BinaryIO) -> tuple[dict[str, dict], str]:
 
 def _validate_inventory(entries: dict[str, dict]) -> None:
     kinds = {path: entry["kind"] for path, entry in entries.items()}
+    links = {}
     for path, kind in list(kinds.items()):
         parts = path.split("/")
         for end in range(1, len(parts)):
@@ -274,6 +284,28 @@ def _validate_inventory(entries: dict[str, dict]) -> None:
             kinds.setdefault(parent, "directory")
         if kind == "symlink":
             _safe_link(path, entries[path]["link"])
+            links[path] = entries[path]["link"]
+    for start in links:
+        pending = deque(start.split("/"))
+        resolved = []
+        expanded = set()
+        while pending:
+            component = pending.popleft()
+            if component in ("", "."):
+                continue
+            if component == "..":
+                if resolved:
+                    resolved.pop()
+                continue
+            resolved.append(component)
+            prefix = "/".join(resolved)
+            if prefix in links:
+                if prefix in expanded:
+                    raise PayloadError("inventory contains symlink cycle")
+                expanded.add(prefix)
+                target = links[prefix]
+                resolved.pop()
+                pending.extendleft(reversed(target.split("/")))
     for path, kind in kinds.items():
         if path not in entries:
             entries[path] = {"kind": kind}
@@ -621,8 +653,8 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
     if len(archive_data) > MAX_CODE_RESOURCES_SIZE or len(framework_data) > MAX_CODE_RESOURCES_SIZE:
         raise PayloadError("CodeResources member exceeds size cap")
     try:
-        original = plistlib.loads(archive_data)
-        current = plistlib.loads(framework_data)
+        original = plistlib.loads(archive_data, dict_type=_UniqueKeyDict)
+        current = plistlib.loads(framework_data, dict_type=_UniqueKeyDict)
     except (plistlib.InvalidFileException, TypeError, ValueError, OverflowError, RecursionError) as error:
         raise PayloadError("CodeResources plist is malformed") from error
     expected_keys = {"files", "files2", "rules", "rules2"}
@@ -715,7 +747,9 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
                     if info_path not in exact_matched_paths | identity_rewritten_paths:
                         return False
                     try:
-                        info = plistlib.loads(_read_framework_bytes(framework_root, info_path, 1024 * 1024))
+                        info = plistlib.loads(
+                            _read_framework_bytes(framework_root, info_path, 1024 * 1024),
+                            dict_type=_UniqueKeyDict)
                     except (PayloadError, plistlib.InvalidFileException, TypeError, ValueError):
                         return False
                     executable = info.get("CFBundleExecutable") if isinstance(info, dict) else None
@@ -747,8 +781,8 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
 
 def _identity_rewrite_matches(original: bytes, current: bytes, identifier: str) -> bool:
     try:
-        source_info = plistlib.loads(original)
-        bundle_info = plistlib.loads(current)
+        source_info = plistlib.loads(original, dict_type=_UniqueKeyDict)
+        bundle_info = plistlib.loads(current, dict_type=_UniqueKeyDict)
     except (plistlib.InvalidFileException, TypeError, ValueError, OverflowError, RecursionError):
         return False
     if not isinstance(source_info, dict) or not isinstance(bundle_info, dict):
@@ -780,6 +814,11 @@ def compare_payload(archive: Path, framework: Path, pin: dict,
         if (not isinstance(expected_hash, str) or len(expected_hash) != 64
                 or any(character not in "0123456789abcdefABCDEF" for character in expected_hash)):
             raise PayloadError("pin has invalid archive SHA-256")
+        if identity_map is not None and (
+                not isinstance(identity_map, dict)
+                or any(not isinstance(path, str) or not isinstance(identifier, str)
+                       for path, identifier in identity_map.items())):
+            raise PayloadError("identity map is malformed")
         with _open_archive(archive) as source:
             initial_stat = _archive_stat(source)
             archive_size, archive_hash = _hash_file(source)
@@ -929,6 +968,15 @@ def compare_payload(archive: Path, framework: Path, pin: dict,
     return report
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, required=True)
@@ -937,8 +985,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pin", type=Path, default=Path("ThirdParty/ChromiumEngine/pin.json"))
     args = parser.parse_args(argv)
     try:
-        pin = json.loads(args.pin.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        with args.pin.open("rb") as pin_file:
+            pin_bytes = pin_file.read(MAX_PIN_FILE_SIZE + 1)
+        if len(pin_bytes) > MAX_PIN_FILE_SIZE:
+            raise ValueError("pin file exceeds size cap")
+        pin = json.loads(
+            pin_bytes.decode("utf-8"), object_pairs_hook=_reject_duplicate_json_keys)
+    except (OSError, UnicodeError, ValueError, RecursionError):
         report = {"schema": 1, "archive_metadata_verified": False, "payload_match": False,
                   "source_provenance_unverified": True, "signature_verification_not_performed": True,
                   "archive_sha256": None, "members": [], "reason": "pin file unavailable or malformed"}

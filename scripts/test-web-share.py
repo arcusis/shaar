@@ -10,6 +10,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import signal
+import stat
 import subprocess
 import tempfile
 import threading
@@ -22,6 +24,26 @@ PAGE = """<!doctype html>
 <title>Web share</title>
 <p>Share sheet fixture</p>
 """
+
+
+def write_receipt(path: Path, receipt: dict) -> None:
+    if path.is_symlink():
+        raise ValueError(f"web-share receipt path must not be a symlink: {path}")
+    if path.exists() and not path.is_file():
+        raise ValueError(f"web-share receipt path is not a regular file: {path}")
+    write_output(path, (json.dumps(receipt, indent=2) + "\n").encode())
+
+
+def copy_screenshot(source: Path, destination: Path) -> None:
+    write_screenshot(destination, source.read_bytes())
+
+
+def write_screenshot(destination: Path, data: bytes) -> None:
+    if destination.is_symlink():
+        raise ValueError(f"web-share screenshot path must not be a symlink: {destination}")
+    if destination.exists() and not destination.is_file():
+        raise ValueError(f"web-share screenshot path is not a regular file: {destination}")
+    write_output(destination, data)
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -54,11 +76,75 @@ def crash_names():
     return names
 
 
+def validate_output_destination(path):
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"Refusing symlink output: {path}")
+
+
+def write_output(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o666)
+    with os.fdopen(descriptor, "wb") as output:
+        output.write(data)
+
+
+def read_probe_file(path):
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as source:
+        return source.read()
+
+
+def run_probe(command, environment, timeout):
+    try:
+        process = subprocess.Popen(
+            command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, start_new_session=True)
+    except OSError as error:
+        return subprocess.CompletedProcess(command, 126, "", str(error))
+
+    def text_output(value):
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return value or ""
+
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        stdout, stderr = process.communicate()
+        return subprocess.CompletedProcess(
+            command, 124, text_output(stdout), text_output(stderr))
+    return subprocess.CompletedProcess(
+        command, process.returncode, text_output(stdout), text_output(stderr))
+
+
+def read_evidence(path):
+    try:
+        return json.loads(read_probe_file(path))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/web-share/receipt.json")
     options = parser.parse_args()
+    screenshot = options.receipt.parent / "share-sheet.png"
+    try:
+        validate_output_destination(options.receipt)
+        validate_output_destination(screenshot)
+    except ValueError as error:
+        parser.error(str(error))
     executable = options.app / "Contents/MacOS/ShaarVerification"
     framework = options.app / "Contents/Frameworks/Chromium Framework.framework"
     if not executable.is_file():
@@ -78,20 +164,20 @@ def main():
             page = f"http://127.0.0.1:{server.server_port}/share"
             environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                                SHAAR_ENGINE_TESTING="1", SHAAR_MOCK_KEYCHAIN="1")
-            process = subprocess.run(
+            process = run_probe(
                 [str(executable), "--probe-web-share",
                  "--probe-framework", str(framework),
                  "--probe-output", str(report), "--probe-data-dir", str(root),
-                 "--probe-url", page],
-                env=environment, capture_output=True, text=True, timeout=90, check=False)
-            evidence = json.loads(report.read_text()) if report.is_file() else None
-            shots = {"share-sheet.png": (root / "share-sheet.png").is_file()}
-            if evidence and evidence.get("passed"):
-                shot_dir = options.receipt.parent
-                shot_dir.mkdir(parents=True, exist_ok=True)
-                source = root / "share-sheet.png"
-                if source.is_file():
-                    (shot_dir / "share-sheet.png").write_bytes(source.read_bytes())
+                 "--probe-url", page], environment, timeout=90)
+            evidence = read_evidence(report) if report.is_file() else None
+            source = root / "share-sheet.png"
+            try:
+                screenshot_data = read_probe_file(source)
+            except OSError:
+                screenshot_data = None
+            shots = {"share-sheet.png": screenshot_data is not None}
+            if evidence and evidence.get("passed") and screenshot_data is not None:
+                write_screenshot(screenshot, screenshot_data)
         server.shutdown()
     crashes = sorted(crash_names() - before)
     receipt = {
@@ -104,8 +190,7 @@ def main():
         "passed": process.returncode == 0 and bool(evidence and evidence.get("passed"))
         and all(shots.values()) and not crashes,
     }
-    options.receipt.parent.mkdir(parents=True, exist_ok=True)
-    options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
+    write_receipt(options.receipt, receipt)
     print(json.dumps({key: receipt[key] for key in (
         "exitCode", "passed", "screenshots", "crashReports")}, indent=2))
     if evidence:

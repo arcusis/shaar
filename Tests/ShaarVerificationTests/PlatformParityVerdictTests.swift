@@ -32,6 +32,16 @@ struct PlatformParityVerdictTests {
     #expect(decision.disposition == "pass")
   }
 
+  @Test func certificateErrorDiagnosticsAcceptErrCertCodesCaseInsensitively() {
+    for diagnostic in ["ERR_CERT_AUTHORITY_INVALID", "err_cert_common_name_invalid"] {
+      let decision = PlatformParityVerdicts.certificate(
+        security: "certificateError", pageText: diagnostic, outcome: "",
+        href: "chrome-error://chromewebdata/", committedURL: "")
+      #expect(decision.passed)
+      #expect(decision.disposition == "pass")
+    }
+  }
+
   @Test func loadedFixtureIsNotACertificateBlock() {
     let decision = PlatformParityVerdicts.certificate(
       security: "certificateError", pageText: "bad cert page loaded",

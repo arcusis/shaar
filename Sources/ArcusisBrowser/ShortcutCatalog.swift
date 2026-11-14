@@ -55,6 +55,7 @@ struct ShortcutCatalog {
     var displayKeys: String {
       if key.isEmpty { return "—" }
       var result = ""
+      if modifiers.contains(.function) { result += "fn-" }
       if modifiers.contains(.control) { result += "⌃" }
       if modifiers.contains(.option) { result += "⌥" }
       if modifiers.contains(.shift) || key != key.lowercased() { result += "⇧" }
@@ -62,6 +63,7 @@ struct ShortcutCatalog {
       switch key.unicodeScalars.first?.value {
       case UInt32(NSLeftArrowFunctionKey): result += "←"
       case UInt32(NSRightArrowFunctionKey): result += "→"
+      case 0x08: result += "⌫"
       default: result += key.uppercased()
       }
       return result
@@ -94,6 +96,9 @@ struct ShortcutCatalog {
     case .newPrivateWindow: ("n", [.command, .shift])
     case .newMiniWindow: ("n", [.command, .option])
     case .newTab: ("t", .command)
+    case .back: ("[", .command)
+    case .forward: ("]", .command)
+    case .print: ("p", .command)
     case .search: ("l", .command)
     case .closeWindow: ("w", [.command, .shift])
     case .find: ("f", .command)
@@ -101,6 +106,9 @@ struct ShortcutCatalog {
     case .findPrevious: ("g", [.command, .shift])
     case .sidebar: ("s", .command)
     case .reload: ("r", .command)
+    case .zoomIn: ("=", .command)
+    case .zoomOut: ("-", .command)
+    case .actualSize: ("0", .command)
     case .hardReload: ("r", [.command, .shift])
     case .developerTools: ("i", [.command, .option])
     // The View menu has one Developer Tools item. This chord stays on the key
@@ -130,10 +138,11 @@ struct ShortcutCatalog {
     // Command-B stays with web editors for bold.
     case .bookmarks: ("b", [.command, .option])
     case .history: ("y", .command)
+    case .clearHistory: ("\u{8}", [.command, .shift])
     case .downloads: ("j", [.command, .shift])
     case .extensions: ("e", [.command, .shift])
     case .zoomWindow: ("m", [.command, .control])
-    case .bringAllToFront, .checkForUpdates, .sharePage: nil
+    case .bringAllToFront, .checkForUpdates, .sharePage, .reopenClosedWindow, .pasteAndGo: nil
     case .help: ("?", .command)
     case .minimizeWindow: ("m", .command)
     case .settings: (",", .command)
@@ -159,6 +168,7 @@ struct ShortcutCatalog {
     case "Copy": ("c", .command)
     case "Paste": ("v", .command)
     case "Paste and Match Style": ("V", [.command, .option])
+    case "Emoji & Symbols": ("e", .function)
     case "Select All": ("a", .command)
     case "Copy URL": ("c", [.command, .option, .shift])
     default: nil
@@ -188,6 +198,20 @@ struct ShortcutCatalog {
 }
 
 enum ShaarDevToolsShortcut {
+  static func command(for event: NSEvent) -> BrowserMenuCommand? {
+    command(forKeyCode: event.keyCode, modifiers: event.modifierFlags)
+  }
+
+  static func command(
+    forKeyCode keyCode: UInt16, modifiers: NSEvent.ModifierFlags
+  ) -> BrowserMenuCommand? {
+    if isF12(keyCode: keyCode, modifiers: modifiers) { return .developerTools }
+    if isDirectChromiumShortcut(keyCode: keyCode, modifiers: modifiers) {
+      return .chromiumDeveloperTools
+    }
+    return nil
+  }
+
   static func isF12(_ event: NSEvent) -> Bool {
     isF12(keyCode: event.keyCode, modifiers: event.modifierFlags)
   }
@@ -239,9 +263,11 @@ enum ShortcutPageRouting {
         // resulting symbol as the menu key equivalent, while this event's base key is /.
         let shiftedSymbol = flags.contains(.shift) && itemKey != key && itemKey == typedKey
         if shiftedSymbol { itemFlags.insert(.shift) }
+        let searchAlias = item.representedObject as? String == BrowserMenuCommand.search.rawValue
+          && key == "f" && flags == [.command, .option]
         guard
-          item.isEnabled && !itemKey.isEmpty && (itemKey == key || shiftedSymbol)
-            && itemFlags == flags
+          item.isEnabled && !itemKey.isEmpty
+            && (((itemKey == key || shiftedSymbol) && itemFlags == flags) || searchAlias)
         else { continue }
         if pageHasFocus && standardEditItem { return false }
         if let validator = item.target as? NSMenuItemValidation,
@@ -265,18 +291,37 @@ enum TabNumberShortcutRouting {
       let character = event.charactersIgnoringModifiers,
       let number = Int(character), (1...9).contains(number)
     else { return false }
-    let tabs = store.session.selectedSpace.tabs
-    let index = number == 9 ? tabs.count - 1 : number - 1
-    return store.selectTabByShortcutIndex(index)
+    return store.selectNumberedPage(number)
   }
 }
 
 @MainActor
 enum NextTabShortcutRouting {
   static func route(_ event: NSEvent, store: BrowserStore) -> Bool {
+    guard event.type == .keyDown else { return false }
+    let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+    let offset: Int
+    if event.keyCode == 48 && modifiers == .control {
+      offset = 1
+    } else if event.keyCode == 124 && modifiers == [.command, .option] {
+      offset = 1
+    } else if event.keyCode == 123 && modifiers == [.command, .option] {
+      offset = -1
+    } else if event.keyCode == 30 && modifiers == [.command, .shift] {
+      offset = 1
+    } else if event.keyCode == 33 && modifiers == [.command, .shift] {
+      offset = -1
+    } else { return false }
+    return store.selectAdjacentTab(by: offset)
+  }
+}
+
+@MainActor
+enum PreviousTabShortcutRouting {
+  static func route(_ event: NSEvent, store: BrowserStore) -> Bool {
     guard event.type == .keyDown, event.keyCode == 48,
-      event.modifierFlags.intersection([.command, .option, .control, .shift]) == .control
+      event.modifierFlags.intersection([.command, .option, .control, .shift]) == [.control, .shift]
     else { return false }
-    return store.selectAdjacentTab(by: 1)
+    return store.selectAdjacentTab(by: -1)
   }
 }

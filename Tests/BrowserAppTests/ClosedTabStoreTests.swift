@@ -10,6 +10,10 @@ import Testing
 
 @Suite @MainActor
 struct ClosedTabStoreTests {
+  @Test func recentlyClosedTitleIsVoiceOverHeading() {
+    #expect(RecentlyClosedPanel.headingTraits == .isHeader)
+  }
+
   @Test func sameTitleRecoveryActionsIdentifyTheirAddressesForVoiceOver() {
     let space = UUID()
     let profile = UUID()

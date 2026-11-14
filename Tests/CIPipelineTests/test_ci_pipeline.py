@@ -49,11 +49,113 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_ci_gate_reports_missing_required_environment_inputs(self):
+        required = {
+            "CI_NEEDS": "{}",
+            "CI_FULL": "false",
+            "CI_NIGHTLY": "false",
+            "GITHUB_STEP_SUMMARY": "/tmp/ci-summary.md",
+        }
+        for missing in required:
+            for value in (None, ""):
+                env = dict(required)
+                if value is None:
+                    env.pop(missing)
+                else:
+                    env[missing] = value
+                with self.subTest(missing=missing, value=value), \
+                        patch.dict(os.environ, env, clear=True), \
+                        patch("sys.stderr", new=io.StringIO()) as stderr:
+                    self.assertEqual(GATE.main(), 2)
+                    self.assertEqual(
+                        stderr.getvalue(),
+                        f"CI required gate: missing or empty environment variable {missing}\n",
+                    )
+
+    def test_ci_gate_rejects_invalid_boolean_environment_inputs(self):
+        required = {
+            "CI_NEEDS": "{}",
+            "CI_FULL": "false",
+            "CI_NIGHTLY": "false",
+            "CI_WEBSITE": "false",
+            "CI_BROWSING": "false",
+            "CI_SHIPPING_GUARD": "false",
+            "GITHUB_STEP_SUMMARY": "/tmp/ci-summary.md",
+        }
+        for name in ("CI_FULL", "CI_NIGHTLY", "CI_WEBSITE", "CI_BROWSING", "CI_SHIPPING_GUARD"):
+            env = dict(required, **{name: "yes"})
+            with self.subTest(name=name), patch.dict(os.environ, env, clear=True), \
+                    patch("sys.stderr", new=io.StringIO()) as stderr:
+                self.assertEqual(GATE.main(), 2)
+                self.assertEqual(stderr.getvalue(), f"CI required gate: {name} must be 'true' or 'false'\n")
+
+    def test_ci_gate_validates_needs_json_and_stage_results(self):
+        for raw, message in (
+            ("{", "CI_NEEDS is not valid JSON"),
+            ("[]", "CI_NEEDS must be a JSON object"),
+            ('{"engine": []}', "CI_NEEDS entry 'engine' must contain a string result"),
+            ('{"engine": {}}', "CI_NEEDS entry 'engine' must contain a string result"),
+            ('{"engine": {"result": 1}}', "CI_NEEDS entry 'engine' must contain a string result"),
+        ):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError, message):
+                GATE.parse_needs(raw)
+        self.assertEqual(GATE.parse_needs('{"engine": {"result": "success"}}'),
+                         {"engine": {"result": "success"}})
+
+    def test_ci_gate_reports_invalid_needs_without_traceback(self):
+        with patch.dict(os.environ, {"CI_NEEDS": "[]"}, clear=True), \
+                patch("sys.stderr", new=io.StringIO()) as errors:
+            self.assertEqual(GATE.main(), 1)
+        self.assertIn("CI gate error:", errors.getvalue())
+        self.assertIn("CI_NEEDS must be a JSON object", errors.getvalue())
+        self.assertNotIn("Traceback", errors.getvalue())
+
+    def test_ci_checks_rejects_options_ignored_by_pins_only(self):
+        for option in ("--snapshot-only", "--docs-only", "--skip-python"):
+            with self.subTest(option=option), patch.object(
+                sys, "argv", ["ci-checks.py", "--pins-only", option]
+            ), self.assertRaises(SystemExit) as caught:
+                PINS.main()
+            self.assertEqual(caught.exception.code, 2)
+
     def test_ci_evidence_collection_runs_after_failure_but_not_cancellation(self):
         action = (ROOT / ".github/actions/ci-evidence/action.yml").read_text()
         collector = action.split("    - name: Collect scoped native probe reports\n", 1)[1]
         collector = collector.split("    - name: Upload logs, reports and authored images", 1)[0]
         self.assertIn("if: ${{ !cancelled() }}", collector)
+    def test_python_junit_destination_is_validated_before_suite_execution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            parent_file = directory / "file"
+            parent_file.write_text("not a directory")
+            self.assertEqual(PYTHON_TESTS.junit_output_path(str(directory / "report.xml")),
+                             directory / "report.xml")
+            for path in (directory, parent_file / "report.xml"):
+                with self.subTest(path=path), self.assertRaises(
+                    PYTHON_TESTS.argparse.ArgumentTypeError
+                ):
+                    PYTHON_TESTS.junit_output_path(str(path))
+
+    def test_ci_plan_decodes_changed_paths_with_filesystem_surrogate_escapes(self):
+        raw_path = b"Notebook/odd-\xff.md"
+        self.assertEqual(PLAN.decode_changed_paths(raw_path + b"\0"), [os.fsdecode(raw_path)])
+    def test_python_junit_destination_rejects_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            external = root / "external"
+            external.mkdir()
+            sentinel = external / "keep.txt"
+            sentinel.write_text("leave untouched")
+            linked_parent = root / "reports"
+            linked_parent.symlink_to(external, target_is_directory=True)
+
+            with self.assertRaisesRegex(
+                PYTHON_TESTS.argparse.ArgumentTypeError, "parent must not be a symlink"
+            ):
+                PYTHON_TESTS.junit_output_path(str(linked_parent / "python.xml"))
+
+            self.assertEqual(sentinel.read_text(), "leave untouched")
+            self.assertEqual(list(external.iterdir()), [sentinel])
 
     def test_evidence_directory_argument_requires_an_existing_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -145,6 +247,11 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn("esbuild@0.28.2:", lockfile)
         self.assertNotIn("esbuild@0.27.7", lockfile)
 
+    def test_website_readiness_probe_bounds_connection_and_response_time(self):
+        workflow = (ROOT / ".github/workflows/website-checks.yml").read_text()
+        readiness = workflow.split("      - name: Check Wrangler HTTP serving", 1)[1]
+        self.assertIn("curl --connect-timeout 1 --max-time 2 -fsS http://localhost:8787/", readiness)
+
     def test_inspector_job_caches_playwright_browser_for_locked_version(self):
         workflow = (ROOT / ".github" / "workflows" / "source-checks.yml").read_text()
         inspector = workflow.split("  inspector-contracts:\n", 1)[1].split("  website:\n", 1)[0]
@@ -154,6 +261,10 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn(
             "key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Tests/InspectorContractTests/pnpm-lock.yaml') }}",
             inspector)
+        playwright_cache = inspector.split("      - name: Cache Playwright Chromium shell", 1)[1].split(
+            "\n      - name:", 1)[0]
+        self.assertIn("restore-keys: |", playwright_cache)
+        self.assertIn("playwright-${{ runner.os }}-${{ runner.arch }}-", playwright_cache)
         self.assertIn("playwright install chromium --with-deps --only-shell", inspector)
 
     def test_pnpm_store_caches_fall_back_after_lockfile_changes(self):
@@ -200,6 +311,30 @@ class PipelineGateTests(unittest.TestCase):
             run = dict(valid, event=event)
             self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [run]}, revision, swift_events), [])
 
+    def test_release_artifact_downloads_have_connection_and_total_timeouts(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        validate = workflow.split("      - name: Validate appcast, update signature and public download\n", 1)[1]
+        validate = validate.split("      - name: Require a newer build than the live feed", 1)[0]
+        curl_commands = [line.strip() for line in validate.splitlines() if line.strip().startswith("curl ")]
+        self.assertEqual(len(curl_commands), 2)
+        for command in curl_commands:
+            with self.subTest(command=command):
+                self.assertIn("--connect-timeout 10", command)
+                self.assertIn("--max-time 120", command)
+                self.assertIn("--retry 3", command)
+                self.assertIn("--retry-max-time 90", command)
+
+    def test_release_gate_api_requests_are_bounded_and_report_timeouts(self):
+        with patch.object(RELEASE_CI.subprocess, "check_output", return_value="{}") as command:
+            self.assertEqual(RELEASE_CI.api("repos/arcusis/shaar/actions"), {})
+        self.assertEqual(command.call_args.kwargs["timeout"], RELEASE_CI.API_TIMEOUT_SECONDS)
+        with patch.object(
+            RELEASE_CI.subprocess, "check_output",
+            side_effect=RELEASE_CI.subprocess.TimeoutExpired(["gh", "api"], 60),
+        ):
+            with self.assertRaisesRegex(ValueError, "GitHub API request timed out after 60s"):
+                RELEASE_CI.api("repos/arcusis/shaar/actions")
+
     def test_code_scanning_issue_sync_opens_reopens_and_closes_by_alert_number(self):
         def alert(number):
             return {"number": number, "html_url": f"https://example.invalid/{number}",
@@ -222,6 +357,12 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn("`swift/rule-3`", body)
         self.assertIn("`Sources/A.swift:3`", body)
         self.assertIn("high", body)
+
+    def test_code_scanning_issue_sync_bounds_github_api_calls(self):
+        with patch.object(SCANNING_ISSUES.subprocess, "check_output", return_value="[]") as check_output:
+            self.assertEqual(SCANNING_ISSUES.gh("repos/arcusis/shaar/issues"), [])
+        self.assertEqual(check_output.call_args.kwargs["timeout"], SCANNING_ISSUES.GH_API_TIMEOUT_SECONDS)
+        self.assertGreater(SCANNING_ISSUES.GH_API_TIMEOUT_SECONDS, 0)
 
     def test_app_icon_changes_skip_website_jobs_but_logo_changes_keep_them(self):
         self.assertEqual(PLAN.select_stages(["Branding/shaar-logo.svg"], "pull_request"),
@@ -364,6 +505,21 @@ class PipelineGateTests(unittest.TestCase):
             baseline.assert_not_called()
             self.assertIn("full=true", (root / "output").read_text())
             self.assertIn("base=" + "a" * 40, (root / "output").read_text())
+
+    def test_diff_failure_warns_when_falling_back_to_full_ci(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"before": "a" * 40}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "push",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with (patch.dict(os.environ, env),
+                  patch.object(PLAN.subprocess, "run", return_value=SimpleNamespace(returncode=128)),
+                  patch("sys.stderr", new=io.StringIO()) as errors):
+                PLAN.main()
+            self.assertIn("git diff exited 128", errors.getvalue())
+            self.assertIn("selecting the full CI plan", errors.getvalue())
+            self.assertIn("full=true", (root / "output").read_text())
 
     def test_probe_count_normalizes_dispatch_strings_before_typed_workflow_call(self):
         for value in (1, "1", 10, "10"):
@@ -648,6 +804,47 @@ class CoverageGateTests(unittest.TestCase):
 
 
 class SupplyChainTests(unittest.TestCase):
+    def test_installer_refuses_symlinked_tool_output_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            target = Path(outside) / "sentinel"
+            target.write_bytes(b"keep")
+            output = root / "actionlint"
+            output.symlink_to(target)
+            with self.assertRaisesRegex(ValueError, "symlinked tool output"):
+                INSTALL.write_binary(output, b"replace", True)
+            self.assertEqual(target.read_bytes(), b"keep")
+
+    def test_installer_refuses_symlinked_output_directory(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            target = Path(outside) / "actionlint"
+            output_directory = root / "tools"
+            output_directory.symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "symlinked tool output"):
+                INSTALL.write_binary(
+                    output_directory / "actionlint", b"replace", True, output_directory
+                )
+            self.assertFalse(target.exists())
+
+    def test_sbom_rejects_symlinked_output_paths_without_touching_targets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "shipping"
+            output.mkdir()
+            for name in ("Shaar-unsigned-candidate.zip", "sbom.spdx.json", "symlinks.json", "candidate.sha256"):
+                with self.subTest(name=name):
+                    target = root / f"outside-{name}"
+                    target.write_text("preserve this", encoding="utf-8")
+                    path = output / name
+                    path.symlink_to(target)
+
+                    with self.assertRaisesRegex(ValueError, "SBOM output path must not be a symlink"):
+                        SBOM.validate_output_paths(output)
+
+                    self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+                    path.unlink()
+
     def test_spdx_inventory_rejects_symlinked_app_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -750,6 +947,20 @@ class SupplyChainTests(unittest.TestCase):
                 fetch.assert_not_called()
             self.assertFalse(external_target.exists())
 
+    def test_installer_rejects_symlinked_archive_cache_directory(self):
+        payload = self.archive()
+        digest = hashlib.sha256(payload).hexdigest()
+        pin = {"url": "https://example.invalid/tool", "sha256": digest}
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            cache = Path(directory) / "cache"
+            external = Path(outside)
+            cache.symlink_to(external, target_is_directory=True)
+            with patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(payload)) as fetch:
+                with self.assertRaisesRegex(ValueError, "Archive cache directory is a symlink"):
+                    INSTALL.archive_payload(pin, cache)
+                fetch.assert_not_called()
+            self.assertEqual(list(external.iterdir()), [])
+
     def test_managed_python_install_retries_only_transient_download_failures(self):
         calls = []
         sleeps = []
@@ -798,6 +1009,13 @@ class SupplyChainTests(unittest.TestCase):
         self.assertEqual(len(calls), PYTHON_INSTALL.INSTALL_ATTEMPTS)
         self.assertEqual(sleeps, [5, 15])
 
+    def test_managed_python_install_version_argument_requires_numeric_release(self):
+        self.assertEqual(PYTHON_INSTALL.parse_python_version("3.13"), "3.13")
+        self.assertEqual(PYTHON_INSTALL.parse_python_version("3.13.2"), "3.13.2")
+        for invalid in ("3", "latest", "3.13.2.1", "3.x"):
+            with self.subTest(version=invalid), self.assertRaises(PYTHON_INSTALL.argparse.ArgumentTypeError):
+                PYTHON_INSTALL.parse_python_version(invalid)
+
     def test_ci_setup_pins_and_caches_managed_python_and_tool_archives(self):
         setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
         self.assertIn("version: '0.13.8'", setup)
@@ -815,9 +1033,32 @@ class SupplyChainTests(unittest.TestCase):
         self.assertIn("--retry 3", curl)
         self.assertIn("--retry-max-time 180", curl)
 
+    def test_test_engine_framework_fetch_has_a_step_timeout(self):
+        workflow = (ROOT / ".github/workflows/source-checks.yml").read_text()
+        fetch = workflow.split("      - name: Fetch SHA-256 pinned Shaar test framework\n", 1)[1]
+        fetch = fetch.split("      - name: Build the headless Shaar verification bundle", 1)[0]
+
+        self.assertIn("timeout-minutes: 10", fetch)
+
     def test_swiftpm_cache_key_tracks_build_plugin_sources(self):
         setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
         self.assertIn("hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Plugins/**')", setup)
+    def test_swiftpm_dependency_cache_reuses_same_toolchain_sources_after_lock_changes(self):
+        setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
+        cache = setup.split("    - name: Cache SwiftPM dependencies without compiled app objects\n", 1)[1]
+        cache = cache.split("    - name:", 1)[0]
+        self.assertIn("restore-keys: |", cache)
+        self.assertIn(
+            "swift-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-",
+            cache,
+        )
+    def test_python_environment_cache_key_separates_requirement_sets_by_mode(self):
+        setup = (ROOT / ".github/actions/ci-setup/action.yml").read_text()
+        cache = setup.split("    - name: Restore Python environment for locked requirements\n", 1)[1]
+        cache = cache.split("    - name: Configure Python and report toolchain", 1)[0]
+        for mode in ("codeql", "engine-probe", "shipping", "release"):
+            self.assertIn(f"'{mode}'", cache)
+        self.assertIn("hashFiles('scripts/*requirements.txt')", cache)
 
     def test_installer_retries_transient_download_failures_only(self):
         def http_error(code):
@@ -828,6 +1069,9 @@ class SupplyChainTests(unittest.TestCase):
         with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
             self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"payload")
         self.assertEqual(sleeps, [2, 4])
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=[http_error(408), io.BytesIO(b"payload")]):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"payload")
+        self.assertEqual(sleeps[-1], 2)
         with patch.object(INSTALL.urllib.request, "urlopen", side_effect=[http_error(404)]):
             with self.assertRaises(INSTALL.urllib.error.HTTPError):
                 INSTALL.download("https://example.invalid/tool", sleeps.append)
@@ -835,6 +1079,74 @@ class SupplyChainTests(unittest.TestCase):
         with patch.object(INSTALL.urllib.request, "urlopen", side_effect=failures):
             with self.assertRaises(INSTALL.urllib.error.HTTPError):
                 INSTALL.download("https://example.invalid/tool", lambda seconds: None)
+
+    def test_installer_retries_short_archive_responses(self):
+        class Response(io.BytesIO):
+            def __init__(self, payload, expected_length):
+                super().__init__(payload)
+                self.headers = {"Content-Length": str(expected_length)}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                self.close()
+
+        class TruncatedResponse(Response):
+            def read(self, *_):
+                raise INSTALL.http.client.IncompleteRead(b"short", 12)
+
+        class ResetResponse(Response):
+            def read(self, *_):
+                raise ConnectionResetError("connection reset while reading archive")
+
+        sleeps = []
+        responses = [Response(b"short", 12), Response(b"complete", 8)]
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"complete")
+        self.assertEqual(sleeps, [2])
+        responses = [TruncatedResponse(b"", 0), Response(b"complete", 8)]
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"complete")
+        self.assertEqual(sleeps, [2, 2])
+        responses = [ResetResponse(b"", 0), Response(b"complete", 8)]
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"complete")
+        self.assertEqual(sleeps, [2, 2, 2])
+        oversized = Response(b"", INSTALL.MAX_ARCHIVE_BYTES + 1)
+        with patch.object(INSTALL.urllib.request, "urlopen", return_value=oversized):
+            with self.assertRaisesRegex(ValueError, "maximum size"):
+                INSTALL.download("https://example.invalid/tool", sleeps.append)
+
+    def test_installer_reports_archives_that_exceed_download_limit(self):
+        with patch.object(INSTALL, "MAX_ARCHIVE_BYTES", 4), \
+                patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(b"12345")):
+            with self.assertRaisesRegex(ValueError, "exceeds the 4-byte limit"):
+                INSTALL.download("https://example.invalid/large-tool", lambda seconds: None)
+
+    def test_installer_retries_incomplete_http_bodies(self):
+        class Response(io.BytesIO):
+            def __init__(self, payload, remaining):
+                super().__init__(payload)
+                self.length = remaining
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                self.close()
+
+            def read(self, size=-1):
+                payload = super().read(size)
+                self.length -= len(payload)
+                return payload
+
+        sleeps = []
+        responses = [Response(b"partial body", 5), Response(b"complete body", 13)]
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses) as fetch:
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"complete body")
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual(sleeps, [2])
 
     def archive(self, symbolic=False):
         output = io.BytesIO()
@@ -876,6 +1188,16 @@ class SupplyChainTests(unittest.TestCase):
             self.assertTrue(PINS.pin_errors(root))
             (actions / "action.yml").write_text(f"steps:\n  - uses: actions/checkout@{'a' * 40}\n")
             self.assertEqual(PINS.pin_errors(root), [])
+
+    def test_pins_only_rejects_other_ci_check_modes(self):
+        for option in ("--snapshot-only", "--docs-only", "--skip-python"):
+            with self.subTest(option=option), patch.object(PINS, "pin_errors", return_value=[]), \
+                    patch.object(sys, "argv", ["ci-checks.py", "--pins-only", option]), \
+                    patch("sys.stderr", new=io.StringIO()) as error_output:
+                with self.assertRaises(SystemExit) as error:
+                    PINS.main()
+                self.assertEqual(error.exception.code, 2)
+                self.assertIn("--pins-only cannot be combined", error_output.getvalue())
 
     def test_evidence_rejects_non_utf8_probe_markers_without_aborting_collection(self):
         with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory, tempfile.TemporaryDirectory() as output:
@@ -937,6 +1259,16 @@ class SupplyChainTests(unittest.TestCase):
                 EVIDENCE.collect(log, Path(output) / "evidence")
             self.assertEqual(sentinel.read_text(), "preserve")
 
+    def test_evidence_rejects_malformed_utf8_probe_marker(self):
+        with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory, \
+                tempfile.TemporaryDirectory() as output:
+            root = Path(directory)
+            (root / ".arcusis-probe").write_bytes(b"\xff\xfe")
+            log = Path(output) / "probe.log"
+            log.write_text(f"Probe evidence: {root}\n")
+            with self.assertRaisesRegex(ValueError, "Refusing foreign probe evidence"):
+                EVIDENCE.collect(log, Path(output) / "evidence")
+
 
 class SwiftReportTests(unittest.TestCase):
     def transcript(self, state="passed"):
@@ -969,6 +1301,27 @@ class SwiftReportTests(unittest.TestCase):
         self.assertEqual(cases[0].attrib["time"], "0.125")
         self.assertIn("authored diagnostic", cases[0].find("failure").text)
 
+    def test_xctest_report_rejects_symlink_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(self.transcript())
+            target = directory / "outside.xml"
+            target.write_text("preserve this", encoding="utf-8")
+            (directory / "xctest.xml").symlink_to(target)
+
+            with self.assertRaisesRegex(ValueError, "XCTest report path must not be a symlink"):
+                SWIFT_REPORTS.write_reports(log, directory)
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_xctest_report_rejects_malformed_and_non_finite_durations(self):
+        for duration in ("1..2", "inf", "-0.1"):
+            with self.subTest(duration=duration), self.assertRaisesRegex(
+                 ValueError, "Invalid XCTest duration for -\\[Fixture.Cases sample\\]"
+             ):
+                 SWIFT_REPORTS.xctest_cases(self.transcript().replace("0.125", duration))
+
     def test_truncated_unpaired_and_mismatched_xctest_logs_fail(self):
         malformed = (self.transcript().split("Test Case", 1)[0],
                      self.transcript().replace(" started.\n", "\n"),
@@ -984,6 +1337,22 @@ class SwiftReportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "selected no test cases"):
             SWIFT_REPORTS.xctest_cases(empty)
 
+    def test_non_finite_xctest_duration_fails(self):
+        text = self.transcript().replace("0.125 seconds", "9" * 400 + " seconds")
+        with self.assertRaisesRegex(ValueError, "Invalid XCTest duration"):
+            SWIFT_REPORTS.xctest_cases(text)
+
+    def test_empty_native_swift_testing_report_cannot_hide_logged_tests(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(self.transcript() + "Test run with 1 test passed\n")
+            (directory / "swift-swift-testing.xml").write_text('<testsuite tests="1"/>')
+            with self.assertRaisesRegex(
+                ValueError, "log reports 1 tests but native XML contains 0 cases"
+            ):
+                SWIFT_REPORTS.write_reports(log, directory)
+
     def test_missing_native_swift_testing_report_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -992,8 +1361,39 @@ class SwiftReportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "native JUnit"):
                 SWIFT_REPORTS.write_reports(log, directory)
 
+    def test_empty_native_swift_testing_report_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(self.transcript() + "Test run with 1 test passed\n")
+            (directory / "swift-swift-testing.xml").write_text('<testsuite tests="0"/>')
+            with self.assertRaisesRegex(ValueError, "contains no test cases"):
+                SWIFT_REPORTS.write_reports(log, directory)
+
 
 class ProbeSoakTests(unittest.TestCase):
+    def test_engine_shard_runs_later_assignments_after_a_probe_failure(self):
+        checks = SimpleNamespace(results=[])
+
+        def run(command, *_args, **_kwargs):
+            checks.results.append({"name": command, "status": 0})
+            return 0
+
+        checks.run = run
+        modes = [("baseline", range(1, 2)), ("dev-mode", range(1, 2))]
+
+        def run_probe(checks, mode, _iterations):
+            checks.results.append({"name": mode, "status": int(mode == "baseline")})
+
+        with (patch.object(STAGES, "require_hosted_mac"),
+              patch.object(STAGES, "shard_modes", return_value=modes),
+              patch.object(STAGES, "restore_bundle"),
+              patch.object(STAGES, "run_probe_iterations", side_effect=run_probe) as run_probes):
+            STAGES.run_engine_shard(checks, "engine-1", 1)
+
+        self.assertEqual([call.args[1] for call in run_probes.call_args_list], ["baseline", "dev-mode"])
+        self.assertEqual([item["status"] for item in checks.results], [0, 1, 0])
+
     def test_visual_shards_validate_each_filtered_test_report(self):
         checks = unittest.mock.Mock()
         checks.run.return_value = 0
@@ -1001,6 +1401,10 @@ class ProbeSoakTests(unittest.TestCase):
             STAGES.run_visuals(checks, "1")
         self.assertEqual([call.args[1] for call in run.call_args_list], list(STAGES.VISUAL_SHARDS["1"]))
         self.assertTrue(all("--filter" in call.args[2] for call in run.call_args_list))
+        self.assertTrue(all(
+            call.kwargs["env"]["ARCUSIS_SIDEBAR_VISUAL_CI"] == "1"
+            for call in run.call_args_list
+        ))
 
     def test_shards_cover_every_original_iteration_once_without_retry(self):
         from collections import Counter
@@ -1108,6 +1512,31 @@ class ProbeSoakTests(unittest.TestCase):
             suite = ET.parse(checks.directory / "commands.xml").getroot()
             self.assertEqual(suite.attrib["failures"], "1")
 
+    def test_command_stage_rejects_symlinked_output_directory(self):
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external"
+            external.mkdir()
+            (root / "build/ci").mkdir(parents=True)
+            (root / "build/ci/unsafe").symlink_to(external, target_is_directory=True)
+            with patch("ci_support.ROOT", root):
+                with self.assertRaisesRegex(ValueError, "must not be a symlink"):
+                    Commands("unsafe")
+            self.assertEqual(list(external.iterdir()), [])
+
+    def test_command_stage_must_be_a_single_directory_name(self):
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("ci_support.ROOT", root):
+                for stage in ("../outside", "nested/stage", ""):
+                    with self.subTest(stage=stage), self.assertRaisesRegex(
+                        ValueError, "single directory name"
+                    ):
+                        Commands(stage)
+            self.assertFalse((root / "outside").exists())
+
     def test_command_logs_replace_invalid_utf8_and_malformed_reports_do_not_mask_failure(self):
         from ci_support import Commands
         with tempfile.TemporaryDirectory() as directory:
@@ -1148,6 +1577,17 @@ class ProbeSoakTests(unittest.TestCase):
                 self.assertEqual(suite.attrib["failures"], "1")
                 self.assertIn("Could not validate swift.xml: invalid tests count", summary.read_text())
 
+    def test_junit_non_numeric_counts_are_reported_without_raising(self):
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            summary = root / "summary.md"
+            with patch("ci_support.ROOT", root), patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+                checks = Commands("invalid-counts")
+                (checks.directory / "swift.xml").write_text('<testsuite tests="many" failures="0"/>')
+                self.assertEqual(checks.finish(), 1)
+                self.assertIn("Could not validate swift.xml: invalid tests count 'many'", summary.read_text())
+
     def test_python_junit_records_subtest_failure_and_skip(self):
         class Example(unittest.TestCase):
             def test_subtests(self):
@@ -1172,6 +1612,54 @@ class ProbeSoakTests(unittest.TestCase):
             self.assertEqual(suite.attrib["tests"], "3")
             self.assertEqual(len(suite.findall("testcase/failure")), 1)
             self.assertEqual(len(suite.findall("testcase/skipped")), 2)
+
+    def test_python_junit_rejects_symlink_report_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "outside.xml"
+            target.write_text("preserve this", encoding="utf-8")
+            report = root / "report.xml"
+            report.symlink_to(target)
+            result = unittest.TextTestRunner(
+                stream=io.StringIO(), resultclass=PYTHON_TESTS.ReportResult
+            ).run(unittest.TestSuite())
+
+            with self.assertRaisesRegex(ValueError, "JUnit report path must not be a symlink"):
+                result.write_report(report)
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_python_junit_rejects_symlinked_report_parent_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outside = root / "outside"
+            outside.mkdir()
+            target = outside / "report.xml"
+            target.write_text("preserve this", encoding="utf-8")
+            parent = root / "linked-parent"
+            parent.symlink_to(outside, target_is_directory=True)
+            report = parent / "report.xml"
+            result = unittest.TextTestRunner(
+                stream=io.StringIO(), resultclass=PYTHON_TESTS.ReportResult
+            ).run(unittest.TestSuite())
+
+            with self.assertRaisesRegex(ValueError, "JUnit report parent (directory )?must not be a symlink"):
+                result.write_report(report)
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_python_junit_rejects_symlink_parent_directory(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            target = Path(outside) / "report.xml"
+            link = root / "reports"
+            link.symlink_to(outside, target_is_directory=True)
+            result = unittest.TextTestRunner(
+                stream=io.StringIO(), resultclass=PYTHON_TESTS.ReportResult
+            ).run(unittest.TestSuite())
+            with self.assertRaisesRegex(ValueError, "JUnit report parent (directory )?must not be a symlink"):
+                result.write_report(link / "report.xml")
+            self.assertFalse(target.exists())
 
     def test_python_module_import_error_is_reported_without_skipping_other_modules(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1208,9 +1696,82 @@ class ProbeSoakTests(unittest.TestCase):
 
 
 class EngineTransferTests(unittest.TestCase):
+    def test_transferred_bundle_rejects_symlinked_or_missing_build_directory(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
+        import shutil
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            bundle = root / "build" / BUNDLE_NAME
+            bundle.mkdir(parents=True)
+            (bundle / "Main").write_text("authored executable")
+            evidence = root / "evidence"
+            evidence.mkdir()
+            archive_bundle(root, evidence)
+            shutil.rmtree(root / "build")
+            outside = root / "outside"
+            outside.mkdir()
+            (root / "build").symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "destination is not a directory"):
+                restore_bundle(root, evidence)
+            self.assertEqual(list(outside.iterdir()), [])
+            (root / "build").unlink()
+            with self.assertRaisesRegex(ValueError, "destination is not a directory"):
+                restore_bundle(root, evidence)
+
+    def test_bundle_archiver_rejects_symlinked_output_paths_without_touching_targets(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            (root / "build" / BUNDLE_NAME).mkdir(parents=True)
+            directory = root / "evidence"
+            directory.mkdir()
+
+            for name in ("verification.tar.gz", "bundle.json"):
+                with self.subTest(name=name):
+                    target = root / f"outside-{name}"
+                    target.write_text("preserve this", encoding="utf-8")
+                    output = directory / name
+                    output.symlink_to(target)
+                    with self.assertRaisesRegex(ValueError, "Verification archive output must not be a symlink"):
+                        archive_bundle(root, directory)
+                    self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+                    output.unlink()
+
+    def test_bundle_restore_reports_invalid_metadata_as_value_error(self):
+        from ci_engine import validate_bundle_archive
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            directory = root / "evidence"
+            directory.mkdir()
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            metadata = directory / "bundle.json"
+            with patch.dict(os.environ, {
+                "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+            }):
+                for raw in ("{", "[]"):
+                    with self.subTest(raw=raw):
+                        metadata.write_text(raw)
+                        with self.assertRaisesRegex(ValueError, "(?i)verification bundle metadata"):
+                            validate_bundle_archive(root, directory)
+
     def test_merge_group_bundle_selection_rejects_fork_pull_request_runs(self):
         from ci_engine import matching_pr_bundle_run_id
         response = {"workflow_runs": [
+            {"id": 9, "run_number": 9, "conclusion": "success",
+             "head_repository": {"full_name": "arcusis/shaar"}, "pull_requests": None},
             {"id": 10, "run_number": 10, "conclusion": "success",
              "head_repository": {"full_name": "contributor/shaar"},
              "pull_requests": [{"number": 448}]},
@@ -1222,6 +1783,7 @@ class EngineTransferTests(unittest.TestCase):
         ]}
         self.assertEqual(matching_pr_bundle_run_id(response, 448, "arcusis/shaar"), "11")
         self.assertEqual(matching_pr_bundle_run_id(response, 448, "other/shaar"), "")
+        self.assertEqual(matching_pr_bundle_run_id({"workflow_runs": None}, 448, "arcusis/shaar"), "")
 
     def test_merge_group_bundle_lookup_is_bounded_and_fail_open(self):
         workflow = (ROOT / ".github/workflows/ci-engine-bundle.yml").read_text()
@@ -1229,6 +1791,28 @@ class EngineTransferTests(unittest.TestCase):
         lookup = lookup.split("      - name: Download the verified bundle artifact", 1)[0]
         self.assertIn("continue-on-error: true", lookup)
         self.assertIn("timeout-minutes: 2", lookup)
+    def test_bundle_metadata_errors_identify_missing_invalid_and_wrong_shape_inputs(self):
+        from ci_engine import validate_bundle_archive
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            with self.assertRaisesRegex(ValueError, "metadata is missing or invalid"):
+                validate_bundle_archive(root, evidence)
+            metadata = evidence / "bundle.json"
+            metadata.write_text("not json")
+            with self.assertRaisesRegex(ValueError, "metadata is missing or invalid"):
+                validate_bundle_archive(root, evidence)
+            metadata.write_text("[]")
+            with self.assertRaisesRegex(ValueError, "must be a JSON object"):
+                validate_bundle_archive(root, evidence)
+
+    def test_merge_group_bundle_download_is_bounded_and_fail_open(self):
+        workflow = (ROOT / ".github/workflows/ci-engine-bundle.yml").read_text()
+        download = workflow.split("      - name: Download the verified bundle artifact", 1)[1]
+        download = download.split("      - name: Build or reuse bundle", 1)[0]
+        self.assertIn("continue-on-error: true", download)
+        self.assertIn("timeout-minutes: 5", download)
 
     def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
@@ -1307,6 +1891,35 @@ class EngineTransferTests(unittest.TestCase):
             self.assertEqual([call.args[0] for call in checks.run.call_args_list], ["normal-window-browsing"])
             self.assertTrue((root / "build" / BUNDLE_NAME).is_dir())
 
+    def test_normal_browsing_rebuilds_after_a_corrupt_shared_bundle_download(self):
+        from ci_engine import BUNDLE_NAME
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "build/ci/engine-build"
+            evidence.mkdir(parents=True)
+            (evidence / "bundle.json").write_text("{")
+            (evidence / "verification.tar.gz").write_bytes(b"partial archive")
+            partial_bundle = root / "build" / BUNDLE_NAME
+            partial_bundle.mkdir(parents=True)
+            (partial_bundle / "partial").write_text("incomplete extraction")
+            checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
+            with patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"):
+                STAGES.run_basic_browsing(checks)
+            self.assertEqual(
+                [call.args[0] for call in checks.run.call_args_list],
+                ["verification-build", "normal-window-browsing"],
+            )
+            self.assertFalse((evidence / "bundle.json").exists())
+            self.assertFalse(partial_bundle.exists())
+
+    def test_normal_browsing_continues_when_shared_bundle_artifact_download_fails(self):
+        workflow = (ROOT / ".github/workflows/source-checks.yml").read_text()
+        basic_browsing = workflow.split("  basic-browsing:\n", 1)[1].split("\n  coverage:\n", 1)[0]
+        download = basic_browsing.split(
+            "      - name: Download shared exact-source verification bundle\n", 1
+        )[1].split("      - name:", 1)[0]
+        self.assertIn("continue-on-error: true", download)
+
     def test_localization_engine_requires_restored_bundle_without_rebuilding_it(self):
         checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
         with patch.object(STAGES, "require_hosted_mac"), patch.object(
@@ -1345,7 +1958,44 @@ class EngineTransferTests(unittest.TestCase):
             self.assertIn(f"shards={json.dumps(engine_shards(2))}", output.read_text())
 
 
+class PythonTestRunnerTests(unittest.TestCase):
+    def test_import_failure_is_recorded_in_requested_junit_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            test_directory = root / "FixtureTests"
+            test_directory.mkdir()
+            (test_directory / "test_broken.py").write_text("def broken(:\n")
+            report_path = root / "junit/python.xml"
+            with (patch.object(PYTHON_TESTS, "TESTS_ROOT", root),
+                  patch.object(sys, "argv", ["test-python.py", "--junit", str(report_path)]),
+                  patch.object(sys, "stdout", io.StringIO()),
+                  patch.object(sys, "stderr", io.StringIO())):
+                status = PYTHON_TESTS.main()
+            report = ET.parse(report_path).getroot()
+            self.assertEqual(status, 1)
+            self.assertEqual(report.attrib["errors"], "1")
+            self.assertIn("invalid syntax", report.find("testcase/error").text.lower())
+
+
 class SwiftExtractionTests(unittest.TestCase):
+    def test_cli_rejects_input_named_coverage_json_without_overwriting_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = root / "coverage.json"
+            original = json.dumps({"#select": {"tuples": [[{
+                "label": str(root / "Sources/App.swift")
+            }]]}})
+            report.write_text(original, encoding="utf-8")
+            error_output = io.StringIO()
+            with (patch.object(EXTRACTION, "ROOT", root),
+                  patch.object(EXTRACTION, "swift_source_files", return_value={"Sources/App.swift"}),
+                  patch.object(sys, "argv", ["check-codeql-extraction.py", str(report)]),
+                  patch.object(sys, "stderr", error_output)):
+                status = EXTRACTION.main()
+            self.assertEqual(status, 2)
+            self.assertIn("input and coverage output paths must differ", error_output.getvalue())
+            self.assertEqual(report.read_text(encoding="utf-8"), original)
+
     def test_cli_reports_malformed_json_without_name_error(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

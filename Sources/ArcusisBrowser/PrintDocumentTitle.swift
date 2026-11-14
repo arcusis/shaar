@@ -9,8 +9,8 @@ import SwiftUI
 enum PrintDocumentTitle {
   static func make(pageTitle: String?, productName: String = ProductIdentity.name) -> String {
     let scalars = (pageTitle ?? "").unicodeScalars.map { scalar -> Unicode.Scalar in
-      if CharacterSet.controlCharacters.contains(scalar)
-        || scalar.properties.generalCategory == .format
+      if CharacterSet.controlCharacters.contains(scalar) && !isJoiner(scalar) && !isEmojiTag(scalar)
+        || isBidirectionalControl(scalar)
         || scalar.properties.generalCategory == .lineSeparator
         || scalar.properties.generalCategory == .paragraphSeparator || scalar == "/"
       {
@@ -19,8 +19,47 @@ enum PrintDocumentTitle {
       return scalar
     }
     let title = String(String.UnicodeScalarView(scalars))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    return title.isEmpty ? productName : String(title.prefix(120))
+      .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    guard !title.isEmpty, containsVisibleFilenameText(title),
+      let boundedTitle = boundedFilenameTitle(title)
+    else { return productName }
+    return boundedTitle
+  }
+
+  private static func boundedFilenameTitle(_ title: String) -> String? {
+    var result = ""
+    for character in title.prefix(120) {
+      let cluster = String(character)
+      guard result.utf8.count + cluster.utf8.count <= 180 else { break }
+      result.append(contentsOf: cluster)
+    }
+    return result.isEmpty ? nil : result
+  }
+
+  private static func containsVisibleFilenameText(_ title: String) -> Bool {
+    title.unicodeScalars.contains {
+      guard !isJoiner($0), !isEmojiTag($0),
+        !CharacterSet.whitespacesAndNewlines.contains($0)
+      else { return false }
+      switch $0.properties.generalCategory {
+      case .nonspacingMark, .spacingMark, .enclosingMark: return false
+      default: return true
+      }
+    }
+  }
+
+  private static func isJoiner(_ scalar: Unicode.Scalar) -> Bool {
+    scalar.value == 0x200C || scalar.value == 0x200D
+  }
+
+  private static func isEmojiTag(_ scalar: Unicode.Scalar) -> Bool {
+    (0xE0000...0xE007F).contains(scalar.value)
+  }
+
+  private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x061C || value == 0x200E || value == 0x200F
+      || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
   }
 }
 

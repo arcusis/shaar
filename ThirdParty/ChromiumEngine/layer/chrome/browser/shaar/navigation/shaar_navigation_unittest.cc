@@ -94,6 +94,8 @@ TEST(ShaarNavigationHandlerTest,
             SHAAR_INVALID_ARGUMENT);
   EXPECT_EQ(ValidateURL("data:text/html,blocked", &canonical),
             SHAAR_POLICY_BLOCKED);
+  EXPECT_EQ(ValidateURL("file:///etc/passwd", &canonical),
+            SHAAR_POLICY_BLOCKED);
   EXPECT_EQ(ValidateURL("https://example.test/", &canonical), SHAAR_OK);
   EXPECT_EQ(canonical, "https://example.test/");
 }
@@ -118,6 +120,13 @@ TEST(ShaarNavigationHandlerTest, ReportsHistoryBoundaryAndMapsReloadModes) {
       HandleCommand(&backend, SHAAR_OP_TAB_RELOAD, Bytes(normal), &reason),
       SHAAR_OK);
   EXPECT_FALSE(backend.did_bypass_cache);
+}
+
+TEST(ShaarNavigationHandlerTest, ReloadDuringNavigationKeepsPendingDestination) {
+  const GURL committed("https://example.test/previous");
+  const GURL pending("https://example.test/slow");
+  EXPECT_EQ(ReloadTargetURL(pending, committed), pending);
+  EXPECT_EQ(ReloadTargetURL(GURL(), committed), committed);
 }
 
 TEST(ShaarNavigationHandlerTest, StopIsDispatchedAndNullBackendIsNotFound) {

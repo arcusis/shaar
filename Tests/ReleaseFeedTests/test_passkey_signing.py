@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -47,6 +48,18 @@ def valid_profile():
 
 
 class PasskeySigningTests(unittest.TestCase):
+    def test_release_base_entitlements_are_minimal(self):
+        entitlements = plistlib.loads(BASE.read_bytes())
+        self.assertEqual(
+            set(entitlements),
+            {
+                "com.apple.security.device.audio-input",
+                "com.apple.security.device.camera",
+                "com.apple.security.personal-information.location",
+            },
+        )
+        self.assertTrue(all(value is True for value in entitlements.values()))
+
     def test_passkeys_plist_matches_the_release_contract(self):
         plist = plistlib.loads(PASSKEYS.read_bytes())
         self.assertEqual(plist, passkey_signing.required_entitlements())
@@ -77,6 +90,20 @@ class PasskeySigningTests(unittest.TestCase):
     def test_check_accepts_a_decoded_developer_id_profile(self):
         self.assertEqual(passkey_signing.profile_problems(valid_profile()), [])
 
+    def test_decode_profile_reports_cms_failure_output(self):
+        result = subprocess.CompletedProcess(
+            args=["security", "cms"], returncode=1, stdout=b"", stderr=b"profile rejected")
+        with patch("passkey_signing.subprocess.run", return_value=result):
+            with self.assertRaisesRegex(ValueError, "profile rejected"):
+                passkey_signing.decode_profile(Path("profile.mobileprovision"))
+
+    def test_decode_profile_rejects_non_plist_cms_output(self):
+        result = subprocess.CompletedProcess(
+            args=["security", "cms"], returncode=0, stdout=b"not a plist", stderr=b"")
+        with patch("passkey_signing.subprocess.run", return_value=result):
+            with self.assertRaisesRegex(ValueError, "decoded profile is not a plist"):
+                passkey_signing.decode_profile(Path("profile.mobileprovision"))
+
     def test_rejections(self):
         cases = {
             "wrong team": ("TeamIdentifier", ["OTHERTEAM1"]),
@@ -97,6 +124,11 @@ class PasskeySigningTests(unittest.TestCase):
             f"profile is missing {passkey_signing.BROWSER_ENTITLEMENT}",
             passkey_signing.profile_problems(profile))
         profile = valid_profile()
+        profile["Entitlements"][passkey_signing.BROWSER_ENTITLEMENT] = 1
+        self.assertTrue(any(
+            passkey_signing.BROWSER_ENTITLEMENT in problem
+            for problem in passkey_signing.profile_problems(profile)))
+        profile = valid_profile()
         profile["Entitlements"]["keychain-access-groups"] = [".com.arcusis.shaar.engine.webauthn"]
         self.assertTrue(any("keychain-access-groups" in problem
                             for problem in passkey_signing.profile_problems(profile)))
@@ -107,6 +139,16 @@ class PasskeySigningTests(unittest.TestCase):
         profile = valid_profile()
         profile["Entitlements"]["com.apple.security.get-task-allow"] = True
         self.assertIn("profile allows a debugger", passkey_signing.profile_problems(profile))
+
+    def test_profile_rejects_malformed_debugger_entitlement_values(self):
+        for value in (1, 0, "false", None, [False]):
+            with self.subTest(value=value):
+                profile = valid_profile()
+                profile["Entitlements"]["com.apple.security.get-task-allow"] = value
+                self.assertIn(
+                    "profile has an invalid debugger entitlement",
+                    passkey_signing.profile_problems(profile),
+                )
 
     def test_merge_refuses_a_key_the_base_already_has(self):
         profile = valid_profile()

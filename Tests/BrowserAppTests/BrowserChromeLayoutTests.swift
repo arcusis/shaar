@@ -8,6 +8,17 @@ import XCTest
 @testable import ArcusisBrowser
 
 final class BrowserChromeLayoutTests: XCTestCase {
+  func testReduceMotionOverrideCannotDisableTheSystemSetting() {
+    XCTAssertFalse(BrowserChromeAccessibilityOverrides().reduceMotionEnabled(systemSetting: false))
+    XCTAssertTrue(
+      BrowserChromeAccessibilityOverrides(reduceMotion: true)
+        .reduceMotionEnabled(systemSetting: false))
+    XCTAssertTrue(
+      BrowserChromeAccessibilityOverrides(reduceMotion: false)
+        .reduceMotionEnabled(systemSetting: true))
+    XCTAssertTrue(BrowserChromeAccessibilityOverrides().reduceMotionEnabled(systemSetting: true))
+  }
+
   func testLibraryWidthsPreservePageSliver() {
     XCTAssertEqual(BrowserChromeLayout.libraryWidth(windowWidth: 1200, spaces: false), 388)
     XCTAssertEqual(BrowserChromeLayout.libraryWidth(windowWidth: 1200, spaces: true), 1176)
@@ -87,5 +98,23 @@ final class BrowserChromeLayoutTests: XCTestCase {
 
     XCTAssertLessThanOrEqual(frame.height, content.height)
     XCTAssertEqual(frame.midY, content.midY)
+  }
+
+  func testContainerFrameSamplerRequiresTwoConsecutiveStableSamples() {
+    var sampler = StableContainerFrameSampler(tolerance: 0.25)
+    let initial = CGRect(x: 205, y: 45, width: 984, height: 700)
+    XCTAssertFalse(sampler.sample(initial))
+    XCTAssertFalse(sampler.sample(CGRect(x: 207, y: 45, width: 984, height: 700)))
+    XCTAssertFalse(sampler.sample(CGRect(x: 208, y: 45, width: 984, height: 700)))
+    XCTAssertTrue(sampler.sample(CGRect(x: 208.1, y: 45, width: 984, height: 700)))
+  }
+
+  func testContainerFrameSamplerResetsStabilityWhenFrameMoves() {
+    var sampler = StableContainerFrameSampler(tolerance: 0.25)
+    let frame = CGRect(x: 208, y: 45, width: 984, height: 700)
+    XCTAssertFalse(sampler.sample(frame))
+    XCTAssertTrue(sampler.sample(frame))
+    XCTAssertFalse(sampler.sample(CGRect(x: 208, y: 45, width: 983, height: 700)))
+    XCTAssertTrue(sampler.sample(CGRect(x: 208, y: 45, width: 983, height: 700)))
   }
 }

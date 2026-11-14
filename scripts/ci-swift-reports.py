@@ -6,14 +6,16 @@
 """Retain native Swift Testing XML and report serial XCTest events as JUnit."""
 
 import argparse
+import math
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
 
-CASE_EVENT = re.compile(r"^Test Case '(.+)' (started|passed|failed|skipped)(?: \(([0-9.]+) seconds\))?\.$")
+CASE_EVENT = re.compile(r"^Test Case '(.+)' (started|passed|failed|skipped)(?: \(([^()]*) seconds\))?\.$")
 SUITE_END = re.compile(r"^Test Suite '(?:All tests|Selected tests)' (?:passed|failed) at ")
 TOTAL = re.compile(r"^\s*Executed ([0-9]+) tests?\b")
+SWIFT_TEST_TOTAL = re.compile(r"Test run with ([0-9]+) tests?\b")
 
 
 def case_identity(label: str) -> tuple[str, str]:
@@ -41,7 +43,12 @@ def xctest_cases(text: str) -> list[ET.Element]:
                 if label not in active or seconds is None:
                     raise ValueError(f"Unpaired or untimed XCTest end: {label}")
                 case, details = active.pop(label)
-                float(seconds)
+                try:
+                    duration = float(seconds)
+                except ValueError as error:
+                    raise ValueError(f"Invalid XCTest duration for {label}: {seconds!r}") from error
+                if not math.isfinite(duration) or duration < 0:
+                    raise ValueError(f"Invalid XCTest duration for {label}: {seconds!r}")
                 case.set("time", seconds)
                 if state in ("failed", "skipped"):
                     tag = "failure" if state == "failed" else "skipped"
@@ -68,14 +75,35 @@ def write_reports(log: Path, directory: Path) -> None:
     native = sorted(directory.glob("swift*-swift-testing.xml"))
     if "Test run with " in text and not native:
         raise ValueError("Swift Testing ran without producing its native JUnit XML")
+    native_case_count = 0
     for report in native:
-        ET.parse(report)
+        native_case_count += sum(1 for _ in ET.parse(report).iter("testcase"))
+    expected_native_count = sum(int(match.group(1)) for match in SWIFT_TEST_TOTAL.finditer(text))
+    if "Test run with " in text and native_case_count == 0:
+        raise ValueError(
+            "Swift Testing ran but its native JUnit XML contains no test cases "
+            f"(log reports {expected_native_count} tests but native XML contains "
+            f"{native_case_count} cases)"
+        )
+    native_test_count = 0
+    for report in native:
+        root = ET.parse(report).getroot()
+        native_test_count += sum(1 for _ in root.iter("testcase"))
+    if expected_native_count != native_test_count:
+        raise ValueError(
+            f"Swift Testing log reports {expected_native_count} tests but native XML contains "
+            f"{native_test_count} cases")
     failures = sum(case.find("failure") is not None for case in cases)
     skipped = sum(case.find("skipped") is not None for case in cases)
     suite = ET.Element("testsuite", name="XCTest", tests=str(len(cases)),
                        failures=str(failures), errors="0", skipped=str(skipped))
     suite.extend(cases)
-    ET.ElementTree(suite).write(directory / "xctest.xml", encoding="utf-8", xml_declaration=True)
+    report = directory / "xctest.xml"
+    if report.is_symlink():
+        raise ValueError(f"XCTest report path must not be a symlink: {report}")
+    if report.exists() and not report.is_file():
+        raise ValueError(f"XCTest report path is not a regular file: {report}")
+    ET.ElementTree(suite).write(report, encoding="utf-8", xml_declaration=True)
     # Some toolchains also emit XCTest XML here. The validated conversion owns
     # that provider's report, so retain one copy of each test rather than two.
     (directory / "swift.xml").unlink(missing_ok=True)

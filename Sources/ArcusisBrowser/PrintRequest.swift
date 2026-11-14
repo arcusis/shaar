@@ -29,7 +29,7 @@ struct PrintRequest: Identifiable, Equatable {
       let requestingOrigin = URL(string: originString),
       let frameID = payload["frameID"] as? String,
       Self.isFrameToken(frameID),
-      NavigationInput.isWebURL(pageURL),
+      Self.isDisplayableWebURL(pageURL),
       Self.isWebOrigin(requestingOrigin),
       let title = Self.boundedTitle(payload["title"])
     else { return nil }
@@ -44,12 +44,39 @@ struct PrintRequest: Identifiable, Equatable {
 
   var sheetID: String { "print-\(id)" }
 
+  var displayPageURL: String {
+    guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
+      return pageURL.host() ?? ""
+    }
+    components.user = nil
+    components.password = nil
+    return components.string ?? pageURL.host() ?? ""
+  }
+
   var hostLabel: String {
-    guard let rawHost = requestingOrigin.host() ?? pageURL.host() else {
+    guard let rawHost = Self.serializedHost(requestingOrigin) ?? pageURL.host() else {
       return pageURL.absoluteString
     }
     let host = rawHost.contains(":") && !rawHost.hasPrefix("[") ? "[\(rawHost)]" : rawHost
     return requestingOrigin.port.map { "\(host):\($0)" } ?? host
+  }
+
+  private static func serializedHost(_ origin: URL) -> String? {
+    let absoluteString = origin.absoluteString
+    guard let authorityStart = absoluteString.range(of: "://")?.upperBound else { return nil }
+    let authority = absoluteString[authorityStart...].prefix { $0 != "/" }
+    guard !authority.isEmpty else { return nil }
+
+    let host: Substring
+    if authority.first == "[" {
+      guard let closingBracket = authority.firstIndex(of: "]") else { return nil }
+      host = authority[...closingBracket]
+    } else if let colon = authority.lastIndex(of: ":") {
+      host = authority[..<colon]
+    } else {
+      host = authority
+    }
+    return host.isEmpty ? nil : String(host)
   }
 
   func matches(
@@ -77,15 +104,85 @@ struct PrintRequest: Identifiable, Equatable {
       origin.query == nil,
       origin.fragment == nil,
       origin.user == nil,
-      origin.password == nil
+      origin.password == nil,
+      Self.hasValidPort(origin)
     else { return false }
     return ["http", "https"].contains(origin.scheme?.lowercased() ?? "")
+  }
+
+  private static func isDisplayableWebURL(_ url: URL) -> Bool {
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+      return false
+    }
+    components.user = nil
+    components.password = nil
+    guard let credentialFreeURL = components.url else { return false }
+    return NavigationInput.isWebURL(credentialFreeURL)
+  }
+
+  private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x061C || value == 0x200E || value == 0x200F
+      || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
+  }
+
+  private static func isPreservedFormat(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x200C || value == 0x200D || (0xE0000...0xE007F).contains(value)
+  }
+
+  private static func hasValidPort(_ origin: URL) -> Bool {
+    let absoluteString = origin.absoluteString
+    guard let authorityStart = absoluteString.range(of: "://")?.upperBound else { return false }
+    let authority = absoluteString[authorityStart...].prefix { $0 != "/" }
+    let portText: Substring
+    if authority.first == "[" {
+      guard let closingBracket = authority.firstIndex(of: "]") else { return false }
+      let suffix = authority[authority.index(after: closingBracket)...]
+      guard suffix.first == ":" else { return suffix.isEmpty && origin.port == nil }
+      portText = suffix.dropFirst()
+    } else {
+      guard let colon = authority.lastIndex(of: ":") else { return origin.port == nil }
+      portText = authority[authority.index(after: colon)...]
+    }
+
+    guard !portText.isEmpty, portText.allSatisfy({ $0 >= "0" && $0 <= "9" }) else {
+      return false
+    }
+    let significantDigits = portText.drop(while: { $0 == "0" })
+    guard significantDigits.count <= 5,
+      let port = Int(significantDigits.isEmpty ? "0" : String(significantDigits)),
+      (0...65_535).contains(port)
+    else { return false }
+    return origin.port == port
   }
 
   private static func boundedTitle(_ value: Any?) -> String? {
     guard let value else { return "" }
     guard let title = value as? String, title.utf8.count <= 2048 else { return nil }
-    return title
+    let scalars = title.unicodeScalars.map { scalar -> Unicode.Scalar in
+      switch scalar.properties.generalCategory {
+      case .control, .lineSeparator, .paragraphSeparator: return " "
+      case .format:
+        return Self.isBidirectionalControl(scalar) || !Self.isPreservedFormat(scalar)
+          ? " " : scalar
+      default: return Self.isBidirectionalControl(scalar) ? " " : scalar
+      }
+    }
+    let sanitized = String(String.UnicodeScalarView(scalars))
+      .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    guard sanitized.unicodeScalars.contains(where: Self.isVisibleTitleScalar) else { return "" }
+    return String(sanitized.prefix(256))
+  }
+
+  private static func isVisibleTitleScalar(_ scalar: Unicode.Scalar) -> Bool {
+    guard !isPreservedFormat(scalar), !CharacterSet.whitespacesAndNewlines.contains(scalar) else {
+      return false
+    }
+    switch scalar.properties.generalCategory {
+    case .nonspacingMark, .spacingMark, .enclosingMark: return false
+    default: return true
+    }
   }
 
   private static func hasSupportedSchemaVersion(_ value: Any?) -> Bool {
@@ -95,4 +192,5 @@ struct PrintRequest: Identifiable, Equatable {
     else { return false }
     return true
   }
+
 }

@@ -53,6 +53,53 @@ import Testing
   }
 }
 
+@Test func historyImportRowAllocationBenchmark() {
+  let items = (0..<2_500).map { itemIndex in
+    BrowserImportItem(
+      kind: .history, source: .chrome, title: "History \(itemIndex)",
+      address: "https://example.com/\(itemIndex)",
+      visitTimes: (0..<200).reversed().map {
+        Date(timeIntervalSince1970: Double(itemIndex + $0))
+      })
+  }
+  let expected = legacyHistoryRows(items)
+  let actual = BrowserImport.historyRows(for: items)
+  #expect(actual.count == expected.count && actual.count == 2_500)
+  for (actualRow, expectedRow) in zip(actual, expected) {
+    #expect(actualRow["v"] as? [Double] == expectedRow["v"] as? [Double])
+    #expect(actualRow["l"] as? Double == expectedRow["l"] as? Double)
+  }
+
+  var beforeSamples: [Duration] = []
+  var afterSamples: [Duration] = []
+  for _ in 0..<5 {
+    let beforeStart = ContinuousClock.now
+    for _ in 0..<3 { _ = legacyHistoryRows(items) }
+    beforeSamples.append(beforeStart.duration(to: .now))
+    let afterStart = ContinuousClock.now
+    for _ in 0..<3 { _ = BrowserImport.historyRows(for: items) }
+    afterSamples.append(afterStart.duration(to: .now))
+  }
+  let before = beforeSamples.sorted()[beforeSamples.count / 2]
+  let after = afterSamples.sorted()[afterSamples.count / 2]
+  print("historyImportRowAllocationBenchmark: before=\(before), after=\(after)")
+  #expect(after < before * 0.9)
+}
+
+private func legacyHistoryRows(_ items: [BrowserImportItem]) -> [[String: Any]] {
+  items.compactMap { item in
+    guard item.kind == .history, !item.visitTimes.isEmpty,
+      let latest = item.visitTimes.max()
+    else { return nil }
+    let visits = item.visitTimes.map { $0.timeIntervalSince1970 * 1_000 }
+    return [
+      "u": item.address, "t": item.title, "n": visits.count,
+      "l": latest.timeIntervalSince1970 * 1_000,
+      "v": visits, "s": item.source.rawValue,
+    ]
+  }
+}
+
 @Test func historyImportPreviewUsesHostForMissingTitles() throws {
   let profile = try profileDirectory(name: "ChromeUntitledHistory")
   try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))
@@ -71,6 +118,93 @@ import Testing
   #expect(
     batch.history.map(\.title)
       == ["History page", "untitled.example.test", "spaces.example.test"])
+}
+
+@Test func browserImportFolderPathAllocationBenchmark() {
+  let path = (0..<10).map { "Folder \($0)" }
+  let items = (0..<10_000).map { index in
+    BrowserImportItem(
+      title: "Page \(index)", address: "https://example.com/\(index)",
+      folderComponents: path)
+  }
+  let rootFolderID = UUID()
+  let expected = legacyImportOperations(items, otherFolderID: rootFolderID)
+  let actual = BrowserImport.operations(for: items, otherFolderID: rootFolderID)
+  #expect(actual.count == expected.count && actual.count == 10_010)
+  #expect(importOperationSignatures(actual) == importOperationSignatures(expected))
+
+  var beforeSamples: [Duration] = []
+  var afterSamples: [Duration] = []
+  for _ in 0..<5 {
+    let beforeStart = ContinuousClock.now
+    for _ in 0..<3 { _ = legacyImportOperations(items, otherFolderID: rootFolderID) }
+    beforeSamples.append(beforeStart.duration(to: .now))
+    let afterStart = ContinuousClock.now
+    for _ in 0..<3 {
+      _ = BrowserImport.operations(for: items, otherFolderID: rootFolderID)
+    }
+    afterSamples.append(afterStart.duration(to: .now))
+  }
+  let before = beforeSamples.sorted()[beforeSamples.count / 2]
+  let after = afterSamples.sorted()[afterSamples.count / 2]
+  print("browserImportFolderPathAllocationBenchmark: before=\(before), after=\(after)")
+  #expect(after < before * 0.9)
+}
+
+private func legacyImportOperations(
+  _ items: [BrowserImportItem], otherFolderID: UUID
+) -> [[String: Any]] {
+  var operations: [[String: Any]] = []
+  var folders: [[String]: UUID] = [:]
+  for item in items where item.kind == .bookmark {
+    let parent: UUID
+    if let components = item.folderComponents {
+      var currentParent = otherFolderID
+      var path: [String] = []
+      for component in components {
+        path.append(component)
+        if let existing = folders[path] {
+          currentParent = existing
+        } else {
+          let id = UUID()
+          folders[path] = id
+          operations.append([
+            "op": "add", "id": id.uuidString.lowercased(),
+            "parent": currentParent.uuidString.lowercased(), "k": "f", "t": component,
+          ])
+          currentParent = id
+        }
+      }
+      parent = currentParent
+    } else {
+      parent = otherFolderID
+    }
+    operations.append([
+      "op": "add", "id": item.id.uuidString.lowercased(),
+      "parent": parent.uuidString.lowercased(), "k": "u", "t": item.title, "u": item.address,
+    ])
+  }
+  return operations
+}
+
+private func importOperationSignatures(_ operations: [[String: Any]]) -> [String] {
+  var folderIndices: [String: Int] = [:]
+  for (index, operation) in operations.enumerated() {
+    guard operation["k"] as? String == "f", let id = operation["id"] as? String else {
+      continue
+    }
+    folderIndices[id] = index
+  }
+  return operations.map { operation in
+    let parent = operation["parent"] as? String ?? ""
+    let normalizedParent = folderIndices[parent].map(String.init) ?? "root"
+    let bookmarkID = operation["k"] as? String == "u" ? operation["id"] as? String ?? "" : ""
+    return [
+      operation["op"] as? String ?? "", operation["k"] as? String ?? "",
+      operation["t"] as? String ?? "", operation["u"] as? String ?? "",
+      normalizedParent, bookmarkID,
+    ].joined(separator: "|")
+  }
 }
 
 @Test func chromiumProfileImportsAvailableDataWithoutTheOtherFile() throws {
@@ -159,9 +293,10 @@ import Testing
   let batch = try BrowserImport.readProfile(at: database, source: .firefox)
 
   #expect(batch.bookmarks.map(\.title) == ["One", "Two"])
-  #expect(batch.bookmarks.map(\.address) == [
-    "https://duplicate.example/one", "https://duplicate.example/two",
-  ])
+  #expect(
+    batch.bookmarks.map(\.address) == [
+      "https://duplicate.example/one", "https://duplicate.example/two",
+    ])
 }
 
 @Test func firefoxImportKeepsNestedFoldersNamedLikeRootFolders() throws {
@@ -201,6 +336,38 @@ import Testing
     }
   }
   #expect(BrowserImport.ImportError.privateProfile.errorDescription?.contains("Private") == true)
+}
+
+@Test func privateBrowserProfileSymlinkAliasesAreRejectedBeforeReading() throws {
+  let root = FileManager.default.temporaryDirectory.appending(path: "BrowserImport-\(UUID())")
+  defer { try? FileManager.default.removeItem(at: root) }
+  let privateProfile = root.appending(path: "Incognito")
+  try FileManager.default.createDirectory(at: privateProfile, withIntermediateDirectories: true)
+  try copyFixture("ChromiumBookmarks", to: privateProfile.appending(path: "Bookmarks"))
+  let alias = root.appending(path: "Regular Profile")
+  try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: privateProfile)
+
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: alias, source: .chrome)
+  }
+}
+
+@Test func privateBrowserProfileAncestorsAreRejectedBeforeReading() throws {
+  let root = FileManager.default.temporaryDirectory.appending(path: "BrowserImport-\(UUID())")
+  defer { try? FileManager.default.removeItem(at: root) }
+  let profile = root.appending(path: "Incognito/First/Second/Profile")
+  try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+  try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))
+
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: profile, source: .chrome)
+  }
+
+  let guestHome = root.appending(path: "Guest/First/Second/Profile")
+  try FileManager.default.createDirectory(at: guestHome, withIntermediateDirectories: true)
+  try copyFixture("ChromiumBookmarks", to: guestHome.appending(path: "Bookmarks"))
+  let imported = try BrowserImport.readProfile(at: guestHome, source: .chrome)
+  #expect(imported.bookmarks.count == 1)
 }
 
 @Test func ordinaryProfileFolderContainingGuestImportsNormally() throws {
@@ -280,6 +447,77 @@ import Testing
   print("repeatedHistoryVisitGroupingFocusedBenchmark: \(start.duration(to: .now))")
   #expect(batch.history.count == 1)
   #expect(batch.history[0].visitTimes.count == 30_002)
+}
+
+@Test func sqliteRowMaterializationFocusedBenchmark() throws {
+  let profile = try profileDirectory(name: "SQLiteRowsBenchmark")
+  defer { try? FileManager.default.removeItem(at: profile) }
+  let database = profile.appending(path: "History")
+  try createDatabase(
+    sqlFixture: "ChromiumHistory.sql", at: database,
+    extraSQL: """
+      WITH RECURSIVE sequence(value) AS (
+        SELECT 10 UNION ALL SELECT value + 1 FROM sequence WHERE value < 30009
+      )
+      INSERT INTO visits SELECT value, 1, 13344473602000000 + value, 0 FROM sequence;
+      """)
+  let start = ContinuousClock.now
+  var rowCount = 0
+  for _ in 0..<4 {
+    rowCount += try BrowserImportSQLite.rows(
+      at: database,
+      query: "SELECT id, url, visit_time, transition FROM visits ORDER BY id").count
+  }
+  print("sqliteRowMaterializationFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(rowCount == 120_012)
+}
+
+@Test func repeatedHistoryAddressValidationBenchmark() {
+  let address = "https://example.com/repeated-history-entry"
+  var validationCache = BrowserImportAddressCache()
+  let rejectsInvalidAddress = validationCache.accepts("not a valid web address")
+  let acceptsValidAddress = validationCache.accepts(address)
+  let acceptsRepeatedAddress = validationCache.accepts(address)
+  #expect(!rejectsInvalidAddress && acceptsValidAddress && acceptsRepeatedAddress)
+  var beforeSamples: [Duration] = []
+  var afterSamples: [Duration] = []
+  var beforeAccepted = 0
+  var afterAccepted = 0
+  for _ in 0..<5 {
+    let beforeStart = ContinuousClock.now
+    for _ in 0..<30_000 {
+      if LibraryAddress.destination(address) != nil { beforeAccepted += 1 }
+    }
+    beforeSamples.append(beforeStart.duration(to: .now))
+    var cache = BrowserImportAddressCache()
+    let afterStart = ContinuousClock.now
+    for _ in 0..<30_000 {
+      if cache.accepts(address) { afterAccepted += 1 }
+    }
+    afterSamples.append(afterStart.duration(to: .now))
+  }
+  #expect(beforeAccepted == afterAccepted && afterAccepted == 150_000)
+  let before = beforeSamples.sorted()[beforeSamples.count / 2]
+  let after = afterSamples.sorted()[afterSamples.count / 2]
+  print("repeatedHistoryAddressValidationBenchmark: before=\(before), after=\(after)")
+  #expect(after < before * 0.5)
+}
+
+@Test func duplicateHistoryURLsKeepVisitsChronological() throws {
+  let profile = try profileDirectory(name: "DuplicateHistoryURLs")
+  try createDatabase(
+    sqlFixture: "ChromiumHistory.sql", at: profile.appending(path: "History"),
+    extraSQL: """
+      INSERT INTO urls VALUES(2, 'https://history.example.test/', 'Duplicate history page', 1,
+        13344473500000000);
+      INSERT INTO visits VALUES(4, 2, 13344473500000000, 0);
+      """
+  )
+
+  let batch = try BrowserImport.readProfile(at: profile, source: .chrome)
+  #expect(batch.history.count == 1)
+  #expect(batch.history[0].visitTimes.count == 3)
+  #expect(batch.history[0].visitTimes == batch.history[0].visitTimes.sorted())
 }
 
 @Test func sqliteSnapshotRejectsMissingSourcesAndInvalidQueries() throws {

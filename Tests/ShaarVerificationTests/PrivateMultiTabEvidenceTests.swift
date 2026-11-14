@@ -7,7 +7,7 @@ import Testing
 
 @testable import ShaarVerification
 
-@Suite struct PrivateMultiTabEvidenceTests {
+@Suite @MainActor struct PrivateMultiTabEvidenceTests {
   @Test func liveTabAuditRequiresOwnedWebContentsAndExpectedCount() {
     let valid: [AnyHashable: Any] = [
       "sourceIsRegular": true,
@@ -27,6 +27,84 @@ import Testing
       missing.removeValue(forKey: key)
       #expect(!PrivateMultiTabEvidence.liveTabAudit(missing, tabCount: 3))
     }
+  }
+
+  @Test func liveTabAuditRejectsJSONNumbersForBooleanFlags() throws {
+    let base: [String: Any] = [
+      "sourceIsRegular": true, "contextIsPrivate": true, "contextDistinct": true,
+      "allWindowsUsePrivateActiveProfile": true, "allTabsInNativeProfileBrowser": true,
+      "allWindowsDisplayOwnedWebContents": true, "visibleNativeViewportCount": 1,
+      "tabCount": 1,
+    ]
+    let keys = [
+      "sourceIsRegular", "contextIsPrivate", "contextDistinct",
+      "allWindowsUsePrivateActiveProfile", "allTabsInNativeProfileBrowser",
+      "allWindowsDisplayOwnedWebContents",
+    ]
+    for key in keys {
+      var malformed = base
+      malformed[key] = 1
+      #expect(
+        !PrivateMultiTabEvidence.liveTabAudit(
+          try jsonObject(malformed) as [AnyHashable: Any], tabCount: 1))
+    }
+  }
+
+  @Test func shellAttachmentRequiresTheNativePageAsAnActualSubview() {
+    let container = NSView()
+    let page = NSView()
+    container.addSubview(page)
+    #expect(PrivateMultiTabEvidence.pageIsAttached(page, to: container, retainedPage: page))
+
+    page.removeFromSuperview()
+    #expect(!PrivateMultiTabEvidence.pageIsAttached(page, to: container, retainedPage: page))
+  }
+
+  @Test func shellAuditRejectsJSONBooleanContainerCount() throws {
+    let data = try JSONSerialization.data(withJSONObject: [
+      "stage": "tab-0", "containerCount": true, "layerBacked": [true],
+      "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
+    ] as [String: Any])
+    let shellAudit = try #require(
+      JSONSerialization.jsonObject(with: data) as? [String: Any])
+    #expect(!PrivateMultiTabEvidence.liveShellAudit(shellAudit, stage: "tab-0"))
+  }
+
+  @Test func shellAuditRejectsJSONNumbersForBooleanEvidence() throws {
+    let base: [String: Any] = [
+      "stage": "tab-0", "containerCount": 1, "layerBacked": [true],
+      "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
+    ]
+    let invalid: [(String, Any)] = [
+      ("attached", 1), ("attachedInWindow", 1), ("nativeHidden", 0),
+      ("rawWindowSibling", 0), ("layerBacked", [1]),
+    ]
+    for (key, value) in invalid {
+      var malformed = base
+      malformed[key] = value
+      #expect(
+        !PrivateMultiTabEvidence.liveShellAudit(
+          try jsonObject(malformed), stage: "tab-0"))
+    }
+
+    let blank: [String: Any] = [
+      "stage": "first-blank", "nativeViewPresent": 1,
+      "containerCount": 1, "layerBacked": [true], "attached": true,
+      "attachedInWindow": true, "nativeHidden": false, "rawWindowSibling": false,
+    ]
+    #expect(!PrivateMultiTabEvidence.blankShellAudit(try jsonObject(blank)))
+
+    var split = base
+    split["stage"] = "split"
+    split["containerCount"] = 2
+    split["layerBacked"] = [true, true]
+    split["attachedContainerCount"] = 2
+    split["attachedPagesInWindowCount"] = 2
+    split["visiblePagesInWindowCount"] = 2
+    split["attached"] = 1
+    #expect(!PrivateMultiTabEvidence.splitShellAudit(try jsonObject(split)))
   }
 
   @Test func liveTabCountsRejectBooleansFractionsAndStrings() {
@@ -61,6 +139,8 @@ import Testing
       "stage": "tab-0", "containerCount": 1, "layerBacked": [true],
       "attached": true, "attachedInWindow": true, "nativeHidden": false,
       "rawWindowSibling": false,
+      "nativeFrameInHost": NSStringFromRect(NSRect(x: 0, y: 0, width: 320, height: 240)),
+      "containerFramesInHost": [NSStringFromRect(NSRect(x: 0, y: 0, width: 320, height: 240))],
     ]
     #expect(PrivateMultiTabEvidence.liveShellAudit(valid, stage: "tab-0"))
     #expect(!PrivateMultiTabEvidence.liveShellAudit(valid, stage: "search"))
@@ -71,12 +151,52 @@ import Testing
     }
   }
 
+  @Test func splitShellAuditRequiresTwoVisibleAttachedPagesInTheWindow() {
+    let valid: [String: Any] = [
+      "stage": "split", "containerCount": 2,
+      "attachedContainerCount": 2, "attachedPagesInWindowCount": 2,
+      "visiblePagesInWindowCount": 2, "layerBacked": [true, true],
+      "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
+    ]
+    #expect(PrivateMultiTabEvidence.splitShellAudit(valid))
+    for key in valid.keys {
+      var missing = valid
+      missing.removeValue(forKey: key)
+      #expect(!PrivateMultiTabEvidence.splitShellAudit(missing))
+    }
+    var detachedPane = valid
+    detachedPane["attachedPagesInWindowCount"] = 1
+    #expect(!PrivateMultiTabEvidence.splitShellAudit(detachedPane))
+    var hiddenPane = valid
+    hiddenPane["visiblePagesInWindowCount"] = 1
+    #expect(!PrivateMultiTabEvidence.splitShellAudit(hiddenPane))
+  }
+  @Test func shellAuditRejectsAZeroSizedNativePageInsideItsContainer() {
+    let audit: [String: Any] = [
+      "stage": "tab-0", "containerCount": 1, "layerBacked": [true],
+      "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
+      "nativeFrameInHost": "{{0, 0}, {0, 0}}",
+      "containerFramesInHost": ["{{0, 0}, {320, 240}}"],
+    ]
+    #expect(!PrivateMultiTabEvidence.liveShellAudit(audit, stage: "tab-0"))
+    var outside = audit
+    outside["nativeFrameInHost"] = NSStringFromRect(NSRect(x: 400, y: 0, width: 320, height: 240))
+    #expect(!PrivateMultiTabEvidence.liveShellAudit(outside, stage: "tab-0"))
+    var clipped = audit
+    clipped["nativeFrameInHost"] = NSStringFromRect(NSRect(x: 200, y: 0, width: 320, height: 240))
+    #expect(!PrivateMultiTabEvidence.liveShellAudit(clipped, stage: "tab-0"))
+  }
+
   @Test func blankPrivateTabCannotCoverTheSwiftUIShell() {
     let valid: [String: Any] = [
       "stage": "first-blank", "nativeViewPresent": true,
       "rawWindowSibling": false, "containerCount": 1,
       "layerBacked": [true], "attached": true,
       "attachedInWindow": true, "nativeHidden": false,
+      "nativeFrameInHost": NSStringFromRect(NSRect(x: 0, y: 0, width: 320, height: 240)),
+      "containerFramesInHost": [NSStringFromRect(NSRect(x: 0, y: 0, width: 320, height: 240))],
     ]
     #expect(PrivateMultiTabEvidence.blankShellAudit(valid))
     for key in valid.keys {
@@ -107,6 +227,13 @@ import Testing
     #expect(
       !PrivateMultiTabEvidence.liveSearch(
         ["host": "search.example", "ready": "complete", "textLength": 100], host: "search.example"))
+    for invalidLength: Any in [true, 101.5, "101"] {
+      #expect(!PrivateMultiTabEvidence.liveSearch([
+        "host": "search.example", "ready": "complete", "textLength": invalidLength,
+      ], host: "search.example"))
+    }
+    #expect(!PrivateMultiTabEvidence.liveSearch(
+      ["host": "", "ready": "complete", "textLength": 101], host: ""))
   }
 
   @Test func bitmapLightSamplesDistinguishWhiteFromBlack() throws {
@@ -126,4 +253,9 @@ import Testing
     }
     #expect(PrivateMultiTabEvidence.lightSamples(bitmap) == 0)
   }
+}
+
+private func jsonObject(_ object: [String: Any]) throws -> [String: Any] {
+  let data = try JSONSerialization.data(withJSONObject: object)
+  return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 }

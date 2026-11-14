@@ -134,6 +134,7 @@ struct SiteControlsPanel: View {
   private var header: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(model.target.host).font(.headline).lineLimit(1).truncationMode(.middle)
+        .accessibilityAddTraits(.isHeader)
       Text(ShellL10n.format("%@ profile", arguments: [.string(profileName)]))
         .font(.caption).foregroundStyle(.secondary)
     }
@@ -142,14 +143,16 @@ struct SiteControlsPanel: View {
   }
 }
 
-private struct SiteSectionTitle: View {
+struct SiteSectionTitle: View {
   let title: String
+  static let accessibilityTraits: AccessibilityTraits = .isHeader
 
   init(_ title: String) { self.title = title }
 
   var body: some View {
     ShellL10n.text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
       .padding(.horizontal, 8)
+      .accessibilityAddTraits(Self.accessibilityTraits)
   }
 }
 
@@ -219,6 +222,13 @@ struct SitePermissionRow: View {
   let saving: Bool
   let setAllowed: (Bool) -> Void
 
+  static func askStateValue(
+    for value: SitePermissionValue?, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String? {
+    guard value == .ask else { return nil }
+    return BrowserLocalization.string("Asks first", table: "Shell", language: language)
+  }
+
   var body: some View {
     HStack(spacing: 10) {
       Image(systemName: permission.symbol)
@@ -237,9 +247,27 @@ struct SitePermissionRow: View {
         .labelsHidden()
         .disabled(value == nil || saving)
         .help(permission.help)
-        .accessibilityLabel(permission.help)
+        .accessibilityLabel(permission.title)
+        .accessibilityHint(permission.help)
+        .modifier(SitePermissionAskStateValue(value: value))
     }
     .hoverRowBackground()
+  }
+
+  static func accessibilityValue(for value: SitePermissionValue?) -> String? {
+    value == .ask ? SettingsL10n.string("Ask") : nil
+  }
+}
+
+private struct SitePermissionAskStateValue: ViewModifier {
+  let value: SitePermissionValue?
+
+  @ViewBuilder func body(content: Content) -> some View {
+    if let value = SitePermissionRow.askStateValue(for: value) {
+      content.accessibilityValue(Text(value))
+    } else {
+      content
+    }
   }
 }
 
@@ -375,6 +403,7 @@ extension SitePermission {
     case .camera: ShellL10n.string("Allow or block camera access for this site")
     case .location: ShellL10n.string("Allow or block location access for this site")
     case .notifications: ShellL10n.string("Allow or block notifications for this site")
+    case .midi: ShellL10n.string("Allow or block MIDI device access for this site")
     case .popups: ShellL10n.string("Allow or block pop-ups and redirects for this site")
     case .sound: ShellL10n.string("Allow or mute sound for this site")
     case .autoPictureInPicture:
@@ -388,6 +417,7 @@ extension SitePermission {
     case .camera: ShellL10n.string("Camera")
     case .location: ShellL10n.string("Location")
     case .notifications: ShellL10n.string("Notifications")
+    case .midi: ShellL10n.string("MIDI devices")
     case .popups: ShellL10n.string("Pop-ups and Redirects")
     case .sound: ShellL10n.string("Sound")
     case .autoPictureInPicture: ShellL10n.string("Automatic Picture-in-Picture")
@@ -400,6 +430,7 @@ extension SitePermission {
     case .camera: WebsitePermissionKind.camera.symbol
     case .location: WebsitePermissionKind.location.symbol
     case .notifications: WebsitePermissionKind.notifications.symbol
+    case .midi: WebsitePermissionKind.midi.symbol
     case .popups: "rectangle.on.rectangle"
     case .sound: "speaker.wave.2"
     case .autoPictureInPicture: "pip"

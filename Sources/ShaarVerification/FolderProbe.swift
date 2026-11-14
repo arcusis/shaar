@@ -9,7 +9,19 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
-private struct FolderIdentities: Codable {
+enum FolderProbeEvidence {
+  static func fixtureDocument(_ json: String?) -> [String: Any]? {
+    guard let data = json?.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      value["fixture"] as? String == "v1",
+      let instance = value["instance"] as? String,
+      !instance.isEmpty
+    else { return nil }
+    return value
+  }
+}
+
+struct FolderIdentities: Codable, Equatable {
   let source: UUID
   let destination: UUID
   let root: UUID
@@ -250,10 +262,7 @@ final class FolderProbe {
             "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('account'),session:sessionStorage.getItem('account')})"
         ) { continuation.resume(returning: $0) }
       }
-      if let data = json?.data(using: .utf8),
-        let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["fixture"] as? String == "v1"
-      {
+      if let value = FolderProbeEvidence.fixtureDocument(json) {
         return value
       }
       try await Task.sleep(for: .milliseconds(100))

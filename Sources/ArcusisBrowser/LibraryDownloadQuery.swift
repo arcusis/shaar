@@ -175,9 +175,22 @@ enum LibraryDownloadQuery {
       $0.startTime == $1.startTime ? $0.id < $1.id : $0.startTime > $1.startTime
     }
     var groupedItems: [(date: Date, label: String, items: [BrowserDownload])] = []
+    var previousDate: Date?
+    var previousLabel: String?
     for item in sorted {
       let date = calendar.startOfDay(for: Date(timeIntervalSince1970: item.startTime))
-      let label = relativeDay(date, now: now, calendar: calendar)
+      let label: String
+      if date == previousDate, let previousLabel {
+        label = previousLabel
+      } else {
+        label = relativeDay(date, now: now, calendar: calendar)
+        previousDate = date
+        previousLabel = label
+      }
+      if groupedItems.last?.date == date {
+        groupedItems[groupedItems.count - 1].items.append(item)
+        continue
+      }
       if groupedItems.last?.label == label {
         groupedItems[groupedItems.count - 1].items.append(item)
       } else {

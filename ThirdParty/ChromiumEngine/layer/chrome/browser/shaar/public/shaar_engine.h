@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 12u
+#define SHAAR_ENGINE_ABI_MINOR 17u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -81,8 +81,12 @@ typedef enum {
   SHAAR_EVENT_DEVTOOLS = 14,
   SHAAR_EVENT_MEDIA = 15,
   // BEGIN save_prompts
-  SHAAR_EVENT_SAVE_PROMPT = 16
+  SHAAR_EVENT_SAVE_PROMPT = 16,
   // END save_prompts
+  SHAAR_EVENT_JAVASCRIPT_DIALOG = 17,
+  // BEGIN page_zoom
+  SHAAR_EVENT_ZOOM = 18
+  // END page_zoom
 } shaar_event_kind;
 typedef struct {
   uint32_t size;
@@ -96,6 +100,17 @@ typedef struct {
 } shaar_event;
 typedef void (*shaar_event_fn)(void *context, const shaar_event *event);
 
+/* Synchronously asks the native app to create a managed window. The callback
+ * is only used for Chromium requests carrying a user gesture. */
+typedef shaar_error_code (*shaar_window_request_fn)(
+    void *context,
+    shaar_bytes profile_id,
+    shaar_bytes request_type,
+    int user_gesture,
+    char *window_id_buffer,
+    size_t buffer_capacity,
+    size_t *window_id_size);
+
 typedef struct {
   uint32_t size;
   uint32_t requested_major;
@@ -104,6 +119,9 @@ typedef struct {
   shaar_bytes locale;
   shaar_event_fn on_event; /* the only event sink */
   void *event_context;
+  /* ABI minor 13: optional embedder callback for user-initiated windows. */
+  shaar_window_request_fn on_window_request;
+  void *window_request_context;
 } shaar_config;
 
 /* Exactly one pointer is set for a scoped operation. */
@@ -189,6 +207,7 @@ typedef enum {
   // BEGIN find
   SHAAR_OP_TAB_FIND = 900,
   SHAAR_OP_TAB_STOP_FIND = 901,
+  SHAAR_OP_TAB_ZOOM = 902,
   // END find
 
   // BEGIN devtools operation IDs.
@@ -224,6 +243,10 @@ typedef enum {
   // Testing only: inspect a popup owned by the selected fixture tab.
   SHAAR_OP_PROBE_POPUP_EVALUATE = 1095,
   SHAAR_OP_PROBE_POPUP_CAPTURE = 1096,
+  // Testing only: send a native wheel event to an authored fixture element.
+  SHAAR_OP_PROBE_TRUSTED_SCROLL = 1097,
+  // Testing only: send a trusted click to a never-shown owned extension popup.
+  SHAAR_OP_PROBE_POPUP_TRUSTED_CLICK = 1098,
   // END devtools operation IDs.
 
   // BEGIN media
@@ -237,12 +260,15 @@ typedef enum {
   SHAAR_OP_PROBE_MEDIA_GESTURE = 1107,
   SHAAR_OP_MEDIA_PERMISSION_DECISION = 1108,
   // END media
+  /* HTTP authentication credentials, ABI minor 17. */
+  SHAAR_OP_HTTP_AUTH_CREDENTIALS_REPLY = 1601,
   // BEGIN storage_keychain
   SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400,
   // END storage_keychain
   // BEGIN save_prompts
-  SHAAR_OP_SAVE_PROMPT_DECIDE = 1500
+  SHAAR_OP_SAVE_PROMPT_DECIDE = 1500,
   // END save_prompts
+  SHAAR_OP_JAVASCRIPT_DIALOG_REPLY = 1501
 } shaar_operation;
 
 // Private sessions module IDs.
@@ -468,12 +494,23 @@ SHAAR_EXPORT shaar_error_code shaar_window_open(
     shaar_bytes window_id, shaar_window **out, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_window_close(
     shaar_window *, shaar_error *error);
+/* Returns the real Chromium session ID for a regular profile window. */
+SHAAR_EXPORT shaar_error_code shaar_window_chrome_id(
+    shaar_engine *, shaar_profile *, shaar_window *, int32_t *out,
+    shaar_error *error);
 SHAAR_EXPORT void *shaar_window_host_view(shaar_window *); /* borrowed NSView* */
 SHAAR_EXPORT void *shaar_window_native_window(shaar_window *); /* borrowed NSWindow* */
 SHAAR_EXPORT shaar_error_code shaar_tab_open(
     shaar_scope, shaar_window *, shaar_bytes tab_id, shaar_bytes url,
     int foreground, shaar_tab **out, shaar_error *error);
+/* Resolve a tab identity previously emitted by a Shaar tab-opened event. */
+SHAAR_EXPORT shaar_error_code shaar_tab_find(
+    shaar_engine *, shaar_bytes window_id, shaar_bytes tab_id,
+    shaar_tab **out, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
+    shaar_tab *, shaar_error *error);
+/* Opens Chromium's native print panel for the selected, live tab. */
+SHAAR_EXPORT shaar_error_code shaar_tab_print(
     shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
 /* Verification-only native ownership and display evidence. Caller sets size;
@@ -562,6 +599,10 @@ SHAAR_EXPORT shaar_error_code shaar_submit(
     shaar_reply_fn, void *reply_context, shaar_error *immediate_error);
 SHAAR_EXPORT shaar_error_code shaar_cancel_request(
     shaar_engine *, shaar_request_id, shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_print_reply(const char *request_id,
+                                                 int accepted);
+SHAAR_EXPORT shaar_error_code shaar_share_reply(const char *request_id,
+                                                  int shared);
 
 #ifdef __cplusplus
 }

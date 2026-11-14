@@ -75,7 +75,7 @@ struct SplitGroupView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    let shown = liveWeights ?? weights
+    let shown = Self.displayedWeights(liveWeights, matching: weights)
     GeometryReader { geometry in
       let total = axis == .columns ? geometry.size.width : geometry.size.height
       let available = max(0, total - Self.dividerThickness * CGFloat(shown.count - 1))
@@ -135,7 +135,8 @@ struct SplitGroupView: View {
     .accessibilityLabel(
       SplitDividerAccessibility.label(
         axis: axis, index: index, dividerCount: weights.count - 1,
-        language: .currentLaunchLanguage))
+        language: .currentLaunchLanguage)
+    )
     .accessibilityValue("\(Int((leadingPercent * 100).rounded()))%")
     .accessibilityAdjustableAction(
       SplitDividerInput.accessibilityAction(step: Self.keyboardStep) {
@@ -174,6 +175,11 @@ struct SplitGroupView: View {
 
   private static let keyboardStep: CGFloat = 32
 
+  static func displayedWeights(_ liveWeights: [Double]?, matching weights: [Double]) -> [Double] {
+    guard let liveWeights, liveWeights.count == weights.count else { return weights }
+    return liveWeights
+  }
+
   private func adjustDivider(_ index: Int, by delta: CGFloat, available: CGFloat) {
     let next = Self.resized(weights, at: index, by: delta, available: available)
     guard next != weights else { return }
@@ -201,7 +207,8 @@ enum SplitDividerAccessibility {
   static func label(
     axis: SplitAxis, index: Int, dividerCount: Int, language: BrowserLanguage
   ) -> String {
-    let key = axis == .columns
+    let key =
+      axis == .columns
       ? "Vertical split divider %d of %d" : "Horizontal split divider %d of %d"
     return BrowserLocalization.format(
       key, table: "Shell", language: language,
@@ -292,7 +299,7 @@ struct BrowserSplitPageView: View {
         )
         .overlay { SplitDropZone(store: store, targetID: id) }
       } else {
-        ProgressView("Loading profile…")
+        ProgressView(ShellL10n.string("Loading profile…"))
       }
     }
     .padding(2)

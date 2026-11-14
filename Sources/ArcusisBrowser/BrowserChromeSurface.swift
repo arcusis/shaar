@@ -24,6 +24,10 @@ extension View {
 struct BrowserChromeAccessibilityOverrides {
   var reduceTransparency: Bool?
   var reduceMotion: Bool?
+
+  func reduceMotionEnabled(systemSetting: Bool) -> Bool {
+    systemSetting || reduceMotion == true
+  }
 }
 
 private struct BrowserChromeAccessibilityOverridesKey: EnvironmentKey {
@@ -80,7 +84,8 @@ struct BrowserChromeSurface: View {
     .frame(height: 34)
     .background(SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme))
     .animation(
-      (accessibilityOverrides.reduceMotion ?? reduceMotion) ? nil : .easeOut(duration: 0.18),
+      accessibilityOverrides.reduceMotionEnabled(systemSetting: reduceMotion)
+        ? nil : .easeOut(duration: 0.18),
       value: SpaceChromeTint(space: store.session.selectedSpace)
     )
     .buttonStyle(.plain)

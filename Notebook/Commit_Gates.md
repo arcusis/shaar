@@ -12,7 +12,7 @@ Pre-commit checks an owned temporary snapshot of the index, preserving partial s
 
 The stdlib sensitive-file checker rejects case-insensitive private-key extensions (`.p8`, `.pem`, `.key`, `.p12`, `.pfx`), conventional private-key names, Sparkle private/secret key names and environment files. Files above 10 MiB are rejected regardless of extension, preventing renaming from bypassing the large-binary limit; the largest existing tracked blob is about 1.15 MB. Escaping symlinks, unresolved index entries and uninspectable objects fail. Deletions are allowed, while renamed additions receive the same checks.
 
-CI runs the same tree checks and scans every new commit between the immutable event base and head, catching sensitive files or secrets added and then deleted. Gitleaks reports are redacted; inline allow comments cannot bypass scanning. Existing exact public-key exceptions remain. No GitHub secret-scanning or push-protection feature is involved.
+CI runs the same tree checks and scans every new commit between the immutable event base and head, catching sensitive files or secrets added and then deleted. Gitleaks reports are redacted, and the report output cannot be a symlink; inline allow comments cannot bypass scanning. Existing exact public-key exceptions remain. No GitHub secret-scanning or push-protection feature is involved.
 
 ## Verification
 
@@ -27,6 +27,7 @@ References: [Git hooks](https://git-scm.com/docs/githooks), [worktree configurat
 `hook_support.py` installs private-Git-directory launchers from `.githooks/run.sh`, saving the prior hook path in worktree configuration. Every existing executable hook receives a forwarding launcher, preserving `commit-msg` and other guards as well as pre-commit/pre-push. The runner chains prior hooks before new checks and replays push input. Push ref labels are decoded losslessly so non-UTF-8 names do not prevent the associated object IDs from being checked. Temporary snapshots reference existing Git objects; their metadata updates do not run global reference hooks. Known input/configuration failures produce concise errors.
 
 The license-header gate reads `git ls-files -z` as bytes and uses filesystem surrogate escapes, so unusual tracked filenames do not crash path discovery. It does not accept a tracked source symlink merely because its target has an MPL header; Git stores the link text at that path.
+The license-header gate reads `git ls-files -z` as bytes and uses filesystem surrogate escapes, so unusual tracked filenames do not crash path discovery. Unreadable or non-UTF-8 tracked sources fail with a concise input error rather than a traceback.
 
 Prior hook paths use Git's path expansion, including `~/…`, rather than treating configuration values as literal repository-relative strings. A temporary-repository regression covers this without changing the home directory or identity.
 The installer refuses a symlink at the private Git directory's managed hook root before writing any launcher files.

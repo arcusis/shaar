@@ -188,6 +188,32 @@ struct ShaarExtensionsAdapterTests {
     }
   }
 
+  @Test func extensionConfirmationsRejectNumericBooleanSubstitutes() async throws {
+    let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"updated":1}"#)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
+    await #expect(throws: ShaarExtensionsAdapterError.mutationNotConfirmed) {
+      try await adapter.manage(
+        profileID: UUID(),
+        action: .setEnabled("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", true))
+    }
+
+    let installedProfile = UUID()
+    await fake.setReply(#"{"schemaVersion":1,"installed":1}"#)
+    let installed = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.0",
+      profileIDs: [installedProfile])
+    #expect(installed.installed.isEmpty)
+    #expect(installed.failed == [installedProfile])
+
+    let queuedProfile = UUID()
+    await fake.setReply(#"{"schemaVersion":1,"queued":1}"#)
+    let queued = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.0",
+      profileIDs: [queuedProfile])
+    #expect(queued.pending.isEmpty)
+    #expect(queued.failed == [queuedProfile])
+  }
+
   @Test func malformedRowsAndInvalidIDsAreRejected() async throws {
     let fake = FakeExtensionsTransport(
       #"{"schemaVersion":1,"extensions":[{"id":"../extension","name":"bad","version":"1","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":0}]}"#
@@ -215,10 +241,67 @@ struct ShaarExtensionsAdapterTests {
     }
   }
 
+  @Test func extensionBooleanFieldsRejectNumericSubstitutes() async throws {
+    let fake = FakeExtensionsTransport("")
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
+    let fields = ["enabled", "mayDisable", "incognitoEnabled", "fromWebStore"]
+    for field in fields {
+      var row: [String: Any] = [
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Extension", "version": "1",
+        "enabled": true, "mayDisable": true, "incognitoEnabled": false, "source": 4,
+        "fromWebStore": true,
+      ]
+      row[field] = 1
+      let data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "extensions": [row]])
+      await fake.setReply(try #require(String(data: data, encoding: .utf8)))
+      await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+        _ = try await adapter.list(profileID: UUID())
+      }
+    }
+  }
+
+  @Test func extensionListRejectsNumericBooleanFields() async throws {
+    let row =
+      #"{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Extension","version":"1","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}"#
+    for invalidRow in [
+      row.replacingOccurrences(of: #""enabled":true"#, with: #""enabled":1"#),
+      row.replacingOccurrences(of: #""mayDisable":true"#, with: #""mayDisable":0"#),
+      row.replacingOccurrences(of: #""incognitoEnabled":false"#, with: #""incognitoEnabled":1"#),
+      row.replacingOccurrences(of: #""fromWebStore":true"#, with: #""fromWebStore":0"#),
+    ] {
+      let fake = FakeExtensionsTransport("{\"schemaVersion\":1,\"extensions\":[\(invalidRow)]}")
+      await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+        _ = try await ShaarExtensionsAdapter(shaar: fake).list(profileID: UUID())
+      }
+    }
+  }
+
   @Test func extensionListRejectsBooleanSchemaVersion() async throws {
     let fake = FakeExtensionsTransport(#"{"schemaVersion":true,"extensions":[]}"#)
-    await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("unsupported schema version")) {
+    await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("unsupported schema version"))
+    {
       _ = try await ShaarExtensionsAdapter(shaar: fake).list(profileID: UUID())
     }
+  }
+
+  @Test func extensionResponseFlagsRejectNumericJSONValues() async throws {
+    let list = FakeExtensionsTransport(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Extension","version":"1","enabled":1,"mayDisable":true,"incognitoEnabled":false,"source":0}]}"#)
+    await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+      _ = try await ShaarExtensionsAdapter(shaar: list).list(profileID: UUID())
+    }
+
+    let manage = FakeExtensionsTransport(#"{"schemaVersion":1,"updated":1}"#)
+    await #expect(throws: ShaarExtensionsAdapterError.mutationNotConfirmed) {
+      try await ShaarExtensionsAdapter(shaar: manage).manage(
+        profileID: UUID(), action: .setEnabled("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", true))
+    }
+
+    let profile = UUID()
+    let install = FakeExtensionsTransport(#"{"schemaVersion":1,"installed":1}"#)
+    let result = await ShaarExtensionsAdapter(shaar: install).installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1", profileIDs: [profile])
+    #expect(result.installed.isEmpty)
+    #expect(result.failed == [profile])
   }
 }

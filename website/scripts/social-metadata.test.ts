@@ -34,4 +34,12 @@ test("layout provides matching Twitter metadata for page shares", () => {
     document.querySelector('meta[name="twitter:image"]')?.getAttribute("content"),
     "https://shaar.arcusis.com/assets/shaar-icon.png",
   );
+  assert.equal(
+    document.querySelector('meta[property="og:image:alt"]')?.getAttribute("content"),
+    "Shaar app icon",
+  );
+  assert.equal(
+    document.querySelector('meta[name="twitter:image:alt"]')?.getAttribute("content"),
+    "Shaar app icon",
+  );
 });

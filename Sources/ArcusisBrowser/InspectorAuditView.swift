@@ -5,6 +5,8 @@
 import SwiftUI
 
 struct InspectorAuditView: View {
+  static let impactGroupHeadingTraits: AccessibilityTraits = .isHeader
+
   @Bindable var model: InspectorAuditModel
   let inspector: InspectorModel
 
@@ -119,6 +121,7 @@ private struct InspectorAuditImpactGroup: View {
     VStack(alignment: .leading, spacing: 4) {
       Text(InspectorDetailsL10n.string(impact.capitalized))
         .font(.system(size: 10, weight: .semibold)).foregroundStyle(impactColor)
+        .accessibilityAddTraits(InspectorAuditView.impactGroupHeadingTraits)
       ForEach(findings) { finding in
         Button {
           select(finding)

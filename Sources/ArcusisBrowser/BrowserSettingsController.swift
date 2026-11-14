@@ -7,8 +7,10 @@ import BrowserCore
 import ChromiumBridge
 import Observation
 import SwiftUI
+import os
 
 typealias ProfileDownloadDirectoryApplier = @MainActor (UUID, URL?) async throws -> URL?
+typealias ProfileDirectoryRemovalOperation = @Sendable (URL?) async throws -> Void
 
 @MainActor @Observable
 final class BrowserSettingsState {
@@ -25,6 +27,7 @@ final class BrowserSettingsState {
   private var didPresent = false
   let downloadDirectorySettingsEnabled: Bool
   private let applyDownloadDirectoryToEngine: ProfileDownloadDirectoryApplier?
+  private let removeProfileDirectory: ProfileDirectoryRemovalOperation
   var onOpenSpace: (UUID) -> Void = { _ in }
   var onConnectAccount: (UUID, AccountSignInOption) -> Void = { _, _ in }
   var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
@@ -36,7 +39,10 @@ final class BrowserSettingsState {
     runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil,
     sharedExtensions: SharedExtensionSettingsModel? = nil,
     downloadDirectorySettingsEnabled: Bool = false,
-    applyDownloadDirectory: ProfileDownloadDirectoryApplier? = nil
+    applyDownloadDirectory: ProfileDownloadDirectoryApplier? = nil,
+    removeProfileDirectory: @escaping ProfileDirectoryRemovalOperation = { directory in
+      try await ProfileDataDirectoryRemoval.removeIfPresent(at: directory)
+    }
   ) {
     self.workspace = workspace
     self.preferences = preferences
@@ -50,6 +56,7 @@ final class BrowserSettingsState {
           httpsOnlyMode: { preferences.httpsOnlyChoice(for: $0) })
       }
     applyDownloadDirectoryToEngine = applyDownloadDirectory
+    self.removeProfileDirectory = removeProfileDirectory
     self.downloadDirectorySettingsEnabled =
       downloadDirectorySettingsEnabled && applyDownloadDirectory != nil
   }
@@ -229,7 +236,7 @@ final class BrowserSettingsState {
 
   @discardableResult
   func applyDownloadDirectory(_ directory: URL?, for profileID: UUID) async -> Bool {
-    guard downloadDirectorySettingsEnabled,
+    guard !Task.isCancelled, downloadDirectorySettingsEnabled,
       workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }),
       let applyDownloadDirectoryToEngine
     else { return false }
@@ -244,6 +251,12 @@ final class BrowserSettingsState {
     }
     do {
       let acknowledged = try await applyDownloadDirectoryToEngine(profileID, directory)
+      guard !Task.isCancelled else {
+        if downloadDirectoryRequests[profileID] == request {
+          downloadDirectoryRequests[profileID] = nil
+        }
+        return false
+      }
       guard downloadDirectoryRequests[profileID] == request else { return false }
       guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
         downloadDirectoryRequests[profileID] = nil
@@ -260,6 +273,11 @@ final class BrowserSettingsState {
       downloadDirectoryRevision &+= 1
       downloadDirectoryRequests[profileID] = nil
       return true
+    } catch is CancellationError {
+      if downloadDirectoryRequests[profileID] == request {
+        downloadDirectoryRequests[profileID] = nil
+      }
+      return false
     } catch {
       guard downloadDirectoryRequests[profileID] == request else { return false }
       downloadDirectoryErrors[profileID] = SettingsL10n.string(
@@ -313,6 +331,10 @@ final class BrowserSettingsState {
     try draft.deleteProfile(id, movingSpacesTo: destinationID)
     try preferences.validateProfileRemoval()
     try await profileBackend.loadProfile(id)
+    let profileDirectory = runtime?.profileDataDirectory(forProfileID: id.uuidString)
+    if runtime != nil && profileDirectory == nil {
+      throw CocoaError(.fileNoSuchFile)
+    }
     draft = workspace.workspace
     try draft.deleteProfile(id, movingSpacesTo: destinationID)
     try workspace.validateWritableSnapshot()
@@ -323,8 +345,42 @@ final class BrowserSettingsState {
     }
     try preferences.removeProfile(id)
     try workspace.flushSaves()
+    do {
+      try await removeProfileDirectory(profileDirectory)
+    } catch {
+      let message = error.localizedDescription
+      Logger(subsystem: "org.arcusis.shaar", category: "profiles").error(
+        "Deleted profile data could not be removed: \(message, privacy: .public)")
+    }
   }
 
+}
+
+enum ProfileDataDirectoryRemoval {
+  static func removeIfPresent(
+    at directory: URL?,
+    fileExists: @escaping @Sendable (URL) -> Bool = {
+      FileManager.default.fileExists(atPath: $0.path)
+    },
+    removeItem: @escaping @Sendable (URL) throws -> Void = {
+      try FileManager.default.removeItem(at: $0)
+    }
+  ) async throws {
+    guard let directory else { return }
+    try await Task.detached(priority: .utility) {
+      for attempt in 0..<50 {
+        do {
+          guard fileExists(directory) else { return }
+          try removeItem(directory)
+          return
+        } catch {
+          guard fileExists(directory) else { return }
+          guard attempt < 49 else { throw error }
+          try await Task.sleep(for: .milliseconds(100))
+        }
+      }
+    }.value
+  }
 }
 
 enum DownloadDirectoryPolicy {
@@ -346,6 +402,8 @@ enum DownloadDirectoryPolicy {
 
 private struct BrowserSettingsRoot: View {
   let state: BrowserSettingsState
+  var initialSection: BrowserSettingsSection = .general
+  var confirmsClearHistoryOnAppear = false
 
   var body: some View {
     BrowserSettingsView(
@@ -384,7 +442,8 @@ private struct BrowserSettingsRoot: View {
         state.preferences.setHttpsOnlyMode(enabled, for: profileID)
         guard let runtime = state.runtime as? ARCShaarRuntime else { return false }
         return runtime.setHttpsOnlyModeEnabled(enabled, forProfileID: profileID.uuidString)
-      })
+      }, initialSection: initialSection,
+      confirmsClearHistoryOnAppear: confirmsClearHistoryOnAppear)
   }
 }
 
@@ -410,6 +469,8 @@ final class BrowserSettingsController: NSObject {
   let presentation: Presentation
   private var windowDelegate: BrowserSettingsWindowDelegate?
   private(set) var window: NSWindow?
+  private(set) var initialSection: BrowserSettingsSection = .general
+  private(set) var confirmsClearHistoryOnAppear = false
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
@@ -477,14 +538,28 @@ final class BrowserSettingsController: NSObject {
     state.setProfileSymbol(id, to: symbol)
   }
 
-  func show(for profileID: UUID? = nil) {
+  func show(
+    for profileID: UUID? = nil, section: BrowserSettingsSection = .general,
+    confirmsClearHistory: Bool = false
+  ) {
     state.prepareFirstPresentation(for: profileID)
+    initialSection = section
+    confirmsClearHistoryOnAppear = confirmsClearHistory
     let settingsWindow = makeWindowIfNeeded()
+    settingsWindow.contentView = NSHostingView(
+      rootView: BrowserSettingsRoot(
+        state: state, initialSection: section,
+        confirmsClearHistoryOnAppear: confirmsClearHistory
+      ).settingsLocalization())
     if presentation == .visible {
       settingsWindow.makeKeyAndOrderFront(nil)
     } else {
       settingsWindow.orderOut(nil)
     }
+  }
+
+  func showClearHistory(for profileID: UUID?) {
+    show(for: profileID, section: .privacy, confirmsClearHistory: true)
   }
 
   func close() {
@@ -501,7 +576,10 @@ final class BrowserSettingsController: NSObject {
     settingsWindow.minSize = NSSize(width: 620, height: 500)
     settingsWindow.isReleasedWhenClosed = false
     settingsWindow.contentView = NSHostingView(
-      rootView: BrowserSettingsRoot(state: state).settingsLocalization())
+      rootView: BrowserSettingsRoot(
+        state: state, initialSection: initialSection,
+        confirmsClearHistoryOnAppear: confirmsClearHistoryOnAppear
+      ).settingsLocalization())
     settingsWindow.center()
     let delegate = BrowserSettingsWindowDelegate(controller: self)
     windowDelegate = delegate

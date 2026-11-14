@@ -41,6 +41,39 @@ struct BrowserPreferencesTests {
     #expect(filePermissions?.intValue == 0o600)
   }
 
+  @Test func existingPreferencesAreRestrictedToOwnerPermissionsOnLoad() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appending(path: "preferences.json")
+    let original = BrowserPreferencesStore(fileURL: fileURL)
+    original.setSidebarInitiallyVisible(false)
+    try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: fileURL.path)
+
+    let loaded = BrowserPreferencesStore(fileURL: fileURL)
+    let filePermissions =
+      try FileManager.default.attributesOfItem(atPath: fileURL.path)[.posixPermissions] as? NSNumber
+
+    #expect(!loaded.sidebarInitiallyVisible)
+    #expect(loaded.storageNotice == nil)
+    #expect(filePermissions?.intValue == 0o600)
+  }
+
+  @Test func preferencesRejectSymbolicLinkInsteadOfReadingTarget() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let target = directory.appending(path: "target.json")
+    let original = BrowserPreferencesStore(fileURL: target)
+    original.setSidebarInitiallyVisible(false)
+    let alias = directory.appending(path: "preferences.json")
+    try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: target)
+
+    let loaded = BrowserPreferencesStore(fileURL: alias)
+
+    #expect(loaded.sidebarInitiallyVisible)
+    #expect(loaded.storageNotice != nil)
+    #expect(BrowserPreferencesStore(fileURL: target).storageNotice == nil)
+  }
+
   @Test func memoryOnlyStoreNeverCreatesFile() {
     let store = BrowserPreferencesStore()
     let profileID = UUID()

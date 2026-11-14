@@ -111,15 +111,19 @@ public struct ShaarExtensionsAdapter: Sendable {
         let id = row["id"] as? String, Self.isValidExtensionID(id), ids.insert(id).inserted,
         let name = row["name"] as? String, name.utf8.count <= 4096,
         let version = row["version"] as? String, version.utf8.count <= 256,
+        Self.isJSONBoolean(row["enabled"]),
         let enabled = row["enabled"] as? Bool,
+        Self.isJSONBoolean(row["mayDisable"]),
         let mayDisable = row["mayDisable"] as? Bool,
+        Self.isJSONBoolean(row["incognitoEnabled"]),
         let incognitoEnabled = row["incognitoEnabled"] as? Bool,
         !Self.isJSONBoolean(row["source"]),
         let source = row["source"] as? Int,
         row["description"] == nil || row["description"] is String,
         row["permissions"] == nil || row["permissions"] is [String],
         row["hostPermissions"] == nil || row["hostPermissions"] is [String],
-        row["fromWebStore"] == nil || row["fromWebStore"] is Bool
+        row["fromWebStore"] == nil
+          || (Self.isJSONBoolean(row["fromWebStore"]) && row["fromWebStore"] is Bool)
       else { throw ShaarExtensionsAdapterError.invalidResponse("malformed extension row") }
       return ShaarExtensionSummary(
         id: id, name: name, version: version, enabled: enabled,
@@ -140,7 +144,7 @@ public struct ShaarExtensionsAdapter: Sendable {
     let resultKey = action.responseKey
     let root = try object(data, required: ["schemaVersion", resultKey])
     try requireVersion(root)
-    guard root[resultKey] as? Bool == true else {
+    guard Self.isJSONBoolean(root[resultKey]), root[resultKey] as? Bool == true else {
       throw ShaarExtensionsAdapterError.mutationNotConfirmed
     }
   }
@@ -171,9 +175,9 @@ public struct ShaarExtensionsAdapter: Sendable {
             || Set(root.keys) == ["schemaVersion", "queued"]
         else { throw ShaarExtensionsAdapterError.invalidResponse("invalid install result") }
         try requireVersion(root)
-        if root["installed"] as? Bool == true {
+        if Self.isJSONBoolean(root["installed"]), root["installed"] as? Bool == true {
           installed.insert(profileID)
-        } else if root["queued"] as? Bool == true {
+        } else if Self.isJSONBoolean(root["queued"]), root["queued"] as? Bool == true {
           pending.insert(profileID)
         } else {
           failed.insert(profileID)

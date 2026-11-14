@@ -11,6 +11,8 @@ import UniformTypeIdentifiers
 import _QuickLook_SwiftUI
 
 struct LibraryDownloadsView: View {
+  static let downloadProgressAccessibilityTraits: AccessibilityTraits = .updatesFrequently
+
   let store: BrowserStore
   let profileID: UUID
   let mediaOnly: Bool
@@ -23,6 +25,10 @@ struct LibraryDownloadsView: View {
   @State private var quickLookURL: URL?
   @State private var thumbnails = LibraryThumbnailLoader()
   @FocusState private var searchIsFocused: Bool
+  @FocusState private var focusedActionsID: String?
+  static func actionsAreVisible(isHovered: Bool, isFocused: Bool) -> Bool {
+    isHovered || isFocused
+  }
 
   init(store: BrowserStore, profileID: UUID, mediaOnly: Bool) {
     self.store = store
@@ -195,8 +201,12 @@ struct LibraryDownloadsView: View {
         if item.state == .downloading && !item.dangerous {
           if let progress = item.progress {
             ProgressView(value: progress)
+              .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
+              .accessibilityAddTraits(Self.downloadProgressAccessibilityTraits)
           } else {
             ProgressView().controlSize(.small)
+              .accessibilityLabel(DownloadAccessibility.progressLabel(filename: item.filename))
+              .accessibilityAddTraits(Self.downloadProgressAccessibilityTraits)
           }
           Text(byteStatus(item)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
@@ -228,7 +238,10 @@ struct LibraryDownloadsView: View {
         Image(systemName: "ellipsis").frame(width: 24, height: 24)
       }
       .menuStyle(.borderlessButton).fixedSize()
-      .opacity(hoveredID == item.id ? 1 : 0)
+      .focused($focusedActionsID, equals: item.id)
+      .opacity(
+        Self.actionsAreVisible(itemID: item.id, hoveredID: hoveredID, focusedID: focusedActionsID)
+          ? 1 : 0)
       .accessibilityLabel(PanelsL10n.format("Actions for %@", .string(item.filename)))
     }
     .padding(8).contentShape(Rectangle())
@@ -248,6 +261,10 @@ struct LibraryDownloadsView: View {
     .onChange(of: downloads?.records[profileID]?[item.id]) { _, _ in
       thumbnails.remove(item, profileID: profileID)
     }
+  }
+
+  static func actionsAreVisible(itemID: String, hoveredID: String?, focusedID: String?) -> Bool {
+    hoveredID == itemID || focusedID == itemID
   }
 
   private func open(_ item: BrowserDownload, inFinder: Bool) {

@@ -35,3 +35,14 @@ test("preformatted text regions can receive keyboard focus", () => {
       assert.equal(region.getAttribute("tabindex"), "0", page.path);
   }
 });
+
+test("only the home page loads the home interaction bundle", () => {
+  const home = parseHTML(HomePage()).document;
+  const documentPage = parseHTML(
+    DocumentPage(Pages("License", "Notice", "Third-party")[0]),
+  ).document;
+
+  assert.ok(home.querySelector('script[src="/assets/home.js"]'));
+  assert.equal(documentPage.querySelector('script[src="/assets/home.js"]'), null);
+  assert.ok(documentPage.querySelector('script[src="/assets/client.js"]'));
+});

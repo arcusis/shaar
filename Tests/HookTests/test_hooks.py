@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import io
 import os
 from pathlib import Path
 import random
@@ -99,6 +100,14 @@ class HookTests(unittest.TestCase):
         self.assertEqual(len(errors), 2)
         self.assertTrue(all("symlink cycle" in error for error in errors))
 
+    def test_repeated_noncyclic_symlink_expansion_is_allowed(self):
+        (self.root / "target").mkdir()
+        (self.root / "target" / "b").write_text("regular target")
+        (self.root / "b").symlink_to("target")
+        (self.root / "alias").symlink_to("b/b")
+        git_content.git(self.root, "add", "target", "b", "alias")
+        self.assertEqual(sensitive_files.policy_errors(self.root), [])
+
     def test_snapshot_preserves_staged_bytes_index_and_worktree(self):
         path = self.stage("nested/source.txt", b"staged bytes")
         path.write_bytes(b"unstaged bytes")
@@ -137,6 +146,31 @@ class HookTests(unittest.TestCase):
                 patch.object(HISTORY, "subprocess") as scan:
             self.assertEqual(HISTORY.scan_history(self.root, "a" * 40, "b" * 40, self.root / "report.json"), 1)
             scan.run.assert_not_called()
+
+    def test_history_scan_rejects_symlinked_report_before_running_gitleaks(self):
+        target = self.root / "outside-report.json"
+        target.write_text("preserve this", encoding="utf-8")
+        report = self.root / "report.json"
+        report.symlink_to(target)
+        with patch.object(HISTORY, "history_commits", return_value=[]), \
+                patch.object(HISTORY, "object_id", side_effect=lambda value: value), \
+                patch.object(HISTORY.subprocess, "run") as scan:
+            with self.assertRaisesRegex(ValueError, "secret scan report must not be a symlink"):
+                HISTORY.scan_history(self.root, "a" * 40, "b" * 40, report)
+            scan.assert_not_called()
+        self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
+    def test_history_gitleaks_timeout_is_bounded_and_reported(self):
+        command = ["gitleaks", "git"]
+        with patch.object(HISTORY, "history_commits", return_value=[]), \
+                patch.object(HISTORY.subprocess, "run",
+                             side_effect=subprocess.TimeoutExpired(command, HISTORY.GITLEAKS_TIMEOUT_SECONDS)) as scan, \
+                patch("sys.stderr", new=io.StringIO()) as stderr:
+            self.assertEqual(
+                HISTORY.scan_history(self.root, "a" * 40, "b" * 40, self.root / "report.json"), 124
+            )
+        self.assertEqual(scan.call_args.kwargs["timeout"], HISTORY.GITLEAKS_TIMEOUT_SECONDS)
+        self.assertIn("Gitleaks history scan exceeded 300s", stderr.getvalue())
 
     def test_missing_ci_baseline_fails_closed(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}, clear=True), \

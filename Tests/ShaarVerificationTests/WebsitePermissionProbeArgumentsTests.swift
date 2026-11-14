@@ -18,6 +18,10 @@ import Testing
         == nil)
     #expect(
       WebsitePermissionProbeArguments.value(
+        after: "--probe-output", in: ["--probe-output", "--probe-data-dir", "/tmp/probe"])
+        == nil)
+    #expect(
+      WebsitePermissionProbeArguments.value(
         after: "--probe-output", in: ["--probe-output-other", "/tmp/report.json"])
         == nil)
     #expect(

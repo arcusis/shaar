@@ -13,7 +13,9 @@ import SwiftUI
 
 enum WebsitePermissionProbeArguments {
   static func value(after flag: String, in arguments: [String]) -> String? {
-    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
+    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1),
+      !arguments[index + 1].hasPrefix("--")
+    else {
       return nil
     }
     return arguments[index + 1]

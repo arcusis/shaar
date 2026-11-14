@@ -31,6 +31,9 @@ class PendingReloadCacheModeTests(unittest.TestCase):
         pending = source.split(
             "if (const content::NavigationEntry* pending = controller->GetPendingEntry()) {", 1
         )[1].split("\n  }", 1)[0]
+        self.assertIn("content::NavigationController::LoadURLParams params(pending->GetURL())", pending)
+        self.assertIn("params.transition_type = ui::PAGE_TRANSITION_RELOAD", pending)
+        self.assertIn("controller->LoadURLWithParams(params)", pending)
         self.assertIn(
             "params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE",
             pending)

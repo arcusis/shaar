@@ -29,6 +29,8 @@ enum FolderEditorRoute: Hashable {
 }
 
 struct FolderEditor: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
+
   let store: BrowserStore
   let route: FolderEditorRoute
   @Environment(\.dismiss) private var dismiss
@@ -52,6 +54,7 @@ struct FolderEditor: View {
         systemImage: "folder"
       )
       .font(.headline)
+      .accessibilityAddTraits(Self.headingTraits)
       TextField(PanelsL10n.string("Folder name"), text: $name)
         .textFieldStyle(.roundedBorder)
         .accessibilityLabel(PanelsL10n.string("Folder name"))

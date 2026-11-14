@@ -126,13 +126,22 @@ def main() -> int:
     parser.add_argument("--junit", type=junit_output_path)
     options = parser.parse_args()
     sys.path.insert(0, str(REPOSITORY_ROOT))
-    test_directories = sorted(path for path in TESTS_ROOT.iterdir() if path.is_dir())
+    entries = sorted(TESTS_ROOT.iterdir())
+    symlinked_directory = next((path for path in entries if path.is_symlink()), None)
+    if symlinked_directory is not None:
+        print(f"Python test directory must not be a symlink: {symlinked_directory}", file=sys.stderr)
+        return 1
+    test_directories = [path for path in entries if path.is_dir()]
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     discovered_files = 0
 
     for test_directory in test_directories:
         test_files = sorted(test_directory.glob("test_*.py"))
+        symlinked_file = next((path for path in test_files if path.is_symlink()), None)
+        if symlinked_file is not None:
+            print(f"Python test file must not be a symlink: {symlinked_file}", file=sys.stderr)
+            return 1
         if not test_files:
             continue
         discovered_files += len(test_files)

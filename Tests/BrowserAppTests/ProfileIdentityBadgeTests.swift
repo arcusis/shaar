@@ -9,6 +9,23 @@ import Testing
 @testable import ArcusisBrowser
 
 @MainActor struct ProfileIdentityBadgeTests {
+  @Test func remotePhotosRejectStoredCredentialsAndInvalidPorts() {
+    let secureURL = URL(string: "https://images.example.test/avatar.png")!
+    let secure = ConnectedAccount(
+      provider: .google, email: "alex@example.test", photoURL: secureURL)
+    #expect(ProfileIdentityBadge.remotePhotoURL(for: secure) == secureURL)
+
+    for address in [
+      "http://images.example.test/avatar.png",
+      "https://user:secret@images.example.test/avatar.png",
+      "https://images.example.test:65536/avatar.png",
+    ] {
+      let account = ConnectedAccount(
+        provider: .google, email: "alex@example.test", photoURL: URL(string: address))
+      #expect(ProfileIdentityBadge.remotePhotoURL(for: account) == nil, "\(address)")
+    }
+  }
+
   @Test func cachedPhotosRejectOversizedBytesAndDimensions() throws {
     var account = ConnectedAccount(provider: .apple, email: "alex@example.test")
     #expect(account.cachedPhoto == nil)

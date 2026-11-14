@@ -136,6 +136,20 @@ struct DevToolsDOMTests {
         event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7) == nil)
   }
 
+  @Test func domEventsRejectNumericTruncationFlags() {
+    for truncated in ["0", "1"] {
+      let payload =
+        #"{"schemaVersion":1,"kind":"panelEvent","eventID":20,"leaseID":7,"data":{"truncated":\#(truncated)}}"#
+      let event = ShaarCopiedEvent(
+        sequence: 10, kind: 14, profileID: Data("profile-a".utf8), sessionID: Data(),
+        windowID: Data("window-a".utf8), tabID: Data("tab-a".utf8),
+        payloadJSON: Data(payload.utf8))
+      #expect(
+        ShaarDOMEventRouter.decode(
+          event, scope: scope, windowID: "window-a", tabID: "tab-a", leaseID: 7) == nil)
+    }
+  }
+
   @Test func projectedChildrenAcceptOneHundredTwentyRows() throws {
     let nodes: [[String: Any]] = (0..<120).map { index in
       [

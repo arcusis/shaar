@@ -21,7 +21,7 @@ uint32_t shaar_navigation_submit_invoke(
     void* reply_context,
     shaar_error* immediate_error) {
   if (!submit_symbol || !engine || !scope || scope->size < sizeof(*scope) || !reply ||
-      !immediate_error)
+      !immediate_error || immediate_error->size < sizeof(*immediate_error))
     return SHAAR_INVALID_ARGUMENT;
   shaar_submit_fn submit = (shaar_submit_fn)submit_symbol;
   return (uint32_t)submit(engine, *scope, window, tab,

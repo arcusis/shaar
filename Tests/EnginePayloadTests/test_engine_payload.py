@@ -688,6 +688,17 @@ class EnginePayloadTests(unittest.TestCase):
         self.assertEqual(report["reason"], "pin file unavailable or malformed")
         self.assertFalse(report["archive_metadata_verified"])
 
+    def test_cli_reports_deeply_nested_pin_as_malformed_json(self):
+        pin_path = self.root / "pin.json"
+        pin_path.write_text("[" * 2_000 + "0" + "]" * 2_000)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = payload.main(["--archive", str(self.archive), "--pin", str(pin_path)])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(report["reason"], "pin file unavailable or malformed")
+        self.assertFalse(report["archive_metadata_verified"])
+
     def test_unavailable_paths_do_not_leak_machine_paths(self):
         missing = self.root / "private-machine-path" / "missing.tar.xz"
         report = payload.compare_payload(missing, self.framework, {"sha256": "0" * 64})

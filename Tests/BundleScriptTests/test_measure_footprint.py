@@ -30,6 +30,13 @@ def thread(total, frames, trailer=""):
 
 
 class MeasureFootprintSampleTests(unittest.TestCase):
+    def test_tab_counts_reject_duplicates_that_would_overwrite_comparison_results(self):
+        for value in ("1,1", "50, 50"):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                SystemExit, "tab count is duplicated"
+            ):
+                measure_footprint.parse_tab_counts(value)
+
     def test_report_writer_rejects_symlink_without_overwriting_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

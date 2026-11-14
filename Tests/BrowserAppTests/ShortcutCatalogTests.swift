@@ -226,6 +226,11 @@ private final class ShortcutFocusableView: NSView {
   #expect(!shortcuts.isEmpty)
   for item in shortcuts {
     let event = shortcutEvent(for: item)
+    if item.keyEquivalentModifierMask.contains(.function) || item.title == "Emoji & Symbols" {
+      #expect(!ShortcutPageRouting.route(event, menu: menu, responder: window.firstResponder))
+      #expect(target.invoked.isEmpty)
+      continue
+    }
     #expect(ShortcutPageRouting.route(event, menu: menu, responder: window.firstResponder))
     #expect(target.invoked == [item.title])
     target.invoked.removeAll()
@@ -311,22 +316,21 @@ private func shortcutEvent(for item: NSMenuItem) -> NSEvent {
     isARepeat: false, keyCode: keyCode)!
 }
 
-@Test @MainActor func normalNewWindowIsAbsentFromShortcutSettingsAndLauncher() {
+@Test @MainActor func normalNewWindowUsesCommandNAndPreservesOtherWindowShortcuts() {
   let entries = ShortcutCatalog.installed().entries
-  #expect(!entries.contains { $0.command == "newWindow" })
-  #expect(!entries.contains { $0.key.lowercased() == "n" && $0.modifiers == .command })
-  #expect(!LauncherCommands.catalog.contains { $0.id == "newWindow" })
+  #expect(entries.contains { $0.command == "newWindow" && $0.key == "n" && $0.modifiers == .command })
+  #expect(LauncherCommands.catalog.contains { $0.id == "newWindow" })
   #expect(LauncherCommands.catalog.contains { $0.id == "newPrivateWindow" })
   #expect(LauncherCommands.catalog.contains { $0.id == "newMiniWindow" })
-  // Chromium must not run its built-in New Window command when no menu item handles Command-N.
+  // The native File menu owns Command-N, keeping Chromium from opening an untracked window.
   let event = NSEvent.keyEvent(
     with: .keyDown, location: .zero, modifierFlags: .command,
     timestamp: 0, windowNumber: 0, context: nil, characters: "n", charactersIgnoringModifiers: "n",
     isARepeat: false, keyCode: 45)!
   let target = NewWindowMenuTarget()
   let menu = NativeBrowserHost.makeMenu(target: target)
-  #expect(!menu.performKeyEquivalent(with: event))
-  #expect(target.invoked.isEmpty)
+  #expect(menu.performKeyEquivalent(with: event))
+  #expect(target.invoked == ["newWindow"])
   for modifiers: NSEvent.ModifierFlags in [[.command, .shift], [.command, .option]] {
     let retained = NSEvent.keyEvent(
       with: .keyDown, location: .zero, modifierFlags: modifiers,
@@ -335,7 +339,7 @@ private func shortcutEvent(for item: NSMenuItem) -> NSEvent {
       isARepeat: false, keyCode: 45)!
     #expect(menu.performKeyEquivalent(with: retained))
   }
-  #expect(target.invoked == ["newPrivateWindow", "newMiniWindow"])
+  #expect(target.invoked == ["newWindow", "newPrivateWindow", "newMiniWindow"])
 }
 
 @MainActor private final class NewWindowMenuTarget: NSObject {

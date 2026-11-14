@@ -7,6 +7,30 @@ import BrowserCore
 import ChromiumBridge
 import SwiftUI
 
+@MainActor
+final class NativeBrowserMenu: NSMenu {
+  @preconcurrency override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+    if event.type == .keyDown, event.charactersIgnoringModifiers?.lowercased() == "n",
+      modifiers == .command || modifiers == [.command, .shift]
+        || modifiers == [.command, .option]
+    {
+      for section in items.compactMap(\.submenu) {
+        guard let index = section.items.firstIndex(where: {
+          $0.keyEquivalent.lowercased() == "n"
+            && $0.keyEquivalentModifierMask.intersection([.command, .option, .control, .shift])
+              == modifiers
+        }), section.items[index].isEnabled
+        else { continue }
+        section.performActionForItem(at: index)
+        return true
+      }
+      return false
+    }
+    return super.performKeyEquivalent(with: event)
+  }
+}
+
 private final class DownloadDirectoryContinuation: @unchecked Sendable {
   private enum State {
     case waiting
@@ -51,7 +75,7 @@ private final class DownloadDirectoryContinuation: @unchecked Sendable {
 }
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
+  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
     print, closeWindow, addFavorite
   case openFile
   case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history,
@@ -81,20 +105,6 @@ enum PageZoomMenuRouter {
     default: return false
     }
     return perform(action, focusedTabID)
-  }
-}
-
-/// AppKit otherwise falls back from unbound Command-N to the private-window menu item.
-@MainActor
-final class NativeBrowserMenu: NSMenu {
-  override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
-    if event.type == .keyDown, modifiers == .command,
-      event.charactersIgnoringModifiers?.lowercased() == "n"
-    {
-      return false
-    }
-    return super.performKeyEquivalent(with: event)
   }
 }
 
@@ -442,6 +452,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if command == .reopenClosedWindow { return lastClosedWindowSnapshot != nil }
     if command == .bringAllToFront { return true }
     if command == .openFile { return true }
+    if command == .newWindow { return true }
     if command == .newMiniWindow {
       return privateHost?.hasActiveWindow != true && miniWindowTarget != nil
     }
@@ -556,7 +567,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Commands that act on the app rather than one window and need no window to be enabled.
   private static let appCommands: Set<BrowserMenuCommand> = [
-    .openFile, .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .bringAllToFront,
+    .openFile, .newWindow, .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .bringAllToFront,
     .nextWindow, .previousWindow, .quit,
   ]
 
@@ -595,6 +606,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private func performAppCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .quit: quit()
+    case .newWindow:
+      do { _ = try newWindow(from: activeContext?.id ?? workspace.workspace.focusedWindowID) }
+      catch { report(error) }
     case .reopenClosedWindow:
       guard let closedWindow = lastClosedWindowSnapshot else { return true }
       do {
@@ -874,7 +888,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .nextWindow, .previousWindow,
+    case .newWindow, .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .nextWindow, .previousWindow,
       .openFile, .settings, .quit, .checkForUpdates:
       break
     case .fullScreen: context.window.toggleFullScreen(nil)
@@ -1597,6 +1611,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let file = section("File")
     add(.newPrivateWindow, "New Private Window", to: file)
     add(.newMiniWindow, "New Mini Window", to: file)
+    add(.newWindow, "New Window", to: file)
     add(.openFile, "Open File…", to: file)
     add(.newTab, "New tab", to: file)
     add(.search, CommandPanel.searchPrompt, to: file)

@@ -12,6 +12,7 @@
     "Could not complete the site action. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not complete the site action. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להשלים את הפעולה באתר. כדאי לנסות שוב."}}}},
     "Changes could not be saved. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Changes could not be saved. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשמור את השינויים. כדאי לנסות שוב."}}}},
     "Window changes could not be saved. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Window changes could not be saved. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשמור את השינויים בחלון. נסו שוב."}}}},
+    "The Agent Bridge request failed. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The Agent Bridge request failed. Try again."}},"he":{"stringUnit":{"state":"translated","value":"בקשת הגישור לסוכן נכשלה. כדאי לנסות שוב."}}}},
     "Coverage": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Coverage"}},"he":{"stringUnit":{"state":"translated","value":"כיסוי"}}}},
     "Script": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Script"}},"he":{"stringUnit":{"state":"translated","value":"סקריפט"}}}},
     "Style sheet": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Style sheet"}},"he":{"stringUnit":{"state":"translated","value":"גיליון סגנון"}}}},

@@ -388,3 +388,19 @@ test("link checker validates caption track URLs", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker reports malformed percent escapes without crashing", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><a href="/%ZZ">Malformed path</a><a href="/#%ZZ">Malformed fragment</a>',
+    );
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: missing target /%ZZ",
+      "index.html: missing fragment /#%ZZ",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

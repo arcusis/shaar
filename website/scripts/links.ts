@@ -15,7 +15,13 @@ export function listFiles(root: string): string[] {
 }
 
 export function localTarget(root: string, url: URL): string | undefined {
-  const path = resolve(root, `.${decodeURIComponent(url.pathname)}`);
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    return undefined;
+  }
+  const path = resolve(root, `.${pathname}`);
   if (path !== root && !path.startsWith(`${root}${sep}`)) return undefined;
   const options = url.pathname.endsWith("/")
     ? [resolve(path, "index.html")]
@@ -170,7 +176,14 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
         if (url.hash && (target.endsWith(".html") || target.endsWith(".svg"))) {
           const targetDocument =
             target === file ? document : parseHTML(readFileSync(target, "utf8")).document;
-          if (!targetDocument.getElementById(decodeURIComponent(url.hash.slice(1))))
+          let fragment: string;
+          try {
+            fragment = decodeURIComponent(url.hash.slice(1));
+          } catch {
+            errors.push(`${path}: missing fragment ${value}`);
+            continue;
+          }
+          if (!targetDocument.getElementById(fragment))
             errors.push(`${path}: missing fragment ${value}`);
         }
       }

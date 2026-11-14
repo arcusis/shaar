@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "fa3c903dbbc48cc50e4cc3fcb2799e567ba84974c47c8d6a41ee7dcc58d49051",
+    "sha256": "2277da81937897b1e08b8224c40d83cdb9385289bd66033c8ab36d94f7d4742a",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "bddfa50a92ee887fccb8ee46487a673d857991d5ed5d72cc057ef4f3c8b9e458",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -61,7 +61,7 @@
       "chrome/browser/shaar/devtools/shaar_devtools.cc": "e7e8fbccf0f0dc1e52fc96fe83c421393acd84514554f9d504cd843ffabe7e5e",
       "chrome/browser/shaar/devtools/shaar_devtools.h": "37bcd054165cf23a432939e4d3b2fe5d11f5343fd1d6d5856db1a6b1aa468a11",
       "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "63eccec832a9bb00669aa7bd610a86752c71a857eb2119f8a2fc9cff97641dfb",
-      "chrome/browser/shaar/devtools/shaar_devtools_panel.cc": "466af013526186278e16380c4f1b9984ab2f7cf5a656cce330aa644a254e8d4f",
+      "chrome/browser/shaar/devtools/shaar_devtools_panel.cc": "9f886162fa9a67f66dd6e8ad08c0f1c9051f641c02feb691a99a93ca52d1db05",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.h": "d926559cb85df4b6f8259275198b3faf1b2c2d77bff8ea3fdf6b065a59dbf9f2",
       "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "176f0ef3f64804cd844d4abbffc6e46f5a51de4d13fe792d05a988bf201f7103",
       "chrome/browser/shaar/devtools/shaar_devtools_viewports.cc": "962917acc421f701cf23590454637ee5a6a97c8a7927c9afaf38b36fd5003341",
@@ -627,7 +627,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0142-blink-hidden-visual-viewport-events.patch",
-      "sha256": "4751e70a813ec7c62e5d2524589c01b7ebe45133cb95b73ff65493d3683327ef"
+      "sha256": "b164c3701176c1e0a4d172e8ffa0d87f75391f682c02c74fa2d6ba772430e95b"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0120-shaar-print-view-manager.patch",
@@ -668,6 +668,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0087-shaar-browsers-by-profile.patch",
       "sha256": "e01c216c03835e98509e6a6aa22643a468f99dcd189d740b2c6457921ac0c1d8"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0147-shaar-devtools-network-navigation.patch",
+      "sha256": "dc0cc5ed7af5f440772c087f852b3bd52d86c3d81e7b8f9f2802803fa71508e5"
     }
   ],
   "devtoolsFrontend157": {

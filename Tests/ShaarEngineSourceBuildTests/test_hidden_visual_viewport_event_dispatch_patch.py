@@ -20,6 +20,12 @@ class HiddenVisualViewportEventDispatchPatchTests(unittest.TestCase):
         patch = content.decode()
         self.assertEqual(patch.count("EnqueueVisualViewportEvent(event)"), 3)
         self.assertIn("hidden_visual_viewport_event_task_pending_", patch)
+        self.assertIn(
+            "+void Document::EnqueueVisualViewportEvent(Event* event) {\n"
+            "+  if (!GetExecutionContext())\n+    return;\n"
+            "   scripted_animation_controller_->EnqueuePerFrameEvent(event);",
+            patch,
+        )
         self.assertIn("TaskType::kDOMManipulation", patch)
         self.assertIn("event->target() == target", patch)
         self.assertIn("HiddenDocumentVisualViewportEventsDispatchWithoutAnimationFrame", patch)

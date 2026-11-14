@@ -9,7 +9,7 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
  
  #include <algorithm>
  #include <memory>
-@@ -6754,21 +6755,49 @@
+@@ -6754,21 +6755,50 @@
    VisualViewportScrollEvent* event =
        MakeGarbageCollected<VisualViewportScrollEvent>();
    event->SetTarget(domWindow()->visualViewport());
@@ -33,9 +33,10 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
 +}
 +
 +void Document::EnqueueVisualViewportEvent(Event* event) {
++  if (!GetExecutionContext())
++    return;
    scripted_animation_controller_->EnqueuePerFrameEvent(event);
-+  if (!hidden() || hidden_visual_viewport_event_task_pending_ ||
-+      !GetExecutionContext()) {
++  if (!hidden() || hidden_visual_viewport_event_task_pending_) {
 +    return;
 +  }
 +  hidden_visual_viewport_event_task_pending_ = true;

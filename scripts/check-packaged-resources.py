@@ -154,13 +154,21 @@ def shipping_swift_files(root: Path) -> list[Path]:
 def violations_in_tree(root: Path) -> list[str]:
     errors = []
     for path in shipping_swift_files(root):
-        text = path.read_text(encoding="utf-8")
-        errors.extend(violations_in_source(text, path.relative_to(root).as_posix()))
+        relative = path.relative_to(root).as_posix()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise ValueError(f"cannot read shipping Swift source {relative}: {error}") from error
+        errors.extend(violations_in_source(text, relative))
     return errors
 
 
 def main() -> int:
-    errors = violations_in_tree(REPOSITORY_ROOT)
+    try:
+        errors = violations_in_tree(REPOSITORY_ROOT)
+    except ValueError as error:
+        print(f"Packaged resource source check failed: {error}", file=sys.stderr)
+        return 2
     for error in errors:
         print(error, file=sys.stderr)
     return 1 if errors else 0

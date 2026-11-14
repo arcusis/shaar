@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -31,6 +32,16 @@ func resourceBundle() -> Bundle { .module }
 
 
 class PackagedResourceSourceTests(unittest.TestCase):
+    def test_invalid_utf8_source_reports_its_path_without_traceback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / check.SHIPPING_SOURCE_ROOTS[0] / "Invalid.swift"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"let value = \xff\n")
+
+            with self.assertRaisesRegex(ValueError, "cannot read shipping Swift source.*Invalid.swift"):
+                check.violations_in_tree(root)
+
     def test_repository_keeps_module_inside_the_packaged_helper(self):
         self.assertEqual(check.violations_in_tree(ROOT), [])
 

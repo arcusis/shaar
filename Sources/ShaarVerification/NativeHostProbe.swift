@@ -106,11 +106,12 @@ private struct HostViewportWindowState {
 
 enum NativeHostViewportValidation {
   static func accountID(fromCookie cookie: String) -> String? {
-    cookie.split(separator: ";").compactMap { item -> String? in
+    let accounts = cookie.split(separator: ";").compactMap { item -> String? in
       let pair = item.trimmingCharacters(in: .whitespaces).split(separator: "=", maxSplits: 1)
-      return pair.count == 2 && pair[0] == "account" && !pair[1].isEmpty
-        ? String(pair[1]) : nil
-    }.first
+      return pair.count == 2 && pair[0] == "account" ? String(pair[1]) : nil
+    }
+    guard accounts.count == 1, let account = accounts.first, !account.isEmpty else { return nil }
+    return account
   }
 
   static func sameCSSSize(_ lhs: CGSize, _ rhs: CGSize) -> Bool {

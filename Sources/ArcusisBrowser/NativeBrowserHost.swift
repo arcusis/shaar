@@ -665,6 +665,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     return CleanLink.clean(url)
   }
 
+  static func showRecentlyClosed(in store: BrowserStore) {
+    store.showRecentlyClosed()
+  }
+
   static func presentSharePicker(for url: URL, in window: NSWindow) {
     guard let contentView = window.contentView else { return }
     let picker = NSSharingServicePicker(items: [url])

@@ -125,6 +125,23 @@ import Testing
     #expect(inspector.styles.failure == nil)
   }
 
+  @Test func cancelledOverlayToggleDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+    try inspector.styles.receive(
+      rules: [], computed: [.init(name: "display", value: "grid")], selectionID: 8,
+      generation: inspector.documentGeneration)
+
+    let toggle = Task { @MainActor in await inspector.styles.toggleOverlay() }
+    toggle.cancel()
+    await toggle.value
+
+    #expect(!inspector.styles.overlay)
+    #expect(inspector.styles.failure == nil)
+  }
+
   @Test func nativeCSSPanelRendersGridFlexAndSourceLimitStates() async throws {
     let inspector = makeInspector()
     inspector.open()

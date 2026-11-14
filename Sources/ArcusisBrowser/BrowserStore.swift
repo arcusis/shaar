@@ -996,14 +996,25 @@ final class BrowserStore {
   func selectAdjacentTab(by offset: Int) -> Bool {
     let space = session.selectedSpace
     let tabs = space.orderedTabs
-    guard tabs.count > 1, let selectedID = space.selectedTabID,
-      let index = tabs.firstIndex(where: { $0.id == selectedID })
-    else { return false }
-    let next = (index + offset % tabs.count + tabs.count) % tabs.count
-    guard let rawIndex = space.tabs.firstIndex(where: { $0.id == tabs[next].id }) else {
-      return false
+    let favoriteIDs = session.favorites(for: space.profileID).compactMap { favorite in
+      session.favoritePage(for: favorite.id)?.tab.id
     }
-    return selectTabByShortcutIndex(rawIndex)
+    let pageIDs = tabs.map(\.id) + favoriteIDs
+    guard pageIDs.count > 1, let selectedID = session.selectedPage?.tab.id,
+      let index = pageIDs.firstIndex(of: selectedID)
+    else { return false }
+    let nextID = pageIDs[(index + offset % pageIDs.count + pageIDs.count) % pageIDs.count]
+    if let tabIndex = space.tabs.firstIndex(where: { $0.id == nextID }) {
+      return selectTabByShortcutIndex(tabIndex)
+    }
+    guard let favorite = session.favorites(for: space.profileID).first(where: { favorite in
+      session.favoritePage(for: favorite.id)?.tab.id == nextID
+    }), session.selectFavorite(favorite.id, in: space.id) else { return false }
+    closeLibraryDrawer()
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    save()
+    return true
   }
 
   func nativeTabOpened(_ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool)

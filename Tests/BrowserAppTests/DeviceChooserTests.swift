@@ -182,6 +182,22 @@ struct DeviceChooserTests {
     _ = DeviceChooserConsent(store: store, request: unavailable).body
   }
 
+  @Test func navigatingAwayCancelsThePresentedChooser() throws {
+    let store = try store()
+    let request = try #require(
+      self.request(
+        store, transport: "usb", id: "navigation-cancel",
+        options: [["index": 0, "name": "Adapter"]], canGrant: true))
+    var decided: Int??
+    store.onDeviceChooserDecision = { _, index in decided = .some(index) }
+
+    #expect(store.requestDeviceChooser(request))
+    store.perform(.open(try #require(URL(string: "https://elsewhere.example/"))))
+
+    #expect(decided == .some(nil))
+    #expect(store.sheet == nil)
+  }
+
   @Test func anUpdateReplacesTheOpenDeviceList() throws {
     let store = try store()
     let opened = try #require(self.request(store, transport: "usb", id: "7"))

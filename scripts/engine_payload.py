@@ -49,6 +49,13 @@ class PayloadError(Exception):
     """Input could not be safely compared."""
 
 
+class _UniqueKeyDict(dict):
+    def __setitem__(self, key, value):
+        if key in self:
+            raise ValueError("plist contains duplicate dictionary key")
+        super().__setitem__(key, value)
+
+
 def _safe_archive_path(raw: str) -> str:
     if not raw or "\x00" in raw or "\\" in raw or raw.startswith("/"):
         raise PayloadError("archive contains unsafe path")
@@ -621,8 +628,8 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
     if len(archive_data) > MAX_CODE_RESOURCES_SIZE or len(framework_data) > MAX_CODE_RESOURCES_SIZE:
         raise PayloadError("CodeResources member exceeds size cap")
     try:
-        original = plistlib.loads(archive_data)
-        current = plistlib.loads(framework_data)
+        original = plistlib.loads(archive_data, dict_type=_UniqueKeyDict)
+        current = plistlib.loads(framework_data, dict_type=_UniqueKeyDict)
     except (plistlib.InvalidFileException, TypeError, ValueError, OverflowError, RecursionError) as error:
         raise PayloadError("CodeResources plist is malformed") from error
     expected_keys = {"files", "files2", "rules", "rules2"}
@@ -715,7 +722,9 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
                     if info_path not in exact_matched_paths | identity_rewritten_paths:
                         return False
                     try:
-                        info = plistlib.loads(_read_framework_bytes(framework_root, info_path, 1024 * 1024))
+                        info = plistlib.loads(
+                            _read_framework_bytes(framework_root, info_path, 1024 * 1024),
+                            dict_type=_UniqueKeyDict)
                     except (PayloadError, plistlib.InvalidFileException, TypeError, ValueError):
                         return False
                     executable = info.get("CFBundleExecutable") if isinstance(info, dict) else None
@@ -747,8 +756,8 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
 
 def _identity_rewrite_matches(original: bytes, current: bytes, identifier: str) -> bool:
     try:
-        source_info = plistlib.loads(original)
-        bundle_info = plistlib.loads(current)
+        source_info = plistlib.loads(original, dict_type=_UniqueKeyDict)
+        bundle_info = plistlib.loads(current, dict_type=_UniqueKeyDict)
     except (plistlib.InvalidFileException, TypeError, ValueError, OverflowError, RecursionError):
         return False
     if not isinstance(source_info, dict) or not isinstance(bundle_info, dict):

@@ -272,8 +272,9 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 - (void)resolveJavaScriptDialogRequestID:(NSString *)requestID accepted:(BOOL)accepted
                                   input:(nullable NSString *)input;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
-/// `index` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
-- (void)resolveDeviceChooserRequestID:(NSString *)requestID index:(nullable NSNumber *)index;
+/// `optionID` nil cancels. A selection is sent only when the engine reports minor 13 or newer.
+- (void)resolveDeviceChooserRequestID:(NSString *)requestID
+                             optionID:(nullable NSString *)optionID;
 - (void)resolveHTTPAuthRequestID:(NSString *)requestID tabID:(NSString *)tabID
                         username:(nullable NSString *)username
                         password:(nullable NSString *)password;

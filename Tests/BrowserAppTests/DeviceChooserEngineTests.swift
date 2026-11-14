@@ -33,7 +33,7 @@ struct DeviceChooserEngineTests {
     #expect(!requested.canGrant)
 
     payload["kind"] = "deviceChooserUpdated"
-    payload["options"] = [["index": 2, "name": "USB adapter"]]
+    payload["options"] = [["optionId": "adapter-2", "name": "USB adapter"]]
     payload["canGrant"] = true
     runtime.onDeviceChooserEvent?(payload)
     guard case .deviceChooser(let updated) = store.sheet else {
@@ -67,7 +67,7 @@ struct DeviceChooserEngineTests {
     #expect(store.sheet?.id == "chooser-chooser-invalid-update")
 
     payload["kind"] = "deviceChooserUpdated"
-    payload["options"] = [["index": 0, "name": "USB adapter"]]
+    payload["options"] = [["optionId": "usb-0", "name": "USB adapter"]]
     payload["canGrant"] = false
     runtime.onDeviceChooserEvent?(payload)
 
@@ -101,9 +101,13 @@ struct DeviceChooserEngineTests {
   private static func event(
     id: String, kind: String, tabID: UUID, profileID: UUID, url: URL
   ) -> [String: Any] {
-    [
+    var origin = URLComponents(url: url, resolvingAgainstBaseURL: false)
+    origin?.path = ""
+    origin?.query = nil
+    origin?.fragment = nil
+    return [
       "schemaVersion": 1, "kind": kind, "id": id, "transport": "usb",
-      "pageURL": url.absoluteString, "origin": url.absoluteString, "options": [],
+      "pageURL": url.absoluteString, "origin": origin?.string ?? url.absoluteString, "options": [],
       "canGrant": false, "profileID": profileID.uuidString,
       "tabID": tabID.uuidString, "windowID": "chooser-window",
     ]

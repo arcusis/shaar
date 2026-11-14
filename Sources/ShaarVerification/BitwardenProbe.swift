@@ -58,18 +58,26 @@ final class BitwardenProbe {
 
   func run() async throws -> [String] {
     do { return try await exercise() } catch {
-      try? write(
-        [
-          "passed": false,
-          "error": error.localizedDescription,
-          "checks": checks,
-          "phase": phase,
-          "controlOnly": onboardingControl, "firstClickAcceptancePassed": false,
-          "scope": "Disposable real-store extension test.",
-        ],
-        name: "\(phase)-bitwarden.json")
+      try? Self.failureReportData(
+        phase: phase, checks: checks, error: error, controlOnly: onboardingControl
+      ).write(to: root.appending(path: "\(phase)-bitwarden.json"), options: .atomic)
       throw error
     }
+  }
+
+  static func failureReportData(
+    phase: String, checks: [String], error: Error, controlOnly: Bool
+  ) throws -> Data {
+    try JSONSerialization.data(
+      withJSONObject: [
+        "passed": false,
+        "error": error.localizedDescription,
+        "checks": checks,
+        "phase": phase,
+        "controlOnly": controlOnly,
+        "firstClickAcceptancePassed": false,
+        "scope": "Disposable real-store extension test.",
+      ], options: [.prettyPrinted, .sortedKeys])
   }
 
   private func exercise() async throws -> [String] {

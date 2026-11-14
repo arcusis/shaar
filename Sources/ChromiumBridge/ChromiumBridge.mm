@@ -180,7 +180,6 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)activateProfileID:(NSString *)profileID {}
 - (void)clearActiveTab {}
 - (void)closeTabID:(NSString *)tabID {}
-- (void)resolveDeviceChooserRequestID:(NSString *)requestID optionID:(NSString *)optionID {}
 - (void)goBackInTabID:(NSString *)tabID {}
 - (void)goForwardInTabID:(NSString *)tabID {}
 - (void)reloadTabID:(NSString *)tabID {}

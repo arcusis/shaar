@@ -68,6 +68,53 @@ struct TabSuspensionTests {
     #expect(allProfilesDownloading)
   }
 
+  @Test func privateSleepingCandidateDownloadLookupBenchmark() throws {
+    let tabs = (0..<1_000).map { index in
+      BrowserTab(url: URL(string: "https://private-tab-\(index).example")!)
+    }
+    let profile = BrowserProfile(name: "Private benchmark")
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Private", symbol: "eye.slash", tint: .ocean,
+      tabs: tabs, selectedTabID: tabs[0].id)
+    let browserSession = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+    let store = BrowserStore(privateSession: browserSession)
+    let runtime = SuspensionTestRuntime()
+    var downloadCheckCount = 0
+    let privateSession = PrivatePageSession(
+      runtime: runtime, contextID: "benchmark-context", windowID: "benchmark-window",
+      firstTabID: tabs[0].id, store: store, profileIsDownloading: { id in
+        downloadCheckCount += 1
+        return id == profile.id
+      })
+    defer {
+      privateSession.suspensionTask?.cancel()
+      privateSession.memoryPressureSource?.cancel()
+    }
+    var beforeSamples: [Duration] = []
+    var afterSamples: [Duration] = []
+    var beforeResolved = 0
+    var afterResolved = 0
+    for _ in 0..<5 {
+      let beforeStart = ContinuousClock.now
+      for tab in tabs where store.session.profileID(forTabID: tab.id) == profile.id {
+        beforeResolved += 1
+      }
+      beforeSamples.append(beforeStart.duration(to: .now))
+      let afterStart = ContinuousClock.now
+      let candidates = privateSession.sleepingCandidates(in: store)
+      for candidate in candidates where candidate.profileIsDownloading { afterResolved += 1 }
+      afterSamples.append(afterStart.duration(to: .now))
+      #expect(candidates.count == tabs.count)
+    }
+    #expect(beforeResolved == afterResolved && afterResolved == tabs.count * 5)
+    #expect(downloadCheckCount == 5)
+    let before = beforeSamples.sorted()[beforeSamples.count / 2]
+    let after = afterSamples.sorted()[afterSamples.count / 2]
+    print("privateSleepingCandidateDownloadLookup: before=\(before), after=\(after)")
+    #expect(after < before * 0.5)
+  }
+
   @Test func anEditedFormStaysAwake() throws {
     let active = BrowserTab(url: URL(string: "https://active.example")!)
     let edited = BrowserTab(url: URL(string: "https://edited.example")!)

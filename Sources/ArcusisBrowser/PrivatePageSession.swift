@@ -207,6 +207,23 @@ final class PrivatePageSession {
     selectedTabID = id
     wakeIfSleeping(id)
     _ = store.nativeTabActivated(id, profileID: store.session.selectedSpace.profileID)
+    restoreSelectedPageAfterActivation(id)
+  }
+
+  private func restoreSelectedPageAfterActivation(_ selected: UUID) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.isClosed,
+        self.selectedTabID == selected,
+        self.store?.session.selectedPage?.tab.id == selected,
+        let view = self.runtime.view(
+          forPrivateTabID: selected.uuidString,
+          windowID: self.windowID,
+          contextID: self.contextID),
+        let window = self.runtime.window(
+          forPrivateWindowID: self.windowID, contextID: self.contextID)
+      else { return }
+      _ = ChromiumPageContainerView.restoreSelectedPage(view, tabID: selected, in: window)
+    }
   }
 
   func noteMediaAccess(_ id: UUID, camera: Bool, microphone: Bool, screen: Bool) {

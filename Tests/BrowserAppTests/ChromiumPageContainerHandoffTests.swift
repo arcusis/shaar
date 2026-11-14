@@ -63,17 +63,37 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
     otherWindow.isReleasedWhenClosed = false
     targetWindow.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
     otherWindow.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
-    defer {
-      targetWindow.close()
-      otherWindow.close()
-    }
+    defer { targetWindow.close(); otherWindow.close() }
     let foreignContainer = ChromiumPageContainerView()
     otherWindow.contentView?.addSubview(foreignContainer)
     _ = foreignContainer.select(page, tabID: tab, liveTabs: [tab])
-
     XCTAssertFalse(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tab, in: targetWindow))
     XCTAssertTrue(page.superview === foreignContainer)
     XCTAssertTrue(page.window === otherWindow)
+  }
+
+  func testPrivateNativeActivationRestoresPageToItsContainer() {
+    let tab = UUID()
+    let page = NSView()
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let root = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    window.contentView = root
+    defer { window.close() }
+    let hosting = NSView(frame: root.bounds)
+    let container = ChromiumPageContainerView(frame: root.bounds)
+    root.addSubview(hosting)
+    hosting.addSubview(container)
+    container.select(page, tabID: tab, liveTabs: [tab])
+    root.addSubview(page)
+    XCTAssertTrue(page.superview === root)
+    XCTAssertFalse(window.isVisible)
+    XCTAssertTrue(ChromiumPageContainerView.restoreSelectedPage(page, tabID: tab, in: window))
+    XCTAssertTrue(page.superview === container)
+    XCTAssertTrue(page.window === window)
+    XCTAssertFalse(window.isVisible)
   }
 
   func testOutgoingContainerHandsPageBackOnTeardown() {

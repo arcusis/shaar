@@ -1915,18 +1915,6 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   }
 }
 
-- (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
-                contextID:(NSString *)contextID requestID:(NSString *)requestID
-                     text:(NSString *)text forward:(BOOL)forward {
-  if (self.onNotice) self.onNotice(@"Private page find is unsupported by this Shaar engine.");
-  return NO;
-}
-
-- (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
-                       contextID:(NSString *)contextID {
-  if (self.onNotice) self.onNotice(@"Private page find is unsupported by this Shaar engine.");
-}
-
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted {
   NSDictionary *pending = _shaarInstallRequests[requestID];
   if (![pending isKindOfClass:NSDictionary.class]) {

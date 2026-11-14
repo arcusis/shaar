@@ -50,7 +50,7 @@ export class APIOperationWatch extends Common.ObjectWrapper.ObjectWrapper<EventT
     const listeners: Common.EventTarget.EventDescriptor[] = [
       manager.addEventListener(SDK.NetworkManager.Events.RequestStarted, this.#onStarted),
       manager.addEventListener(SDK.NetworkManager.Events.RequestUpdated, this.#onRequest),
-      manager.addEventListener(SDK.NetworkManager.Events.RequestFinished, this.#onRequest),
+      manager.addEventListener(SDK.NetworkManager.Events.RequestFinished, this.#onFinished),
     ];
     const resourceTree = manager.target().model(SDK.ResourceTreeModel.ResourceTreeModel);
     if (resourceTree) {
@@ -81,7 +81,11 @@ export class APIOperationWatch extends Common.ObjectWrapper.ObjectWrapper<EventT
 
   #onRequest = (event: Common.EventTarget.EventTargetEvent<SDK.NetworkRequest.NetworkRequest>): void => {
     this.#remember(event.data, event.source);
-    if (event.type === SDK.NetworkManager.Events.RequestFinished && !this.#finished.has(event.data)) {
+  };
+
+  #onFinished = (event: Common.EventTarget.EventTargetEvent<SDK.NetworkRequest.NetworkRequest>): void => {
+    this.#remember(event.data, event.source);
+    if (!this.#finished.has(event.data)) {
       this.#finished.add(event.data);
       void this.#refresh(event.data);
     }

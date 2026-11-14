@@ -20,8 +20,8 @@ file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
 <meta name="color-scheme" content="light"><title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeHtml(page.description)}"><link rel="canonical" href="${siteOrigin}${page.path}">
 ${page.path === "/404.html" ? '<meta name="robots" content="noindex">' : ""}
-<meta property="og:type" content="website"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(page.description)}"><meta property="og:url" content="${siteOrigin}${page.path}"><meta property="og:image" content="${siteOrigin}/assets/shaar-icon.png">
-<meta name="twitter:card" content="summary"><meta name="twitter:title" content="${escapeHtml(title)}"><meta name="twitter:description" content="${escapeHtml(page.description)}"><meta name="twitter:image" content="${siteOrigin}/assets/shaar-icon.png"><link rel="icon" href="/assets/shaar-logo.svg" type="image/svg+xml">
+<meta property="og:type" content="website"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(page.description)}"><meta property="og:url" content="${siteOrigin}${page.path}"><meta property="og:image" content="${siteOrigin}/assets/shaar-icon.png"><meta property="og:image:alt" content="Shaar">
+<meta name="twitter:card" content="summary"><meta name="twitter:title" content="${escapeHtml(title)}"><meta name="twitter:description" content="${escapeHtml(page.description)}"><meta name="twitter:image" content="${siteOrigin}/assets/shaar-icon.png"><meta name="twitter:image:alt" content="Shaar"><link rel="icon" href="/assets/shaar-logo.svg" type="image/svg+xml">
 ${fontFiles.map((file) => `<link rel="preload" href="/assets/fonts/${escapeHtml(file)}" as="font" type="font/woff2" crossorigin>`).join("")}
 <link rel="stylesheet" href="/assets/styles.css"><script src="/assets/client.js" defer></script>
 </head><body id="top">${Navigation(page.path)}<main id="main" tabindex="-1"${page.path !== "/" ? ' class="document-main"' : ""}>${content}</main>${Footer()}</body></html>`;

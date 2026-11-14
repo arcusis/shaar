@@ -243,6 +243,7 @@ struct BrowserSidebar: View {
       space: space, activeFolderID: store.session.selectedPage?.tab.folderID)
     let folderSiblingIndex = SidebarFolderSiblingIndex(folders: space.folders)
     let itemSections = space.sidebarItemSections()
+    let pinnedItems = SidebarPinnedItems { itemSections.pinned }
     return ScrollViewReader { tabScroll in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
@@ -262,15 +263,15 @@ struct BrowserSidebar: View {
           }
           sectionDropTarget(
             pinned: true,
-            height: itemSections.pinned.isEmpty ? 8 : 12,
-            hint: itemSections.pinned.isEmpty
+            height: pinnedItems.isEmpty ? 8 : 12,
+            hint: pinnedItems.isEmpty
               ? ShellL10n.string("Drop to pin in this Space") : nil)
           if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil,
             folderDraft.editingFolderID == nil
           {
             folderDraftRow(depth: 0)
           }
-          ForEach(itemSections.pinned) { item in
+          ForEach(pinnedItems.items) { item in
             switch item {
             case .folder(let folder, let depth):
               if folderDraft?.editingFolderID == folder.id {

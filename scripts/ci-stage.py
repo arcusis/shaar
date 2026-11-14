@@ -263,7 +263,7 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
                 "status": 0,
                 "seconds": 0.0,
             })
-            with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+            with output_file(Path(os.environ["GITHUB_OUTPUT"])).open("a") as output:
                 output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
             checks.results.append(dict(name="cached-verification-bundle", command=[],
                                         status=0, seconds=0.0))
@@ -272,7 +272,7 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return
     archive_bundle(ROOT, checks.directory)
-    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+    with output_file(Path(os.environ["GITHUB_OUTPUT"])).open("a") as output:
         output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
 
 

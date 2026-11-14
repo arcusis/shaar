@@ -24,4 +24,13 @@ struct RendererRecoveryProbeTests {
         lastDocument: " \n\t "
       ).hasUsableDocumentIdentity)
   }
+
+  @Test func recoveryMustReturnToThePriorDocumentURL() {
+    let original = "http://localhost:41000/renderer-crash-account"
+    #expect(RendererRecoveryIdentity.recoveryRetainsDocumentURL(original: original, restored: original))
+    #expect(
+      !RendererRecoveryIdentity.recoveryRetainsDocumentURL(
+        original: original, restored: "http://localhost:41000/light"))
+    #expect(!RendererRecoveryIdentity.recoveryRetainsDocumentURL(original: original, restored: nil))
+  }
 }

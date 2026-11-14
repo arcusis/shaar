@@ -27,13 +27,6 @@ private func navigationBoolean(_ value: Any?) -> Bool? {
   return number.boolValue
 }
 
-private func navigationBoolean(_ value: Any?) -> Bool? {
-  guard let number = value as? NSNumber,
-    CFGetTypeID(number) == CFBooleanGetTypeID()
-  else { return nil }
-  return number.boolValue
-}
-
 public enum ShaarNavigationOperation: UInt32, Sendable {
   case navigate = 300
   case go = 301

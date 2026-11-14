@@ -155,6 +155,21 @@ import Testing
       try FileManager.default.attributesOfItem(atPath: saved.path)[.posixPermissions] as? NSNumber
     #expect(permissions?.intValue == 0o600)
   }
+
+  @Test func screenshotCacheRejectsSymlinkedDirectory() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let target = root.appending(path: "outside", directoryHint: .isDirectory)
+    let directory = root.appending(path: "Inspector", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createSymbolicLink(at: directory, withDestinationURL: target)
+
+    #expect(throws: CocoaError.self) {
+      try InspectorScreenshotCache(directory: directory).save(Data([1, 2, 3]), tag: "section")
+    }
+    #expect(try FileManager.default.contentsOfDirectory(atPath: target.path).isEmpty)
+  }
+
   @Test func unavailableOrClosedSelectionFailsWithoutTouchingClipboard() async throws {
     let model = inspector()
     defer { model.close() }

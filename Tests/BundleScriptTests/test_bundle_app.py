@@ -485,10 +485,12 @@ class BundleAppTests(unittest.TestCase):
             "enum InspectorIdleSmoke {}\n"
             "enum ShaarDevToolsF12RouteSmoke {}\n"
             "enum WebsitePermissionPromptProbe {}\n"
+            "enum ShaarSavePromptProbe {}\n"
             "enum ShaarBrowsingEdgeProbe {}\n"
             "enum HttpsOnlyProbe {}\n"
             "enum SleepingTabsProbe {}\n"
             "enum DeviceChooserProbe {}\n"
+            "enum ShaarSavePromptProbe {}\n"
             "func evaluateDeviceChooserProbeInTabID() {}\n"
             "enum WebShareProbe {}\n"
             "let flag = \"--browsing-qa\"\n"
@@ -527,6 +529,8 @@ class BundleAppTests(unittest.TestCase):
             "--sleeping-tabs-probe",
             "--probe-device-choosers",
             "DeviceChooserProbe",
+            "ShaarSavePromptProbe",
+            "--save-prompt-probe",
             "evaluateDeviceChooserProbe",
             "shaar-chooser:",
         ):

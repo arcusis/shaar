@@ -212,4 +212,6 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (completion) completion(ARCBridgeError(@"Shaar engine unavailable."));
 }
 
+- (void)resolveSavePromptRequestID:(NSString *)requestID decision:(NSString *)decision {}
+
 @end

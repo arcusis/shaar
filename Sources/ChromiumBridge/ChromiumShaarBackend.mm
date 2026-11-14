@@ -207,6 +207,7 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarPrintRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarJavaScriptDialogRequests;
   ShaarPrintReplyFunction _shaarPrintReply;
+  NSMutableDictionary<NSString *, NSString *> *_shaarSavePrompts;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
@@ -216,6 +217,7 @@ struct Symbols {
   BOOL _shaarWebShareAvailable;
   BOOL _shaarPrintAvailable;
   BOOL _shaarJavaScriptDialogsAvailable;
+  BOOL _shaarSavePromptsAvailable;
   NSString *_shaarStartupNotice;
   NSURL *_shaarUserDataDirectory;
   NSMutableDictionary<NSString *, NSNumber *> *_shaarHttpsOnly;
@@ -297,6 +299,84 @@ static BOOL ShaarLifecycleProbeCapable(NSDictionary *reply, NSError *error) {
       [reply[@"error"] isKindOfClass:NSNumber.class]) return NO;
   NSString *state = [reply[@"state"] isKindOfClass:NSString.class] ? reply[@"state"] : @"";
   return [@[@"active", @"frozen", @"discarded"] containsObject:state];
+}
+
+// Patch 0066. The pinned engine reports a lower minor and never emits this event.
+static const uint32_t kShaarSavePromptABIMinor = 12;
+
+static BOOL ShaarScalarIsFormatOrBidi(UTF32Char scalar) {
+  if (scalar == 0x00AD || scalar == 0x061C || scalar == 0x06DD || scalar == 0x070F ||
+      scalar == 0x08E2 || scalar == 0x180E || scalar == 0xFEFF || scalar == 0x110BD ||
+      scalar == 0x110CD || scalar == 0xE0001)
+    return YES;
+  if ((scalar >= 0x0600 && scalar <= 0x0605) || (scalar >= 0x0890 && scalar <= 0x0891) ||
+      (scalar >= 0x200B && scalar <= 0x200F) || (scalar >= 0x202A && scalar <= 0x202E) ||
+      (scalar >= 0x2060 && scalar <= 0x2064) || (scalar >= 0x2066 && scalar <= 0x206F) ||
+      (scalar >= 0xFFF9 && scalar <= 0xFFFB) || (scalar >= 0x13430 && scalar <= 0x1343F) ||
+      (scalar >= 0x1BCA0 && scalar <= 0x1BCA3) || (scalar >= 0x1D173 && scalar <= 0x1D17A) ||
+      (scalar >= 0xE0020 && scalar <= 0xE007F))
+    return YES;
+  return NO;
+}
+
+static BOOL ShaarTextUsesFormatOrBidi(NSString *text) {
+  NSUInteger index = 0;
+  while (index < text.length) {
+    const unichar unit = [text characterAtIndex:index];
+    UTF32Char scalar = unit;
+    if (unit >= 0xD800 && unit <= 0xDBFF) {
+      if (index + 1 >= text.length) return YES;
+      const unichar trail = [text characterAtIndex:index + 1];
+      if (trail < 0xDC00 || trail > 0xDFFF) return YES;
+      scalar = 0x10000 + ((unit - 0xD800) << 10) + (trail - 0xDC00);
+      index += 2;
+    } else if (unit >= 0xDC00 && unit <= 0xDFFF) {
+      return YES;
+    } else {
+      index += 1;
+    }
+    if (ShaarScalarIsFormatOrBidi(scalar)) return YES;
+  }
+  return NO;
+}
+
+static BOOL ShaarPlainText(id value, NSUInteger maxLength) {
+  if (![value isKindOfClass:NSString.class]) return NO;
+  NSString *text = value;
+  if (!text.length || text.length > maxLength) return NO;
+  if ([text rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound)
+    return NO;
+  return !ShaarTextUsesFormatOrBidi(text);
+}
+
+static BOOL ShaarSavePromptRequestIsValid(NSDictionary *payload) {
+  NSSet *allowed = [NSSet setWithArray:@[
+    @"schemaVersion", @"kind", @"id", @"prompt", @"origin", @"pageURL", @"detail", @"update"]];
+  if (![[NSSet setWithArray:payload.allKeys] isEqualToSet:allowed]) return NO;
+  if (![payload[@"schemaVersion"] isEqual:@1]) return NO;
+  if (![payload[@"kind"] isEqualToString:@"savePromptRequested"]) return NO;
+  if (!ShaarPlainText(payload[@"id"], 128)) return NO;
+  NSString *prompt = payload[@"prompt"];
+  if (![prompt isKindOfClass:NSString.class]) return NO;
+  if (![prompt isEqualToString:@"password"] && ![prompt isEqualToString:@"card"] &&
+      ![prompt isEqualToString:@"address"]) return NO;
+  if (!ShaarPlainText(payload[@"origin"], 256) || !ShaarPlainText(payload[@"pageURL"], 2048))
+    return NO;
+  NSString *detail = payload[@"detail"];
+  if (![detail isKindOfClass:NSString.class] || detail.length > 120) return NO;
+  if ([detail rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound)
+    return NO;
+  if (ShaarTextUsesFormatOrBidi(detail)) return NO;
+  if (![payload[@"update"] isKindOfClass:NSNumber.class]) return NO;
+  return ![payload[@"update"] boolValue] || [prompt isEqualToString:@"password"];
+}
+
+static BOOL ShaarSavePromptDismissIsValid(NSDictionary *payload) {
+  NSSet *allowed = [NSSet setWithArray:@[@"schemaVersion", @"kind", @"id"]];
+  if (![[NSSet setWithArray:payload.allKeys] isEqualToSet:allowed]) return NO;
+  if (![payload[@"schemaVersion"] isEqual:@1]) return NO;
+  if (![payload[@"kind"] isEqualToString:@"savePromptDismissed"]) return NO;
+  return ShaarPlainText(payload[@"id"], 128);
 }
 
 static void ShaarEventCallback(void *context, const shaar_event *event) {
@@ -395,6 +475,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarShareRequests = [NSMutableDictionary dictionary];
   _shaarPrintRequests = [NSMutableDictionary dictionary];
   _shaarJavaScriptDialogRequests = [NSMutableDictionary dictionary];
+  _shaarSavePrompts = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -422,6 +503,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       dlsym(_shaarLibrary, "shaar_print_reply"));
   _shaarPrintAvailable = _symbols.abi_minor() >= 16 && _shaarPrintReply != nullptr;
   _shaarJavaScriptDialogsAvailable = _symbols.abi_minor() >= 17;
+  _shaarSavePromptsAvailable = _symbols.abi_minor() >= kShaarSavePromptABIMinor;
   return self;
 }
 
@@ -489,6 +571,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarShareRequests removeAllObjects];
   [_shaarInstallRequests removeAllObjects];
   [_shaarJavaScriptDialogRequests removeAllObjects];
+  [_shaarSavePrompts removeAllObjects];
   _symbols.release(_shaarEngine);
   _shaarEngine = nullptr;
   return result == SHAAR_OK ? 0 : 1;
@@ -773,6 +856,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       [self resolveHTTPAuthRequestID:requestID tabID:tabID username:nil password:nil];
     for (NSString *requestID in [_shaarJavaScriptDialogRequests allKeysForObject:tabID])
       [self resolveJavaScriptDialogRequestID:requestID accepted:NO input:nil];
+    for (NSString *requestID in [_shaarSavePrompts allKeysForObject:tabID])
+      [self resolveSavePromptRequestID:requestID decision:@"dismiss"];
     NSString *mappedWindowID = _shaarTabWindows[tabID];
     NSString *windowID = String(event->window_id);
     if (!windowID.length) windowID = mappedWindowID;
@@ -792,6 +877,30 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       self.onTabLifecycle(tabID, state, [payload[@"audible"] boolValue],
                           [payload[@"capturing"] boolValue]);
     }
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_SAVE_PROMPT) {
+    if (!_shaarSavePromptsAvailable) return;
+    NSString *requestID = payload[@"id"];
+    if ([payload[@"kind"] isEqualToString:@"savePromptDismissed"]) {
+      if (!ShaarSavePromptDismissIsValid(payload) ||
+          ![_shaarSavePrompts[requestID] isEqualToString:tabID]) return;
+      [_shaarSavePrompts removeObjectForKey:requestID];
+      if (self.onSavePromptDismissed) self.onSavePromptDismissed(requestID);
+      return;
+    }
+    NSString *windowID = String(event->window_id);
+    if (!ShaarSavePromptRequestIsValid(payload) || _shaarSavePrompts[requestID] ||
+        !_shaarTabs[tabID] ||
+        ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+    _shaarSavePrompts[requestID] = tabID;
+    NSMutableDictionary *request = [payload mutableCopy];
+    request[@"profileID"] = profileID;
+    request[@"tabID"] = tabID;
+    request[@"windowID"] = windowID;
+    if (self.onSavePromptRequest) self.onSavePromptRequest(request);
+    else [self resolveSavePromptRequestID:requestID decision:@"dismiss"];
     return;
   }
   if (event->kind == SHAAR_EVENT_DOWNLOAD) {
@@ -2144,6 +2253,18 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [self submitTabID:tabID operation:SHAAR_OP_MEDIA_CAPTURE_REPLY
             payload:@{@"schemaVersion": @1, @"promptID": requestID,
                       @"decision": decision, @"sourceToken": token}];
+}
+
+- (void)resolveSavePromptRequestID:(NSString *)requestID decision:(NSString *)decision {
+  NSString *tabID = _shaarSavePrompts[requestID];
+  if (!tabID || !_shaarSavePromptsAvailable) return;
+  if (![decision isEqualToString:@"save"] && ![decision isEqualToString:@"dismiss"] &&
+      ![decision isEqualToString:@"never"]) {
+    decision = @"dismiss";
+  }
+  [_shaarSavePrompts removeObjectForKey:requestID];
+  [self submitTabID:tabID operation:SHAAR_OP_SAVE_PROMPT_DECIDE
+            payload:@{@"schemaVersion": @1, @"id": requestID, @"decision": decision}];
 }
 
 - (void)dealloc {

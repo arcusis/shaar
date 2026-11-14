@@ -1483,6 +1483,46 @@
         }
       }
     },
+    "Never for this site": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אף פעם לא באתר הזה"
+          }
+        }
+      }
+    },
+    "Save address?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשמור את הכתובת?"
+          }
+        }
+      }
+    },
+    "Save card?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשמור את הכרטיס?"
+          }
+        }
+      }
+    },
+    "Save password?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשמור את הסיסמה?"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "he": {
@@ -1839,6 +1879,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "אתר לא ידוע"
+          }
+        }
+      }
+    },
+    "Update saved password?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לעדכן את הסיסמה השמורה?"
           }
         }
       }

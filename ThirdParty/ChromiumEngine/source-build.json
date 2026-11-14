@@ -558,6 +558,10 @@
       "sha256": "b5503e80d28d49834c9d72d7f1d0e98ee7c872c8fcb05727ecbcf2ea7e7a6d73"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0079-shaar-testing-switches.patch",
+      "sha256": "b2fe5ebd4b419eb929579b78f6bde7bfe77b931c52cb393da8f48b699705a679"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0076-shaar-web-store-fit-test-host.patch",
       "sha256": "388af72f7c1e9b70c7e1e685c6f55e81141da3d92ed5e6763878d490d462a761"
     },

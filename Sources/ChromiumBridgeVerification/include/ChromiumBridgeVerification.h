@@ -78,9 +78,12 @@ FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
 FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeShaarMediaPublicState(NSDictionary *native);
 /// Injects a scoped media event into a runtime without creating an engine or window.
 FOUNDATION_EXPORT NSDictionary *ARCProbeShaarMediaEventDispatch(
-    NSDictionary *payload, BOOL validOwner);
+  NSDictionary *payload, BOOL validOwner);
 FOUNDATION_EXPORT NSDictionary *ARCProbePrivateShaarMediaEventDispatch(
-    NSDictionary *payload);
+  NSDictionary *payload);
+/// Injects save-prompt events for fixture tab OWNED-TAB. `abiReady` stands in for minor 12.
+FOUNDATION_EXPORT NSDictionary *ARCProbeShaarSavePromptDispatch(
+  NSArray<NSDictionary *> *payloads, NSString *tabID, BOOL abiReady);
 FOUNDATION_EXPORT NSDictionary *ARCProbeDesktopCaptureEventDispatch(
     NSDictionary *payload, BOOL validOwner);
 FOUNDATION_EXPORT NSDictionary *ARCProbeWebShareEventDispatch(

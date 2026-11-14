@@ -99,6 +99,7 @@ struct BrowserWindow: View {
       PrintDocumentTitleWindowBridge(pageTitle: store.session.selectedPage?.tab.title)
         .frame(width: 0, height: 0)
     }
+    .background { SavePromptAnchor(store: store) }
     .environment(\.browserWindowIsFullScreen, isFullScreen)
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }

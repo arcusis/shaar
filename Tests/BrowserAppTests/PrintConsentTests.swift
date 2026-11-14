@@ -334,6 +334,25 @@ struct PrintConsentTests {
     #expect(decisions.map(\.0) == [first.id, second.id])
     #expect(decisions.map(\.1) == [false, true])
     #expect(store.sheet == nil)
+  @Test func navigationCommitCancelsPrintConsentBeforeFrameCanBeRebound() throws {
+    let store = openedStore()
+    let print = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decisions: [(String, Bool)] = []
+    store.onPrintDecision = { id, accepted in decisions.append((id, accepted)) }
+
+    #expect(store.requestPrint(print))
+    store.nativeDocumentCommitted(print.tabID, profileID: print.profileID)
+
+    #expect(decisions.map(\.0) == [print.id])
+    #expect(decisions.map(\.1) == [false])
+    #expect(store.sheet == nil)
+
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    store.resolvePrint(print.id, accepted: true)
+    #expect(decisions.map(\.1) == [false])
   }
 
   @Test func privatePrintRequestsAreBoundAndUnboundRequestsAreDenied() throws {

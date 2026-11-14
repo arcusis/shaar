@@ -33,12 +33,16 @@ class SavePromptArgumentBoundsTests(unittest.TestCase):
         end = self.source.index("}  // namespace shaar::save_prompts", start)
         handler = self.source[start:end]
         self.assertIn('HasOnlyKeys(*args, {"schemaVersion", "id", "decision"})', handler)
-        self.assertIn("!PlainIdentifier(*id)", handler)
-        start = self.source.index("bool PlainIdentifier(")
-        end = self.source.index("void Finish(", start)
+        self.assertIn("!IsValidDecisionRequestID(*id)", handler)
+
+    def test_decision_ids_match_the_decimal_ids_emitted_by_the_engine(self):
+        self.assertIn("std::to_string(++NextRequestID())", self.source)
+        start = self.source.index("bool IsValidDecisionRequestID(")
+        end = self.source.index("bool SavePromptAllowedForContext(", start)
         identifier = self.source[start:end]
-        self.assertIn("id.size() > 128", identifier)
-        self.assertIn("c < 32 || c == 127", identifier)
+        self.assertIn("id.size() > kMaximumDecisionRequestIDBytes", identifier)
+        self.assertIn("constexpr size_t kMaximumDecisionRequestIDBytes = 20;", self.source)
+        self.assertIn("c < '0' || c > '9'", identifier)
 
 
 if __name__ == "__main__":

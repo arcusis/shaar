@@ -32,6 +32,7 @@ bool OfferSavePrompt(content::WebContents* contents,
                      base::OnceCallback<void(int)> decision);
 
 int DecisionCode(const char* prompt, bool update, const char* decision);
+bool IsValidDecisionRequestID(std::string_view id);
 std::string SanitizeDetail(std::string_view raw);
 
 // A private window, or a tab with no browser context, never gets a save offer.

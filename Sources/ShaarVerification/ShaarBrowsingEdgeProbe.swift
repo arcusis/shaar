@@ -277,7 +277,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     report.add(await checkDownloadLink(context, runtime, pageURL))
     report.add(contentsOf: await checkPopups(context, runtime, pageURL))
     report.add(await checkHang(context, runtime, pageURL))
-    report.add(await checkCrash(context))
+    report.add(await checkCrash(context, runtime, pageURL))
     report.add(contentsOf: await checkDialogs(context, runtime, pageURL, dialogs))
     cancelActiveDownloads(context)
     let stray = visibleWindowLabels()
@@ -903,7 +903,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       "wedged \(wedged), reload asked \(reloaded), recovered \(recovered) via \(how)")
   }
 
-  private static func checkCrash(_ context: NativeBrowserContext) async -> [String: Any] {
+  private static func checkCrash(
+    _ context: NativeBrowserContext, _ runtime: ARCShaarRuntime, _ page: URL
+  ) async -> [String: Any] {
+    guard await open(context, runtime, page, path: "/crash", marker: "crash") else {
+      return makeRow("Sad tab", false, "Crash recovery page did not become ready")
+    }
     guard let tab = selectedID(context) else {
       return makeRow("Sad tab", false, "No selected tab", proven: false)
     }
@@ -930,9 +935,18 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let restored = await wait(seconds: 8) {
       context.store.rendererFailures[tab] == nil && context.engine.pages[tab]?.loading == false
     }
+    let recovery = object(from: await evaluate(
+      runtime, tab: tab,
+      script: "({marker:document.getElementById('marker')?.textContent||''})", seconds: 3))
+    let marker = recovery?["marker"] as? String
+    let responsive = await ping(runtime, context, seconds: 3)
+    let hidden = windowsHidden()
+    let passed = crashRecoveryPassed(
+      started: started, restored: restored, marker: marker, responsive: responsive,
+      windowsHidden: hidden)
     return makeRow(
-      "Sad tab", started && restored && windowsHidden(),
-      "status \(failure.status), reload \(started), restored \(restored), killed \(killed)")
+      "Sad tab", passed,
+      "status \(failure.status), reload \(started), restored \(restored), marker \(marker ?? "missing"), responsive \(responsive), hidden \(hidden), killed \(killed)")
   }
 
   private static func recover(_ context: NativeBrowserContext, _ runtime: ARCShaarRuntime) async {
@@ -1327,6 +1341,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     exercised: Bool, dialogCount: Int, navigated: Bool, windowsHidden: Bool
   ) -> Bool {
     exercised && dialogCount > 0 && navigated && windowsHidden
+  }
+
+  nonisolated static func crashRecoveryPassed(
+    started: Bool, restored: Bool, marker: String?, responsive: Bool, windowsHidden: Bool
+  ) -> Bool {
+    started && restored && marker == "crash-target" && responsive && windowsHidden
   }
 
   nonisolated static func number(_ value: Any?) -> Int? {

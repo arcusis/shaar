@@ -40,6 +40,15 @@ enum SidebarTabTitle {
     }
     return label
   }
+
+  static func closeAccessibilityLabel(
+    title: String, address: String,
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    let label = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? address : title
+    return BrowserLocalization.format(
+      "Close %@", table: "Shell", language: language, arguments: [.string(label)])
+  }
 }
 
 struct SidebarTabRow: View {
@@ -135,8 +144,9 @@ struct SidebarTabRow: View {
     .opacity(showsClose ? 1 : 0)
     .allowsHitTesting(showsClose)
     .accessibilityHidden(!showsClose)
-    .accessibilityLabel(ShellL10n.format("Close %@", arguments: [.string(title)]))
-    .help(ShellL10n.format("Close %@", arguments: [.string(title)]))
+    .accessibilityLabel(
+      SidebarTabTitle.closeAccessibilityLabel(title: title, address: address))
+    .help(SidebarTabTitle.closeAccessibilityLabel(title: title, address: address))
     .accessibilityIdentifier("sidebar-tab-close-\(tabID.uuidString)")
   }
 }

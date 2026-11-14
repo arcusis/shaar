@@ -81,6 +81,10 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
         .wrongProfile, platformCode: 0, message: "session belongs to another profile")
     }
     let handle = try engine.openSession(profileID: profileID, sessionID: sessionID)
+    guard handle != 0 else {
+      throw ShaarEngineError.status(
+        .chromiumError, platformCode: 0, message: "private session open returned a null handle")
+    }
     let result = ShaarPrivateSessionHandles(
       profileID: profileID, sessionID: sessionID, session: handle)
     sessions[key] = result
@@ -101,6 +105,10 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
         .conflict, platformCode: 0, message: "window ID is already live")
     }
     let handle = try engine.openWindow(session: entry.value.session, windowID: windowID)
+    guard handle != 0 else {
+      throw ShaarEngineError.status(
+        .chromiumError, platformCode: 0, message: "private window open returned a null handle")
+    }
     windows[windowID] = (entry.key, handle)
     return handle
   }
@@ -123,6 +131,10 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
     }
     let handle = try engine.openTab(
       session: session.session, window: entry.1, tabID: tabID, url: url, foreground: foreground)
+    guard handle != 0 else {
+      throw ShaarEngineError.status(
+        .chromiumError, platformCode: 0, message: "private tab open returned a null handle")
+    }
     tabs[tabID] = (entry.0, entry.1, handle)
   }
 

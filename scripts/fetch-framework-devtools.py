@@ -281,6 +281,16 @@ def main():
 def validate_output_path(path: Path) -> Path:
     if path.is_symlink():
         raise ValueError(f"output must not be a symlink: {path}")
+    parent = path.parent.absolute()
+    while parent != parent.parent:
+        if parent.is_symlink():
+            # macOS exposes the system temporary and variable directories through
+            # these stable aliases; user-selected path components remain forbidden.
+            system_aliases = {Path("/var"): Path("/private/var"),
+                              Path("/tmp"): Path("/private/tmp")}
+            if system_aliases.get(parent) != parent.resolve():
+                raise ValueError(f"output has symlinked parent: {parent}")
+        parent = parent.parent
     output = path.resolve()
     protected_roots = (ROOT.resolve(), Path(tempfile.gettempdir()).resolve())
     if output == output.parent or any(root == output or output in root.parents for root in protected_roots):

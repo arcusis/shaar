@@ -5,6 +5,7 @@
 import importlib.util
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -36,6 +37,20 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
             for path in invalid:
                 with self.subTest(path=path), self.assertRaises(ValueError):
                     fetcher.validate_output_path(path)
+
+    def test_output_path_rejects_symlinked_parent_directories(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outside = root / "outside"
+            outside.mkdir()
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(outside, target_is_directory=True)
+            output = linked_parent / "FrameworkDevTools"
+
+            with patch.object(fetcher.tempfile, "gettempdir", return_value=str(root / "other-temp")):
+                with self.assertRaisesRegex(ValueError, "symlinked parent"):
+                    fetcher.validate_output_path(output)
 
     def test_release_url_names_the_pinned_github_asset(self):
         fetcher = load_fetcher()

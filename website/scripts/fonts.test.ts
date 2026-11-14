@@ -84,6 +84,31 @@ test("invalid cached font manifest falls back to system fonts", async () => {
   }
 });
 
+test("empty cached font manifest is removed so the next build can retry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  mkdirSync(cache);
+  writeFileSync(join(cache, "fonts.json"), "[]");
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("unremovable cached manifest still falls back to system fonts", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  mkdirSync(cache);
+  mkdirSync(join(cache, "fonts.json"));
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("missing cached font file falls back to system fonts", async () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
   const cache = join(root, "cache");
@@ -186,6 +211,50 @@ test("valid WOFF2 assets are cached and copied", async () => {
     assert.equal(faces.length, 2);
     assert.deepEqual(readFileSync(join(output, "clash-display.woff2")), font);
     assert.deepEqual(readFileSync(join(output, "satoshi.woff2")), font);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("unparseable font CSS falls back without caching an empty manifest", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<!doctype html><title>Unavailable</title>");
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("incomplete font CSS falls back without caching a partial manifest", async () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-fonts-"));
+  const cache = join(root, "cache");
+  const originalFetch = globalThis.fetch;
+  const font = readFileSync(
+    new URL(
+      "../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2",
+      import.meta.url,
+    ),
+  );
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("api.fontshare.com")) {
+      if (url.includes("clash-display"))
+        return new Response(
+          "@font-face{font-family:'Clash Display';src:url('https://fonts.test/clash.woff2');font-weight:300 900;font-style:normal;}",
+        );
+      return new Response("<!doctype html><title>Unavailable</title>");
+    }
+    return new Response(new Uint8Array(font));
+  };
+  try {
+    assert.deepEqual(await prepareFonts(cache, join(root, "output")), []);
+    assert.equal(existsSync(join(cache, "fonts.json")), false);
   } finally {
     globalThis.fetch = originalFetch;
     rmSync(root, { recursive: true, force: true });

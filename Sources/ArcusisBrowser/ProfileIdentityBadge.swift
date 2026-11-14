@@ -61,7 +61,7 @@ enum AccountPhotoURLPolicy {
   static func accepts(_ url: URL) -> Bool {
     guard url.scheme?.lowercased() == "https", url.host() != nil,
       url.user == nil, url.password == nil,
-      url.port.map({ (0...65535).contains($0) }) ?? true
+      url.port.map({ (1...65535).contains($0) }) ?? true
     else { return false }
     return true
   }

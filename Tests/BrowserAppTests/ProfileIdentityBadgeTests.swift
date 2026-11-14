@@ -58,6 +58,16 @@ import Testing
     #expect(account.cachedPhoto == nil)
   }
 
+  @Test func accountPhotoPolicyRejectsPortZero() {
+    let secureURL = URL(string: "https://images.example.test/avatar.png")!
+    let invalidURL = URL(string: "https://images.example.test:0/avatar.png")!
+    let account = ConnectedAccount(
+      provider: .google, email: "alex@example.test", photoURL: invalidURL)
+
+    #expect(ProfileIdentityBadge.remotePhotoURL(for: account) == nil)
+    #expect(!AccountPhotoURLPolicy.allowsRedirect(from: secureURL, to: invalidURL))
+  }
+
   @Test func unreadablePhotoFallsBackToInitialsInProfileColor() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: "badge-fallback-\(UUID())")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

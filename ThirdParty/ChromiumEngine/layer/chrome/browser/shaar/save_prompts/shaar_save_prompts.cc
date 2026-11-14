@@ -328,6 +328,24 @@ bool SavePromptAllowedForContext(bool has_browser_context,
   return has_browser_context && !off_the_record;
 }
 
+bool IsValidUTF8Sequence(std::string_view raw, size_t index, size_t length) {
+  if (index + length > raw.size())
+    return false;
+  const auto lead = static_cast<unsigned char>(raw[index]);
+  const auto second = static_cast<unsigned char>(raw[index + 1]);
+  if ((lead == 0xE0 && second < 0xA0) ||
+      (lead == 0xED && second > 0x9F) ||
+      (lead == 0xF0 && second < 0x90) ||
+      (lead == 0xF4 && second > 0x8F))
+    return false;
+  for (size_t offset = 1; offset < length; ++offset) {
+    const auto byte = static_cast<unsigned char>(raw[index + offset]);
+    if (byte < 0x80 || byte > 0xBF)
+      return false;
+  }
+  return true;
+}
+
 std::string SanitizeDetail(std::string_view raw) {
   std::string cleaned;
   size_t index = 0;
@@ -370,6 +388,10 @@ std::string SanitizeDetail(std::string_view raw) {
     }
     if (index + length > raw.size())
       break;
+    if (length > 1 && !IsValidUTF8Sequence(raw, index, length)) {
+      ++index;
+      continue;
+    }
     const std::string_view character = raw.substr(index, length);
     if (IsFormattingCharacter(character)) {
       index += length;

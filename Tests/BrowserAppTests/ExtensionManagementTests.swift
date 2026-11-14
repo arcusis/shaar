@@ -83,6 +83,19 @@ struct ExtensionManagementTests {
     #expect(rows.isEmpty)
   }
 
+  @Test func shaarListRejectsBooleanSchemaVersion() throws {
+    let reply: [String: Any] = [
+      "schemaVersion": true,
+      "extensions": [[
+        "id": String(repeating: "a", count: 32), "name": "Example",
+        "version": "1.0", "source": 4,
+      ]],
+    ]
+    let data = try JSONSerialization.data(withJSONObject: reply)
+    let json = try #require(String(data: data, encoding: .utf8))
+    #expect(ARCVisibleShaarExtensionRows(json) == nil)
+  }
+
   @Test func popupCloseLabelNamesTheExtensionInBothLanguages() {
     let popup = ExtensionPopupContext(
       id: "popup", profileID: UUID(), tabID: UUID(), extensionID: validID, name: "Notes")

@@ -46,6 +46,13 @@ def verify_archive(payload: bytes, digest: str, name: str) -> None:
         raise ValueError(f"Checksum mismatch for {name}")
 
 
+def write_binary(destination: Path, binary: bytes, executable: bool) -> None:
+    if destination.is_symlink():
+        raise ValueError(f"Refusing symlinked tool output: {destination}")
+    destination.write_bytes(binary)
+    destination.chmod(0o755 if executable else 0o644)
+
+
 def read_verified_cached_archive(cache_path: Path, digest: str) -> Optional[bytes]:
     if cache_path.is_symlink():
         raise ValueError(f"Refusing symlinked cached archive: {cache_path}")
@@ -154,8 +161,7 @@ def main() -> None:
         for member in (name, *pin.get("companions", [])):
             binary = binary_from_archive(payload, member, pin["sha256"])
             destination = options.destination / member
-            destination.write_bytes(binary)
-            destination.chmod(0o755 if member == name else 0o644)
+            write_binary(destination, binary, member == name)
         print(f"Installed {name} from {pin['url']} ({pin['sha256']})")
 
 

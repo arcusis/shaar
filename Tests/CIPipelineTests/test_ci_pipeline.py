@@ -704,6 +704,17 @@ class CoverageGateTests(unittest.TestCase):
 
 
 class SupplyChainTests(unittest.TestCase):
+    def test_installer_refuses_symlinked_tool_output_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            target = Path(outside) / "sentinel"
+            target.write_bytes(b"keep")
+            output = root / "actionlint"
+            output.symlink_to(target)
+            with self.assertRaisesRegex(ValueError, "symlinked tool output"):
+                INSTALL.write_binary(output, b"replace", True)
+            self.assertEqual(target.read_bytes(), b"keep")
+
     def test_spdx_inventory_rejects_symlinked_app_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

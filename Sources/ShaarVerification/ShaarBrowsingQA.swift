@@ -273,6 +273,18 @@ import Foundation
         reloaded && settledSlow && repeatedRequest ? "pass" : "fail",
         "Reload during load inFlight=\(stillLoading), reload=\(reloaded), requests=\(reloadRequests ?? "missing"), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
         ["elapsedMs": milliseconds(since: slowStarted)]))
+    runtime.goBack(inTabID: current.uuidString)
+    let backPath = await until(attempts: 100, condition: { settled(context, path: "/nav/1") })
+      ? context.store.session.selectedPage?.tab.url.path : nil
+    runtime.goForward(inTabID: current.uuidString)
+    let forwardPath = await until(attempts: 100, condition: { settled(context, path: "/slow-reload") })
+      ? context.store.session.selectedPage?.tab.url.path : nil
+    let reloadHistoryOK = reloadHistoryPreserved(backPath: backPath, forwardPath: forwardPath)
+    rows.append(
+      row(
+        "churn-reload-history", reloadHistoryOK ? "pass" : "fail",
+        "Back after reload reached \(backPath ?? "nothing"); forward reached \(forwardPath ?? "nothing")."
+      ))
     let failures = context.store.rendererFailures.count
     rows.append(
       row(
@@ -960,6 +972,10 @@ import Foundation
   static func reloadDuringNavigationWasFetched(_ value: String?) -> Bool {
     guard let requestCount = wholeNumber(value) else { return false }
     return requestCount >= 2
+  }
+
+  static func reloadHistoryPreserved(backPath: String?, forwardPath: String?) -> Bool {
+    backPath == "/nav/1" && forwardPath == "/slow-reload"
   }
 
   static func playbackStarted(_ value: String?) -> Bool {

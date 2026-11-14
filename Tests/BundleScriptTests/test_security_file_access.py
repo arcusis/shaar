@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 IMPORTERS = REPO / "Sources/BrowserCore/BrowserProfileImporters.swift"
+STORE = REPO / "Sources/ArcusisBrowser/BrowserStore.swift"
 
 
 class PrivateProfilePathSecurityTests(unittest.TestCase):
@@ -21,6 +22,18 @@ class PrivateProfilePathSecurityTests(unittest.TestCase):
         self.assertIn("url.resolvingSymlinksInPath().standardizedFileURL", guard)
         self.assertIn("resolved.pathComponents.map", guard)
         self.assertIn('marker == "guest" && !profileNames.contains(name)', guard)
+
+    def test_native_tabs_reject_non_web_popup_urls(self):
+        source = STORE.read_text()
+        method = source[
+            source.index("func nativeTabOpened("):
+            source.index("func openDevToolsRequestedTab(")
+        ]
+
+        self.assertIn(
+            'guard NavigationInput.isWebURL(tab.url) || tab.url.absoluteString == "about:blank"',
+            method,
+        )
 
 
 if __name__ == "__main__":

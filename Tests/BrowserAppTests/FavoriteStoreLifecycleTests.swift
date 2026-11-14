@@ -126,4 +126,37 @@ struct FavoriteStoreLifecycleTests {
     #expect(store.session.selectedSpaceID == currentSpaceID)
     #expect(store.session.spaces.first(where: { $0.id == otherSpaceID })?.tabs.isEmpty == true)
   }
+
+  @Test func nativePopupRejectsNonWebSchemes() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://opener.example")!))
+    let profileID = store.session.selectedSpace.profileID
+    let originalTabIDs = store.session.spaces.flatMap(\.tabs).map(\.id)
+
+    for address in [
+      "file:///etc/passwd", "chrome://settings", "devtools://devtools/bundled/inspector.html",
+      "javascript:alert(1)", "data:text/html,untrusted",
+    ] {
+      let popup = BrowserTab(url: try #require(URL(string: address)))
+      #expect(
+        !store.nativeTabOpened(
+          popup, profileID: profileID, openerID: nil, foreground: true),
+        "Unexpectedly accepted popup URL: \(address)")
+    }
+
+    #expect(store.session.spaces.flatMap(\.tabs).map(\.id) == originalTabIDs)
+  }
+
+  @Test func nativePopupAllowsBlankAndWebURLs() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://opener.example")!))
+    let profileID = store.session.selectedSpace.profileID
+
+    for address in ["about:blank", "https://popup.example"] {
+      let popup = BrowserTab(url: try #require(URL(string: address)))
+      #expect(
+        store.nativeTabOpened(
+          popup, profileID: profileID, openerID: nil, foreground: false))
+    }
+  }
 }

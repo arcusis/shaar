@@ -1009,6 +1009,9 @@ final class BrowserStore {
   func nativeTabOpened(_ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool)
     -> Bool
   {
+    guard NavigationInput.isWebURL(tab.url) || tab.url.absoluteString == "about:blank" else {
+      return false
+    }
     let previousSpaceID = session.selectedSpaceID
     let mayForeground = foreground && session.selectedSpace.profileID == profileID
     let favoriteOpenerSpace: UUID? = openerID.flatMap { opener -> UUID? in

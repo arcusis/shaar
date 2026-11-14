@@ -8,6 +8,12 @@ import SwiftUI
 struct BrowserSidebar: View {
   static let pinnedSectionHeadingTraits: AccessibilityTraits = .isHeader
 
+  static func accessibilityGroupLabel(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.string("Browser sidebar", table: "Shell", language: language)
+  }
+
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
@@ -179,6 +185,8 @@ struct BrowserSidebar: View {
       }
       .accessibilityIdentifier("sidebar-space-footer")
     }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel(Self.accessibilityGroupLabel())
     .environment(\.sidebarMotionNamespace, sidebarMotionNamespace)
     .animation(sidebarMotion, value: sidebarLayoutKey)
     .buttonStyle(.plain)

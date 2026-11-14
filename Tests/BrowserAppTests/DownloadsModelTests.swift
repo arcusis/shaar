@@ -28,4 +28,33 @@ struct DownloadsModelTests {
     directory = replacement
     #expect(model.libraryItems(in: profileID).map(\.filename) == ["new.pdf"])
   }
+
+  @Test func downloadRecordsRejectBooleansInNumericFields() throws {
+    let valid: [String: Any] = [
+      "id": "8ce51349-a188-4bad-bd1c-011b48e48ca6",
+      "filename": "file.txt",
+      "path": "/tmp/file.txt",
+      "url": "https://example.test/file",
+      "state": "downloading",
+      "paused": false,
+      "dangerous": false,
+      "offTheRecord": false,
+      "received": 10.0,
+      "total": 20.0,
+      "startTime": 1.0,
+    ]
+
+    for field in ["received", "total", "startTime"] {
+      let record = try json(valid.merging([field: true]) { _, new in new })
+      let model = DownloadsModel()
+      let profileID = UUID()
+      model.changed(record, profileID: profileID)
+      #expect(model.items(in: profileID).isEmpty, "Accepted boolean for \(field)")
+    }
+  }
+
+  private func json(_ value: [String: Any]) throws -> [String: Any] {
+    let data = try JSONSerialization.data(withJSONObject: value)
+    return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+  }
 }

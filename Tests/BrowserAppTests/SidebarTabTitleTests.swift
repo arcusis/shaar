@@ -48,6 +48,16 @@ import Vision
         language: .english) == "\(address), Pinned, Sleeping")
   }
 
+  @Test func closeAccessibilityLabelFallsBackToAddressForBlankTitles() {
+    let address = "https://news.example/page"
+    #expect(
+      SidebarTabTitle.closeAccessibilityLabel(
+        title: "News", address: address, language: .english) == "Close News")
+    #expect(
+      SidebarTabTitle.closeAccessibilityLabel(
+        title: " \n\t", address: address, language: .english) == "Close \(address)")
+  }
+
   @Test func tabAccessibilityLabelIncludesPinnedAndSleepingStates() {
     #expect(
       SidebarTabTitle.accessibilityLabel(
@@ -63,21 +73,6 @@ import Vision
       SidebarTabTitle.accessibilityLabel(
         title: "News", address: "https://news.example", isSleeping: false, isPinned: true,
         language: .hebrew)
-        == "News, \u{2068}נעוצים\u{2069}")
-  }
-
-  @Test func tabAccessibilityLabelIncludesPinnedAndSleepingStates() {
-    #expect(
-      SidebarTabTitle.accessibilityLabel(
-        title: "News", isSleeping: false, isPinned: true, language: .english)
-        == "News, Pinned")
-    #expect(
-      SidebarTabTitle.accessibilityLabel(
-        title: "News", isSleeping: true, isPinned: true, language: .english)
-        == "News, Pinned, Sleeping")
-    #expect(
-      SidebarTabTitle.accessibilityLabel(
-        title: "News", isSleeping: false, isPinned: true, language: .hebrew)
         == "News, \u{2068}נעוצים\u{2069}")
   }
 

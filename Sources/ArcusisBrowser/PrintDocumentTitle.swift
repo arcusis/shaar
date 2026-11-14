@@ -34,6 +34,8 @@ enum PrintDocumentTitle {
       result.append(contentsOf: cluster)
     }
     return result.isEmpty ? nil : result
+  }
+
   private static func containsVisibleFilenameText(_ title: String) -> Bool {
     title.unicodeScalars.contains {
       guard !isJoiner($0), !isEmojiTag($0),
@@ -44,7 +46,6 @@ enum PrintDocumentTitle {
       default: return true
       }
     }
-  }
   }
 
   private static func isJoiner(_ scalar: Unicode.Scalar) -> Bool {

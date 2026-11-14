@@ -297,9 +297,12 @@ struct PrivateMultiTabProbe {
       "nativeFrame": NSStringFromRect(native?.frame ?? .zero),
       "containerFrames": containers.map { NSStringFromRect($0.frame) },
       "layerBacked": containers.map(\.wantsLayer),
-      "attached": containers.contains { $0.pageView === native },
+      "attached": containers.contains {
+        PrivateMultiTabEvidence.pageIsAttached(native, to: $0, retainedPage: $0.pageView)
+      },
       "attachedInWindow": containers.contains {
-        $0.pageView === native && $0.window === owner.window
+        PrivateMultiTabEvidence.pageIsAttached(native, to: $0, retainedPage: $0.pageView)
+          && native?.window === owner.window && $0.window === owner.window
       },
     ]
     let auditData = try JSONSerialization.data(
@@ -354,6 +357,11 @@ struct PrivateMultiTabProbe {
 }
 
 enum PrivateMultiTabEvidence {
+  static func pageIsAttached(_ page: NSView?, to container: NSView, retainedPage: NSView?) -> Bool {
+    guard let page, retainedPage === page else { return false }
+    return page.superview === container
+  }
+
   static func blankShellAudit(_ audit: [String: Any]) -> Bool {
     audit["nativeViewPresent"] as? Bool == true
       && liveShellAudit(audit, stage: "first-blank")

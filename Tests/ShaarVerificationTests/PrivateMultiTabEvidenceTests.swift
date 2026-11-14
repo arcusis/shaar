@@ -7,7 +7,7 @@ import Testing
 
 @testable import ShaarVerification
 
-@Suite struct PrivateMultiTabEvidenceTests {
+@Suite @MainActor struct PrivateMultiTabEvidenceTests {
   @Test func liveTabAuditRequiresOwnedWebContentsAndExpectedCount() {
     let valid: [AnyHashable: Any] = [
       "sourceIsRegular": true,
@@ -27,6 +27,16 @@ import Testing
       missing.removeValue(forKey: key)
       #expect(!PrivateMultiTabEvidence.liveTabAudit(missing, tabCount: 3))
     }
+  }
+
+  @Test func shellAttachmentRequiresTheNativePageAsAnActualSubview() {
+    let container = NSView()
+    let page = NSView()
+    container.addSubview(page)
+    #expect(PrivateMultiTabEvidence.pageIsAttached(page, to: container, retainedPage: page))
+
+    page.removeFromSuperview()
+    #expect(!PrivateMultiTabEvidence.pageIsAttached(page, to: container, retainedPage: page))
   }
 
   @Test func shellAuditRejectsJSONBooleanContainerCount() throws {

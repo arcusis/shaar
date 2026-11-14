@@ -16,6 +16,27 @@ SPEC.loader.exec_module(EVIDENCE)
 
 
 class CIEvidenceDestinationParentSymlinkTests(unittest.TestCase):
+    def test_collect_rejects_symlinked_deep_ancestor(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            (outside / "level1/level2").mkdir(parents=True)
+            linked_parent = root / "linked-output"
+            linked_parent.symlink_to(outside, target_is_directory=True)
+            destination = linked_parent / "level1/level2/evidence"
+
+            with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as probe_temp:
+                probe = Path(probe_temp)
+                (probe / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
+                (probe / "receipt.json").write_text("{}\n")
+                log = root / "probe.log"
+                log.write_text(f"Probe evidence: {probe}\n")
+
+                with self.assertRaisesRegex(ValueError, "symlinked parent"):
+                    EVIDENCE.collect(log, destination)
+
+            self.assertFalse((outside / "level1/level2/evidence").exists())
+
     def test_collect_rejects_symlinked_destination_parent(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

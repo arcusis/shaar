@@ -37,11 +37,21 @@ def owned_probe_root(path: Path) -> bool:
         return False
 
 
+def symlinked_parent(path: Path) -> Path | None:
+    system_aliases = {Path("/var"): Path("/private/var"),
+                      Path("/tmp"): Path("/private/tmp")}
+    for parent in path.parents:
+        if parent.is_symlink() and system_aliases.get(parent) != parent.resolve():
+            return parent
+    return None
+
+
 def collect(log: Path, destination: Path) -> None:
     if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
         raise ValueError("evidence destination is not a regular directory")
-    if any(parent.is_symlink() for parent in destination.parents[:2]):
-        raise ValueError("evidence destination has a symlinked parent")
+    parent = symlinked_parent(destination)
+    if parent is not None:
+        raise ValueError(f"evidence destination has a symlinked parent: {parent}")
     for line in log.read_text(errors="replace").splitlines():
         if not line.startswith("Probe evidence: "):
             continue

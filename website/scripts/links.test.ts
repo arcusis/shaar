@@ -404,3 +404,17 @@ test("link checker reports malformed percent escapes without crashing", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker reports multiple malformed CSS asset URLs", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
+    writeFileSync(join(root, "styles.css"), 'a{background:url("http://[")}b{background:url("http://%") }');
+    assert.deepEqual(checkLinks(root).errors, [
+      "styles.css: missing/nonlocal CSS asset http://[",
+      "styles.css: missing/nonlocal CSS asset http://%",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

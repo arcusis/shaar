@@ -77,6 +77,14 @@ PAGES = {
         } catch (error) { fail(error); }
       };
     """,
+    "mailto": """
+      document.getElementById('parity-action').onclick = () => {
+        try {
+          navigator.registerProtocolHandler('mailto', location.origin + '/handled?u=%s');
+          finish({outcome:'registered'});
+        } catch (error) { fail(error); }
+      };
+    """,
     "handled": "finish({outcome:'handled', href:location.href});",
 }
 
@@ -110,7 +118,7 @@ class Fixture(BaseHTTPRequestHandler):
 
 def dishonest_protocol(checks):
     for check in checks:
-        if check.get("name") != "protocol" or not check.get("prompted"):
+        if check.get("name") not in {"protocol", "mailto"} or not check.get("prompted"):
             continue
         kinds = set(check.get("kinds") or [])
         if "protocolHandler" not in kinds:
@@ -207,11 +215,17 @@ def main():
                 and payload.get("allWindowsHidden")
                 and not payload.get("unexpectedSurfaces")
                 and not payload.get("error"))
+            opened_protocols = set(payload.get("openedProtocols") or [])
+            expected_protocols = {"web+shaarparity", "mailto"}
             if not completed:
                 raise SystemExit(1)
             if dishonest_protocol(payload.get("checks") or []):
                 raise SystemExit(1)
-            if not payload.get("passed") or required - prompted:
+            if (
+                not payload.get("passed")
+                or required - prompted
+                or expected_protocols - opened_protocols
+            ):
                 raise SystemExit(2)
         server.shutdown()
 

@@ -1,0 +1,91 @@
+diff --git a/components/custom_handlers/protocol_handler_registry.cc b/components/custom_handlers/protocol_handler_registry.cc
+index 000000000000..000000000000 100644
+--- a/components/custom_handlers/protocol_handler_registry.cc
++++ b/components/custom_handlers/protocol_handler_registry.cc
+@@ -370,7 +370,13 @@ bool ProtocolHandlerRegistry::CanSchemeBeOverridden(
+   if (handlers != nullptr && !handlers->empty()) {
+     return true;
+   }
++  // A website handler registered through the user-visible permission prompt
++  // must be able to replace the operating system's mailto handler inside the
++  // browser. NavigationThrottle will translate accepted mailto URLs through
++  // this registry; other schemes still defer to the OS handler check below.
++  if (scheme == "mailto")
++    return true;
+   // Don't override a scheme if it already has an external handler.
+   return !delegate_->IsExternalHandlerRegistered(
+       static_cast<std::string>(scheme));
+ }
+diff --git a/components/custom_handlers/test_protocol_handler_registry_delegate.h b/components/custom_handlers/test_protocol_handler_registry_delegate.h
+index 000000000000..000000000000 100644
+--- a/components/custom_handlers/test_protocol_handler_registry_delegate.h
++++ b/components/custom_handlers/test_protocol_handler_registry_delegate.h
+@@ -52,4 +52,7 @@ class TestProtocolHandlerRegistryDelegate
+   void set_force_os_failure(bool force) { force_os_failure_ = force; }
+   bool force_os_failure() { return force_os_failure_; }
++  void set_external_handler_registered_for_testing(bool registered) {
++    external_handler_registered_for_testing_ = registered;
++  }
+ 
+   void Reset();
+@@ -64,6 +68,7 @@ class TestProtocolHandlerRegistryDelegate
+   std::set<std::string> registered_protocols_;
+   std::set<std::string> os_registered_protocols_;
+   bool force_os_failure_{false};
++  bool external_handler_registered_for_testing_{false};
+ };
+ 
+ }  // namespace custom_handlers
+diff --git a/components/custom_handlers/test_protocol_handler_registry_delegate.cc b/components/custom_handlers/test_protocol_handler_registry_delegate.cc
+index 000000000000..000000000000 100644
+--- a/components/custom_handlers/test_protocol_handler_registry_delegate.cc
++++ b/components/custom_handlers/test_protocol_handler_registry_delegate.cc
+@@ -45,3 +45,4 @@ bool TestProtocolHandlerRegistryDelegate::IsExternalHandlerRegistered(
+     const std::string& protocol) {
+-  return registered_protocols_.find(protocol) != registered_protocols_.end();
++  return external_handler_registered_for_testing_ ||
++         registered_protocols_.find(protocol) != registered_protocols_.end();
+ }
+@@ -77,4 +78,5 @@ void TestProtocolHandlerRegistryDelegate::Reset() {
+   registered_protocols_.clear();
+   os_registered_protocols_.clear();
+   force_os_failure_ = false;
++  external_handler_registered_for_testing_ = false;
+ }
+diff --git a/chrome/browser/custom_handlers/chrome_protocol_handler_registry_unittest.cc b/chrome/browser/custom_handlers/chrome_protocol_handler_registry_unittest.cc
+index 000000000000..000000000000 100644
+--- a/chrome/browser/custom_handlers/chrome_protocol_handler_registry_unittest.cc
++++ b/chrome/browser/custom_handlers/chrome_protocol_handler_registry_unittest.cc
+@@ -43,4 +43,12 @@ class ChromeProtocolHandlerRegistryTest : public testing::Test {
+     return !registry_->GetHandlersFor(protocol).empty();
+   }
+ 
++  bool CanSchemeBeOverriddenForTesting(const std::string& scheme) {
++    return registry_->CanSchemeBeOverridden(scheme);
++  }
++
++  void SetExternalHandlerRegisteredForTesting(bool registered) {
++    delegate_->set_external_handler_registered_for_testing(registered);
++  }
++
+   void SetUp() override {
+@@ -48,5 +56,6 @@ class ChromeProtocolHandlerRegistryTest : public testing::Test {
+     auto delegate = std::make_unique<
+         custom_handlers::TestProtocolHandlerRegistryDelegate>();
++    delegate_ = delegate.get();
+     registry_ = std::make_unique<ProtocolHandlerRegistry>(profile_->GetPrefs(),
+                                                           std::move(delegate));
+     registry_->InitProtocolSettings();
+@@ -61,5 +70,12 @@ class ChromeProtocolHandlerRegistryTest : public testing::Test {
+   std::unique_ptr<TestingProfile> profile_;
+   std::unique_ptr<ProtocolHandlerRegistry> registry_;
++  custom_handlers::TestProtocolHandlerRegistryDelegate* delegate_ = nullptr;
+ };
+ 
++TEST_F(ChromeProtocolHandlerRegistryTest, MailtoCanOverrideExternalHandler) {
++  SetExternalHandlerRegisteredForTesting(true);
++  EXPECT_TRUE(CanSchemeBeOverriddenForTesting("mailto"));
++  EXPECT_FALSE(CanSchemeBeOverriddenForTesting("web+shaarprobe"));
++}
++
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)

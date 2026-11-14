@@ -596,6 +596,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0088-shaar-page-zoom.patch",
       "sha256": "d6b6ac4204f6a967e68b67781de4f081c9cebbb4c530aa2ef204b0f760a175e1"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0090-shaar-registered-mailto-handler.patch",
+      "sha256": "179000e21c4a5726d97d8606c81af2beed4d486192e7cbb8da1b30198c7aa4ed"
     }
   ],
   "devtoolsFrontend157": {

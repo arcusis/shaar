@@ -26,6 +26,7 @@ struct PrintConsentSheet: View {
 }
 
 struct PrintConsentContent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let request: PrintRequest
   let onCancel: () -> Void
   let onPrint: () -> Void
@@ -34,6 +35,7 @@ struct PrintConsentContent: View {
     VStack(alignment: .leading, spacing: 12) {
       Text(PanelsL10n.string("Print this page?"))
         .font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.headingTraits)
       Text(request.hostLabel)
         .font(.callout)
         .foregroundStyle(.secondary)

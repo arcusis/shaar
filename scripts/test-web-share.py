@@ -25,6 +25,22 @@ PAGE = """<!doctype html>
 """
 
 
+def write_receipt(path: Path, receipt: dict) -> None:
+    if path.is_symlink():
+        raise ValueError(f"web-share receipt path must not be a symlink: {path}")
+    if path.exists() and not path.is_file():
+        raise ValueError(f"web-share receipt path is not a regular file: {path}")
+    write_output(path, (json.dumps(receipt, indent=2) + "\n").encode())
+
+
+def copy_screenshot(source: Path, destination: Path) -> None:
+    if destination.is_symlink():
+        raise ValueError(f"web-share screenshot path must not be a symlink: {destination}")
+    if destination.exists() and not destination.is_file():
+        raise ValueError(f"web-share screenshot path is not a regular file: {destination}")
+    write_output(destination, source.read_bytes())
+
+
 class Fixture(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.split("?", 1)[0] != "/share":
@@ -136,7 +152,7 @@ def main():
             if evidence and evidence.get("passed"):
                 source = root / "share-sheet.png"
                 if source.is_file():
-                    write_output(screenshot, source.read_bytes())
+                    copy_screenshot(source, screenshot)
         server.shutdown()
     crashes = sorted(crash_names() - before)
     receipt = {
@@ -149,7 +165,7 @@ def main():
         "passed": process.returncode == 0 and bool(evidence and evidence.get("passed"))
         and all(shots.values()) and not crashes,
     }
-    write_output(options.receipt, (json.dumps(receipt, indent=2) + "\n").encode())
+    write_receipt(options.receipt, receipt)
     print(json.dumps({key: receipt[key] for key in (
         "exitCode", "passed", "screenshots", "crashReports")}, indent=2))
     if evidence:

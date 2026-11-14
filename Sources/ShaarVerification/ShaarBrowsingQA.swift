@@ -30,7 +30,7 @@ import Foundation
       write(["passed": false, "error": "Loopback http base URL is required."], to: outputURL)
       return 2
     }
-    guard scenarios.contains(scenario) else {
+    guard supportsScenario(scenario) else {
       write(["passed": false, "error": "Unknown scenario \(scenario)."], to: outputURL)
       return 2
     }
@@ -70,6 +70,10 @@ import Foundation
     "overload-50", "overload-100", "overload-200", "churn", "windows", "splits", "heavy",
     "dialogs", "downloads", "renderer", "restore-seed", "restore-check",
   ]
+
+  static func supportsScenario(_ scenario: String) -> Bool {
+    scenarios.contains(scenario)
+  }
 
   private static func exercise(
     host: NativeBrowserHost, runtime: ARCShaarRuntime, pageURL: URL, outputURL: URL,

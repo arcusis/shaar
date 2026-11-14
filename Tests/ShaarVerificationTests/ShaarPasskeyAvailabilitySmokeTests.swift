@@ -25,3 +25,45 @@ struct ShaarPasskeyAvailabilitySmokeTests {
     }
   }
 }
+
+@MainActor
+@Suite("Passkey availability report")
+struct ShaarPasskeyAvailabilityReportTests {
+  private let availableAPIs: [String: Any] = [
+    "passkey": "false",
+    "publicKeyCredential": true,
+    "platformAuthenticator": true,
+    "conditionalMediation": true,
+    "credentialsGet": true,
+    "secureContext": true,
+  ]
+
+  @Test func passesOnlyWhenPlatformAuthenticatorIsUnavailableInAQuietSecurePage() {
+    let report = ShaarPasskeyAvailabilitySmoke.availabilityReport(
+      state: availableAPIs, quiet: true)
+
+    #expect(report["passed"] as? Bool == true)
+    #expect(report["passkey"] as? String == "false")
+    #expect(report["rendererQuiet"] as? Bool == true)
+  }
+
+  @Test func rejectsUnexpectedPasskeyAvailabilityAndMissingPrerequisites() {
+    for (key, value) in [
+      ("passkey", "true"),
+      ("publicKeyCredential", "missing"),
+      ("platformAuthenticator", false),
+      ("credentialsGet", false),
+      ("secureContext", false),
+    ] as [(String, Any)] {
+      var state = availableAPIs
+      state[key] = value
+      #expect(
+        ShaarPasskeyAvailabilitySmoke.availabilityReport(state: state, quiet: true)["passed"]
+          as? Bool == false)
+    }
+
+    #expect(
+      ShaarPasskeyAvailabilitySmoke.availabilityReport(state: availableAPIs, quiet: false)["passed"]
+        as? Bool == false)
+  }
+}

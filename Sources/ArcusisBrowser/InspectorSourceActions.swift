@@ -119,7 +119,7 @@ final class InspectorSourceActions {
         failure = InspectorL10n.string("Source location is not exposed for this element.")
         return
       }
-      location = InspectorAIFormatter.url(source)
+      location = InspectorL10n.display(InspectorAIFormatter.url(source))
       let editor =
         InspectorSourceEditor(
           rawValue: UserDefaults.standard.string(forKey: "inspectorSourceEditor") ?? "vscode")

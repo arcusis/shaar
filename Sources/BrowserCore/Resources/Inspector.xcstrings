@@ -2155,6 +2155,22 @@
           }
         }
       }
+    },
+    "[URL omitted]": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[URL omitted]"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כתובת URL הושמטה"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

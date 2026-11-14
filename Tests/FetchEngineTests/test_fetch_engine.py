@@ -130,6 +130,38 @@ class FetchEngineTests(unittest.TestCase):
         self.assertEqual(result.stdout, f"{self.framework}\n")
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
 
+    def test_archive_override_requires_receipt_unless_explicit_dot37_dry_run(self):
+        staged = self.root / "without-receipt.tar.xz"
+        write_archive(staged)
+        archive = self.root / "ShaarEngine-157.0.8103.51-shaar.37.tar.xz"
+        staged.rename(archive)
+        checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+        self.pin.update(
+            releaseTag="engine-157.0.8103.51-shaar.37",
+            asset=archive.name,
+            sha256=checksum,
+        )
+        self._write_pin()
+        self.env["SHAAR_ENGINE_ARCHIVE_PATH"] = str(archive)
+
+        strict = self._run()
+        self.assertNotEqual(strict.returncode, 0)
+        self.assertIn("incomplete patch receipt", strict.stderr)
+
+        self.env["SHAAR_V02_PROOF_DRY_RUN"] = "1"
+        dry_run = self._run()
+        self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+        self.assertEqual(dry_run.stdout, f"{self.cache}/{checksum[:16]}/{FRAMEWORK}\n")
+        self.assertIn("bypasses only the patch receipt check", dry_run.stderr)
+
+    def test_receipt_bypass_refuses_engine_tags_other_than_dot37(self):
+        self.env["SHAAR_V02_PROOF_DRY_RUN"] = "1"
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("allowed only for the .37 proof dry run", result.stderr)
+
     def test_build_and_engine_cache_roots_reject_symlinks_and_non_directories(self):
         cases = (
             ("build", "symlink", "must not be a symlink"),

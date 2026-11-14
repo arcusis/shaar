@@ -25,17 +25,20 @@ checksum=$(jq -er .sha256 "$pin")
 [[ $asset == "ShaarEngine-${tag#engine-}.tar.xz" ]] || {
   echo 'Shaar engine asset and tag do not match.' >&2; exit 1;
 }
-archive="$cache/$asset"
+archive="${SHAAR_ENGINE_ARCHIVE_PATH:-$cache/$asset}"
 [[ ! -L "$PWD/build" && ! -L "$cache" ]] || {
   echo 'Refusing symlinked engine cache directory.' >&2; exit 1;
 }
 mkdir -p "$cache"
-if [[ -L "$archive" || -L "$archive.partial" ]]; then
+if [[ -L "$archive" || ( -e "$archive" && ! -f "$archive" ) || -L "$archive.partial" ]]; then
   echo 'Engine archive cache paths must not be symlinks.' >&2
   exit 1
 fi
 verify() { [[ $(shasum -a 256 "$1" | cut -d ' ' -f 1) == "$checksum" ]]; }
-if [[ ! -f "$archive" ]] || ! verify "$archive"; then
+if [[ -n ${SHAAR_ENGINE_ARCHIVE_PATH:-} ]]; then
+  [[ -f "$archive" ]] || { echo 'Specified engine archive does not exist.' >&2; exit 1; }
+  verify "$archive" || { echo 'Engine checksum mismatch; refusing extraction.' >&2; exit 1; }
+elif [[ ! -f "$archive" ]] || ! verify "$archive"; then
   echo "Fetching pinned Shaar engine $tag..." >&2
   if curl --fail --location --connect-timeout 30 --max-time 900 --retry 3 --retry-max-time 180 \
     "https://github.com/arcusis/shaar/releases/download/$tag/$asset" \
@@ -53,10 +56,18 @@ if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   fi
   mv "$archive.partial" "$archive"
 fi
-python3 scripts/engine_patches.py --verify-archive "$archive" || {
-  echo 'Engine archive has an incomplete patch receipt; refusing extraction.' >&2
-  exit 1
-}
+case ${SHAAR_V02_PROOF_DRY_RUN:-0} in
+  0) python3 scripts/engine_patches.py --verify-archive "$archive" || {
+       echo 'Engine archive has an incomplete patch receipt; refusing extraction.' >&2; exit 1;
+     } ;;
+  1)
+    [[ $tag == engine-157.0.8103.51-shaar.37 ]] || {
+      echo 'Receipt bypass is allowed only for the .37 proof dry run.' >&2; exit 1;
+    }
+    echo 'WARNING: .37 proof dry run bypasses only the patch receipt check.' >&2
+    ;;
+  *) echo 'SHAAR_V02_PROOF_DRY_RUN must be 0 or 1.' >&2; exit 2 ;;
+esac
 destination="$cache/${checksum:0:16}"
 if [[ -L "$destination" || ( -e "$destination" && ! -d "$destination" ) ]]; then
   echo 'Engine cache destination must be a regular directory.' >&2

@@ -19,6 +19,8 @@ GITLEAKS_TIMEOUT_SECONDS = 300
 
 
 def scan_history(root, base: str, head: str, report) -> int:
+    if report.parent.is_symlink():
+        raise ValueError(f"secret scan report directory must not be a symlink: {report.parent}")
     if report.is_symlink():
         raise ValueError(f"secret scan report must not be a symlink: {report}")
     if report.exists() and not report.is_file():

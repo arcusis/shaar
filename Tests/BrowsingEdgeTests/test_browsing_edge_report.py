@@ -5,8 +5,12 @@
 import importlib.util
 import json
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
+from http.server import HTTPServer
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +27,26 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         self.assertIn('addEventListener("change"', fixture)
         self.assertIn("file.text()", fixture)
         self.assertIn("dataset.fileUpload", fixture)
+
+    def test_basic_auth_fixture_requires_the_probe_credentials(self):
+        server = HTTPServer(("127.0.0.1", 0), PROBE.Fixture)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_port}/auth"
+            with self.assertRaises(urllib.error.HTTPError) as refused:
+                urllib.request.urlopen(url, timeout=3)
+            self.assertEqual(refused.exception.code, 401)
+            self.assertEqual(refused.exception.headers["WWW-Authenticate"], 'Basic realm="Edge"')
+            request = urllib.request.Request(url, headers={
+                "Authorization": "Basic ZWRnZS11c2VyOmVkZ2UtcGFzcw=="})
+            with urllib.request.urlopen(request, timeout=3) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.read(), b"edge-auth-ok")
+        finally:
+            server.shutdown()
+            worker.join(timeout=3)
+            server.server_close()
 
     def test_unproven_row_fails_even_when_marked_passed(self):
         self.assertFalse(PROBE.row_accepted({"passed": True, "proven": False}))

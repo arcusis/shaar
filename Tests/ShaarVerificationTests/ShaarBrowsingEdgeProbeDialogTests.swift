@@ -116,4 +116,20 @@ import Testing
       !ShaarBrowsingEdgeProbe.beforeUnloadProbePassed(
         exercised: true, dialogCount: 1, navigated: true, windowsHidden: false))
   }
+
+  @Test @MainActor func dialogReplyNeedsTheValueReturnedByTheRenderer() {
+    #expect(ShaarBrowsingEdgeProbe.dialogReplyPassed(name: "alert", result: ["stage": "returned"]))
+    #expect(
+      !ShaarBrowsingEdgeProbe.dialogReplyPassed(
+        name: "confirm", result: ["stage": "returned", "value": false]))
+    #expect(
+      ShaarBrowsingEdgeProbe.dialogReplyPassed(
+        name: "confirm", result: ["stage": "returned", "value": true]))
+    #expect(
+      !ShaarBrowsingEdgeProbe.dialogReplyPassed(
+        name: "prompt", result: ["stage": "returned", "value": "cancelled"]))
+    #expect(
+      ShaarBrowsingEdgeProbe.dialogReplyPassed(
+        name: "prompt", result: ["stage": "returned", "value": "edge-answer"]))
+  }
 }

@@ -7,8 +7,32 @@ import Testing
 
 @testable import ArcusisBrowser
 
-@Suite
+@Suite @MainActor
 struct HTTPAuthRequestTests {
+  @Test func selectedChallengeSubmitsCredentialsOnlyOnce() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://example.test/protected")!))
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let request = try #require(
+      HTTPAuthRequest(payload: [
+        "id": "auth-1", "tabID": tab.id.uuidString,
+        "profileID": store.session.selectedSpace.profileID.uuidString,
+        "windowID": "window-1", "host": "example.test", "realm": "Members",
+      ]))
+    var decisions: [(String?, String?)] = []
+    store.onHTTPAuthDecision = { _, username, password in
+      decisions.append((username, password))
+    }
+    #expect(store.requestHTTPAuth(request))
+    #expect(store.sheet?.id == request.sheetID)
+    store.resolveHTTPAuth(request, username: "member", password: "secret")
+    store.resolveHTTPAuth(request, username: "again", password: "again")
+    #expect(decisions.count == 1)
+    #expect(decisions[0].0 == "member")
+    #expect(decisions[0].1 == "secret")
+    #expect(store.sheet == nil)
+  }
+
   @Test func parsesBoundedBasicAuthPromptFields() throws {
     let id = UUID().uuidString
     let tab = UUID().uuidString

@@ -11,6 +11,8 @@ tab overload, windows, private windows, restore, and splits.
 """
 
 import argparse
+import base64
+import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -239,6 +241,9 @@ class Fixture(BaseHTTPRequestHandler):
         if path == "/http/500":
             return self.bytes(HTTP_500, "text/plain; charset=utf-8", status=500)
         if path == "/auth":
+            expected = "Basic " + base64.b64encode(b"edge-user:edge-pass").decode("ascii")
+            if hmac.compare_digest(self.headers.get("Authorization", ""), expected):
+                return self.bytes(b"edge-auth-ok", "text/plain; charset=utf-8")
             body = b"auth required"
             self.send_response(401)
             self.send_header("WWW-Authenticate", 'Basic realm="Edge"')

@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -7445,6 +7445,7 @@ ChromeContentBrowserClient::CreateLoginDelegate(
+   // Shaar owns the native HTTP Basic credentials sheet. The request callback
+   // remains owned by the delegate until the app replies or the delegate ends.
+-  if (!do_not_prompt_for_login && !auth_info.is_proxy &&
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder") &&
++      !do_not_prompt_for_login && !auth_info.is_proxy &&
+       auth_info.scheme == "basic") {
+     return shaar::login::CreateLoginDelegate(
+         auth_info, web_contents, std::move(auth_required_callback));

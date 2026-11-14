@@ -67,8 +67,10 @@ enum BrowsingEdgeFilePickerSelection {
       (NSOpenPanel.self, "URLs", "edgeProbeURLs"),
       (NSOpenPanel.self, "runModal", "edgeProbeRunModal"),
       (NSOpenPanel.self, "beginWithCompletionHandler:", "edgeProbeBeginWithCompletionHandler:"),
-      (NSOpenPanel.self, "beginSheetModalForWindow:completionHandler:",
-       "edgeProbeBeginSheetModalForWindow:completionHandler:"),
+      (
+        NSOpenPanel.self, "beginSheetModalForWindow:completionHandler:",
+        "edgeProbeBeginSheetModalForWindow:completionHandler:"
+      ),
       (NSApplication.self, "runModalForWindow:", "edgeProbeRunModalForWindow:"),
     ]
     for method in methods {
@@ -105,7 +107,7 @@ enum BrowsingEdgeFilePickerSelection {
         || $0.1 == NSSelectorFromString("beginSheetModalForWindow:completionHandler:")
         || $0.0 == NSApplication.self
     }
-    guard (hasURLGetter || hasURLsGetter), hasPresentation else {
+    guard hasURLGetter || hasURLsGetter, hasPresentation else {
       uninstall()
       return false
     }
@@ -144,22 +146,24 @@ enum BrowsingEdgeFilePickerSelection {
   }
 }
 
-private extension NSOpenPanel {
-  @objc(edgeProbeURL) func edgeProbeURL() -> URL? {
+extension NSOpenPanel {
+  @objc(edgeProbeURL) fileprivate func edgeProbeURL() -> URL? {
     BrowsingEdgeFilePickerSelection.selectedURL() ?? edgeProbeURL()
   }
 
-  @objc(edgeProbeURLs) func edgeProbeURLs() -> [URL] {
+  @objc(edgeProbeURLs) fileprivate func edgeProbeURLs() -> [URL] {
     BrowsingEdgeFilePickerSelection.selectedURLs() ?? edgeProbeURLs()
   }
 
-  @objc(edgeProbeRunModal) func edgeProbeRunModal() -> NSApplication.ModalResponse {
+  @objc(edgeProbeRunModal) fileprivate func edgeProbeRunModal() -> NSApplication.ModalResponse {
     if BrowsingEdgeFilePickerSelection.recordRequest() { return .OK }
     return edgeProbeRunModal()
   }
 
   @objc(edgeProbeBeginWithCompletionHandler:)
-  func edgeProbeBegin(completionHandler: @escaping (NSApplication.ModalResponse) -> Void) {
+  fileprivate func edgeProbeBegin(
+    completionHandler: @escaping (NSApplication.ModalResponse) -> Void
+  ) {
     guard BrowsingEdgeFilePickerSelection.recordRequest() else {
       edgeProbeBegin(completionHandler: completionHandler)
       return
@@ -168,7 +172,7 @@ private extension NSOpenPanel {
   }
 
   @objc(edgeProbeBeginSheetModalForWindow:completionHandler:)
-  func edgeProbeBeginSheet(
+  fileprivate func edgeProbeBeginSheet(
     for window: NSWindow, completionHandler: @escaping (NSApplication.ModalResponse) -> Void
   ) {
     guard BrowsingEdgeFilePickerSelection.recordRequest() else {
@@ -179,9 +183,9 @@ private extension NSOpenPanel {
   }
 }
 
-private extension NSApplication {
+extension NSApplication {
   @objc(edgeProbeRunModalForWindow:)
-  func edgeProbeRunModal(for window: NSWindow) -> NSApplication.ModalResponse {
+  fileprivate func edgeProbeRunModal(for window: NSWindow) -> NSApplication.ModalResponse {
     guard window is NSOpenPanel, BrowsingEdgeFilePickerSelection.recordRequest() else {
       return edgeProbeRunModal(for: window)
     }
@@ -666,7 +670,8 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   }
 
   nonisolated static func scrollStateScript(triggerScroll: Bool) -> String {
-    let scroll = triggerScroll
+    let scroll =
+      triggerScroll
       ? "const last=root.lastElementChild; if(last) last.scrollIntoView({block:'end'}); root.scrollTop=root.scrollHeight; window.scrollTo(0, document.documentElement.scrollHeight);"
       : ""
     return """
@@ -903,11 +908,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       let sameWindow = created.allSatisfy { id in
         runtime.windowID(forTabID: id.uuidString) == context.nativeID
       }
-      let sourceRetained = source.map { sourceID in
-        context.store.session.spaces.flatMap(\.tabs).contains {
-          $0.id == sourceID && $0.url.path == "/popups"
-        }
-      } ?? false
+      let sourceRetained =
+        source.map { sourceID in
+          context.store.session.spaces.flatMap(\.tabs).contains {
+            $0.id == sourceID && $0.url.path == "/popups"
+          }
+        } ?? false
       let adoptedSingleDestination = popupAdoptionPassed(
         createdTabCount: created.count, destinationReady: destination,
         sourceRetained: sourceRetained)
@@ -970,15 +976,40 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     name: String, script: String
   ) async -> [String: Any] {
     let before = dialogs.snapshot().count
-    let json = await evaluate(runtime, tab: selectedID(context), script: script, seconds: 4)
+    let call = Task {
+      await evaluate(runtime, tab: selectedID(context), script: script, seconds: 8)
+    }
+    let surfaced = await wait(seconds: 4) {
+      if case .javascriptDialog(let request)? = context.store.sheet {
+        return request.kind.rawValue == name && request.matches(context.store.session)
+      }
+      return false
+    }
+    if surfaced, case .javascriptDialog(let request)? = context.store.sheet {
+      try? await Task.sleep(for: .milliseconds(150))
+      context.store.resolveJavaScriptDialog(
+        request.id, accepted: true, input: name == "prompt" ? "edge-answer" : nil)
+    }
+    let json = await call.value
     let fresh = dialogNotes(Array(dialogs.snapshot().dropFirst(before)))
-    let returned = object(from: json)?["stage"] as? String == "returned"
+    let returned = dialogReplyPassed(name: name, result: object(from: json))
     if json == nil { await recover(context, runtime) }
     let hidden = windowsHidden()
-    let passed = !fresh.isEmpty && returned && hidden
+    let passed = surfaced && !fresh.isEmpty && returned && hidden
     return makeRow(
       name, passed,
-      "dialog \(fresh.count), returned \(returned), hidden \(hidden), \(describe(fresh))")
+      "sheet \(surfaced), dialog \(fresh.count), reply \(returned), hidden \(hidden), \(describe(fresh))"
+    )
+  }
+
+  static func dialogReplyPassed(name: String, result: [String: Any]?) -> Bool {
+    guard result?["stage"] as? String == "returned" else { return false }
+    switch name {
+    case "alert": return true
+    case "confirm": return result?["value"] as? Bool == true
+    case "prompt": return result?["value"] as? String == "edge-answer"
+    default: return false
+    }
   }
 
   private static func checkBeforeUnload(
@@ -999,7 +1030,18 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     guard let away = url(page, "/find") else {
       return makeRow("beforeunload", false, "Could not build the next URL", proven: false)
     }
-    _ = await open(context, runtime, away, path: "/find", marker: nil)
+    let navigation = Task { await open(context, runtime, away, path: "/find", marker: nil) }
+    let surfaced = await wait(seconds: 4) {
+      if case .javascriptDialog(let request)? = context.store.sheet {
+        return request.kind == .beforeUnload && request.matches(context.store.session)
+      }
+      return false
+    }
+    if surfaced, case .javascriptDialog(let request)? = context.store.sheet {
+      try? await Task.sleep(for: .milliseconds(150))
+      context.store.resolveJavaScriptDialog(request.id, accepted: true, input: nil)
+    }
+    _ = await navigation.value
     let fresh = dialogNotes(Array(dialogs.snapshot().dropFirst(before)))
     let snap = await snapshot(runtime, context)
     let left =
@@ -1007,10 +1049,11 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let exercised = clicked && isArmed
     let hidden = windowsHidden()
     let passed = beforeUnloadProbePassed(
-      exercised: exercised, dialogCount: fresh.count, navigated: left, windowsHidden: hidden)
+      exercised: exercised && surfaced, dialogCount: fresh.count, navigated: left,
+      windowsHidden: hidden)
     return makeRow(
       "beforeunload", passed,
-      "clicked \(clicked), armed \(isArmed), dialog \(fresh.count), navigated \(left), hidden \(hidden), \(describe(fresh))",
+      "clicked \(clicked), armed \(isArmed), sheet \(surfaced), dialog \(fresh.count), navigated \(left), hidden \(hidden), \(describe(fresh))",
       proven: exercised)
   }
 
@@ -1022,16 +1065,29 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     }
     let before = dialogs.snapshot().count
     context.store.perform(.open(stamped(auth) ?? auth))
-    _ = await wait(seconds: 8) {
-      guard let tab = selectedID(context) else { return false }
-      return context.engine.pages[tab]?.loading == false
+    let surfaced = await wait(seconds: 8) {
+      if case .httpAuth(let request)? = context.store.sheet {
+        return request.realm == "Edge" && request.matches(context.store.session)
+      }
+      return false
+    }
+    if surfaced, case .httpAuth(let request)? = context.store.sheet {
+      try? await Task.sleep(for: .milliseconds(150))
+      context.store.resolveHTTPAuth(request, username: "edge-user", password: "edge-pass")
+    }
+    let deadline = Date().addingTimeInterval(8)
+    var snap = await snapshot(runtime, context)
+    while !pageText(snap, context).contains("edge-auth-ok") && Date() < deadline {
+      try? await Task.sleep(for: .milliseconds(100))
+      snap = await snapshot(runtime, context)
     }
     let fresh = dialogNotes(Array(dialogs.snapshot().dropFirst(before)))
-    let snap = await snapshot(runtime, context)
     let text = pageText(snap, context)
+    let authenticated = text.contains("edge-auth-ok")
     return makeRow(
-      "Auth prompt", !fresh.isEmpty && windowsHidden(),
-      "dialogs \(fresh.count), hidden \(windowsHidden()), text \(text), \(describe(fresh))")
+      "Auth prompt", surfaced && !fresh.isEmpty && authenticated && windowsHidden(),
+      "sheet \(surfaced), dialogs \(fresh.count), authenticated \(authenticated), hidden \(windowsHidden()), \(describe(fresh))"
+    )
   }
 
   private static func checkFilePicker(
@@ -1061,9 +1117,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     var returnedName = ""
     var returnedContents = ""
     for _ in 0..<40 {
-      let uploadState = object(from: await evaluate(
-        runtime, tab: selectedID(context),
-        script: "({upload:document.documentElement.dataset.fileUpload||''})", seconds: 1))
+      let uploadState = object(
+        from: await evaluate(
+          runtime, tab: selectedID(context),
+          script: "({upload:document.documentElement.dataset.fileUpload||''})", seconds: 1))
       let value = uploadState?["upload"] as? String ?? ""
       if let separator = value.firstIndex(of: "|"), separator != value.startIndex {
         returnedName = String(value[..<separator])
@@ -1145,9 +1202,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let restored = await wait(seconds: 8) {
       context.store.rendererFailures[tab] == nil && context.engine.pages[tab]?.loading == false
     }
-    let recovery = object(from: await evaluate(
-      runtime, tab: tab,
-      script: "({marker:document.getElementById('marker')?.textContent||''})", seconds: 3))
+    let recovery = object(
+      from: await evaluate(
+        runtime, tab: tab,
+        script: "({marker:document.getElementById('marker')?.textContent||''})", seconds: 3))
     let marker = recovery?["marker"] as? String
     let responsive = await ping(runtime, context, seconds: 3)
     let hidden = windowsHidden()
@@ -1156,7 +1214,8 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       windowsHidden: hidden)
     return makeRow(
       "Sad tab", passed,
-      "status \(failure.status), reload \(started), restored \(restored), marker \(marker ?? "missing"), responsive \(responsive), hidden \(hidden), killed \(killed)")
+      "status \(failure.status), reload \(started), restored \(restored), marker \(marker ?? "missing"), responsive \(responsive), hidden \(hidden), killed \(killed)"
+    )
   }
 
   private static func recover(_ context: NativeBrowserContext, _ runtime: ARCShaarRuntime) async {

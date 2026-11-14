@@ -468,16 +468,25 @@ final class EngineRequestedWindowProbe {
   }
 
   private func report(error: Error?) throws {
+    try Self.reportData(
+      phase: phase, checks: checks, observations: observations, rollback: rollback, error: error
+    ).write(
+      to: root.appending(path: "\(phase)-engine-requested-windows.json"), options: .atomic)
+  }
+
+  static func reportData(
+    phase: String, checks: [String], observations: [[String: Any]], rollback: [String: Bool],
+    error: Error?
+  ) throws -> Data {
     try JSONSerialization.data(
       withJSONObject: [
-        "passed": error == nil, "checks": checks, "observations": observations,
+        "passed": error == nil, "phase": phase, "checks": checks, "observations": observations,
         "rollback": rollback,
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
           "Authored page window.open and MV3 chrome.windows.create in hidden managed normal-profile windows. Does not cover real sign-in, physical focus, private sessions or third-party window flows.",
       ], options: [.prettyPrinted, .sortedKeys]
-    ).write(
-      to: root.appending(path: "\(phase)-engine-requested-windows.json"), options: .atomic)
+    )
   }
 }
 

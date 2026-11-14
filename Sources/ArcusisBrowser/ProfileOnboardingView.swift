@@ -51,7 +51,8 @@ struct ProfileOnboardingView: View {
   }
 }
 
-private struct OnboardingStepHeader: View {
+struct OnboardingStepHeader: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let step: ProfileOnboardingStep
 
   var body: some View {
@@ -70,6 +71,7 @@ private struct OnboardingStepHeader: View {
       .font(.caption)
       .foregroundStyle(.secondary)
       Text(step.title).font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.headingTraits)
     }
   }
 

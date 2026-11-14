@@ -4,6 +4,7 @@
 
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -57,6 +58,10 @@ private final class OnboardingRecorder {
 private struct CreationFailure: Error {}
 
 @Suite @MainActor struct ProfileOnboardingTests {
+  @Test func onboardingStepTitleIsVoiceOverHeading() {
+    #expect(OnboardingStepHeader.headingTraits == .isHeader)
+  }
+
   @Test func stepsAdvanceSkipAndGoBackInOrder() {
     let model = OnboardingRecorder().model()
     #expect(model.step == .name)

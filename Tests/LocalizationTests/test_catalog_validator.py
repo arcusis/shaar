@@ -34,6 +34,17 @@ def catalog(english, hebrew, key="Open %@"):
 
 
 class CatalogValidatorTests(unittest.TestCase):
+    def test_hebrew_bluetooth_permission_copy_uses_natural_passkey_wording(self):
+        path = ROOT / "Resources/Localizations/InfoPlist.xcstrings"
+        strings = json.loads(path.read_text(encoding="utf-8"))["strings"]
+        value = strings["NSBluetoothAlwaysUsageDescription"]["localizations"]["he"][
+            "stringUnit"
+        ]["value"]
+        self.assertEqual(
+            value,
+            "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים שמשמשים לכניסה באמצעות מפתח גישה.",
+        )
+
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Fixture.xcstrings"

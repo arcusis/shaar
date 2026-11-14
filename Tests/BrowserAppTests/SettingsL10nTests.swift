@@ -17,7 +17,6 @@ final class SettingsL10nTests: XCTestCase {
     let expected = BrowserLocalization.format(
       "Window changes could not be saved. %@", table: "Settings",
       language: .currentLaunchLanguage, arguments: [.string(detail)])
-
     XCTAssertEqual(notice, expected)
   }
 
@@ -34,5 +33,26 @@ struct HebrewWorkspaceSaveNoticeTests {
       SettingsL10n.notice(
         "Window changes could not be saved. The file is locked.", language: .hebrew)
         == "לא ניתן לשמור את שינויי החלונות. כדאי לנסות שוב.")
+  }
+}
+
+struct SettingsL10nBehaviorTests {
+  @Test func noticeReformatsLocalizedShellSaveFailuresIntoSettingsLanguage() {
+    let detail = "Disk full"
+    let shellMessage = BrowserLocalization.format(
+      "Window changes could not be saved. %@", table: "Shell", language: .hebrew,
+      arguments: [.string(detail)])
+    let expected = BrowserLocalization.format(
+      "Window changes could not be saved. %@", table: "Settings", language: .hebrew,
+      arguments: [.string(detail)])
+    #expect(SettingsL10n.notice(shellMessage, language: .hebrew) == expected)
+    #expect(expected != shellMessage)
+  }
+
+  @Test func noticeLeavesUnrelatedMessagesInTheSettingsTable() {
+    let message = "Could not delete this profile. Try again."
+    #expect(
+      SettingsL10n.notice(message, language: .hebrew)
+        == BrowserLocalization.string(message, table: "Settings", language: .hebrew))
   }
 }

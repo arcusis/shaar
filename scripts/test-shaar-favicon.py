@@ -78,9 +78,18 @@ def run_probe(app: Path, root: Path, data: Path, report: Path, page: str,
     return process, json.loads(report.read_text())
 
 
+def verification_app_path(value: str) -> Path:
+    app = Path(value)
+    executable = app / "Contents/MacOS/ShaarVerification"
+    if not app.is_dir() or not executable.is_file():
+        raise argparse.ArgumentTypeError(
+            f"verification app is missing or incomplete: {app}")
+    return app
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", required=True, type=Path)
+    parser.add_argument("--app", required=True, type=verification_app_path)
     options = parser.parse_args()
     app = options.app.resolve()
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:

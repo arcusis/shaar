@@ -218,6 +218,9 @@ struct ExtensionManagementTests {
     #expect(!ExtensionPageOrigin.accepts("https://::1"))
     #expect(!ExtensionPageOrigin.accepts("https://example.com:443"))
     #expect(
+      ExtensionPageOrigin.string(from: URL(string: "https://example.com:65536/path")!) == nil)
+    #expect(!ExtensionPageOrigin.accepts("https://example.com:65536"))
+    #expect(
       ExtensionPageOrigin.string(from: URL(string: "https://user:pass@example.com/a?q=1#h")!)
         == "https://example.com")
     let listed = try JSONDecoder().decode(

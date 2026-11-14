@@ -79,6 +79,11 @@ class ReportResult(unittest.TextTestResult):
         ET.SubElement(self.cases[test], "failure", message="Unexpected success")
 
     def write_report(self, path):
+        path = Path(path)
+        if path.is_symlink():
+            raise ValueError(f"JUnit report path must not be a symlink: {path}")
+        if path.exists() and not path.is_file():
+            raise ValueError(f"JUnit report path is not a regular file: {path}")
         self.report.set("tests", str(len(self.report)))
         self.report.set("failures", str(len(self.failures) + len(self.unexpectedSuccesses)))
         self.report.set("errors", str(len(self.errors)))

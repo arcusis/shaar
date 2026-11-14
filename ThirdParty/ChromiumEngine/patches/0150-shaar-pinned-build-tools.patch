@@ -1,0 +1,27 @@
+From: Shaar Chromium 157 layer port
+Subject: [PATCH] use pinned Chromium build tools on macOS
+
+diff --git a/build/config/rust.gni b/build/config/rust.gni
+--- a/build/config/rust.gni
++++ b/build/config/rust.gni
+@@ -57,7 +57,7 @@ declare_args() {
+   # using a *nightly* version of Rust toolchain (see
+   # `docs/rust/unstable_rust_feature_usage.md`) although other projects (e.g.
+   # V8) may be compatible with the stable version of Rust toolchain.
+-  rust_sysroot_absolute = "//third_party/rust-toolchain"
++  rust_sysroot_absolute = ""
+ 
+   # Directory under which to find `bin/bindgen` (a `bin` directory containing
+   # the bindgen exectuable).
+diff --git a/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni b/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni
+--- a/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni
++++ b/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni
+@@ -58,7 +58,7 @@ template("bundle") {
+       inputs += [ _entrypoints_file ]
+     }
+ 
+-    _esbuild = "/opt/homebrew/bin/esbuild"
++    _esbuild = devtools_location_prepend + "third_party/esbuild/esbuild"
+     if (host_os == "win") {
+       inputs += [ _esbuild + ".exe" ]
+     } else {

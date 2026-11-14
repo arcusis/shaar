@@ -49,9 +49,9 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "4468de8556206b578117b4c9dcf901cab66986230d7a6fdd6dc6efdc751e1020",
+    "sha256": "250bbace22cb2ab68b182c015b58a344dda9cfd819c958fb8b650a2e4ca9f131",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "744a01388dba6ca1e1b1e420f0d686099232708833aa0285d2f0a93654e1a2e2",
+      "chrome/browser/shaar/BUILD.gn": "01f613b76bc616def1d12969948ffe74a07b3c9a1d723941360ca2dc860705df",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.h": "15cd5f6fc6ee7c998f5c04e8e0bb9e6c9d5c276cd7ab810a22b83c6ef849cdb5",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_lifecycle_adapter.cc": "02f28526c3d8d14b9efc59973dd8269650d079613085f4d910c2901aba020de7",
@@ -600,6 +600,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0149-shaar-http-basic-embedder-scope.patch",
       "sha256": "476d01482e4916dcaac4a01aa9c443ed7c29e86420fededc930d7334e00ee759"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0150-shaar-pinned-build-tools.patch",
+      "sha256": "43404f106095b740c6f7aa35e912636f4ffde624aa1854ee067458efed313021"
     }
   ],
   "devtoolsFrontend157": {

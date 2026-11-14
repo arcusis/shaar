@@ -235,7 +235,6 @@ source_set("quit_probe_hooks") {
     "//chrome/browser/lifetime",
     "//chrome/browser/profiles",
     "//chrome/browser/ui/browser_window",
-    "//content/browser",
     "//content/public/browser",
     "//third_party/blink/public/common",
     "//ui/gfx",

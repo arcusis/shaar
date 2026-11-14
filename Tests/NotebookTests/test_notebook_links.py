@@ -65,6 +65,14 @@ class NotebookLinksTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("Note not linked from any index: CommentedOut.md", result.stderr)
 
+    def test_html_comment_marker_inside_fence_does_not_hide_following_index_links(self):
+        result = self.run_check({
+            "_INDEX_Main.md": "```html\n<!-- example comment\n```\n[[Visible]]",
+            "Visible.md": "# Visible",
+        })
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_wrong_case_or_missing_target_does_not_count(self):
         result = self.run_check({"_INDEX_Main.md": "[[note]]\n[[Missing]]", "Note.md": ""})
         self.assertEqual(result.returncode, 1)
@@ -134,7 +142,6 @@ class NotebookLinksTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 1)
             self.assertIn("Notebook root and its parent must not be symlinks", result.stderr)
-
     def test_notebook_prefix_in_nested_index_resolves_from_notebook_root(self):
         result = self.run_check({
             "_INDEX_Main.md": "[[nested/_INDEX_Nested]]",
@@ -142,6 +149,7 @@ class NotebookLinksTests(unittest.TestCase):
             "Target.md": "# Root target",
         })
         self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_non_directory_notebook_argument_gets_a_direct_error(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "notebook.md"

@@ -19,7 +19,9 @@ enum DesktopCaptureCatalog {
   static func allowedSources(
     _ sources: [DesktopCaptureSource], for request: DesktopCaptureRequest
   ) -> [DesktopCaptureSource] {
-    sources.filter { DesktopCaptureSource.isValidToken($0.id) && request.allows($0.kind) }
+    sources.filter {
+      DesktopCaptureSource.kind(forToken: $0.id) == $0.kind && request.allows($0.kind)
+    }
   }
 
   static func tabSources(

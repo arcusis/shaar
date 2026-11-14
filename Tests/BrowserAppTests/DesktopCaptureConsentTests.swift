@@ -479,6 +479,7 @@ struct DesktopCaptureConsentTests {
         id: "tab:\(base.tabID.uuidString):0", name: "Current", kind: .tab),
       DesktopCaptureSource(id: "screen:0:0", name: "Invalid Display", kind: .display),
       DesktopCaptureSource(id: "screen:1:0", name: "Display", kind: .display),
+      DesktopCaptureSource(id: "screen:3:0", name: "Wrong kind", kind: .window),
       DesktopCaptureSource(id: "window:0:0", name: "Invalid Window", kind: .window),
       DesktopCaptureSource(id: "window:2:0", name: "Notes", kind: .window),
     ]

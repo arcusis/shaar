@@ -192,13 +192,7 @@ public enum CommandLauncher {
     -> [CommandResult]
   {
     let profileID = session.selectedSpace.profileID
-    let favoriteIDs = Set(session.favorites(for: profileID).map(\.id))
-    let openURLs =
-      session.selectedSpace.tabs.map(\.url)
-      + session.favoritePages.filter {
-        favoriteIDs.contains($0.favoriteID)
-      }.map(\.tab.url)
-    let open = Set(openURLs.map { pageKey($0.absoluteString) })
+    let open = openPageKeys(in: session)
     var top = TopRanked<BrowserHistoryEntry>(limit: mostVisitedLimit) {
       ($0.visitCount, $0.lastVisit) > ($1.visitCount, $1.lastVisit)
     }
@@ -210,6 +204,23 @@ public enum CommandLauncher {
     return top.items.map {
       CommandResult.history($0, subtitle: CommandText.domain(of: $0.destination))
     }
+  }
+
+  /// Builds the set without allocating intermediate URL and key arrays.
+  static func openPageKeys(in session: BrowserSession) -> Set<String> {
+    let profileID = session.selectedSpace.profileID
+    let favoriteIDs = Set(session.favorites.lazy.filter { $0.profileID == profileID }.map(\.id))
+    let tabs = session.selectedSpace.tabs
+    let favoritePages = session.favoritePages
+    var open = Set<String>()
+    open.reserveCapacity(tabs.count + favoritePages.count)
+    for tab in tabs {
+      open.insert(pageKey(tab.url.absoluteString))
+    }
+    for favoritePage in favoritePages where favoriteIDs.contains(favoritePage.favoriteID) {
+      open.insert(pageKey(favoritePage.tab.url.absoluteString))
+    }
+    return open
   }
 
   // MARK: Typed query

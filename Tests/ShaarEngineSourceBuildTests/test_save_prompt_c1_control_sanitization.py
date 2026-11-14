@@ -17,7 +17,7 @@ class SavePromptC1ControlSanitizationTests(unittest.TestCase):
     def test_sanitizer_strips_c1_sequences_and_regresses_middle_and_terminal_cases(self):
         source = SOURCE.read_text()
         self.assertIn("if (lead == 0xC2 && index + 1 < raw.size())", source)
-        self.assertIn("second >= 0x80 && second <= 0x9F", source)
+        self.assertIn("continuation >= 0x80 && continuation <= 0x9F", source)
         self.assertIn("index += 2;", source)
         tests = UNIT_TEST.read_text()
         self.assertIn('SanitizeDetail("a\\xC2\\x85" "b"), "ab"', tests)

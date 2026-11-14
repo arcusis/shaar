@@ -39,7 +39,7 @@ class SavePromptProfileServiceRequiredTests(unittest.TestCase):
         start = SOURCE.read_text().index("bool ProfileOwnsContents(")
         end = SOURCE.read_text().index("}  // namespace", start)
         helper = SOURCE.read_text()[start:end]
-        self.assertIn("if (!context->profile_services)", helper)
+        self.assertIn("!context->profile_services", helper)
         self.assertIn("return false;", helper)
         self.assertNotIn("return true;", helper)
 

@@ -570,10 +570,12 @@
  TEST(ShaarDevToolsPanelTest, ProjectsBoundedDOMChanges) {
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -233,6 +233,7 @@
+@@ -233,8 +233,9 @@
    SHAAR_OP_DEVTOOLS_VIEWPORT_CLOSE = 1014,
    SHAAR_OP_DEVTOOLS_VIEWPORT_ADD = 1015,
    SHAAR_OP_DEVTOOLS_VIEWPORT_REMOVE = 1016,
+   SHAAR_OP_DEVTOOLS_VIEWPORT_ACTION = 1017,
+   SHAAR_OP_DEVTOOLS_VIEWPORT_FRAME = 1018,
 +  SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES = 1080,
    // Testing only: exercise the native DevTools URL and Node frontend routes.
    SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL = 1090,

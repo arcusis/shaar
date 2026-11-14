@@ -1,3 +1,56 @@
+--- a/third_party/blink/renderer/core/dom/document.cc
++++ b/third_party/blink/renderer/core/dom/document.cc
+@@ -6760,14 +6760,49 @@
+ }
+ 
+ void Document::EnqueueResizeEvent() {
++  if (!GetExecutionContext())
++    return;
+   Event* event = Event::Create(event_type_names::kResize);
+   event->SetTarget(domWindow());
+-  scripted_animation_controller_->EnqueuePerFrameEvent(event);
++  if (!hidden()) {
++    scripted_animation_controller_->EnqueuePerFrameEvent(event);
++    return;
++  }
++  scripted_animation_controller_->EnqueueHiddenResizeEvent(event);
++  if (hidden_resize_event_task_pending_)
++    return;
++  hidden_resize_event_task_pending_ = true;
++  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
++      FROM_HERE,
++      BindOnce(&Document::DispatchHiddenResizeEventTask, WrapPersistent(this)));
++}
++
++void Document::DispatchHiddenResizeEventTask() {
++  hidden_resize_event_task_pending_ = false;
++  if (!GetExecutionContext())
++    return;
++  scripted_animation_controller_->DispatchHiddenResizeEvents();
+ }
+ 
+ void Document::EnqueueMediaQueryChangeListeners(
+     HeapVector<Member<MediaQueryListListener>>& listeners) {
++  if (!GetExecutionContext())
++    return;
+   scripted_animation_controller_->EnqueueMediaQueryChangeListeners(listeners);
++  if (!hidden() || hidden_media_query_change_task_pending_)
++    return;
++  hidden_media_query_change_task_pending_ = true;
++  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
++      FROM_HERE,
++      BindOnce(&Document::DispatchHiddenMediaQueryChangeTask,
++               WrapPersistent(this)));
++}
++
++void Document::DispatchHiddenMediaQueryChangeTask() {
++  hidden_media_query_change_task_pending_ = false;
++  if (!GetExecutionContext())
++    return;
++  scripted_animation_controller_->DispatchMediaQueryListEventsAndCallbacks();
+ }
+ 
+ void Document::EnqueueVisualViewportScrollEvent() {
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
@@ -33,56 +86,6 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
  
    LocalDOMWindow* GetWindow() const;
    void ScheduleAnimationIfNeeded(
-diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
---- a/third_party/blink/renderer/core/dom/document.cc
-+++ b/third_party/blink/renderer/core/dom/document.cc
-@@ -6742,10 +6742,45 @@
- void Document::EnqueueResizeEvent() {
-+  if (!GetExecutionContext())
-+    return;
-   Event* event = Event::Create(event_type_names::kResize);
-   event->SetTarget(domWindow());
--  scripted_animation_controller_->EnqueuePerFrameEvent(event);
-+  if (!hidden()) {
-+    scripted_animation_controller_->EnqueuePerFrameEvent(event);
-+    return;
-+  }
-+  scripted_animation_controller_->EnqueueHiddenResizeEvent(event);
-+  if (hidden_resize_event_task_pending_)
-+    return;
-+  hidden_resize_event_task_pending_ = true;
-+  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
-+      FROM_HERE,
-+      BindOnce(&Document::DispatchHiddenResizeEventTask, WrapPersistent(this)));
-+}
-+
-+void Document::DispatchHiddenResizeEventTask() {
-+  hidden_resize_event_task_pending_ = false;
-+  if (!GetExecutionContext())
-+    return;
-+  scripted_animation_controller_->DispatchHiddenResizeEvents();
- }
- 
- void Document::EnqueueMediaQueryChangeListeners(
-   HeapVector<Member<MediaQueryListListener>>& listeners) {
-+  if (!GetExecutionContext())
-+    return;
-   scripted_animation_controller_->EnqueueMediaQueryChangeListeners(listeners);
-+  if (!hidden() || hidden_media_query_change_task_pending_)
-+    return;
-+  hidden_media_query_change_task_pending_ = true;
-+  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
-+      FROM_HERE,
-+      BindOnce(&Document::DispatchHiddenMediaQueryChangeTask,
-+               WrapPersistent(this)));
-+}
-+
-+void Document::DispatchHiddenMediaQueryChangeTask() {
-+  hidden_media_query_change_task_pending_ = false;
-+  if (!GetExecutionContext())
-+    return;
-+  scripted_animation_controller_->DispatchMediaQueryListEventsAndCallbacks();
- }
 diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/renderer/core/dom/document.h
 --- a/third_party/blink/renderer/core/dom/document.h
 +++ b/third_party/blink/renderer/core/dom/document.h

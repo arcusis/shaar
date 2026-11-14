@@ -379,7 +379,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0024-shaar-devtools-network-rules.patch",
-      "sha256": "668c1c69ade171a851df967baea0f3de9c6c3ce80ff6504d31de40145b120e51"
+      "sha256": "42371c229512da1df8addbe63d3721d8e7cdb50e36f09f1eed1f2c0aa1e3a014"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0026-shaar-devtools-dom-session-events.patch",
@@ -395,31 +395,27 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0031-shaar-quit-dialog-hold.patch",
-      "sha256": "a183a14b37e5865981ac3a2e6b002dd78db9529e0f5f5f125db0892c3da7a087"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0032-shaar-popup-probe.patch",
-      "sha256": "50318524c15907e3ce8d39bf49a39272cde4f1785c2952557147920a62b66dad"
+      "sha256": "b15935709d03a6c56435d6cf453e1050859412da7e35409610b33783dd8466fa"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0033-shaar-lazy-framework-devtools.patch",
-      "sha256": "bd8d6ae51041e9057dad6fba4eb566ceb76290fd6d2ea6a6d21192b422900357"
+      "sha256": "adb12bdac10ea8f7e581519f267397d5707d4f6b36381716d69871d857fa081f"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0034-shaar-devtools-force-pseudo-state.patch",
-      "sha256": "af75d129ce2e163f0a6a3d373b13fa458a80d3b8986a7a6fca1f518dba6719ed"
+      "sha256": "5558d0d06154139c38197296968f114438b3da0061e53e1e9b13f9b0a1847877"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0035-shaar-devtools-touch-emulation.patch",
-      "sha256": "f79b5e7f77ac1cef74a0458d1a0b97fc962541c7aa775cb04d5cbeed55ee4ff7"
+      "sha256": "93a9bc8e66bb546844b27b0a436a04b9684ae4e00cdc6b6553317cf52241a430"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0036-shaar-devtools-rendering-overlay.patch",
-      "sha256": "9d526f95adcbd17b3272eac36e8aebcd34471eaaf3810888ea87273ddb873124"
+      "sha256": "37050fa93f61d4fd5901bc7e0f0571c8f92a0f2181baba244c8f3078e255d411"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0037-shaar-devtools-network-cache-disabled.patch",
-      "sha256": "69a2423552d0ff1283ddee3474339758680d4db2cbcf1268755a1355b1e2368f"
+      "sha256": "cecd648e5d7e23f57a700552e26fc7e94b12ac32a6edc6ca14eec41ee1f96989"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0038-shaar-devtools-console-stack.patch",
@@ -427,15 +423,15 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0039-shaar-devtools-idle-override.patch",
-      "sha256": "e27701420a4c424c5f156bfe567664a6f15036ccc008070a9fc3220277a65808"
+      "sha256": "f03cc3250d4b24595b27066b62fb04b74fbe77e0932294856c4bad7248e9cae4"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0040-shaar-devtools-coverage.patch",
-      "sha256": "782145c03e7203cf57a3ddb2be588d312cfb49e4958b5fae0a084f4124c189e7"
+      "sha256": "ba9c6029e13d3ef0a6c216e9c5abd6466cfb0faaf50c6ce58b60ad4a5a9b7dec"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0041-shaar-devtools-heap-profiler.patch",
-      "sha256": "a0939f8d7d6435e54ea975406303b43718aaf6f74403b3c6f606b74ecdaf3872"
+      "sha256": "50607fcd3c104640d55255c3dcff60d1fd4f1c09850e1ba99184249825f9f121"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0042-shaar-devtools-long-tasks.patch",
@@ -443,11 +439,11 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0043-shaar-devtools-event-listeners.patch",
-      "sha256": "471c7bcd05cc6563a44fa222207c99eae61f9740c778e74dae1cb514fa98669e"
+      "sha256": "3c7dd70fab2bc5f70442a481c3baa2c35b0c8475d8bc360d09ee2e14bfa1115f"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0044-shaar-quit-cancellation-callback.patch",
-      "sha256": "e373f179d5974a81bff87413174df81eaaebd1758dd5b39b1711ac3b62f4f12c"
+      "sha256": "2b18251e20b7f9ad29e98c22ba3db210a56a50a2abc2db0699f6eea8879aa08d"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0044-shaar-devtools-heap-snapshot-limit.patch",
@@ -455,27 +451,19 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0045-shaar-website-media-consent.patch",
-      "sha256": "7d217f0e4460dd164769580de7c3637bf2889f37c8e74be16b7db39c2ff1f49a"
+      "sha256": "a3d8f763fdfaa61dd10b8e4543d325ee76d25ff8ef28297d85df25a5399143b5"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0046-shaar-devtools-profiler-enable.patch",
-      "sha256": "1f8fbac79a82c416b42b3827a5b925f270fee1afec220300a598d7cebc405af5"
+      "sha256": "3478486f50c0b3891ffb182e6b2ea007e548fc42449bf77bf8893b5a5aff96a3"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0047-shaar-tab-adoption.patch",
-      "sha256": "8d6083315f128753bc14747a5c9f92fc1852e84e78b70e2f2acdf4edfff037aa"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0048-shaar-layer-compile-fixes.patch",
-      "sha256": "b2874af5bbf98f1c1712627537b391370ecef0092b99754b7b930d3da23f22e9"
+      "sha256": "016b6cdfb15ba21f139ceb944373a5b3b74f6c9daee3a3269fb63af88d0f6170"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0049-shaar-devtools-lease-navigation.patch",
-      "sha256": "6c40ace19e1d432cf742f2b137a53e78f6d6a8c33e5a4ae50938807dbcf78b1a"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0050-shaar-media-capture-events.patch",
-      "sha256": "76dfd87417b1721a31e01bf57eaf2ab1ce89929199f852b3f13c228b7aa9aa77"
+      "sha256": "f941671668eec9434260487ccb0594b2859b3272dcc76a30863e26782e482595"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0051-shaar-devtools-wide-dom-children.patch",
@@ -487,7 +475,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0053-shaar-devtools-document-navigation.patch",
-      "sha256": "39602071a77d589f89b4c4f276caa76b808c6bb14520757e8075be138f7c98bb"
+      "sha256": "1ce849dff480f3411898fd1adf47650ad5ac6f154047e560657ff60411fca754"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0054-shaar-devtools-network-headers.patch",
@@ -507,23 +495,11 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0058-shaar-devtools-parsed-scripts.patch",
-      "sha256": "115a67fd4a6637a868071edcfc275545dfff968a275afd5571e3239443c3923c"
+      "sha256": "3ea0626631aca5d36794f0148db1b805ded8ca2ebf9e4e19ff08409e7c53dd0e"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0059-shaar-devtools-console-objects.patch",
       "sha256": "4bd602b9e9392280575cf39cce9f14f9f250808cab96fb6c4e29b06dcb3e567b"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0060-shaar-devtools-websocket-events.patch",
-      "sha256": "d5eb8044fbe3a3ad01c9e64696ccd3a3457fc3a76f4dda33111379150209c952"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0061-shaar-private-quit-renderer-activation.patch",
-      "sha256": "2b18251e20b7f9ad29e98c22ba3db210a56a50a2abc2db0699f6eea8879aa08d"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0062-shaar-tab-lifecycle.patch",
-      "sha256": "cb3b862d6f6026ec651264cdd958c958251d97804f3645a74fd762cfd9d8f23b"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0063-shaar-icloud-passkey-window.patch",
@@ -535,19 +511,19 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0068-shaar-bluetooth-gate.patch",
-      "sha256": "e3e6c710be1933401208b540328ab709667da82e3e34e566822c5519ee34d79e"
+      "sha256": "72378ee626d2bc3383a159903c4b5819331e35eb090e3445063c9914c75411b7"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0069-shaar-device-chooser.patch",
-      "sha256": "fbc46f07566cab39b9d8798e34547485c3fe8761da130f1a094bfa85960f232f"
+      "sha256": "68d22c1b1c193d2203314c2b1422e27ef8ce9aae34bebc068dd2d32eacbd1891"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0115-shaar-card-save-prompt-supersede.patch",
-      "sha256": "b7bef616bc5c30b511d622413667c685ee31075b42c67e8c81bf6532ba5c60d1"
+      "sha256": "9926607af1cc05561f093fe20c127744591733dae18116cc341a64b0778fb717"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0116-shaar-password-save-prompt-snapshot.patch",
-      "sha256": "ddbc237dd0f773fad284035ea7dfdd638ad07af8eef0ecb9be34d2c42172a12a"
+      "sha256": "60320cdc00758eea6eaa50ed12279dcc108c0f7f38c2f92b81366ba3b01e676e"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0070-shaar-website-permission-prompt.patch",
@@ -558,40 +534,28 @@
       "sha256": "aab873bbf02f4ad6a327a796f21afb76ea0379791252cdf7a40ba1278675bbd9"
     },
     {
-      "file": "ThirdParty/ChromiumEngine/patches/0074-shaar-https-only.patch",
-      "sha256": "b5503e80d28d49834c9d72d7f1d0e98ee7c872c8fcb05727ecbcf2ea7e7a6d73"
-    },
-    {
       "file": "ThirdParty/ChromiumEngine/patches/0079-shaar-testing-switches.patch",
       "sha256": "b2fe5ebd4b419eb929579b78f6bde7bfe77b931c52cb393da8f48b699705a679"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0076-shaar-web-store-fit-test-host.patch",
-      "sha256": "388af72f7c1e9b70c7e1e685c6f55e81141da3d92ed5e6763878d490d462a761"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0077-shaar-probe-dispatch-and-quit-cancel.patch",
-      "sha256": "2113cd3c77ed3a812f84c899eb971ff5c598cd31ea07fcf00caec0b52c4671f9"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0078-shaar-trusted-click-layout.patch",
-      "sha256": "93d724a6e39e9f41637808a86efc403db304fb141524856646cf83fa05f24f86"
+      "sha256": "73abc9427b657390b9e4c97263cb3e4d20fef1c877cd789163aac16323406018"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0080-shaar-download-readiness.patch",
       "sha256": "a2110709215a9fa5d118abaafd25cc231fddcb16da877ac9072a4734993531ca"
     },
     {
-      "file": "ThirdParty/ChromiumEngine/patches/0081-shaar-native-window-session-id.patch",
-      "sha256": "ca33752de8db14d1442f995a81408908b4439e1b55ef10b68d75727fb9aeeaff"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0082-shaar-tab-activation-events.patch",
-      "sha256": "b8383d2468ea097b0463634399ad315ce98660d7fbc814775849a0a32945a68a"
+      "file": "ThirdParty/ChromiumEngine/patches/0083-shaar-managed-window-requests.patch",
+      "sha256": "af87355a20f40c01fa06ac14817d634073ef59772018dc01304497e044af64ad"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0086-shaar-http-basic-auth.patch",
       "sha256": "b32c270fd18ee0c90f998c88de326ab28c661d43c973bdb03e0b1357bf373961"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0110-shaar-display-media-picker-delegate.patch",
+      "sha256": "5f7145de7e38a3f1c809d02bbb169a3c688a738fc7f3e6fe1af9313be73209f3"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0140-blink-hidden-scroll-event-dispatch.patch",
@@ -599,7 +563,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0141-blink-hidden-resize-event-dispatch.patch",
-      "sha256": "b4ce21ce54a43e236ba42317b3c2a8b8f022c040bf73c379b0870387d95087d4"
+      "sha256": "2d58c620cf64e57c1aca6ccc2ae18f037c468ae0092b40cf0b59b1a0a3bacabf"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0143-blink-hidden-scroll-snap-event-dispatch.patch",
@@ -607,7 +571,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0144-blink-hidden-scroll-related-events.patch",
-      "sha256": "bdd143ab69b862582ce79df0259dc3e19e7a2e590bc8bdd0c64690b54fdd83a8"
+      "sha256": "7eabc8b43dc93f66a6ffb67bba75214f4d5bb15b7e3abb7d5ecdd1bf53464977"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0142-blink-hidden-visual-viewport-events.patch",
@@ -619,7 +583,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0121-shaar-print-menu-native-panel.patch",
-      "sha256": "939dcacf56a62df2ce20c3a827db1f7c6ef10c73a8d73c738ae66fd05b723854"
+      "sha256": "3dbe2038779894fa2452a26e652cdf2691ca0997aedb1e123fa14ef0b7bfd422"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0122-shaar-print-selection-option.patch",
@@ -627,39 +591,11 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0085-shaar-javascript-dialogs.patch",
-      "sha256": "e2ebd08d3ff8f62b413fb593c7ea2203a32fe4fb8fb17b4233b92b8f4035618f"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0088-shaar-page-zoom.patch",
-      "sha256": "d6b6ac4204f6a967e68b67781de4f081c9cebbb4c530aa2ef204b0f760a175e1"
+      "sha256": "7b3d872131a33238308eda0bfccad9d1bcaf46e4423e24cf2cc6f6926648f191"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0090-shaar-registered-mailto-handler.patch",
       "sha256": "179000e21c4a5726d97d8606c81af2beed4d486192e7cbb8da1b30198c7aa4ed"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0145-shaar-reload-pending-navigation.patch",
-      "sha256": "7b5d22ba0f5c6e38b8e7fad7d8166899ab20f098c92c5b2f3172655af18d75f9"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0146-shaar-hidden-trusted-scroll.patch",
-      "sha256": "e70b7542bb0c220c773f1af92d7a8a4be0066f24ffdacbf0d57e0c03efc89c37"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0125-shaar-device-chooser.patch",
-      "sha256": "bce4068054ee1ea5cd1a181f105378dd3b156a648d8296a8478ccca69edd2846"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0087-shaar-browsers-by-profile.patch",
-      "sha256": "e01c216c03835e98509e6a6aa22643a468f99dcd189d740b2c6457921ac0c1d8"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0147-shaar-devtools-network-navigation.patch",
-      "sha256": "dc0cc5ed7af5f440772c087f852b3bd52d86c3d81e7b8f9f2802803fa71508e5"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0148-shaar-devtools-websocket-projection.patch",
-      "sha256": "13556ac30468cc7161919a6003bbbe47bd3456b05216b7ea566f0ff50d17be74"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0149-shaar-http-basic-embedder-scope.patch",

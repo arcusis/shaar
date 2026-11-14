@@ -31,15 +31,14 @@ class DevToolsWebSocketProjectionTests(unittest.TestCase):
         manifest = json.loads(MANIFEST.read_text())
         patches = {entry["file"]: entry["sha256"] for entry in manifest["patches"]}
         patch_name = str(PATCH.relative_to(ROOT))
-        self.assertIn(patch_name, patches)
-        self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), patches[patch_name])
+        self.assertNotIn(patch_name, patches)
         for path, expected in manifest["layer"]["files"].items():
             self.assertEqual(hashlib.sha256((LAYER / path).read_bytes()).hexdigest(), expected, path)
         digest = hashlib.sha256()
         for path, expected in sorted(manifest["layer"]["files"].items()):
             digest.update(path.encode() + b"\0" + expected.encode("ascii") + b"\n")
         self.assertEqual(digest.hexdigest(), manifest["layer"]["sha256"])
-        self.assertIn("webSocketFrameReceived", PATCH.read_text())
+        self.assertIn("webSocketFrameReceived", (LAYER / "chrome/browser/shaar/devtools/shaar_devtools_panel.cc").read_text())
 
 
 if __name__ == "__main__":

@@ -19,4 +19,4 @@
 +    shaar::lifecycle::EngineQuitCancelled();
    GlobalBrowserCollection::GetInstance()->ForEach(
        [](BrowserWindowInterface* browser) {
-         UnloadController::From(browser)->ResetTryToCloseWindow();
+         UnloadController::From(browser)->ResetBeforeUnloadForShutdown();

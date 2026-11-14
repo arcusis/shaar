@@ -83,6 +83,7 @@ final class PrivateWindowProbe {
     "closedWindowRejected", "cleanupChildrenClosed", "cleanupContextsRetired",
     "productHostOwnsPrivateNativeWindow", "productCommandTUsesPrivateOpaqueSearch",
     "productPrivateHostRemainsAttachedAcrossTabs",
+    "productPrivateHostRemainsAttachedAfterTabClose",
     "productAlphabetSearchDoesNotOpenPicker", "productFirstPrivateTabRenders",
     "productSecondPrivateTabRenders", "productThirdPrivateTabRenders",
     "productPrivateWindowCloseLeavesNoData",

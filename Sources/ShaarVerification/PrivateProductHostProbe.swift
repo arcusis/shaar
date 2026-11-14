@@ -495,6 +495,14 @@ final class PrivateProductHostProbe {
       }
     }
     checks["productPrivateHostRemainsAttachedAcrossTabs"] = hostingRemainedAttached
+    if let firstTabID, let firstTabUUID = UUID(uuidString: firstTabID) {
+      first.store.closeTab(firstTabUUID)
+      try await waitForTabs(first.store, count: 2)
+      checks["productPrivateHostRemainsAttachedAfterTabClose"] =
+        Self.hostingViewIsAttached(first.hosting, to: privateContainer)
+    } else {
+      checks["productPrivateHostRemainsAttachedAfterTabClose"] = false
+    }
     first.store.showCommand()
     try await waitForCaptureReadiness(first, tabID: first.store.selectedTabID)
     let captures = try await capturePrivateWindow(first, runID: runID, phase: phase)

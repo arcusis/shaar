@@ -226,6 +226,26 @@ final class BrowserRuntimeEvents {
       }
       receive(payload)
     }
+    runtime.onHTTPAuthRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let client = self.router.claim(.httpAuth, id: id, payload: payload) else {
+        if let tabID = payload["tabID"] as? String {
+          self.runtime.resolveHTTPAuthRequestID(id, tabID: tabID, username: nil, password: nil)
+        }
+        return
+      }
+      guard let receive = client.onHTTPAuthRequest else {
+        _ = self.router.consume(.httpAuth, id: id, windowID: client.windowID)
+        if let tabID = payload["tabID"] as? String {
+          self.runtime.resolveHTTPAuthRequestID(id, tabID: tabID, username: nil, password: nil)
+        }
+        return
+      }
+      receive(payload)
+    }
+    runtime.onHTTPAuthDismissed = { [weak self] id in
+      self?.router.client(for: .httpAuth, id: id, removing: true)?.onHTTPAuthDismissed?(id)
+    }
     runtime.onDownloadChanged = { [weak self] profile, record in
       for client in self?.router.clients(forProfile: profile) ?? [] {
         client.onDownloadChanged?(profile, record)
@@ -311,6 +331,17 @@ final class BrowserRuntimeEvents {
       return
     }
     runtime.resolveDeviceChooserRequestID(id, index: index.map(NSNumber.init(value:)))
+  }
+
+  func resolveHTTPAuth(_ request: HTTPAuthRequest, username: String?, password: String?) {
+    guard router.consume(.httpAuth, id: request.id, windowID: request.windowID) else { return }
+    runtime.resolveHTTPAuthRequestID(request.id, tabID: request.tabID.uuidString,
+                                     username: username, password: password)
+  }
+
+  func rejectHTTPAuth(_ id: String, tabID: String, windowID: String) {
+    guard router.consume(.httpAuth, id: id, windowID: windowID) else { return }
+    runtime.resolveHTTPAuthRequestID(id, tabID: tabID, username: nil, password: nil)
   }
 
   func applyBookmarkOperation(

@@ -165,6 +165,7 @@ struct BrowserWindow: View {
       case .print(let request): PrintConsentSheet(request: request, store: store)
       case .externalApp(let request): ExternalAppConsent(store: store, request: request)
       case .deviceChooser(let request): DeviceChooserConsent(store: store, request: request)
+      case .httpAuth(let request): HTTPAuthSheet(store: store, request: request)
       case .downloads(let profile):
         if let engine = store.engine {
           DownloadsPanel(store: store, engine: engine, profileID: profile)

@@ -32,6 +32,7 @@ enum BrowserSheet: Identifiable {
   case print(PrintRequest)
   case externalApp(ExternalAppRequest)
   case deviceChooser(DeviceChooserRequest)
+  case httpAuth(HTTPAuthRequest)
   case downloads(profileID: UUID)
   case folder(FolderEditorRoute)
   case recentlyClosed(spaceID: UUID)
@@ -48,6 +49,7 @@ enum BrowserSheet: Identifiable {
     case .print(let request): request.sheetID
     case .externalApp(let request): "external-\(request.id)"
     case .deviceChooser(let request): request.sheetID
+    case .httpAuth(let request): request.sheetID
     case .downloads(let profile): "downloads-\(profile)"
     case .folder(let route): "folder-\(route)"
     case .recentlyClosed(let space): "closed-\(space)"
@@ -60,7 +62,7 @@ enum BrowserSheet: Identifiable {
     switch self {
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
     case .extensionInstall, .websitePermission, .desktopCapture, .webShare, .print, .externalApp,
-      .deviceChooser:
+      .deviceChooser, .httpAuth:
       true
     }
   }
@@ -74,6 +76,7 @@ enum BrowserSheet: Identifiable {
     case .print(let request): request.tabID
     case .externalApp(let request): request.tabID
     case .deviceChooser(let request): request.tabID
+    case .httpAuth(let request): request.tabID
     default: nil
     }
   }
@@ -88,6 +91,7 @@ enum BrowserSheet: Identifiable {
     case .print(let request): request.matches(session)
     case .externalApp(let request): request.matches(session)
     case .deviceChooser(let request): request.matches(session)
+    case .httpAuth(let request): request.matches(session)
     }
   }
 }

@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 16u
+#define SHAAR_ENGINE_ABI_MINOR 17u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -237,6 +237,8 @@ typedef enum {
   SHAAR_OP_PROBE_MEDIA_GESTURE = 1107,
   SHAAR_OP_MEDIA_PERMISSION_DECISION = 1108,
   // END media
+  /* HTTP authentication credentials, ABI minor 17. */
+  SHAAR_OP_HTTP_AUTH_CREDENTIALS_REPLY = 1601,
   // BEGIN storage_keychain
   SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400,
   // END storage_keychain

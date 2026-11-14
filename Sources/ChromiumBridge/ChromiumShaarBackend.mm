@@ -98,6 +98,7 @@ NSInteger HistoryQueryVisitsPerURL(NSInteger limit) {
 // submitted only when the loaded engine reports minor 13 or newer.
 static const uint32_t kShaarDeviceChooserABIMinor = 13;
 static const shaar_operation kShaarDeviceChooserDecision = (shaar_operation)1600;
+static const shaar_operation kShaarHTTPCredentialsReply = SHAAR_OP_HTTP_AUTH_CREDENTIALS_REPLY;
 
 static BOOL ShaarDeviceChooserKind(NSString *kind, BOOL *dismissed, BOOL *updated) {
   if ([kind isEqualToString:@"deviceChooserDismissed"]) {
@@ -199,6 +200,7 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarMediaRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarCaptureRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarDeviceChooserRequests;
+  NSMutableDictionary<NSString *, NSString *> *_shaarHTTPAuthRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarShareRequests;
   ShaarShareReplyFunction _shaarShareReply;
   NSMutableDictionary<NSString *, NSDictionary *> *_shaarInstallRequests;
@@ -387,6 +389,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarInstallRequests = [NSMutableDictionary dictionary];
   _shaarProfileFilesBeforeOpen = [NSMutableDictionary dictionary];
   _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
+  _shaarHTTPAuthRequests = [NSMutableDictionary dictionary];
   _shaarShareRequests = [NSMutableDictionary dictionary];
   _shaarPrintRequests = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
@@ -533,6 +536,38 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   NSString *tabID = String(event->tab_id);
   NSString *profileID = String(event->profile_id).uppercaseString;
   BOOL websitePermissionDismissed = NO;
+  if (event->kind == SHAAR_EVENT_PERMISSION && !event->session_id.size &&
+      [kind isEqualToString:@"httpAuthRequested"]) {
+    NSString *requestID = payload[@"id"];
+    NSString *windowID = String(event->window_id);
+    NSString *realm = payload[@"realm"];
+    NSString *host = payload[@"host"];
+    if (![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] || !requestID.length ||
+        requestID.length > 128 || _shaarHTTPAuthRequests[requestID] ||
+        !_shaarTabs[tabID] || ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]] ||
+        ![realm isKindOfClass:NSString.class] || realm.length > 512 ||
+        ![host isKindOfClass:NSString.class] || !host.length || host.length > 255) return;
+    _shaarHTTPAuthRequests[requestID] = tabID;
+    NSMutableDictionary *request = [payload mutableCopy];
+    request[@"profileID"] = profileID;
+    request[@"tabID"] = tabID;
+    request[@"windowID"] = windowID;
+    if (self.onHTTPAuthRequest) self.onHTTPAuthRequest(request);
+    else [self resolveHTTPAuthRequestID:requestID tabID:tabID username:nil password:nil];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_PERMISSION && !event->session_id.size &&
+      [kind isEqualToString:@"httpAuthDismissed"]) {
+    NSString *requestID = payload[@"id"];
+    if (![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] ||
+        ![_shaarHTTPAuthRequests[requestID] isEqualToString:tabID]) return;
+    [_shaarHTTPAuthRequests removeObjectForKey:requestID];
+    if (self.onHTTPAuthDismissed) self.onHTTPAuthDismissed(requestID);
+    return;
+  }
   if (event->kind == SHAAR_EVENT_PERMISSION &&
       ShaarWebsitePermissionEvent(kind, &websitePermissionDismissed)) {
     if (websitePermissionDismissed) {
@@ -706,6 +741,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self cancelExtensionInstallRequestsForTabID:tabID];
     for (NSString *requestID in [_shaarPrintRequests allKeysForObject:tabID])
       [self resolvePrintRequestID:requestID accepted:NO];
+    for (NSString *requestID in [_shaarHTTPAuthRequests allKeysForObject:tabID])
+      [self resolveHTTPAuthRequestID:requestID tabID:tabID username:nil password:nil];
     NSString *mappedWindowID = _shaarTabWindows[tabID];
     NSString *windowID = String(event->window_id);
     if (!windowID.length) windowID = mappedWindowID;
@@ -753,6 +790,19 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       ? payload[@"failure"] : nil;
   if ([failure[@"descriptionCode"] isEqualToString:@"renderer_gone"] && self.onRendererGone)
     self.onRendererGone(tabID, _shaarTabProfiles[tabID] ?: @"", @"renderer_gone", 0);
+}
+
+- (void)resolveHTTPAuthRequestID:(NSString *)requestID tabID:(NSString *)tabID
+                        username:(NSString *)username password:(NSString *)password {
+  if (![_shaarHTTPAuthRequests[requestID] isEqualToString:tabID]) return;
+  [_shaarHTTPAuthRequests removeObjectForKey:requestID];
+  NSMutableDictionary *payload = [@{@"schemaVersion": @1, @"id": requestID,
+                                    @"cancelled": @(username == nil || password == nil)} mutableCopy];
+  if (username && password) {
+    payload[@"username"] = username;
+    payload[@"password"] = password;
+  }
+  [self submitTabID:tabID operation:kShaarHTTPCredentialsReply payload:payload];
 }
 
 - (NSValue *)loadedProfileValueForID:(NSString *)profileID {

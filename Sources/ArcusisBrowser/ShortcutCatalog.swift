@@ -63,6 +63,7 @@ struct ShortcutCatalog {
       switch key.unicodeScalars.first?.value {
       case UInt32(NSLeftArrowFunctionKey): result += "←"
       case UInt32(NSRightArrowFunctionKey): result += "→"
+      case 0x08: result += "⌫"
       default: result += key.uppercased()
       }
       return result
@@ -132,10 +133,11 @@ struct ShortcutCatalog {
     // Command-B stays with web editors for bold.
     case .bookmarks: ("b", [.command, .option])
     case .history: ("y", .command)
+    case .clearHistory: ("\u{8}", [.command, .shift])
     case .downloads: ("j", [.command, .shift])
     case .extensions: ("e", [.command, .shift])
     case .zoomWindow: ("m", [.command, .control])
-    case .bringAllToFront, .checkForUpdates, .sharePage, .clearHistory: nil
+    case .bringAllToFront, .checkForUpdates, .sharePage: nil
     case .help: ("?", .command)
     case .minimizeWindow: ("m", .command)
     case .settings: (",", .command)

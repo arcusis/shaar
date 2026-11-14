@@ -187,6 +187,16 @@ final class ReloadWindowProbe {
     }
     let page = try require(await document(destination, runtime: runtime), "No destination document")
     let destinationURL = (page["href"] as? String).flatMap(URL.init(string:))
+    if elementID != "plain" {
+      let sourcePage = try require(await document(source, runtime: runtime), "No source document after opening destination")
+      try expect(
+        Self.newWindowDestinationPassed(
+          sourceTabID: source, destinationTabID: destination,
+          sourceHref: sourcePage["href"] as? String ?? "",
+          destinationHref: page["href"] as? String ?? "",
+          marker: page["marker"] as? String ?? ""),
+        "\(name) opens a distinct destination tab and leaves its source on the first origin")
+    }
     try expect(
       ReloadWindowProbeEvidence.isCrossSiteLoopbackNavigation(
         source: originA, destination: destinationURL?.absoluteString),
@@ -329,6 +339,18 @@ final class ReloadWindowProbe {
     if let notice = owner.engine.notice, !notice.isEmpty { reasons.append(notice) }
     let detail = reasons.isEmpty ? "reload handler returned false" : reasons.joined(separator: "; ")
     return "Reload action accepts destroyed tab (\(detail))"
+  }
+
+  nonisolated static func newWindowDestinationPassed(
+    sourceTabID: UUID, destinationTabID: UUID, sourceHref: String,
+    destinationHref: String, marker: String
+  ) -> Bool {
+    guard sourceTabID != destinationTabID,
+      let source = URL(string: sourceHref), let destination = URL(string: destinationHref)
+    else { return false }
+    return source.host == "127.0.0.1" && source.path == "/cross-site-a"
+      && destination.host == "localhost" && destination.path == "/cross-site-b"
+      && marker == "Cross-site destination loaded"
   }
 
   private struct Failure: LocalizedError {

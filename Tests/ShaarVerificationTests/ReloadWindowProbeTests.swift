@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import Testing
 import Foundation
+import Testing
 
 @testable import ShaarVerification
 
@@ -46,5 +46,28 @@ import Foundation
       !ReloadWindowProbe.hasSingleDestinationTab(
         [destination, UUID()], destination: destination))
     #expect(!ReloadWindowProbe.hasSingleDestinationTab([UUID()], destination: destination))
+  }
+
+  @Test func newWindowNavigationRequiresASeparateDestinationAndRetainedSource() {
+    let sourceID = UUID()
+    let destinationID = UUID()
+    #expect(
+      ReloadWindowProbe.newWindowDestinationPassed(
+        sourceTabID: sourceID, destinationTabID: destinationID,
+        sourceHref: "http://127.0.0.1:41000/cross-site-a",
+        destinationHref: "http://localhost:41000/cross-site-b",
+        marker: "Cross-site destination loaded"))
+    #expect(
+      !ReloadWindowProbe.newWindowDestinationPassed(
+        sourceTabID: sourceID, destinationTabID: sourceID,
+        sourceHref: "http://localhost:41000/cross-site-b",
+        destinationHref: "http://localhost:41000/cross-site-b",
+        marker: "Cross-site destination loaded"))
+    #expect(
+      !ReloadWindowProbe.newWindowDestinationPassed(
+        sourceTabID: sourceID, destinationTabID: destinationID,
+        sourceHref: "http://127.0.0.1:41000/cross-site-a",
+        destinationHref: "http://localhost:41000/cross-site-b",
+        marker: ""))
   }
 }

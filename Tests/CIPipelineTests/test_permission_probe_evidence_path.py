@@ -24,6 +24,10 @@ class PermissionProbeEvidencePathTests(unittest.TestCase):
     def test_cli_rejects_symlinked_evidence_directories_before_probe_setup(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            app = root / "Shaar Verification.app"
+            executable = app / "Contents/MacOS/ShaarVerification"
+            executable.parent.mkdir(parents=True)
+            executable.write_text("fixture")
             outside = root / "outside"
             outside.mkdir()
             (outside / "preserve.txt").write_text("preserve this")
@@ -39,7 +43,7 @@ class PermissionProbeEvidencePathTests(unittest.TestCase):
                 with self.subTest(path=path):
                     stderr = io.StringIO()
                     with patch.object(sys, "argv", ["test-shaar-permission-prompt.py",
-                                                     "--app", str(root / "missing.app"),
+                                                     "--app", str(app),
                                                      "--evidence", str(path)]), \
                             patch.object(PROBE, "ThreadingHTTPServer") as server, \
                             patch.object(PROBE.threading, "Thread") as thread, \

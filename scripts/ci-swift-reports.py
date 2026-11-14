@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 CASE_EVENT = re.compile(r"^Test Case '(.+)' (started|passed|failed|skipped)(?: \(([^()]*) seconds\))?\.$")
 SUITE_END = re.compile(r"^Test Suite '(?:All tests|Selected tests)' (?:passed|failed) at ")
 TOTAL = re.compile(r"^\s*Executed ([0-9]+) tests?\b")
+SWIFT_TEST_TOTAL = re.compile(r"Test run with ([0-9]+) tests?\b")
 
 
 def case_identity(label: str) -> tuple[str, str]:
@@ -63,6 +64,8 @@ def xctest_cases(text: str) -> list[ET.Element]:
                 details.append(line)
     if active or awaiting_total or not totals or sum(totals) != len(cases):
         raise ValueError("XCTest log is incomplete or its outer-suite totals do not match cases")
+    if not cases:
+        raise ValueError("XCTest filter selected no test cases")
     return cases
 
 
@@ -75,8 +78,21 @@ def write_reports(log: Path, directory: Path) -> None:
     native_case_count = 0
     for report in native:
         native_case_count += sum(1 for _ in ET.parse(report).iter("testcase"))
+    expected_native_count = sum(int(match.group(1)) for match in SWIFT_TEST_TOTAL.finditer(text))
     if "Test run with " in text and native_case_count == 0:
-        raise ValueError("Swift Testing ran but its native JUnit XML contains no test cases")
+        raise ValueError(
+            "Swift Testing ran but its native JUnit XML contains no test cases "
+            f"(log reports {expected_native_count} tests but native XML contains "
+            f"{native_case_count} cases)"
+        )
+    native_test_count = 0
+    for report in native:
+        root = ET.parse(report).getroot()
+        native_test_count += sum(1 for _ in root.iter("testcase"))
+    if expected_native_count != native_test_count:
+        raise ValueError(
+            f"Swift Testing log reports {expected_native_count} tests but native XML contains "
+            f"{native_test_count} cases")
     failures = sum(case.find("failure") is not None for case in cases)
     skipped = sum(case.find("skipped") is not None for case in cases)
     suite = ET.Element("testsuite", name="XCTest", tests=str(len(cases)),

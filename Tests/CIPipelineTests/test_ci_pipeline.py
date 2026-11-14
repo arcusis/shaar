@@ -1342,6 +1342,17 @@ class SwiftReportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Invalid XCTest duration"):
             SWIFT_REPORTS.xctest_cases(text)
 
+    def test_empty_native_swift_testing_report_cannot_hide_logged_tests(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(self.transcript() + "Test run with 1 test passed\n")
+            (directory / "swift-swift-testing.xml").write_text('<testsuite tests="1"/>')
+            with self.assertRaisesRegex(
+                ValueError, "log reports 1 tests but native XML contains 0 cases"
+            ):
+                SWIFT_REPORTS.write_reports(log, directory)
+
     def test_missing_native_swift_testing_report_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

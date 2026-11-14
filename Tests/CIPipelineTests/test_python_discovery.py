@@ -20,11 +20,15 @@ SPEC.loader.exec_module(RUNNER)
 class PythonTestDiscoveryTests(unittest.TestCase):
     def run_runner(self, repository):
         errors = io.StringIO()
-        with (patch.object(RUNNER, "REPOSITORY_ROOT", repository),
-              patch.object(RUNNER, "TESTS_ROOT", repository / "Tests"),
-              patch.object(RUNNER.sys, "argv", ["test-python.py"]),
-              redirect_stderr(errors)):
-            result = RUNNER.main()
+        original_sys_path = RUNNER.sys.path[:]
+        try:
+            with (patch.object(RUNNER, "REPOSITORY_ROOT", repository),
+                  patch.object(RUNNER, "TESTS_ROOT", repository / "Tests"),
+                  patch.object(RUNNER.sys, "argv", ["test-python.py"]),
+                  redirect_stderr(errors)):
+                result = RUNNER.main()
+        finally:
+            RUNNER.sys.path[:] = original_sys_path
         return result, errors.getvalue()
 
     def test_symlinked_test_directory_is_rejected_before_import(self):

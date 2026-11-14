@@ -182,7 +182,9 @@ struct ShaarHistoryAdapterTests {
     let fake = FakeHistoryEngine(reply: #"{"schemaVersion":1}"#)
     let adapter = ShaarHistoryAdapter(engine: fake)
 
-    for url in ["file:///tmp/private.txt", "javascript:alert(1)"] {
+    for url in [
+      "file:///tmp/private.txt", "javascript:alert(1)", "https:example.test/path",
+    ] {
       await #expect(throws: ShaarHistoryAdapterError.invalidResponse("invalid import batch")) {
         try await adapter.insert(
           profileID: UUID(), source: "firefox",

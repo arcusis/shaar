@@ -164,7 +164,8 @@ public struct ShaarHistoryAdapter: Sendable {
       (1...5000).contains(pages.count),
       pages.allSatisfy({ page in
         guard let url = URL(string: page.url),
-          ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+          ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+          url.host != nil
         else { return false }
         return !page.visits.isEmpty && page.visits.allSatisfy({ $0 >= 0 })
       })

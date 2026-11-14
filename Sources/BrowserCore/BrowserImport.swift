@@ -4,6 +4,11 @@
 
 import Foundation
 
+private struct BrowserImportFolderKey: Hashable {
+  let parentID: UUID
+  let name: String
+}
+
 public struct BrowserImportItem: Identifiable, Equatable, Sendable {
   public enum Kind: String, Sendable { case bookmark, history }
   public let id: UUID
@@ -89,19 +94,18 @@ public enum BrowserImport {
     Any]]
   {
     var operations: [[String: Any]] = []
-    var folders: [[String]: UUID] = [:]
+    var folders: [BrowserImportFolderKey: UUID] = [:]
     for item in items where item.kind == .bookmark {
       let parent: UUID
       if let components = item.folderComponents {
         var currentParent = otherFolderID
-        var path: [String] = []
         for component in components {
-          path.append(component)
-          if let existing = folders[path] {
+          let key = BrowserImportFolderKey(parentID: currentParent, name: component)
+          if let existing = folders[key] {
             currentParent = existing
           } else {
             let id = UUID()
-            folders[path] = id
+            folders[key] = id
             operations.append([
               "op": "add", "id": id.uuidString.lowercased(),
               "parent": currentParent.uuidString.lowercased(), "k": "f", "t": component,

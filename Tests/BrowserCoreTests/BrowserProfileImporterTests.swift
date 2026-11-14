@@ -73,6 +73,93 @@ import Testing
       == ["History page", "untitled.example.test", "spaces.example.test"])
 }
 
+@Test func browserImportFolderPathAllocationBenchmark() {
+  let path = (0..<10).map { "Folder \($0)" }
+  let items = (0..<10_000).map { index in
+    BrowserImportItem(
+      title: "Page \(index)", address: "https://example.com/\(index)",
+      folderComponents: path)
+  }
+  let rootFolderID = UUID()
+  let expected = legacyImportOperations(items, otherFolderID: rootFolderID)
+  let actual = BrowserImport.operations(for: items, otherFolderID: rootFolderID)
+  #expect(actual.count == expected.count && actual.count == 10_010)
+  #expect(importOperationSignatures(actual) == importOperationSignatures(expected))
+
+  var beforeSamples: [Duration] = []
+  var afterSamples: [Duration] = []
+  for _ in 0..<5 {
+    let beforeStart = ContinuousClock.now
+    for _ in 0..<3 { _ = legacyImportOperations(items, otherFolderID: rootFolderID) }
+    beforeSamples.append(beforeStart.duration(to: .now))
+    let afterStart = ContinuousClock.now
+    for _ in 0..<3 {
+      _ = BrowserImport.operations(for: items, otherFolderID: rootFolderID)
+    }
+    afterSamples.append(afterStart.duration(to: .now))
+  }
+  let before = beforeSamples.sorted()[beforeSamples.count / 2]
+  let after = afterSamples.sorted()[afterSamples.count / 2]
+  print("browserImportFolderPathAllocationBenchmark: before=\(before), after=\(after)")
+  #expect(after < before * 0.9)
+}
+
+private func legacyImportOperations(
+  _ items: [BrowserImportItem], otherFolderID: UUID
+) -> [[String: Any]] {
+  var operations: [[String: Any]] = []
+  var folders: [[String]: UUID] = [:]
+  for item in items where item.kind == .bookmark {
+    let parent: UUID
+    if let components = item.folderComponents {
+      var currentParent = otherFolderID
+      var path: [String] = []
+      for component in components {
+        path.append(component)
+        if let existing = folders[path] {
+          currentParent = existing
+        } else {
+          let id = UUID()
+          folders[path] = id
+          operations.append([
+            "op": "add", "id": id.uuidString.lowercased(),
+            "parent": currentParent.uuidString.lowercased(), "k": "f", "t": component,
+          ])
+          currentParent = id
+        }
+      }
+      parent = currentParent
+    } else {
+      parent = otherFolderID
+    }
+    operations.append([
+      "op": "add", "id": item.id.uuidString.lowercased(),
+      "parent": parent.uuidString.lowercased(), "k": "u", "t": item.title, "u": item.address,
+    ])
+  }
+  return operations
+}
+
+private func importOperationSignatures(_ operations: [[String: Any]]) -> [String] {
+  var folderIndices: [String: Int] = [:]
+  for (index, operation) in operations.enumerated() {
+    guard operation["k"] as? String == "f", let id = operation["id"] as? String else {
+      continue
+    }
+    folderIndices[id] = index
+  }
+  return operations.map { operation in
+    let parent = operation["parent"] as? String ?? ""
+    let normalizedParent = folderIndices[parent].map(String.init) ?? "root"
+    let bookmarkID = operation["k"] as? String == "u" ? operation["id"] as? String ?? "" : ""
+    return [
+      operation["op"] as? String ?? "", operation["k"] as? String ?? "",
+      operation["t"] as? String ?? "", operation["u"] as? String ?? "",
+      normalizedParent, bookmarkID,
+    ].joined(separator: "|")
+  }
+}
+
 @Test func chromiumProfileImportsAvailableDataWithoutTheOtherFile() throws {
   let profile = try profileDirectory(name: "ChromeBookmarksOnly")
   try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))

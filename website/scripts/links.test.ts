@@ -109,8 +109,22 @@ test("link checker verifies image map associations", () => {
       join(root, "index.html"),
       '<h1>Home</h1><img src="/map.png" alt="Map" usemap="#regions"><map name="regions"><area href="/north/" alt="North"></map><img src="/map.png" alt="Map" usemap="#missing">',
     );
+    assert.deepEqual(checkLinks(root).errors, ["index.html: image references missing map #missing"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("link checker validates form submission URLs", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><form action="/missing-submit/"><button formaction="/missing-override/">Submit</button></form>',
+    );
     assert.deepEqual(checkLinks(root).errors, [
-      "index.html: image references missing map #missing",
+      "index.html: missing target /missing-submit/",
+      "index.html: missing target /missing-override/",
     ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -268,6 +282,11 @@ test("link checker validates social preview image targets", () => {
     );
     writeFileSync(join(root, "social.png"), "fixture");
     assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing.png"]);
+test("link checker validates embedded page URLs", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), '<h1>Home</h1><iframe src="/missing-embed/"></iframe>');
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing-embed/"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

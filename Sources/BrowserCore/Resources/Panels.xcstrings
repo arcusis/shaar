@@ -1,6 +1,7 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Could not load Library data. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load Library data. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את נתוני הספרייה. כדאי לנסות שוב."}}}},
     "Could not update the Library. Try again.": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Could not update the Library. Try again." } },

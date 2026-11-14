@@ -31,6 +31,20 @@ struct BrowserLibraryTests {
         == knownError.description(language: .hebrew))
   }
 
+  @Test func runtimeLoadFailureShowsLocalizedLibraryRecoveryNotice() {
+    let model = BrowserLibraryModel()
+    let profile = UUID()
+    let failure = NSError(
+      domain: "LibraryRefreshTest", code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "Raw bookmark read error."])
+    model.onLoad = { _, _, done in done(.failure(failure)) }
+
+    model.refresh(profile, section: .bookmarks)
+
+    #expect(model.notice(profile, section: .bookmarks) == BrowserLibraryModel.loadFailure(failure))
+    #expect(model.notice(profile, section: .bookmarks) != "Raw bookmark read error.")
+  }
+
   @Test func bookmarkAndHistorySearchFindsTitlesWithoutTypingAccents() {
     #expect(LibraryPanelSearch.matches("Résumé https://example.test", query: "resume"))
     #expect(LibraryPanelSearch.matches("Café https://example.test", query: "cafe"))

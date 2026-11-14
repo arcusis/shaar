@@ -76,6 +76,28 @@ private func fakeShaarNavigationSubmitBooleanSchema(
   return shaar_error_code(rawValue: 0)
 }
 
+@_cdecl("fake_shaar_navigation_submit_invalid_slice")
+private func fakeShaarNavigationSubmitInvalidSlice(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ args: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard let reply, let replyContext else { return shaar_error_code(rawValue: 1) }
+  let contextAddress = UInt(bitPattern: replyContext)
+  DispatchQueue.global().async {
+    let context = UnsafeMutableRawPointer(bitPattern: contextAddress)!
+    var result = shaar_result(
+      size: UInt32(MemoryLayout<shaar_result>.size), request_id: requestID,
+      error: shaar_error(
+        size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
+        platform_code: 0, message: shaar_bytes(data: nil, size: 0)),
+      payload_json: shaar_bytes(data: nil, size: 1))
+    reply(context, &result)
+  }
+  return shaar_error_code(rawValue: 0)
+}
+
 private func deliverFakeNavigationReply(
   _ reply: shaar_reply_fn, contextAddress: UInt, requestID: UInt64,
   booleanSchemaVersion: Bool = false
@@ -152,6 +174,20 @@ private struct FakeShortNavigationErrorSymbols: ShaarSymbolResolving {
     guard named == "shaar_submit" else { return nil }
     let function =
       fakeShaarNavigationSubmitShortError
+      as @convention(c) (
+        OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+        shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+        UnsafeMutablePointer<shaar_error>?
+      ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
+  }
+}
+
+private struct FakeInvalidSliceNavigationSymbols: ShaarSymbolResolving {
+  func symbol(named: String) -> UnsafeRawPointer? {
+    guard named == "shaar_submit" else { return nil }
+    let function =
+      fakeShaarNavigationSubmitInvalidSlice
       as @convention(c) (
         OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
         shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
@@ -430,4 +466,25 @@ struct ShaarNavigationAdapterTests {
     }
     #expect(result == .failure(.invalidEvent("invalid navigation result payload")))
   }
+  @Test func concreteTransportRejectsNonemptyNilResultBytes() async throws {
+    let transport = try ShaarNavigationABITransport(
+      resolver: FakeInvalidSliceNavigationSymbols(), handleResolver: FakeHandleResolver())
+    let adapter = try #require(ShaarNavigationAdapter(implementation: .shaar, transport: transport))
+    await #expect(throws: ShaarEngineError.self) {
+      try await withCheckedThrowingContinuation {
+        (continuation: CheckedContinuation<Void, Error>) in
+        do {
+          _ = try adapter.submit(
+            .stop, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
+            tabID: "tab"
+          ) { result in
+            continuation.resume(with: result.map { _ in () }.mapError { $0 as Error })
+          }
+        } catch {
+          continuation.resume(throwing: error)
+        }
+      }
+    }
+  }
+
 }

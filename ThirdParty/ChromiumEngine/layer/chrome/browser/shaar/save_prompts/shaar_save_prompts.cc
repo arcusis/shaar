@@ -347,6 +347,16 @@ std::string SanitizeDetail(std::string_view raw) {
         continue;
       }
     }
+    // Unicode line and paragraph separators are also rejected by the native
+    // request parser. Drop their UTF-8 encodings so they cannot hide the offer.
+    if (lead == 0xE2 && index + 2 < raw.size() &&
+        static_cast<unsigned char>(raw[index + 1]) == 0x80) {
+      const auto separator = static_cast<unsigned char>(raw[index + 2]);
+      if (separator == 0xA8 || separator == 0xA9) {
+        index += 3;
+        continue;
+      }
+    }
     size_t length = 1;
     if (lead >= 0xC2 && lead <= 0xDF)
       length = 2;

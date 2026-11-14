@@ -8,6 +8,14 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum InspectorInteractionProbeOptions {
+  static let domEventsArgument = "--probe-shaar-inspector-dom-input"
+
+  static func usesDOMEvents(arguments: [String]) -> Bool {
+    arguments.contains(domEventsArgument)
+  }
+}
+
 /// Synthesized AppKit events use the real native hit-test and renderer overlay.
 /// Does not prove physical desktop input or visible-window presentation.
 @MainActor
@@ -15,7 +23,7 @@ struct InspectorInteractionProbe {
   let model: InspectorModel
   let view: NSView
   private var usesDOMEvents: Bool {
-    CommandLine.arguments.contains("--probe-shaar-inspector-dom-input")
+    InspectorInteractionProbeOptions.usesDOMEvents(arguments: CommandLine.arguments)
   }
 
   func run(record: (String) -> Void) async throws {

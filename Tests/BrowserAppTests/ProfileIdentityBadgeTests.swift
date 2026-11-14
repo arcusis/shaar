@@ -24,6 +24,10 @@ import Testing
       !AccountPhotoURLPolicy.allowsRedirect(
         from: secureURL, to: URL(string: "http://images.example.test/avatar.png")!))
     #expect(
+      !AccountPhotoURLPolicy.allowsRedirect(
+        from: secureURL,
+        to: URL(string: "https://user:secret@images.example.test/avatar.png")!))
+    #expect(
       AccountPhotoURLPolicy.allowsRedirect(
         from: URL(string: "https://images.example.test:443/avatar.png")!, to: secureURL))
     #expect(

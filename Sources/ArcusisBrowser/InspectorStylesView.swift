@@ -27,6 +27,10 @@ struct InspectorStylesView: View {
     declaration.name
   }
 
+  static var matchedRulesLoadingLabel: String {
+    InspectorL10n.string("Loading matched rules…")
+  }
+
   init(inspector: InspectorModel, model: InspectorStylesModel) {
     self.inspector = inspector
     self.model = model
@@ -120,7 +124,8 @@ struct InspectorStylesView: View {
               ) {
                 VStack(alignment: .leading, spacing: 12) {
                   if model.busy && model.rules.isEmpty {
-                    ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+                    ProgressView(Self.matchedRulesLoadingLabel).controlSize(.small)
+                      .frame(maxWidth: .infinity)
                   }
                   newRuleControl
                   ForEach(model.rules) { rule in

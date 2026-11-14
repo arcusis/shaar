@@ -17,6 +17,10 @@ import Testing
     #expect(InspectorStylesView.declarationToggleAccessibilityLabel(for: disabled) == "color")
   }
 
+  @Test func matchedRulesLoadingStatusHasAnAccessibleLabel() {
+    #expect(InspectorStylesView.matchedRulesLoadingLabel == "Loading matched rules…")
+  }
+
   @Test func authoredDeclarationsPreserveFallbacksAndKeepDisabledRows() {
     let inspector = makeInspector()
     let rows = inspector.styles.declarations([

@@ -21,6 +21,16 @@ struct BrowserLibraryTests {
         == "מנוע הדפדפן החזיר נתוני סימנייה לא תקינים.")
   }
 
+  @Test func importReadFailureUsesHebrewRecoveryCopyAndKeepsKnownImportErrors() {
+    #expect(
+      LibraryPanel.importFailure(CocoaError(.fileReadNoPermission), language: .hebrew)
+        == "לא ניתן לפתוח את קובץ הייצוא של הדפדפן. כדאי לוודא שהפורמט נתמך ולנסות שוב.")
+    let knownError = BrowserImport.ImportError.unsupported
+    #expect(
+      LibraryPanel.importFailure(knownError, language: .hebrew)
+        == knownError.description(language: .hebrew))
+  }
+
   @Test func bookmarkAndHistorySearchFindsTitlesWithoutTypingAccents() {
     #expect(LibraryPanelSearch.matches("Résumé https://example.test", query: "resume"))
     #expect(LibraryPanelSearch.matches("Café https://example.test", query: "cafe"))

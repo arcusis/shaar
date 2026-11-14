@@ -276,6 +276,13 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertEqual(forms["two"]["stringUnit"]["value"], "שני בייטים של קוד סימון")
         self.assertEqual(forms["other"]["stringUnit"]["value"], "%d בייטים של קוד סימון")
 
+    def test_inspector_copy_backend_failures_use_hebrew_recovery_copy(self):
+        key = "Could not copy the selected element. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Inspector.xcstrings").read_text(encoding="utf-8"))["strings"]
+        self.assertEqual(catalog[key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן להעתיק את הרכיב שנבחר. כדאי לנסות שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorAICopyModel.swift").read_text(encoding="utf-8")
+        self.assertEqual(source.count("Self.failureMessage(for: error)"), 3)
+
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

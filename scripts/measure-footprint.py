@@ -118,6 +118,15 @@ def positive_seconds(text):
     return seconds
 
 
+def write_sample_copy(destination: Path, text: str) -> None:
+    if destination.parent.is_symlink():
+        raise OSError(f"main-thread sample directory must not be a symlink: {destination.parent}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+        raise OSError(f"main-thread sample path must be a regular file: {destination}")
+    destination.write_text(text)
+
+
 def main_thread_sample(pid, copy_path=None):
     """Two-second sample of the Swift process main thread while the page is idle."""
     handle = tempfile.NamedTemporaryFile(
@@ -140,9 +149,7 @@ def main_thread_sample(pid, copy_path=None):
             }
         text = Path(path).read_text(errors="replace")
         if copy_path is not None:
-            destination = Path(copy_path)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(text)
+            write_sample_copy(Path(copy_path), text)
         return parse_main_thread_sample(text)
     except (OSError, subprocess.TimeoutExpired) as error:
         return {"mainThreadSample": "unavailable", "mainThreadSampleError": str(error)}

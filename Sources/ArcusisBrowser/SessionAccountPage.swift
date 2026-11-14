@@ -69,7 +69,7 @@ enum SessionAccountPage {
   }
 
   static func account(from text: String, provider: AccountProvider) -> ConnectedAccount? {
-    guard let data = text.data(using: .utf8),
+    guard text.utf8.count <= 512 * 1_024, let data = text.data(using: .utf8),
       let value = try? JSONDecoder().decode(Snapshot.self, from: data),
       let url = URL(string: value.url), provider.isSignedInPage(url),
       let email = MicrosoftSignInPage.email(in: url, pageText: value.email),

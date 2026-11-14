@@ -154,6 +154,14 @@ struct SessionAccountPageTests {
     #expect(SessionAccountPage.account(from: body, provider: .apple) == nil)
   }
 
+  @Test func accountPageRejectsOversizedMetadataSnapshot() throws {
+    let body = try snapshot(
+      url: "https://www.icloud.com/", email: "alex@example.test",
+      name: String(repeating: "A", count: 600 * 1_024))
+    #expect(body.utf8.count > 512 * 1_024)
+    #expect(SessionAccountPage.account(from: body, provider: .apple) == nil)
+  }
+
   private func snapshot(
     url: String, email: String, name: String? = "Alex Example",
     photo: String? = "https://example.test/photo.png", photoData: String? = nil

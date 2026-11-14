@@ -194,6 +194,21 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, text_only, finished))
         self.assertTrue(PROBE.crash_counts_against_suite("windows", report, match, finished))
 
+    def test_boolean_signal_pid_cannot_hide_a_renderer_crash(self):
+        finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
+        report = {"rows": [
+            {
+                "name": "renderer-kill",
+                "status": "pass",
+                "signaledPIDs": [True],
+                "signaledAt": "2026-11-10T12:00:05+00:00",
+            },
+            {"name": "renderer-recover", "status": "pass"},
+        ]}
+        crash = '{"pid" : 1, "captureTime" : "2026-11-10 07:00:10.0000 -0500"}'
+        self.assertFalse(PROBE.deliberate_renderer_kill(report, crash, finished))
+        self.assertTrue(PROBE.crash_counts_against_suite("renderer", report, crash, finished))
+
     def test_make_clip_timeout_returns_no_bytes(self):
         def expired(*_args, **_kwargs):
             raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=30)
@@ -231,11 +246,40 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertIn("| windows | fail | 12 | 1 MiB | none | drop / rejected |", table)
         self.assertTrue(table.startswith("| Scenario |"))
 
+    def test_malformed_rows_are_reported_without_crashing_note_formatting(self):
+        notes = PROBE.row_notes({"rows": [None]}, "")
+        self.assertIn("malformed scenario row", notes.lower())
+
+    def test_malformed_status_scalar_fails_without_crashing_report_formatting(self):
+        report = {"passed": True, "rows": [{"status": []}]}
+        self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+        notes = PROBE.row_notes(report, "")
+        self.assertIn("malformed scenario row status", notes.lower())
+
+    def test_invalid_utf8_report_is_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_bytes(b"\xff")
+            self.assertEqual(PROBE.read_report(report), {})
+
+    def test_report_removed_after_existence_check_is_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_text("{}")
+            with patch.object(PROBE.Path, "read_text", side_effect=FileNotFoundError):
+                self.assertEqual(PROBE.read_report(report), {})
+
+    def test_malformed_renderer_rows_cannot_hide_a_crash(self):
+        finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
+        report = {"rows": [None]}
+        self.assertTrue(
+            PROBE.crash_counts_against_suite("renderer", report, "EXC_CRASH", finished))
+        self.assertFalse(PROBE.deliberate_renderer_kill(report, "EXC_CRASH", finished))
+
     def test_scroll_fixture_appends_rows_only_after_scroll_and_stops_at_200(self):
         node = shutil.which("node")
         if node is None:
             self.skipTest("Node.js is required to execute the fixture script")
-
         fixture = PROBE.Fixture.document(None, "/scroll", "").decode()
         match = re.search(r"<script>(.*?)</script>", fixture, re.DOTALL)
         self.assertIsNotNone(match)

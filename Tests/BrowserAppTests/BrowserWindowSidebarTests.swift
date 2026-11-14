@@ -19,6 +19,12 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
     #expect(BrowserSidebar.pinnedSectionHeadingTraits == .isHeader)
   }
 
+  @Test func currentSidebarTabsGroupIsALocalizedHeading() {
+    #expect(BrowserSidebar.currentTabsSectionHeadingTraits == .isHeader)
+    #expect(BrowserSidebar.currentTabsSectionLabel(language: .english) == "Today's tabs")
+    #expect(BrowserSidebar.currentTabsSectionLabel(language: .hebrew) == "לשוניות היום")
+  }
+
   @Test func sidebarGroupLabelIsLocalized() {
     #expect(BrowserSidebar.accessibilityGroupLabel(language: .english) == "Browser sidebar")
     #expect(BrowserSidebar.accessibilityGroupLabel(language: .hebrew) == "סרגל הצד של הדפדפן")

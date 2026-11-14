@@ -3203,6 +3203,22 @@
         }
       }
     },
+    "Today's tabs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today's tabs"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשוניות היום"
+          }
+        }
+      }
+    },
     "Toggle sidebar": {
       "localizations": {
         "en": {

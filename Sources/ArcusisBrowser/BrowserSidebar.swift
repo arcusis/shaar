@@ -20,6 +20,13 @@ struct FavoritePageIndex {
 
 struct BrowserSidebar: View {
   static let pinnedSectionHeadingTraits: AccessibilityTraits = .isHeader
+  static let currentTabsSectionHeadingTraits: AccessibilityTraits = .isHeader
+
+  static func currentTabsSectionLabel(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.string("Today's tabs", table: "Shell", language: language)
+  }
 
   static func accessibilityGroupLabel(
     language: BrowserLanguage = .currentLaunchLanguage
@@ -292,94 +299,99 @@ struct BrowserSidebar: View {
               }
             }
           }
-          if !space.tabs.isEmpty || !space.folders.isEmpty {
-            HStack(spacing: 8) {
-              Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
-              Button(ShellL10n.string("Tidy")) { tidyTabs(in: space) }
+          LazyVStack(alignment: .leading, spacing: 4) {
+            if !space.tabs.isEmpty || !space.folders.isEmpty {
+              HStack(spacing: 8) {
+                Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
+                Button(ShellL10n.string("Tidy")) { tidyTabs(in: space) }
+                  .font(.system(size: 11, weight: .semibold))
+                  .foregroundStyle(.secondary)
+                  .disabled(tidyInProgress || !space.tabs.contains { !$0.isPinned })
+                  .help(ShellL10n.string("Group today's tabs by topic"))
+                Button(ShellL10n.string("Clear")) {
+                  clearSpaceID = space.id
+                }
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .disabled(tidyInProgress || !space.tabs.contains { !$0.isPinned })
-                .help(ShellL10n.string("Group today's tabs by topic"))
-              Button(ShellL10n.string("Clear")) {
-                clearSpaceID = space.id
+                .disabled(!space.tabs.contains { !$0.isPinned })
+                .help(ShellL10n.string("Close today's tabs"))
               }
-              .font(.system(size: 11, weight: .semibold))
-              .foregroundStyle(.secondary)
-              .disabled(!space.tabs.contains { !$0.isPinned })
-              .help(ShellL10n.string("Close today's tabs"))
+              .padding(.vertical, 6)
             }
-            .padding(.vertical, 6)
-          }
-          Button {
-            store.showCommand()
-          } label: {
-            HStack(spacing: 9) {
-              Image(systemName: "plus")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-              ShellL10n.text("New tab")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-              Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(minHeight: 32)
-            .contentShape(Rectangle())
-            .background(
-              newTabIsHovered ? Color.primary.opacity(0.07) : .clear,
-              in: RoundedRectangle(cornerRadius: 8)
-            )
-          }
-          .accessibilityLabel(ShellL10n.string("New tab"))
-          .onHover { newTabIsHovered = $0 }
-          .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: newTabIsHovered)
-          .contextMenu {
-            Button(ShellL10n.string("New Folder")) {
-              beginFolderDraft(parentID: nil, section: .today)
-            }
-            Button(ShellL10n.string("Reopen last closed tab")) { store.reopenLastClosedTab() }
-              .disabled(!store.canReopenClosedTab)
-            Button(ShellL10n.string("Recently closed…")) { store.showRecentlyClosed() }
-          }
-          sectionDropTarget(pinned: false)
-          if let folderDraft, folderDraft.section == .today, folderDraft.parentID == nil,
-            folderDraft.editingFolderID == nil
-          {
-            folderDraftRow(depth: 0)
-          }
-          ForEach(space.items(isPinned: false)) { item in
-            switch item {
-            case .folder(let folder, let depth):
-              if folderDraft?.editingFolderID == folder.id {
-                folderDraftRow(depth: depth)
-              } else {
-                folderRow(folder, depth: depth, siblingIndex: folderSiblingIndex)
+            Button {
+              store.showCommand()
+            } label: {
+              HStack(spacing: 9) {
+                Image(systemName: "plus")
+                  .font(.system(size: 12, weight: .medium))
+                  .foregroundStyle(.secondary)
+                ShellL10n.text("New tab")
+                  .font(.system(size: 13))
+                  .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
               }
-              if let folderDraft, folderDraft.editingFolderID == nil,
-                folderDraft.parentID == folder.id
-              {
-                folderDraftRow(depth: depth + 1)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(.horizontal, 10)
+              .padding(.vertical, 6)
+              .frame(minHeight: 32)
+              .contentShape(Rectangle())
+              .background(
+                newTabIsHovered ? Color.primary.opacity(0.07) : .clear,
+                in: RoundedRectangle(cornerRadius: 8)
+              )
+            }
+            .accessibilityLabel(ShellL10n.string("New tab"))
+            .onHover { newTabIsHovered = $0 }
+            .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: newTabIsHovered)
+            .contextMenu {
+              Button(ShellL10n.string("New Folder")) {
+                beginFolderDraft(parentID: nil, section: .today)
               }
-            case .tab(let tab, _):
-              if isSplitRowLeader(tab, in: space) {
-                tabRow(tab, index: tabIndex).id(tab.id)
-                  .background {
-                    if tab.id == activeSidebarPageID {
-                      GeometryReader { geometry in
-                        Color.clear.preference(
-                          key: SidebarOrdinaryRevealFramesPreferenceKey.self,
-                          value: SidebarRevealFrames(
-                            selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
-                            selectedID: tab.id))
+              Button(ShellL10n.string("Reopen last closed tab")) { store.reopenLastClosedTab() }
+                .disabled(!store.canReopenClosedTab)
+              Button(ShellL10n.string("Recently closed…")) { store.showRecentlyClosed() }
+            }
+            sectionDropTarget(pinned: false)
+            if let folderDraft, folderDraft.section == .today, folderDraft.parentID == nil,
+              folderDraft.editingFolderID == nil
+            {
+              folderDraftRow(depth: 0)
+            }
+            ForEach(space.items(isPinned: false)) { item in
+              switch item {
+              case .folder(let folder, let depth):
+                if folderDraft?.editingFolderID == folder.id {
+                  folderDraftRow(depth: depth)
+                } else {
+                  folderRow(folder, depth: depth, siblingIndex: folderSiblingIndex)
+                }
+                if let folderDraft, folderDraft.editingFolderID == nil,
+                  folderDraft.parentID == folder.id
+                {
+                  folderDraftRow(depth: depth + 1)
+                }
+              case .tab(let tab, _):
+                if isSplitRowLeader(tab, in: space) {
+                  tabRow(tab, index: tabIndex).id(tab.id)
+                    .background {
+                      if tab.id == activeSidebarPageID {
+                        GeometryReader { geometry in
+                          Color.clear.preference(
+                            key: SidebarOrdinaryRevealFramesPreferenceKey.self,
+                            value: SidebarRevealFrames(
+                              selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
+                              selectedID: tab.id))
+                        }
                       }
                     }
-                  }
+                }
               }
             }
+            sectionDropTarget(pinned: false, isFooter: true)
           }
-          sectionDropTarget(pinned: false, isFooter: true)
+          .accessibilityElement(children: .contain)
+          .accessibilityLabel(Self.currentTabsSectionLabel())
+          .accessibilityAddTraits(Self.currentTabsSectionHeadingTraits)
         }
       }
       .contextMenu {

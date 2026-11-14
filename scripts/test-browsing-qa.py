@@ -698,9 +698,13 @@ def run_suite(
     return results
 
 
-def write_receipt(path: Path, markdown_path: Path, executable: Path, results: list[dict]) -> None:
+def validate_report_paths(path: Path, markdown_path: Path) -> None:
     if path.resolve() == markdown_path.resolve():
         raise ValueError("Browsing QA receipt and markdown output paths must differ")
+
+
+def write_receipt(path: Path, markdown_path: Path, executable: Path, results: list[dict]) -> None:
+    validate_report_paths(path, markdown_path)
     for output in (path, markdown_path):
         if output.is_symlink():
             raise ValueError(f"Browsing QA output path must not be a symlink: {output}")
@@ -727,6 +731,10 @@ def main() -> None:
     try:
         scenarios = parse_scenarios(options.scenarios)
     except UnknownScenario as error:
+        parser.error(str(error))
+    try:
+        validate_report_paths(options.receipt, options.markdown)
+    except ValueError as error:
         parser.error(str(error))
     executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():

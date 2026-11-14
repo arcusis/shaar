@@ -2,13 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+from contextlib import redirect_stderr
 from datetime import datetime, timezone
+import io
 import importlib.util
 import re
 import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -22,6 +26,35 @@ GIBIBYTE = 1024 ** 3
 
 
 class BrowsingQAReportTests(unittest.TestCase):
+    def test_main_rejects_colliding_report_paths_before_app_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            receipt = root / "report.json"
+            with patch.object(sys, "argv", [
+                "test-browsing-qa.py", "--app", str(root / "missing.app"),
+                "--receipt", str(receipt), "--markdown", str(root / "nested" / ".." / "report.json"),
+            ]), patch.object(PROBE, "run_suite") as run_suite:
+                errors = io.StringIO()
+                with redirect_stderr(errors), self.assertRaises(SystemExit) as exit_error:
+                    PROBE.main()
+            self.assertEqual(exit_error.exception.code, 2)
+            self.assertIn("receipt and markdown output paths must differ", errors.getvalue())
+            run_suite.assert_not_called()
+
+    def test_receipt_and_markdown_outputs_must_not_resolve_to_the_same_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            receipt = root / "reports" / "receipt.json"
+            receipt.parent.mkdir()
+            (receipt.parent / "unused").mkdir()
+            receipt.write_text("preserve this", encoding="utf-8")
+            markdown = root / "reports" / "unused" / ".." / "receipt.json"
+
+            with self.assertRaisesRegex(ValueError, "receipt and markdown output paths must differ"):
+                PROBE.write_receipt(receipt, markdown, root / "ShaarVerification", [])
+
+            self.assertEqual(receipt.read_text(encoding="utf-8"), "preserve this")
+
     def test_slow_reload_fixture_numbers_requests_per_run_path(self):
         original = PROBE.Fixture.slow_reload_requests
         PROBE.Fixture.slow_reload_requests = {}
@@ -31,7 +64,6 @@ class BrowsingQAReportTests(unittest.TestCase):
             self.assertEqual(PROBE.Fixture.next_slow_reload_request("/run-b"), 1)
         finally:
             PROBE.Fixture.slow_reload_requests = original
-    }
 
     def test_receipt_and_markdown_paths_must_not_collide_or_follow_symlinks(self):
         with tempfile.TemporaryDirectory() as temporary:

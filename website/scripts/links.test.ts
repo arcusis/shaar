@@ -74,10 +74,10 @@ test("link checker validates every responsive image source", () => {
   try {
     writeFileSync(
       join(root, "index.html"),
-      '<h1>Home</h1><img src="/small.png" alt="" srcset="/medium.png 2x, /large.png 3x">',
+      '<h1>Home</h1><img src="/missing-fallback.png" alt="" srcset="/medium.png 2x, /large.png 3x">',
     );
-    writeFileSync(join(root, "small.png"), "fixture");
     assert.deepEqual(checkLinks(root).errors, [
+      "index.html: missing target /missing-fallback.png",
       "index.html: missing target /medium.png",
       "index.html: missing target /large.png",
     ]);

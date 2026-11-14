@@ -106,6 +106,7 @@ struct InspectorPanel: View {
   private var header: some View {
     HStack(spacing: 7) {
       Image(systemName: "viewfinder").font(.system(size: 12)).foregroundStyle(.secondary)
+        .accessibilityHidden(true)
       Text(InspectorL10n.string("Inspector")).font(.system(size: 12, weight: .semibold))
         .accessibilityAddTraits(Self.titleAccessibilityTraits)
       Spacer()

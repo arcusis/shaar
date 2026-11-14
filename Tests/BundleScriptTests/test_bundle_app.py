@@ -206,6 +206,23 @@ class BundleAppTests(unittest.TestCase):
                                     for suffix in ("strings", "stringsdict")), table)
             self.assertTrue((localized / "Core.stringsdict").is_file())
             self.assertTrue((resources / f"{language}.lproj" / "InfoPlist.strings").is_file())
+        hebrew_info = plistlib.loads(
+            (resources / "he.lproj" / "InfoPlist.strings").read_bytes())
+        self.assertEqual(
+            hebrew_info["NSCameraUsageDescription"],
+            "אתרים שתאשרו יוכלו להשתמש במצלמה לשיחות וידאו.")
+        self.assertEqual(
+            hebrew_info["NSMicrophoneUsageDescription"],
+            "אתרים שתאשרו יוכלו להשתמש במיקרופון לשיחות.")
+        self.assertEqual(
+            hebrew_info["NSLocationUsageDescription"],
+            "אתרים שתאשרו יוכלו להשתמש במיקום, למשל באתרי מפות ומשלוחים.")
+        self.assertEqual(
+            hebrew_info["NSLocationWhenInUseUsageDescription"],
+            "אתרים שתאשרו יוכלו להשתמש במיקום, למשל באתרי מפות ומשלוחים.")
+        self.assertEqual(
+            hebrew_info["NSBluetoothAlwaysUsageDescription"],
+            "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים לכניסה עם מפתח גישה.")
         for name in ("LICENSE", "pin.json"):
             self.assertEqual(
                 (resources / "PublicSuffix" / name).read_bytes(),

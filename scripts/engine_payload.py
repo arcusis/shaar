@@ -944,6 +944,15 @@ def compare_payload(archive: Path, framework: Path, pin: dict,
     return report
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, required=True)
@@ -956,7 +965,8 @@ def main(argv: list[str] | None = None) -> int:
             pin_bytes = pin_file.read(MAX_PIN_FILE_SIZE + 1)
         if len(pin_bytes) > MAX_PIN_FILE_SIZE:
             raise ValueError("pin file exceeds size cap")
-        pin = json.loads(pin_bytes.decode("utf-8"))
+        pin = json.loads(
+            pin_bytes.decode("utf-8"), object_pairs_hook=_reject_duplicate_json_keys)
     except (OSError, UnicodeError, ValueError, RecursionError):
         report = {"schema": 1, "archive_metadata_verified": False, "payload_match": False,
                   "source_provenance_unverified": True, "signature_verification_not_performed": True,

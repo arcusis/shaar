@@ -18,6 +18,35 @@ import Testing
     model.open()
     return model
   }
+
+  @Test func cancelledCopyDoesNotStartInspectorRequestOrShowFailure() async throws {
+    let model = inspector()
+    defer { model.close() }
+    try model.receive(InspectorPanelTests.fixtureSelection())
+
+    let copy = Task { @MainActor in await model.aiCopy.copy(.element) }
+    copy.cancel()
+    await copy.value
+
+    #expect(model.aiCopy.failure == nil)
+    #expect(!model.aiCopy.busy)
+  }
+
+  @Test func cancelledNoteDoesNotStartInspectorRequestOrShowFailure() async throws {
+    let model = inspector()
+    defer { model.close() }
+    try model.receive(InspectorPanelTests.fixtureSelection())
+    model.aiCopy.feedback = "Add a label"
+
+    let note = Task { @MainActor in await model.aiCopy.addNote() }
+    note.cancel()
+    await note.value
+
+    #expect(model.aiCopy.notes.isEmpty)
+    #expect(model.aiCopy.failure == nil)
+    #expect(!model.aiCopy.busy)
+  }
+
   @Test func notesStayPerTabAcrossNavigationAndCloseAndUndoPreservesNewNotes() throws {
     let one = inspector()
     let two = inspector()

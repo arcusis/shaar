@@ -138,7 +138,7 @@ final class InspectorAICopyModel {
   }
 
   func copy(_ kind: CopyKind, to pasteboard: NSPasteboard = .general) async {
-    guard !busy else { return }
+    guard !Task.isCancelled, !busy else { return }
     busy = true
     failure = nil
     status = nil
@@ -187,7 +187,8 @@ final class InspectorAICopyModel {
   }
 
   func addNote() async {
-    guard !busy, notes.count < 50, !feedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    guard !Task.isCancelled, !busy, notes.count < 50,
+      !feedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { return }
     busy = true
     failure = nil

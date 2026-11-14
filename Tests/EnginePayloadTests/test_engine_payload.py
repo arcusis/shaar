@@ -510,6 +510,15 @@ class EnginePayloadTests(unittest.TestCase):
                 self.assertFalse(report["archive_metadata_verified"])
                 self.assertFalse(report["payload_match"])
 
+    def test_matching_archive_and_framework_symlink_cycles_fail_closed(self):
+        cycles = ({"LoopA": "LoopB", "LoopB": "LoopA"}, {"Loop": "Loop/child"})
+        for links in cycles:
+            with self.subTest(links=links):
+                report = self.fixture(links=links)
+                self.assertFalse(report["archive_metadata_verified"])
+                self.assertFalse(report["payload_match"])
+                self.assertEqual(report["reason"], "inventory contains symlink cycle")
+
     def test_malformed_signature_commands_and_unsupported_formats_fail_closed(self):
         for mutation in ("nonterminal", "bad_commands", "bad_segment", "unsafe_linkedit", "fat"):
             with self.subTest(mutation=mutation):

@@ -408,6 +408,21 @@ def stop(process):
         process.kill()
 
 
+def validate_receipt_path(path):
+    if path.parent.is_symlink():
+        raise ValueError(f"receipt directory must not be a symlink: {path.parent}")
+    if path.is_symlink():
+        raise ValueError(f"receipt path must not be a symlink: {path}")
+    if path.exists() and not path.is_file():
+        raise ValueError(f"receipt path is not a regular file: {path}")
+
+
+def write_receipt(path, receipt):
+    validate_receipt_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(receipt, indent=2) + "\n")
+
+
 def read_report(path):
     try:
         return json.loads(path.read_text())
@@ -452,6 +467,10 @@ def main():
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/browsing-edge/receipt.json")
     options = parser.parse_args()
+    try:
+        validate_receipt_path(options.receipt)
+    except ValueError as error:
+        parser.error(str(error))
     executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
         parser.error(f"Missing verification app: {executable}")
@@ -535,8 +554,7 @@ def main():
             "stderrTail": (stderr or "")[-4000:],
             "passed": gate,
         }
-        options.receipt.parent.mkdir(parents=True, exist_ok=True)
-        options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
+        write_receipt(options.receipt, receipt)
         print(markdown_table(rows))
         print()
         print(json.dumps({

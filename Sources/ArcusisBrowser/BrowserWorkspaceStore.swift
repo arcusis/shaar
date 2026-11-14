@@ -336,9 +336,7 @@ final class BrowserWorkspaceStore {
   }
 
   private static func saveNotice(failure: String?) -> String? {
-    failure.map {
-      ShellL10n.format("Window changes could not be saved. %@", arguments: [.string($0)])
-    }
+    failure.map { _ in ShellL10n.string("Window changes could not be saved. Try again.") }
   }
 
   private func broadcast(excluding sourceID: UUID?) {

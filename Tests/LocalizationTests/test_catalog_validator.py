@@ -504,6 +504,13 @@ class CatalogValidatorTests(unittest.TestCase):
             settings["strings"]["Show All History"]["localizations"]["he"]["stringUnit"]["value"],
             shell["strings"]["Show All History"]["localizations"]["he"]["stringUnit"]["value"],
         )
+    def test_workspace_save_failure_uses_localized_recovery_copy(self):
+        key = "Window changes could not be saved. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן לשמור את השינויים בחלון. נסו שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserWorkspaceStore.swift").read_text(encoding="utf-8")
+        self.assertIn('ShellL10n.string("Window changes could not be saved. Try again.")', source)
+        self.assertNotIn('ShellL10n.format("Window changes could not be saved. %@"', source)
 
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"

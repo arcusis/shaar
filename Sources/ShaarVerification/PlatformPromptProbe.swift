@@ -11,7 +11,8 @@ import SwiftUI
 
 enum PlatformPromptProbeArguments {
   static func value(after flag: String, in arguments: [String]) -> String? {
-    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1),
+    guard arguments.filter({ $0 == flag }).count == 1,
+      let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1),
       !arguments[index + 1].hasPrefix("--")
     else { return nil }
     return arguments[index + 1]

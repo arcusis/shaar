@@ -21,5 +21,9 @@ import Testing
     #expect(
       PlatformPromptProbeArguments.value(
         after: "--probe-output", in: ["--probe-output-other", "/tmp/report.json"]) == nil)
+    #expect(
+      PlatformPromptProbeArguments.value(
+        after: "--probe-output", in: ["--probe-output", "first", "--probe-output", "second"])
+        == nil)
   }
 }

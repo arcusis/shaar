@@ -80,6 +80,23 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
     for (const image of document.querySelectorAll("img")) {
       if (!image.hasAttribute("alt")) errors.push(`${path}: image missing alt`);
     }
+    const imageMapNames = new Set(
+      [...document.querySelectorAll("map[name]")]
+        .map((map) => map.getAttribute("name"))
+        .filter((name): name is string => Boolean(name)),
+    );
+    for (const image of document.querySelectorAll("img[usemap]")) {
+      const usemap = image.getAttribute("usemap") ?? "";
+      let associated = false;
+      if (usemap.startsWith("#")) {
+        try {
+          associated = imageMapNames.has(decodeURIComponent(usemap.slice(1)));
+        } catch {
+          // A malformed fragment cannot identify a map.
+        }
+      }
+      if (!associated) errors.push(`${path}: image references missing map ${usemap}`);
+    }
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {
     for (const match of readFileSync(file, "utf8").matchAll(/url\(["']?([^"')]+)["']?\)/g)) {

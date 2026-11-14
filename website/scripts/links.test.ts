@@ -70,3 +70,21 @@ test("link checker validates every responsive image source", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker verifies image map associations", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    mkdirSync(join(root, "north"));
+    writeFileSync(join(root, "north/index.html"), "<h1>North</h1>");
+    writeFileSync(join(root, "map.png"), "fixture");
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img src="/map.png" alt="Map" usemap="#regions"><map name="regions"><area href="/north/" alt="North"></map><img src="/map.png" alt="Map" usemap="#missing">',
+    );
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: image references missing map #missing",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

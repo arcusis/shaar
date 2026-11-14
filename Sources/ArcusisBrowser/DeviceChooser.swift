@@ -231,7 +231,7 @@ struct DeviceChooserConsent: View {
     selection.selectedOptionID(for: options, revision: revision) == optionID
   }
 
-  init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: Int? = nil) {
+  init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: String? = nil) {
     self.store = store
     self.request = request
     _selection = State(

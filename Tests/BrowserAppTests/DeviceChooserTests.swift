@@ -165,11 +165,12 @@ struct DeviceChooserTests {
       request(store, transport: "usb", id: "opaque-option", options: [valid], canGrant: true))
     #expect(parsed.options.first?.optionID == "opaque-option-0")
 
-    for invalidOptions in [
+    let invalidOptionSets: [[[String: Any]]] = [
       [["optionId": "bad id", "name": "Adapter"]],
       [valid, valid],
       [["index": 0, "name": "Adapter"]],
-    ] {
+    ]
+    for invalidOptions in invalidOptionSets {
       let payload = event(
         transport: "usb", id: "invalid-option-id", page: tab.url,
         options: invalidOptions, canGrant: true)

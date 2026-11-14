@@ -68,6 +68,23 @@ struct DeviceChooserTests {
     #expect(insecureOrigin.displayOrigin == "http://device-frame.example:8443")
   }
 
+  @Test func chooserRejectsCredentialedOrInvalidPortOrigins() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    for origin in [
+      "https://user:secret@device-frame.example/chooser",
+      "https://user@device-frame.example/chooser",
+      "https://device-frame.example:65536/chooser",
+    ] {
+      var payload = event(transport: "usb", id: "invalid-origin", page: tab.url)
+      payload["origin"] = origin
+      #expect(
+        DeviceChooserIntake.request(
+          tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+          payload: payload) == nil)
+    }
+  }
+
   @Test func emptyChooserEventsCannotBeGranted() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

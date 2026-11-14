@@ -111,7 +111,7 @@ try {
   const played = video.play();
   report.videoPending = true;
   Promise.resolve(played).then(function () {
-    report.video = video.videoWidth > 0 && video.readyState >= 2;
+    report.video = !video.paused && video.videoWidth > 0 && video.readyState >= 2;
     report.videoWidth = video.videoWidth;
     report.videoHeight = video.videoHeight;
     report.paused = video.paused;

@@ -518,7 +518,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let media = object(from: json) ?? [:]
     let pixel = numbers(media["pixel"])
     let webgl = flag(media["webgl"]) == true
-    let video = flag(media["video"]) == true
+    let video = videoIsPlaying(media)
     let vendor = media["vendor"] as? String ?? ""
     let error = media["error"] as? String ?? ""
     return [
@@ -1335,6 +1335,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     if let values = value as? [Any] { return values.compactMap { number($0) } }
     if let values = value as? NSArray { return values.compactMap { number($0) } }
     return []
+  }
+
+  nonisolated static func videoIsPlaying(_ media: [String: Any]) -> Bool {
+    flag(media["video"]) == true
+      && flag(media["paused"]) == false
+      && (number(media["videoWidth"]) ?? 0) > 0
   }
 }
 

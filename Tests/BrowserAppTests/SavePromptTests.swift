@@ -19,7 +19,8 @@ struct SavePromptTests {
 
   private func request(
     _ store: BrowserStore, id: String = "1", kind: SavePromptRequest.Kind = .password,
-    update: Bool = false, detail: String = "parity-user"
+    update: Bool = false, detail: String = "parity-user", profileID: UUID? = nil,
+    tabID: UUID? = nil
   ) throws -> SavePromptRequest {
     let tab = try #require(store.session.selectedSpace.selectedTab)
     return try #require(
@@ -32,8 +33,8 @@ struct SavePromptTests {
         "pageURL": "http://127.0.0.1:9/password",
         "detail": detail,
         "update": update,
-        "profileID": store.session.selectedSpace.profileID.uuidString,
-        "tabID": tab.id.uuidString,
+        "profileID": (profileID ?? store.session.selectedSpace.profileID).uuidString,
+        "tabID": (tabID ?? tab.id).uuidString,
         "windowID": "window-1",
       ]))
   }
@@ -113,6 +114,13 @@ struct SavePromptTests {
     store.perform(.open(URL(string: "http://127.0.0.1:9/login")!))
     #expect(store.savePrompt == nil)
     #expect(decisions == [.dismiss])
+  }
+
+  @Test func requestMustMatchTheActiveProfileAndTab() throws {
+    let store = store()
+    #expect(try request(store).matches(store.session))
+    #expect(!(try request(store, profileID: UUID()).matches(store.session)))
+    #expect(!(try request(store, tabID: UUID()).matches(store.session)))
   }
 
   @Test func aPrivateWindowRejectsTheOffer() throws {

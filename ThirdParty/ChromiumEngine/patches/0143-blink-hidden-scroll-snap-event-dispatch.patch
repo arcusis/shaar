@@ -1,0 +1,100 @@
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
+@@ -41,2 +41,3 @@
+ #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
++#include "third_party/blink/renderer/platform/scheduler/public/task_type.h"
+ 
+@@ -258,2 +259,26 @@
+ 
++void ScriptedAnimationController::EnqueueHiddenScrollSnapEvent(Event* event) {
++  if (!InsertToPerFrameEventsMap(event))
++    return;
++  EnqueueEvent(event);
++  if (hidden_scroll_snap_dispatch_task_pending_)
++    return;
++  hidden_scroll_snap_dispatch_task_pending_ = true;
++  GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation)->PostTask(
++      FROM_HERE,
++      BindOnce(&ScriptedAnimationController::DispatchHiddenScrollSnapEvents,
++               WrapPersistent(this)));
++}
++
++void ScriptedAnimationController::DispatchHiddenScrollSnapEvents() {
++  hidden_scroll_snap_dispatch_task_pending_ = false;
++  if (!GetExecutionContext())
++    return;
++  DispatchEvents(base::BindRepeating([](Event* event) {
++    return event->type() == AtomicString("scrollsnapchange") ||
++           event->type() == AtomicString("scrollsnapchanging");
++  }));
++}
++
++
+ }  // namespace blink
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
+@@ -117,2 +117,3 @@
+   bool HasScheduledFrameTasks() const;
++  void EnqueueHiddenScrollSnapEvent(Event*);
+ 
+@@ -136,2 +137,4 @@
+   double current_frame_legacy_time_ms_ = 0.0;
++  void DispatchHiddenScrollSnapEvents();
++  bool hidden_scroll_snap_dispatch_task_pending_ = false;
+ };
+diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
+--- a/third_party/blink/renderer/core/dom/document.cc
++++ b/third_party/blink/renderer/core/dom/document.cc
+@@ -6702,3 +6702,7 @@
+   scrollsnapchange_event->SetTarget(target);
+-  scripted_animation_controller_->EnqueuePerFrameEvent(scrollsnapchange_event);
++  if (hidden())
++    scripted_animation_controller_->EnqueueHiddenScrollSnapEvent(
++        scrollsnapchange_event);
++  else
++    scripted_animation_controller_->EnqueuePerFrameEvent(scrollsnapchange_event);
+ }
+@@ -6713,4 +6717,8 @@
+   scrollsnapchanging_event->SetTarget(target);
+-  scripted_animation_controller_->EnqueuePerFrameEvent(
+-      scrollsnapchanging_event);
++  if (hidden())
++    scripted_animation_controller_->EnqueueHiddenScrollSnapEvent(
++        scrollsnapchanging_event);
++  else
++    scripted_animation_controller_->EnqueuePerFrameEvent(
++        scrollsnapchanging_event);
+ }
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
+@@ -384,2 +384,27 @@
+ 
++TEST_F(ScriptedAnimationControllerTest,
++       HiddenDocumentScrollSnapEventsDispatchWithoutAnimationFrame) {
++  GetPage().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
++                               /*is_initial_state=*/false);
++  TaskOrderObserver observer;
++  GetDocument().addEventListener(
++      AtomicString("scrollsnapchange"),
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(1)));
++  GetDocument().addEventListener(
++      AtomicString("scrollsnapchanging"),
++      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(2)));
++  Member<Node> block_target = &GetDocument();
++  Member<Node> inline_target = &GetDocument();
++
++  GetDocument().EnqueueScrollSnapChangeEvent(&GetDocument(), block_target,
++                                             inline_target);
++  GetDocument().EnqueueScrollSnapChangingEvent(&GetDocument(), block_target,
++                                               inline_target);
++  EXPECT_TRUE(observer.Order().empty());
++
++  task_environment_.RunUntilIdle();
++  EXPECT_THAT(observer.Order(), testing::ElementsAre(1, 2));
++}
++
++
+ }  // namespace blink

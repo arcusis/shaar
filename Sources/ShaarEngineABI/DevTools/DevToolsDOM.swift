@@ -90,7 +90,13 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
       let value = fields["nodeValue"] as? String, value.utf8.count <= 4_096,
       (0...20_000).contains(count)
     else { return nil }
-    let raw = fields["attributes"] as? [String] ?? []
+    let raw: [String]
+    if let value = fields["attributes"] {
+      guard let attributes = value as? [String] else { return nil }
+      raw = attributes
+    } else {
+      raw = []
+    }
     guard raw.count <= 64, raw.count.isMultiple(of: 2) else { return nil }
     var attributes: [ShaarDOMAttribute] = []
     for index in stride(from: 0, to: raw.count, by: 2) {

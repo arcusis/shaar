@@ -12,6 +12,8 @@ archive=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)/$(basename "$1") || usage
 [[ -f "$archive" && ! -L "$archive" ]] || { echo 'Engine archive must be a regular, non-symlink file.' >&2; exit 2; }
 dry_run=${SHAAR_V02_PROOF_DRY_RUN:-0}
 case "$dry_run" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_DRY_RUN must be 0 or 1.' >&2; exit 2 ;; esac
+widevine=${SHAAR_V02_PROOF_WIDEVINE:-0}
+case "$widevine" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_WIDEVINE must be 0 or 1.' >&2; exit 2 ;; esac
 
 run_id=$(date -u +%Y%m%dT%H%M%SZ)-$$
 run_root="$PWD/build/v02-proof/$run_id"
@@ -103,16 +105,21 @@ PY
 }
 
 bundle_env=(env "SHAAR_ENGINE_ARCHIVE_PATH=$archive")
+widevine_bundle_flag=()
+if [[ $widevine == 1 ]]; then
+  widevine_bundle_flag=(--with-widevine-cdm)
+fi
 if [[ $dry_run == 1 ]]; then
   bundle_env+=("SHAAR_V02_PROOF_DRY_RUN=1")
 fi
 run_step 'Shipping bundle build' "$HOME/bin/shaar-heavy" "${bundle_env[@]}" \
-  bash scripts/bundle-app.sh --with-engine
+  bash scripts/bundle-app.sh --with-engine "${widevine_bundle_flag[@]}"
 run_step 'Verification bundle build' "$HOME/bin/shaar-heavy" "${bundle_env[@]}" \
-  bash scripts/bundle-app.sh --with-engine --verification
+  bash scripts/bundle-app.sh --with-engine --verification "${widevine_bundle_flag[@]}"
 
 verification_app="$PWD/build/Shaar Verification.app"
-if [[ -x "$verification_app/Contents/MacOS/ShaarVerification" ]]; then
+if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
+      -x "$verification_app/Contents/MacOS/ShaarVerification" ]]; then
   run_step 'Browsing, dialogs, Basic auth, file upload, downloads, restore' \
     python3 scripts/test-browsing-edge-probe.py --app "$verification_app" \
     --receipt "$run_root/browsing-edge.json"
@@ -138,6 +145,11 @@ if [[ -x "$verification_app/Contents/MacOS/ShaarVerification" ]]; then
   run_step 'Platform parity for v0.2 web items' run_platform_parity
   run_step 'Media and picture-in-picture' python3 scripts/test-shaar-media.py \
     --app "$verification_app" --receipt "$run_root/media.json"
+  if [[ $widevine == 1 ]]; then
+    run_step 'Widevine EME, ClearKey, Shaka playback' \
+      python3 scripts/test-platform-parity.py --widevine-only --app "$verification_app" \
+      --receipt "$run_root/widevine-drm.json"
+  fi
 else
   for label in 'Browsing, dialogs, Basic auth, file upload, downloads, restore' \
     'Browsing QA, dialogs, downloads, session restore' 'Tab/window adoption' \
@@ -147,8 +159,11 @@ else
     'Reload and closed-window recovery' 'Session recovery' 'External protocol handler consent' \
     'Permission and protocol prompts' 'Save prompts' 'Platform parity for v0.2 web items' \
     'Media and picture-in-picture'; do
-    record "$label" SKIP 'verification bundle executable unavailable'
+    record "$label" SKIP 'shipping or verification bundle build did not pass'
   done
+  if [[ $widevine == 1 ]]; then
+    record 'Widevine EME, ClearKey, Shaka playback' SKIP 'shipping or verification bundle build did not pass'
+  fi
 fi
 
 crash_snapshot > "$crashes_after"

@@ -19,11 +19,13 @@ configuration=release
 with_engine=false
 with_updates=false
 with_verification=false
+with_widevine_cdm=false
 preview_shaar_engine=false
 seen_configuration=false
 seen_engine=false
 seen_updates=false
 seen_verification=false
+seen_widevine_cdm=false
 seen_preview_shaar_engine=false
 seen_mock_keychain=false
 mock_keychain=false
@@ -31,7 +33,7 @@ while (($#)); do
   case "$1" in
     --configuration)
       if $seen_configuration || (($# < 2)) || [[ "$2" == --* ]]; then
-        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-updates] [--verification] [--preview-shaar-engine] [--mock-keychain]' >&2
+        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-widevine-cdm] [--with-updates] [--verification] [--preview-shaar-engine] [--mock-keychain]' >&2
         exit 2
       fi
       case "$2" in
@@ -66,6 +68,15 @@ while (($#)); do
       fi
       seen_verification=true
       with_verification=true
+      shift
+      ;;
+    --with-widevine-cdm)
+      if $seen_widevine_cdm; then
+        echo 'Duplicate option: --with-widevine-cdm' >&2
+        exit 2
+      fi
+      seen_widevine_cdm=true
+      with_widevine_cdm=true
       shift
       ;;
     --preview-shaar-engine)
@@ -111,6 +122,10 @@ fi
 # The verification harness drives the real engine and never ships, so it never carries a feed.
 if $with_verification && { ! $with_engine || $with_updates; }; then
   echo '--verification requires --with-engine and excludes --with-updates.' >&2
+  exit 2
+fi
+if $with_widevine_cdm && ! $with_engine; then
+  echo '--with-widevine-cdm requires --with-engine.' >&2
   exit 2
 fi
 if [[ ${SHAAR_TEST_SHAAR_ENGINE:-0} == 1 ]] && ! $with_verification; then
@@ -217,6 +232,10 @@ if $with_engine; then
   ditto "$framework" "$app/Contents/Frameworks/Chromium Framework.framework"
   python3 scripts/rebrand-engine-framework.py \
     "$app/Contents/Frameworks/Chromium Framework.framework"
+  if $with_widevine_cdm; then
+    python3 scripts/stage-widevine-cdm.py \
+      "$app/Contents/Frameworks/Chromium Framework.framework"
+  fi
   python3 - "$app/Contents/Frameworks/Chromium Framework.framework" "$bundle_name" \
     Resources/Branding/Shaar.icns <<'PY'
 import plistlib
@@ -249,6 +268,10 @@ for helper in helpers:
     (resources / "Assets.car").unlink(missing_ok=True)
 PY
   sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework" adhoc_sign
+  if $with_widevine_cdm; then
+    codesign --verify --strict \
+      "$app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Libraries/WidevineCdm/_platform_specific/mac_arm64/libwidevinecdm.dylib"
+  fi
 fi
 # Only release bundles carry the update feed; without it the app never starts Sparkle.
 update_keys=''

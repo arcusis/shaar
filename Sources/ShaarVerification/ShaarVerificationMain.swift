@@ -52,7 +52,8 @@ enum ShaarVerificationMain {
         PlatformParityProbe.run(
           frameworkURL: framework, outputURL: output,
           httpBase: URL(string: CommandLine.arguments[index + 2]),
-          httpsBase: URL(string: CommandLine.arguments[index + 3])))
+          httpsBase: URL(string: CommandLine.arguments[index + 3]),
+          widevineOnly: CommandLine.arguments.contains("--widevine-only")))
     }
     if CommandLine.arguments.contains("--probe-shaar-preview") {
       exit(ShaarPreviewProbe.run(arguments: CommandLine.arguments))

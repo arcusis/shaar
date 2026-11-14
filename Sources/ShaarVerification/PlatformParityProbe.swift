@@ -42,7 +42,10 @@ enum PlatformParityPreferenceEvidence {
 /// Hidden audit of web-platform prompts, pickers, and delegates.
 /// Runs in the verification harness. Loopback fixtures only; windows stay off screen.
 @MainActor enum PlatformParityProbe {
-  static func run(frameworkURL: URL, outputURL: URL, httpBase: URL?, httpsBase: URL?) -> Int32 {
+  static func run(
+    frameworkURL: URL, outputURL: URL, httpBase: URL?, httpsBase: URL?,
+    widevineOnly: Bool = false
+  ) -> Int32 {
     guard let httpBase, httpBase.scheme == "http", httpBase.host == "127.0.0.1",
       httpBase.port.map({ (1...65_535).contains($0) }) == true,
       let httpsBase, httpsBase.scheme == "https", httpsBase.host == "127.0.0.1",
@@ -60,7 +63,8 @@ enum PlatformParityPreferenceEvidence {
         presentation: .hiddenProbe)
       let run = PlatformParityRun(
         host: host, runtime: runtime, http: httpBase, https: httpsBase,
-        dataRoot: directory.appending(path: "Chromium"), outputURL: outputURL)
+        dataRoot: directory.appending(path: "Chromium"), outputURL: outputURL,
+        widevineOnly: widevineOnly)
       runtime.onReady = {
         NSApp.setActivationPolicy(.prohibited)
         Task { await run.execute() }
@@ -139,6 +143,7 @@ private struct ParitySnapshot {
   let https: URL
   let dataRoot: URL
   let outputURL: URL
+  let widevineOnly: Bool
   private var rows: [[String: Any]] = []
   private var userAgent = ""
   private var preferences: [String: String] = [:]
@@ -147,7 +152,7 @@ private struct ParitySnapshot {
 
   init(
     host: NativeBrowserHost, runtime: ARCShaarRuntime, http: URL, https: URL, dataRoot: URL,
-    outputURL: URL
+    outputURL: URL, widevineOnly: Bool
   ) {
     self.host = host
     self.runtime = runtime
@@ -155,11 +160,12 @@ private struct ParitySnapshot {
     self.https = https
     self.dataRoot = dataRoot
     self.outputURL = outputURL
+    self.widevineOnly = widevineOnly
   }
 
   func execute() async {
     defer {
-      replaceSafeBrowsingRow()
+      if !widevineOnly { replaceSafeBrowsingRow() }
       SurfaceGuard.stopWatchdog()
       publish()
       host.events.quit()
@@ -199,6 +205,10 @@ private struct ParitySnapshot {
       }
       rows.append(contentsOf: verdicts(check, snapshot))
       publish()
+    }
+    if widevineOnly {
+      completed = true
+      return
     }
     let partition = await runPartition()
     rows.append(partition)
@@ -245,6 +255,13 @@ private struct ParitySnapshot {
   private var context: NativeBrowserContext? { host.contexts.values.first }
 
   private func checks() -> [ParityCheck] {
+    let eme = ParityCheck(
+      item: "EME/Widevine", path: "/eme", base: .http, click: false, seconds: 6,
+      allowMedia: false, tolerateErrorPage: false)
+    let playback = ParityCheck(
+      item: "Widevine test stream", path: "/widevine-playback", base: .http,
+      click: false, seconds: 35, allowMedia: false, tolerateErrorPage: false)
+    if widevineOnly { return [eme, playback] }
     let media = ParityCheck(
       item: "Camera and microphone", path: "/media", base: .http, click: true, seconds: 8,
       allowMedia: true, tolerateErrorPage: false)
@@ -272,9 +289,7 @@ private struct ParitySnapshot {
       ParityCheck(
         item: "WebGL", path: "/webgl", base: .http, click: false, seconds: 4,
         allowMedia: false, tolerateErrorPage: false),
-      ParityCheck(
-        item: "EME/Widevine", path: "/eme", base: .http, click: false, seconds: 6,
-        allowMedia: false, tolerateErrorPage: false),
+      eme,
       item("Picture in Picture", "/pip", seconds: 6),
       item("Media Session", "/media-session", seconds: 6),
       item("Popups/window.open", "/popup"),
@@ -610,6 +625,7 @@ private struct ParitySnapshot {
     case "WebGPU": return [featureRow(snapshot, item: check.item, delegate: "WebGPU adapter")]
     case "WebGL": return [featureRow(snapshot, item: check.item, delegate: "WebGL context")]
     case "EME/Widevine": return [emeRow(snapshot)]
+    case "Widevine test stream": return [widevinePlaybackRow(snapshot)]
     case "Picture in Picture": return [pipRow(snapshot)]
     case "Media Session": return [mediaSessionRow(snapshot)]
     case "Popups/window.open": return [popupRow(snapshot)]
@@ -711,8 +727,20 @@ private struct ParitySnapshot {
 
   private func emeRow(_ snapshot: ParitySnapshot) -> [String: Any] {
     row(
-      item: "EME/Widevine", passed: text(snapshot.result["widevine"]) == "resolved",
+      item: "EME/Widevine",
+      passed: text(snapshot.result["widevine"]) == "resolved"
+        && text(snapshot.result["clearkey"]) == "resolved",
       delegate: "Widevine CDM", evidence: describe(snapshot), signals: signals(snapshot))
+  }
+
+  private func widevinePlaybackRow(_ snapshot: ParitySnapshot) -> [String: Any] {
+    row(
+      item: "Widevine test stream",
+      passed: text(snapshot.result["outcome"]) == "playing"
+        && text(snapshot.result["keySystem"]) == "com.widevine.alpha"
+        && intValue(snapshot.result["currentTimeMilliseconds"]) > 0,
+      delegate: "Shaka Player / Widevine test license", evidence: describe(snapshot),
+      signals: signals(snapshot))
   }
 
   private func pipRow(_ snapshot: ParitySnapshot) -> [String: Any] {

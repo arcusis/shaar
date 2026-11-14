@@ -188,6 +188,7 @@ struct DesktopCapturePicker: View {
 }
 
 struct DesktopCapturePickerContent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
   let request: DesktopCaptureRequest
   let sources: [DesktopCaptureSource]
   let loading: Bool
@@ -203,7 +204,7 @@ struct DesktopCapturePickerContent: View {
     VStack(alignment: .leading, spacing: 16) {
       Text(PanelsL10n.string("Choose what to share"))
         .font(.title2.weight(.semibold))
-        .accessibilityAddTraits(.isHeader)
+        .accessibilityAddTraits(Self.headingTraits)
       Text(request.displayOrigin)
         .font(.callout).foregroundStyle(.secondary)
         .textSelection(.enabled)

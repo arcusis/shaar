@@ -11,9 +11,17 @@ struct PrintConsentSheet: View {
   var body: some View {
     PrintConsentContent(
       request: request,
-      onCancel: { store.resolvePrint(request.id, accepted: false) },
-      onPrint: { store.resolvePrint(request.id, accepted: true) }
+      onCancel: cancel,
+      onPrint: continueToPrint
     )
+  }
+
+  func cancel() {
+    store.resolvePrint(request.id, accepted: false)
+  }
+
+  func continueToPrint() {
+    store.resolvePrint(request.id, accepted: true)
   }
 }
 

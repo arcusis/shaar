@@ -49,7 +49,7 @@ struct PageFindBar: View {
       .disabled(!state.canMove)
       .accessibilityLabel(PanelsL10n.string("Next match"))
       .help(PanelsL10n.string("Next match (Command-G)"))
-      Button(PanelsL10n.string("Done")) { close() }
+      Button(PanelsL10n.string("Done"), role: .cancel) { close() }
         .keyboardShortcut(Self.closeShortcut)
         .help(PanelsL10n.string("Close find (Escape)"))
     }

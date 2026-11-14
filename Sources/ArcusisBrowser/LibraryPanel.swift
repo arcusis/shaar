@@ -154,7 +154,8 @@ struct LibraryPanel: View {
           }
         }
         Spacer()
-        Button(PanelsL10n.string("Done")) { dismiss() }.keyboardShortcut(.cancelAction)
+        Button(PanelsL10n.string("Done"), role: .cancel) { dismiss() }
+          .keyboardShortcut(.cancelAction)
       }
       Picker(PanelsL10n.string("Library"), selection: $section) {
         ForEach(LibrarySection.allCases, id: \.self) { Text($0.title).tag($0) }

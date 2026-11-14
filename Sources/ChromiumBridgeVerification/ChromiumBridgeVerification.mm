@@ -277,44 +277,6 @@ NSDictionary *ARCProbeShaarSavePromptDispatch(
            @"id": requests.count ? requests.firstObject[@"id"] ?: @"" : @""};
 }
 
-NSDictionary *ARCProbeShaarSavePromptDispatch(
-    NSArray<NSDictionary *> *payloads, NSString *tabID, BOOL abiReady) {
-  ARCShaarRuntime *runtime = [ARCShaarRuntime new];
-  Ivar available = class_getInstanceVariable(runtime.class, "_shaarSavePromptsAvailable");
-  if (available) {
-    void *address = (__bridge void *)runtime;
-    *reinterpret_cast<BOOL *>(static_cast<uint8_t *>(address) + ivar_getOffset(available)) = abiReady;
-  }
-  NSMutableArray *requests = [NSMutableArray array];
-  NSMutableArray *dismissals = [NSMutableArray array];
-  runtime.onSavePromptRequest = ^(NSDictionary *request) { [requests addObject:request ?: @{}]; };
-  runtime.onSavePromptDismissed = ^(NSString *requestID) { [dismissals addObject:requestID ?: @""]; };
-  NSString *ownedTab = @"OWNED-TAB", *profileID = @"OWNED-PROFILE", *windowID = @"OWNED-WINDOW";
-  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabs"),
-                 [@{ownedTab: [NSValue valueWithPointer:(void *)1]} mutableCopy]);
-  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabProfiles"),
-                 [@{ownedTab: profileID} mutableCopy]);
-  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarTabWindows"),
-                 [@{ownedTab: windowID} mutableCopy]);
-  object_setIvar(runtime, class_getInstanceVariable(runtime.class, "_shaarSavePrompts"),
-                 [NSMutableDictionary dictionary]);
-  for (NSDictionary *payload in payloads) {
-    NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
-    if (!data) continue;
-    NSString *eventTab = tabID.length ? tabID : ownedTab;
-    shaar_event event = {};
-    event.size = sizeof(event);
-    event.kind = SHAAR_EVENT_SAVE_PROMPT;
-    event.profile_id = {profileID.UTF8String, profileID.length};
-    event.window_id = {windowID.UTF8String, windowID.length};
-    event.tab_id = {eventTab.UTF8String, eventTab.length};
-    event.payload_json = {(const char *)data.bytes, data.length};
-    [runtime receiveEvent:&event];
-  }
-  return @{@"requestCount": @(requests.count), @"dismissCount": @(dismissals.count),
-           @"id": requests.count ? requests.firstObject[@"id"] ?: @"" : @""};
-}
-
 NSDictionary *ARCProbeDesktopCaptureEventDispatch(NSDictionary *payload, BOOL validOwner) {
   ARCDesktopCaptureProbeRuntime *runtime = [ARCDesktopCaptureProbeRuntime new];
   __block NSDictionary *received = nil;

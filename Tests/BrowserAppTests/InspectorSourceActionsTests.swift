@@ -8,6 +8,38 @@ import Testing
 @testable import ArcusisBrowser
 
 struct InspectorSourceActionsTests {
+  @Test @MainActor func cancelledOpenDoesNotStartInspectorRequest() async throws {
+    let inspector = InspectorModel(
+      target: .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!),
+      engine: nil)
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let opening = Task { @MainActor in await inspector.sourceActions.open() }
+    opening.cancel()
+    await opening.value
+
+    #expect(inspector.sourceActions.failure == nil)
+    #expect(inspector.sourceActions.location == nil)
+  }
+
+  @Test @MainActor func cancelledAgentCopyDoesNotStartInspectorRequest() async throws {
+    let inspector = InspectorModel(
+      target: .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!),
+      engine: nil)
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let copying = Task { @MainActor in await inspector.sourceActions.copyForAgent() }
+    copying.cancel()
+    await copying.value
+
+    #expect(inspector.sourceActions.failure == nil)
+    #expect(inspector.sourceActions.location == nil)
+  }
+
   @Test func parsesSourceLocationsAndBuildsEditorURLs() throws {
     let location = try #require(InspectorSourceLocation.parse(" /workspace/App.swift:18:4 "))
     #expect(location.path == "/workspace/App.swift")

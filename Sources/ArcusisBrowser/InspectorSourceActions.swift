@@ -101,7 +101,7 @@ final class InspectorSourceActions {
   }
 
   func open() async {
-    guard !busy, let inspector, inspector.aiCopy.canCopy else { return }
+    guard !Task.isCancelled, !busy, let inspector, inspector.aiCopy.canCopy else { return }
     busy = true
     failure = nil
     location = nil
@@ -135,7 +135,7 @@ final class InspectorSourceActions {
   }
 
   func copyForAgent(to pasteboard: NSPasteboard = .general) async {
-    guard !busy, let inspector, inspector.aiCopy.canCopy else { return }
+    guard !Task.isCancelled, !busy, let inspector, inspector.aiCopy.canCopy else { return }
     busy = true
     failure = nil
     location = nil

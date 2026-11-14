@@ -1,64 +1,458 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Could not load Library data. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not load Library data. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לטעון את נתוני הספרייה. כדאי לנסות שוב."}}}},
+    "Could not load Library data. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load Library data. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לטעון את נתוני הספרייה. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
     "Could not update the Library. Try again.": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Could not update the Library. Try again." } },
-        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לעדכן את הספרייה. כדאי לנסות שוב." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not update the Library. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לעדכן את הספרייה. כדאי לנסות שוב."
+          }
+        }
       }
     },
     "Could not run the extension. Try again.": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Could not run the extension. Try again." } },
-        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להפעיל את התוסף. כדאי לנסות שוב." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not run the extension. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להפעיל את התוסף. כדאי לנסות שוב."
+          }
+        }
       }
     },
     "The selected file could not be read. Try another file.": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "The selected file could not be read. Try another file." } },
-        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לקרוא את הקובץ שנבחר. כדאי לנסות קובץ אחר." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected file could not be read. Try another file."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לקרוא את הקובץ שנבחר. כדאי לנסות קובץ אחר."
+          }
+        }
       }
     },
-    "%@ image": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תמונת %@"}}}},
-    "%@ video": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"סרטון %@"}}}},
-    "%@ audio file": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובץ שמע %@"}}}},
-    "%@ archive": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"ארכיון %@"}}}},
-    "%@ document": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מסמך %@"}}}},
-    "%@ file": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובץ %@"}}}},
+    "%@ image": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תמונת %@"
+          }
+        }
+      }
+    },
+    "%@ video": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סרטון %@"
+          }
+        }
+      }
+    },
+    "%@ audio file": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובץ שמע %@"
+          }
+        }
+      }
+    },
+    "%@ archive": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ארכיון %@"
+          }
+        }
+      }
+    },
+    "%@ document": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מסמך %@"
+          }
+        }
+      }
+    },
+    "%@ file": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובץ %@"
+          }
+        }
+      }
+    },
     "%d years ago": {
       "localizations": {
         "en": {
           "variations": {
             "plural": {
-              "one": {"stringUnit": {"state": "translated", "value": "1 year ago"}},
-              "other": {"stringUnit": {"state": "translated", "value": "%d years ago"}}
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 year ago"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d years ago"
+                }
+              }
             }
           }
         },
         "he": {
           "variations": {
             "plural": {
-              "one": {"stringUnit": {"state": "translated", "value": "לפני שנה"}},
-              "two": {"stringUnit": {"state": "translated", "value": "לפני שנתיים"}},
-              "other": {"stringUnit": {"state": "translated", "value": "לפני %d שנים"}}
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "לפני שנה"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "לפני שנתיים"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "לפני %d שנים"
+                }
+              }
             }
           }
         }
       }
     },
-    "Import…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import…"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא…"}}}},
-    "%d bookmark": {"localizations":{"en":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"1 bookmark"}},"other":{"stringUnit":{"state":"translated","value":"%d bookmarks"}}}}},"he":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"סימנייה אחת"}},"two":{"stringUnit":{"state":"translated","value":"שתי סימניות"}},"other":{"stringUnit":{"state":"translated","value":"%d סימניות"}}}}}}},
-    "%d history entry": {"localizations":{"en":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"1 history entry"}},"other":{"stringUnit":{"state":"translated","value":"%d history entries"}}}}},"he":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"פריט היסטוריה אחד"}},"two":{"stringUnit":{"state":"translated","value":"שני פריטי היסטוריה"}},"other":{"stringUnit":{"state":"translated","value":"%d פריטי היסטוריה"}}}}}}},
-    "%@ and %@ are ready to import into %@.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%@ and %@ are ready to import into %@."}},"he":{"stringUnit":{"state":"translated","value":"%@ ו־%@ מוכנים לייבוא לפרופיל %@."}}}},
-    "Could not open this browser export. Check that it is supported and try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not open this browser export. Check that it is supported and try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לפתוח את קובץ הייצוא של הדפדפן. כדאי לוודא שהפורמט נתמך ולנסות שוב."}}}},
-    "Import Data": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import Data"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא נתונים"}}}},
-    "Import from another browser": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import from another browser"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא מדפדפן אחר"}}}},
-    "%d bookmarks are ready to import into %@.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%d bookmarks are ready to import into %@."}},"he":{"stringUnit":{"state":"translated","value":"%d סימניות מוכנות לייבוא לפרופיל %@."}}}},
-    "History import requires an engine feature that is not available in this build.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"History import requires an engine feature that is not available in this build."}},"he":{"stringUnit":{"state":"translated","value":"ייבוא היסטוריה דורש יכולת מנוע שאינה זמינה בגרסה זו."}}}},
-    "Import Bookmarks": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import Bookmarks"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא סימניות"}}}},
-    "Volume": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Volume"}},"he":{"stringUnit":{"state":"translated","value":"עוצמת קול"}}}},
-    "%d percent": {"localizations":{"en":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"%d percent"}},"other":{"stringUnit":{"state":"translated","value":"%d percent"}}}}},"he":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"%d אחוז"}},"two":{"stringUnit":{"state":"translated","value":"%d אחוזים"}},"other":{"stringUnit":{"state":"translated","value":"%d אחוזים"}}}}}}},
+    "Import…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ייבוא…"
+          }
+        }
+      }
+    },
+    "%d bookmark": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 bookmark"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d bookmarks"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "סימנייה אחת"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שתי סימניות"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d סימניות"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%d history entry": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 history entry"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d history entries"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "פריט היסטוריה אחד"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שני פריטי היסטוריה"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d פריטי היסטוריה"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@ and %@ are ready to import into %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ and %@ are ready to import into %@."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ו־%@ מוכנים לייבוא לפרופיל %@."
+          }
+        }
+      }
+    },
+    "Could not open this browser export. Check that it is supported and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not open this browser export. Check that it is supported and try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לפתוח את קובץ הייצוא של הדפדפן. כדאי לוודא שהפורמט נתמך ולנסות שוב."
+          }
+        }
+      }
+    },
+    "Import Data": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Data"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ייבוא נתונים"
+          }
+        }
+      }
+    },
+    "Import from another browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from another browser"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ייבוא מדפדפן אחר"
+          }
+        }
+      }
+    },
+    "%d bookmarks are ready to import into %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d bookmarks are ready to import into %@."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d סימניות מוכנות לייבוא לפרופיל %@."
+          }
+        }
+      }
+    },
+    "History import requires an engine feature that is not available in this build.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History import requires an engine feature that is not available in this build."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ייבוא היסטוריה דורש יכולת מנוע שאינה זמינה בגרסה זו."
+          }
+        }
+      }
+    },
+    "Import Bookmarks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Bookmarks"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ייבוא סימניות"
+          }
+        }
+      }
+    },
+    "Volume": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volume"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עוצמת קול"
+          }
+        }
+      }
+    },
+    "%d percent": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d percent"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d percent"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d אחוז"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d אחוזים"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d אחוזים"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Add bookmark": {
       "localizations": {
         "he": {
@@ -399,7 +793,16 @@
         }
       }
     },
-    "Close %@ extension": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"סגירת התוסף %@"}}}},
+    "Close %@ extension": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגירת התוסף %@"
+          }
+        }
+      }
+    },
     "Collapsed": {
       "localizations": {
         "he": {
@@ -3420,6 +3823,48 @@
           "stringUnit": {
             "state": "translated",
             "value": "חלון: %@"
+          }
+        }
+      }
+    },
+    "%d bookmarks and %d history entries are ready to import into %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d bookmarks and %d history entries are ready to import into %@."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d סימניות ו־%d פריטי היסטוריה מוכנים לייבוא לפרופיל %@."
+          }
+        }
+      }
+    },
+    "No screens, windows, or tabs are available": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אין מסכים, חלונות או לשוניות זמינים"
+          }
+        }
+      }
+    },
+    "Could not complete this download action. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not complete this download action. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לבצע את הפעולה על ההורדה. כדאי לנסות שוב."
           }
         }
       }

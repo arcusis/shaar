@@ -278,7 +278,7 @@ bool ProfileOwnsContents(shaar::ShaarEngineContext* context,
                          shaar_engine* engine,
                          shaar_scope scope,
                          content::WebContents* contents) {
-  if (!context->profile_services)
+  if (!context || !context->profile_services || !scope.profile || !contents)
     return false;
   Profile* profile =
       context->profile_services->ResolveProfile(engine, scope.profile);
@@ -392,6 +392,8 @@ bool OfferSavePrompt(content::WebContents* contents,
       browser_context && browser_context->IsOffTheRecord();
   if (!SavePromptAllowedForContext(browser_context != nullptr, off_the_record))
     return decline();
+  if (!shaar::EngineContext().profile_services)
+    return decline();
 
   shaar_engine* engine = lifecycle::ActiveEngine();
   auto identity =
@@ -484,6 +486,9 @@ shaar_error_code CompleteDecision(shaar::ShaarEngineContext* context,
   if (!contents)
     return Fail(immediate_error, SHAAR_NOT_FOUND,
                 "save prompt tab is unavailable");
+  if (!context->profile_services)
+    return Fail(immediate_error, SHAAR_NOT_READY,
+                "save prompt profile services are unavailable");
   if (!ProfileOwnsContents(context, engine, scope, contents))
     return Fail(immediate_error, SHAAR_WRONG_PROFILE,
                 "save prompt tab does not belong to the supplied profile");

@@ -76,6 +76,20 @@ import Testing
         event, expectedScope: scope, expectedTabID: "t", expectedRequestID: 20) == nil)
   }
 
+  @Test func findEventsRejectZeroRequestToken() {
+    let adapter = ShaarFindAdapter(shaar: FakeFindEngine())
+    let event = ShaarCopiedEvent(
+      sequence: 2, kind: 7, profileID: Data("p".utf8), sessionID: Data(),
+      windowID: Data("w".utf8), tabID: Data("t".utf8),
+      payloadJSON: Data(
+        #"{"kind":"result","schemaVersion":1,"requestID":"0","matchCount":1,"activeMatch":1,"final":true}"#.utf8))
+
+    #expect(
+      adapter.decode(
+        event, expectedScope: .init(profileID: "p"), expectedTabID: "t",
+        expectedRequestID: 0) == nil)
+  }
+
   @Test func findEventIntegerFieldsRejectBooleansAndFractions() {
     let adapter = ShaarFindAdapter(shaar: FakeFindEngine())
     let values = ["schemaVersion": "1", "matchCount": "4", "activeMatch": "2"]

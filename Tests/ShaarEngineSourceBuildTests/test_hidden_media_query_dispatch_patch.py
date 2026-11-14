@@ -22,6 +22,16 @@ class HiddenMediaQueryDispatchPatchTests(unittest.TestCase):
         self.assertIn("DispatchHiddenMediaQueryChangeTask", patch)
         self.assertIn("DispatchMediaQueryListEventsAndCallbacks", patch)
         self.assertIn("HiddenDocumentMediaQueryListListenersDispatchWithoutAnimationFrame", patch)
+        enqueue = patch.split("void Document::EnqueueMediaQueryChangeListeners", 1)[1].split(
+            "void Document::DispatchHiddenMediaQueryChangeTask", 1
+        )[0]
+        self.assertIn("+  if (!GetExecutionContext())\n+    return;", enqueue)
+        dispatch = patch.split("void Document::DispatchHiddenMediaQueryChangeTask", 1)[1]
+        self.assertIn("+  if (!GetExecutionContext())\n+    return;", dispatch)
+        self.assertLess(
+            dispatch.index("+  if (!GetExecutionContext())"),
+            dispatch.index("scripted_animation_controller_->DispatchMediaQueryListEventsAndCallbacks"),
+        )
 
 
 if __name__ == "__main__":

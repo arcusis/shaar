@@ -18,7 +18,7 @@ REPO = Path(__file__).resolve().parents[2]
 FRAMEWORK = "Chromium Framework.framework"
 
 
-def write_archive(path):
+def write_archive(path, receipt=None):
     with tarfile.open(path, "w:xz", format=tarfile.PAX_FORMAT) as archive:
         files = {
             f"{FRAMEWORK}/Versions/A/Chromium Framework": b"engine binary bytes",
@@ -38,6 +38,11 @@ def write_archive(path):
             info = tarfile.TarInfo(name)
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
+        if receipt is not None:
+            data = json.dumps(receipt).encode()
+            info = tarfile.TarInfo("applied-patches.json")
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
         link = tarfile.TarInfo(f"{FRAMEWORK}/Versions/Current")
         link.type = tarfile.SYMTYPE
         link.linkname = "A"
@@ -53,9 +58,13 @@ class FetchEngineTests(unittest.TestCase):
         self.scripts.mkdir()
         shutil.copy2(REPO / "scripts/fetch-engine.sh", self.scripts / "fetch-engine.sh")
         shutil.copy2(REPO / "scripts/engine_payload.py", self.scripts / "engine_payload.py")
+        shutil.copy2(REPO / "scripts/engine_patches.py", self.scripts / "engine_patches.py")
         self.third_party = self.root / "ThirdParty/ChromiumEngine"
         self.third_party.mkdir(parents=True)
         self.pin_path = self.third_party / "pin.json"
+        self.manifest_path = self.third_party / "source-build.json"
+        self.manifest_path.write_text(json.dumps({"chromium": {"commit": "a" * 40}, "patches": [
+            {"file": "ThirdParty/ChromiumEngine/patches/0001-test.patch", "sha256": "b" * 64}]}))
         self.cache = self.root / "build/EngineCache"
         self.tools = self.root / "tools"
         self.tools.mkdir()
@@ -67,7 +76,9 @@ class FetchEngineTests(unittest.TestCase):
 
         self.cache.mkdir(parents=True)
         staged = self.root / "staged.tar.xz"
-        write_archive(staged)
+        write_archive(staged, {"schemaVersion": 1, "chromiumRevision": "a" * 40,
+                               "patches": [{"file": "ThirdParty/ChromiumEngine/patches/0001-test.patch",
+                                            "sha256": "b" * 64}]})
         checksum = hashlib.sha256(staged.read_bytes()).hexdigest()
         self.destination = self.cache / checksum[:16]
         self.archive = self.cache / "ShaarEngine-157.0.8103.51-shaar.4.tar.xz"
@@ -242,10 +253,20 @@ exit 99
 
     def test_failed_framework_extraction_removes_staging_directory(self):
         shutil.rmtree(self.destination)
+        manifest = json.loads(self.manifest_path.read_text())
+        receipt = {
+            "schemaVersion": 1,
+            "chromiumRevision": manifest["chromium"]["commit"],
+            "patches": manifest["patches"],
+        }
         with tarfile.open(self.archive, "w:xz", format=tarfile.PAX_FORMAT) as archive:
             info = tarfile.TarInfo("unrelated.txt")
             info.size = 7
             archive.addfile(info, io.BytesIO(b"invalid"))
+            receipt_bytes = json.dumps(receipt).encode()
+            receipt_info = tarfile.TarInfo("applied-patches.json")
+            receipt_info.size = len(receipt_bytes)
+            archive.addfile(receipt_info, io.BytesIO(receipt_bytes))
         self.pin["sha256"] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
         self._write_pin()
 
@@ -267,6 +288,20 @@ exit 99
         self.assertIn("Engine cache root must not be a symlink", result.stderr)
         self.assertFalse((external / self.destination.name).exists())
 
+    def test_missing_patch_in_archive_receipt_fails_even_with_matching_pin(self):
+        replacement = self.root / "replacement.tar.xz"
+        write_archive(replacement, {"schemaVersion": 1, "chromiumRevision": "a" * 40, "patches": []})
+        checksum = hashlib.sha256(replacement.read_bytes()).hexdigest()
+        replacement.replace(self.archive)
+        self.pin["sha256"] = checksum
+        self._write_pin()
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("incomplete patch receipt", result.stderr)
+
     def test_symlinked_build_root_is_rejected_before_extraction(self):
         shutil.rmtree(self.destination)
         external = self.root / "external-build"
@@ -278,7 +313,6 @@ exit 99
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Engine cache root must not be a symlink", result.stderr)
         self.assertFalse((external / "EngineCache" / self.destination.name).exists())
-
 
 if __name__ == "__main__":
     unittest.main()

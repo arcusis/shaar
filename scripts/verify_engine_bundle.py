@@ -467,6 +467,14 @@ def verify(repo: Path, app: Path, archive: Path) -> dict[str, Any]:
         if archive_hash != pin["sha256"]:
             raise VerifyError("archive_pin_mismatch")
         report["archivePinVerified"] = True
+        try:
+            receipt_check = subprocess.run(
+                [sys.executable, str(repo / "scripts/engine_patches.py"), "--verify-archive", str(archive)],
+                capture_output=True, timeout=30, check=False)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise VerifyError("archive_patch_receipt_invalid") from error
+        if receipt_check.returncode:
+            raise VerifyError("archive_patch_receipt_invalid")
         signed = [(app, APP_ID), (framework, FRAMEWORK_ID), *helpers]
         identity_hashes: dict[str, str] = {}
         kinds: set[str] = set()

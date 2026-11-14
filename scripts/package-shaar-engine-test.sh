@@ -22,6 +22,7 @@ jq -e '.sourceKind == "shaar" and .mode == "final" and
   .status == "succeeded" and (.framework.exports.required | length) >= 26 and
   .framework.exports.legacyFound == []' \
   "$receipt" >/dev/null
+python3 scripts/engine_patches.py --verify-receipt "$output/applied-patches.json"
 [[ $(shasum -a 256 ThirdParty/ChromiumEngine/source-build.json | cut -d ' ' -f 1) == \
    $(jq -er .configSha256 "$receipt") ]] || { echo 'Source config changed after verification.' >&2; exit 1; }
 [[ $(jq -er .layerSha256 "$receipt") == \
@@ -51,6 +52,7 @@ package=build/ShaarEnginePackage
 rm -rf "$package"
 mkdir -p "$package/stage"
 ditto "$framework" "$package/stage/Chromium Framework.framework"
+cp "$output/applied-patches.json" "$package/stage/applied-patches.json"
 staged="$package/stage/Chromium Framework.framework"
 python3 scripts/trim-engine-locales.py "$staged" > "$package/resource-trim.json"
 python3 scripts/rebrand-engine-framework.py "$staged"
@@ -62,12 +64,13 @@ codesign --verify --deep --strict "$staged"
 
 archive="$package/$name.tar.xz"
 if command -v xz >/dev/null 2>&1; then
-  tar --no-mac-metadata -cf - -C "$package/stage" 'Chromium Framework.framework' |
+  tar --no-mac-metadata -cf - -C "$package/stage" 'Chromium Framework.framework' applied-patches.json |
     nice -n 19 xz -T2 -9 > "$archive"
 else
   nice -n 19 tar --no-mac-metadata -cJf "$archive" -C "$package/stage" \
-    'Chromium Framework.framework'
+    'Chromium Framework.framework' applied-patches.json
 fi
+python3 scripts/engine_patches.py --verify-archive "$archive"
 archive_sha=$(shasum -a 256 "$archive" | cut -d ' ' -f 1)
 printf '%s  %s\n' "$archive_sha" "$(basename "$archive")" > "$archive.sha256"
 jq -n --arg sha "$archive_sha" '{sha256: $sha}' > "$package/payload-pin.json"

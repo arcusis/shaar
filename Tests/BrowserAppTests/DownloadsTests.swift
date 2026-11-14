@@ -83,6 +83,20 @@ struct DownloadsTests {
     #expect(model.notices[b] == nil)
   }
 
+  @Test func removedDownloadDoesNotReceiveItsLateActionError() {
+    let model = DownloadsModel()
+    let profile = UUID()
+    model.changed(record(), profileID: profile)
+    var finish: (@MainActor @Sendable (String?) -> Void)?
+    model.onCommand = { _, _, _, completion in finish = completion }
+
+    #expect(model.perform(.pause, id: id, profileID: profile, selectedProfileID: profile))
+    model.removed(id, profileID: profile)
+    finish?("Could not pause")
+
+    #expect(model.notices[profile] == nil)
+  }
+
   @Test func downloadsPresentationCannotReplaceConsentAndClosesOnProfileChange() throws {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com")!))

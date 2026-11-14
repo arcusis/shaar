@@ -192,9 +192,13 @@ final class ProfileAccountSignIn {
     } catch { return nil }
   }
 
-  func ownsWindow(_ id: String) -> Bool { id == engine.windowID || popups[id] != nil }
+  func ownsWindow(_ id: String) -> Bool {
+    !finished && (id == engine.windowID || popups[id] != nil)
+  }
 
-  var windowIDs: Set<String> { Set(popups.keys).union([engine.windowID]) }
+  var windowIDs: Set<String> {
+    finished ? [] : Set(popups.keys).union([engine.windowID])
+  }
 
   func showWindow(_ id: String, active: Bool) {
     guard visible, !finished, let window = popups[id]?.window else { return }

@@ -38,6 +38,31 @@ struct ProfileAccountSignInTests {
     #expect(finishCount == 1)
     #expect(runtime.closedIDs == [windowID])
   }
+
+  @Test func cancellingSignInClosesOwnedPopupWindowsAndFinishesOnce() throws {
+    let runtime = SignInWindowTestRuntime()
+    let flow = try ProfileAccountSignIn(
+      events: BrowserRuntimeEvents(runtime: runtime),
+      profile: BrowserProfile(id: UUID(), name: "Work"),
+      provider: .google, purpose: .signIn, visible: false)
+    let primaryWindowID = flow.engine.windowID
+    let popupWindowID = try #require(flow.requestedWindow(type: "popup"))
+    var finishCount = 0
+    flow.onFinished = { _ in finishCount += 1 }
+
+    #expect(flow.ownsWindow(primaryWindowID))
+    #expect(flow.ownsWindow(popupWindowID))
+    #expect(flow.windowIDs == [primaryWindowID, popupWindowID])
+
+    flow.cancel()
+    flow.cancel()
+
+    #expect(finishCount == 1)
+    #expect(flow.windowIDs.isEmpty)
+    #expect(!flow.ownsWindow(primaryWindowID))
+    #expect(!flow.ownsWindow(popupWindowID))
+    #expect(runtime.closedIDs == [popupWindowID, primaryWindowID])
+  }
 }
 
 private final class SignInWindowTestRuntime: ARCChromiumRuntime, @unchecked Sendable {

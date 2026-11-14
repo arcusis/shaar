@@ -41,4 +41,29 @@ import Testing
     #expect(!NativeHostViewportValidation.deliveredResizeEvent(from: 2, to: 2))
     #expect(!NativeHostViewportValidation.deliveredResizeEvent(from: 3, to: 1))
   }
+
+  @Test func viewportDocumentDecodesFixtureIdentityAndEventMetrics() {
+    let fields = NativeHostViewportValidation.documentFields(from: [
+      "fixture": "v1", "instance": "document-7",
+      "cookie": "theme=dark; account=acct-42; session=active",
+      "innerWidth": 1280, "innerHeight": 720, "resizeEventCount": 3,
+      "pageFocusEventCount": 2, "pageBlurEventCount": 1, "devicePixelRatio": 2.0,
+    ])
+    #expect(fields == HostViewportDocumentFields(
+      accountID: "acct-42", instance: "document-7", cssWidth: 1280, cssHeight: 720,
+      resizeEventCount: 3, pageFocusEventCount: 2, pageBlurEventCount: 1,
+      devicePixelRatio: 2.0))
+  }
+
+  @Test func viewportDocumentRejectsWrongFixtureAndMissingAccount() {
+    var payload: [String: Any] = [
+      "fixture": "v2", "instance": "document-7", "cookie": "account=acct-42",
+      "innerWidth": 1280, "innerHeight": 720, "resizeEventCount": 3,
+      "pageFocusEventCount": 2, "pageBlurEventCount": 1, "devicePixelRatio": 2.0,
+    ]
+    #expect(NativeHostViewportValidation.documentFields(from: payload) == nil)
+    payload["fixture"] = "v1"
+    payload["cookie"] = "theme=dark; session=active"
+    #expect(NativeHostViewportValidation.documentFields(from: payload) == nil)
+  }
 }

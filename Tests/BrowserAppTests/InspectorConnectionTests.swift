@@ -36,9 +36,9 @@ struct InspectorConnectionTests {
 
 @MainActor
 private final class InspectorConnectionRuntime: ARCChromiumRuntime {
-  var tabOwners: [String: String] = [:]
-  var profileOwners: [String: String] = [:]
-  var begunTabs: [String] = []
+  nonisolated(unsafe) var tabOwners: [String: String] = [:]
+  nonisolated(unsafe) var profileOwners: [String: String] = [:]
+  nonisolated(unsafe) var begunTabs: [String] = []
 
   override func windowID(forTabID tabID: String) -> String? { tabOwners[tabID] }
   override func profileID(forTabID tabID: String) -> String? { profileOwners[tabID] }

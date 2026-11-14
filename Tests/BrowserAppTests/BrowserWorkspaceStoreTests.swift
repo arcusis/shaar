@@ -439,6 +439,20 @@ struct BrowserWorkspaceStoreTests {
     #expect(throws: WorkspaceError.self) { try manager.focusWindow(secondID) }
     #expect(manager.workspace == before)
   }
+
+  @Test func retiredWindowStoreCannotReassignSharedSpaceProfile() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let secondID = try manager.newWindow(from: manager.workspace.windows[0].id)
+    let retiredStore = try #require(manager.stores[secondID])
+    let spaceID = retiredStore.session.selectedSpaceID
+    let replacementProfileID = try #require(
+      retiredStore.session.profiles.first { $0.id != retiredStore.session.selectedSpace.profileID }?.id)
+    try manager.removeWindow(secondID)
+    let before = manager.workspace
+
+    #expect(!retiredStore.setSpaceProfile(spaceID, to: replacementProfileID))
+    #expect(manager.workspace == before)
+  }
 }
 
 @MainActor

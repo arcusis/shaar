@@ -150,6 +150,8 @@ def main():
             validator.validate_catalog(catalog)
         validator.validate_source_references(ROOT, catalogs, include_app=True)
         if options.write_inventory is not None:
+            if options.write_inventory.is_symlink():
+                raise ValueError(f"inventory output must not be a symlink: {options.write_inventory}")
             rows = inventory_rows()
             options.write_inventory.parent.mkdir(parents=True, exist_ok=True)
             options.write_inventory.write_text(render_inventory(rows), encoding="utf-8")

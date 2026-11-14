@@ -2,12 +2,17 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct DownloadsPanelTests {
+  @Test func titleExposesHeadingTrait() {
+    #expect(DownloadsPanelAccessibility.titleTraits.contains(.isHeader))
+  }
+
   @Test func emptyProfileShowsDownloadsEmptyState() throws {
     let store = BrowserStore()
     let profileID = try #require(store.session.profiles.first?.id)

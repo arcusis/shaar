@@ -41,6 +41,7 @@
     "Move %@ to Applications before setting it as your default browser.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"העבירו את %@ לתיקיית היישומים לפני שתגדירו אותו כדפדפן ברירת המחדל."}}}},
     "%@ is your default browser": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"%@ הוא דפדפן ברירת המחדל שלכם"}}}},
     "Could not set the default browser.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא ניתן להגדיר את דפדפן ברירת המחדל."}}}},
+    "Could not set Shaar as the default browser.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא ניתן להגדיר את Shaar כדפדפן ברירת המחדל."}}}},
     "Set as Default Browser": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הגדרה כדפדפן ברירת המחדל"}}}},
     "Spaces keep different parts of your web in reach. Start with a name you recognize.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מרחבים שומרים על חלקים שונים של הגלישה בהישג יד. התחילו עם שם שתזהו."}}}},
     "%@ uses macOS Keychain to protect saved website passwords. macOS may ask for Keychain access when a saved password is needed. You can manage passwords in Settings later.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"%@ משתמש בצרור המפתחות של macOS כדי להגן על סיסמאות אתרים שמורות. macOS עשוי לבקש גישה לצרור המפתחות כשנדרשת סיסמה שמורה. אפשר לנהל סיסמאות בהגדרות מאוחר יותר."}}}},

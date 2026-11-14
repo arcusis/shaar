@@ -283,14 +283,22 @@ class CatalogValidatorTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('SettingsL10n.string("Could not set the default browser.")', source)
+    def test_first_run_default_browser_failure_uses_hebrew_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/FirstRunSetup.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'SettingsL10n.string("Could not set Shaar as the default browser.")', source
+        )
         settings = json.loads(
             (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
                 encoding="utf-8"
             )
         )
-        translation = settings["strings"]["Could not set the default browser."][
+        translation = settings["strings"]["Could not set Shaar as the default browser."][
             "localizations"]["he"]["stringUnit"]["value"]
-        self.assertNotEqual(translation, "Could not set the default browser.")
+        self.assertEqual(translation, "לא ניתן להגדיר את Shaar כדפדפן ברירת המחדל.")
+
     def test_inspector_section_disclosure_uses_direction_aware_chevron(self):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorPanelComponents.swift").read_text(
             encoding="utf-8"

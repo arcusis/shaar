@@ -80,9 +80,18 @@ def launch(app: Path, root: Path, url: str, *, upgrade: bool) -> dict:
     return result
 
 
+def verification_app_path(value: str) -> Path:
+    app = Path(value)
+    executable = app / "Contents/MacOS/ShaarVerification"
+    if not app.is_dir() or not executable.is_file():
+        raise argparse.ArgumentTypeError(
+            f"verification app is missing or incomplete: {app}")
+    return app
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", required=True, type=Path)
+    parser.add_argument("--app", required=True, type=verification_app_path)
     options = parser.parse_args()
     app = options.app.resolve()
     before = crash_names()

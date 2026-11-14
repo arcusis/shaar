@@ -114,6 +114,8 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct BrowserSettingsView: View {
+  static let profilesHeadingTraits: AccessibilityTraits = .isHeader
+
   let profiles: [BrowserSettingsProfile]
   let searchEngines: [BrowserSettingsChoice]
   @Binding var selectedProfileID: UUID?
@@ -582,7 +584,9 @@ struct BrowserSettingsView: View {
     HStack(spacing: 0) {
       VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text(SettingsL10n.string("Profiles")).font(.headline)
+          Text(SettingsL10n.string("Profiles"))
+            .font(.headline)
+            .accessibilityAddTraits(Self.profilesHeadingTraits)
           Spacer()
           Button(action: onAddProfile) {
             Image(systemName: "plus")

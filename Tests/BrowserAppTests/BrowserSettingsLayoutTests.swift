@@ -14,6 +14,10 @@ final class BrowserSettingsLayoutTests: XCTestCase {
     XCTAssertTrue(BrowserLanguageRestartPrompt.headingTraits.contains(.isHeader))
   }
 
+  func testProfilesSectionTitleIsVoiceOverHeading() {
+    XCTAssertTrue(BrowserSettingsView.profilesHeadingTraits.contains(.isHeader))
+  }
+
   func testSearchSettingsSectionRemoved() {
     XCTAssertFalse(BrowserSettingsSection.allCases.contains { $0.rawValue == "search" })
   }

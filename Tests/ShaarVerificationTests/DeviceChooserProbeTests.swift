@@ -51,4 +51,20 @@ struct DeviceChooserProbeTests {
       #expect(DeviceChooserProbe.PageSettlement(raw: raw)?.isChooserDismissal(for: "hid") == false)
     }
   }
+
+  @Test func baseURLMustBeAnUnauthenticatedLoopbackHTTPFixtureWithAValidPort() {
+    #expect(
+      DeviceChooserProbeConfiguration.acceptsBaseURL(
+        URL(string: "http://127.0.0.1:43210/serial")))
+    for value in [
+      "https://127.0.0.1:43210/serial",
+      "http://localhost:43210/serial",
+      "http://example.invalid:43210/serial",
+      "http://127.0.0.1:0/serial",
+      "http://user:secret@127.0.0.1:43210/serial",
+    ] {
+      #expect(!DeviceChooserProbeConfiguration.acceptsBaseURL(URL(string: value)))
+    }
+    #expect(!DeviceChooserProbeConfiguration.acceptsBaseURL(nil))
+  }
 }

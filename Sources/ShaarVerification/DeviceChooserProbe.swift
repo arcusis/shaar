@@ -19,6 +19,16 @@ enum DeviceChooserProbePolicy {
   }
 }
 
+enum DeviceChooserProbeConfiguration {
+  static func acceptsBaseURL(_ page: URL?) -> Bool {
+    guard let page, page.scheme == "http", page.host == "127.0.0.1",
+      let port = page.port, (1...65_535).contains(port),
+      page.user == nil, page.password == nil
+    else { return false }
+    return true
+  }
+}
+
 /// Hidden proof that Web Serial, Web Bluetooth, Web USB, and Web HID call the real navigator
 /// APIs and return without freezing the main thread. A sheet appears only when the engine
 /// sends a device-chooser permission event. Serial, Bluetooth, and USB reject with
@@ -54,7 +64,7 @@ final class DeviceChooserProbe {
     output = URL(filePath: try value(after: "--probe-output"))
     let dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
     guard let page = URL(string: try value(after: "--probe-base-url")),
-      page.scheme == "http", page.host == "127.0.0.1"
+      DeviceChooserProbeConfiguration.acceptsBaseURL(page)
     else { throw Failure("The device chooser probe requires an authored loopback base URL.") }
     baseURL = page
     let selected = try NativeBrowserHost.makeRuntime(frameworkURL: framework)

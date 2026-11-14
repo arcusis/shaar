@@ -115,4 +115,40 @@ struct DesktopCapturePickerTests {
       tabs: [], screens: [], screenAccessFailed: false, screenEnumerationFailed: true)
     #expect(emptyListing.error == DesktopCaptureCatalog.screenEnumerationNote)
   }
+
+  @Test func screenPermissionDenialKeepsRequestedTabsAvailable() async throws {
+    let store = BrowserStore()
+    store.perform(.open(try #require(URL(string: "https://meet.example/call"))))
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let request = try #require(
+      DesktopCaptureRequest(payload: [
+        "id": UUID().uuidString,
+        "profileID": store.session.selectedSpace.profileID.uuidString,
+        "tabID": tab.id.uuidString,
+        "pageURL": tab.url.absoluteString,
+        "origin": "https://meet.example",
+        "frameID": "0123456789abcdef0123456789abcdef",
+        "sourceTypes": ["screen", "tab"],
+      ]))
+    #expect(store.requestDesktopCapture(request))
+    var enumerationCount = 0
+    let picker = DesktopCapturePicker(
+      request: request,
+      store: store,
+      hasScreenRecordingAccess: { false },
+      requestScreenRecordingAccess: { false },
+      shareableContent: {
+        enumerationCount += 1
+        throw CocoaError(.fileReadUnknown)
+      }
+    )
+
+    await picker.loadSources()
+    var decision: String?
+    store.onDesktopCaptureDecision = { _, sourceID in decision = sourceID }
+    let tabToken = "tab:\(tab.id.uuidString):0"
+    store.resolveDesktopCapture(request.id, sourceID: tabToken)
+    #expect(enumerationCount == 0)
+    #expect(decision == tabToken)
+  }
 }

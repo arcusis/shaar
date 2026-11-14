@@ -104,8 +104,68 @@ private actor CancelledManageSettingsTransport: ShaarExtensionsTransport {
   }
 }
 
+private actor DelayedReconcileExtensionsTransport: ShaarExtensionsTransport {
+  private var firstManageStarted = false
+  private var firstManageWaiter: CheckedContinuation<Void, Never>?
+  private var firstManageReply: CheckedContinuation<Data, Never>?
+  private var manageCount = 0
+
+  func submitExtensions(
+    profileID: UUID, operation: ShaarExtensionsOperation, arguments: Data
+  ) async throws -> Data {
+    if operation == .list {
+      return Data(#"{"schemaVersion":1,"extensions":[]}"#.utf8)
+    }
+    manageCount += 1
+    if manageCount == 1 {
+      firstManageStarted = true
+      firstManageWaiter?.resume()
+      firstManageWaiter = nil
+      return await withCheckedContinuation { firstManageReply = $0 }
+    }
+    return Data(#"{"schemaVersion":1,"installed":true}"#.utf8)
+  }
+
+  func waitForFirstManage() async {
+    guard !firstManageStarted else { return }
+    await withCheckedContinuation { firstManageWaiter = $0 }
+  }
+
+  func releaseFirstAsQueued() {
+    firstManageReply?.resume(returning: Data(#"{"schemaVersion":1,"queued":true}"#.utf8))
+    firstManageReply = nil
+  }
+}
+
 @Suite("Shared extension Settings")
 struct SharedExtensionSettingsTests {
+  @Test @MainActor func staleReconcileCannotReplaceNewerProfileResult() async throws {
+    let profileID = UUID()
+    let extensionID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+    ).write(to: file)
+    let transport = DelayedReconcileExtensionsTransport()
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter, profiles: { [profileID: "Work"] })
+    await model.reload()
+
+    let older = Task { await model.reconcile(profileID: profileID) }
+    await transport.waitForFirstManage()
+    await model.reconcile(profileID: profileID)
+    #expect(model.rows.first?.profiles[profileID]?.pending == false)
+
+    await transport.releaseFirstAsQueued()
+    await older.value
+    #expect(model.rows.first?.id == extensionID)
+    #expect(model.rows.first?.profiles[profileID]?.pending == false)
+    #expect(model.rows.first?.profiles[profileID]?.failed == false)
+  }
+
   @Test @MainActor func olderExtensionReloadCannotReplaceNewerState() async throws {
     let profileID = UUID()
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")

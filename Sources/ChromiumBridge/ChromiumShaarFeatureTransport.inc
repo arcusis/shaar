@@ -54,7 +54,16 @@
       [](void *context, const shaar_result *result) {
         if (!context) return;
         void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
-        if (!result || result->error.code != SHAAR_OK) {
+        if (!result) {
+          finish(nil, ShaarError(@"Shaar feature operation failed."));
+          return;
+        }
+        if (result->size < sizeof(*result) ||
+            result->error.size < sizeof(result->error)) {
+          finish(nil, ShaarError(@"Shaar feature operation returned an invalid result."));
+          return;
+        }
+        if (result->error.code != SHAAR_OK) {
           finish(nil, ShaarError(@"Shaar feature operation failed."));
           return;
         }

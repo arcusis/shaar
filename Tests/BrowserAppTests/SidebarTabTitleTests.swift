@@ -30,6 +30,21 @@ import Vision
       SidebarTabTitle.accessibilityLabel(title: "News", isSleeping: true) == "News, Sleeping")
   }
 
+  @Test func tabAccessibilityLabelIncludesPinnedAndSleepingStates() {
+    #expect(
+      SidebarTabTitle.accessibilityLabel(
+        title: "News", isSleeping: false, isPinned: true, language: .english)
+        == "News, Pinned")
+    #expect(
+      SidebarTabTitle.accessibilityLabel(
+        title: "News", isSleeping: true, isPinned: true, language: .english)
+        == "News, Pinned, Sleeping")
+    #expect(
+      SidebarTabTitle.accessibilityLabel(
+        title: "News", isSleeping: false, isPinned: true, language: .hebrew)
+        == "News, \u{2068}נעוצים\u{2069}")
+  }
+
   @Test func restingRowShowsTheFullDevToolsTitle() throws {
     let hosted = try host(title: pageTitle, closeIsVisible: false)
     defer { hosted.window.close() }

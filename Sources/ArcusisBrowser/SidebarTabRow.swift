@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import SwiftUI
 
 /// How a sidebar tab title is measured. The close control stays in the row for focus,
@@ -23,10 +24,21 @@ enum SidebarTabTitle {
     painted.range(of: #"Shaar DevTools\b"#, options: [.regularExpression, .caseInsensitive]) != nil
   }
 
-  static func accessibilityLabel(title: String, isSleeping: Bool) -> String {
-    guard isSleeping else { return title }
-    return ShellL10n.format(
-      "%@, %@", arguments: [.string(title), .string(ShellL10n.string("Sleeping"))])
+  static func accessibilityLabel(
+    title: String, isSleeping: Bool, isPinned: Bool = false,
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    var label = title
+    let states = [
+      isPinned ? BrowserLocalization.string("Pinned", table: "Shell", language: language) : nil,
+      isSleeping ? BrowserLocalization.string("Sleeping", table: "Shell", language: language) : nil,
+    ]
+    for state in states.compactMap({ $0 }) {
+      label = BrowserLocalization.format(
+        "%@, %@", table: "Shell", language: language,
+        arguments: [.string(label), .string(state)])
+    }
+    return label
   }
 }
 
@@ -90,7 +102,9 @@ struct SidebarTabRow: View {
     .buttonStyle(.plain)
     .frame(maxWidth: .infinity, alignment: .leading)
     .focused($focusedControl, equals: .select)
-    .accessibilityLabel(SidebarTabTitle.accessibilityLabel(title: title, isSleeping: isSleeping))
+    .accessibilityLabel(
+      SidebarTabTitle.accessibilityLabel(
+        title: title, isSleeping: isSleeping, isPinned: isPinned))
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .accessibilityAction(named: ShellL10n.text("Close tab"), onClose)
     .accessibilityIdentifier("sidebar-tab-select-\(tabID.uuidString)")

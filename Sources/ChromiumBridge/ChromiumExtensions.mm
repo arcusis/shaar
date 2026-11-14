@@ -54,13 +54,19 @@ static NSString *ARCJSONLiteral(id value) {
 
 static ARCShaarExtensionState *ShaarExtensionState(ARCShaarRuntime *runtime) {
   static NSMapTable<ARCShaarRuntime *, ARCShaarExtensionState *> *states;
+  static NSRecursiveLock *statesLock;
   static dispatch_once_t once;
-  dispatch_once(&once, ^{ states = [NSMapTable weakToStrongObjectsMapTable]; });
+  dispatch_once(&once, ^{
+    states = [NSMapTable weakToStrongObjectsMapTable];
+    statesLock = [NSRecursiveLock new];
+  });
+  [statesLock lock];
   ARCShaarExtensionState *state = [states objectForKey:runtime];
   if (!state) {
     state = [ARCShaarExtensionState new];
     [states setObject:state forKey:runtime];
   }
+  [statesLock unlock];
   return state;
 }
 

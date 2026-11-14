@@ -6,11 +6,15 @@ import SwiftUI
 
 struct InspectorNotesView: View {
   @Bindable var model: InspectorAICopyModel
+
+  static var sectionHeadingTraits: AccessibilityTraits { .isHeader }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
         VStack(alignment: .leading, spacing: 8) {
           Text(InspectorL10n.string("Add feedback")).font(.system(size: 11, weight: .semibold))
+            .accessibilityAddTraits(Self.sectionHeadingTraits)
           if !model.canCopy {
             Text(InspectorL10n.string("Lock an element to add a note.")).font(.system(size: 11))
               .foregroundStyle(
@@ -48,6 +52,7 @@ struct InspectorNotesView: View {
         Divider()
         HStack(spacing: 7) {
           Text(InspectorL10n.string("Notes")).font(.system(size: 11, weight: .semibold))
+            .accessibilityAddTraits(Self.sectionHeadingTraits)
           Text("\(model.notes.count)/50").font(.system(size: 10, design: .monospaced))
             .foregroundStyle(.tertiary)
           Spacer(minLength: 0)

@@ -62,6 +62,15 @@ private struct CreationFailure: Error {}
     #expect(OnboardingStepHeader.headingTraits == .isHeader)
   }
 
+  @Test func stepProgressAccessibilityLabelUsesTheSelectedLanguage() {
+    #expect(
+      ProfileOnboardingAccessibility.stepLabel(stepIndex: 2, stepCount: 5, language: .english)
+        == "Step 2 of 5")
+    #expect(
+      ProfileOnboardingAccessibility.stepLabel(stepIndex: 2, stepCount: 5, language: .hebrew)
+        == "שלב 2 מתוך 5")
+  }
+
   @Test func stepsAdvanceSkipAndGoBackInOrder() {
     let model = OnboardingRecorder().model()
     #expect(model.step == .name)
@@ -191,9 +200,6 @@ private struct CreationFailure: Error {}
     advanceToAccount(model)
     model.skip()
     model.continueToNext()
-    #expect(
-      model.failure == SettingsL10n.string("Could not create the profile. Try again.")
-        && model.outcome == nil && recorder.outcomes.isEmpty)
     #expect(model.failure == SettingsL10n.string("Could not create this profile. Try again."))
     #expect(model.outcome == nil && recorder.outcomes.isEmpty)
     #expect(

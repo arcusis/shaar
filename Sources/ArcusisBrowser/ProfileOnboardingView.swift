@@ -14,6 +14,14 @@ enum ProfileOnboardingAccessibility {
       "Finish signing in to %@ in the sign-in window.", table: "Settings", language: language,
       arguments: [.string(provider)])
   }
+
+  static func stepLabel(
+    stepIndex: Int, stepCount: Int, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Step %d of %d", table: "Settings", language: language,
+      arguments: [.integer(stepIndex), .integer(stepCount)])
+  }
 }
 
 /// One choice per step, followed by an optional account and a summary.
@@ -62,14 +70,20 @@ struct OnboardingStepHeader: View {
           Capsule().fill(progressColor(reached: item.rawValue <= step.rawValue)).frame(height: 4)
         }
       }
-      .accessibilityHidden(true)
+      .accessibilityRepresentation {
+        ProgressView(
+          value: Double(step.rawValue + 1), total: Double(ProfileOnboardingStep.allCases.count))
+          .accessibilityLabel(
+            ProfileOnboardingAccessibility.stepLabel(
+              stepIndex: step.rawValue + 1, stepCount: ProfileOnboardingStep.allCases.count))
+      }
       Text(
-        SettingsL10n.format(
-          "Step %d of %d", .integer(step.rawValue + 1),
-          .integer(ProfileOnboardingStep.allCases.count))
+        ProfileOnboardingAccessibility.stepLabel(
+          stepIndex: step.rawValue + 1, stepCount: ProfileOnboardingStep.allCases.count)
       )
       .font(.caption)
       .foregroundStyle(.secondary)
+      .accessibilityHidden(true)
       Text(step.title).font(.title2.weight(.semibold))
         .accessibilityAddTraits(Self.headingTraits)
     }

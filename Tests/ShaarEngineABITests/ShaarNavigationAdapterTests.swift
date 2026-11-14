@@ -54,18 +54,22 @@ private func fakeShaarNavigationSubmit(
 ) -> shaar_error_code {
   guard let reply, let replyContext else { return shaar_error_code(rawValue: 1) }
   let replyContextAddress = UInt(bitPattern: replyContext)
+  let response = operation.rawValue == ShaarNavigationOperation.reload.rawValue
+    ? "{\"schemaVersion\":true}" : "{\"schemaVersion\":1}"
   DispatchQueue.global().async {
-    deliverFakeNavigationReply(reply, contextAddress: replyContextAddress, requestID: requestID)
+    deliverFakeNavigationReply(
+      reply, contextAddress: replyContextAddress, requestID: requestID, response: response)
   }
   return shaar_error_code(rawValue: 0)
 }
 
 private func deliverFakeNavigationReply(
-  _ reply: shaar_reply_fn, contextAddress: UInt, requestID: UInt64
+  _ reply: shaar_reply_fn, contextAddress: UInt, requestID: UInt64,
+  response: String = "{\"schemaVersion\":1}"
 ) {
   let context = UnsafeMutableRawPointer(bitPattern: contextAddress)!
-  let response = Data("{\"schemaVersion\":1}".utf8)
-  response.withUnsafeBytes { rawBuffer in
+  let responseData = Data(response.utf8)
+  responseData.withUnsafeBytes { rawBuffer in
     let payload = rawBuffer.bindMemory(to: CChar.self)
     let resultError = shaar_error(
       size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
@@ -297,5 +301,25 @@ struct ShaarNavigationAdapterTests {
       }
     }
     #expect(String(decoding: response, as: UTF8.self) == "{\"schemaVersion\":1}")
+  }
+
+  @Test func concreteTransportRejectsBooleanReplySchemaVersion() async throws {
+    let transport = try ShaarNavigationABITransport(
+      resolver: FakeNavigationSymbols(), handleResolver: FakeHandleResolver())
+    let adapter = try #require(ShaarNavigationAdapter(implementation: .shaar, transport: transport))
+    let result = await withCheckedContinuation {
+      (continuation: CheckedContinuation<Result<Data, ShaarEngineError>, Never>) in
+      do {
+        _ = try adapter.submit(
+          .reload, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
+          tabID: "tab", completion: { continuation.resume(returning: $0) })
+      } catch {
+        continuation.resume(returning: .failure(error as? ShaarEngineError ?? .invalidEvent("submit failed")))
+      }
+    }
+    guard case .failure(.invalidEvent("invalid navigation result payload")) = result else {
+      Issue.record("Expected boolean schemaVersion reply to be rejected, got \(result)")
+      return
+    }
   }
 }

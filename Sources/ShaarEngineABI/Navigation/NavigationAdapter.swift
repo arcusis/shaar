@@ -125,7 +125,7 @@ private let shaarNavigationReply: shaar_reply_fn = { context, result in
     let payload = try copyABISlice(result.payload_json)
     guard !payload.isEmpty,
       let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
-      object["schemaVersion"] as? Int == 1
+      navigationInteger(object["schemaVersion"]) == 1
     else { throw ShaarEngineError.invalidEvent("invalid navigation result payload") }
     box.completion(.success(payload))
   } catch let error as ShaarEngineError {

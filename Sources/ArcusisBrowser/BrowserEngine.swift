@@ -82,6 +82,7 @@ final class BrowserEngine {
   @ObservationIgnored let sleepingTabs = SleepingTabScheduler()
   @ObservationIgnored var memoryPressureSource: DispatchSourceMemoryPressure?
   @ObservationIgnored var suspensionTask: Task<Void, Never>?
+  @ObservationIgnored private var delayedRefreshTasks: [UUID: Task<Void, Never>] = [:]
   private(set) var favicons: [UUID: NSImage] = [:]
   /// Site host last associated with each tab's icon. An empty query for that host
   /// leaves the icon in place. A different host drops the live icon and the saved file.
@@ -93,6 +94,7 @@ final class BrowserEngine {
   isolated deinit {
     suspensionTask?.cancel()
     memoryPressureSource?.cancel()
+    delayedRefreshTasks.values.forEach { $0.cancel() }
   }
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
@@ -233,6 +235,7 @@ final class BrowserEngine {
       self.suspensionTask?.cancel()
       self.memoryPressureSource?.cancel()
       self.memoryPressureSource = nil
+      self.cancelDelayedRefreshes()
       for model in self.inspectors.values where model.isOpen { model.close() }
       self.inspectors.removeAll()
       for model in self.developerModels.values { model.close() }
@@ -541,13 +544,11 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
       if accepted {
-        Task { [weak self] in
-          for delay in Self.extensionInstallRefreshDelaysMilliseconds {
-            do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
-            guard let self else { return }
-            self.refreshExtensions()
-            ExtensionManagerModel.refreshInstalled()
-          }
+        self.scheduleDelayedRefreshes(after: Self.extensionInstallRefreshDelaysMilliseconds) {
+          [weak self] in
+          guard let self else { return }
+          self.refreshExtensions()
+          ExtensionManagerModel.refreshInstalled()
         }
       }
     }
@@ -1083,13 +1084,10 @@ final class BrowserEngine {
         loadedProfiles.insert(profile)
         store?.library.refresh(profile, section: .bookmarks)
         store?.library.refresh(profile, section: .history)
-        Task { [weak self] in
-          // Download history initializes asynchronously and can return an empty early list.
-          for delay in [300, 700, 2000] {
-            try? await Task.sleep(for: .milliseconds(delay))
-            guard let self, !self.isClosed else { return }
-            self.runtime.refreshDownloads(forProfileID: profile.uuidString)
-          }
+        // Download history initializes asynchronously and can return an empty early list.
+        scheduleDelayedRefreshes(after: [300, 700, 2_000]) { [weak self] in
+          guard let self else { return }
+          self.runtime.refreshDownloads(forProfileID: profile.uuidString)
         }
       } catch {
         failedProfiles.insert(profile)
@@ -1097,6 +1095,28 @@ final class BrowserEngine {
       }
     }
     DispatchQueue.main.async { [weak self] in self?.reconcile() }
+  }
+
+  var pendingDelayedRefreshTaskCount: Int { delayedRefreshTasks.count }
+
+  func scheduleDelayedRefreshes(
+    after delays: [Int], action: @escaping @MainActor () -> Void
+  ) {
+    let id = UUID()
+    delayedRefreshTasks[id] = Task { @MainActor [weak self] in
+      defer { self?.delayedRefreshTasks[id] = nil }
+      for delay in delays {
+        do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
+        guard let self, !self.isClosed else { return }
+        action()
+      }
+    }
+  }
+
+  private func cancelDelayedRefreshes() {
+    let tasks = Array(delayedRefreshTasks.values)
+    delayedRefreshTasks.removeAll()
+    tasks.forEach { $0.cancel() }
   }
 
   func recordDownloadDirectoryAcknowledgement(_ acknowledged: URL, requested: URL, for profile: UUID) {

@@ -12,16 +12,25 @@ import CoreFoundation
 
 enum NativeWindowProbeEvidence {
   static func webStoreFit(_ value: [String: Any]) -> (width: Int, overflow: Int)? {
+    guard let result = NativeWindowFitEvidence.parse(value) else { return nil }
+    return (result.width, result.overflow)
+  }
+}
+
+struct NativeWindowFitEvidence: Equatable {
+  let width: Int
+  let overflow: Int
+
+  static func parse(_ value: [String: Any]) -> Self? {
     guard value["fixture"] as? String == "web-store-fit",
-      let width = integer(value["width"]),
-      let overflow = integer(value["overflow"])
+      let width = exactInteger(value["width"]),
+      let overflow = exactInteger(value["overflow"])
     else { return nil }
-    return (width, overflow)
+    return Self(width: width, overflow: overflow)
   }
 
-  private static func integer(_ value: Any?) -> Int? {
-    guard let number = value as? NSNumber,
-      CFGetTypeID(number) != CFBooleanGetTypeID(),
+  private static func exactInteger(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
       number.doubleValue.isFinite,
       number.doubleValue.rounded(.towardZero) == number.doubleValue,
       number.compare(NSNumber(value: Int.min)) != .orderedAscending,
@@ -414,11 +423,11 @@ final class NativeWindowProbe {
       {
         last = value
       }
-      if let sample = NativeWindowProbeEvidence.webStoreFit(last),
-        ready((sample.width, sample.overflow))
+if let measurement = NativeWindowFitEvidence.parse(last),
+        ready((measurement.width, measurement.overflow))
       {
         observations["webStoreFit:\(label)"] = last
-        return sample
+        return (measurement.width, measurement.overflow)
       }
       try await Task.sleep(for: .milliseconds(100))
     }

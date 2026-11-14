@@ -390,11 +390,6 @@ final class BrowserRuntimeEvents {
     runtime.resolveSavePromptRequestID(id, decision: decision)
   }
 
-  func resolveSavePrompt(_ id: String, windowID: String, decision: String) {
-    guard router.consume(.savePrompt, id: id, windowID: windowID) else { return }
-    runtime.resolveSavePromptRequestID(id, decision: decision)
-  }
-
   func applyBookmarkOperation(
     _ operation: [String: Any], profileID: String, completion: @escaping @MainActor (Error?) -> Void
   ) {

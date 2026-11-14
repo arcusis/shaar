@@ -17,6 +17,15 @@ from http.server import ThreadingHTTPServer
 from engine_fixture import Fixture
 
 
+def verification_app_path(value: str) -> Path:
+    app = Path(value)
+    executable = app / "Contents/MacOS/ShaarVerification"
+    if not app.is_dir() or not executable.is_file():
+        raise argparse.ArgumentTypeError(
+            f"verification app is missing or incomplete: {app}")
+    return app
+
+
 def receipt_output_path(value: str) -> Path:
     path = Path(value)
     if path.is_symlink():
@@ -28,7 +37,7 @@ def receipt_output_path(value: str) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", required=True, type=Path)
+    parser.add_argument("--app", required=True, type=verification_app_path)
     parser.add_argument("--receipt", required=True, type=receipt_output_path)
     options = parser.parse_args()
     app = options.app.resolve()

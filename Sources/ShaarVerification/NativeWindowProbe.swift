@@ -6,8 +6,30 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 
 @testable import ArcusisBrowser
+
+enum NativeWindowProbeEvidence {
+  static func webStoreFit(_ value: [String: Any]) -> (width: Int, overflow: Int)? {
+    guard value["fixture"] as? String == "web-store-fit",
+      let width = integer(value["width"]),
+      let overflow = integer(value["overflow"])
+    else { return nil }
+    return (width, overflow)
+  }
+
+  private static func integer(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID(),
+      number.doubleValue.isFinite,
+      number.doubleValue.rounded(.towardZero) == number.doubleValue,
+      number.compare(NSNumber(value: Int.min)) != .orderedAscending,
+      number.compare(NSNumber(value: Int.max)) != .orderedDescending
+    else { return nil }
+    return number.intValue
+  }
+}
 
 /// Exercises native window ownership without creating a second application store or showing a window.
 @MainActor
@@ -392,11 +414,11 @@ final class NativeWindowProbe {
       {
         last = value
       }
-      if last["fixture"] as? String == "web-store-fit", let width = last["width"] as? Int,
-        let overflow = last["overflow"] as? Int, ready((width, overflow))
+      if let sample = NativeWindowProbeEvidence.webStoreFit(last),
+        ready((sample.width, sample.overflow))
       {
         observations["webStoreFit:\(label)"] = last
-        return (width, overflow)
+        return sample
       }
       try await Task.sleep(for: .milliseconds(100))
     }

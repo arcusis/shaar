@@ -552,6 +552,14 @@
       "sha256": "33d111990e8de140bac8983e1e6352836087761f0a17e53dcd45311e3d605bc1"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0068-shaar-bluetooth-gate.patch",
+      "sha256": "e3e6c710be1933401208b540328ab709667da82e3e34e566822c5519ee34d79e"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0069-shaar-device-chooser.patch",
+      "sha256": "fbc46f07566cab39b9d8798e34547485c3fe8761da130f1a094bfa85960f232f"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0115-shaar-card-save-prompt-supersede.patch",
       "sha256": "b7bef616bc5c30b511d622413667c685ee31075b42c67e8c81bf6532ba5c60d1"
     },

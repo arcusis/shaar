@@ -4,9 +4,14 @@
 
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
+import sys
+import tempfile
 import unittest
+from contextlib import redirect_stderr
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +21,41 @@ SPEC.loader.exec_module(RULES)
 
 
 class PrivateTrackerRulesTests(unittest.TestCase):
+    def test_cli_rejects_symlinked_output_paths_before_fetching_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            external = root / "external.json"
+            external.write_text("preserve this ruleset")
+            output = root / "rules.json"
+            output.symlink_to(external)
+            outside = root / "outside"
+            outside.mkdir()
+            parent_output = outside / "rules.json"
+            parent_output.write_text("preserve this parent ruleset")
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(outside, target_is_directory=True)
+
+            cases = ((output, "output must not be a symlink"),
+                     (linked_parent / "rules.json", "output parent must not be a symlink"))
+            for path, message in cases:
+                with self.subTest(path=path):
+                    stderr = io.StringIO()
+                    with patch.object(sys, "argv", ["update-private-trackers.py",
+                                                     "--revision", "a" * 40,
+                                                     "--output", str(path)]), \
+                            patch.object(RULES, "fetch_source") as fetch, \
+                            patch.object(RULES, "build_rules", return_value={}) as build, \
+                            redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                        RULES.main()
+
+                    self.assertEqual(raised.exception.code, 2)
+                    self.assertIn(message, stderr.getvalue())
+                    fetch.assert_not_called()
+                    build.assert_not_called()
+
+            self.assertEqual(external.read_text(), "preserve this ruleset")
+            self.assertEqual(parent_output.read_text(), "preserve this parent ruleset")
+
     def test_only_complete_domain_rules_are_used(self):
         text = "\n".join((
             "! comment", "||analytics.example^", "||tracker.example^$third-party",

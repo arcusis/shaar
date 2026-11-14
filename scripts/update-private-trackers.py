@@ -98,10 +98,19 @@ def fetch_source(revision: str, name: str) -> bytes:
     return raw
 
 
+def output_path(value: str) -> Path:
+    path = Path(value)
+    if path.is_symlink():
+        raise argparse.ArgumentTypeError(f"output must not be a symlink: {path}")
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(f"output parent must not be a symlink: {path.parent}")
+    return path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--revision", required=True, help="full EasyPrivacy Git commit SHA")
-    parser.add_argument("--output", type=Path, default=OUTPUT)
+    parser.add_argument("--output", type=output_path, default=OUTPUT)
     arguments = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", arguments.revision):
         parser.error("revision must be a full lowercase Git commit SHA")

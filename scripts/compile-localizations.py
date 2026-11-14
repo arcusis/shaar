@@ -399,7 +399,7 @@ def validate_source_references(root, catalogs, include_app=False):
     call = re.compile(r"\b(" + "|".join(map(re.escape, wrappers)) + r")\.(?:string|text|format|plural)\s*\(")
     direct_text = re.compile(r'\b(Text)\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)')
     direct_control_text = re.compile(
-        r'\b(Button|Label|Menu|Picker|Section|SecureField|TextField|Toggle)'
+        r'\b(Button|Label|Menu|Picker|ProgressView|Section|SecureField|TextField|Toggle)'
         r'\s*\(\s*("(?:[^"\\]|\\.)*")'
     )
     direct_accessibility_text = re.compile(

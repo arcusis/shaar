@@ -725,7 +725,8 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     var rows: [[String: Any]] = []
     for (name, element) in [("target=_blank", "blank"), ("window.open", "popup")] {
       let before = tabIDs(context)
-      let clicked = await click(runtime, tab: selectedID(context), element: element)
+      let source = selectedID(context)
+      let clicked = await click(runtime, tab: source, element: element)
       let adopted = await wait(seconds: 8) {
         tabIDs(context).subtracting(before).isEmpty == false
       }
@@ -734,10 +735,18 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       let sameWindow = created.allSatisfy { id in
         runtime.windowID(forTabID: id.uuidString) == context.nativeID
       }
+      let sourceRetained = source.map { sourceID in
+        context.store.session.spaces.flatMap(\.tabs).contains {
+          $0.id == sourceID && $0.url.path == "/popups"
+        }
+      } ?? false
+      let adoptedSingleDestination = popupAdoptionPassed(
+        createdTabCount: created.count, destinationReady: destination,
+        sourceRetained: sourceRetained)
       rows.append(
         makeRow(
-          name, clicked && adopted && destination && sameWindow && windowsHidden(),
-          "clicked \(clicked), adopted \(adopted), destination \(destination), same window \(sameWindow), tabs \(created.count)",
+          name, clicked && adoptedSingleDestination && sameWindow && windowsHidden(),
+          "clicked \(clicked), adopted \(adopted), destination \(destination), source retained \(sourceRetained), same window \(sameWindow), tabs \(created.count)",
           proven: clicked))
       await closeTabs(context, created)
     }
@@ -983,6 +992,12 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       if object(from: json)?["marker"] as? String == "Popup destination loaded" { return true }
     }
     return false
+  }
+
+  nonisolated static func popupAdoptionPassed(
+    createdTabCount: Int, destinationReady: Bool, sourceRetained: Bool
+  ) -> Bool {
+    createdTabCount == 1 && destinationReady && sourceRetained
   }
 
   private static func open(

@@ -29,6 +29,17 @@ import Testing
     }
   }
 
+  @Test func shellAuditRejectsJSONBooleanContainerCount() throws {
+    let data = try JSONSerialization.data(withJSONObject: [
+      "stage": "tab-0", "containerCount": true, "layerBacked": [true],
+      "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
+    ] as [String: Any])
+    let shellAudit = try #require(
+      JSONSerialization.jsonObject(with: data) as? [String: Any])
+    #expect(!PrivateMultiTabEvidence.liveShellAudit(shellAudit, stage: "tab-0"))
+  }
+
   @Test func liveTabCountsRejectBooleansFractionsAndStrings() {
     let base: [AnyHashable: Any] = [
       "sourceIsRegular": true,

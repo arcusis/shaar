@@ -349,7 +349,7 @@ enum PrivateMultiTabEvidence {
 
   static func liveShellAudit(_ audit: [String: Any], stage: String) -> Bool {
     audit["stage"] as? String == stage
-      && audit["containerCount"] as? Int == 1
+      && integerEvidence(audit["containerCount"]) == 1
       && audit["layerBacked"] as? [Bool] == [true]
       && audit["attached"] as? Bool == true
       && audit["attachedInWindow"] as? Bool == true

@@ -330,10 +330,17 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   ) async -> Double? {
     let json = await evaluate(
       runtime, tab: selectedID(context), script: "({scale:window.devicePixelRatio})", seconds: 3)
-    guard let value = object(from: json)?["scale"] else { return nil }
-    if let number = value as? NSNumber { return number.doubleValue }
-    if let number = value as? Double { return number }
-    return nil
+    return Self.pageScale(from: json)
+  }
+
+  static func pageScale(from json: String?) -> Double? {
+    guard let value = object(from: json)?["scale"],
+      let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID(),
+      number.doubleValue.isFinite,
+      number.doubleValue > 0
+    else { return nil }
+    return number.doubleValue
   }
 
   private static func scaleChanged(_ before: Double?, _ after: Double?) -> Bool {

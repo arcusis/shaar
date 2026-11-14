@@ -88,12 +88,20 @@ struct PrintRequest: Identifiable, Equatable {
       || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
   }
 
+  private static func isPreservedFormat(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x200C || value == 0x200D || (0xE0000...0xE007F).contains(value)
+  }
+
   private static func boundedTitle(_ value: Any?) -> String? {
     guard let value else { return "" }
     guard let title = value as? String, title.utf8.count <= 2048 else { return nil }
     let scalars = title.unicodeScalars.map { scalar -> Unicode.Scalar in
       switch scalar.properties.generalCategory {
       case .control, .lineSeparator, .paragraphSeparator: return " "
+      case .format:
+        return Self.isBidirectionalControl(scalar) || !Self.isPreservedFormat(scalar)
+          ? " " : scalar
       default: return Self.isBidirectionalControl(scalar) ? " " : scalar
       }
     }

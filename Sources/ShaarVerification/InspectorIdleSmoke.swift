@@ -136,13 +136,13 @@ enum InspectorIdlePollEvidence {
 
   private static func pollCalls(_ model: InspectorModel) async throws -> Int {
     let value = try await model.evaluate("globalThis.__shaarInspectorPollCalls")
-    guard let calls = pollCallCount(value) else {
+    guard let calls = pollCallCount(from: value) else {
       throw Failure("Inspector poll counter was missing or malformed")
     }
     return calls
   }
 
-  static func pollCallCount(_ value: Any?) -> Int? {
+  static func pollCallCount(from value: Any?) -> Int? {
     guard let number = value as? NSNumber,
       CFGetTypeID(number) != CFBooleanGetTypeID()
     else { return nil }

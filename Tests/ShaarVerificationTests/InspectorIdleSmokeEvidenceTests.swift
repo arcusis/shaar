@@ -22,10 +22,10 @@ import Testing
   }
 
   @Test func pollCountMustBeANonnegativeExactInteger() {
-    #expect(InspectorIdleSmoke.pollCallCount(5) == 5)
-    #expect(InspectorIdleSmoke.pollCallCount(5.0) == 5)
+    #expect(InspectorIdleSmoke.pollCallCount(from: 5) == 5)
+    #expect(InspectorIdleSmoke.pollCallCount(from: 5.0) == 5)
     for malformed: Any in [2.5, true, "5", -1] {
-      #expect(InspectorIdleSmoke.pollCallCount(malformed) == nil)
+      #expect(InspectorIdleSmoke.pollCallCount(from: malformed) == nil)
     }
   }
 }

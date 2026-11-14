@@ -60,11 +60,29 @@ private func fakeShaarNavigationSubmit(
   return shaar_error_code(rawValue: 0)
 }
 
+@_cdecl("fake_shaar_navigation_submit_boolean_schema")
+private func fakeShaarNavigationSubmitBooleanSchema(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ args: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard let reply, let replyContext else { return shaar_error_code(rawValue: 1) }
+  let contextAddress = UInt(bitPattern: replyContext)
+  DispatchQueue.global().async {
+    deliverFakeNavigationReply(
+      reply, contextAddress: contextAddress, requestID: requestID, booleanSchemaVersion: true)
+  }
+  return shaar_error_code(rawValue: 0)
+}
+
 private func deliverFakeNavigationReply(
-  _ reply: shaar_reply_fn, contextAddress: UInt, requestID: UInt64
+  _ reply: shaar_reply_fn, contextAddress: UInt, requestID: UInt64,
+  booleanSchemaVersion: Bool = false
 ) {
   let context = UnsafeMutableRawPointer(bitPattern: contextAddress)!
-  let response = Data("{\"schemaVersion\":1}".utf8)
+  let response = Data(
+    (booleanSchemaVersion ? "{\"schemaVersion\":true}" : "{\"schemaVersion\":1}").utf8)
   response.withUnsafeBytes { rawBuffer in
     let payload = rawBuffer.bindMemory(to: CChar.self)
     let resultError = shaar_error(
@@ -106,6 +124,20 @@ private struct FakeNavigationSymbols: ShaarSymbolResolving {
     guard named == "shaar_submit" else { return nil }
     let function =
       fakeShaarNavigationSubmit
+      as @convention(c) (
+        OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+        shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+        UnsafeMutablePointer<shaar_error>?
+      ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
+  }
+}
+
+private struct FakeBooleanNavigationSymbols: ShaarSymbolResolving {
+  func symbol(named: String) -> UnsafeRawPointer? {
+    guard named == "shaar_submit" else { return nil }
+    let function =
+      fakeShaarNavigationSubmitBooleanSchema
       as @convention(c) (
         OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
         shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
@@ -380,5 +412,22 @@ struct ShaarNavigationAdapterTests {
       }
     }
     #expect(result == .failure(.invalidEvent("short navigation error")))
+  }
+
+  @Test func concreteTransportRejectsBooleanReplySchemaVersion() async throws {
+    let transport = try ShaarNavigationABITransport(
+      resolver: FakeBooleanNavigationSymbols(), handleResolver: FakeHandleResolver())
+    let adapter = try #require(ShaarNavigationAdapter(implementation: .shaar, transport: transport))
+    let result = await withCheckedContinuation {
+      (continuation: CheckedContinuation<Result<Data, ShaarEngineError>, Never>) in
+      do {
+        _ = try adapter.submit(
+          .reload, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
+          tabID: "tab", completion: { continuation.resume(returning: $0) })
+      } catch {
+        continuation.resume(returning: .failure(error as? ShaarEngineError ?? .invalidEvent("submit failed")))
+      }
+    }
+    #expect(result == .failure(.invalidEvent("invalid navigation result payload")))
   }
 }

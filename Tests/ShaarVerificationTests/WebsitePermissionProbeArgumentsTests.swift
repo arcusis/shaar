@@ -32,6 +32,6 @@ import Testing
       WebsitePermissionProbeArguments.value(
         after: "--probe-output",
         in: ["--probe-output", "first", "--probe-output", "second"])
-        == "first")
+        == nil)
   }
 }

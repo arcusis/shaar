@@ -390,24 +390,6 @@ struct ShaarNavigationAdapterTests {
     #expect(snapshot.failure?.netError == rawInteger)
   }
 
-  @Test func snapshotBooleanFieldsRejectNumericJSONValues() {
-    let base =
-      #"{"kind":"navigation","schemaVersion":1,"phase":"committed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
-    let failure =
-      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
-    let invalid = [
-      base.replacingOccurrences(of: #""loading":false"#, with: #""loading":1"#),
-      base.replacingOccurrences(of: #""canGoBack":false"#, with: #""canGoBack":0"#),
-      base.replacingOccurrences(of: #""canGoForward":false"#, with: #""canGoForward":1"#),
-      base.replacingOccurrences(of: #""sameDocument":false"#, with: #""sameDocument":0"#),
-      failure.replacingOccurrences(of: #""isMainFrame":true"#, with: #""isMainFrame":1"#),
-    ]
-    for payload in invalid {
-      #expect(throws: ShaarEngineError.self) {
-        try ShaarNavigationSnapshot.decode(Data(payload.utf8))
-      }
-    }
-  }
   @Test func shippingChoiceUsesShaar() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)
     #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) != nil)

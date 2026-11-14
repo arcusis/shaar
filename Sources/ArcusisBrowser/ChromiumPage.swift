@@ -40,7 +40,8 @@ final class ChromiumPageContainerView: NSView {
         .filter({ $0.shownTabID == tabID && $0.window === window })
         .max(by: { $0.selectionOrder < $1.selectionOrder })
     else { return false }
-    _ = target.attach(page)
+    _ = target.select(
+      page, tabID: tabID, liveTabs: Set(target.retainedPages.keys).union([tabID]))
     page.isHidden = false
     return page.superview === target && page.window === window
   }
@@ -64,7 +65,7 @@ final class ChromiumPageContainerView: NSView {
   @discardableResult
   func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
     Self.live.add(self)
-    shownTabID = page == nil ? nil : tabID
+    shownTabID = liveTabs.contains(tabID) ? tabID : nil
     Self.nextSelectionOrder &+= 1
     selectionOrder = Self.nextSelectionOrder
     wantsLayer = true

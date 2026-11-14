@@ -13,6 +13,14 @@ import subprocess
 import tempfile
 
 
+def verification_app(value: str) -> Path:
+    app = Path(value)
+    executable = app / "Contents/MacOS/ShaarVerification"
+    if not app.is_dir() or not executable.is_file() or not os.access(executable, os.X_OK):
+        raise argparse.ArgumentTypeError(f"not a Shaar verification app: {app}")
+    return app
+
+
 def run_case(app: Path, fixture_url: str | None, inspector: bool) -> dict:
     with tempfile.TemporaryDirectory(prefix="shaar-system-quit-") as temporary:
         root = Path(temporary)
@@ -63,10 +71,9 @@ def run_case(app: Path, fixture_url: str | None, inspector: bool) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", type=Path, required=True)
+    parser.add_argument("--app", type=verification_app, required=True)
     parser.add_argument("--fixture-url", required=True)
     options = parser.parse_args()
-    assert options.app.is_dir()
     assert options.fixture_url.startswith("http://127.0.0.1:")
     results = [run_case(options.app, options.fixture_url, False),
                run_case(options.app, options.fixture_url, True)]

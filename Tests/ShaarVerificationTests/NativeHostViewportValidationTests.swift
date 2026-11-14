@@ -16,6 +16,7 @@ import Testing
     #expect(NativeHostViewportValidation.accountID(fromCookie: "accountant=alpha; token=x") == nil)
     #expect(NativeHostViewportValidation.accountID(fromCookie: "account; token=x") == nil)
     #expect(NativeHostViewportValidation.accountID(fromCookie: "account=; token=x") == nil)
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "account=alpha; account=beta") == nil)
     #expect(NativeHostViewportValidation.accountID(fromCookie: "theme=dark") == nil)
   }
 

@@ -273,14 +273,19 @@ struct LibraryDownloadsView: View {
       let url = downloads?.fileForDrag(
         id: item.id, profileID: profileID, selectedProfileID: currentProfileID)
     {
-      if inFinder {
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-      } else {
-        NSWorkspace.shared.open(url)
-      }
+      Self.performDownloadFileAction(
+        url, inFinder: inFinder,
+        openFile: { _ = NSWorkspace.shared.open($0) },
+        revealFile: { NSWorkspace.shared.activateFileViewerSelecting([$0]) })
     } else {
       store.engine?.revealDownload(item.id, profileID: profileID, open: !inFinder)
     }
+  }
+
+  static func performDownloadFileAction(
+    _ url: URL, inFinder: Bool, openFile: (URL) -> Void, revealFile: (URL) -> Void
+  ) {
+    if inFinder { revealFile(url) } else { openFile(url) }
   }
 
   private func preview(_ item: BrowserDownload) {

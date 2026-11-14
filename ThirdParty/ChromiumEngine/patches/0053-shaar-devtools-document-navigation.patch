@@ -1,7 +1,8 @@
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
-@@ -36,6 +36,7 @@
+@@ -36,7 +36,8 @@
  #include "content/public/browser/devtools_agent_host_client.h"
+ #include "content/public/browser/navigation_handle.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/browser/web_contents_observer.h"
 +#include "net/http/http_response_headers.h"

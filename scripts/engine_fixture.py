@@ -1194,6 +1194,7 @@ def validate_private_window_report(root, phase, report):
     checks = evidence.get('checks')
     expected_failures = evidence.get('expectedFailures', {})
     cleanup = evidence.get('cleanup')
+    disk_audit = evidence.get('privateDiskArtifactAudit')
     run_id = evidence.get('runID')
     try:
         canonical_run = isinstance(run_id, str) and str(uuid.UUID(run_id)).upper() == run_id
@@ -1265,6 +1266,10 @@ def validate_private_window_report(root, phase, report):
             or viewport_audit.get('visibleNativeViewportCount') != 1
             or not isinstance(cleanup, dict) or cleanup.get('windowsRemaining') != 0
             or cleanup.get('contextsRemaining') != 0 or cleanup.get('passed') is not True
+            or not isinstance(disk_audit, dict) or disk_audit.get('passed') is not True
+            or type(disk_audit.get('newFileCount')) is not int
+            or not isinstance(disk_audit.get('leakedFiles'), list)
+            or disk_audit.get('leakedFiles')
             or evidence.get('scope') != PRIVATE_WINDOW_SCOPE):
         raise RuntimeError(f'{phase} private-window evidence has failed or mismatched checks/cleanup')
     return evidence

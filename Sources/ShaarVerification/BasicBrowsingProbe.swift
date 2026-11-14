@@ -84,6 +84,15 @@ struct BasicBrowsingProbe {
       checks.append("\(name) renders live, non-black web contents")
     }
 
+    if let target = opened.first,
+      let originalURL = store.session.page(forTabID: target)?.tab.url.absoluteString
+    {
+      checks += try await verifyPageInitiatedUnsafeNavigation(
+        target, originalURL: originalURL)
+    } else {
+      throw Failure("Unsafe navigation fixture tab was not available.")
+    }
+
     guard let closing = opened.last else { throw Failure("Smoke tabs were not created.") }
     store.closeTab(closing)
     try await waitUntil("tab closure") { store.session.page(forTabID: closing) == nil }
@@ -95,6 +104,45 @@ struct BasicBrowsingProbe {
     try await waitForNonBlackCapture(reopened)
     checks.append("closed tab reopens and renders live web contents")
     return checks
+  }
+
+  private func verifyPageInitiatedUnsafeNavigation(_ id: UUID, originalURL: String) async throws
+    -> [String]
+  {
+    let marker = "unsafe-navigation-\(UUID().uuidString.lowercased())"
+    let blockedURLs = [
+      "file:///etc/passwd", "chrome://version", "devtools://devtools/bundled/inspector.html",
+      "javascript:document.documentElement.dataset['\(marker)']='ran'",
+    ]
+    let originalTabs = Set(store.session.spaces.flatMap(\.tabs).map(\.id))
+    for address in blockedURLs {
+      let encoded = try JSONEncoder().encode(address)
+      guard let literal = String(data: encoded, encoding: .utf8) else {
+        throw Failure("Could not encode an unsafe navigation URL.")
+      }
+      for initiation in ["location", "window.open", "link"] {
+        let action: String
+        switch initiation {
+        case "location": action = "location.href=url"
+        case "window.open": action = "window.open(url,'_blank')"
+        default: action = "const a=document.createElement('a');a.href=url;a.click()"
+        }
+        _ = await evaluate(
+          id.uuidString, "(()=>{const url=\(literal);\(action);return true})()")
+        try await Task.sleep(for: .milliseconds(250))
+        let state = await evaluate(
+          id.uuidString,
+          "({href:location.href,marker:document.documentElement.dataset['\(marker)']||''})")
+          as? [String: Any]
+        let tabs = Set(store.session.spaces.flatMap(\.tabs).map(\.id))
+        try expect(
+          state?["href"] as? String == originalURL
+            && state?["marker"] as? String == ""
+            && tabs == originalTabs,
+          "page-initiated \(initiation) navigation to \(URLComponents(string: address)?.scheme ?? "unknown") is blocked")
+      }
+    }
+    return ["page-initiated location, window.open, and link attempts to four unsafe schemes are blocked"]
   }
 
   private func assertNoPicker(_ initialWindowCount: Int) throws {
@@ -147,12 +195,12 @@ struct BasicBrowsingProbe {
     return false
   }
 
-  private func evaluate(_ id: String) async -> Any? {
+  private func evaluate(
+    _ id: String,
+    _ script: String = "({href:location.href,ready:document.readyState,text:document.body?.innerText||''})"
+  ) async -> Any? {
     let json: String? = await withCheckedContinuation { continuation in
-      runtime.evaluate(
-        inTabID: id,
-        script: "({href:location.href,ready:document.readyState,text:document.body?.innerText||''})"
-      ) { continuation.resume(returning: $0) }
+      runtime.evaluate(inTabID: id, script: script) { continuation.resume(returning: $0) }
     }
     guard let json, let data = json.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])

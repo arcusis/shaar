@@ -7,8 +7,8 @@
 
 import json
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from ci_support import output_file
 
@@ -70,6 +70,11 @@ def main() -> int:
     if missing:
         print(f"CI required gate: missing or empty environment variable {missing}", file=sys.stderr)
         return 2
+    for name in ("CI_FULL", "CI_NIGHTLY", "CI_WEBSITE", "CI_BROWSING", "CI_SHIPPING_GUARD"):
+        value = os.environ.get(name)
+        if value is not None and value not in ("true", "false"):
+            print(f"CI required gate: {name} must be 'true' or 'false'", file=sys.stderr)
+            return 2
 
     for name in ("CI_FULL", "CI_NIGHTLY", "CI_WEBSITE", "CI_BROWSING", "CI_SHIPPING_GUARD"):
         value = os.environ.get(name)

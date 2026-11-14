@@ -9,6 +9,33 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+enum DevToolsDockProbeEvidence {
+  static func geometryMatches(
+    _ state: [AnyHashable: Any], open: Bool, previousWidth: Double? = nil
+  ) -> Bool {
+    guard state["open"] as? Bool == open,
+      let page = state["pageWidth"] as? Double,
+      let host = state["containerWidth"] as? Double,
+      let height = state["pageHeight"] as? Double,
+      host > 0, height > 0
+    else { return false }
+    if let previousWidth, abs(host - previousWidth) <= 10 { return false }
+    if !open { return abs(page - host) <= 1 }
+    guard state["sameWindow"] as? Bool == true,
+      state["sameContainer"] as? Bool == true,
+      state["frontendHitNearTabStrip"] as? Bool == true,
+      state["pageAboveFrontend"] as? Bool == true,
+      state["frontendCoversContainer"] as? Bool == true,
+      state["geometryReady"] as? Bool == true,
+      let gap = state["gap"] as? Double,
+      let frontend = state["frontendWidth"] as? Double,
+      let frontendHeight = state["frontendHeight"] as? Double
+    else { return false }
+    return gap <= 1 && page > 0 && page < host && abs(frontend - host) <= 1
+      && frontendHeight > 0
+  }
+}
+
 @MainActor
 struct DevToolsDockProbe {
   let runtime: ARCShaarRuntime
@@ -89,24 +116,8 @@ struct DevToolsDockProbe {
     guard state["allWindowsHidden"] as? Bool == true else {
       throw InspectorFailure("DevTools exposed a native window.")
     }
-    guard state["open"] as? Bool == open,
-      let page = state["pageWidth"] as? Double, let host = state["containerWidth"] as? Double,
-      let height = state["pageHeight"] as? Double, host > 0, height > 0
-    else { return false }
-    if let previousWidth, abs(host - previousWidth) <= 10 { return false }
-    if !open { return abs(page - host) <= 1 }
-    guard state["sameWindow"] as? Bool == true,
-      state["sameContainer"] as? Bool == true,
-      state["frontendHitNearTabStrip"] as? Bool == true,
-      state["pageAboveFrontend"] as? Bool == true,
-      state["frontendCoversContainer"] as? Bool == true,
-      state["geometryReady"] as? Bool == true,
-      let gap = state["gap"] as? Double,
-      let frontend = state["frontendWidth"] as? Double,
-      let frontendHeight = state["frontendHeight"] as? Double
-    else { return false }
-    return gap <= 1 && page > 0 && page < host && abs(frontend - host) <= 1
-      && frontendHeight > 0
+    return DevToolsDockProbeEvidence.geometryMatches(
+      state, open: open, previousWidth: previousWidth)
   }
 
   private func wait(_ name: String, until ready: () async throws -> Bool) async throws {

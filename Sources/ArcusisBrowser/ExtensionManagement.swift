@@ -246,9 +246,10 @@ enum ExtensionIconLoader {
       let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let relative = largestIcon(in: manifest)
     else { return nil }
-    let file = folder.appending(path: relative).standardizedFileURL
+    let file = folder.appending(path: relative).standardizedFileURL.resolvingSymlinksInPath()
+    let resolvedFolder = folder.standardizedFileURL.resolvingSymlinksInPath()
     // Manifest paths are untrusted; never read outside the extension's own folder.
-    guard file.path.hasPrefix(folder.standardizedFileURL.path + "/") else { return nil }
+    guard file.path.hasPrefix(resolvedFolder.path + "/") else { return nil }
     return NSImage(contentsOf: file)
   }
 

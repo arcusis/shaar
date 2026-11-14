@@ -218,6 +218,9 @@ private func receiveShaarEvent(
   }
 
   private static func decode(_ result: UInt32, error: ShaarLifecycleError) throws {
+    guard error.size >= UInt32(MemoryLayout<ShaarLifecycleError>.size) else {
+      throw ShaarEngineError.invalidEvent("short lifecycle error struct")
+    }
     let code = result == 0 ? error.code : result
     try ShaarStatusCode.decode(
       code, platformCode: error.platformCode, message: try lifecycleErrorMessage(error.message))

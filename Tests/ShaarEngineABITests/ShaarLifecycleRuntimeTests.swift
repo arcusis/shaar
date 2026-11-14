@@ -50,6 +50,33 @@ private func fakeLifecycleCreateWithInvalidErrorMessage(
   return ShaarStatusCode.invalidArgument.rawValue
 }
 
+@_cdecl("fake_lifecycle_create_with_short_error")
+private func fakeLifecycleCreateWithShortError(
+  _ config: UnsafeRawPointer?,
+  _ output: UnsafeMutablePointer<OpaquePointer?>?,
+  _ error: UnsafeMutableRawPointer?
+) -> UInt32 {
+  guard config != nil, let output else { return ShaarStatusCode.invalidArgument.rawValue }
+  output.pointee = nil
+  if let error {
+    let value = error.assumingMemoryBound(to: ShaarLifecycleError.self)
+    value.pointee.size = UInt32(MemoryLayout<ShaarLifecycleError>.size - 1)
+    value.pointee.code = ShaarStatusCode.invalidArgument.rawValue
+  }
+  return ShaarStatusCode.invalidArgument.rawValue
+}
+
+private struct FakeShortErrorLifecycleResolver: ShaarSymbolResolving {
+  func symbol(named name: String) -> UnsafeRawPointer? {
+    guard name == "shaar_engine_create" else {
+      return FakeLifecycleResolver().symbol(named: name)
+    }
+    return unsafeBitCast(
+      fakeLifecycleCreateWithShortError as ShaarCreateFunction,
+      to: UnsafeRawPointer.self)
+  }
+}
+
 @_cdecl("fake_lifecycle_run")
 private func fakeLifecycleRun(
   _ engine: OpaquePointer?, _ error: UnsafeMutableRawPointer?
@@ -183,6 +210,14 @@ struct ShaarLifecycleRuntimeTests {
     #expect(throws: ShaarEngineError.invalidEvent("invalid lifecycle error message slice")) {
       try ShaarLifecycleRuntime(
         resolver: FakeLifecycleResolver(invalidErrorMessage: true),
+        dataRoot: URL(fileURLWithPath: "/tmp/shaar-test"), locale: "en-US", onEvent: { _ in })
+    }
+  }
+
+  @Test @MainActor func runtimeRejectsShortErrorOutputStruct() {
+    #expect(throws: ShaarEngineError.invalidEvent("short lifecycle error struct")) {
+      try ShaarLifecycleRuntime(
+        resolver: FakeShortErrorLifecycleResolver(),
         dataRoot: URL(fileURLWithPath: "/tmp/shaar-test"), locale: "en-US", onEvent: { _ in })
     }
   }

@@ -931,6 +931,17 @@ final class PrivateWindowProbe {
     } ?? []
   }
 
+  static func evidencePassed(
+    checks: [String: Bool], expectedFailures: [String: String]
+  ) -> Bool {
+    !checkNames.isEmpty && checkNames.allSatisfy { name in
+      if checks[name] == true { return true }
+      return name == "productSecondPrivateTabRenders"
+        && checks[name] == false
+        && expectedFailures[name] == "Issue #417: second private tab may display a black page."
+    }
+  }
+
   private func normalSelectionRetained() -> Bool {
     let after = runtime.normalProbeSelectionAudit(forTabID: normalTab)
     let beforeSelected = normalSelectionBefore["selectedNativeTab"] as? Bool == true
@@ -1018,13 +1029,7 @@ final class PrivateWindowProbe {
   }
 
   private var requiredChecksPassed: Bool {
-    Self.checkNames.allSatisfy { name in
-      if checks[name] == true { return true }
-      return name == "productSecondPrivateTabRenders"
-        && checks[name] == false
-        && expectedPrivateFailures[name]
-          == "Issue #417: second private tab may display a black page."
-    }
+    Self.evidencePassed(checks: checks, expectedFailures: expectedPrivateFailures)
   }
 }
 

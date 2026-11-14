@@ -43,6 +43,27 @@ class CIPlanEventTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn("CI plan error: cannot read workflow event JSON", errors.getvalue())
 
+    def test_main_reports_invalid_workflow_dispatch_inputs_without_traceback(self):
+        cases = (
+            ({"inputs": []}, "workflow_dispatch inputs must be an object"),
+            ({"inputs": {"probe_iterations": "0"}},
+             "probe_iterations must be an integer from 1 to 10"),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "event.json"
+            for event, expected in cases:
+                with self.subTest(event=event):
+                    path.write_text(json.dumps(event), encoding="utf-8")
+                    errors = io.StringIO()
+                    with (patch.dict(os.environ, {
+                        "GITHUB_EVENT_PATH": str(path),
+                        "GITHUB_EVENT_NAME": "workflow_dispatch",
+                    }, clear=True), redirect_stderr(errors)):
+                        result = PLAN.main()
+
+                    self.assertEqual(result, 1)
+                    self.assertIn(f"CI plan error: {expected}", errors.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

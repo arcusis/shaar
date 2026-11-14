@@ -140,6 +140,10 @@ class BrowsingQAReportTests(unittest.TestCase):
         malformed = {"passed": True, "rows": [None]}
         self.assertEqual(PROBE.scenario_result(malformed, 0, False, []), "fail")
 
+    def test_malformed_rows_fail_the_scenario_without_crashing(self):
+        report = {"passed": True, "rows": [None]}
+        self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+
     def test_deliberate_renderer_kill_matches_pid_and_time(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
         report = {"rows": [
@@ -254,7 +258,5 @@ process.stdin.on('end', () => {
         self.assertTrue(
             PROBE.crash_counts_against_suite("renderer", report, "EXC_CRASH", finished))
         self.assertFalse(PROBE.deliberate_renderer_kill(report, "EXC_CRASH", finished))
-
-
 if __name__ == "__main__":
     unittest.main()

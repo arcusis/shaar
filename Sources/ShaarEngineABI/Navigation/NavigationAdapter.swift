@@ -20,6 +20,13 @@ private func navigationGeneration(_ value: Any?) -> UInt64? {
   return UInt64(exactly: number.doubleValue)
 }
 
+private func navigationBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
 public enum ShaarNavigationOperation: UInt32, Sendable {
   case navigate = 300
   case go = 301
@@ -329,10 +336,10 @@ public struct ShaarNavigationSnapshot: Equatable, Sendable {
       let phaseName = object["phase"] as? String, let phase = Phase(rawValue: phaseName),
       let navigationID = object["navigationID"] as? String, !navigationID.isEmpty,
       let generation = navigationGeneration(object["generation"]), generation > 0,
-      let loading = object["loading"] as? Bool,
-      let canGoBack = object["canGoBack"] as? Bool,
-      let canGoForward = object["canGoForward"] as? Bool,
-      let sameDocument = object["sameDocument"] as? Bool,
+      let loading = navigationBoolean(object["loading"]),
+      let canGoBack = navigationBoolean(object["canGoBack"]),
+      let canGoForward = navigationBoolean(object["canGoForward"]),
+      let sameDocument = navigationBoolean(object["sameDocument"]),
       object["url"] is NSNull || object["url"] is String,
       object["title"] is NSNull || object["title"] is String
     else { throw ShaarEngineError.invalidEvent("invalid navigation snapshot") }
@@ -342,7 +349,7 @@ public struct ShaarNavigationSnapshot: Equatable, Sendable {
       guard let details = failure as? [String: Any],
         Set(details.keys) == ["netError", "isMainFrame", "descriptionCode"],
         let netError = navigationInteger(details["netError"]),
-        let isMainFrame = details["isMainFrame"] as? Bool,
+        let isMainFrame = navigationBoolean(details["isMainFrame"]),
         let descriptionCode = details["descriptionCode"] as? String
       else { throw ShaarEngineError.invalidEvent("invalid navigation failure") }
       decodedFailure = Failure(

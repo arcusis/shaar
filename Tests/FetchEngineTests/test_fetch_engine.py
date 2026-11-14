@@ -171,6 +171,22 @@ class FetchEngineTests(unittest.TestCase):
         self.assertEqual(list(external.iterdir()), [])
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
 
+    def test_non_directory_cache_roots_are_rejected_clearly(self):
+        shutil.rmtree(self.root / "build")
+        (self.root / "build").write_text("not a directory")
+        build_result = self._run()
+        self.assertNotEqual(build_result.returncode, 0)
+        self.assertIn("Engine cache build root must be a regular directory", build_result.stderr)
+        self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
+
+        (self.root / "build").unlink()
+        (self.root / "build").mkdir()
+        self.cache.write_text("not a directory")
+        cache_result = self._run()
+        self.assertNotEqual(cache_result.returncode, 0)
+        self.assertIn("Engine cache directory must be a regular directory", cache_result.stderr)
+        self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
+
     def test_symlinked_partial_archive_is_rejected_before_curl_can_overwrite_target(self):
         self.archive.write_bytes(b"corrupt cached archive")
         sentinel = self.root / "outside.txt"

@@ -53,7 +53,8 @@ struct DesktopCapturePickerTests {
       shareableContent: {
         contentCalls += 1
         throw CocoaError(.fileReadUnknown)
-      }
+      },
+      sourceLoadCoordinator: DesktopCaptureSourceLoadCoordinator()
     )
     await picker.loadSources()
 
@@ -89,7 +90,8 @@ struct DesktopCapturePickerTests {
       shareableContent: {
         enumerationCount += 1
         throw CocoaError(.fileReadUnknown)
-      }
+      },
+      sourceLoadCoordinator: DesktopCaptureSourceLoadCoordinator()
     )
 
     await picker.loadSources()
@@ -140,7 +142,8 @@ struct DesktopCapturePickerTests {
       shareableContent: {
         enumerationCount += 1
         throw CocoaError(.fileReadUnknown)
-      }
+      },
+      sourceLoadCoordinator: DesktopCaptureSourceLoadCoordinator()
     )
 
     await picker.loadSources()
@@ -189,7 +192,8 @@ struct DesktopCapturePickerTests {
       hasScreenRecordingAccess: { true },
       screenSourcesProvider: {
         await withCheckedContinuation { pending.append($0) }
-      }
+      },
+      sourceLoadCoordinator: DesktopCaptureSourceLoadCoordinator()
     )
 
     let first = Task { await picker.loadSources() }

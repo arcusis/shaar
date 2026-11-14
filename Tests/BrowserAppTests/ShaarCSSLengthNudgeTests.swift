@@ -23,7 +23,7 @@ import Testing
     #expect(window.makeFirstResponder(field))
     let up = try #require(arrow(126, flags: [], window: window))
     #expect(up.specialKey == .upArrow)
-    #expect(up.window == nil, "the fixture window stays unordered and cannot take focus")
+    #expect(!window.isVisible, "the fixture window stays unordered and cannot take focus")
     #expect(ShaarCSSLengthNudge.consume(up, in: window) == nil)
     #expect(editedText(window) == "11px")
 

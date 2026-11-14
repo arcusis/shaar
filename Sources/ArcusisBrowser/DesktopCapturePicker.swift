@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import CoreGraphics
 import AppKit
+import CoreGraphics
 import ScreenCaptureKit
 import SwiftUI
 
@@ -64,7 +64,7 @@ struct DesktopCaptureSettingsButton {
 }
 
 @MainActor
-private final class DesktopCaptureSourceLoadCoordinator {
+final class DesktopCaptureSourceLoadCoordinator {
   private(set) var generation = 0
 
   func beginLoad() -> Int {
@@ -88,7 +88,7 @@ struct DesktopCapturePicker: View {
   @State private var note: String?
   @State private var needsScreenRecordingAccess = false
   @State private var settingsAction: DesktopCaptureSettingsAction?
-  @State private var sourceLoadCoordinator = DesktopCaptureSourceLoadCoordinator()
+  @State private var sourceLoadCoordinator: DesktopCaptureSourceLoadCoordinator
 
   init(
     request: DesktopCaptureRequest,
@@ -99,6 +99,8 @@ struct DesktopCapturePicker: View {
       try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     },
     screenSourcesProvider: (@MainActor () async throws -> [DesktopCaptureSource])? = nil,
+    sourceLoadCoordinator: DesktopCaptureSourceLoadCoordinator =
+      DesktopCaptureSourceLoadCoordinator(),
     openSettings: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
   ) {
     self.request = request
@@ -107,6 +109,7 @@ struct DesktopCapturePicker: View {
     self.requestScreenRecordingAccess = requestScreenRecordingAccess
     self.shareableContent = shareableContent
     self.screenSourcesProvider = screenSourcesProvider
+    _sourceLoadCoordinator = State(initialValue: sourceLoadCoordinator)
     self.openSettings = openSettings
   }
 

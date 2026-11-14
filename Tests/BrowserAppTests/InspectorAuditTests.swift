@@ -77,12 +77,15 @@ private final class PendingInspectorAuditRuntime: ARCChromiumRuntime {
   }
 
   func complete(_ index: Int) {
-    replies[index]([
-      "result": [
-        "value": ["scope": "page", "violations": 0, "incomplete": 0, "findings": [],
-          "truncated": false],
-      ]
-    ], nil)
+    replies[index](
+      [
+        "result": [
+          "value": [
+            "scope": "page", "violations": 0, "incomplete": 0, "findings": [],
+            "truncated": false,
+          ]
+        ]
+      ], nil)
   }
 }
 
@@ -98,8 +101,10 @@ private final class PendingInspectorAuditRuntime: ARCChromiumRuntime {
     session.tabChanged(
       tabID, url: "https://example.test", title: "Fixture", loading: false,
       back: false, forward: false)
-    let inspector = InspectorModel(target: try #require(session.inspectorTarget), privateSession: session)
+    let inspector = InspectorModel(
+      target: try #require(session.inspectorTarget), privateSession: session)
     inspector.open()
+    inspector.endPoll()  // Keep autonomous reads out of the selection-cancellation assertion.
     defer { inspector.close() }
     let finding = InspectorAuditModel.Finding(
       id: "image-alt:0", ruleID: "image-alt", impact: "serious", title: "Image alt",
@@ -139,7 +144,8 @@ private final class PendingInspectorAuditRuntime: ARCChromiumRuntime {
   }
 
   @Test func backendFailuresUseLocalizedAuditRecoveryCopy() {
-    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let error = NSError(
+      domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(
       InspectorAuditModel.failureMessage(for: error)
         == InspectorL10n.string("Could not complete the page audit. Try again."))

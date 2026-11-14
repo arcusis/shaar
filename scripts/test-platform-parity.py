@@ -814,12 +814,26 @@ def check_fixtures(http_base, https_base):
     print(f"fixtures ok {http_base} {https_base}")
 
 
-def main():
+def receipt_output_path(value: str) -> Path:
+    path = Path(value)
+    if path.is_symlink():
+        raise argparse.ArgumentTypeError(f"receipt output must not be a symlink: {path}")
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(f"receipt output parent must not be a symlink: {path.parent}")
+    return path
+
+
+def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
-    parser.add_argument("--receipt", type=Path, default=ROOT / "build/platform-parity/receipt.json")
+    parser.add_argument("--receipt", type=receipt_output_path,
+                        default=ROOT / "build/platform-parity/receipt.json")
     parser.add_argument("--fixtures-only", action="store_true")
-    options = parser.parse_args()
+    return parser
+
+
+def main():
+    options = argument_parser().parse_args()
     executable = options.app / "Contents/MacOS/ShaarVerification"
     if not options.fixtures_only and not executable.is_file():
         parser.error(f"Missing verification app: {executable}")

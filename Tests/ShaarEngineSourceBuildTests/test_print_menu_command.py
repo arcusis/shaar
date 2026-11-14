@@ -53,7 +53,9 @@ class PrintMenuCommandTests(unittest.TestCase):
         error_localizations = strings["strings"]["Could not open print panel"]["localizations"]
         self.assertEqual(error_localizations["en"]["stringUnit"]["value"], "Could not open print panel")
         self.assertEqual(error_localizations["he"]["stringUnit"]["value"], "לא ניתן לפתוח את לוח ההדפסה")
-        self.assertIn("runtime.printTabID(page.tab.id.uuidString", host)
+        self.assertIn("runtime.printTabID(", host)
+        self.assertIn("page.tab.id.uuidString, windowID: context.nativeID,", host)
+        self.assertIn("profileID: store.session.selectedSpace.profileID.uuidString", host)
         self.assertIn("decltype(&shaar_tab_print) tab_print = nullptr", bridge)
         self.assertIn("SHAAR_LOAD(tab_print, tab_print)", bridge)
         required_symbols = bridge.split("return abi_minor &&", 1)[1].split(";", 1)[0]

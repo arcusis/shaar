@@ -289,19 +289,23 @@ struct DeviceChooserConsent: View {
       Text(PanelsL10n.string("No devices found."))
         .foregroundStyle(.secondary)
     } else {
-      ForEach(presented.options) { option in
-        Button {
-          selection.select(option.index, from: presented.options, revision: presented.revision)
-        } label: {
-          optionLabel(option, options: presented.options)
+      ScrollView(.vertical) {
+        LazyVStack(alignment: .leading, spacing: 0) {
+          ForEach(presented.options) { option in
+            Button {
+              selection.select(option.index, from: presented.options, revision: presented.revision)
+            } label: {
+              optionLabel(option, options: presented.options)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(
+              Self.optionAccessibilityTraits(
+                isSelected: selection.selectedIndex(
+                  for: presented.options, revision: presented.revision) == option.index))
+          }
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(
-          Self.optionAccessibilityTraits(
-            isSelected: Self.isOptionSelected(
-              option.index, options: presented.options, selection: selection,
-              revision: presented.revision)))
       }
+      .frame(maxHeight: 320, alignment: .top)
     }
   }
 

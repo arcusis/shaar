@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -396,6 +397,23 @@ struct DeviceChooserTests {
     #expect(DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: 2))
     #expect(!DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: 1))
     #expect(!DeviceChooserOptionPresentation.isSelected(optionIndex: 2, selectedIndex: nil))
+  }
+
+  @Test func longOptionListFitsWithinTheNativeSheet() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let options = (0..<64).map {
+      DeviceChooserOption(index: $0, title: "USB device \($0)", detail: "")
+    }
+    let request = DeviceChooserRequest(
+      id: "long-list", tabID: tab.id, profileID: store.session.selectedSpace.profileID,
+      pageURL: tab.url, origin: tab.url, transport: .usb, options: options,
+      bluetoothUnavailable: false, canGrant: true)
+    let hostingView = NSHostingView(rootView: DeviceChooserConsent(store: store, request: request))
+    hostingView.frame = NSRect(x: 0, y: 0, width: 440, height: 700)
+    hostingView.layoutSubtreeIfNeeded()
+
+    #expect(hostingView.fittingSize.height <= 700)
   }
 
   private func store() throws -> BrowserStore {

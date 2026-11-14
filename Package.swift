@@ -94,6 +94,10 @@ let package = Package(
       ],
       linkerSettings: bundleFrameworksLinkerSettings),
     .target(name: "BrowserTestSupport", path: "Tests/TestSupport"),
+    .target(
+      name: "ShaarEngineABITestSupport",
+      path: "Tests/ShaarEngineABITestSupport",
+      publicHeadersPath: "include"),
     .testTarget(
       name: "BrowserCoreTests", dependencies: ["BrowserCore", "BrowserTestSupport", "CSQLite"],
       resources: [.copy("Fixtures/BrowserImport")]),
@@ -110,6 +114,8 @@ let package = Package(
         "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
         "ShaarVerification",
       ]),
-    .testTarget(name: "ShaarEngineABITests", dependencies: ["ShaarEngineABI", "ShaarEngineC"]),
+    .testTarget(
+      name: "ShaarEngineABITests",
+      dependencies: ["ShaarEngineABI", "ShaarEngineC", "ShaarEngineABITestSupport"]),
   ]
 )

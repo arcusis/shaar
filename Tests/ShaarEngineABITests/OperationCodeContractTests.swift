@@ -3,48 +3,51 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import ShaarEngineC
+import ShaarEngineABITestSupport
 import Testing
 
 @testable import ShaarEngineABI
 
 @Test func swiftOperationIDsMatchThePublicCABI() {
+  var c = shaar_test_operation_codes()
+  shaar_test_get_operation_codes(&c)
   let mappings = [
-    ShaarNavigationOperation.navigate.rawValue == UInt32(SHAAR_OP_TAB_NAVIGATE.rawValue),
-    ShaarNavigationOperation.go.rawValue == UInt32(SHAAR_OP_TAB_GO.rawValue),
-    ShaarNavigationOperation.reload.rawValue == UInt32(SHAAR_OP_TAB_RELOAD.rawValue),
-    ShaarNavigationOperation.stop.rawValue == UInt32(SHAAR_OP_TAB_STOP.rawValue),
-    ShaarDownloadsAdapter.listOperation == UInt32(SHAAR_OP_DOWNLOAD_LIST.rawValue),
-    ShaarDownloadsAdapter.controlOperation == UInt32(SHAAR_OP_DOWNLOAD_CONTROL.rawValue),
-    ShaarDownloadsAdapter.directoryOperation == UInt32(SHAAR_OP_DOWNLOAD_DIRECTORY.rawValue),
-    ShaarBookmarkOperation.tree.rawValue == UInt32(SHAAR_OP_BOOKMARK_TREE.rawValue),
-    ShaarBookmarkOperation.apply.rawValue == UInt32(SHAAR_OP_BOOKMARK_APPLY.rawValue),
-    ShaarBookmarkOperation.watch.rawValue == UInt32(SHAAR_OP_BOOKMARK_WATCH.rawValue),
-    ShaarHistoryOperation.query.rawValue == UInt32(SHAAR_OP_HISTORY_QUERY.rawValue),
-    ShaarHistoryOperation.insert.rawValue == UInt32(SHAAR_OP_HISTORY_INSERT.rawValue),
-    ShaarHistoryOperation.delete.rawValue == UInt32(SHAAR_OP_HISTORY_DELETE.rawValue),
-    ShaarHistoryOperation.watch.rawValue == UInt32(SHAAR_OP_HISTORY_WATCH.rawValue),
-    ShaarHistoryOperation.unwatch.rawValue == UInt32(SHAAR_OP_HISTORY_UNWATCH.rawValue),
-    ShaarSiteDataOperation.settingsGet.rawValue == UInt32(SHAAR_OP_SITE_SETTINGS_GET.rawValue),
-    ShaarSiteDataOperation.settingsSet.rawValue == UInt32(SHAAR_OP_SITE_SETTINGS_SET.rawValue),
-    ShaarSiteDataOperation.settingsReset.rawValue == UInt32(SHAAR_OP_SITE_SETTINGS_RESET.rawValue),
-    ShaarExtensionsOperation.list.rawValue == UInt32(SHAAR_OP_EXTENSION_LIST.rawValue),
-    ShaarExtensionsOperation.manage.rawValue == UInt32(SHAAR_OP_EXTENSION_MANAGE.rawValue),
-    ShaarExtensionsOperation.action.rawValue == UInt32(SHAAR_OP_EXTENSION_ACTION.rawValue),
+    ShaarNavigationOperation.navigate.rawValue == c.tab_navigate,
+    ShaarNavigationOperation.go.rawValue == c.tab_go,
+    ShaarNavigationOperation.reload.rawValue == c.tab_reload,
+    ShaarNavigationOperation.stop.rawValue == c.tab_stop,
+    ShaarDownloadsAdapter.listOperation == c.download_list,
+    ShaarDownloadsAdapter.controlOperation == c.download_control,
+    ShaarDownloadsAdapter.directoryOperation == c.download_directory,
+    ShaarBookmarkOperation.tree.rawValue == c.bookmark_tree,
+    ShaarBookmarkOperation.apply.rawValue == c.bookmark_apply,
+    ShaarBookmarkOperation.watch.rawValue == c.bookmark_watch,
+    ShaarHistoryOperation.query.rawValue == c.history_query,
+    ShaarHistoryOperation.insert.rawValue == c.history_insert,
+    ShaarHistoryOperation.delete.rawValue == c.history_delete,
+    ShaarHistoryOperation.watch.rawValue == c.history_watch,
+    ShaarHistoryOperation.unwatch.rawValue == c.history_unwatch,
+    ShaarSiteDataOperation.settingsGet.rawValue == c.site_settings_get,
+    ShaarSiteDataOperation.settingsSet.rawValue == c.site_settings_set,
+    ShaarSiteDataOperation.settingsReset.rawValue == c.site_settings_reset,
+    ShaarExtensionsOperation.list.rawValue == c.extension_list,
+    ShaarExtensionsOperation.manage.rawValue == c.extension_manage,
+    ShaarExtensionsOperation.action.rawValue == c.extension_action,
     ShaarExtensionsOperation.installDecision.rawValue
-      == UInt32(SHAAR_OP_EXTENSION_INSTALL_DECISION.rawValue),
-    ShaarExtensionsOperation.popupClose.rawValue == UInt32(SHAAR_OP_EXTENSION_POPUP_CLOSE.rawValue),
-    ShaarFindOperation.find.rawValue == UInt32(SHAAR_OP_TAB_FIND.rawValue),
-    ShaarFindOperation.stop.rawValue == UInt32(SHAAR_OP_TAB_STOP_FIND.rawValue),
-    ShaarDevToolsOperation.call.rawValue == UInt32(SHAAR_OP_DEVTOOLS_CALL.rawValue),
-    ShaarDevToolsOperation.panelOpen.rawValue == UInt32(SHAAR_OP_DEVTOOLS_PANEL_OPEN.rawValue),
-    ShaarDevToolsOperation.panelClose.rawValue == UInt32(SHAAR_OP_DEVTOOLS_PANEL_CLOSE.rawValue),
+      == c.extension_install_decision,
+    ShaarExtensionsOperation.popupClose.rawValue == c.extension_popup_close,
+    ShaarFindOperation.find.rawValue == c.tab_find,
+    ShaarFindOperation.stop.rawValue == c.tab_stop_find,
+    ShaarDevToolsOperation.call.rawValue == c.devtools_call,
+    ShaarDevToolsOperation.panelOpen.rawValue == c.devtools_panel_open,
+    ShaarDevToolsOperation.panelClose.rawValue == c.devtools_panel_close,
     ShaarDevToolsOperation.panelScreencast.rawValue
-      == UInt32(SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST.rawValue),
-    ShaarMediaOperation.getState.rawValue == UInt32(SHAAR_OP_MEDIA_GET_STATE.rawValue),
-    ShaarMediaOperation.control.rawValue == UInt32(SHAAR_OP_MEDIA_CONTROL.rawValue),
-    ShaarMediaOperation.captureReply.rawValue == UInt32(SHAAR_OP_MEDIA_CAPTURE_REPLY.rawValue),
+      == c.devtools_panel_screencast,
+    ShaarMediaOperation.getState.rawValue == c.media_get_state,
+    ShaarMediaOperation.control.rawValue == c.media_control,
+    ShaarMediaOperation.captureReply.rawValue == c.media_capture_reply,
     ShaarStorageKeychainAdapter.identityOperation
-      == UInt32(SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY.rawValue),
+      == c.storage_keychain_identity,
   ]
   #expect(mappings.allSatisfy { $0 })
 }

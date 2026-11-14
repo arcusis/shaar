@@ -4,6 +4,10 @@
 
 import SwiftUI
 
+enum AgentBridgeAccessibility {
+  static let headingTraits: AccessibilityTraits = .isHeader
+}
+
 @MainActor struct AgentBridgePresentation {
   let model: AgentBridgeModel
 
@@ -32,6 +36,7 @@ struct AgentBridgeControls: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Text(ShellL10n.string("Agent bridge")).font(.headline)
+        .accessibilityAddTraits(AgentBridgeAccessibility.headingTraits)
       Text(AgentBridgeConsent.summary)
         .font(.caption).foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
@@ -105,6 +110,7 @@ private struct AgentBridgeEndpoint: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text(ShellL10n.string("MCP endpoint")).font(.caption.weight(.semibold))
+        .accessibilityAddTraits(AgentBridgeAccessibility.headingTraits)
       if let endpoint = model.documentedEndpoint {
         Text(endpoint)
           .font(.caption.monospaced())
@@ -138,6 +144,7 @@ private struct AgentBridgeAgentList: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text(ShellL10n.string("Connected agents")).font(.caption.weight(.semibold))
+        .accessibilityAddTraits(AgentBridgeAccessibility.headingTraits)
       if model.connections.isEmpty {
         Text(ShellL10n.string("No agent is connected to this tab."))
           .font(.caption).foregroundStyle(.secondary)

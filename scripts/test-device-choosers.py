@@ -11,6 +11,7 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -52,6 +53,7 @@ def crash_names():
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
+    parser.add_argument("--screenshot-dir", type=Path)
     options = parser.parse_args()
     executable = options.app / "Contents/MacOS/ShaarVerification"
     framework = options.app / "Contents/Frameworks/Chromium Framework.framework"
@@ -77,6 +79,8 @@ def main() -> None:
             "--probe-output", str(report), "--probe-data-dir", str(data),
             "--probe-base-url", page,
         ]
+        if os.environ.get("SHAAR_V02_PROOF_LOCALE") == "he":
+            command.extend(["-AppleLanguages", "(he)"])
         environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                            SHAAR_ENGINE_TESTING="1", RUNNER_TEMP=str(root))
         process = subprocess.Popen(
@@ -91,6 +95,15 @@ def main() -> None:
             returncode = process.returncode if process.returncode not in (None, 0) else 124
             stderr = (stderr or "") + "\nThe device chooser probe did not exit within 120 seconds."
         evidence = json.loads(report.read_text()) if report.exists() else None
+        screenshot_paths = []
+        if evidence and options.screenshot_dir:
+            options.screenshot_dir.mkdir(parents=True, exist_ok=True)
+            for name in evidence.get("screenshots") or []:
+                source = data / name
+                if source.is_file() and source.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+                    destination = options.screenshot_dir / name
+                    shutil.copy2(source, destination)
+                    screenshot_paths.append(str(destination))
         new_crashes = sorted(crash_names() - before)
         print(json.dumps({
             "exitCode": returncode,
@@ -99,7 +112,7 @@ def main() -> None:
             "rows": evidence.get("rows") if evidence else None,
             "error": evidence.get("error") if evidence else (stderr or "")[-2000:],
             "newCrashes": new_crashes,
-            "screenshots": [
+            "screenshots": screenshot_paths if options.screenshot_dir else [
                 str(data / name) for name in (evidence.get("screenshots") or [])
             ] if evidence else [],
         }, indent=2))

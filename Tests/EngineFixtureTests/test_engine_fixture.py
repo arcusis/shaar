@@ -49,6 +49,14 @@ class PageFocusEventProbeTests(unittest.TestCase):
 
 
 class LocalExtensionInstallRunnerTests(unittest.TestCase):
+    def test_hebrew_locale_is_applied_to_the_hidden_verification_app_launch(self):
+        with patch.dict(os.environ, {"SHAAR_V02_PROOF_LOCALE": "he"}):
+            arguments = fixture.build_engine_probe_arguments(
+                "/tmp/ShaarVerification", Path("/tmp/probe"),
+                "http://127.0.0.1:1234/account", "initial", include_bitwarden=False,
+                onboarding_control=False, abrupt=False, saved_tab_capacity=False)
+        self.assertEqual(arguments[-2:], ["-AppleLanguages", "(he)"])
+
     def test_local_install_mode_is_explicit_and_mutually_exclusive(self):
         options = fixture.argument_parser().parse_args(['--local-extension-install'])
         self.assertTrue(options.local_extension_install)

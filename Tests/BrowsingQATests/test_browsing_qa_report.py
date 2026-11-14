@@ -26,6 +26,27 @@ GIBIBYTE = 1024 ** 3
 
 
 class BrowsingQAReportTests(unittest.TestCase):
+    def test_hidden_flow_screenshots_are_copied_before_disposable_profile_cleanup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "flow-root"
+            root.mkdir()
+            screenshots = Path(temporary) / "screenshots"
+
+            def launch(_executable, flow_root, _page_url, scenario):
+                (flow_root / f"browsing-{scenario}.png").write_bytes(b"hidden-flow-png")
+                return {"scenario": scenario, "result": "pass", "seconds": 0}
+
+            with patch.object(PROBE, "prepare_root", return_value=root), patch.object(
+                PROBE, "launch_scenario", side_effect=launch
+            ):
+                rows = PROBE.run_suite(
+                    Path("/tmp/ShaarVerification"), ["dialogs"], "http://127.0.0.1:1234/",
+                    screenshot_dir=screenshots)
+
+            self.assertEqual(rows[0]["result"], "pass")
+            self.assertEqual(
+                (screenshots / "browsing-dialogs.png").read_bytes(), b"hidden-flow-png")
+
     def test_main_rejects_colliding_report_paths_before_app_validation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

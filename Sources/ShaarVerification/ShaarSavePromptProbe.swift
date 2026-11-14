@@ -60,28 +60,31 @@ import Foundation
     do {
       try host.restore()
       guard let context = host.contexts.values.first else { throw Failure("No hidden window") }
-      rows.append(await password(context: context, runtime: runtime, base: base))
+      rows.append(
+        await password(context: context, runtime: runtime, base: base, outputURL: outputURL))
       hideWindows()
       rows.append(
         await offer(
-          name: "card", kind: .card, path: "/card", context: context, runtime: runtime, base: base))
+          name: "card", kind: .card, path: "/card", context: context, runtime: runtime,
+          base: base, outputURL: outputURL))
       hideWindows()
       rows.append(
         await offer(
           name: "address", kind: .address, path: "/address", context: context, runtime: runtime,
-          base: base))
+          base: base, outputURL: outputURL))
     } catch {
       rows.append(["name": "setup", "passed": false, "detail": error.localizedDescription])
     }
   }
 
   private static func password(
-    context: NativeBrowserContext, runtime: ARCShaarRuntime, base: URL
+    context: NativeBrowserContext, runtime: ARCShaarRuntime, base: URL, outputURL: URL
   ) async -> [String: Any] {
     let opened = await open(base.appending(path: "password"), context: context)
     hideWindows()
     let clicked = opened ? await trustedClick(context: context, runtime: runtime) : false
     let prompt = await waitForPrompt(in: context, kind: .password)
+    let screenshot = prompt != nil && capturePrompt(name: "password", outputURL: outputURL)
     let offscreen = panelStaysOffscreen()
     let saved = prompt != nil && click(ShaarSavePromptPanel.saveIdentifier)
     let cleared = await wait {
@@ -90,32 +93,35 @@ import Foundation
     let filled = saved ? await filledLogin(context: context, base: base) : (false, false)
     let passed =
       opened && clicked && prompt != nil && offscreen && saved && cleared
-      && filled.0 && filled.1
+      && filled.0 && filled.1 && screenshot
     return [
       "name": "password", "passed": passed, "opened": opened, "clicked": clicked,
       "prompt": prompt != nil, "offscreen": offscreen, "saved": saved, "cleared": cleared,
-      "filledUsername": filled.0, "filledPassword": filled.1,
+      "filledUsername": filled.0, "filledPassword": filled.1, "screenshot": screenshot,
     ]
   }
 
   private static func offer(
     name: String, kind: SavePromptRequest.Kind, path: String, context: NativeBrowserContext,
-    runtime: ARCShaarRuntime, base: URL
+    runtime: ARCShaarRuntime, base: URL, outputURL: URL
   ) async -> [String: Any] {
     let opened = await open(base.appending(path: path), context: context)
     hideWindows()
     let clicked = opened ? await trustedClick(context: context, runtime: runtime) : false
     let prompt = await waitForPrompt(in: context, kind: kind)
+    let screenshot = prompt?.kind == kind && capturePrompt(name: name, outputURL: outputURL)
     let offscreen = panelStaysOffscreen()
     let saved = prompt != nil && click(ShaarSavePromptPanel.saveIdentifier)
     let cleared = await wait {
       context.store.savePrompt == nil && promptPanel()?.isVisible != true
     }
-    let passed = opened && clicked && prompt?.kind == kind && offscreen && saved && cleared
+    let passed =
+      opened && clicked && prompt?.kind == kind && offscreen && saved && cleared
+      && screenshot
     return [
       "name": name, "passed": passed, "opened": opened, "clicked": clicked,
       "prompt": prompt?.kind.rawValue ?? "", "offscreen": offscreen, "saved": saved,
-      "cleared": cleared,
+      "cleared": cleared, "screenshot": screenshot,
     ]
   }
 
@@ -179,6 +185,24 @@ import Foundation
 
   private static func promptPanel() -> ShaarSavePromptPanel? {
     NSApp.windows.compactMap { $0 as? ShaarSavePromptPanel }.first
+  }
+
+  private static func capturePrompt(name: String, outputURL: URL) -> Bool {
+    guard let view = promptPanel()?.contentView, view.bounds.width > 0, view.bounds.height > 0,
+      let bitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * 2),
+        pixelsHigh: Int(view.bounds.height * 2), bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+        bitsPerPixel: 0)
+    else { return false }
+    view.cacheDisplay(in: view.bounds, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else { return false }
+    do {
+      try png.write(
+        to: outputURL.deletingLastPathComponent().appending(path: "save-prompt-\(name).png"),
+        options: .atomic)
+      return true
+    } catch { return false }
   }
 
   private static func panelStaysOffscreen() -> Bool {

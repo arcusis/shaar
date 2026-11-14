@@ -178,6 +178,8 @@ def main():
                 "--probe-data-dir", str(data),
                 "--probe-fixture-url", f"http://127.0.0.1:{server.server_port}/",
             ]
+            if os.environ.get("SHAAR_V02_PROOF_LOCALE") == "he":
+                command.extend(["-AppleLanguages", "(he)"])
             environment = dict(
                 os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                 SHAAR_ENGINE_TESTING="1", RUNNER_TEMP=str(root))

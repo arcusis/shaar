@@ -139,8 +139,11 @@ def main():
             environment = os.environ.copy()
             environment.update(HOME=str(home), CFFIXED_USER_HOME=str(home),
                                SHAAR_ENGINE_TESTING="1", SHAAR_MOCK_KEYCHAIN="1")
+            command = [str(executable), "--save-prompt-probe", str(report_path), page]
+            if os.environ.get("SHAAR_V02_PROOF_LOCALE") == "he":
+                command.extend(["-AppleLanguages", "(he)"])
             result = subprocess.run(
-                [str(executable), "--save-prompt-probe", str(report_path), page],
+                command,
                 env=environment, capture_output=True, text=True, timeout=180, check=False,
             )
             report = json.loads(report_path.read_text()) if report_path.is_file() else {}

@@ -399,13 +399,14 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     host: NativeBrowserHost, runtime: ARCShaarRuntime, pageURL: URL, report: EdgeProbeReport
   ) async {
     let dialogs = DialogGuard()
+    var screenshotCaptured = false
     defer {
       dialogs.stop()
       silenceRenderers()
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
       report.finish(
         hidden: hidden, dialogs: dialogs.snapshot(),
-        dialogsTruncated: dialogs.notesWereDropped())
+        dialogsTruncated: dialogs.notesWereDropped(), screenshotCaptured: screenshotCaptured)
       host.events.quit()
     }
     do {
@@ -433,12 +434,31 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     report.add(await checkHang(context, runtime, pageURL))
     report.add(await checkCrash(context, runtime, pageURL))
     report.add(contentsOf: await checkDialogs(context, runtime, pageURL, dialogs))
+    screenshotCaptured = capture(context.hosting, output: report.output)
     cancelActiveDownloads(context)
     let stray = visibleWindowLabels()
     let notes = dialogs.snapshot()
     let verdict = browsingEdgeHiddenWindowsVerdict(
       stillVisible: stray, notes: notes, notesDropped: dialogs.notesWereDropped())
     report.add(makeRow("Hidden windows", verdict.passed, verdict.detail))
+  }
+
+  private static func capture(_ view: NSView?, output: URL) -> Bool {
+    guard let view, view.bounds.width > 0, view.bounds.height > 0,
+      let bitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * 2),
+        pixelsHigh: Int(view.bounds.height * 2), bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+        bitsPerPixel: 0)
+    else { return false }
+    view.cacheDisplay(in: view.bounds, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else { return false }
+    do {
+      try png.write(
+        to: output.deletingLastPathComponent().appending(path: "browsing-edge.png"),
+        options: .atomic)
+      return true
+    } catch { return false }
   }
 
   private static func checkPageZoom(
@@ -1692,12 +1712,17 @@ private final class EdgeProbeReport {
     for row in extra { add(row) }
   }
 
-  func finish(hidden: Bool, dialogs: [[String: String]], dialogsTruncated: Bool) {
-    publish(complete: true, hidden: hidden, dialogs: dialogs, dialogsTruncated: dialogsTruncated)
+  func finish(
+    hidden: Bool, dialogs: [[String: String]], dialogsTruncated: Bool, screenshotCaptured: Bool
+  ) {
+    publish(
+      complete: true, hidden: hidden, dialogs: dialogs,
+      dialogsTruncated: dialogsTruncated, screenshotCaptured: screenshotCaptured)
   }
 
   private func publish(
-    complete: Bool, hidden: Bool, dialogs: [[String: String]], dialogsTruncated: Bool = false
+    complete: Bool, hidden: Bool, dialogs: [[String: String]], dialogsTruncated: Bool = false,
+    screenshotCaptured: Bool = false
   ) {
     let passed =
       complete && hidden && !dialogsTruncated && !rows.isEmpty && rows.allSatisfy(rowAccepted)
@@ -1706,7 +1731,7 @@ private final class EdgeProbeReport {
         "passed": passed, "complete": complete, "allWindowsHidden": hidden,
         "dialogsTruncated": dialogsTruncated,
         "dialogSampleIntervalMs": browsingEdgeDialogSampleIntervalMs,
-        "rows": rows, "dialogs": dialogs,
+        "rows": rows, "dialogs": dialogs, "screenshotCaptured": screenshotCaptured,
       ],
       to: output)
   }

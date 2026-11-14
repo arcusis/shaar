@@ -81,8 +81,7 @@ import Testing
     let values = ["schemaVersion": "1", "matchCount": "4", "activeMatch": "2"]
     for (field, value) in values {
       for replacement in ["true", "\(value).5"] {
-        let payload =
-          #"{"kind":"result","schemaVersion":1,"requestID":"19","matchCount":4,"activeMatch":2,"final":true}"#
+        let payload = #"{"kind":"result","schemaVersion":1,"requestID":"19","matchCount":4,"activeMatch":2,"final":true}"#
           .replacingOccurrences(of: "\"\(field)\":\(value)", with: "\"\(field)\":\(replacement)")
         let event = ShaarCopiedEvent(
           sequence: 2, kind: 7, profileID: Data("p".utf8), sessionID: Data("s".utf8),
@@ -93,6 +92,29 @@ import Testing
             expectedTabID: "t", expectedRequestID: 19) == nil)
       }
     }
+  }
+
+  @Test func findEventsRejectNegativeCountsAndAcceptUnknownIntermediateMatchIndex() {
+    let adapter = ShaarFindAdapter(shaar: FakeFindEngine())
+    let scope = ShaarFindScope(profileID: "p")
+    let invalidCount = ShaarCopiedEvent(
+      sequence: 3, kind: 7, profileID: Data("p".utf8), sessionID: Data(),
+      windowID: Data("w".utf8), tabID: Data("t".utf8),
+      payloadJSON: Data(
+        #"{"kind":"result","schemaVersion":1,"requestID":"19","matchCount":-1,"activeMatch":0,"final":true}"#.utf8))
+    #expect(
+      adapter.decode(
+        invalidCount, expectedScope: scope, expectedTabID: "t", expectedRequestID: 19) == nil)
+
+    let unknownIntermediateIndex = ShaarCopiedEvent(
+      sequence: 4, kind: 7, profileID: Data("p".utf8), sessionID: Data(),
+      windowID: Data("w".utf8), tabID: Data("t".utf8),
+      payloadJSON: Data(
+        #"{"kind":"result","schemaVersion":1,"requestID":"19","matchCount":1,"activeMatch":-1,"final":true}"#.utf8))
+    #expect(
+      adapter.decode(
+        unknownIntermediateIndex, expectedScope: scope, expectedTabID: "t", expectedRequestID: 19)
+        == ShaarFindUpdate(requestID: 19, matchCount: 1, activeMatch: -1, isFinal: true))
   }
 
   @Test func findEventFinalFlagRequiresAJSONBoolean() {
@@ -106,21 +128,5 @@ import Testing
       adapter.decode(
         event, expectedScope: .init(profileID: "p", sessionID: "s"),
         expectedTabID: "t", expectedRequestID: 19) == nil)
-  }
-
-  @Test func findEventsRejectNegativeMatchIndexes() {
-    let adapter = ShaarFindAdapter(shaar: FakeFindEngine())
-    let scope = ShaarFindScope(profileID: "p")
-    for values in [("-1", "0"), ("1", "-2")] {
-      let payload = Data(
-        "{\"kind\":\"result\",\"schemaVersion\":1,\"requestID\":\"19\",\"matchCount\":\(values.0),\"activeMatch\":\(values.1),\"final\":true}"
-          .utf8)
-      let event = ShaarCopiedEvent(
-        sequence: 3, kind: 7, profileID: Data("p".utf8), sessionID: Data(),
-        windowID: Data("w".utf8), tabID: Data("t".utf8), payloadJSON: payload)
-      #expect(
-        adapter.decode(event, expectedScope: scope, expectedTabID: "t", expectedRequestID: 19)
-          == nil)
-  }
   }
 }

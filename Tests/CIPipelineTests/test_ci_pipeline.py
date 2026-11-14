@@ -170,6 +170,11 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn("esbuild@0.28.2:", lockfile)
         self.assertNotIn("esbuild@0.27.7", lockfile)
 
+    def test_website_readiness_probe_bounds_connection_and_response_time(self):
+        workflow = (ROOT / ".github/workflows/website-checks.yml").read_text()
+        readiness = workflow.split("      - name: Check Wrangler HTTP serving", 1)[1]
+        self.assertIn("curl --connect-timeout 1 --max-time 2 -fsS http://localhost:8787/", readiness)
+
     def test_inspector_job_caches_playwright_browser_for_locked_version(self):
         workflow = (ROOT / ".github" / "workflows" / "source-checks.yml").read_text()
         inspector = workflow.split("  inspector-contracts:\n", 1)[1].split("  website:\n", 1)[0]

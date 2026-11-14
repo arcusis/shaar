@@ -135,7 +135,7 @@ struct ShortcutCatalog {
     case .downloads: ("j", [.command, .shift])
     case .extensions: ("e", [.command, .shift])
     case .zoomWindow: ("m", [.command, .control])
-    case .bringAllToFront, .checkForUpdates, .sharePage: nil
+    case .bringAllToFront, .checkForUpdates, .sharePage, .clearHistory: nil
     case .help: ("?", .command)
     case .minimizeWindow: ("m", .command)
     case .settings: (",", .command)

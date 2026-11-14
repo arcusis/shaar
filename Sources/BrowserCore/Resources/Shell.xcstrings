@@ -1515,6 +1515,22 @@
         }
       }
     },
+    "Clear History…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear History…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקת ההיסטוריה…"
+          }
+        }
+      }
+    },
     "Show All History": {
       "localizations": {
         "en": {

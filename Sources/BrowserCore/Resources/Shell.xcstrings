@@ -2155,6 +2155,22 @@
         }
       }
     },
+    "Paste and Go": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste and Go"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדבקה ומעבר"
+          }
+        }
+      }
+    },
     "Permissions": {
       "localizations": {
         "en": {

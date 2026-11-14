@@ -417,6 +417,20 @@ class CatalogValidatorTests(unittest.TestCase):
                 with self.subTest(modifier=modifier):
                     with self.assertRaisesRegex(ValueError, f"unlocalized {modifier}.*{key}"):
                         VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+    def test_source_reference_scanner_ignores_wrapper_calls_in_comments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Sources/BrowserCore/Example.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                '// BrowserLocalization.string("Missing key")\n'
+                '/* outer /* ShellL10n.text("Also missing") */ still a comment */\n',
+                encoding="utf-8",
+            )
+            catalog_path = root / "Sources/BrowserCore/Resources/Core.xcstrings"
+            catalog_path.parent.mkdir(parents=True)
+            catalog_path.write_text(json.dumps({"strings": {}}), encoding="utf-8")
+            VALIDATOR.validate_source_references(root, [catalog_path])
 
     def test_rejects_direct_swiftui_control_titles_when_hebrew_translation_exists(self):
         examples = (

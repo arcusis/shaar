@@ -137,6 +137,7 @@ struct PrivateMultiTabProbe {
       let firstID = UUID(uuidString: tabs[0]["tabID"] as? String ?? ""),
       owner.store.moveTab(firstID, from: privateSpace, to: privateSpace, folderID: folder)
     else { throw Failure("Private sidebar could not create a folder or move a tab into it.") }
+    try await captureShell(owner, stage: "folder")
     owner.store.splitSelectedTab()
     guard owner.store.selectedSplit != nil else {
       throw Failure("Private tabs could not use the shared split model.")

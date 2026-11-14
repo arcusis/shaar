@@ -172,7 +172,6 @@ import Testing
     hiddenPane["visiblePagesInWindowCount"] = 1
     #expect(!PrivateMultiTabEvidence.splitShellAudit(hiddenPane))
   }
-
   @Test func shellAuditRejectsAZeroSizedNativePageInsideItsContainer() {
     let audit: [String: Any] = [
       "stage": "tab-0", "containerCount": 1, "layerBacked": [true],

@@ -42,6 +42,8 @@ def rebrand(framework: Path) -> None:
     actual = {path.name for path in helpers.glob("*.app")}
     if actual != set(HELPER_IDS):
         raise ValueError("Unexpected Chromium helper set")
+    if any((helpers / name).is_symlink() or not (helpers / name).is_dir() for name in HELPER_IDS):
+        raise ValueError("Chromium helper bundles must be real directories")
     set_identity(versioned / "Resources/Info.plist", FRAMEWORK_ID, "Shaar Engine")
     notices = versioned / "Resources/ThirdPartyNotices"
     notices.mkdir(exist_ok=True)

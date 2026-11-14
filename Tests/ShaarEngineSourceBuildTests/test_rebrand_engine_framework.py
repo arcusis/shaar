@@ -19,6 +19,38 @@ SPEC.loader.exec_module(REBRAND)
 
 
 class RebrandEngineFrameworkTests(unittest.TestCase):
+    def test_rebrand_rejects_symlinked_helper_bundle_before_modifying_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            framework = root / "Chromium Framework.framework"
+            version = framework / "Versions/Current"
+            (version / "Resources").mkdir(parents=True)
+            (version / "Resources/Info.plist").write_bytes(
+                plistlib.dumps({"CFBundleIdentifier": "com.ardia.browser"})
+            )
+            helpers = version / "Helpers"
+            helpers.mkdir()
+            target = root / "outside-helper"
+            info = target / "Contents/Info.plist"
+            info.parent.mkdir(parents=True)
+            info.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.external.target"}))
+            for name in REBRAND.HELPER_IDS:
+                path = helpers / name
+                if name == "Chromium Helper.app":
+                    path.symlink_to(target, target_is_directory=True)
+                    continue
+                (path / "Contents").mkdir(parents=True)
+                (path / "Contents/Info.plist").write_bytes(
+                    plistlib.dumps({"CFBundleIdentifier": "com.ardia.browser"})
+                )
+
+            with self.assertRaisesRegex(ValueError, "helper bundles must be real directories"):
+                REBRAND.rebrand(framework)
+
+            self.assertEqual(
+                plistlib.loads(info.read_bytes())["CFBundleIdentifier"], "com.external.target"
+            )
+
     def test_framework_and_helpers_have_shaar_bundle_ids(self):
         with tempfile.TemporaryDirectory() as temporary:
             framework = Path(temporary) / "Chromium Framework.framework"

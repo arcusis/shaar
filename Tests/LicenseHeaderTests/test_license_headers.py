@@ -109,7 +109,18 @@ class LicenseHeaderTests(unittest.TestCase):
               patch("sys.stderr", errors)):
             self.assertEqual(check_license_headers.main(), 1)
         self.assertIn("Cannot read tracked file for MPL-2.0 header check: broken.py", errors.getvalue())
+        self.assertNotIn("Traceback", errors.getvalue())
 
+    def test_main_reports_invalid_utf8_source_without_traceback(self):
+        (self.root / "broken.py").write_bytes(b"\xff\xfe")
+        error_output = io.StringIO()
+        with (patch.object(check_license_headers, "REPOSITORY_ROOT", self.root),
+              patch.object(check_license_headers, "tracked_files", return_value=[Path("broken.py")]),
+              patch.object(check_license_headers.sys, "stderr", error_output)):
+            status = check_license_headers.main()
+        self.assertEqual(status, 1)
+        self.assertIn("Cannot read tracked file for MPL-2.0 header check: broken.py", error_output.getvalue())
+        self.assertNotIn("Traceback", error_output.getvalue())
 
 if __name__ == "__main__":
     unittest.main()

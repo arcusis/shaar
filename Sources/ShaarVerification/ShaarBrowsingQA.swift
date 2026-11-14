@@ -1054,7 +1054,8 @@ import Foundation
   }
 
   static func isLoopbackFixtureURL(_ value: URL?) -> Bool {
-    guard let value, value.scheme == "http", value.host == "127.0.0.1", value.port != nil,
+    guard let value, value.scheme == "http", value.host == "127.0.0.1",
+      value.port.map({ (1...65_535).contains($0) }) == true,
       let components = URLComponents(url: value, resolvingAgainstBaseURL: false),
       components.user == nil, components.password == nil
     else { return false }

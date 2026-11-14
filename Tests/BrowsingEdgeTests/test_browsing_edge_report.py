@@ -198,7 +198,15 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         trigger = source.index('_ = await scrollState(runtime, context, triggerScroll: true)')
         self.assertLess(baseline, trigger)
         self.assertIn(
-            'let second = await scrollState(runtime, context, triggerScroll: false)', source)
+            'var second = await scrollState(runtime, context, triggerScroll: false)', source)
+
+    def test_scroll_probe_waits_for_delayed_fixture_rows(self):
+        fixture = PROBE.SCROLL.decode()
+        self.assertIn('setTimeout(function () { add(400); }, 600)', fixture)
+        source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
+        self.assertIn('for _ in 0..<40', source)
+        self.assertIn(
+            'scrollRowsHaveGrown(beforeCount: firstCount, afterCount: observedCount)', source)
 
     def test_media_fixture_rejects_a_paused_video_with_dimensions(self):
         fixture = PROBE.MEDIA.decode()

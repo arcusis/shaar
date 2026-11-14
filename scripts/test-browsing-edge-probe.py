@@ -75,9 +75,13 @@ window.__pageScrollEvents = 0;
 window.addEventListener("scroll", function () {
   window.__pageScrollEvents += 1;
 });
+const pendingRows = {value: false};
 root.addEventListener("scroll", function () {
   window.__scrollEvents += 1;
-  if (root.scrollTop + root.clientHeight >= root.scrollHeight - 80) add(400);
+  if (!pendingRows.value && root.scrollTop + root.clientHeight >= root.scrollHeight - 80) {
+    pendingRows.value = true;
+    setTimeout(function () { add(400); }, 600);
+  }
 });
 root.addEventListener("scrollend", function () {
   window.__scrollEndEvents += 1;

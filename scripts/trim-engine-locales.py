@@ -47,7 +47,9 @@ def main() -> None:
     framework = Path(sys.argv[1]).resolve()
     if not framework.is_relative_to(STAGE.resolve()):
         raise SystemExit("Refusing to trim outside the owned package stage")
-    resources = framework / "Versions/Current/Resources"
+    resources = (framework / "Versions/Current/Resources").resolve()
+    if not resources.is_relative_to(framework):
+        raise SystemExit("Refusing to trim resources outside the framework")
     if not resources.is_dir():
         raise SystemExit(f"Missing framework resources: {resources}")
     print(json.dumps(trim_locales(resources), sort_keys=True))

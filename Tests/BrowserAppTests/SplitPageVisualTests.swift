@@ -99,6 +99,13 @@ final class SplitPageVisualTests: XCTestCase {
     XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 40, available: 0), initial)
   }
 
+  func testStaleDragWeightsDoNotOutnumberUpdatedChildren() {
+    XCTAssertEqual(
+      SplitGroupView.displayedWeights([0.4, 0.3, 0.3], matching: [0.5, 0.5]), [0.5, 0.5])
+    XCTAssertEqual(
+      SplitGroupView.displayedWeights([0.6, 0.4], matching: [0.5, 0.5]), [0.6, 0.4])
+  }
+
   func testSplitDividerViewBuildsInHeadlessHost() {
     let ids = [UUID(), UUID()]
     let view = SplitPageView(

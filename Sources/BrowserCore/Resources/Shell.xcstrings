@@ -74,6 +74,7 @@
     "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
     "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},
     "Open DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open DevTools"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי הפיתוח"}}}},
+    "Could not run this extension. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not run this extension. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להפעיל את התוסף. כדאי לנסות שוב."}}}},
     "Live DOM tree is unavailable for this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Live DOM tree is unavailable for this tab"}},"he":{"stringUnit":{"state":"translated","value":"עץ ה-DOM החי אינו זמין ללשונית זו"}}}},
     "hidden": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"hidden"}},"he":{"stringUnit":{"state":"translated","value":"מוסתר"}}}},
     "%d of %d": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%d of %d"}},"he":{"stringUnit":{"state":"translated","value":"%d מתוך %d"}}}},

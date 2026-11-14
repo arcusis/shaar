@@ -90,6 +90,22 @@ class CatalogValidatorTests(unittest.TestCase):
             "localizations"]["he"]["stringUnit"]["value"]
         self.assertEqual(translation, "לא ניתן להשלים את הפעולה %@. כדאי לנסות שוב.")
 
+    def test_extension_execution_failure_uses_hebrew_shell_copy(self):
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'ShellL10n.string("Could not run this extension. Try again.")', source
+        )
+        shell = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        translation = shell["strings"]["Could not run this extension. Try again."][
+            "localizations"]["he"]["stringUnit"]["value"]
+        self.assertEqual(translation, "לא ניתן להפעיל את התוסף. כדאי לנסות שוב.")
+
     def test_rejects_null_catalog_and_localization_maps_cleanly(self):
         for data in (None, {"sourceLanguage": "en", "strings": {"x": None}},
                      {"sourceLanguage": "en", "strings": {"x": {"localizations": None}}}):

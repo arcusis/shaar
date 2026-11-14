@@ -58,6 +58,9 @@ import Testing
   payload = sharePayload()
   payload["url"] = "file:///tmp/private"
   #expect(WebShareRequest(payload: payload) == nil)
+
+  payload = sharePayload(url: "https://alice:secret@example.com/private")
+  #expect(WebShareRequest(payload: payload) == nil)
 }
 
 @Test func webShareRequestBoundsTitleTextAndURLByUTF8Bytes() {

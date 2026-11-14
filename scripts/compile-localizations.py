@@ -424,6 +424,15 @@ def validate_source_references(root, catalogs, include_app=False):
                             f"(NativeBrowserHost.swift:{line})")
 
 
+def symlinked_output_parent(path: Path) -> Path | None:
+    system_aliases = {Path("/var"): Path("/private/var"),
+                      Path("/tmp"): Path("/private/tmp")}
+    for parent in path.absolute().parents:
+        if parent.is_symlink() and system_aliases.get(parent) != parent.resolve():
+            return parent
+    return None
+
+
 def main():
     if len(sys.argv) != 3:
         raise SystemExit("Usage: compile-localizations.py PACKAGE_ROOT OUTPUT_DIR")
@@ -431,6 +440,9 @@ def main():
     output_argument = Path(sys.argv[2])
     if output_argument.is_symlink():
         raise SystemExit(f"Localization output directory must not be a symlink: {output_argument}")
+    symlink_parent = symlinked_output_parent(output_argument)
+    if symlink_parent is not None:
+        raise SystemExit(f"Localization output path contains a symlinked parent: {symlink_parent}")
     output = output_argument.resolve()
     core = root / "Sources/BrowserCore/Resources"
     catalogs = sorted(core.glob("*.xcstrings")) + sorted((root / "Resources/Localizations").glob("*.xcstrings"))

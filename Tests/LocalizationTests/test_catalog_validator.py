@@ -79,6 +79,34 @@ class CatalogValidatorTests(unittest.TestCase):
 
             self.assertEqual((marker / "preserve.txt").read_text(encoding="utf-8"), "preserve")
 
+    def test_main_rejects_symlinked_output_parent_before_creating_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "package"
+            core = package / "Sources/BrowserCore/Resources"
+            resources = package / "Resources/Localizations"
+            core.mkdir(parents=True)
+            resources.mkdir(parents=True)
+            (core / "Core.xcstrings").write_text("{}", encoding="utf-8")
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "preserve.txt").write_text("preserve", encoding="utf-8")
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(outside, target_is_directory=True)
+            output = linked_parent / "localizations"
+
+            with patch.object(VALIDATOR.sys, "argv", [
+                    "compile-localizations.py", str(package), str(output)]), \
+                    patch.object(VALIDATOR, "validate_catalog"), \
+                    patch.object(VALIDATOR, "validate_source_references"), \
+                    patch.object(VALIDATOR, "compile_native") as compile_native:
+                with self.assertRaisesRegex(SystemExit, "output path contains a symlinked parent"):
+                    VALIDATOR.main()
+                compile_native.assert_not_called()
+
+            self.assertFalse((outside / "localizations").exists())
+            self.assertEqual((outside / "preserve.txt").read_text(encoding="utf-8"), "preserve")
+
     def test_default_browser_failure_uses_hebrew_settings_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(
             encoding="utf-8"

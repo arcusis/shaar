@@ -204,9 +204,11 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         fixture = PROBE.SCROLL.decode()
         self.assertIn('setTimeout(function () { add(400); }, 600)', fixture)
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
-        self.assertIn('for _ in 0..<40', source)
+        self.assertIn('let growthDeadline = Date().addingTimeInterval(2)', source)
+        self.assertIn('while Date() < growthDeadline', source)
         self.assertIn(
-            'scrollRowsHaveGrown(beforeCount: firstCount, afterCount: observedCount)', source)
+            'scrollRowsHaveGrown(\n        beforeCount: firstCount, afterCount: number(second?["count"]) ?? 0)',
+            source)
 
     def test_media_fixture_rejects_a_paused_video_with_dimensions(self):
         fixture = PROBE.MEDIA.decode()

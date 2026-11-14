@@ -463,9 +463,11 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let firstCount = number(first?["count"]) ?? 0
     _ = await scrollState(runtime, context, triggerScroll: true)
     var second = await scrollState(runtime, context, triggerScroll: false)
-    for _ in 0..<40 {
-      let observedCount = number(second?["count"]) ?? 0
-      if scrollRowsHaveGrown(beforeCount: firstCount, afterCount: observedCount) { break }
+    let growthDeadline = Date().addingTimeInterval(2)
+    while Date() < growthDeadline
+      && !scrollRowsHaveGrown(
+        beforeCount: firstCount, afterCount: number(second?["count"]) ?? 0)
+    {
       try? await Task.sleep(for: .milliseconds(50))
       second = await scrollState(runtime, context, triggerScroll: false)
     }
@@ -509,7 +511,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let json = await evaluate(
       runtime, tab: selectedID(context),
       script: scrollStateScript(triggerScroll: triggerScroll),
-      seconds: 5)
+      seconds: 1)
     return object(from: json)
   }
 

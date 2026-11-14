@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ci_support import output_file
+
 
 def documentation_only(paths: list[str]) -> bool:
     return bool(paths) and all(
@@ -156,11 +158,13 @@ def main() -> int:
     shipping_guard = name == "pull_request" and not draft and needs_shipping_probe_guard(paths)
     abi_contract = name in {"pull_request", "merge_group", "push"} and needs_abi_contract(paths)
     queue_pr = merge_group_pr_number(event, name)
-    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+    github_output = output_file(Path(os.environ["GITHUB_OUTPUT"]))
+    step_summary = output_file(Path(os.environ["GITHUB_STEP_SUMMARY"]))
+    with github_output.open("a") as output:
         output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\nqueue_pr={queue_pr}\n")
         output.write(f"shipping_guard={str(shipping_guard).lower()}\n")
         output.write(f"abi_contract={str(abi_contract).lower()}\n")
-    with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
+    with step_summary.open("a") as output:
         output.write(f"### CI selection\n\nFull native pipeline: **{full}**. Draft pull request: **{draft}**. "
                      f"Immutable baseline: `{base}`. "
                      f"Website checks: **{website}**. Swift CodeQL: **{swift}**. Requested probe repetitions: **{iterations}**; private/Quit minimum: **3**.\n")

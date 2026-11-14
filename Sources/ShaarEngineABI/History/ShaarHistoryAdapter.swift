@@ -132,6 +132,7 @@ public struct ShaarHistoryAdapter: Sendable {
         let title = row["title"] as? String,
         let count = historyInteger(row["visitCount"]), count >= 0,
         let visits = historyTimestamps(row["visits"]), visits.count <= maxVisitsPerURL,
+        count >= visits.count,
         visits.allSatisfy({ $0 >= 0 }), seen.insert(rawURL).inserted
       else { throw ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row") }
       return ShaarHistoryEntry(url: url, title: title, visitCount: count, visits: visits)

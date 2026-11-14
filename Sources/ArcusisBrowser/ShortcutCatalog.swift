@@ -198,6 +198,20 @@ struct ShortcutCatalog {
 }
 
 enum ShaarDevToolsShortcut {
+  static func command(for event: NSEvent) -> BrowserMenuCommand? {
+    command(forKeyCode: event.keyCode, modifiers: event.modifierFlags)
+  }
+
+  static func command(
+    forKeyCode keyCode: UInt16, modifiers: NSEvent.ModifierFlags
+  ) -> BrowserMenuCommand? {
+    if isF12(keyCode: keyCode, modifiers: modifiers) { return .developerTools }
+    if isDirectChromiumShortcut(keyCode: keyCode, modifiers: modifiers) {
+      return .chromiumDeveloperTools
+    }
+    return nil
+  }
+
   static func isF12(_ event: NSEvent) -> Bool {
     isF12(keyCode: event.keyCode, modifiers: event.modifierFlags)
   }

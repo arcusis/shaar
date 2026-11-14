@@ -1601,15 +1601,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   /// F12 and Option-Shift-Command-I open the Chromium DevTools dock.
   @discardableResult
   func performDeveloperToolsKey(_ event: NSEvent) -> Bool {
-    let command: BrowserMenuCommand
-    if ShaarDevToolsShortcut.isF12(event) {
-      command = .developerTools
-    } else if ShaarDevToolsShortcut.isDirectChromiumShortcut(event) {
-      command = .chromiumDeveloperTools
-    } else {
+    guard let command = ShaarDevToolsShortcut.command(for: event), canPerform(command) else {
       return false
     }
-    guard canPerform(command) else { return false }
     perform(command)
     return true
   }

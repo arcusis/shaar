@@ -1039,6 +1039,8 @@ def argument_parser():
                       help="Run hidden two-origin link, failed-page Reload, and closed-window recovery probe")
     mode.add_argument("--dev-mode", action="store_true",
                       help="Prove Next.js and Vite detection on hidden local fixture tabs")
+    mode.add_argument("--local-extension-install", action="store_true",
+                      help="Install and exercise a disposable unpacked MV3 extension in a hidden profile")
     parser.add_argument("--probe-phase", choices=("initial", "restart"),
                         help="Run one half of a baseline or private-window probe using a transferred profile")
     parser.add_argument("--probe-root", help="Marked temporary root used by a split probe phase")
@@ -1051,6 +1053,7 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  private_window_run_id=None, quit_exit=False,
                                  quit_pending_navigation=False, session_recovery=False,
                                  private_multitab=False, basic_browsing=False,
+                                 local_extension_install=False,
                                  reload_window=False,
                                  dev_mode=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
@@ -1083,6 +1086,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
         arguments.append('--probe-session-recovery')
     if basic_browsing:
         arguments.append('--probe-basic-browsing')
+    if local_extension_install:
+        arguments.append('--probe-local-extension-install')
     if reload_window:
         arguments.append('--probe-reload-window')
     if dev_mode:
@@ -1111,6 +1116,31 @@ def validate_dev_mode_report(report, evidence, phase, exit_code):
                 or item.get('windowHidden') is not True
                 or item.get('documentReady') is not True):
             raise RuntimeError(f'Dev Mode {framework} detection lacks native page evidence')
+
+
+LOCAL_EXTENSION_INSTALL_CHECKS = {
+    'unpacked MV3 install requests consent for its owning profile and loopback tab',
+    'accepted unpacked MV3 extension appears enabled in the product extension list',
+    'unpacked MV3 content script runs in the owning loopback page',
+    'all application windows remain hidden during local MV3 installation',
+    'disposable unpacked MV3 extension is removed after the probe',
+}
+
+
+def validate_local_extension_install_report(report, evidence, phase, exit_code):
+    checks = report.get('checks') if isinstance(report, dict) else None
+    evidence_checks = evidence.get('checks') if isinstance(evidence, dict) else None
+    if (exit_code != 0 or not isinstance(report, dict) or not isinstance(evidence, dict)
+            or report.get('phase') != phase or report.get('probeMode') != 'local-extension-install-only'
+            or report.get('localExtensionInstallOnly') is not True or report.get('passed') is not True
+            or report.get('localFixturesPassed') is not True or report.get('error') is not None
+            or evidence.get('phase') != phase or evidence.get('passed') is not True
+            or evidence.get('error') is not None or not isinstance(checks, list)
+            or not LOCAL_EXTENSION_INSTALL_CHECKS.issubset(checks)
+            or 'clean quit closes the normal window and engine client' not in checks
+            or not isinstance(evidence_checks, list)
+            or not LOCAL_EXTENSION_INSTALL_CHECKS.issubset(evidence_checks)):
+        raise RuntimeError('Local MV3 install report has failed or mismatched mode, phase, or process exit')
 
 
 def ensure_private_failure_reports(root, phase, run_id, exit_code):
@@ -1811,7 +1841,7 @@ def main(argv=None):
                         or options.abrupt_control or options.saved_tab_capacity or options.external_app_consent
                         or options.quit_exit or options.session_recovery or options.basic_browsing
                         or options.reload_window
-                        or options.dev_mode
+                        or options.dev_mode or options.local_extension_install
                         or not options.probe_root):
         raise ValueError("Split probe phases require only the baseline or private-window mode and a probe root")
     include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
@@ -1839,6 +1869,8 @@ def main(argv=None):
         print('RELOAD WINDOW: hidden two-origin links and closed-window Reload', flush=True)
     if options.dev_mode:
         print('DEV MODE: hidden local Next.js and Vite fixture pages; no desktop window', flush=True)
+    if options.local_extension_install:
+        print('LOCAL MV3 INSTALL: consented unpacked extension in a hidden disposable profile', flush=True)
     app = VERIFICATION_APP.resolve()
     require_verification_bundle_identity(app)
     root = Path(options.probe_root) if split_phase else Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
@@ -1904,6 +1936,7 @@ def main(argv=None):
     try:
         phases = ((options.probe_phase,) if split_phase else
                   ("initial",) if options.basic_browsing or options.reload_window or options.dev_mode
+                  or options.local_extension_install
                   else ("initial", "restart"))
         for phase in phases:
             if options.private_window and phase == 'restart' and failures:
@@ -1922,6 +1955,7 @@ def main(argv=None):
                 session_recovery=options.session_recovery,
                 private_multitab=options.private_multitab,
                 basic_browsing=options.basic_browsing, reload_window=options.reload_window,
+                local_extension_install=options.local_extension_install,
                 dev_mode=options.dev_mode)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
@@ -2002,6 +2036,18 @@ def main(argv=None):
                         or not isinstance(checks, list) or not required.issubset(checks)
                         or any(not isinstance(check, str) or not check for check in checks)):
                     raise RuntimeError('Basic browsing report has wrong phase, mode, or check evidence')
+            elif options.local_extension_install:
+                evidence_path = root / f'{phase}-local-extension-install.json'
+                try:
+                    evidence = json.loads(evidence_path.read_text())
+                except (OSError, ValueError) as error:
+                    raise RuntimeError(f'Local MV3 install evidence is missing or invalid: {evidence_path}') from error
+                try:
+                    validate_local_extension_install_report(report, evidence, phase, code)
+                except RuntimeError as error:
+                    raise RuntimeError(
+                        f"Local MV3 install report failed: {report.get('error') if isinstance(report, dict) else report}"
+                    ) from error
             elif options.reload_window:
                 checks = report.get('checks') if isinstance(report, dict) else None
                 required = {

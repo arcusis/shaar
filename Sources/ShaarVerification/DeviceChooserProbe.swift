@@ -432,6 +432,7 @@ final class DeviceChooserProbe {
         CFGetTypeID(ok) == CFBooleanGetTypeID(), ok.boolValue,
         let countValue = object["count"] as? NSNumber,
         CFGetTypeID(countValue) != CFBooleanGetTypeID(),
+        !["f", "d"].contains(String(cString: countValue.objCType)),
         let count = object["count"] as? Int
       {
         resolvedCount = count

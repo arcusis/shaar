@@ -37,4 +37,9 @@ struct DeviceChooserProbeTests {
         DeviceChooserProbe.PageSettlement(raw: raw)?.isChooserDismissal(for: "hid") == false)
     }
   }
+
+  @Test func fractionalJSONNumberCannotResolveHIDAsAnIntegerCount() {
+    let fractional = DeviceChooserProbe.PageSettlement(raw: #"{"ok":true,"count":0.0}"#)
+    #expect(fractional?.isChooserDismissal(for: "hid") == false)
+  }
 }

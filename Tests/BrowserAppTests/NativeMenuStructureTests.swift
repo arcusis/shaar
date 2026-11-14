@@ -80,8 +80,20 @@ import Testing
         arguments: [.string(ProductIdentity.name)]) != key)
   }
   #expect(
-    BrowserLocalization.string("Search or enter address", table: "Shell", language: .hebrew)
+      BrowserLocalization.string("Search or enter address", table: "Shell", language: .hebrew)
       != "Search or enter address")
+}
+
+@Test @MainActor func reopenClosedShortcutPrefersATabThenFallsBackToAWindow() {
+  #expect(
+    NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: true, hasClosedWindow: true)
+      == .reopenClosed)
+  #expect(
+    NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: true)
+      == .reopenClosedWindow)
+  #expect(
+      NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: false)
+      == nil)
 }
 
 @Test @MainActor func reopenClosedWindowCommandRoutesAndPreservesSnapshotOnAttachFailure() throws {
@@ -102,6 +114,7 @@ import Testing
   host.lastClosedWindowSnapshot = snapshot
   let windowIDs = workspace.workspace.windows.map(\.id)
   #expect(throws: (any Error).self) { try host.restore() }
+  #expect(host.canPerform(.reopenClosed))
   #expect(host.canPerform(.reopenClosedWindow))
   host.perform(.reopenClosedWindow)
   #expect(host.lastError != nil)
@@ -295,6 +308,9 @@ import Testing
   #expect(item("New Private Window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("New tab")?.keyEquivalent == "t")
   #expect(item(CommandPanel.searchPrompt)?.keyEquivalent == "l")
+  #expect(item("Reopen last closed tab")?.keyEquivalent == "t")
+  #expect(item("Reopen last closed tab")?.keyEquivalentModifierMask == [.command, .shift])
+  #expect(item("Reopen Last Closed Window")?.keyEquivalent.isEmpty == true)
   #expect(item("Close tab")?.keyEquivalentModifierMask == .command)
   #expect(item("Close window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("Find in Page…")?.keyEquivalent == "f")

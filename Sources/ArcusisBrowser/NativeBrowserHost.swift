@@ -271,6 +271,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     presentation == .visible
   }
 
+  static func reopenClosedShortcutCommand(
+    canReopenTab: Bool, hasClosedWindow: Bool
+  ) -> BrowserMenuCommand? {
+    if canReopenTab { return .reopenClosed }
+    return hasClosedWindow ? .reopenClosedWindow : nil
+  }
+
   private var miniWindowTarget: NativeBrowserContext? {
     activeContext ?? workspace.workspace.focusedWindowID.flatMap { contexts[$0] }
       ?? contexts.values.first
@@ -434,6 +441,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return privateWindowSourceProfileID() != nil
     }
     if privateHost?.hasActiveWindow == true {
+      if command == .reopenClosed {
+        let owner = privateHost?.activeOwner
+        let canReopenWindow = lastClosedWindowSnapshot != nil
+          && owner?.store.sheet == nil && owner?.window.attachedSheet == nil
+        return Self.reopenClosedShortcutCommand(
+          canReopenTab: privateHost?.canPerform(.reopenClosed) == true,
+          hasClosedWindow: canReopenWindow) != nil
+      }
       return privateHost?.canPerform(command) == true
     }
     if command == .settings {
@@ -443,7 +458,20 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if let settingsWindow = settingsController?.window, keyWindow() === settingsWindow {
       return command == .closeTab || command == .closeWindow
     }
-    guard let context = activeContext else { return false }
+    guard let context = activeContext else {
+      if command == .reopenClosed {
+        return Self.reopenClosedShortcutCommand(
+          canReopenTab: false, hasClosedWindow: lastClosedWindowSnapshot != nil) != nil
+      }
+      return false
+    }
+    if command == .reopenClosed {
+      let canReopenWindow = lastClosedWindowSnapshot != nil
+        && context.store.sheet == nil && context.window.attachedSheet == nil
+      return Self.reopenClosedShortcutCommand(
+        canReopenTab: windowCanPerform(command, in: context, afterLauncher: false),
+        hasClosedWindow: canReopenWindow) != nil
+    }
     return windowCanPerform(command, in: context, afterLauncher: false)
   }
 
@@ -509,6 +537,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   func perform(_ command: BrowserMenuCommand) {
     guard canPerform(command) else { return }
+    if command == .reopenClosed, activeBrowserStore?.canReopenClosedTab != true {
+      _ = performAppCommand(.reopenClosedWindow)
+      return
+    }
     if performAppCommand(command) { return }
     if privateHost?.hasActiveWindow == true {
       privateHost?.perform(command)

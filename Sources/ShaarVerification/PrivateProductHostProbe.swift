@@ -499,7 +499,7 @@ final class PrivateProductHostProbe {
       first.store.closeTab(firstTabUUID)
       try await waitForTabs(first.store, count: 2)
       checks["productPrivateHostRemainsAttachedAfterTabClose"] =
-        Self.hostingViewIsAttached(first.hosting, to: privateContainer)
+        Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
     } else {
       checks["productPrivateHostRemainsAttachedAfterTabClose"] = false
     }

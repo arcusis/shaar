@@ -601,6 +601,8 @@ SHAAR_EXPORT shaar_error_code shaar_cancel_request(
     shaar_engine *, shaar_request_id, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_print_reply(const char *request_id,
                                                  int accepted);
+SHAAR_EXPORT shaar_error_code shaar_share_reply(const char *request_id,
+                                                  int shared);
 
 #ifdef __cplusplus
 }

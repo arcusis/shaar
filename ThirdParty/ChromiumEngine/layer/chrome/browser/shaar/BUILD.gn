@@ -126,6 +126,10 @@ source_set("engine") {
     "login/shaar_login.cc",
     "login/shaar_login.h",
     # END login
+    # BEGIN webshare
+    "webshare/shaar_webshare.cc",
+    "webshare/shaar_webshare.h",
+    # END webshare
     # BEGIN storage_keychain
     "storage_keychain/shaar_storage_keychain.cc",
     "storage_keychain/shaar_storage_keychain.h",

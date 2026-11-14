@@ -192,6 +192,14 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         self.assertIn(
             'proven: scrollFailureIsAttributable(scrollEvents: scrollEvents)', source)
 
+    def test_scroll_probe_samples_before_issuing_its_first_scroll(self):
+        source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
+        baseline = source.index('let first = await scrollState(runtime, context, triggerScroll: false)')
+        trigger = source.index('_ = await scrollState(runtime, context, triggerScroll: true)')
+        self.assertLess(baseline, trigger)
+        self.assertIn(
+            'let second = await scrollState(runtime, context, triggerScroll: false)', source)
+
     def test_media_fixture_rejects_a_paused_video_with_dimensions(self):
         fixture = PROBE.MEDIA.decode()
         self.assertIn('!video.paused && video.videoWidth > 0', fixture)

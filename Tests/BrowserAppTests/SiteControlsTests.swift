@@ -38,6 +38,7 @@ private final class FakeSiteBackend: SiteControlBackend {
   var failsWrites = false
   var performed: [SiteAction] = []
   var suspendFirstWrite = false
+  var suspendNextPermissionWrite = false
   var writeCount = 0
   var finishFirstWrite: CheckedContinuation<Void, Never>?
   var suspendNextRead = false
@@ -63,6 +64,10 @@ private final class FakeSiteBackend: SiteControlBackend {
     async throws
   {
     writeCount += 1
+    if suspendNextPermissionWrite {
+      suspendNextPermissionWrite = false
+      try await Task.sleep(for: .seconds(60))
+    }
     if writeCount == 1, suspendFirstWrite {
       await withCheckedContinuation { continuation in finishFirstWrite = continuation }
     }
@@ -186,6 +191,23 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(!succeeded)
   #expect(model.failure == nil)
   #expect(model.runningAction == nil)
+}
+
+@MainActor @Test func cancelledPermissionWriteRollsBackWithoutShowingFailure() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  await model.load()
+  backend.suspendNextPermissionWrite = true
+  let write = Task { await model.setPermission(.camera, allowed: true) }
+  for _ in 0..<100 where !model.savingPermissions.contains(.camera) { await Task.yield() }
+  #expect(model.savingPermissions.contains(.camera))
+
+  write.cancel()
+  await write.value
+
+  #expect(model.permissionValues[.camera] == .block)
+  #expect(model.failure == nil)
+  #expect(model.savingPermissions.isEmpty)
 }
 
 @MainActor @Test func olderPermissionReadCannotReplaceNewerRefresh() async {

@@ -78,8 +78,8 @@ struct DevelopmentModeLabel: View {
       if let budget {
         Image(systemName: budget.badgeSymbol)
           .foregroundStyle(budget.badgeColor)
-          .help(budget.accessibilityDescription)
-          .accessibilityLabel(budget.accessibilityDescription)
+          .help(budget.accessibilityDescription())
+          .accessibilityLabel(budget.accessibilityDescription())
       }
     }
     .font(.system(size: 11, weight: .semibold))
@@ -92,8 +92,13 @@ struct DevelopmentModeLabel: View {
 }
 
 extension ShaarPerformanceBudgetResult {
-  var accessibilityDescription: String {
-    "Route budget: \(passed) passed, \(failed) over, \(unavailable) unavailable"
+  func accessibilityDescription(
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Route budget: %1$d passed, %2$d over, %3$d unavailable", table: "Shell",
+      language: language,
+      arguments: [.integer(passed), .integer(failed), .integer(unavailable)])
   }
 
   fileprivate var badgeSymbol: String {

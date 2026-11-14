@@ -163,7 +163,11 @@ def archive_directory(explicit):
 def archive_matches(name, archive):
     if not archive.is_file():
         return False
-    return hashlib.sha256(archive.read_bytes()).hexdigest() == PINS[name].sha256
+    with archive.open("rb") as source:
+        data = source.read(MAX_ARCHIVE_SIZE + 1)
+    if len(data) > MAX_ARCHIVE_SIZE:
+        return False
+    return hashlib.sha256(data).hexdigest() == PINS[name].sha256
 
 
 def install_pinned(name, archive_dir, download, source_label):
@@ -199,7 +203,10 @@ def ensure_archive(name, archive_dir, from_web_store):
 
 def unpack(name, archive_path, destination):
     pin = PINS[name]
-    archive = archive_path.read_bytes()
+    with archive_path.open("rb") as source:
+        archive = source.read(MAX_ARCHIVE_SIZE + 1)
+    if len(archive) > MAX_ARCHIVE_SIZE:
+        raise ValueError(f"{name}: archive exceeds size limit")
     if hashlib.sha256(archive).hexdigest() != pin.sha256:
         raise ValueError(f"{name}: CRX SHA-256 mismatch; upstream version may have changed")
     public_key = public_key_for_id(archive, pin.extension_id)

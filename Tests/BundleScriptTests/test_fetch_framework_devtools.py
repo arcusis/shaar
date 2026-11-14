@@ -5,6 +5,7 @@
 import importlib.util
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -75,3 +76,25 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
             self.assertEqual(pinned.read_bytes(), b"pinned bytes")
             candidate = archive_dir / "react.crx.candidate"
             self.assertEqual(candidate.read_bytes(), b"not the pinned archive")
+
+    def test_oversized_cache_entry_is_rejected_before_full_file_read(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "react.crx"
+            with archive.open("wb") as handle:
+                handle.truncate(fetcher.MAX_ARCHIVE_SIZE + 1)
+
+            with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")):
+                self.assertFalse(fetcher.archive_matches("react", archive))
+
+    def test_oversized_archive_is_rejected_before_unpack_reads_it(self):
+        fetcher = load_fetcher()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "react.crx"
+            with archive.open("wb") as handle:
+                handle.truncate(fetcher.MAX_ARCHIVE_SIZE + 1)
+
+            with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")):
+                with self.assertRaisesRegex(ValueError, "size limit"):
+                    fetcher.unpack("react", archive, root / "output")

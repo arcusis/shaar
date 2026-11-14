@@ -34,7 +34,7 @@ import Testing
         mediaTracks: failingCheck != "mediaTracks",
         hidden: failingCheck != "hidden",
         unexpectedSurfaces: failingCheck == "surface" ? ["NSOpenPanel"] : [],
-        promptedNames: prompts)
+        promptedNames: prompts, openedProtocols: [])
       #expect(!result, "\(failingCheck) must prevent a pass")
     }
   }
@@ -44,8 +44,11 @@ import Testing
       error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
       unexpectedSurfaces: [],
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol", "clipboard"]
-        .filter { $0 != "midi" })
+        .filter { $0 != "midi" },
+      openedProtocols: [])
     #expect(!result)
+  }
+
   @Test func passedRequiresBothRegisteredProtocolRoutes() {
     #expect(!WebsitePermissionProbeVerdict.passed(
       error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,

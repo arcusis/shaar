@@ -14,15 +14,14 @@ import Testing
 }
 
 @Test @MainActor func printCommandRequiresASelectedPageAndNativeSupport() {
-  let store = BrowserStore()
-  #expect(!NativeBrowserHost.printCommandIsAvailable(in: store, hasNativePrint: true))
-
-  store.perform(.open(URL(string: "https://example.com/print")!))
-  #expect(NativeBrowserHost.printCommandIsAvailable(in: store, hasNativePrint: true))
-  #expect(!NativeBrowserHost.printCommandIsAvailable(in: store, hasNativePrint: false))
-
-  store.commandIsOpen = true
-  #expect(!NativeBrowserHost.printCommandIsAvailable(in: store, hasNativePrint: true))
+  #expect(!NativeBrowserHost.printCommandIsAvailable(
+    hasSelectedPage: false, commandIsOpen: false, hasNativePrint: true))
+  #expect(NativeBrowserHost.printCommandIsAvailable(
+    hasSelectedPage: true, commandIsOpen: false, hasNativePrint: true))
+  #expect(!NativeBrowserHost.printCommandIsAvailable(
+    hasSelectedPage: true, commandIsOpen: false, hasNativePrint: false))
+  #expect(!NativeBrowserHost.printCommandIsAvailable(
+    hasSelectedPage: true, commandIsOpen: true, hasNativePrint: true))
 }
 
 @Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {

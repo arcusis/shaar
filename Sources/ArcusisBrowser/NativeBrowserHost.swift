@@ -269,8 +269,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     return true
   }
 
-  static func printCommandIsAvailable(in store: BrowserStore, hasNativePrint: Bool) -> Bool {
-    store.session.selectedPage != nil && !store.commandIsOpen && hasNativePrint
+  static func printCommandIsAvailable(
+    hasSelectedPage: Bool, commandIsOpen: Bool, hasNativePrint: Bool
+  ) -> Bool {
+    hasSelectedPage && !commandIsOpen && hasNativePrint
   }
 
   static func settingsSpaceSelectionShouldPresentWindow(in presentation: Presentation) -> Bool {
@@ -539,7 +541,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return Self.pasteAndGoDestination(for: store) != nil
     case .print:
       return Self.printCommandIsAvailable(
-        in: store,
+        hasSelectedPage: store.session.selectedPage != nil,
+        commandIsOpen: store.commandIsOpen,
         hasNativePrint: (context.engine.runtime as? ARCShaarRuntime)?.supportsNativePrint() == true
       )
     case .addFavorite:

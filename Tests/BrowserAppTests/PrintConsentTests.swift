@@ -123,6 +123,7 @@ struct PrintConsentTests {
       ("origin", "file:///tmp/page" as Any),
       ("origin", "https://example.com/path" as Any),
       ("frameID", "short" as Any),
+      ("title", NSNull() as Any),
       ("title", String(repeating: "a", count: 2049) as Any),
     ] {
       var malformed = valid

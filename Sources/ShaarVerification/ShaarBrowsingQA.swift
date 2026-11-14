@@ -363,10 +363,13 @@ import Foundation
       let destinationSelectedTab =
         destination.store.session.selectedSpace.selectedTabID?.uuidString ?? "none"
       let destinationEngineAttached = destination.store.engine === destination.engine
+      let movedCompletely = Self.windowsDragPassed(
+        accepted: accepted, sourceStillHasTab: stayed,
+        destinationHasTab: destinationHasTab, engineMoved: engineMoved)
       rows.append(
         row(
-          "windows-drag", accepted && !stayed && engineMoved ? "pass" : "fail",
-          accepted && !stayed && engineMoved
+          "windows-drag", movedCompletely ? "pass" : "fail",
+          movedCompletely
             ? "The tab moved into the other window and its live engine owner followed."
             : "Drop accepted=\(accepted), stayed in source=\(stayed), destination has tab=\(destinationHasTab), selected=\(destinationSelectedTab), engine attached=\(destinationEngineAttached), engine closed=\(destination.engine.isClosed), live=\(destination.engine.liveTabs.contains(movedTab)), owner=\(destination.engine.runtime.windowID(forTabID: movedTab.uuidString) ?? "none"), destination=\(destination.engine.windowID), notice=\(destination.engine.notice ?? "none")."
         ))
@@ -991,6 +994,12 @@ import Foundation
         where: { $0.name == "n" && $0.value == "extra" }) == true
     else { return false }
     return settled
+  }
+
+  static func windowsDragPassed(
+    accepted: Bool, sourceStillHasTab: Bool, destinationHasTab: Bool, engineMoved: Bool
+  ) -> Bool {
+    accepted && !sourceStillHasTab && destinationHasTab && engineMoved
   }
 
   private static func liveCount(_ context: NativeBrowserContext) -> Int {

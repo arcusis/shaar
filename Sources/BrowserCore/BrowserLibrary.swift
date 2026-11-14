@@ -121,9 +121,17 @@ public struct BrowserHistoryEntry: Identifiable, Equatable, Sendable {
       CFGetTypeID(count) != CFBooleanGetTypeID(), count.doubleValue.isFinite,
       count.doubleValue >= 0, count.doubleValue < Double(Int64.max),
       count.doubleValue.rounded(.towardZero) == count.doubleValue,
-      let visits = payload["v"] as? [NSNumber],
-      let last = Self.latestValidVisit(in: visits)
+      let visits = payload["v"] as? [NSNumber], !visits.isEmpty
     else { throw LibraryDataError.invalidHistory }
+    let maximumVisit = Date.distantFuture.timeIntervalSince1970 * 1_000
+    var last = 0.0
+    for visit in visits {
+      let value = visit.doubleValue
+      guard CFGetTypeID(visit) != CFBooleanGetTypeID(), value.isFinite,
+        value >= 0, value <= maximumVisit
+      else { throw LibraryDataError.invalidHistory }
+      last = max(last, value)
+    }
     self.profileID = profileID
     self.address = address
     self.title =

@@ -193,6 +193,23 @@ import Testing
   #expect(after < before * 0.8)
 }
 
+@Test func historyEntryDecodingFocusedBenchmark() throws {
+  let profileID = UUID()
+  let visits = (0..<16).map { NSNumber(value: 1_700_000_000_000 + $0 * 1_000) }
+  let rows = (0..<2_000).map { index in
+    [
+      "u": "https://history.example/page-\(index)", "t": "History page \(index)",
+      "n": visits.count, "v": visits,
+    ] as [String: Any]
+  }
+
+  let start = ContinuousClock.now
+  let entries = try rows.map { try BrowserHistoryEntry(profileID: profileID, payload: $0) }
+  print("historyEntryDecodingFocusedBenchmark: \(start.duration(to: .now))")
+  #expect(entries.count == rows.count)
+  #expect(entries.allSatisfy { $0.visitCount == visits.count })
+}
+
 @Test func whitespaceOnlyHistoryTitleFallsBackToHost() throws {
   let entry = try BrowserHistoryEntry(
     profileID: UUID(),

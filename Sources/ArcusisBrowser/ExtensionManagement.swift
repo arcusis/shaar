@@ -257,10 +257,12 @@ enum ExtensionIconLoader {
     guard Self.isContained(file, in: resolvedFolder) else { return nil }
     let resolvedFile = file.resolvingSymlinksInPath().standardizedFileURL
     guard Self.isContained(resolvedFile, in: resolvedFolder),
-      let values = try? resolvedFile.resourceValues(forKeys: [.isRegularFileKey]),
-      values.isRegularFile == true
+      let iconValues = try? resolvedFile.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+      iconValues.isRegularFile == true,
+      let iconSize = iconValues.fileSize, iconSize <= 4 * 1_048_576,
+      let data = try? Data(contentsOf: resolvedFile), data.count <= 4 * 1_048_576
     else { return nil }
-    return NSImage(contentsOf: resolvedFile)
+    return NSImage(data: data)
   }
 
   private static func isContained(_ child: URL, in parent: URL) -> Bool {

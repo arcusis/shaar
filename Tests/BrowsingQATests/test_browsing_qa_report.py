@@ -144,10 +144,6 @@ class BrowsingQAReportTests(unittest.TestCase):
         report = {"passed": True, "rows": [None]}
         self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
 
-    def test_malformed_rows_fail_the_scenario_without_crashing(self):
-        report = {"passed": True, "rows": [None]}
-        self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
-
     def test_unknown_or_missing_row_status_cannot_pass_the_scenario(self):
         for row in ({"status": "unknown"}, {}, {"status": ["pass"]}):
             with self.subTest(row=row):
@@ -156,7 +152,7 @@ class BrowsingQAReportTests(unittest.TestCase):
 
     def test_unhashable_row_status_does_not_crash_note_formatting(self):
         notes = PROBE.row_notes({"rows": [{"status": ["fail"]}]}, "")
-        self.assertEqual(notes, "")
+        self.assertIn("malformed scenario row status", notes.lower())
 
     def test_deliberate_renderer_kill_matches_pid_and_time(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)

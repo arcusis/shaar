@@ -99,6 +99,8 @@ def fetch_source(revision: str, name: str) -> bytes:
 
 
 def write_rules(output: Path, rules: dict) -> None:
+    if output.parent.is_symlink():
+        raise ValueError(f"tracker rules output directory must not be a symlink: {output.parent}")
     if output.is_symlink():
         raise ValueError(f"tracker rules output must not be a symlink: {output}")
     if output.exists() and not output.is_file():

@@ -1038,6 +1038,10 @@ final class EngineProbe {
       try renderShell(name: "\(phase)-command.png")
       store.dismissCommand()
       if let browserEngine {
+        fixtureStage = "Reopen"
+        checks += try await ReopenProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
+        ).run()
         fixtureStage = "Extension"
         checks += try await ExtensionProbe(
           runtime: runtime, engine: browserEngine, store: store,
@@ -1067,10 +1071,6 @@ final class EngineProbe {
         ).run()
         fixtureStage = "Folder"
         checks += try await FolderProbe(
-          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
-        ).run()
-        fixtureStage = "Reopen"
-        checks += try await ReopenProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
         ).run()
         fixtureStage = "Library"

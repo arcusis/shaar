@@ -11,15 +11,29 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/functional/bind.h"
+#include "base/location.h"
+#include "base/no_destructor.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/desktop_browser_window_capabilities.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 
 namespace shaar::windows_tabs {
 
 namespace {
 BrowserTabRegistryImpl g_registry;
+
+std::unordered_map<Browser*, base::CallbackListSubscription>&
+BrowserCloseWatches() {
+  static base::NoDestructor<
+      std::unordered_map<Browser*, base::CallbackListSubscription>>
+      watches;
+  return *watches;
+}
 }
 
 BrowserTabRegistryImpl& Registry() { return g_registry; }
@@ -119,6 +133,79 @@ void BrowserTabRegistryImpl::UnbindBrowser(shaar_engine* engine,
       state->active_profile_id = id;
     }
   }
+}
+
+void BrowserTabRegistryImpl::RetireClosingBrowser(Browser* browser) {
+  if (!browser)
+    return;
+  const bool inserted = retired_browsers_.insert(browser).second;
+  if (inserted) {
+    for (const auto& state : windows_)
+      UnbindBrowser(state.engine, state.handle, browser);
+  }
+  // Drop the subscription after Notify returns. Erasing it here would reset
+  // the callback list node while RegisterBrowserDidClose is still running.
+  if (!BrowserCloseWatches().contains(browser))
+    return;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](Browser* closing) {
+                       BrowserCloseWatches().erase(closing);
+                     },
+                     browser));
+}
+
+bool BrowserTabRegistryImpl::BrowserHasBoundTabs(Browser* browser) const {
+  if (!browser)
+    return false;
+  for (const auto& entry : tabs_)
+    if (entry.browser == browser)
+      return true;
+  return false;
+}
+
+bool BrowserTabRegistryImpl::IsClosingBrowser(Browser* browser) const {
+  return browser && retired_browsers_.contains(browser);
+}
+
+bool BrowserTabRegistryImpl::ReleaseIfClosing(Browser* browser) {
+  if (!browser)
+    return false;
+  if (retired_browsers_.contains(browser)) {
+    RetireClosingBrowser(browser);
+    return true;
+  }
+  if (browser->IsDeleteScheduled()) {
+    RetireClosingBrowser(browser);
+    return true;
+  }
+  const auto* capabilities = browser->capabilities();
+  if (capabilities && capabilities->IsAttemptingToCloseBrowser()) {
+    RetireClosingBrowser(browser);
+    return true;
+  }
+  return false;
+}
+
+void BrowserTabRegistryImpl::WatchBrowserClose(Browser* browser) {
+  if (!browser)
+    return;
+  MarkBrowserCreated(browser);
+  if (BrowserCloseWatches().contains(browser))
+    return;
+  BrowserCloseWatches().emplace(
+      browser, browser->RegisterBrowserDidClose(base::BindRepeating(
+                   [](Browser* closing, BrowserWindowInterface*) {
+                     Registry().RetireClosingBrowser(closing);
+                   },
+                   browser)));
+}
+
+void BrowserTabRegistryImpl::MarkBrowserCreated(Browser* browser) {
+  if (!browser || !retired_browsers_.erase(browser))
+    return;
+  // Replace any watch left under this address when the allocator reused it.
+  BrowserCloseWatches().erase(browser);
 }
 
 bool BrowserTabRegistryImpl::BeginWindowClose(shaar_engine* engine,
@@ -298,20 +385,21 @@ void BrowserTabRegistryImpl::GetTabsForBrowser(
       tabs->emplace(entry.id, entry.contents);
 }
 
-void BrowserTabRegistryImpl::BindWindow(shaar_engine* engine,
+bool BrowserTabRegistryImpl::BindWindow(shaar_engine* engine,
                                         shaar_window* window,
                                         Browser* browser) {
-  if (!engine || !window || !browser)
-    return;
+  if (!engine || !window || !browser || retired_browsers_.contains(browser))
+    return false;
   for (auto& entry : windows_) {
     if (entry.engine == engine && entry.handle == window) {
       entry.browser = browser;
       if (!entry.active_browser)
         entry.active_browser = browser;
-      return;
+      return true;
     }
   }
   windows_.push_back({engine, window, browser, {}, browser, {}, {}});
+  return true;
 }
 
 BrowserTabRegistryImpl::WindowState* BrowserTabRegistryImpl::EnsureWindowState(
@@ -319,6 +407,8 @@ BrowserTabRegistryImpl::WindowState* BrowserTabRegistryImpl::EnsureWindowState(
     shaar_window* window,
     Browser* browser,
     std::string_view profile_id) {
+  if (browser && retired_browsers_.contains(browser))
+    return nullptr;
   BindWindow(engine, window, browser);
   for (auto& entry : windows_) {
     if (entry.engine == engine && entry.handle == window) {

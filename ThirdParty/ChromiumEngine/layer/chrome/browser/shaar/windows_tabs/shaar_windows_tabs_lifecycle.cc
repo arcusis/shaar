@@ -85,7 +85,13 @@ struct shaar_tab : content::WebContentsObserver,
     favicon_observation.Reset();
     // Drop the WebContents pointer before a queued view update can request it.
     shaar::agent_bridge::RevokeForTab(engine, this);
-    shaar::windows_tabs::Registry().UnbindTab(engine, window, this);
+    Browser* closing = browser;
+    auto& registry = shaar::windows_tabs::Registry();
+    registry.UnbindTab(engine, window, this);
+    // WebContentsDestroyed runs before TabStripEmpty closes the Browser.
+    // Drop the raw pointer while the object is still alive.
+    if (closing && !registry.BrowserHasBoundTabs(closing))
+      registry.RetireClosingBrowser(closing);
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&CleanupTab, serial));
   }
@@ -286,6 +292,7 @@ Browser* CreateHiddenBrowser(Profile* profile) {
   if (browser) {
     if (BrowserWindow* native_window = BrowserWindow::FromBrowser(browser))
       native_window->Hide();
+    shaar::windows_tabs::Registry().WatchBrowserClose(browser);
   }
   return browser;
 }
@@ -339,10 +346,11 @@ Browser* BrowserForScope(shaar_engine* engine,
   if (!state)
     return nullptr;
   if (window->kind == SHAAR_WINDOW_PRIVATE) {
-    if (state->browser)
+    if (state->browser && !registry.ReleaseIfClosing(state->browser))
       return state->browser;
     Browser* browser = CreateHiddenBrowser(profile);
-    registry.BindWindow(engine, window, browser);
+    if (!browser || !registry.BindWindow(engine, window, browser))
+      return nullptr;
     return browser;
   }
   const std::string id(shaar::EngineContext().profile_services->ProfileID(
@@ -350,11 +358,13 @@ Browser* BrowserForScope(shaar_engine* engine,
   if (id.empty())
     return nullptr;
   auto found = state->browsers_by_profile.find(id);
-  if (found != state->browsers_by_profile.end())
+  if (found != state->browsers_by_profile.end() && found->second &&
+      !registry.ReleaseIfClosing(found->second)) {
     return found->second;
+  }
   Browser* browser = CreateHiddenBrowser(profile);
-  if (browser)
-    registry.EnsureWindowState(engine, window, browser, id);
+  if (!browser || !registry.EnsureWindowState(engine, window, browser, id))
+    return nullptr;
   return browser;
 }
 

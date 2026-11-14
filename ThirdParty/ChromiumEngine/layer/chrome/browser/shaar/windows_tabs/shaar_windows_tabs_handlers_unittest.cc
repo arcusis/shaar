@@ -201,6 +201,68 @@ TEST(ShaarWindowsTabsHandlersTest, ProfileTabsStayBoundToTheirOwnBrowser) {
   registry.UnbindWindow(engine, window);
 }
 
+TEST(ShaarWindowsTabsHandlersTest, LastTabCloseDropsBrowserSoReopenBindsAFreshOne) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* closing = reinterpret_cast<Browser*>(3);
+  auto* fresh = reinterpret_cast<Browser*>(4);
+  auto* other = reinterpret_cast<Browser*>(5);
+  auto* tab = reinterpret_cast<shaar_tab*>(6);
+  auto* other_tab = reinterpret_cast<shaar_tab*>(7);
+  auto* contents = reinterpret_cast<content::WebContents*>(8);
+  auto* other_contents = reinterpret_cast<content::WebContents*>(9);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "window-a"));
+  ASSERT_NE(registry.EnsureWindowState(engine, window, closing, "profile-a"),
+            nullptr);
+  ASSERT_NE(registry.EnsureWindowState(engine, window, other, "profile-b"),
+            nullptr);
+  ASSERT_TRUE(registry.ReserveTab(engine, window, tab, "tab-a"));
+  ASSERT_TRUE(registry.ReserveTab(engine, window, other_tab, "tab-b"));
+  registry.BindTab(engine, window, tab, "tab-a", closing, contents);
+  registry.BindTab(engine, window, other_tab, "tab-b", other, other_contents);
+
+  registry.UnbindTab(engine, window, tab);
+  EXPECT_FALSE(registry.BrowserHasBoundTabs(closing));
+  EXPECT_TRUE(registry.BrowserHasBoundTabs(other));
+  registry.RetireClosingBrowser(closing);
+
+  auto* state = registry.FindWindowState(engine, window);
+  ASSERT_NE(state, nullptr);
+  EXPECT_TRUE(registry.IsClosingBrowser(closing));
+  EXPECT_FALSE(registry.IsClosingBrowser(other));
+  EXPECT_EQ(state->browsers_by_profile.find("profile-a"),
+            state->browsers_by_profile.end());
+  EXPECT_EQ(state->browsers_by_profile.at("profile-b"), other);
+  EXPECT_NE(registry.FindBrowser(engine, window), closing);
+  EXPECT_EQ(registry.FindBrowserForTab(engine, window, other_tab), other);
+
+  EXPECT_EQ(registry.EnsureWindowState(engine, window, closing, "profile-a"),
+            nullptr);
+  EXPECT_EQ(state->browsers_by_profile.find("profile-a"),
+            state->browsers_by_profile.end());
+  EXPECT_FALSE(registry.BindWindow(engine, window, closing));
+
+  auto* rebound =
+      registry.EnsureWindowState(engine, window, fresh, "profile-a");
+  ASSERT_NE(rebound, nullptr);
+  EXPECT_EQ(rebound->browsers_by_profile.at("profile-a"), fresh);
+  EXPECT_EQ(rebound->browsers_by_profile.at("profile-b"), other);
+  EXPECT_NE(registry.FindBrowser(engine, window), closing);
+  EXPECT_EQ(registry.EnsureWindowState(engine, window, closing, "profile-a"),
+            nullptr);
+  EXPECT_EQ(rebound->browsers_by_profile.at("profile-a"), fresh);
+
+  // A later allocation may reuse the retired address. Clear that pointer
+  // identity before associating the new live Browser.
+  registry.MarkBrowserCreated(closing);
+  auto* reused =
+      registry.EnsureWindowState(engine, window, closing, "profile-c");
+  ASSERT_NE(reused, nullptr);
+  EXPECT_EQ(reused->browsers_by_profile.at("profile-c"), closing);
+  registry.UnbindWindow(engine, window);
+}
+
 TEST(ShaarWindowsTabsHandlersTest, WindowCloseWaitsForEveryBrowser) {
   BrowserTabRegistryImpl registry;
   auto* engine = reinterpret_cast<shaar_engine*>(1);

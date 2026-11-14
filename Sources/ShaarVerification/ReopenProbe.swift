@@ -61,6 +61,42 @@ final class ReopenProbe {
     let ids: RecoveryIdentities
     var previousInstance: String?
     if phase == "initial" {
+      guard store.createSpace(name: "Bulk close recovery", sharingProfile: base.profileID, tint: .ocean)
+      else { throw RecoveryFailure("Could not create bulk-close recovery space.") }
+      let bulkSpace = store.session.selectedSpaceID
+      for _ in 0..<3 { store.perform(.open(url)) }
+      let bulkTabs = store.session.selectedSpace.orderedTabs.map(\.id)
+      guard bulkTabs.count == 3 else {
+        throw RecoveryFailure("Bulk-close fixture did not create three tabs.")
+      }
+      for tab in bulkTabs { store.closeTab(tab) }
+      var bulkCloseCompleted = false
+      for _ in 0..<120 {
+        bulkCloseCompleted = bulkTabs.allSatisfy { id in
+          store.session.closedTabs.contains(where: { $0.id == id })
+            && runtime.nativeTabID(forID: id.uuidString) == -1
+        }
+        if bulkCloseCompleted { break }
+        try await Task.sleep(for: .milliseconds(50))
+      }
+      guard bulkCloseCompleted else {
+        throw RecoveryFailure("Bulk tab closure did not complete in the probe window.")
+      }
+      try expect(
+        store.reopenLastClosedTab(),
+        "reopening immediately after bulk close creates a live tab without reusing a closing browser"
+      )
+      let bulkReopened = store.session.selectedSpace.selectedTabID!
+      _ = try await document(bulkReopened)
+      try expect(
+        runtime.nativeTabID(forID: bulkReopened.uuidString) >= 0,
+        "bulk-close recovery binds the reopened tab to a fresh native tab")
+      try await close(bulkReopened)
+      guard store.removeSpace(bulkSpace) else {
+        throw RecoveryFailure("Could not remove bulk-close recovery space.")
+      }
+      store.perform(.space(base.id))
+
       guard store.createSpace(name: "Recovery alpha", sharingProfile: base.profileID, tint: .ocean)
       else { throw RecoveryFailure("Could not create alpha recovery space.") }
       let alpha = store.session.selectedSpaceID

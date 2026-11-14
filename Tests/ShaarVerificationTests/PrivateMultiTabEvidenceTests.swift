@@ -186,7 +186,6 @@ import Testing
     outside["nativeFrameInHost"] = NSStringFromRect(NSRect(x: 400, y: 0, width: 320, height: 240))
     #expect(!PrivateMultiTabEvidence.liveShellAudit(outside, stage: "tab-0"))
   }
-  }
 
   @Test func blankPrivateTabCannotCoverTheSwiftUIShell() {
     let valid: [String: Any] = [

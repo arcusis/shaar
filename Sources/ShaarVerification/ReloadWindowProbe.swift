@@ -203,7 +203,9 @@ final class ReloadWindowProbe {
       try await wait("\(name) destination") {
         for context in host.contexts.values {
           for tab in context.store.session.spaces.flatMap(\.tabs)
-          where tab.id == source || !prior.contains(tab.id) {
+          where Self.isDestinationCandidate(
+            tabID: tab.id, sourceID: source, prior: prior, requiresNewTab: name != "plain")
+          {
             if let page = await document(tab.id, runtime: runtime),
               (page["href"] as? String)?.contains("/cross-site-b") == true
             {
@@ -265,6 +267,13 @@ final class ReloadWindowProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw Failure("Timed out waiting for \(label)")
+  }
+
+  static func isDestinationCandidate(
+    tabID: UUID, sourceID: UUID, prior: Set<UUID>, requiresNewTab: Bool
+  ) -> Bool {
+    if requiresNewTab { return tabID != sourceID && !prior.contains(tabID) }
+    return tabID == sourceID || !prior.contains(tabID)
   }
 
   private func require<T>(_ value: T?, _ message: String) throws -> T {

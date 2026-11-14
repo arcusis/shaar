@@ -525,7 +525,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       runtime, tab: selectedID(context), script: "window.__edgeMedia || {}", seconds: 5)
     let media = object(from: json) ?? [:]
     let pixel = numbers(media["pixel"])
-    let webgl = flag(media["webgl"]) == true
+    let webgl = flag(media["webgl"]) == true && webGLPixelIsPainted(pixel)
     let video = videoIsPlaying(media)
     let vendor = media["vendor"] as? String ?? ""
     let error = media["error"] as? String ?? ""
@@ -1382,6 +1382,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     return number.boolValue
   }
 
+  nonisolated static func webGLPixelIsPainted(_ pixel: [Int]) -> Bool {
+    pixel.count == 4 && pixel.allSatisfy { (0...255).contains($0) }
+      && pixel[3] > 0 && pixel[0..<3].contains { $0 > 0 }
+  }
   nonisolated static func numbers(_ value: Any?) -> [Int] {
     if let values = value as? [Any] { return values.compactMap { number($0) } }
     if let values = value as? NSArray { return values.compactMap { number($0) } }

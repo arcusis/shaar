@@ -45,6 +45,25 @@ class CatalogValidatorTests(unittest.TestCase):
             value,
             "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים שמשמשים לכניסה באמצעות מפתח גישה.",
         )
+    def test_window_navigation_native_menu_has_hebrew_copy(self):
+        expected = {"Next Window": "החלון הבא", "Previous Window": "החלון הקודם"}
+        for table in ("Shell", "Settings"):
+            with self.subTest(table=table):
+                catalog = json.loads(
+                    (ROOT / f"Sources/BrowserCore/Resources/{table}.xcstrings").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                for key, translation in expected.items():
+                    self.assertEqual(
+                        catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+                        translation,
+                    )
+        source = (ROOT / "Sources/ArcusisBrowser/NativeBrowserHost.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('add(.nextWindow, "Next Window", to: window)', source)
+        self.assertIn('add(.previousWindow, "Previous Window", to: window)', source)
 
     def test_site_action_failure_uses_localized_recovery_copy(self):
         key = "Could not complete the site action. Try again."

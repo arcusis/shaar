@@ -449,7 +449,8 @@ public struct ShaarDevToolsAdapter: Sendable {
       completion(
         result.flatMap { data in
           guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            Set(object.keys) == ["schemaVersion"], object["schemaVersion"] as? Int == 1
+            Set(object.keys) == ["schemaVersion"],
+            devToolsEnvelopeInteger(object["schemaVersion"]) == 1
           else { return .failure(.invalidEvent("invalid network rules reply")) }
           return .success(())
         })

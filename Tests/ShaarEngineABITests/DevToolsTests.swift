@@ -119,9 +119,11 @@ struct DevToolsTests {
       #"{"schemaVersion":true,"leaseID":42}"#,
       #"{"schemaVersion":1,"leaseID":true}"#,
     ] {
-      let fake = FakeDevToolsEngine(reply: Data(reply.utf8))
+      let fake = FakeDevToolsEngine()
+      fake.setReply(reply)
       let adapter = try #require(ShaarDevToolsAdapter(engine: fake))
-      let result = await withCheckedContinuation { continuation in
+      let result = await withCheckedContinuation {
+        (continuation: CheckedContinuation<Result<UInt32, ShaarEngineError>, Never>) in
         do {
           _ = try adapter.openPanel(
             scope: ShaarNavigationScope(profileID: "profile-a"),

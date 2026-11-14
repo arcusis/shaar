@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SUITES = {"HebrewLocalizationVisualTests": 6, "InspectorLocalizationVisualTests": 1,
+SUITES = {"HebrewLocalizationVisualTests": 7, "InspectorLocalizationVisualTests": 1,
           "InspectorDockWidthTests": 2}
 
 
@@ -61,7 +61,16 @@ def expected_captures():
     names = {"space-pager-selected.png", "space-pager-drag.png",
              "language-restart-light.png", "language-restart-dark.png",
              "sidebar-toggle-windowed.png", "sidebar-toggle-fullscreen.png",
-             "private-chrome-light.png", "private-chrome-dark.png"}
+             "private-chrome-light.png", "private-chrome-dark.png",
+             "v02-tabs-windows.png", "v02-session-restore.png", "v02-downloads.png",
+             "v02-bookmarks.png", "v02-history.png", "v02-import.png",
+             "v02-file-upload-menu.png", "v02-javascript-alert.png",
+             "v02-javascript-confirm.png", "v02-javascript-prompt.png", "v02-basic-auth.png",
+             "v02-permission-prompts.png", "v02-protocol-registration.png",
+             "v02-save-password.png", "v02-save-card.png", "v02-save-address.png",
+             "v02-extensions.png", "v02-extension-consent.png",
+             "v02-protocol-handler.png", "v02-device-picker.png",
+             "v02-device-picker-bluetooth.png", "v02-device-picker-serial.png"}
     for scheme in ("light", "dark"):
         for panel in ("design", "css", "component", "accessibility", "assets", "notes", "overview",
                       "vitals", "network", "console", "storage", "simulations", "report"):

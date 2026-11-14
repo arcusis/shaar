@@ -119,6 +119,12 @@ import Testing
   #expect(
       BrowserLocalization.string("Search or enter address", table: "Shell", language: .hebrew)
       != "Search or enter address")
+  #expect(
+    BrowserLocalization.string("Open File…", table: "Settings", language: .english)
+      == "Open File…")
+  #expect(
+    BrowserLocalization.string("Open File…", table: "Settings", language: .hebrew)
+      == "פתיחת קובץ…")
 }
 
 @Test @MainActor func reopenClosedShortcutPrefersATabThenFallsBackToAWindow() {

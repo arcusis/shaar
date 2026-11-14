@@ -204,6 +204,181 @@ final class HebrewLocalizationVisualTests: XCTestCase {
     }
   }
 
+  func testV02BrowserAndWebPlatformFlowsRenderInTheSelectedLanguage() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://example.test/localization")!))
+    let profileID = store.session.selectedSpace.profileID
+    let tab = try XCTUnwrap(store.session.selectedSpace.selectedTab)
+    let light = NSAppearance.Name.aqua
+    let size = NSSize(width: 520, height: 440)
+
+    try capture(
+      BrowserWindow(store: store), name: "v02-tabs-windows.png",
+      size: NSSize(width: 920, height: 640), appearance: light)
+
+    let restoreStore = BrowserStore()
+    restoreStore.perform(.open(URL(string: "https://example.test/closed")!))
+    let closedTab = try XCTUnwrap(restoreStore.session.selectedSpace.selectedTab)
+    restoreStore.closeTab(closedTab.id)
+    try capture(
+      RecentlyClosedPanel(store: restoreStore, spaceID: restoreStore.session.selectedSpaceID),
+      name: "v02-session-restore.png", size: NSSize(width: 540, height: 430), appearance: light)
+
+    let download = try XCTUnwrap(
+      BrowserDownload(
+        id: UUID().uuidString, profileID: profileID, filename: "report.pdf",
+        path: "/tmp/report.pdf", sourceURL: "https://example.test/report.pdf",
+        state: .downloading, paused: false, dangerous: false, offTheRecord: false,
+        received: 45, total: 100, startTime: 1))
+    try capture(
+      RecentDownloadsPopover(
+        items: [download], profileID: profileID, selectedProfileID: { profileID },
+        dragURL: { $0.fileURL }, dismiss: {}, animatesReveal: false),
+      name: "v02-downloads.png", size: NSSize(width: 260, height: 220), appearance: light)
+
+    try capture(
+      LibraryPanel(store: store, profileID: profileID, section: .bookmarks),
+      name: "v02-bookmarks.png", size: NSSize(width: 560, height: 460), appearance: light)
+    try capture(
+      LibraryPanel(store: store, profileID: profileID, section: .history),
+      name: "v02-history.png", size: NSSize(width: 560, height: 460), appearance: light)
+    let importItems = [
+      BrowserImportItem(source: .chrome, title: "Research", address: "https://example.test/"),
+      BrowserImportItem(
+        kind: .history, source: .chrome, title: "Recent page",
+        address: "https://example.test/recent"),
+    ]
+    try capture(
+      BrowserImportPreviewView(
+        items: importItems, profileName: store.profileName, error: nil, canImport: true,
+        onCancel: {}, onImport: {}),
+      name: "v02-import.png", size: NSSize(width: 560, height: 480), appearance: light)
+
+    let fileMenuTitle = ShellL10n.string("Open File…")
+    try capture(
+      VStack(alignment: .leading) {
+        Text(ShellL10n.string("File")).font(.headline)
+        Text(fileMenuTitle).padding(8)
+      },
+      name: "v02-file-upload-menu.png", size: NSSize(width: 260, height: 100), appearance: light)
+
+    for kind in [JavaScriptDialogKind.alert, .confirm, .prompt] {
+      let javascript = try XCTUnwrap(JavaScriptDialogRequest(payload: [
+        "id": "visual-dialog-\(kind.rawValue)", "profileID": profileID.uuidString,
+        "tabID": tab.id.uuidString, "pageURL": tab.url.absoluteString,
+        "origin": "https://example.test", "dialogType": kind.rawValue,
+        "message": "Enter a value", "defaultPrompt": "",
+      ]))
+      try capture(
+        JavaScriptDialogSheet(request: javascript, store: store),
+        name: "v02-javascript-\(kind.rawValue).png", size: size, appearance: light)
+    }
+
+    let auth = try XCTUnwrap(HTTPAuthRequest(payload: [
+      "id": "visual-auth", "profileID": profileID.uuidString,
+      "tabID": tab.id.uuidString, "windowID": "visual-window",
+      "host": "example.test", "realm": "Members",
+    ]))
+    try capture(
+      HTTPAuthSheet(store: store, request: auth), name: "v02-basic-auth.png",
+      size: size, appearance: light)
+
+    let permission = try XCTUnwrap(
+      WebsitePermissionRequest(
+        id: "visual-permission", profileID: profileID, tabID: tab.id,
+        pageURL: tab.url, requestingOrigin: URL(string: "https://example.test")!,
+        kinds: [.location, .notifications, .midi, .camera, .microphone]))
+    try capture(
+      WebsitePermissionConsent(store: store, request: permission),
+      name: "v02-permission-prompts.png", size: NSSize(width: 500, height: 560),
+      appearance: light)
+    let protocolRegistration = try XCTUnwrap(
+      WebsitePermissionRequest(
+        id: "visual-protocol-registration", profileID: profileID, tabID: tab.id,
+        pageURL: tab.url, requestingOrigin: URL(string: "https://example.test")!,
+        kinds: [.protocolHandler]))
+    try capture(
+      WebsitePermissionConsent(store: store, request: protocolRegistration),
+      name: "v02-protocol-registration.png", size: NSSize(width: 500, height: 480),
+      appearance: light)
+
+    for (kind, id, detail, name) in [
+      ("password", "1", "alex@example.test", "password"),
+      ("card", "2", "Personal card", "card"),
+      ("address", "3", "Home address", "address"),
+    ] {
+      let save = try XCTUnwrap(SavePromptRequest(payload: [
+        "schemaVersion": 1, "kind": "savePromptRequested", "id": id,
+        "prompt": kind, "origin": "https://example.test",
+        "pageURL": tab.url.absoluteString, "detail": detail, "update": false,
+        "profileID": profileID.uuidString, "tabID": tab.id.uuidString,
+        "windowID": "visual-window",
+      ]))
+      let savePanel = ShaarSavePromptPanel()
+      savePanel.show(save) { _ in }
+      let saveContent = try XCTUnwrap(savePanel.contentView)
+      let saveSize = NSSize(width: 360, height: 196)
+      savePanel.appearance = NSAppearance(named: light)
+      saveContent.frame = NSRect(origin: .zero, size: saveSize)
+      saveContent.layoutSubtreeIfNeeded()
+      let saveCapture = try VisualCapture.render(
+        saveContent, to: output.appending(path: "v02-save-\(name).png"))
+      assertNonblank(saveCapture, size: saveSize)
+      savePanel.close()
+    }
+
+    let extensionManager = ExtensionManagerModel(profileID: profileID, extensions: [])
+    try capture(
+      VStack(alignment: .leading) {
+        Text(PanelsL10n.string("Extensions")).font(.headline)
+        ProfileExtensionsSection(model: extensionManager, onAddExtensions: {})
+      }.padding(16),
+      name: "v02-extensions.png", size: NSSize(width: 460, height: 320), appearance: light)
+
+    let browserExtension = try XCTUnwrap(BrowserExtension(
+      id: String(repeating: "a", count: 32), name: "Sample Notes", version: "1.0"))
+    let install = try XCTUnwrap(
+      ExtensionInstallRequest(
+        id: "visual-install", profileID: profileID, tabID: tab.id,
+        sourceURL: tab.url, browserExtension: browserExtension, kind: .install,
+        permissions: ["Read your browsing history"]))
+    try capture(
+      ExtensionConsent(store: store, request: install), name: "v02-extension-consent.png",
+      size: NSSize(width: 500, height: 560), appearance: light)
+
+    let external = try XCTUnwrap(
+      ExternalAppRequest(
+        id: "x1", profileID: profileID, tabID: tab.id, pageURL: tab.url,
+        scheme: "mailto", requestingOrigin: URL(string: "https://example.test"),
+        applicationName: "Mail", windowID: "visual-window"))
+    store.requestExternalApp(external)
+    try capture(
+      ExternalAppConsent(store: store, request: external),
+      name: "v02-protocol-handler.png", size: NSSize(width: 500, height: 540), appearance: light)
+
+    let chooser = DeviceChooserRequest(
+      id: "visual-device", tabID: tab.id, profileID: profileID, pageURL: tab.url,
+      origin: URL(string: "https://example.test")!, transport: .usb,
+      options: [DeviceChooserOption(optionID: "key-1", title: "Security key", detail: "USB")],
+      bluetoothUnavailable: false, canGrant: false)
+    try capture(
+      DeviceChooserConsent(store: store, request: chooser),
+      name: "v02-device-picker.png", size: NSSize(width: 500, height: 400), appearance: light)
+    for (transport, unavailable, suffix) in [
+      (DeviceChooserTransport.bluetooth, true, "bluetooth"),
+      (DeviceChooserTransport.serial, false, "serial"),
+    ] {
+      let request = DeviceChooserRequest(
+        id: "visual-device-\(suffix)", tabID: tab.id, profileID: profileID,
+        pageURL: tab.url, origin: URL(string: "https://example.test")!,
+        transport: transport, options: [], bluetoothUnavailable: unavailable, canGrant: false)
+      try capture(
+        DeviceChooserConsent(store: store, request: request),
+        name: "v02-device-picker-\(suffix).png", size: NSSize(width: 500, height: 420),
+        appearance: light)
+    }
+  }
+
   func testSiteControlCenterMiniPlayerAndPictureInPicture() throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(),

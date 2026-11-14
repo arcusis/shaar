@@ -9,6 +9,10 @@ import Testing
 
 @Suite @MainActor
 struct DeviceChooserTests {
+  @Test func chooserTitleIsVoiceOverHeading() {
+    #expect(DeviceChooserConsent.headingTraits.contains(.isHeader))
+  }
+
   @Test func parsesAnEngineChooserEventAndRejectsAPageTitle() throws {
     let store = try store()
     let tab = try #require(store.session.selectedSpace.selectedTab)

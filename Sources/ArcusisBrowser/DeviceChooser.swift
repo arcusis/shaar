@@ -178,6 +178,8 @@ enum DeviceChooserIntake {
 }
 
 struct DeviceChooserConsent: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
+
   let store: BrowserStore
   let request: DeviceChooserRequest
   @Environment(\.dismiss) private var dismiss
@@ -212,6 +214,7 @@ struct DeviceChooserConsent: View {
     VStack(alignment: .leading, spacing: 16) {
       Label(PanelsL10n.string("Choose a device"), systemImage: presented.transport.symbol)
         .font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.headingTraits)
       Text(presented.displayOrigin)
         .font(.headline)
         .textSelection(.enabled)

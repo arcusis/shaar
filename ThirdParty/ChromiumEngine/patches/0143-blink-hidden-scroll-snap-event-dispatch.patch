@@ -1,11 +1,7 @@
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
-@@ -41,2 +41,3 @@
- #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
-+#include "third_party/blink/renderer/platform/scheduler/public/task_type.h"
- 
-@@ -258,2 +259,26 @@
+@@ -258,2 +258,26 @@
  
 +void ScriptedAnimationController::EnqueueHiddenScrollSnapEvent(Event* event) {
 +  if (!InsertToPerFrameEventsMap(event))

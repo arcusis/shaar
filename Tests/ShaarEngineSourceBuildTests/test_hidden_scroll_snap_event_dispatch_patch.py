@@ -19,6 +19,7 @@ class HiddenScrollSnapEventDispatchPatchTests(unittest.TestCase):
         patch = content.decode()
         self.assertIn("EnqueueHiddenScrollSnapEvent", patch)
         self.assertIn("TaskType::kDOMManipulation", patch)
+        self.assertNotIn("task_type.h", patch)
         self.assertIn("scrollsnapchange", patch)
         self.assertIn("scrollsnapchanging", patch)
         self.assertIn("if (hidden())", patch)

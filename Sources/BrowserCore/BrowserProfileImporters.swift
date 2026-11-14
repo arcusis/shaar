@@ -108,7 +108,7 @@ private func rejectPrivateProfile(_ url: URL) throws {
   if names.contains(where: { name in
     markers.contains { marker in
       if marker == "guest" && !profileNames.contains(name) { return false }
-      name.range(of: "\\b\(marker)\\b", options: .regularExpression) != nil
+      return name.range(of: "\\b\(marker)\\b", options: .regularExpression) != nil
     }
   }) {
     throw BrowserImport.ImportError.privateProfile

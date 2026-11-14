@@ -289,7 +289,6 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.failure == nil)
   #expect(model.runningAction == nil)
 }
-}
 
 @MainActor @Test func siteControlsDoNotOverlapWritesToTheSamePermission() async {
   let backend = FakeSiteBackend()

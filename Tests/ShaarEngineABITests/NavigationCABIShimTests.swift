@@ -77,7 +77,7 @@ private func fakeNavigationCShimSubmit(
   let noEngine = withUnsafePointer(to: &scope) { scopePointer in
     shaar_navigation_submit_invoke(
       symbol, nil, scopePointer, nil, nil, 0, shaar_bytes(data: nil, size: 0), 1,
-      noOpNavigationShimReply, nil, &error)
+      noOpNavigationReply, nil, &error)
   }
   #expect(noEngine == invalidArgument)
 
@@ -100,7 +100,7 @@ private func fakeNavigationCShimSubmit(
   let status = withUnsafePointer(to: &scope) { scopePointer in
     shaar_navigation_submit_invoke(
       symbol, OpaquePointer(bitPattern: 0x22), scopePointer, nil, nil, 0,
-      shaar_bytes(data: nil, size: 0), 1, noOpNavigationShimReply, nil, &error)
+      shaar_bytes(data: nil, size: 0), 1, noOpNavigationReply, nil, &error)
   }
   #expect(status == invalidArgument)
 }

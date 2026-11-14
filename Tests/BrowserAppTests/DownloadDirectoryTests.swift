@@ -124,6 +124,30 @@ struct DownloadDirectoryTests {
     #expect(preferences.downloadDirectory(for: profile)?.path == root.path)
   }
 
+  @Test func cancelledDirectoryUpdateDoesNotStartOrShowError() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let profile = try #require(workspace.workspace.catalog.profiles.first?.id)
+    var applied = false
+    let state = BrowserSettingsState(
+      workspace: workspace, preferences: BrowserPreferencesStore(),
+      downloadDirectorySettingsEnabled: true,
+      applyDownloadDirectory: { _, _ in
+        try Task.checkCancellation()
+        applied = true
+        return root
+      })
+
+    let update = Task { await state.applyDownloadDirectory(root, for: profile) }
+    update.cancel()
+
+    #expect(await !update.value)
+    #expect(!applied)
+    #expect(state.downloadDirectoryErrors[profile] == nil)
+  }
+
   @Test func missingEngineAcknowledgementShowsError() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

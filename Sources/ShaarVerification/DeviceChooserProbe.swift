@@ -428,7 +428,8 @@ final class DeviceChooserProbe {
       if let error = object["error"] as? String, !error.isEmpty {
         errorName = error
         message = object["message"] as? String
-      } else if let ok = object["ok"] as? NSNumber,
+      } else if object["error"] == nil,
+        let ok = object["ok"] as? NSNumber,
         CFGetTypeID(ok) == CFBooleanGetTypeID(), ok.boolValue,
         let countValue = object["count"] as? NSNumber,
         CFGetTypeID(countValue) != CFBooleanGetTypeID(),

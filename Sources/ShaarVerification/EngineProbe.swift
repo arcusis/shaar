@@ -54,6 +54,15 @@ enum EngineProbeSnapshotValidation {
   }
 }
 
+enum EngineProbeFixtureURL {
+  static func isLoopback(_ fixture: URL?) -> Bool {
+    guard let fixture, fixture.scheme == "http", fixture.host() == "127.0.0.1",
+      let port = fixture.port
+    else { return false }
+    return (1...65_535).contains(port)
+  }
+}
+
 /// Uses only a marked, disposable directory and an authored loopback fixture.
 /// No window is ordered onscreen and no existing browser profiles are opened.
 @MainActor
@@ -258,8 +267,8 @@ final class EngineProbe {
         try String(contentsOf: root.appending(path: ".arcusis-probe"), encoding: .utf8)
           == "arcusis-engine-probe-v1\n",
         ["initial", "restart"].contains(phase),
-        let fixture = URL(string: try value("--probe-url")), fixture.scheme == "http",
-        fixture.host() == "127.0.0.1", fixture.port != nil
+        let fixture = URL(string: try value("--probe-url")),
+        EngineProbeFixtureURL.isLoopback(fixture)
       else {
         throw ProbeFailure("Probe requires a marked temporary directory and loopback fixture.")
       }

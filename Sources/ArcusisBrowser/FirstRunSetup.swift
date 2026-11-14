@@ -100,7 +100,7 @@ struct FirstRunSetupView: View {
     language: BrowserLanguage = .currentLaunchLanguage
   ) -> String {
     BrowserLocalization.string(
-      "Could not set Shaar as the default browser.", table: "Settings", language: language)
+      "Could not set this app as the default browser.", table: "Settings", language: language)
   }
 
   var body: some View {
@@ -292,7 +292,7 @@ struct FirstRunSetupView: View {
       do {
         try await DefaultBrowserService.makeDefault()
         defaultError = nil
-      } catch { defaultError = Self.defaultBrowserFailure() }
+      } catch { defaultError = SettingsL10n.string("Could not set this app as the default browser.") }
       defaultStatus = DefaultBrowserService.isDefault()
     }
   }

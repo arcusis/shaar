@@ -9,6 +9,7 @@
     "Could not clear history. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not clear history. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב."}}}},
     "Could not delete the profile. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not delete the profile. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן למחוק את הפרופיל. נסו שוב."}}}},
     "Could not create this profile. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not create this profile. Try again."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן ליצור את הפרופיל. כדאי לנסות שוב."}}}},
+    "Could not set this app as the default browser.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not set this app as the default browser."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להגדיר את האפליקציה כדפדפן ברירת המחדל."}}}},
     "Share Page…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Share Page…"}},"he":{"stringUnit":{"state":"translated","value":"שיתוף העמוד…"}}}},
     "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
     "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},

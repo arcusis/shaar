@@ -342,16 +342,16 @@ class CatalogValidatorTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            'SettingsL10n.string("Could not set Shaar as the default browser.")', source
+            'Could not set this app as the default browser.', source
         )
         settings = json.loads(
             (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
                 encoding="utf-8"
             )
         )
-        translation = settings["strings"]["Could not set Shaar as the default browser."][
+        translation = settings["strings"]["Could not set this app as the default browser."][
             "localizations"]["he"]["stringUnit"]["value"]
-        self.assertEqual(translation, "לא ניתן להגדיר את Shaar כדפדפן ברירת המחדל.")
+        self.assertEqual(translation, "לא ניתן להגדיר את האפליקציה כדפדפן ברירת המחדל.")
 
     def test_inspector_section_disclosure_uses_direction_aware_chevron(self):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorPanelComponents.swift").read_text(
@@ -706,6 +706,19 @@ class CatalogValidatorTests(unittest.TestCase):
             forms = catalog["strings"][key]["localizations"]["he"]["variations"]["plural"]
             with self.subTest(key=key):
                 self.assertEqual(tuple(forms[c]["stringUnit"]["value"] for c in ("one", "two", "other")), values)
+    def test_default_browser_failures_use_localized_settings_copy(self):
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(encoding="utf-8"))
+        checks = (
+            ("Sources/ArcusisBrowser/BrowserSettingsView.swift", "Could not set the default browser."),
+            ("Sources/ArcusisBrowser/FirstRunSetup.swift", "Could not set this app as the default browser."),
+        )
+        for relative, key in checks:
+            with self.subTest(path=relative):
+                self.assertIn(key, catalog["strings"])
+                self.assertNotEqual(catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"], key)
+                source = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn(f'SettingsL10n.string("{key}")', source)
+                self.assertNotIn('defaultError = error.localizedDescription', source)
 
     def test_bridge_english_single_download_keeps_numeric_one(self):
         path = ROOT / "Sources/BrowserCore/Resources/Bridge.xcstrings"

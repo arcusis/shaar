@@ -188,13 +188,11 @@ struct DeviceChooserTests {
         store, transport: "usb", id: "max-name-bytes",
         options: [["index": 0, "name": acceptedName]], canGrant: true))
     #expect(accepted.options.first?.title == acceptedName)
-
     let oversizedName = String(repeating: "a", count: 257)
     #expect(
       request(
         store, transport: "usb", id: "oversized-name",
         options: [["index": 0, "name": oversizedName]], canGrant: true) == nil)
-
     let multibyteName = String(repeating: "🔌", count: 64)
     #expect(
       request(
@@ -206,6 +204,21 @@ struct DeviceChooserTests {
       request(
         store, transport: "usb", id: "oversized-multibyte-name",
         options: [["index": 0, "name": oversizedMultibyteName]], canGrant: true) == nil)
+  }
+
+  @Test func chooserOptionCountMatchesTheEngineLimit() throws {
+    let store = try store()
+    let acceptedOptions = (0..<64).map { ["index": $0, "name": "Device \($0)"] as [String: Any] }
+    let accepted = try #require(
+      request(
+        store, transport: "usb", id: "max-options", options: acceptedOptions,
+        canGrant: true))
+    #expect(accepted.options.count == 64)
+    let excessOptions = (0..<65).map { ["index": $0, "name": "Device \($0)"] as [String: Any] }
+    #expect(
+      request(
+        store, transport: "usb", id: "too-many-options", options: excessOptions,
+        canGrant: true) == nil)
   }
 
   @Test func unnamedDevicesHaveAVisibleFallbackLabel() throws {

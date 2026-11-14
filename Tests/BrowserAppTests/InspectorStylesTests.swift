@@ -155,6 +155,19 @@ import Testing
     #expect(inspector.styles.failure == nil)
   }
 
+  @Test func cancelledStyleUndoDoesNotStartOrPublishFailure() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let undo = Task { @MainActor in await inspector.styles.undo() }
+    undo.cancel()
+    await undo.value
+
+    #expect(inspector.styles.failure == nil)
+  }
+
   @Test func nativeCSSPanelRendersGridFlexAndSourceLimitStates() async throws {
     let inspector = makeInspector()
     inspector.open()

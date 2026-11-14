@@ -91,7 +91,7 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
       firstTabID: tabID, store: store)
     let target = try #require(session.inspectorTarget)
     var model: InspectorModel? = InspectorModel(target: target, privateSession: session)
-    weak var released = model
+    weak let released = model
     model?.open()
     model?.close()
     model = nil

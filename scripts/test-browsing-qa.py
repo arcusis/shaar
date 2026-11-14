@@ -127,9 +127,12 @@ def crash_counts_against_suite(
     """A deliberate renderer SIGKILL is evidence for the recovery row, not a second defect."""
     if scenario != "renderer" or finished is None:
         return True
-    recovered = any(
-        row.get("name") == "renderer-recover" and row.get("status") == "pass"
-        for row in report.get("rows") or []
+    rows = report.get("rows")
+    recovered = isinstance(rows, list) and any(
+        isinstance(row, dict)
+        and row.get("name") == "renderer-recover"
+        and row.get("status") == "pass"
+        for row in rows
     )
     return not (recovered and deliberate_renderer_kill(report, crash_text, finished))
 
@@ -137,8 +140,14 @@ def crash_counts_against_suite(
 def deliberate_renderer_kill(report: dict, crash_text: str, finished: datetime) -> bool:
     signaled: set[int] = set()
     signaled_at = None
-    for row in report.get("rows") or []:
-        for pid in row.get("signaledPIDs") or []:
+    rows = report.get("rows")
+    if not isinstance(rows, list):
+        return False
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        pids = row.get("signaledPIDs")
+        for pid in pids if isinstance(pids, list) else []:
             if isinstance(pid, int):
                 signaled.add(pid)
         parsed = parse_signaled_at(row.get("signaledAt"))
@@ -366,7 +375,13 @@ def read_report(path: Path) -> dict:
 
 def row_notes(report: dict, extra: str) -> str:
     parts = [extra] if extra else []
-    for row in report.get("rows") or []:
+    rows = report.get("rows")
+    if not isinstance(rows, list):
+        return " ".join(parts + ["Malformed scenario rows."])
+    for row in rows:
+        if not isinstance(row, dict):
+            parts.append("Malformed scenario row.")
+            continue
         if row.get("status") in {"fail", "blocked"}:
             parts.append(f"{row.get('name')}: {row.get('detail') or ''}".strip())
     return " ".join(parts)

@@ -172,6 +172,17 @@ process.stdin.on('end', () => {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_malformed_rows_are_reported_without_crashing_note_formatting(self):
+        notes = PROBE.row_notes({"rows": [None]}, "")
+        self.assertIn("malformed scenario row", notes.lower())
+
+    def test_malformed_renderer_rows_cannot_hide_a_crash(self):
+        finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
+        report = {"rows": [None]}
+        self.assertTrue(
+            PROBE.crash_counts_against_suite("renderer", report, "EXC_CRASH", finished))
+        self.assertFalse(PROBE.deliberate_renderer_kill(report, "EXC_CRASH", finished))
+
 
 if __name__ == "__main__":
     unittest.main()

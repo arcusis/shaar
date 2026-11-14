@@ -80,9 +80,24 @@ public enum BrowserImport {
   public static func readOffMain(_ url: URL, source: BrowserImportSource) async throws
     -> BrowserImportBatch
   {
-    try await Task.detached(priority: .userInitiated) {
-      try read(url, source: source)
-    }.value
+    try await performOffMain { try read(url, source: source) }
+  }
+
+  /// Runs synchronous import work away from the caller's actor and forwards cancellation to it.
+  static func performOffMain<Value: Sendable>(
+    _ operation: @escaping @Sendable () throws -> Value
+  ) async throws -> Value {
+    let worker = Task.detached(priority: .userInitiated) {
+      try Task<Never, Never>.checkCancellation()
+      let value = try operation()
+      try Task<Never, Never>.checkCancellation()
+      return value
+    }
+    return try await withTaskCancellationHandler {
+      try await worker.value
+    } onCancel: {
+      worker.cancel()
+    }
   }
 
   public static func historyRows(for items: [BrowserImportItem]) -> [[String: Any]] {

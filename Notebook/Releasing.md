@@ -21,6 +21,8 @@ Only `bundle-app.sh --with-engine --with-updates` in the release configuration w
 
 ## Cutting a release
 
+The Chromium 157 preparation sets the app contract to **0.2.0 (build 2)**. The last published app release remains **v0.1.0** until a later release operation; `website/src/content.ts` and `scripts/sparkle-fixture.json` deliberately keep pointing to that published version. The bundle's Info.plist and appcast derive their new values from `scripts/release-config.sh` rather than pinning another version.
+
 1. Raise `SHAAR_BUNDLE_VERSION` (Major.Minor.Patch, which also sets the tag `v<version>`) and `SHAAR_BUILD_VERSION`. Sparkle orders updates by the build number.
 2. Merge the change and wait for both Source checks and Swift security on that exact production commit to pass. Full production Swift analysis includes verification/support modules, the manifest and build plugins. Release CI enforces those exact successful production-push runs and blocks any open code-scanning alert at any severity. Then tag `v<version>` at that verified commit and push the tag.
 3. Write the release notes as `<li>` lines in an HTML file.

@@ -171,7 +171,8 @@ final class ReloadWindowProbe {
       try expect(gestureResult != nil, "NATIVE NEEDED: trusted offscreen click for \(name)")
     }
     let destination = try await destinationTab(
-      name: name, source: source, prior: prior, host: host, gestureResult: gestureResult)
+      name: name, source: source, ownerID: ownerID, prior: prior, host: host,
+      gestureResult: gestureResult)
     if elementID != "plain" {
       let clicked = try require(await document(source, runtime: runtime), "No source document")
       try expect(
@@ -195,7 +196,7 @@ final class ReloadWindowProbe {
   }
 
   private func destinationTab(
-    name: String, source: UUID, prior: Set<UUID>, host: NativeBrowserHost,
+    name: String, source: UUID, ownerID: UUID, prior: Set<UUID>, host: NativeBrowserHost,
     gestureResult: String?
   ) async throws -> UUID {
     var found: UUID?
@@ -204,7 +205,8 @@ final class ReloadWindowProbe {
         for context in host.contexts.values {
           for tab in context.store.session.spaces.flatMap(\.tabs)
           where Self.isDestinationCandidate(
-            tabID: tab.id, sourceID: source, prior: prior, requiresNewTab: name != "plain")
+            tabID: tab.id, sourceID: source, prior: prior,
+            candidateOwnerID: context.id, ownerID: ownerID, requiresNewTab: name != "plain")
           {
             if let page = await document(tab.id, runtime: runtime),
               (page["href"] as? String)?.contains("/cross-site-b") == true
@@ -274,8 +276,10 @@ final class ReloadWindowProbe {
   }
 
   static func isDestinationCandidate(
-    tabID: UUID, sourceID: UUID, prior: Set<UUID>, requiresNewTab: Bool
+    tabID: UUID, sourceID: UUID, prior: Set<UUID>,
+    candidateOwnerID: UUID, ownerID: UUID, requiresNewTab: Bool
   ) -> Bool {
+    guard candidateOwnerID == ownerID else { return false }
     if requiresNewTab { return tabID != sourceID && !prior.contains(tabID) }
     return tabID == sourceID || !prior.contains(tabID)
   }

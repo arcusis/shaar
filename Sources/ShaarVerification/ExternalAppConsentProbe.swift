@@ -490,12 +490,29 @@ final class ExternalAppConsentProbe {
     throw failure("No installed external-protocol handler available.")
   }
 
-  private func audit(_ target: String) -> (count: Int, matchingCount: Int, allUnremembered: Bool)? {
-    guard let value = runtime.probeExternalAppLaunchAudit(forURL: target) as? [String: Any],
-      let count = value["count"] as? Int, let matching = value["matchingCount"] as? Int,
-      let unremembered = value["allUnremembered"] as? Bool
+  static func parseAudit(_ value: [String: Any]?) -> (
+    count: Int, matchingCount: Int, allUnremembered: Bool
+  )? {
+    guard let value,
+      let count = strictInteger(value["count"]),
+      let matching = strictInteger(value["matchingCount"]),
+      let unremembered = value["allUnremembered"] as? NSNumber,
+      CFGetTypeID(unremembered) == CFBooleanGetTypeID()
     else { return nil }
-    return (count, matching, unremembered)
+    return (count, matching, unremembered.boolValue)
+  }
+
+  private static func strictInteger(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
+      return nil
+    }
+    let encoding = String(cString: number.objCType)
+    guard encoding != "f", encoding != "d" else { return nil }
+    return value as? Int
+  }
+
+  private func audit(_ target: String) -> (count: Int, matchingCount: Int, allUnremembered: Bool)? {
+    Self.parseAudit(runtime.probeExternalAppLaunchAudit(forURL: target) as? [String: Any])
   }
 
   private func evaluate(_ tab: UUID, _ script: String) async -> Any? {

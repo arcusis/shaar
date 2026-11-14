@@ -357,6 +357,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       })
     else { throw SessionError.invalidState }
     let favoritesByID = Dictionary(uniqueKeysWithValues: favorites.map { ($0.id, $0) })
+    let spaceProfileIDs = Set(spaces.map(\.profileID))
     guard
       favorites.allSatisfy({ favorite in
         profileIDs.contains(favorite.profileID) && Self.isPersistableURL(favorite.originalURL)
@@ -367,7 +368,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
         return page.tab.isPinned == false && page.tab.folderID == nil
           && Self.isPersistableURL(page.tab.url)
           && !page.tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          && spaces.contains(where: { $0.profileID == favorite.profileID })
+          && spaceProfileIDs.contains(favorite.profileID)
       }),
       spaces.allSatisfy({ space in
         space.selectedFavoriteID.map { id in

@@ -12,6 +12,13 @@ private func panelInteger(_ value: Any?) -> Int? {
   return Int(exactly: number.doubleValue)
 }
 
+private func panelBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
 private func panelNumber(_ value: Any?) -> Double? {
   guard let number = value as? NSNumber,
     CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite
@@ -103,7 +110,7 @@ public struct ShaarDevToolsResponseBody: Equatable, Sendable {
       panelInteger(object["schemaVersion"]) == 1,
       let body = object["body"] as? String,
       body.utf8.count <= 1_048_576,
-      let encoded = object["base64Encoded"] as? Bool
+      let encoded = panelBoolean(object["base64Encoded"])
     else { return nil }
     return Self(body: body, base64Encoded: encoded)
   }
@@ -144,8 +151,8 @@ public enum ShaarDevToolsPanelEventRouter {
       guard
         Set(fields.keys) == [
           "jpegBase64", "sessionID", "masked", "truncated",
-        ], fields["masked"] as? Bool == true,
-        fields["truncated"] as? Bool == false,
+        ], panelBoolean(fields["masked"]) == true,
+        panelBoolean(fields["truncated"]) == false,
         let text = fields["jpegBase64"] as? String, text.utf8.count <= 350_000,
         let jpeg = Data(base64Encoded: text), jpeg.count <= 256 * 1024,
         jpeg.count >= 4, jpeg.starts(with: [0xFF, 0xD8]),
@@ -172,7 +179,7 @@ public enum ShaarDevToolsPanelEventRouter {
         metrics: nil, droppedCount: value, frame: nil, stack: [],
         requestHeaders: [], responseHeaders: [], truncated: false)
     }
-    guard let truncated = fields["truncated"] as? Bool,
+    guard let truncated = panelBoolean(fields["truncated"]),
       Set(fields.keys).isSubset(of: allowedKeys(for: id)),
       validString(fields["text"]), validString(fields["level"]),
       validString(fields["objectID"]),

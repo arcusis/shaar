@@ -16,6 +16,7 @@ The DevTools frontend overlay staging script rejects symlinked source files so s
 The ABI contract checker requires source-build patch paths to remain inside the repository before reading their pinned contents.
 Symlink loops in those paths are reported as invalid repository paths rather than escaping as a pathlib traceback.
 The engine payload CLI reports non-UTF-8 pin files as malformed through its machine-readable failure report.
+The pinned engine fetcher refuses symlinks at its archive and `.partial` cache paths before invoking `curl`.
 
 The reviewed `patches/profile-download-directory.patch` adds `ac_downloads_directory_get` and `ac_downloads_directory_set` for exact loaded normal profiles. It rejects private/shutdown/policy-controlled profiles and unusable directory paths. Chromium `DownloadPrefs` and its `PrefService` remain the authority. This patch is not present in the prebuilt archive. Shaar now persists a per-profile folder choice and can scan it in Library, but the shipped engine still does not apply the choice to browser downloads. Compilation and runner tests do not prove per-profile runtime download isolation, restart persistence, UI behavior, signing or release readiness.
 

@@ -87,6 +87,9 @@ def main() -> int:
     if args.notebook.is_symlink():
         print(f"Notebook root must not be a symlink: {args.notebook}", file=sys.stderr)
         return 1
+    if args.notebook.parent.is_symlink():
+        print(f"Notebook parent must not be a symlink: {args.notebook.parent}", file=sys.stderr)
+        return 1
     try:
         return check_notebook(args.notebook.resolve())
     except (OSError, UnicodeError) as error:

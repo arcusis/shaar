@@ -106,6 +106,23 @@ class NotebookLinksTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("Notebook root must not be a symlink", result.stderr)
 
+    def test_symlinked_notebook_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "outside"
+            notebook = parent / "Notebook"
+            notebook.mkdir(parents=True)
+            (notebook / "_INDEX_Main.md").write_text("[[Note]]", encoding="utf-8")
+            (notebook / "Note.md").write_text("# Note", encoding="utf-8")
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(parent, target_is_directory=True)
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--notebook", str(linked_parent / "Notebook")],
+                cwd=directory, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Notebook parent must not be a symlink", result.stderr)
+
     def test_notebook_prefix_in_nested_index_resolves_from_notebook_root(self):
         result = self.run_check({
             "_INDEX_Main.md": "[[nested/_INDEX_Nested]]",

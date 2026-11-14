@@ -124,7 +124,7 @@ def main():
                         default=pathlib.Path("build/Shaar Verification.app"))
     parser.add_argument("--runs", type=int, default=6)
     parser.add_argument("--timeout", type=int, default=90)
-    parser.add_argument("--output-dir", type=pathlib.Path)
+    parser.add_argument("--output-dir", type=output_directory_path)
     parser.add_argument("--mode", action="append",
                         choices=("pending", "private-live", "pending-private",
                                  "private-close-live"),
@@ -155,6 +155,16 @@ def main():
         thread.join()
     print(f"Results: {sum(outcomes)}/{len(outcomes)}; evidence: {output_dir}")
     return 0 if all(outcomes) else 1
+
+
+def output_directory_path(value):
+    path = pathlib.Path(value)
+    if path.is_symlink():
+        raise argparse.ArgumentTypeError(f"output directory must not be a symlink: {path}")
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(
+            f"output directory parent must not be a symlink: {path.parent}")
+    return path
 
 
 if __name__ == "__main__":

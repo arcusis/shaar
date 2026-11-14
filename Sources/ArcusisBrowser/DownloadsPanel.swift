@@ -15,6 +15,10 @@ enum DownloadAccessibility {
   }
 }
 
+enum DownloadsPanelAccessibility {
+  static let titleTraits: AccessibilityTraits = .isHeader
+}
+
 struct DownloadsPanel: View {
   let store: BrowserStore
   let engine: BrowserEngine

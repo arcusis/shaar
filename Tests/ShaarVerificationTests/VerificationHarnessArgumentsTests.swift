@@ -29,6 +29,11 @@ import Testing
         frameworksURL: frameworks) == nil)
     #expect(
       VerificationHarnessArguments.launch(
+        "--tab-adoption-smoke",
+        arguments: ["--tab-adoption-smoke", "first.json", "http://127.0.0.1:1234/",
+          "--tab-adoption-smoke", "second.json"], frameworksURL: frameworks) == nil)
+    #expect(
+      VerificationHarnessArguments.launch(
         "--tab-adoption-smoke", arguments: args, frameworksURL: nil) == nil)
   }
 

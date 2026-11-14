@@ -106,6 +106,15 @@ import Testing
   #expect(foreign["pipCount"] as? Int == 0)
 }
 
+@Test func shaarMediaCaptureFlagsMustBeJSONBooleans() {
+  let event: [String: Any] = [
+    "schemaVersion": 1, "kind": "capture_changed",
+    "camera": 1, "microphone": false, "screen": false,
+  ]
+  let result = ARCProbeShaarMediaEventDispatch(event, true)
+  #expect(result["accessCount"] as? Int == 0)
+}
+
 @Test func desktopCaptureRequestsReachTheObjectiveCReceivePathForOwnedTabs() throws {
   let id = UUID().uuidString
   let payload: [String: Any] = [

@@ -3,10 +3,12 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib.util
+import io
 import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -60,6 +62,20 @@ class FetchFrameworkDevToolsTests(unittest.TestCase):
             "https://github.com/arcusis/shaar/releases/download/"
             "framework-devtools-pins/react-8.0.0.crx",
         )
+
+    def test_transient_release_download_failure_is_retried(self):
+        fetcher = load_fetcher()
+        error = fetcher.urllib.error.HTTPError("https://example.invalid/react.crx", 503, "busy", {}, None)
+        sleeps = []
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "react.crx"
+            with patch.object(fetcher.urllib.request, "urlopen",
+                              side_effect=[error, io.BytesIO(b"pinned bytes")]) as open_url:
+                fetcher.download_url("https://example.invalid/react.crx", "react", destination, sleeps.append)
+            self.assertEqual(destination.read_bytes(), b"pinned bytes")
+
+        self.assertEqual(open_url.call_count, 2)
+        self.assertEqual(sleeps, [2])
 
     def test_bundle_does_not_refresh_archives_from_the_web_store(self):
         text = BUNDLE.read_text()

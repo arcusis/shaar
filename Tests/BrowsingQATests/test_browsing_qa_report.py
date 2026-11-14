@@ -200,6 +200,12 @@ process.stdin.on('end', () => {
         notes = PROBE.row_notes({"rows": [None]}, "")
         self.assertIn("malformed scenario row", notes.lower())
 
+    def test_malformed_status_scalar_fails_without_crashing_report_formatting(self):
+        report = {"passed": True, "rows": [{"status": []}]}
+        self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+        notes = PROBE.row_notes(report, "")
+        self.assertIn("malformed scenario row status", notes.lower())
+
     def test_malformed_renderer_rows_cannot_hide_a_crash(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
         report = {"rows": [None]}

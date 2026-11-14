@@ -56,6 +56,7 @@ document.documentElement.dataset.ready = "huge";
 
 SCROLL = page("Scroll", "pending", """
 <div id="root" style="height:220px;overflow:auto"></div>
+<div id="page-scroll-spacer" style="height:180vh"></div>
 <script>
 const root = document.getElementById("root");
 function add(count) {
@@ -70,6 +71,10 @@ add(40);
 window.__frames = 0;
 window.__scrollEvents = 0;
 window.__scrollEndEvents = 0;
+window.__pageScrollEvents = 0;
+window.addEventListener("scroll", function () {
+  window.__pageScrollEvents += 1;
+});
 root.addEventListener("scroll", function () {
   window.__scrollEvents += 1;
   if (root.scrollTop + root.clientHeight >= root.scrollHeight - 80) add(400);

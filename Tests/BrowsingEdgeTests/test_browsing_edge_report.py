@@ -169,7 +169,11 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         fixture = PROBE.SCROLL.decode()
         self.assertIn('window.__scrollEvents = 0', fixture)
         self.assertIn('window.__scrollEvents += 1', fixture)
-        self.assertIn('addEventListener("scroll"', fixture)
+        self.assertIn('root.addEventListener("scroll"', fixture)
+        self.assertIn('window.__pageScrollEvents = 0', fixture)
+        self.assertIn('window.__pageScrollEvents += 1', fixture)
+        self.assertIn('window.addEventListener("scroll"', fixture)
+        self.assertIn('height:180vh', fixture)
 
     def test_scroll_fixture_requires_scrollend_listener_delivery(self):
         fixture = PROBE.SCROLL.decode()
@@ -179,6 +183,9 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
         self.assertIn('let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0', source)
         self.assertIn('scrollEvents > 0 && scrollEndEvents > 0', source)
+        self.assertIn('window.scrollTo(0, document.documentElement.scrollHeight)', fixture)
+        self.assertIn('let pageScrollEvents = number(second?["pageScrollEvents"]) ?? 0', source)
+        self.assertIn('scrollEvents > 0 && scrollEndEvents > 0 && pageScrollEvents > 0', source)
 
     def test_scroll_failure_is_unproven_without_a_page_event(self):
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()

@@ -4,6 +4,12 @@
 
 import SwiftUI
 
+enum InspectorComponentAccessibility {
+  static func traits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
+  }
+}
+
 struct InspectorDetailsView: View {
   @Bindable var inspector: InspectorModel
   @Bindable var model: InspectorDetailsModel
@@ -62,7 +68,12 @@ struct InspectorDetailsView: View {
                   Color.accentColor)
               }
             }.padding(.vertical, 4).contentShape(Rectangle())
-          }.buttonStyle(.plain).help(
+          }
+          .buttonStyle(.plain)
+          .accessibilityAddTraits(
+            InspectorComponentAccessibility.traits(
+              isSelected: model.selectedComponent == branch.id))
+          .help(
             InspectorDetailsL10n.format(
               "Inspect %1$@ data", arguments: [.string(branch.entry.name)]
             ))

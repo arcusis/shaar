@@ -227,7 +227,7 @@ struct DesktopCapturePickerContent: View {
         ContentUnavailableView(error, systemImage: "rectangle.dashed.badge.record")
       } else if sources.isEmpty {
         ContentUnavailableView(
-          PanelsL10n.string("No screens, windows, or tabs are available"), systemImage: "display")
+          PanelsL10n.string(DesktopCaptureCatalog.emptySources), systemImage: "display")
       } else {
         List(sources) { source in
           Button {

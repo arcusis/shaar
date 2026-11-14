@@ -295,12 +295,12 @@
         }
       }
     },
-    "No screens, windows, or tabs are available": {
+    "No sharing sources match this request.": {
       "localizations": {
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "אין מסכים, חלונות או לשוניות זמינים"
+            "value": "אין מקורות שיתוף התואמים לבקשה הזו."
           }
         }
       }

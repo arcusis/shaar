@@ -15,7 +15,7 @@ enum DesktopCaptureCatalog {
   static let screenAccessNote =
     "Screen Recording access is unavailable. Check Privacy & Security settings."
   static let screenEnumerationNote = "Screen sources could not be loaded. Try again."
-  static let emptySources = "No screens, windows, or tabs are available"
+  static let emptySources = "No sharing sources match this request."
 
   static func allowedSources(
     _ sources: [DesktopCaptureSource], for request: DesktopCaptureRequest

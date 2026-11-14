@@ -589,6 +589,13 @@ struct DesktopCaptureConsentTests {
     #expect(sources.map(\.id) == ["tab:\(requestingTabID.uuidString):0"])
   }
 
+  @Test func emptySourceMessageDoesNotClaimUnrequestedKindsAreMissing() {
+    let empty = DesktopCaptureCatalog.listing(tabs: [], screens: [], screenAccessFailed: false)
+
+    #expect(empty.error == DesktopCaptureCatalog.emptySources)
+    #expect(!DesktopCaptureCatalog.emptySources.contains("tabs"))
+  }
+
   @Test func tabSourceFallsBackToPageHostWhenSavedTitleIsBlank() throws {
     let original = store().session
     let spaceIndex = try #require(

@@ -425,6 +425,14 @@ class Fixture(BaseHTTPRequestHandler):
     icon = b""
     clip = b""
     heavy = b""
+    slow_reload_lock = threading.Lock()
+    slow_reload_requests = 0
+
+    @classmethod
+    def next_slow_reload_request(cls) -> int:
+        with cls.slow_reload_lock:
+            cls.slow_reload_requests += 1
+            return cls.slow_reload_requests
 
     def do_GET(self) -> None:
         try:
@@ -439,6 +447,12 @@ class Fixture(BaseHTTPRequestHandler):
         if path == "/slow":
             time.sleep(1.5)
             self.send_bytes(page("slow", "<p>slow</p>"), "text/html; charset=utf-8")
+            return
+        if path == "/slow-reload":
+            request = self.next_slow_reload_request()
+            time.sleep(1.5)
+            body = f'<script>document.documentElement.dataset.reloadRequest="{request}"</script>'
+            self.send_bytes(page("slow reload", body), "text/html; charset=utf-8")
             return
         if path == "/heavy":
             self.send_bytes(self.heavy, "text/html; charset=utf-8")
@@ -690,6 +704,7 @@ def main() -> None:
     if not executable.is_file():
         parser.error(f"Missing verification app: {executable}")
     with tempfile.TemporaryDirectory(prefix="shaar-browsing-qa-") as temporary:
+        Fixture.slow_reload_requests = 0
         Fixture.icon = favicon_png()
         Fixture.clip = make_clip(Path(temporary))
         Fixture.heavy = page("heavy", "<div id=heavy>" + ("<div></div>" * 20000) + "</div>")

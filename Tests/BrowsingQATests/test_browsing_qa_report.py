@@ -19,6 +19,15 @@ GIBIBYTE = 1024 ** 3
 
 
 class BrowsingQAReportTests(unittest.TestCase):
+    def test_slow_reload_fixture_assigns_distinct_request_numbers(self):
+        original = PROBE.Fixture.slow_reload_requests
+        PROBE.Fixture.slow_reload_requests = 0
+        try:
+            self.assertEqual(PROBE.Fixture.next_slow_reload_request(), 1)
+            self.assertEqual(PROBE.Fixture.next_slow_reload_request(), 2)
+        finally:
+            PROBE.Fixture.slow_reload_requests = original
+
     def test_fifty_tabs_always_run(self):
         allowed, reason = PROBE.allow_overload(50, None, None, None)
         self.assertTrue(allowed)

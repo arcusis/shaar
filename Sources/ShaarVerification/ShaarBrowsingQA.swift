@@ -252,19 +252,25 @@ import Foundation
       ))
 
     let slowStarted = Date()
-    guard context.engine.navigateCurrentPage(to: url(base, path: "/slow")) else {
+    guard context.engine.navigateCurrentPage(to: url(base, path: "/slow-reload")) else {
       rows.append(row("churn-reload-during-load", "fail", "The slow navigation was rejected."))
       return rows
     }
     let inFlight = await until(attempts: 40, condition: { pageIsLoading(context) })
     let stillLoading = pageIsLoading(context)
     let reloaded = inFlight && stillLoading && context.store.reloadCurrentPage()
-    let settledSlow = await until(attempts: 200, condition: { settled(context, path: "/slow") })
+    let settledSlow = await until(
+      attempts: 200, condition: { settled(context, path: "/slow-reload") })
+    let reloadRequests = await evaluate(
+      runtime, tab: current,
+      script: "document.documentElement.dataset.reloadRequest || ''")
+    let repeatedRequest = reloadDuringNavigationWasFetched(reloadRequests)
     let landed = context.store.session.selectedPage?.tab.url.path ?? "nothing"
     rows.append(
       row(
-        "churn-reload-during-load", reloaded && settledSlow ? "pass" : "fail",
-        "Reload during load inFlight=\(stillLoading), reload=\(reloaded), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
+        "churn-reload-during-load",
+        reloaded && settledSlow && repeatedRequest ? "pass" : "fail",
+        "Reload during load inFlight=\(stillLoading), reload=\(reloaded), requests=\(reloadRequests ?? "missing"), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
         ["elapsedMs": milliseconds(since: slowStarted)]))
     let failures = context.store.rendererFailures.count
     rows.append(
@@ -948,6 +954,11 @@ import Foundation
       return nil
     }
     return Int(text)
+  }
+
+  static func reloadDuringNavigationWasFetched(_ value: String?) -> Bool {
+    guard let requestCount = wholeNumber(value) else { return false }
+    return requestCount >= 2
   }
 
   static func playbackStarted(_ value: String?) -> Bool {

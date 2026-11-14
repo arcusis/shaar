@@ -12,6 +12,23 @@ import XCTest
 
 @MainActor
 final class AgentBridgeTests: XCTestCase {
+  private final class MemoryPasteboard: AgentBridgePasteboard {
+    private(set) var changeCount = 0
+    private(set) var value: String?
+
+    func clearContents() {
+      changeCount += 1
+      value = nil
+    }
+
+    func setString(_ string: String, forType type: NSPasteboard.PasteboardType) {
+      changeCount += 1
+      value = string
+    }
+
+    func string(forType type: NSPasteboard.PasteboardType) -> String? { value }
+  }
+
   func testOlderStatusRefreshCannotReplaceTheLatestReply() {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test/")!)
@@ -188,7 +205,7 @@ final class AgentBridgeTests: XCTestCase {
     }
     bridge.enable()
     XCTAssertTrue(bridge.hasOneTimeToken)
-    let pasteboard = NSPasteboard(name: NSPasteboard.Name("AgentBridgeTests-\(UUID())"))
+    let pasteboard = MemoryPasteboard()
     bridge.copySetup(for: .claude, pasteboard: pasteboard, clearAfter: .milliseconds(20))
     let copiedCommand = try XCTUnwrap(pasteboard.string(forType: .string))
 

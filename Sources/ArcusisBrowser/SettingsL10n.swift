@@ -30,7 +30,9 @@ enum SettingsL10n {
     guard message.hasPrefix(prefix), message.hasSuffix(suffix),
       message.count >= prefix.count + suffix.count
     else {
-      if language.resolved == .hebrew {
+      if language.resolved == .hebrew,
+        message.hasPrefix("Window changes could not be saved.")
+      {
         return BrowserLocalization.string(
           "Window changes could not be saved. Try again.", table: "Settings", language: language)
       }

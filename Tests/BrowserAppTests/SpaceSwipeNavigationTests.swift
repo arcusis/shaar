@@ -41,7 +41,7 @@ struct SpaceSwipeNavigationTests {
     let replacementSpaceID = replacementStore.session.selectedSpaceID
 
     view.store = replacementStore
-    #expect(monitor.route(event, deltaX: 2, deltaY: 0) == nil)
+    #expect(monitor.route(event, deltaX: 2, deltaY: 0, eventWindow: window) == nil)
     #expect(originalStore.session.selectedSpaceID == originalSpaceID)
     #expect(replacementStore.session.selectedSpaceID != replacementSpaceID)
   }
@@ -75,16 +75,18 @@ struct SpaceSwipeNavigationTests {
     let authoredEvent = try #require(makeWindowEvent(for: window))
 
     #expect(store.showLibraryDrawer(.spaces))
-    #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0) === authoredEvent)
+    #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0, eventWindow: window) === authoredEvent)
     #expect(store.session.selectedSpaceID == initialSpaceID)
 
     store.closeLibraryDrawer()
-    #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0) == nil)
+    #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0, eventWindow: window) == nil)
     #expect(store.session.selectedSpaceID != initialSpaceID)
     let afterClosedDrawerSwipeSpaceID = store.session.selectedSpaceID
 
     let wrongWindowSwipe = try #require(makeWindowEvent(for: foreignWindow))
-    #expect(monitor.route(wrongWindowSwipe, deltaX: 2, deltaY: 0) === wrongWindowSwipe)
+    #expect(
+      monitor.route(wrongWindowSwipe, deltaX: 2, deltaY: 0, eventWindow: foreignWindow)
+        === wrongWindowSwipe)
     #expect(store.session.selectedSpaceID == afterClosedDrawerSwipeSpaceID)
 
     store.perform(.space(selectedSpace.id))
@@ -95,7 +97,7 @@ struct SpaceSwipeNavigationTests {
         tabID: tab.id, pageURL: pageURL,
         requestingOrigin: URL(string: "https://example.test")!, kinds: [.camera]))
     #expect(store.requestWebsitePermission(request))
-    #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0) === authoredEvent)
+    #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0, eventWindow: window) === authoredEvent)
     #expect(store.session.selectedSpaceID == afterSwipeSpaceID)
   }
 
@@ -125,7 +127,7 @@ struct SpaceSwipeNavigationTests {
     monitor.detach(newer)
 
     let event = try #require(makeWindowEvent(for: window))
-    #expect(monitor.route(event, deltaX: 2, deltaY: 0) == nil)
+    #expect(monitor.route(event, deltaX: 2, deltaY: 0, eventWindow: window) == nil)
     #expect(store.session.selectedSpaceID == nextSpace)
   }
 

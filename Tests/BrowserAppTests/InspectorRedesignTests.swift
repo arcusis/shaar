@@ -8,6 +8,18 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@MainActor
+private final class InspectorRedesignClipboard: InspectorClipboard {
+  private(set) var value: String?
+
+  func clearContents() { value = nil }
+  func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool {
+    value = string
+    return true
+  }
+  func writeObjects(_ objects: [NSPasteboardWriting]) -> Bool { false }
+}
+
 @Suite @MainActor struct InspectorRedesignTests {
   init() { _ = NSApplication.shared }
   @Test func tabsAndCopyMenuStayInsideBothDockWidthsInBothAppearances() async throws {
@@ -79,10 +91,9 @@ import Testing
     let other = model()
     defer { other.close() }
     #expect(!other.presentation.collapsedSections.contains("Design:Typography"))
-    let board = NSPasteboard.withUniqueName()
-    defer { board.releaseGlobally() }
+    let board = InspectorRedesignClipboard()
     inspector.copy("#account", label: "CSS selector", to: board)
-    #expect(board.string(forType: .string) == "#account")
+    #expect(board.value == "#account")
     #expect(inspector.presentation.toast == "Copied CSS selector to clipboard")
     inspector.close()
     #expect(inspector.presentation.toast == nil && !inspector.presentation.copyMenuOpen)

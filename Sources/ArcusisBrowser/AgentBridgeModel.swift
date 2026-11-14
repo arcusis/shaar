@@ -8,6 +8,30 @@ import CoreFoundation
 import Foundation
 import Observation
 
+@MainActor
+protocol AgentBridgePasteboard: AnyObject {
+  var changeCount: Int { get }
+  func clearContents()
+  func setString(_ string: String, forType type: NSPasteboard.PasteboardType)
+  func string(forType type: NSPasteboard.PasteboardType) -> String?
+}
+
+@MainActor
+private final class SystemAgentBridgePasteboard: AgentBridgePasteboard {
+  private let pasteboard: NSPasteboard
+
+  init(_ pasteboard: NSPasteboard) { self.pasteboard = pasteboard }
+
+  var changeCount: Int { pasteboard.changeCount }
+  func clearContents() { pasteboard.clearContents() }
+  func setString(_ string: String, forType type: NSPasteboard.PasteboardType) {
+    pasteboard.setString(string, forType: type)
+  }
+  func string(forType type: NSPasteboard.PasteboardType) -> String? {
+    pasteboard.string(forType: type)
+  }
+}
+
 enum AgentBridgeFailure: LocalizedError {
   case invalidReply
   var errorDescription: String? { ShellL10n.string("The agent bridge returned an invalid reply.") }
@@ -300,7 +324,7 @@ final class AgentBridgeModel {
   }
 
   func copySetup(
-    for client: Client, pasteboard: NSPasteboard = .general,
+    for client: Client, pasteboard: any AgentBridgePasteboard = SystemAgentBridgePasteboard(.general),
     clearAfter: Duration = .seconds(120)
   ) {
     guard let command = setupCommand(for: client) else { return }

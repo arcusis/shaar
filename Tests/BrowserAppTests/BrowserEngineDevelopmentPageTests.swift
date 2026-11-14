@@ -11,6 +11,14 @@ import Testing
 
 @Suite @MainActor
 struct BrowserEngineDevelopmentPageTests {
+  private func waitForReplies(_ count: Int, from runtime: DevelopmentProbeRuntime) async throws {
+    for _ in 0..<100 {
+      if runtime.replies.count >= count { return }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    try #require(runtime.replies.count >= count)
+  }
+
   @Test func reloadAtSameURLIgnoresThePreviousFrameworkProbe() async throws {
     let store = BrowserStore()
     let url = try #require(URL(string: "http://localhost:5173/app"))
@@ -26,13 +34,11 @@ struct BrowserEngineDevelopmentPageTests {
 
     engine.updateDevelopmentPage(tabID: tabID, url: url, loading: true)
     engine.updateDevelopmentPage(tabID: tabID, url: url, loading: false)
-    try await Task.sleep(for: .milliseconds(275))
-    #expect(runtime.replies.count == 1)
+    try await waitForReplies(1, from: runtime)
 
     engine.updateDevelopmentPage(tabID: tabID, url: url, loading: true)
     engine.updateDevelopmentPage(tabID: tabID, url: url, loading: false)
-    try await Task.sleep(for: .milliseconds(275))
-    #expect(runtime.replies.count == 2)
+    try await waitForReplies(2, from: runtime)
 
     runtime.replies[0](
       ["result": ["value": "{\"resourcePaths\":[\"/@vite/client\"],\"documentMarkers\":[]}"]], nil)

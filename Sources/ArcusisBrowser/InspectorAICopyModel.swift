@@ -6,6 +6,28 @@ import AppKit
 import Foundation
 import Observation
 
+@MainActor
+protocol InspectorClipboard: AnyObject {
+  func clearContents()
+  func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool
+  func writeObjects(_ objects: [NSPasteboardWriting]) -> Bool
+}
+
+@MainActor
+private final class SystemInspectorClipboard: InspectorClipboard {
+  private let pasteboard: NSPasteboard
+
+  init(_ pasteboard: NSPasteboard) { self.pasteboard = pasteboard }
+
+  func clearContents() { pasteboard.clearContents() }
+  func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool {
+    pasteboard.setString(string, forType: type)
+  }
+  func writeObjects(_ objects: [NSPasteboardWriting]) -> Bool {
+    pasteboard.writeObjects(objects)
+  }
+}
+
 @MainActor @Observable
 final class InspectorAICopyModel {
   typealias Formatter = InspectorAIFormatter
@@ -134,10 +156,18 @@ final class InspectorAICopyModel {
   }
 
   func copyElement(to pasteboard: NSPasteboard = .general) async {
+    await copy(.element, to: SystemInspectorClipboard(pasteboard))
+  }
+
+  func copyElement(to pasteboard: any InspectorClipboard) async {
     await copy(.element, to: pasteboard)
   }
 
   func copy(_ kind: CopyKind, to pasteboard: NSPasteboard = .general) async {
+    await copy(kind, to: SystemInspectorClipboard(pasteboard))
+  }
+
+  func copy(_ kind: CopyKind, to pasteboard: any InspectorClipboard) async {
     guard !Task.isCancelled, !busy else { return }
     busy = true
     failure = nil
@@ -238,6 +268,10 @@ final class InspectorAICopyModel {
   }
 
   func copyNotes(to pasteboard: NSPasteboard = .general) {
+    copyNotes(to: SystemInspectorClipboard(pasteboard))
+  }
+
+  func copyNotes(to pasteboard: any InspectorClipboard) {
     guard !notes.isEmpty, !busy else { return }
     do {
       try Self.write(Formatter.notes(notes, detailed: detailed), png: nil, to: pasteboard)
@@ -254,7 +288,7 @@ final class InspectorAICopyModel {
     return InspectorL10n.string("Could not copy the selected element. Try again.")
   }
 
-  static func write(_ markdown: String?, png: Data?, to pasteboard: NSPasteboard) throws {
+  static func write(_ markdown: String?, png: Data?, to pasteboard: any InspectorClipboard) throws {
     let text = NSPasteboardItem()
     if let markdown {
       text.setString(markdown, forType: .string)
@@ -271,5 +305,9 @@ final class InspectorAICopyModel {
     guard pasteboard.writeObjects([text]) else {
       throw InspectorFailure(InspectorL10n.string("The clipboard could not be written."))
     }
+  }
+
+  static func write(_ markdown: String?, png: Data?, to pasteboard: NSPasteboard) throws {
+    try write(markdown, png: png, to: SystemInspectorClipboard(pasteboard))
   }
 }

@@ -31,7 +31,7 @@ final class ShaarCSSLengthNudgeView: NSView {
 
   private func apply(_ event: NSEvent) -> NSEvent? {
     guard let window, event.window === window else { return event }
-    return ShaarCSSLengthNudge.consume(event)
+    return ShaarCSSLengthNudge.consume(event, in: window)
   }
 
   private func detach() {
@@ -44,8 +44,10 @@ final class ShaarCSSLengthNudgeView: NSView {
 
 @MainActor
 enum ShaarCSSLengthNudge {
-  static func consume(_ event: NSEvent) -> NSEvent? {
-    guard let delta = delta(for: event), let editor = fieldEditor(event) else { return event }
+  static func consume(_ event: NSEvent, in window: NSWindow? = nil) -> NSEvent? {
+    guard let delta = delta(for: event), let editor = fieldEditor(event, in: window) else {
+      return event
+    }
     guard isCSSValue(editor) else { return event }
     let caret = editor.selectedRange().location
     guard caret != NSNotFound,
@@ -81,8 +83,8 @@ enum ShaarCSSLengthNudge {
     return modifiers
   }
 
-  private static func fieldEditor(_ event: NSEvent) -> NSTextView? {
-    let responder = event.window?.firstResponder
+  private static func fieldEditor(_ event: NSEvent, in window: NSWindow?) -> NSTextView? {
+    let responder = (window ?? event.window)?.firstResponder
     if let editor = responder as? NSTextView { return editor }
     if let field = responder as? NSTextField { return field.currentEditor() as? NSTextView }
     return nil

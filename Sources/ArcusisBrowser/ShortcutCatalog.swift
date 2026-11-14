@@ -86,7 +86,7 @@ struct ShortcutCatalog {
   /// These menu actions intentionally have no shortcut; web pages keep those keys.
   static let unassignedTitles: Set<String> = [
     "About \(ProductIdentity.name)", "Check for Updates…", "Show All", "Bring All to Front",
-    "Share Page…",
+    "Share Page…", "Paste and Go", "Reopen Last Closed Window",
   ]
 
   static func shortcut(for command: BrowserMenuCommand) -> (

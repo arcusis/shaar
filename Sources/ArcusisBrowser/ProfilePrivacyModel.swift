@@ -330,6 +330,8 @@ final class ProfilePrivacyModel {
     do {
       try await operation()
       guard !Task.isCancelled else { return }
+    } catch is CancellationError {
+      return
     } catch {
       guard !Task.isCancelled else { return }
       if error is ProfilePermissionDataError {

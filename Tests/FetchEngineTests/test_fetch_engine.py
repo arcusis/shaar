@@ -180,6 +180,18 @@ class FetchEngineTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
 
+    def test_symlinked_verified_destination_is_rejected(self):
+        external = self.root / "external-destination"
+        shutil.move(self.destination, external)
+        self.destination.symlink_to(external, target_is_directory=True)
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Engine cache destination must be a regular directory", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertTrue((external / f".verified-{self.pin['sha256']}").is_file())
+        self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
     def test_failed_framework_extraction_removes_staging_directory(self):
         shutil.rmtree(self.destination)
         with tarfile.open(self.archive, "w:xz", format=tarfile.PAX_FORMAT) as archive:

@@ -2,8 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import CoreFoundation
 import Foundation
 import ShaarEngineABIC
+
+private func devToolsJSONBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
 
 public enum ShaarDevToolsOperation: UInt32, Sendable {
   case call = 1000
@@ -476,7 +484,7 @@ public enum ShaarDevToolsEventRouter {
       let payload = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       payload["schemaVersion"] as? Int == 1,
       payload["kind"] as? String == "frontendState",
-      let open = payload["open"] as? Bool,
+      let open = devToolsJSONBoolean(payload["open"]),
       Set(payload.keys) == ["schemaVersion", "kind", "open"]
     else { return nil }
     return ShaarDevToolsFrontendState(open: open)

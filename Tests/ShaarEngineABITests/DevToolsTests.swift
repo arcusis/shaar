@@ -176,6 +176,16 @@ struct DevToolsTests {
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         event, scope: scope, windowID: "window-a", tabID: "tab-a")?.open == true)
+    for numericOpen in ["0", "1"] {
+      let numericEvent = ShaarCopiedEvent(
+        sequence: event.sequence, kind: event.kind, profileID: event.profileID,
+        sessionID: event.sessionID, windowID: event.windowID, tabID: event.tabID,
+        payloadJSON: Data(
+          #"{"schemaVersion":1,"kind":"frontendState","open":\#(numericOpen)}"#.utf8))
+      #expect(
+        ShaarDevToolsEventRouter.decodeFrontendState(
+          numericEvent, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
+    }
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         event, scope: ShaarNavigationScope(profileID: "profile-a"),

@@ -6,9 +6,25 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import ChromiumBridgeVerification
+import CoreFoundation
 import SwiftUI
 
 @testable import ArcusisBrowser
+
+enum PageFindProbeEvidence {
+  static func isReadyDocument(_ document: [String: Any]) -> Bool {
+    document["fixture"] as? String == "v1"
+      && document["ready"] as? String == "complete"
+      && isBooleanTrue(document["text"])
+  }
+
+  private static func isBooleanTrue(_ value: Any?) -> Bool {
+    guard let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else {
+      return false
+    }
+    return value.boolValue
+  }
+}
 
 /// Searches authored fixture text through Chromium's find API, never page JavaScript.
 @MainActor
@@ -183,10 +199,7 @@ final class PageFindProbe {
       let audit = runtime.normalProbeSelectionAudit(forTabID: tab.uuidString)
       if audit["selectedNativeTab"] as? Bool == true {
         document = await evaluate(tab, expression) ?? [:]
-        if document["fixture"] as? String == "v1",
-          document["ready"] as? String == "complete",
-          document["text"] as? Bool == true
-        {
+        if PageFindProbeEvidence.isReadyDocument(document) {
           try await Task.sleep(for: .milliseconds(100))
           return
         }

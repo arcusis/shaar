@@ -1026,6 +1026,16 @@ class SupplyChainTests(unittest.TestCase):
             (actions / "action.yml").write_text(f"steps:\n  - uses: actions/checkout@{'a' * 40}\n")
             self.assertEqual(PINS.pin_errors(root), [])
 
+    def test_pins_only_rejects_other_ci_check_modes(self):
+        for option in ("--snapshot-only", "--docs-only", "--skip-python"):
+            with self.subTest(option=option), patch.object(PINS, "pin_errors", return_value=[]), \
+                    patch.object(sys, "argv", ["ci-checks.py", "--pins-only", option]), \
+                    patch("sys.stderr", new=io.StringIO()) as error_output:
+                with self.assertRaises(SystemExit) as error:
+                    PINS.main()
+                self.assertEqual(error.exception.code, 2)
+                self.assertIn("--pins-only cannot be combined", error_output.getvalue())
+
     def test_evidence_rejects_non_utf8_probe_markers_without_aborting_collection(self):
         with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory, tempfile.TemporaryDirectory() as output:
             root = Path(directory)

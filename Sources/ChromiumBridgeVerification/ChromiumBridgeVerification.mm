@@ -152,11 +152,15 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
   ARCShaarRuntime *runtime = [ARCShaarRuntime new];
   NSMutableArray *media = [NSMutableArray array];
   NSMutableArray *pip = [NSMutableArray array];
+  NSMutableArray *access = [NSMutableArray array];
   runtime.onMediaSessionChanged = ^(NSString *tabID, NSDictionary *state) {
     [media addObject:state ?: NSNull.null];
   };
   runtime.onPictureInPictureChanged = ^(NSString *tabID, BOOL active) {
     [pip addObject:@(active)];
+  };
+  runtime.onMediaAccess = ^(NSString *tabID, NSDictionary *state) {
+    [access addObject:state];
   };
   NSString *tabID = @"OWNED-TAB";
   NSString *profileID = @"OWNED-PROFILE";
@@ -181,7 +185,8 @@ NSDictionary *ARCProbeShaarMediaEventDispatch(NSDictionary *payload, BOOL validO
   event.tab_id = {tabID.UTF8String, tabID.length};
   event.payload_json = {(const char *)data.bytes, data.length};
   [runtime receiveEvent:&event];
-  return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count)};
+  return @{@"mediaCount": @(media.count), @"pipCount": @(pip.count),
+           @"accessCount": @(access.count)};
 }
 
 NSDictionary *ARCProbeDesktopCaptureEventDispatch(NSDictionary *payload, BOOL validOwner) {

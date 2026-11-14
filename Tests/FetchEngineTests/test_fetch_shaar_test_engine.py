@@ -54,6 +54,65 @@ class FetchShaarTestEngineTests(unittest.TestCase):
                     self.assertIn(expected, result.stderr)
                     self.assertEqual(list(external.iterdir()), [sentinel])
 
+    def test_symlinked_archive_cache_is_rejected_before_gh_download(self):
+        with tempfile.TemporaryDirectory(prefix="fetch-shaar-test-engine-") as temporary, \
+                tempfile.TemporaryDirectory() as outside:
+            root = Path(temporary)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            shutil.copy2(REPO / "scripts/fetch-shaar-test-engine.sh", scripts)
+            cache = root / "build/ShaarEngineTestCache"
+            cache.mkdir(parents=True)
+            tag = "engine-155.0.8059.84-shaar.1"
+            asset = "ShaarEngine-155.0.8059.84-shaar.1.tar.xz"
+            archive_path = cache / asset
+            sentinel = Path(outside) / "preserve.txt"
+            sentinel.write_text("preserve")
+            archive_path.symlink_to(sentinel)
+            pin_path = root / "ThirdParty/ChromiumEngine/ci-test-pin.json"
+            pin_path.parent.mkdir(parents=True)
+            payload = b"pinned archive"
+            pin_path.write_text(json.dumps({
+                "schemaVersion": 1,
+                "sourceKind": "shaar",
+                "releaseTag": tag,
+                "asset": asset,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }))
+            tools = root / "tools"
+            tools.mkdir()
+            uname = tools / "uname"
+            uname.write_text("#!/bin/sh\nprintf 'arm64\\n'\n")
+            uname.chmod(0o755)
+            gh_log = root / "gh.log"
+            gh = tools / "gh"
+            gh.write_text('''#!/bin/bash
+set -euo pipefail
+printf 'called\\n' >> "$FETCH_TEST_GH_LOG"
+while (($#)); do
+  case "$1" in
+    --pattern) asset="$2"; shift 2 ;;
+    --dir) directory="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf 'downloaded' > "$directory/$asset"
+''')
+            gh.chmod(0o755)
+            environment = dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}",
+                               FETCH_TEST_GH_LOG=str(gh_log))
+
+            result = subprocess.run(
+                ["bash", str(scripts / "fetch-shaar-test-engine.sh")],
+                cwd=root, env=environment, capture_output=True, text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Shaar test archive cache path must not be a symlink", result.stderr)
+            self.assertEqual(sentinel.read_text(), "preserve")
+            self.assertFalse(gh_log.exists())
+
+
     def test_failed_framework_extraction_removes_staging_directory(self):
         with tempfile.TemporaryDirectory(prefix="fetch-shaar-test-engine-") as temporary:
             root = Path(temporary)

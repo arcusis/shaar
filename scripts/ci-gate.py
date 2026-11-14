@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 import sys
 
+from ci_support import output_file
+
 
 def advisory_stages(raw: str | None) -> set[str]:
     """Stages named in the CI_ADVISORY_STAGES repository variable report but do not block."""
@@ -73,7 +75,7 @@ def main() -> int:
                          os.environ.get("CI_BROWSING") == "true",
                          os.environ.get("CI_SHIPPING_GUARD") == "true",
                          advisory_stages(os.environ.get("CI_ADVISORY_STAGES")))
-    with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
+    with output_file(Path(os.environ["GITHUB_STEP_SUMMARY"])).open("a") as output:
         output.write("### CI required\n\n| Stage | Result |\n| --- | --- |\n")
         for name, item in sorted(needs.items()):
             output.write(f"| {name} | {item['result']} |\n")

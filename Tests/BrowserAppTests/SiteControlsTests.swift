@@ -10,6 +10,10 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func siteControlSectionTitlesAreVoiceOverHeadings() {
+  #expect(SiteSectionTitle.accessibilityTraits == .isHeader)
+}
+
 @Test func runningSiteActionStatusIsLocalized() {
   #expect(
     BrowserLocalization.string("In progress", table: "Shell", language: .english) == "In progress")

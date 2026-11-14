@@ -373,7 +373,7 @@ bool OfferSavePrompt(content::WebContents* contents,
   payload.Set("id", id);
   payload.Set("prompt", prompt);
   payload.Set("origin", origin.spec());
-  payload.Set("pageURL", page.spec());
+  payload.Set("pageURL", origin.spec());
   payload.Set("detail", safe_detail);
   payload.Set("update", update);
   std::string json;

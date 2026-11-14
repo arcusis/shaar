@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -42,6 +43,17 @@ enum LibraryPanelFooterAccessibility {
     language: BrowserLanguage = .currentLaunchLanguage
   ) -> String {
     PanelsL10n.string("Updating Library…", language: language)
+  }
+}
+
+enum LibraryImportErrorPresentation {
+  static func message(for error: Error) -> String? {
+    if error is CancellationError { return nil }
+    let cocoaError = error as NSError
+    guard cocoaError.domain == NSCocoaErrorDomain, cocoaError.code == NSUserCancelledError else {
+      return error.localizedDescription
+    }
+    return nil
   }
 }
 
@@ -195,7 +207,8 @@ struct LibraryPanel: View {
           importError = nil
           showingImportPreview = true
         } catch {
-          importError = error.localizedDescription
+          guard let message = LibraryImportErrorPresentation.message(for: error) else { return }
+          importError = message
           showingImportPreview = true
         }
       }

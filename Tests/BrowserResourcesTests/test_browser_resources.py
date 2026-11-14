@@ -151,6 +151,17 @@ class ResourceStagingTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(output.read_bytes()).hexdigest(), digest)
         self.assertFalse((self.resources / extra.name).exists())
 
+    def test_symlinked_resources_root_is_rejected_before_staging(self):
+        external = self.root / "external-resources"
+        external.mkdir()
+        self.resources.parent.mkdir(parents=True)
+        self.resources.symlink_to(external, target_is_directory=True)
+
+        with self.assertRaisesRegex(ValueError, "resource output directory must not be a symlink"):
+            staging.stage(self.binary, self.resources, self.pin)
+
+        self.assertEqual(list(external.iterdir()), [])
+
     def test_flat_audit_bundle_is_staged(self):
         shutil.rmtree(self.audit)
         flat = self.binary / staging.AUDIT_BUNDLE / "InspectorAudit"

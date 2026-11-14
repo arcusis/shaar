@@ -136,6 +136,18 @@ class BrowsingEdgeReportTests(unittest.TestCase):
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
             self.assertFalse((external / "receipt.json").exists())
 
+    def test_receipt_writer_rejects_paths_inside_verification_app(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory) / "Verification.app"
+            executable = app / "Contents/MacOS/ShaarVerification"
+            executable.parent.mkdir(parents=True)
+            executable.write_text("executable", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "receipt path must be outside the verification app"):
+                PROBE.write_receipt(executable, {"passed": True}, app)
+
+            self.assertEqual(executable.read_text(encoding="utf-8"), "executable")
+
     def test_note_cap_fails_a_hidden_windows_row_that_claims_a_pass(self):
         rows = [{"name": "Hidden windows", "passed": True, "proven": True}]
         harness = {"passed": True, "proven": True}

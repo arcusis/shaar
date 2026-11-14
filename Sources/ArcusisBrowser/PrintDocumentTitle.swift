@@ -9,8 +9,8 @@ import SwiftUI
 enum PrintDocumentTitle {
   static func make(pageTitle: String?, productName: String = ProductIdentity.name) -> String {
     let scalars = (pageTitle ?? "").unicodeScalars.map { scalar -> Unicode.Scalar in
-      if CharacterSet.controlCharacters.contains(scalar)
-        || scalar.properties.generalCategory == .format
+      if (CharacterSet.controlCharacters.contains(scalar) && !isJoiner(scalar))
+        || isBidirectionalControl(scalar)
         || scalar.properties.generalCategory == .lineSeparator
         || scalar.properties.generalCategory == .paragraphSeparator || scalar == "/"
       {
@@ -21,6 +21,16 @@ enum PrintDocumentTitle {
     let title = String(String.UnicodeScalarView(scalars))
       .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     return title.isEmpty ? productName : String(title.prefix(120))
+  }
+
+  private static func isJoiner(_ scalar: Unicode.Scalar) -> Bool {
+    scalar.value == 0x200C || scalar.value == 0x200D
+  }
+
+  private static func isBidirectionalControl(_ scalar: Unicode.Scalar) -> Bool {
+    let value = scalar.value
+    return value == 0x061C || value == 0x200E || value == 0x200F
+      || (0x202A...0x202E).contains(value) || (0x2066...0x206F).contains(value)
   }
 }
 

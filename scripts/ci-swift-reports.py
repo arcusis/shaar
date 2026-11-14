@@ -6,6 +6,7 @@
 """Retain native Swift Testing XML and report serial XCTest events as JUnit."""
 
 import argparse
+import math
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -41,7 +42,8 @@ def xctest_cases(text: str) -> list[ET.Element]:
                 if label not in active or seconds is None:
                     raise ValueError(f"Unpaired or untimed XCTest end: {label}")
                 case, details = active.pop(label)
-                float(seconds)
+                if not math.isfinite(float(seconds)):
+                    raise ValueError(f"Invalid XCTest duration: {seconds}")
                 case.set("time", seconds)
                 if state in ("failed", "skipped"):
                     tag = "failure" if state == "failed" else "skipped"

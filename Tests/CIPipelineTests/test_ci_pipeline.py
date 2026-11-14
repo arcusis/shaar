@@ -1150,6 +1150,18 @@ class SwiftReportTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 SWIFT_REPORTS.xctest_cases(text)
 
+    def test_empty_xctest_filter_result_fails(self):
+        empty = ("Test Suite 'All tests' started at now.\n"
+                 "Test Suite 'All tests' passed at now.\n"
+                 " Executed 0 tests, with 0 failures in 0.000 seconds\n")
+        with self.assertRaisesRegex(ValueError, "selected no test cases"):
+            SWIFT_REPORTS.xctest_cases(empty)
+
+    def test_non_finite_xctest_duration_fails(self):
+        text = self.transcript().replace("0.125 seconds", "9" * 400 + " seconds")
+        with self.assertRaisesRegex(ValueError, "Invalid XCTest duration"):
+            SWIFT_REPORTS.xctest_cases(text)
+
     def test_missing_native_swift_testing_report_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

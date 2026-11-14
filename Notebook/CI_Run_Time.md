@@ -44,6 +44,8 @@ Fast gates, visuals, and coverage each waited longer than they ran. The localiza
 The packaged-resource source guard ignores plain `Bundle.module` text in Swift strings while checking normal and raw string interpolation and code following URL strings.
 CI report collection treats malformed JUnit count attributes as report failures, keeping invalid XML metadata from crashing the summary step.
 
+XCTest report conversion rejects durations that overflow to non-finite values.
+
 The updated graph sends platform-independent fast checks to Ubuntu, keeps the complete Python/resource test suite on macOS, and runs the immutable-base coverage comparison in the unit-test macOS job. A docs-only fast gate runs on Ubuntu with Notebook-link, sensitive-file, secret-scan, and history checks. The sensitive-file gate rejects symlink cycles as well as links that escape the repository root. Known docs/site-only PRs select zero macOS jobs; that path has not yet had a dedicated hosted PR run.
 
 Post-change [run 41608902696](https://github.com/arcusis/shaar/actions/runs/41608902696) passed `CI required` in 18m37s from run creation. It used 10 macOS jobs, down from 11. Their aggregate `created_at` to `started_at` wait was 61s (median 3s, maximum 29s), versus 2h13m28s (median 12m34s, maximum 23m25s) before. The wall time fell 19m57s (52%) in this before/after pair. Per-job timings:

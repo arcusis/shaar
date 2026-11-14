@@ -268,6 +268,7 @@ public enum CommandSearch {
     bookmarks: [BrowserBookmark], history: [BrowserHistoryEntry],
     searchEngine: BrowserSearchEngine, limit: Int
   ) -> [CommandResult] {
+    guard limit > 0 else { return [] }
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let typedAddress = NavigationInput.address(for: query)
     let completion =
@@ -286,6 +287,7 @@ public enum CommandSearch {
         || CommandText.titleStarts(with: query, result.title)
     }
     func append(_ result: CommandResult, url: URL? = nil) -> Bool {
+      guard candidateLimit > 0 else { return true }
       if results.count < candidateLimit {
         if leadingIndex == nil, leads(result, url) { leadingIndex = results.count }
         results.append(result)

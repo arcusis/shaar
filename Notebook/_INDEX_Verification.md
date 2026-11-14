@@ -26,6 +26,7 @@
 - [[Abrupt_Restart_Durability]]
 - [[Session_Durability]]
 - [[Quit_Exit_Verification]]
+- [[Chromium_157_Release_QA_Results]]
 - [[Notebook_Maintenance]]
 - [[Bitwarden_Compatibility]]
 - [[Project_State]]

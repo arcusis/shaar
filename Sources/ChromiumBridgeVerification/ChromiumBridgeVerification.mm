@@ -1174,9 +1174,14 @@ void ARCCompletePrivateQuitDialogCancellation(
   static NSString *const kAuthoredClipGesture =
       @"(()=>{const c=document.getElementById('clip');c.currentTime=5;"
        "c.play().then(()=>c.requestPictureInPicture());return {opened:true};})()";
+  static NSString *const kAuthoredOnboardingPopupGesture =
+      @"(()=>{window.fixturePopup=window.open(window.fixturePopupURL,'_blank',"
+       "'popup,width=520,height=680');return !!window.fixturePopup;})()";
   BOOL clipGesture = [script isEqualToString:kAuthoredClipGesture];
+  BOOL onboardingPopupGesture = [script isEqualToString:kAuthoredOnboardingPopupGesture];
   if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed() ||
-      (![script isEqualToString:kAuthoredGesture] && !clipGesture)) {
+      (![script isEqualToString:kAuthoredGesture] && !clipGesture &&
+       !onboardingPopupGesture)) {
     completion(nil);
     return;
   }
@@ -1186,6 +1191,25 @@ void ARCCompletePrivateQuitDialogCancellation(
   if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID
                             windowID:windowID]) {
     completion(nil);
+    return;
+  }
+  if (onboardingPopupGesture) {
+    [runtime shaarDevToolsCall:@"Runtime.evaluate"
+        params:@{@"expression": script, @"returnByValue": @YES, @"userGesture": @YES}
+        capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+        profileID:profileID windowID:windowID
+        completion:^(NSDictionary *reply, NSError *error) {
+          if (error) {
+            NSData *data = [NSJSONSerialization dataWithJSONObject:@{
+              @"error": error.localizedDescription ?: @"DevTools evaluation failed"
+            } options:NSJSONWritingFragmentsAllowed error:nil];
+            completion(data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil);
+            return;
+          }
+          NSDictionary *remote = [reply[@"result"] isKindOfClass:NSDictionary.class]
+              ? reply[@"result"] : nil;
+          completion([remote[@"value"] boolValue] ? @"true" : nil);
+        }];
     return;
   }
   BOOL submitted = [runtime shaarDevToolsSubmit:SHAAR_OP_PROBE_MEDIA_GESTURE

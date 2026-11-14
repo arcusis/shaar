@@ -99,6 +99,27 @@ final class ProfileDeletionProbe {
           + "survivorWorkspaceEntry=\(survivorWorkspaceEntry)).")
     }
 
+    // Recreate the deleted identity to prove its cookie store was removed, then clean it again.
+    try await backend.loadProfile(deleting)
+    let checkTab = UUID()
+    let checkWindow = UUID().uuidString
+    try runtime.createWindowID(checkWindow)
+    try runtime.openTabID(
+      checkTab.uuidString, profileID: deleting.uuidString, windowID: checkWindow,
+      url: url.absoluteString)
+    let freshCookie = await cookieValue(checkTab, runtime: runtime)
+    runtime.discardTabID(checkTab.uuidString)
+    _ = runtime.closeWindowID(checkWindow)
+    let retainedCookie = await cookieValue(survivorTab, runtime: runtime)
+    try await backend.deleteProfile(deleting)
+    guard freshCookie == "", retainedCookie?.contains(survivorCookie) == true,
+      !host.workspace.workspace.catalog.profiles.contains(where: { $0.id == deleting }),
+      host.workspace.workspace.catalog.profiles.contains(where: { $0.id == survivor })
+    else {
+      throw ProfileDeletionFailure(
+        "Profile deletion did not clear cookies or preserve the other profile")
+    }
+
     runtime.discardTabID(survivorTab.uuidString)
     _ = runtime.closeWindowID(survivorWindow)
     try await settings.deleteProfile(survivor, movingSpacesTo: nil)
@@ -106,6 +127,8 @@ final class ProfileDeletionProbe {
     return [
       "Profile deletion removes its data directory and workspace entry",
       "The other profile retains its data directory and workspace entry",
+      "Recreating the deleted profile starts with an empty cookie store",
+      "The other profile retains its directory, cookie and workspace entry",
     ]
   }
 
@@ -132,6 +155,14 @@ final class ProfileDeletionProbe {
 
   private func directory(_ profile: UUID, runtime: ARCChromiumRuntime) -> URL? {
     runtime.profileDataDirectory(forProfileID: profile.uuidString)
+  }
+
+  private func cookieValue(_ tab: UUID, runtime: ARCChromiumRuntime) async -> String? {
+    guard let value = await evaluate(tab, "document.cookie", runtime: runtime),
+      let data = value.data(using: .utf8),
+      let decoded = try? JSONSerialization.jsonObject(with: data) as? String
+    else { return nil }
+    return decoded
   }
 
   private func evaluate(_ tab: UUID, _ script: String, runtime: ARCChromiumRuntime) async -> String?

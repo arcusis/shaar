@@ -262,6 +262,18 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
 
+    def test_verification_popup_fixture_id_is_rejected_from_shipping_sources(self):
+        self.plant(
+            "Sources/ShaarVerification/ProfileOnboardingProbe.swift",
+            'let marker = "onboarding-popup-probe"\n',
+        )
+        self.plant(
+            "Sources/ArcusisBrowser/Planted.swift",
+            'let marker = "onboarding-popup-probe"\n',
+        )
+        found = GUARD.findings(self.root)
+        self.assertTrue(any("onboarding-popup-probe" in item for item in found), found)
+
     def test_engine_testing_in_lookalike_start_method_is_not_allowed(self):
         self.plant(
             "Sources/ChromiumBridge/Backend.mm",

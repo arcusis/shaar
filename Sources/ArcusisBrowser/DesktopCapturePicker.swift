@@ -106,10 +106,10 @@ struct DesktopCapturePicker: View {
       loading: loading,
       error: displayedError,
       note: displayedNote,
-      settingsAction: settingsAction,
       onRetry: { await reloadSources() },
       needsScreenRecordingAccess: needsScreenRecordingAccess,
       settingsButton: settingsButton(for: needsScreenRecordingAccess),
+      settingsAction: settingsAction,
       onSelect: { store.resolveDesktopCapture(request.id, sourceID: $0) },
       onCancel: { store.resolveDesktopCapture(request.id, sourceID: nil) }
     )

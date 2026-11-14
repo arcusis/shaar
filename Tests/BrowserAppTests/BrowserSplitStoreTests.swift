@@ -198,6 +198,8 @@ final class BrowserSplitStoreTests: XCTestCase {
 
   func testSplitDropPreviewRespectsReduceMotion() {
     XCTAssertNil(SplitDropZone.previewAnimation(reduceMotion: true))
+    XCTAssertNil(SplitDropZone.previewAnimation(reduceMotion: true, override: false))
+    XCTAssertNil(SplitDropZone.previewAnimation(reduceMotion: false, override: true))
     XCTAssertNotNil(SplitDropZone.previewAnimation(reduceMotion: false))
   }
 

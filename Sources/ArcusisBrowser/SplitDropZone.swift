@@ -14,9 +14,10 @@ struct SplitDropZone: View {
   @State private var edge: SplitEdge?
   @Environment(\.layoutDirection) private var layoutDirection
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
 
-  static func previewAnimation(reduceMotion: Bool) -> Animation? {
-    reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.86)
+  static func previewAnimation(reduceMotion: Bool, override: Bool? = nil) -> Animation? {
+    reduceMotion || override == true ? nil : .spring(response: 0.22, dampingFraction: 0.86)
   }
 
   var body: some View {
@@ -43,7 +44,9 @@ struct SplitDropZone: View {
           }
         }
       }
-      .animation(Self.previewAnimation(reduceMotion: reduceMotion), value: edge)
+      .animation(
+        Self.previewAnimation(reduceMotion: reduceMotion, override: accessibilityOverrides.reduceMotion),
+        value: edge)
     }
   }
 

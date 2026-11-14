@@ -690,7 +690,7 @@ class EnginePayloadTests(unittest.TestCase):
 
     def test_cli_reports_deeply_nested_pin_as_malformed_json(self):
         pin_path = self.root / "pin.json"
-        pin_path.write_text("[" * 2_000 + "0" + "]" * 2_000)
+        pin_path.write_text("[" * 10_000 + "0" + "]" * 10_000)
         output = io.StringIO()
         with redirect_stdout(output):
             status = payload.main(["--archive", str(self.archive), "--pin", str(pin_path)])

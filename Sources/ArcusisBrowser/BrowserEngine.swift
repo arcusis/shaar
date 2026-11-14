@@ -921,7 +921,7 @@ final class BrowserEngine {
         else { return nil }
         return page.tab
       }
-      let ordered = tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned } + favoriteTabs
+      let ordered = Self.orderedTabs(tabs, favorites: favoriteTabs)
       let positions = ordered.map { NativeTabPlacement(id: $0.id, pinned: $0.isPinned) }
       if lastTabOrders[profile] != positions,
         runtime.placeTabIDs(
@@ -943,6 +943,13 @@ final class BrowserEngine {
     }
     if waitingToHidePlayingVideo { return }
     activateReconciledSelection()
+  }
+
+  static func orderedTabs(_ tabs: [BrowserTab], favorites: [BrowserTab]) -> [BrowserTab] {
+    let partition = tabs.reduce(into: (pinned: [BrowserTab](), unpinned: [BrowserTab]())) {
+      if $1.isPinned { $0.pinned.append($1) } else { $0.unpinned.append($1) }
+    }
+    return partition.pinned + partition.unpinned + favorites
   }
 
   /// Selects the current page. Picture-in-picture may defer this until the page

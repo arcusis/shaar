@@ -89,6 +89,7 @@ public actor ShaarExtensionHome {
   public func reconcileDetails(profileID: UUID) async -> [String: ShaarSharedInstallResult] {
     var details: [String: ShaarSharedInstallResult] = [:]
     for (id, approvedVersion) in versions.sorted(by: { $0.key < $1.key }) {
+      guard !Task.isCancelled else { return details }
       let result = await adapter.installAcrossProfiles(
         extensionID: id, approvedVersion: approvedVersion, profileIDs: [profileID])
       details[id] = result

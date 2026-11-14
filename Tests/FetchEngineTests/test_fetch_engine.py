@@ -216,7 +216,7 @@ class FetchEngineTests(unittest.TestCase):
         result = self._run()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Engine cache path is not a regular directory", result.stderr)
+        self.assertIn("Engine cache root must not be a symlink", result.stderr)
         self.assertFalse((external / self.destination.name).exists())
 
     def test_symlinked_build_root_is_rejected_before_extraction(self):
@@ -228,7 +228,7 @@ class FetchEngineTests(unittest.TestCase):
         result = self._run()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Engine build path is not a regular directory", result.stderr)
+        self.assertIn("Engine cache root must not be a symlink", result.stderr)
         self.assertFalse((external / "EngineCache" / self.destination.name).exists())
 
 

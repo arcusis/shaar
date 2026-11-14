@@ -148,6 +148,12 @@ class BrowsingQAReportTests(unittest.TestCase):
         report = {"passed": True, "rows": [None]}
         self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
 
+    def test_unknown_or_missing_row_status_cannot_pass_the_scenario(self):
+        for row in ({"status": "unknown"}, {}):
+            with self.subTest(row=row):
+                report = {"passed": True, "rows": [row]}
+                self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+
     def test_deliberate_renderer_kill_matches_pid_and_time(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
         report = {"rows": [

@@ -758,6 +758,7 @@
     "Could not update the extension. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לעדכן את התוסף. נסו שוב."}}}},
     "Enable %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הפעלת התוסף %@ בפרופיל %@"}}}},
     "Disable %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "השבתת התוסף %@ בפרופיל %@"}}}},
+    "Extension %@ for profile %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "התוסף %@ בפרופיל %@"}}}},
     "Extensions unavailable": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "התוספים אינם זמינים"}}}},
     "Could not load extensions. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לטעון את התוספים. נסו שוב."}}}},
     "Not installed": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא מותקן"}}}},

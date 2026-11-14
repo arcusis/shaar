@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 import threading
@@ -54,11 +55,34 @@ def crash_names():
     return names
 
 
+def validate_output_destination(path):
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(mode):
+        raise ValueError(f"Refusing symlink output: {path}")
+
+
+def write_output(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o666)
+    with os.fdopen(descriptor, "wb") as output:
+        output.write(data)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/web-share/receipt.json")
     options = parser.parse_args()
+    screenshot = options.receipt.parent / "share-sheet.png"
+    try:
+        validate_output_destination(options.receipt)
+        validate_output_destination(screenshot)
+    except ValueError as error:
+        parser.error(str(error))
     executable = options.app / "Contents/MacOS/ShaarVerification"
     framework = options.app / "Contents/Frameworks/Chromium Framework.framework"
     if not executable.is_file():
@@ -87,11 +111,9 @@ def main():
             evidence = json.loads(report.read_text()) if report.is_file() else None
             shots = {"share-sheet.png": (root / "share-sheet.png").is_file()}
             if evidence and evidence.get("passed"):
-                shot_dir = options.receipt.parent
-                shot_dir.mkdir(parents=True, exist_ok=True)
                 source = root / "share-sheet.png"
                 if source.is_file():
-                    (shot_dir / "share-sheet.png").write_bytes(source.read_bytes())
+                    write_output(screenshot, source.read_bytes())
         server.shutdown()
     crashes = sorted(crash_names() - before)
     receipt = {
@@ -104,8 +126,7 @@ def main():
         "passed": process.returncode == 0 and bool(evidence and evidence.get("passed"))
         and all(shots.values()) and not crashes,
     }
-    options.receipt.parent.mkdir(parents=True, exist_ok=True)
-    options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
+    write_output(options.receipt, (json.dumps(receipt, indent=2) + "\n").encode())
     print(json.dumps({key: receipt[key] for key in (
         "exitCode", "passed", "screenshots", "crashReports")}, indent=2))
     if evidence:

@@ -65,6 +65,18 @@ struct ProfileAccountsTests {
     #expect(AccountProvider.allCases.allSatisfy { $0.logo != nil })
   }
 
+  @Test func signedInAccountEvidenceRejectsCredentialedAndNonstandardAuthorities() {
+    let urls: [(AccountProvider, String)] = [
+      (.google, "www.google.com"), (.microsoft, "www.microsoft365.com"),
+      (.apple, "www.icloud.com"),
+    ]
+    for (provider, host) in urls {
+      #expect(!provider.isSignedInPage(URL(string: "https://user:secret@\(host)/")!))
+      #expect(!provider.isSignedInPage(URL(string: "https://\(host):8443/")!))
+      #expect(provider.isSignedInPage(URL(string: "https://\(host):443/")!))
+    }
+  }
+
   @Test func microsoftWorkAccountRedirectsCaptureEmailFromExternalIdentityProvider() {
     let microsoft = URL(
       string: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize")!

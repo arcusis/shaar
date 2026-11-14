@@ -19,6 +19,7 @@ struct SidebarMediaPlayer: View {
   @State private var editingVolume = false
   @State private var draftVolume: Double?
   @FocusState private var focusedControl: FocusedControl?
+  @AccessibilityFocusState private var accessibilityFocusedControl: FocusedControl?
   let item: MiniPlayerItem
   let onSelect: () -> Void
   let onCommand: (MediaCommand) -> Void
@@ -84,11 +85,13 @@ struct SidebarMediaPlayer: View {
           onCommand(.setMuted(!state.muted))
         }
         .focused($focusedControl, equals: .mute)
+        .accessibilityFocused($accessibilityFocusedControl, equals: .mute)
         .onHover { if $0 { volumeIsVisible = true } }
       }
       .environment(\.layoutDirection, .leftToRight)
       if Self.showsVolumeControl(
-        pointerRevealed: volumeIsVisible, keyboardFocused: focusedControl != nil)
+        pointerRevealed: volumeIsVisible, keyboardFocused: focusedControl != nil,
+        accessibilityFocused: accessibilityFocusedControl != nil)
       {
         volumeControl
       }
@@ -138,12 +141,15 @@ struct SidebarMediaPlayer: View {
     .accessibilityLabel(PanelsL10n.string("Volume"))
     .accessibilityValue(volumeAccessibilityValue)
     .accessibilityIdentifier("sidebar-media-volume")
+    .accessibilityFocused($accessibilityFocusedControl, equals: .volume)
     .environment(\.layoutDirection, .leftToRight)
     .focused($focusedControl, equals: .volume)
   }
 
-  static func showsVolumeControl(pointerRevealed: Bool, keyboardFocused: Bool) -> Bool {
-    pointerRevealed || keyboardFocused
+  static func showsVolumeControl(
+    pointerRevealed: Bool, keyboardFocused: Bool, accessibilityFocused: Bool = false
+  ) -> Bool {
+    pointerRevealed || keyboardFocused || accessibilityFocused
   }
 
   private var volumeAccessibilityValue: String {

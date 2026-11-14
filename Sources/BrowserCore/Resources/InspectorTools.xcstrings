@@ -1805,19 +1805,19 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "בקשה אחרונה אחת"
+                  "value": "בקשה אחת שנשלחה לאחרונה"
                 }
               },
               "two": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "שתי בקשות אחרונות"
+                  "value": "שתי בקשות שנשלחו לאחרונה"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d בקשות אחרונות"
+                  "value": "%d בקשות שנשלחו לאחרונה"
                 }
               }
             }
@@ -1851,19 +1851,19 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "הודעה אחרונה אחת"
+                  "value": "הודעה אחת שנרשמה לאחרונה"
                 }
               },
               "two": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "שתי הודעות אחרונות"
+                  "value": "שתי הודעות שנרשמו לאחרונה"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d הודעות אחרונות"
+                  "value": "%d הודעות שנרשמו לאחרונה"
                 }
               }
             }

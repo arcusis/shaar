@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import Foundation
 import SwiftUI
 
 /// Shared by onboarding, Settings cards and profile menus. Cached session photos also work
@@ -15,11 +16,7 @@ struct ProfileIdentityBadge: View {
   var size: CGFloat = 28
 
   static func remotePhotoURL(for account: ConnectedAccount) -> URL? {
-    guard let url = account.photoURL, url.scheme?.lowercased() == "https",
-      url.host() != nil, url.user == nil, url.password == nil,
-      url.port.map({ (0...65535).contains($0) }) ?? true
-    else { return nil }
-    return url
+    account.photoURL.flatMap { AccountPhotoURLPolicy.accepts($0) ? $0 : nil }
   }
 
   var body: some View {
@@ -28,12 +25,8 @@ struct ProfileIdentityBadge: View {
         if let image = account.cachedPhoto {
           Image(nsImage: image).resizable().scaledToFill()
         } else if let url = Self.remotePhotoURL(for: account) {
-          AsyncImage(url: url) { phase in
-            if let image = phase.image {
-              image.resizable().scaledToFill()
-            } else {
-              initials(account)
-            }
+          RemoteAccountPhoto(url: url) {
+            initials(account)
           }
         } else {
           initials(account)
@@ -61,6 +54,100 @@ struct ProfileIdentityBadge: View {
       .foregroundStyle(.white)
       .frame(width: size, height: size)
       .background(color.map(Color.init(spaceRGB:)) ?? .accentColor, in: Circle())
+  }
+}
+
+enum AccountPhotoURLPolicy {
+  static func accepts(_ url: URL) -> Bool {
+    guard url.scheme?.lowercased() == "https", url.host() != nil,
+      url.user == nil, url.password == nil,
+      url.port.map({ (1...65535).contains($0) }) ?? true
+    else { return false }
+    return true
+  }
+
+  static func allowsRedirect(from source: URL, to destination: URL) -> Bool {
+    guard accepts(source), accepts(destination),
+      source.scheme?.lowercased() == destination.scheme?.lowercased(),
+      source.host()?.lowercased() == destination.host()?.lowercased()
+    else { return false }
+    return (source.port ?? 443) == (destination.port ?? 443)
+  }
+}
+
+private struct RemoteAccountPhoto<Placeholder: View>: View {
+  let url: URL
+  private let placeholder: () -> Placeholder
+  @State private var image: NSImage?
+
+  init(url: URL, @ViewBuilder placeholder: @escaping () -> Placeholder) {
+    self.url = url
+    self.placeholder = placeholder
+  }
+
+  var body: some View {
+    Group {
+      if let image {
+        Image(nsImage: image).resizable().scaledToFill()
+      } else {
+        placeholder()
+      }
+    }
+    .task(id: url) {
+      image = await AccountPhotoLoader.load(url)
+    }
+  }
+}
+
+private enum AccountPhotoLoader {
+  static func load(_ url: URL) async -> NSImage? {
+    guard AccountPhotoURLPolicy.accepts(url) else { return nil }
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.httpCookieStorage = nil
+    configuration.httpShouldSetCookies = false
+    configuration.urlCredentialStorage = nil
+    configuration.timeoutIntervalForRequest = 5
+    configuration.timeoutIntervalForResource = 5
+    let delegate = AccountPhotoRedirectDelegate(source: url)
+    let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+    defer { session.invalidateAndCancel() }
+    do {
+      let (bytes, response) = try await session.bytes(from: url)
+      guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+        let finalURL = http.url, AccountPhotoURLPolicy.allowsRedirect(from: url, to: finalURL)
+      else { return nil }
+      var data = Data()
+      for try await byte in bytes {
+        guard data.count < 1_048_576 else { return nil }
+        data.append(byte)
+      }
+      return NSImage(data: data)
+    } catch {
+      return nil
+    }
+  }
+}
+
+private final class AccountPhotoRedirectDelegate: NSObject, URLSessionTaskDelegate,
+  @unchecked Sendable
+{
+  let source: URL
+
+  init(source: URL) { self.source = source }
+
+  func urlSession(
+    _ session: URLSession, task: URLSessionTask,
+    willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest,
+    completionHandler: @escaping (URLRequest?) -> Void
+  ) {
+    guard let destination = request.url,
+      AccountPhotoURLPolicy.allowsRedirect(from: source, to: destination)
+    else {
+      completionHandler(nil)
+      return
+    }
+    completionHandler(request)
   }
 }
 

@@ -14,6 +14,25 @@ import Testing
     let secure = ConnectedAccount(
       provider: .google, email: "alex@example.test", photoURL: secureURL)
     #expect(ProfileIdentityBadge.remotePhotoURL(for: secure) == secureURL)
+    #expect(
+      AccountPhotoURLPolicy.allowsRedirect(
+        from: secureURL, to: URL(string: "https://images.example.test/redirected.png")!))
+    #expect(
+      !AccountPhotoURLPolicy.allowsRedirect(
+        from: secureURL, to: URL(string: "https://other.example.test/avatar.png")!))
+    #expect(
+      !AccountPhotoURLPolicy.allowsRedirect(
+        from: secureURL, to: URL(string: "http://images.example.test/avatar.png")!))
+    #expect(
+      !AccountPhotoURLPolicy.allowsRedirect(
+        from: secureURL,
+        to: URL(string: "https://user:secret@images.example.test/avatar.png")!))
+    #expect(
+      AccountPhotoURLPolicy.allowsRedirect(
+        from: URL(string: "https://images.example.test:443/avatar.png")!, to: secureURL))
+    #expect(
+      !AccountPhotoURLPolicy.allowsRedirect(
+        from: URL(string: "https://images.example.test:8443/avatar.png")!, to: secureURL))
 
     for address in [
       "http://images.example.test/avatar.png",
@@ -37,6 +56,16 @@ import Testing
     #expect(account.cachedPhoto == nil)
     account.photoData = Data(repeating: 0, count: 262_145)
     #expect(account.cachedPhoto == nil)
+  }
+
+  @Test func accountPhotoPolicyRejectsPortZero() {
+    let secureURL = URL(string: "https://images.example.test/avatar.png")!
+    let invalidURL = URL(string: "https://images.example.test:0/avatar.png")!
+    let account = ConnectedAccount(
+      provider: .google, email: "alex@example.test", photoURL: invalidURL)
+
+    #expect(ProfileIdentityBadge.remotePhotoURL(for: account) == nil)
+    #expect(!AccountPhotoURLPolicy.allowsRedirect(from: secureURL, to: invalidURL))
   }
 
   @Test func unreadablePhotoFallsBackToInitialsInProfileColor() throws {

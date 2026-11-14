@@ -49,6 +49,7 @@ struct PrintDocumentTitleTests {
 
     let tagOnly = "\u{E0067}\u{E0062}\u{E007F}"
     #expect(PrintDocumentTitle.make(pageTitle: tagOnly, productName: "Shaar") == "Shaar")
+    #expect(PrintDocumentTitle.make(pageTitle: "\u{FE0F}", productName: "Shaar") == "Shaar")
   }
 
   @Test func capsPageTitleLength() {

@@ -36,7 +36,13 @@ enum PrintDocumentTitle {
     return result.isEmpty ? nil : result
   private static func containsVisibleFilenameText(_ title: String) -> Bool {
     title.unicodeScalars.contains {
-      !isJoiner($0) && !isEmojiTag($0) && !CharacterSet.whitespacesAndNewlines.contains($0)
+      guard !isJoiner($0), !isEmojiTag($0),
+        !CharacterSet.whitespacesAndNewlines.contains($0)
+      else { return false }
+      switch $0.properties.generalCategory {
+      case .nonspacingMark, .spacingMark, .enclosingMark: return false
+      default: return true
+      }
     }
   }
   }

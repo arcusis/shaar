@@ -40,6 +40,15 @@ struct NativeWindowFitEvidence: Equatable {
   }
 }
 
+enum NativeWindowDocumentValidation {
+  static func isReady(_ value: [String: Any], differentFrom oldInstance: String? = nil) -> Bool {
+    guard value["fixture"] as? String == "v1",
+      let instance = value["instance"] as? String
+    else { return false }
+    return instance != oldInstance
+  }
+}
+
 /// Exercises native window ownership without creating a second application store or showing a window.
 @MainActor
 final class NativeWindowProbe {
@@ -510,8 +519,7 @@ if let measurement = NativeWindowFitEvidence.parse(last),
       }
       if let data = json?.data(using: .utf8),
         let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        value["fixture"] as? String == "v1", let instance = value["instance"] as? String,
-        instance != old
+        NativeWindowDocumentValidation.isReady(value, differentFrom: old)
       {
         return value
       }

@@ -666,6 +666,19 @@ class SupplyChainTests(unittest.TestCase):
                     self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
                     path.unlink()
 
+    def test_sbom_rejects_symlinked_output_directory_ancestors(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            output_target = outside / "ci/shipping"
+            output_target.mkdir(parents=True)
+            linked_build = root / "build"
+            linked_build.symlink_to(outside, target_is_directory=True)
+            output = linked_build / "ci/shipping"
+
+            with self.assertRaisesRegex(ValueError, "SBOM output directory contains a symlinked parent"):
+                SBOM.validate_output_paths(output)
+
     def test_spdx_inventory_rejects_symlinked_app_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

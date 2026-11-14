@@ -81,6 +81,11 @@ def build_document(app: Path, candidate: Path, revision: str, pin: dict, depende
 def validate_output_paths(directory: Path) -> None:
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError(f"SBOM output directory is not a regular directory: {directory}")
+    system_aliases = {Path("/var"): Path("/private/var"),
+                      Path("/tmp"): Path("/private/tmp")}
+    for parent in directory.absolute().parents:
+        if parent.is_symlink() and system_aliases.get(parent) != parent.resolve():
+            raise ValueError(f"SBOM output directory contains a symlinked parent: {parent}")
     for name in ("Shaar-unsigned-candidate.zip", "sbom.spdx.json", "symlinks.json", "candidate.sha256"):
         path = directory / name
         if path.is_symlink():

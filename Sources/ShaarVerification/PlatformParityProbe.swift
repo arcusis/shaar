@@ -44,9 +44,9 @@ enum PlatformParityPreferenceEvidence {
 @MainActor enum PlatformParityProbe {
   static func run(frameworkURL: URL, outputURL: URL, httpBase: URL?, httpsBase: URL?) -> Int32 {
     guard let httpBase, httpBase.scheme == "http", httpBase.host == "127.0.0.1",
-      httpBase.port != nil,
+      httpBase.port.map({ (1...65_535).contains($0) }) == true,
       let httpsBase, httpsBase.scheme == "https", httpsBase.host == "127.0.0.1",
-      httpsBase.port != nil
+      httpsBase.port.map({ (1...65_535).contains($0) }) == true
     else { return 2 }
     let directory = outputURL.deletingLastPathComponent()
     do {

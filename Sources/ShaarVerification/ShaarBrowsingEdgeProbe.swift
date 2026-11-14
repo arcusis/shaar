@@ -40,6 +40,155 @@ func browsingEdgeFileChooserOpened(_ note: [String: String]) -> Bool {
   note["kind"] == "open-panel"
 }
 
+func browsingEdgeFileUploadPassed(
+  clicked: Bool, chooserRequested: Bool, returnedName: String, returnedContents: String,
+  expectedName: String, expectedContents: String, windowsHidden: Bool
+) -> Bool {
+  clicked && chooserRequested && returnedName == expectedName
+    && returnedContents == expectedContents && windowsHidden
+}
+
+/// Supplies a real fixture URL through NSOpenPanel's normal result accessors without showing UI.
+@MainActor
+enum BrowsingEdgeFilePickerSelection {
+  private static var selectedFileURL: URL?
+  private static var requestCount = 0
+  private static var exchanges: [(AnyClass, Selector, Selector)] = []
+
+  static var wasRequested: Bool { requestCount > 0 }
+
+  static func install(fileURL: URL) -> Bool {
+    guard exchanges.isEmpty else { return false }
+    selectedFileURL = fileURL
+    requestCount = 0
+
+    let methods: [(AnyClass, String, String)] = [
+      (NSOpenPanel.self, "URL", "edgeProbeURL"),
+      (NSOpenPanel.self, "URLs", "edgeProbeURLs"),
+      (NSOpenPanel.self, "runModal", "edgeProbeRunModal"),
+      (NSOpenPanel.self, "beginWithCompletionHandler:", "edgeProbeBeginWithCompletionHandler:"),
+      (NSOpenPanel.self, "beginSheetModalForWindow:completionHandler:",
+       "edgeProbeBeginSheetModalForWindow:completionHandler:"),
+      (NSApplication.self, "runModalForWindow:", "edgeProbeRunModalForWindow:"),
+    ]
+    for method in methods {
+      let targetClass: AnyClass = method.0
+      let originalName = method.1
+      let replacementName = method.2
+      let original = NSSelectorFromString(originalName)
+      let replacement = NSSelectorFromString(replacementName)
+      guard let originalMethod = class_getInstanceMethod(targetClass, original),
+        class_getInstanceMethod(targetClass, replacement) != nil
+      else { continue }
+      if class_addMethod(
+        targetClass, original, method_getImplementation(originalMethod),
+        method_getTypeEncoding(originalMethod))
+      {
+        guard let ownOriginal = class_getInstanceMethod(targetClass, original),
+          let replacementMethod = class_getInstanceMethod(targetClass, replacement)
+        else { continue }
+        method_exchangeImplementations(ownOriginal, replacementMethod)
+      } else {
+        guard let replacementMethod = class_getInstanceMethod(targetClass, replacement) else {
+          continue
+        }
+        method_exchangeImplementations(originalMethod, replacementMethod)
+      }
+      exchanges.append((targetClass, original, replacement))
+    }
+
+    let hasURLGetter = exchanges.contains { $0.1 == NSSelectorFromString("URL") }
+    let hasURLsGetter = exchanges.contains { $0.1 == NSSelectorFromString("URLs") }
+    let hasPresentation = exchanges.contains {
+      $0.1 == NSSelectorFromString("runModal")
+        || $0.1 == NSSelectorFromString("beginWithCompletionHandler:")
+        || $0.1 == NSSelectorFromString("beginSheetModalForWindow:completionHandler:")
+        || $0.0 == NSApplication.self
+    }
+    guard (hasURLGetter || hasURLsGetter), hasPresentation else {
+      uninstall()
+      return false
+    }
+    return true
+  }
+
+  static func uninstall() {
+    for exchange in exchanges.reversed() {
+      let targetClass: AnyClass = exchange.0
+      let original = exchange.1
+      let replacement = exchange.2
+      guard let originalMethod = class_getInstanceMethod(targetClass, original),
+        let replacementMethod = class_getInstanceMethod(targetClass, replacement)
+      else { continue }
+      method_exchangeImplementations(originalMethod, replacementMethod)
+    }
+    exchanges.removeAll()
+    selectedFileURL = nil
+    requestCount = 0
+  }
+
+  static func selectedURLs() -> [URL]? {
+    guard let selectedFileURL else { return nil }
+    return [selectedFileURL]
+  }
+
+  static func selectedURL() -> URL? {
+    guard let selectedFileURL else { return nil }
+    return selectedFileURL
+  }
+
+  static func recordRequest() -> Bool {
+    guard selectedFileURL != nil else { return false }
+    requestCount += 1
+    return true
+  }
+}
+
+private extension NSOpenPanel {
+  @objc(edgeProbeURL) func edgeProbeURL() -> URL? {
+    BrowsingEdgeFilePickerSelection.selectedURL() ?? edgeProbeURL()
+  }
+
+  @objc(edgeProbeURLs) func edgeProbeURLs() -> [URL] {
+    BrowsingEdgeFilePickerSelection.selectedURLs() ?? edgeProbeURLs()
+  }
+
+  @objc(edgeProbeRunModal) func edgeProbeRunModal() -> NSApplication.ModalResponse {
+    if BrowsingEdgeFilePickerSelection.recordRequest() { return .OK }
+    return edgeProbeRunModal()
+  }
+
+  @objc(edgeProbeBeginWithCompletionHandler:)
+  func edgeProbeBegin(completionHandler: @escaping (NSApplication.ModalResponse) -> Void) {
+    guard BrowsingEdgeFilePickerSelection.recordRequest() else {
+      edgeProbeBegin(completionHandler: completionHandler)
+      return
+    }
+    completionHandler(.OK)
+  }
+
+  @objc(edgeProbeBeginSheetModalForWindow:completionHandler:)
+  func edgeProbeBeginSheet(
+    for window: NSWindow, completionHandler: @escaping (NSApplication.ModalResponse) -> Void
+  ) {
+    guard BrowsingEdgeFilePickerSelection.recordRequest() else {
+      edgeProbeBeginSheet(for: window, completionHandler: completionHandler)
+      return
+    }
+    completionHandler(.OK)
+  }
+}
+
+private extension NSApplication {
+  @objc(edgeProbeRunModalForWindow:)
+  func edgeProbeRunModal(for window: NSWindow) -> NSApplication.ModalResponse {
+    guard window is NSOpenPanel, BrowsingEdgeFilePickerSelection.recordRequest() else {
+      return edgeProbeRunModal(for: window)
+    }
+    return .OK
+  }
+}
+
 func browsingEdgeHiddenWindowsFailure(
   stillVisible: [String], notes: [[String: String]], notesDropped: Bool = false
 ) -> String? {
@@ -203,6 +352,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     title:document.title||'',\
     text:(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').slice(0,300),\
     href:location.href,\
+    upload:document.documentElement.dataset.fileUpload||'',\
     nodes:document.getElementsByTagName('*').length,\
     armed:document.documentElement.dataset.armed||''})
     """
@@ -811,7 +961,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       ))
     rows.append(await checkBeforeUnload(context, runtime, page, dialogs))
     rows.append(await checkAuth(context, runtime, page, dialogs))
-    rows.append(await checkFilePicker(context, runtime, page, dialogs))
+    rows.append(await checkFilePicker(context, runtime, page))
     return rows
   }
 
@@ -885,19 +1035,52 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   }
 
   private static func checkFilePicker(
-    _ context: NativeBrowserContext, _ runtime: ARCShaarRuntime, _ page: URL, _ dialogs: DialogGuard
+    _ context: NativeBrowserContext, _ runtime: ARCShaarRuntime, _ page: URL
   ) async -> [String: Any] {
     guard await open(context, runtime, page, path: "/dialogs", marker: "dialogs") else {
       return makeRow("File picker", false, "Could not return to the file input")
     }
-    let before = dialogs.snapshot().count
+    let expectedName = "shaar-file-upload-probe.txt"
+    let expectedContents = "shaar file upload probe contents\n"
+    let fixtureDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appending(path: "shaar-file-upload-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let fileURL = fixtureDirectory.appending(path: expectedName)
+    do {
+      try FileManager.default.createDirectory(
+        at: fixtureDirectory, withIntermediateDirectories: false)
+      try Data(expectedContents.utf8).write(to: fileURL, options: .atomic)
+    } catch {
+      return makeRow("File picker", false, "Could not create the upload fixture: \(error)")
+    }
+    defer { try? FileManager.default.removeItem(at: fixtureDirectory) }
+    guard BrowsingEdgeFilePickerSelection.install(fileURL: fileURL) else {
+      return makeRow("File picker", false, "Could not install the hidden selection response")
+    }
+    defer { BrowsingEdgeFilePickerSelection.uninstall() }
     let clicked = await click(runtime, tab: selectedID(context), element: "blank")
-    try? await Task.sleep(for: .milliseconds(600))
-    let fresh = Array(dialogs.snapshot().dropFirst(before))
-    let opened = fresh.contains(where: browsingEdgeFileChooserOpened)
+    var returnedName = ""
+    var returnedContents = ""
+    for _ in 0..<40 {
+      let uploadState = object(from: await evaluate(
+        runtime, tab: selectedID(context),
+        script: "({upload:document.documentElement.dataset.fileUpload||''})", seconds: 1))
+      let value = uploadState?["upload"] as? String ?? ""
+      if let separator = value.firstIndex(of: "|"), separator != value.startIndex {
+        returnedName = String(value[..<separator])
+        returnedContents = String(value[value.index(after: separator)...])
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    let chooserRequested = BrowsingEdgeFilePickerSelection.wasRequested
+    let hidden = windowsHidden()
+    let passed = browsingEdgeFileUploadPassed(
+      clicked: clicked, chooserRequested: chooserRequested,
+      returnedName: returnedName, returnedContents: returnedContents,
+      expectedName: expectedName, expectedContents: expectedContents, windowsHidden: hidden)
     return makeRow(
-      "File picker", clicked && opened && windowsHidden(),
-      "clicked \(clicked), chooser \(opened), hidden \(windowsHidden()), \(describe(fresh))",
+      "File picker", passed,
+      "clicked \(clicked), chooser requested \(chooserRequested), returned \(returnedName.debugDescription) with matching contents \(returnedContents == expectedContents), hidden \(hidden)",
       proven: clicked)
   }
 

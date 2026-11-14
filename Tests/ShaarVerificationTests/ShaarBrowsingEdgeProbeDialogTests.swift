@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Testing
 
 @testable import ShaarVerification
@@ -35,6 +36,56 @@ import Testing
     #expect(!browsingEdgePrintSurface(["class": "NSOpenPanel", "title": "Choose file"]))
     #expect(browsingEdgeFileChooserOpened(["kind": "open-panel"]))
     #expect(!browsingEdgeFileChooserOpened(["kind": "save-panel"]))
+  }
+
+  @Test func fileUploadPassRequiresTheChooserAndExactReturnedFile() {
+    #expect(
+      browsingEdgeFileUploadPassed(
+        clicked: true, chooserRequested: true,
+        returnedName: "upload.txt", returnedContents: "payload",
+        expectedName: "upload.txt", expectedContents: "payload", windowsHidden: true))
+    #expect(
+      !browsingEdgeFileUploadPassed(
+        clicked: true, chooserRequested: false,
+        returnedName: "upload.txt", returnedContents: "payload",
+        expectedName: "upload.txt", expectedContents: "payload", windowsHidden: true))
+    #expect(
+      !browsingEdgeFileUploadPassed(
+        clicked: true, chooserRequested: true,
+        returnedName: "upload.txt", returnedContents: "other",
+        expectedName: "upload.txt", expectedContents: "payload", windowsHidden: true))
+    #expect(
+      !browsingEdgeFileUploadPassed(
+        clicked: true, chooserRequested: true,
+        returnedName: "upload.txt", returnedContents: "payload",
+        expectedName: "upload.txt", expectedContents: "payload", windowsHidden: false))
+    #expect(
+      !browsingEdgeFileUploadPassed(
+        clicked: true, chooserRequested: true,
+        returnedName: "other.txt", returnedContents: "payload",
+        expectedName: "upload.txt", expectedContents: "payload", windowsHidden: true))
+  }
+
+  @MainActor @Test func syntheticOpenPanelReturnsTheFixtureWithoutShowingIt() throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appending(path: "shaar-open-panel-test-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+    defer {
+      BrowsingEdgeFilePickerSelection.uninstall()
+      try? FileManager.default.removeItem(at: directory)
+    }
+    let fileURL = directory.appending(path: "selected.txt")
+    try Data("selected content".utf8).write(to: fileURL)
+    let installed = BrowsingEdgeFilePickerSelection.install(fileURL: fileURL)
+    #expect(installed)
+    guard installed else { return }
+
+    let panel = NSOpenPanel()
+    #expect(panel.runModal() == .OK)
+    #expect(panel.url == fileURL)
+    #expect(panel.urls == [fileURL])
+    #expect(BrowsingEdgeFilePickerSelection.wasRequested)
+    #expect(!panel.isVisible)
   }
 
   @Test func hiddenWindowFailureReportsVisibleAndDroppedDialogEvidence() {

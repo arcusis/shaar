@@ -165,6 +165,11 @@ DIALOGS = page("Dialogs", "dialogs", """
 <button id="performance-input" style="position:fixed;left:8px;top:8px;width:140px;height:44px">Arm</button>
 <input id="blank" type="file" style="position:fixed;left:8px;top:64px;width:180px;height:44px">
 <script>
+document.getElementById("blank").addEventListener("change", async function () {
+  const file = this.files && this.files[0];
+  if (!file) return;
+  document.documentElement.dataset.fileUpload = file.name + "|" + await file.text();
+});
 document.getElementById("performance-input").addEventListener("click", function () {
   window.addEventListener("beforeunload", function (event) {
     event.preventDefault();

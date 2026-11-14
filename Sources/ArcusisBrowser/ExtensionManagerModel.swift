@@ -35,6 +35,7 @@ final class ExtensionManagerModel {
   private(set) var status: String?
   private var requestID = UUID()
   private var developerModeRequestID = UUID()
+  private var extensionAccessRequestID = UUID()
 
   static func shared(
     runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID
@@ -232,6 +233,8 @@ final class ExtensionManagerModel {
   }
 
   func setIncognitoEnabled(_ id: String, enabled: Bool) {
+    let request = UUID()
+    extensionAccessRequestID = request
     guard BrowserExtension.isValidID(id) else {
       status = ExtensionInstallNotice.privateAccessRefused
       return
@@ -243,7 +246,7 @@ final class ExtensionManagerModel {
         "enabled": enabled,
       ], tabID: nil
     ) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.extensionAccessRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -257,6 +260,8 @@ final class ExtensionManagerModel {
   func setSiteAccess(
     _ access: ExtensionSiteAccess, extensionID: String, origin: String, tabID: UUID?
   ) {
+    let request = UUID()
+    extensionAccessRequestID = request
     guard BrowserExtension.isValidID(extensionID), ExtensionPageOrigin.accepts(origin) else {
       status = ExtensionInstallNotice.siteAccessRefused
       return
@@ -268,7 +273,7 @@ final class ExtensionManagerModel {
         "access": access.rawValue, "origin": origin,
       ], tabID: tabID
     ) { [weak self] reply in
-      guard let self else { return }
+      guard let self, self.extensionAccessRequestID == request else { return }
       switch reply {
       case .updated:
         self.status = nil

@@ -12,7 +12,7 @@ private typealias NavigationShimSubmit = @convention(c) (
   UnsafeMutablePointer<shaar_error>?
 ) -> shaar_error_code
 
-private let noOpNavigationShimReply: shaar_reply_fn = { _, _ in }
+private let noOpNavigationReply: shaar_reply_fn = { _, _ in }
 
 @_cdecl("fake_navigation_c_shim_submit")
 private func fakeNavigationCShimSubmit(
@@ -39,6 +39,28 @@ private func fakeNavigationCShimSubmit(
       shaar_bytes(data: nil, size: 0), 1, nil, nil, nil)
   }
   #expect(noErrorOutput == invalidArgument)
+
+  var immediateError = shaar_error(
+    size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK,
+    platform_code: 0, message: shaar_bytes(data: nil, size: 0))
+  let noEngine = withUnsafePointer(to: &scope) { scopePointer in
+    withUnsafeMutablePointer(to: &immediateError) { errorPointer in
+      shaar_navigation_submit_invoke(
+        UnsafeRawPointer(bitPattern: 1), nil, scopePointer, nil, nil, 0,
+        shaar_bytes(data: nil, size: 0), 1, noOpNavigationReply, nil, errorPointer)
+    }
+  }
+  #expect(noEngine == invalidArgument)
+
+  let invalidEngine = OpaquePointer(bitPattern: 1)
+  let noReply = withUnsafePointer(to: &scope) { scopePointer in
+    withUnsafeMutablePointer(to: &immediateError) { errorPointer in
+      shaar_navigation_submit_invoke(
+        UnsafeRawPointer(bitPattern: 1), invalidEngine, scopePointer, nil, nil, 0,
+        shaar_bytes(data: nil, size: 0), 1, nil, nil, errorPointer)
+    }
+  }
+  #expect(noReply == invalidArgument)
 }
 
 @Test func navigationCShimRejectsMissingEngineAndReply() {

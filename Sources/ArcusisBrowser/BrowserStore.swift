@@ -1031,7 +1031,16 @@ final class BrowserStore {
 
   @discardableResult
   func requestDesktopCapture(_ request: DesktopCaptureRequest) -> Bool {
-    enqueueConsent(.desktopCapture(request))
+    if let frameID = permissionFrames[request.tabID], frameID != request.frameID {
+      return false
+    }
+    if let origin = permissionFrameOrigins[request.tabID], origin != request.requestingOrigin {
+      return false
+    }
+    guard enqueueConsent(.desktopCapture(request)) else { return false }
+    rememberPermissionFrame(
+      request.tabID, frameID: request.frameID, origin: request.requestingOrigin)
+    return true
   }
 
   @discardableResult
@@ -1122,6 +1131,8 @@ final class BrowserStore {
     }
     let valid =
       presented
+      && permissionFrames[capture.tabID] != nil
+      && permissionFrameOrigins[capture.tabID] != nil
       && capture.matches(
         session, frameID: permissionFrames[capture.tabID],
         origin: permissionFrameOrigins[capture.tabID])

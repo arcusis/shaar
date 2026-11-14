@@ -64,7 +64,12 @@ def junit_totals(report: Path) -> dict[str, int]:
 
 class Commands:
     def __init__(self, stage: str):
+        if not stage or Path(stage).name != stage or stage in {".", ".."}:
+            raise ValueError("CI stage must be a single directory name")
         self.directory = ROOT / "build/ci" / stage
+        for path in (ROOT / "build", ROOT / "build/ci", self.directory):
+            if path.is_symlink():
+                raise ValueError(f"CI output path must not be a symlink: {path}")
         self.directory.mkdir(parents=True, exist_ok=True)
         self.results = []
         metadata = dict(revision=os.environ.get("GITHUB_SHA", "local"),

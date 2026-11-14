@@ -1232,6 +1232,31 @@ class ProbeSoakTests(unittest.TestCase):
             suite = ET.parse(checks.directory / "commands.xml").getroot()
             self.assertEqual(suite.attrib["failures"], "1")
 
+    def test_command_stage_rejects_symlinked_output_directory(self):
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external"
+            external.mkdir()
+            (root / "build/ci").mkdir(parents=True)
+            (root / "build/ci/unsafe").symlink_to(external, target_is_directory=True)
+            with patch("ci_support.ROOT", root):
+                with self.assertRaisesRegex(ValueError, "must not be a symlink"):
+                    Commands("unsafe")
+            self.assertEqual(list(external.iterdir()), [])
+
+    def test_command_stage_must_be_a_single_directory_name(self):
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("ci_support.ROOT", root):
+                for stage in ("../outside", "nested/stage", ""):
+                    with self.subTest(stage=stage), self.assertRaisesRegex(
+                        ValueError, "single directory name"
+                    ):
+                        Commands(stage)
+            self.assertFalse((root / "outside").exists())
+
     def test_command_logs_replace_invalid_utf8_and_malformed_reports_do_not_mask_failure(self):
         from ci_support import Commands
         with tempfile.TemporaryDirectory() as directory:

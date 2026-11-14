@@ -61,7 +61,9 @@ private struct HostViewportSample: Codable {
   let documentInstance: String
   let innerWidthCSSPixels: Double
   let innerHeightCSSPixels: Double
+  let pageVisibilityState: String
   let resizeEventCount: Int
+  let mediaQueryChangeEventCount: Int
   let pageFocusEventCount: Int
   let pageBlurEventCount: Int
   let devicePixelRatio: Double
@@ -121,15 +123,19 @@ enum NativeHostViewportValidation {
       let accountID = accountID(fromCookie: cookie),
       let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
       let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
+      let pageVisibilityState = document["visibilityState"] as? String,
       let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,
+      let mediaQueryChangeEventCount = (document["mediaQueryChangeEventCount"] as? NSNumber)?.intValue,
       let pageFocusEventCount = (document["pageFocusEventCount"] as? NSNumber)?.intValue,
       let pageBlurEventCount = (document["pageBlurEventCount"] as? NSNumber)?.intValue,
       let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue
     else { return nil }
     return HostViewportDocumentFields(
       accountID: accountID, instance: instance, cssWidth: cssWidth, cssHeight: cssHeight,
-      resizeEventCount: resizeEventCount, pageFocusEventCount: pageFocusEventCount,
-      pageBlurEventCount: pageBlurEventCount, devicePixelRatio: devicePixelRatio)
+      pageVisibilityState: pageVisibilityState, resizeEventCount: resizeEventCount,
+      mediaQueryChangeEventCount: mediaQueryChangeEventCount,
+      pageFocusEventCount: pageFocusEventCount, pageBlurEventCount: pageBlurEventCount,
+      devicePixelRatio: devicePixelRatio)
   }
 
   static func sameCSSSize(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
@@ -146,7 +152,9 @@ struct HostViewportDocumentFields: Equatable {
   let instance: String
   let cssWidth: Double
   let cssHeight: Double
+  let pageVisibilityState: String
   let resizeEventCount: Int
+  let mediaQueryChangeEventCount: Int
   let pageFocusEventCount: Int
   let pageBlurEventCount: Int
   let devicePixelRatio: Double
@@ -790,11 +798,32 @@ final class NativeHostProbe {
         "Minimum resize leaves second owning window viewport unchanged.",
         checks: &viewportChecks)
 
+      let mediaQueryBreakpoint = floor(
+        (firstMinimum.innerWidthCSSPixels + firstNormal.innerWidthCSSPixels) / 2)
+      let mediaQueryProbeInstalled = await installMediaQueryChangeProbe(
+        tabID: firstTab, breakpoint: mediaQueryBreakpoint)
+      try recordViewportCheck(
+        "hiddenMediaQueryProbeStartsBelowBreakpoint", mediaQueryProbeInstalled,
+        "The hidden page starts below a width media-query breakpoint before resizing.",
+        checks: &viewportChecks)
       first.window.setFrame(normalFrame, display: false)
+      await waitForResizeEvent(tabID: firstTab, after: firstMinimum.resizeEventCount)
+      let mediaQueryChangeDelivered = await waitForMediaQueryChangeEvent(
+        tabID: firstTab, after: firstMinimum.mediaQueryChangeEventCount)
       try await settleViewportLayout(first)
       let firstNormalBeforeChrome = try await viewportSample(
         "first-normal-before-chrome", context: first, tabID: firstTab)
       samples.append(firstNormalBeforeChrome)
+      try recordViewportCheck(
+        "hiddenViewportResizeDeliversMediaQueryChange",
+        mediaQueryChangeDelivered
+          && firstMinimum.pageVisibilityState == "hidden"
+          && firstNormalBeforeChrome.pageVisibilityState == "hidden"
+          && NativeHostViewportValidation.deliveredResizeEvent(
+            from: firstMinimum.mediaQueryChangeEventCount,
+            to: firstNormalBeforeChrome.mediaQueryChangeEventCount),
+        "Resizing the hidden page across a media-query breakpoint delivers its change listener.",
+        checks: &viewportChecks)
       first.store.sidebarIsVisible = false
       await waitForResizeEvent(tabID: firstTab, after: firstNormalBeforeChrome.resizeEventCount)
       try await settleViewportLayout(first)
@@ -1116,7 +1145,9 @@ final class NativeHostProbe {
       profileID: context.store.session.selectedSpace.profileID,
       accountID: fields.accountID, documentInstance: fields.instance,
       innerWidthCSSPixels: fields.cssWidth, innerHeightCSSPixels: fields.cssHeight,
+      pageVisibilityState: fields.pageVisibilityState,
       resizeEventCount: fields.resizeEventCount,
+      mediaQueryChangeEventCount: fields.mediaQueryChangeEventCount,
       pageFocusEventCount: fields.pageFocusEventCount,
       pageBlurEventCount: fields.pageBlurEventCount,
       devicePixelRatio: fields.devicePixelRatio,
@@ -1157,6 +1188,47 @@ final class NativeHostProbe {
       }
       try? await Task.sleep(for: .milliseconds(100))
     }
+  }
+
+  private func installMediaQueryChangeProbe(tabID: UUID, breakpoint: Double) async -> Bool {
+    let breakpointCSSPixels = Int(breakpoint)
+    let json: String? = await withCheckedContinuation { continuation in
+      primary.runtime.evaluate(
+        inTabID: tabID.uuidString,
+        script: """
+          (() => {
+            const query = matchMedia('(min-width: \(breakpointCSSPixels)px)');
+            window.__arcusisMediaQueryChangeEvents = 0;
+            query.addEventListener('change', () => window.__arcusisMediaQueryChangeEvents++);
+            return {matches: query.matches};
+          })()
+          """) { continuation.resume(returning: $0) }
+    }
+    guard let data = json?.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return false }
+    return object["matches"] as? Bool == false
+  }
+
+  private func waitForMediaQueryChangeEvent(tabID: UUID, after count: Int) async -> Bool {
+    for _ in 0..<20 {
+      let json: String? = await withCheckedContinuation { continuation in
+        primary.runtime.evaluate(
+          inTabID: tabID.uuidString,
+          script: "({count:window.__arcusisMediaQueryChangeEvents||0})") {
+            continuation.resume(returning: $0)
+          }
+      }
+      if let data = json?.data(using: .utf8),
+        let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let current = (object["count"] as? NSNumber)?.intValue,
+        current > count
+      {
+        return true
+      }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    return false
   }
 
   private func pageContainer(in view: NSView, page: NSView) -> ChromiumPageContainerView? {
@@ -1317,8 +1389,10 @@ final class NativeHostProbe {
               local:localStorage.getItem('arcusisProfileMutation'),
               session:sessionStorage.getItem('arcusisProfileMutation'),
               innerWidth:window.innerWidth,innerHeight:window.innerHeight,
+              visibilityState:document.visibilityState,
               devicePixelRatio:window.devicePixelRatio,
               resizeEventCount:window.__arcusisResizeEvents||0,
+              mediaQueryChangeEventCount:window.__arcusisMediaQueryChangeEvents||0,
               pageFocusEventCount:window.__shaarPageFocusEvents?.focus,
               pageBlurEventCount:window.__shaarPageFocusEvents?.blur})
             """

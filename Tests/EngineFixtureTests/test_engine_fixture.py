@@ -48,6 +48,37 @@ class PageFocusEventProbeTests(unittest.TestCase):
         self.assertIn('window.__shaarPageFocusEvents?.blur', source)
 
 
+class LocalExtensionInstallRunnerTests(unittest.TestCase):
+    def test_local_install_mode_is_explicit_and_mutually_exclusive(self):
+        options = fixture.argument_parser().parse_args(['--local-extension-install'])
+        self.assertTrue(options.local_extension_install)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            fixture.argument_parser().parse_args(['--local-extension-install', '--bitwarden'])
+
+    def test_local_install_mode_runs_one_initial_phase_with_its_probe_flag(self):
+        arguments = fixture.build_engine_probe_arguments(
+            '/tmp/ShaarVerification', Path('/tmp/probe'), 'http://127.0.0.1:1234/account',
+            'initial', include_bitwarden=False, onboarding_control=False, abrupt=False,
+            saved_tab_capacity=False, local_extension_install=True)
+        self.assertIn('--probe-local-extension-install', arguments)
+        self.assertNotIn('--bitwarden', arguments)
+        self.assertNotIn('--probe-expect-abrupt-recovery', arguments)
+
+    def test_local_install_report_requires_consent_execution_hidden_and_cleanup_evidence(self):
+        checks = sorted(fixture.LOCAL_EXTENSION_INSTALL_CHECKS)
+        evidence = dict(phase='initial', passed=True, checks=checks)
+        report = dict(phase='initial', probeMode='local-extension-install-only',
+                      localExtensionInstallOnly=True, passed=True, localFixturesPassed=True,
+                      error=None, checks=checks + ['clean quit closes the normal window and engine client'])
+        fixture.validate_local_extension_install_report(report, evidence, 'initial', 0)
+        with self.assertRaises(RuntimeError):
+            fixture.validate_local_extension_install_report(
+                report | dict(checks=checks), evidence, 'initial', 0)
+        with self.assertRaises(RuntimeError):
+            fixture.validate_local_extension_install_report(
+                report, evidence | dict(checks=checks[:-1]), 'initial', 0)
+
+
 class SavedTabCapacityRunnerTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')

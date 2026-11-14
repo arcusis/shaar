@@ -84,6 +84,7 @@ final class EngineProbe {
   private let sessionRecoveryMode: Bool
   private let localizationMode: Bool
   private let basicBrowsingMode: Bool
+  private let localExtensionInstallMode: Bool
   private let reloadWindowMode: Bool
   private let devModeOnly: Bool
   private let mediaSessionOnlyMode: Bool
@@ -132,7 +133,8 @@ final class EngineProbe {
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
-    localizationMode: Bool, basicBrowsingMode: Bool, reloadWindowMode: Bool, devModeOnly: Bool,
+    localizationMode: Bool, basicBrowsingMode: Bool, localExtensionInstallMode: Bool,
+    reloadWindowMode: Bool, devModeOnly: Bool,
     mediaSessionOnlyMode: Bool, devtoolsRouteOnlyMode: Bool,
     measurementTabCount: Int?, measurementEager: Bool, measurementSleeping: Bool,
     measurementInspector: Bool
@@ -153,6 +155,7 @@ final class EngineProbe {
     self.sessionRecoveryMode = sessionRecoveryMode
     self.localizationMode = localizationMode
     self.basicBrowsingMode = basicBrowsingMode
+    self.localExtensionInstallMode = localExtensionInstallMode
     self.reloadWindowMode = reloadWindowMode
     self.devModeOnly = devModeOnly
     self.mediaSessionOnlyMode = mediaSessionOnlyMode
@@ -284,6 +287,7 @@ final class EngineProbe {
       let quitPendingNavigation = arguments.contains("--probe-quit-pending-navigation")
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let basicBrowsingMode = arguments.contains("--probe-basic-browsing")
+      let localExtensionInstallMode = arguments.contains("--probe-local-extension-install")
       let reloadWindowMode = arguments.contains("--probe-reload-window")
       let devModeOnly = arguments.contains("--probe-dev-mode-only")
       let mediaSessionOnlyMode = arguments.contains("--probe-media-session-only")
@@ -320,6 +324,7 @@ final class EngineProbe {
         "--probe-quit-exit",
         "--probe-localization",
         "--probe-basic-browsing",
+        "--probe-local-extension-install",
         "--probe-reload-window",
         "--probe-dev-mode-only",
         "--probe-media-session-only",
@@ -345,6 +350,9 @@ final class EngineProbe {
             where: arguments.contains),
         !basicBrowsingMode
           || !conflictingFlags.filter({ $0 != "--probe-basic-browsing" }).contains(
+            where: arguments.contains),
+        !localExtensionInstallMode
+          || !conflictingFlags.filter({ $0 != "--probe-local-extension-install" }).contains(
             where: arguments.contains),
         !reloadWindowMode
           || !conflictingFlags.filter({ $0 != "--probe-reload-window" }).contains(
@@ -382,7 +390,8 @@ final class EngineProbe {
         privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
         quitPendingNavigation: quitPendingNavigation,
         sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode,
-        basicBrowsingMode: basicBrowsingMode, reloadWindowMode: reloadWindowMode,
+        basicBrowsingMode: basicBrowsingMode,
+        localExtensionInstallMode: localExtensionInstallMode, reloadWindowMode: reloadWindowMode,
         devModeOnly: devModeOnly,
         mediaSessionOnlyMode: mediaSessionOnlyMode,
         devtoolsRouteOnlyMode: devtoolsRouteOnlyMode,
@@ -769,6 +778,18 @@ final class EngineProbe {
         finish(error: nil)
         return
       }
+      if localExtensionInstallMode {
+        guard browserEngine != nil else {
+          throw ProbeFailure("Local extension install engine is missing.")
+        }
+        fixtureStage = "LocalExtensionInstall"
+        checks += try await LocalExtensionInstallProbe(
+          runtime: runtime, store: store, root: root, phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       if reloadWindowMode {
         guard let browserEngine,
           let profile = store.session.profiles.first(where: {
@@ -1076,6 +1097,10 @@ final class EngineProbe {
         fixtureStage = "Reopen"
         checks += try await ReopenProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
+        ).run()
+        fixtureStage = "LocalExtensionInstall"
+        checks += try await LocalExtensionInstallProbe(
+          runtime: runtime, store: store, root: root, phase: phase
         ).run()
         fixtureStage = "Extension"
         checks += try await ExtensionProbe(
@@ -1516,7 +1541,8 @@ final class EngineProbe {
       writeReport()
       return
     }
-    if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
+    if basicBrowsingMode || localExtensionInstallMode || reloadWindowMode || devModeOnly
+      || mediaSessionOnlyMode
       || devtoolsRouteOnlyMode
     {
       let engineClosed = browserEngine?.isClosed == true
@@ -1556,7 +1582,8 @@ final class EngineProbe {
   }
 
   private var baseTimeoutSeconds: Double {
-    if basicBrowsingMode || reloadWindowMode || devModeOnly || mediaSessionOnlyMode
+    if basicBrowsingMode || localExtensionInstallMode || reloadWindowMode || devModeOnly
+      || mediaSessionOnlyMode
       || devtoolsRouteOnlyMode
     {
       return 180
@@ -1570,6 +1597,7 @@ final class EngineProbe {
 
   private var probeMode: String {
     if basicBrowsingMode { return "basic-browsing" }
+    if localExtensionInstallMode { return "local-extension-install-only" }
     if reloadWindowMode { return "reload-window" }
     if devModeOnly { return DevelopmentModeProbe.mode }
     if mediaSessionOnlyMode { return "media-session-only" }
@@ -1591,6 +1619,10 @@ final class EngineProbe {
     if basicBrowsingMode {
       return
         "Owned hidden normal window, unauthenticated Google search results, and authored loopback tabs. No existing browser profile or account is opened."
+    }
+    if localExtensionInstallMode {
+      return "Owned hidden normal window, an authored unpacked MV3 fixture, and one loopback tab "
+        + "in a disposable profile. No existing browser profile or account is opened."
     }
     if devModeOnly {
       return
@@ -1644,6 +1676,7 @@ final class EngineProbe {
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
       "probeMode": probeMode,
       "reloadWindowOnly": reloadWindowMode,
+      "localExtensionInstallOnly": localExtensionInstallMode,
       "devModeOnly": devModeOnly,
       "savedTabCapacityOnly": savedTabCapacityMode,
       "savedTabCapacityProbe": savedTabCapacityMode,

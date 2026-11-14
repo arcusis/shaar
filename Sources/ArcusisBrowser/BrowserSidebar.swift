@@ -807,6 +807,7 @@ struct BrowserSidebar: View {
       SidebarTabRow(
         tabID: tab.id,
         title: tab.title,
+        address: tab.url.absoluteString,
         favicon: store.favicon(for: tab, profileID: space.profileID),
         isPinned: tab.isPinned,
         isSelected: store.session.selectedPage?.tab.id == tab.id,

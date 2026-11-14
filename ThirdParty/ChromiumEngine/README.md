@@ -7,11 +7,13 @@ identifiers before signing them. The source archive's native symbols and Chromiu
 behavior still require separate verification before release.
 
 `source-build.json` records the pinned Chromium inputs, Shaar-owned source layer,
-ordered build patches, and their digests. Run
-`bash scripts/engine-apply-patches.sh /path/to/chromium/src` before source builds.
-It requires a clean checkout at the pinned commit, applies every manifest patch
-with strict `git apply`, and writes `build/ShaarEngineSource/applied-patches.json`.
-For a recovered, already-patched tree, run
+ordered build patches, and their digests. For a patch series that applies
+directly to a clean pinned checkout, run
+`bash scripts/engine-apply-patches.sh /path/to/chromium/src`. It uses strict
+`git apply` and writes `build/ShaarEngineSource/applied-patches.json`.
+The Chromium 157 builder prepares the pinned upstream stack and copies the
+Shaar layer before applying the literal manifest patch list. For a recovered,
+already-patched tree, run
 `python3 scripts/engine_patches.py --verify-tree /path/to/chromium/src` instead.
 For a Chromium 157 source tree that includes the pinned upstream stack and
 copied Shaar layer, pass the builder's replay record as well:

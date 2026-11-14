@@ -109,14 +109,23 @@ extension BrowserStore {
 
   @discardableResult
   func deleteBookmark(_ id: UUID, profileID: UUID) -> Bool {
-    guard mayUseLibrary(profileID, editing: true),
-      library.bookmarks[profileID]?.items.contains(where: { $0.id == id && !$0.isPermanent })
-        == true
+    let editorRoute: BookmarkEditorRoute?
+    switch sheet {
+    case .library(let owner, _) where owner == profileID:
+      editorRoute = nil
+    case .bookmarkEditor(let route) where route.profileID == profileID && route.itemID == id:
+      editorRoute = route
+    default:
+      return false
+    }
+    guard mayUseLibrary(profileID, editing: editorRoute != nil),
+      library.bookmarks[profileID]?.items.contains(where: { $0.id == id && !$0.isPermanent }) == true
     else { return false }
     return library.mutate(
       .bookmark(["op": "remove", "id": id.uuidString.lowercased()]), profile: profileID
     ) { [weak self] success in
-      guard let self, success, case .bookmarkEditor(let route) = self.sheet,
+      guard let self, success, let editorRoute,
+        case .bookmarkEditor(let route) = self.sheet,
         route.itemID == id && route.profileID == profileID
       else { return }
       self.sheet = nil

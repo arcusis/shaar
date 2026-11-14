@@ -144,6 +144,10 @@ class BrowsingQAReportTests(unittest.TestCase):
         report = {"passed": True, "rows": [None]}
         self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
 
+    def test_malformed_rows_fail_the_scenario_without_crashing(self):
+        report = {"passed": True, "rows": [None]}
+        self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+
     def test_deliberate_renderer_kill_matches_pid_and_time(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
         report = {"rows": [

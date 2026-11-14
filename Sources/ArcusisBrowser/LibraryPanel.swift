@@ -186,16 +186,18 @@ struct LibraryPanel: View {
     .fileImporter(
       isPresented: $choosingImport, allowedContentTypes: [.item, .folder]
     ) { result in
-      do {
-        let url = try result.get()
-        let access = url.startAccessingSecurityScopedResource()
-        defer { if access { url.stopAccessingSecurityScopedResource() } }
-        importPreview = try BrowserImport.read(url, source: importSource).items
-        importError = nil
-        showingImportPreview = true
-      } catch {
-        importError = error.localizedDescription
-        showingImportPreview = true
+      Task {
+        do {
+          let url = try result.get()
+          let access = url.startAccessingSecurityScopedResource()
+          defer { if access { url.stopAccessingSecurityScopedResource() } }
+          importPreview = try await BrowserImport.readOffMain(url, source: importSource).items
+          importError = nil
+          showingImportPreview = true
+        } catch {
+          importError = error.localizedDescription
+          showingImportPreview = true
+        }
       }
     }
     .sheet(

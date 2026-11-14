@@ -76,6 +76,15 @@ public enum BrowserImport {
     return BrowserImportBatch(source: source, items: items)
   }
 
+  /// Reads a browser export without blocking the caller's actor on file or database work.
+  public static func readOffMain(_ url: URL, source: BrowserImportSource) async throws
+    -> BrowserImportBatch
+  {
+    try await Task.detached(priority: .userInitiated) {
+      try read(url, source: source)
+    }.value
+  }
+
   public static func historyRows(for items: [BrowserImportItem]) -> [[String: Any]] {
     items.compactMap { item in
       guard item.kind == .history, !item.visitTimes.isEmpty else { return nil }

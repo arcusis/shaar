@@ -48,6 +48,12 @@ def inventory_files(app: Path) -> tuple[list[dict], dict[str, str], str]:
     return files, links, verification
 
 
+def require_no_symlink(path: Path) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"CI SBOM path must not be a symlink: {path}")
+    return path
+
+
 def build_document(app: Path, candidate: Path, revision: str, pin: dict, dependencies: list[dict]) -> tuple[dict, dict]:
     candidate_checksums = file_checksums(candidate)
     digest = next(item["checksumValue"] for item in candidate_checksums if item["algorithm"] == "SHA256")
@@ -82,17 +88,25 @@ def main() -> None:
     directory = ROOT / "build/ci/shipping"
     app = ROOT / "build/Shaar.app"
     candidate = directory / "Shaar-unsigned-candidate.zip"
+    for path in (ROOT / "build", ROOT / "build/ci", directory):
+        require_no_symlink(path)
+    if app.is_symlink() or not app.is_dir():
+        raise ValueError("candidate app inventory root is not a regular directory")
+    sbom = directory / "sbom.spdx.json"
+    links_path = directory / "symlinks.json"
+    checksums_path = directory / "candidate.sha256"
+    for path in (candidate, sbom, links_path, checksums_path):
+        require_no_symlink(path)
     subprocess.run(["ditto", "-c", "-k", "--keepParent", str(app), str(candidate)], check=True)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     pin = json.loads((ROOT / "ThirdParty/ChromiumEngine/pin.json").read_text())
     dependencies = json.loads((ROOT / "Package.resolved").read_text())["pins"]
     document, links = build_document(app, candidate, revision, pin, dependencies)
-    (directory / "sbom.spdx.json").write_text(json.dumps(document, indent=2) + "\n")
-    (directory / "symlinks.json").write_text(json.dumps(links, indent=2) + "\n")
+    sbom.write_text(json.dumps(document, indent=2) + "\n")
+    links_path.write_text(json.dumps(links, indent=2) + "\n")
     digest = next(item["checksumValue"] for item in document["packages"][0]["checksums"] if item["algorithm"] == "SHA256")
-    sbom = directory / "sbom.spdx.json"
     sbom_digest = next(item["checksumValue"] for item in file_checksums(sbom) if item["algorithm"] == "SHA256")
-    (directory / "candidate.sha256").write_text(f"{digest}  {candidate.name}\n{sbom_digest}  {sbom.name}\n")
+    checksums_path.write_text(f"{digest}  {candidate.name}\n{sbom_digest}  {sbom.name}\n")
     print(f"Unsigned candidate: {digest}; {len(document['files'])} files, {len(document['packages'])} packages")
 
 

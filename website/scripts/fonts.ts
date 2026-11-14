@@ -57,12 +57,18 @@ export function parseFaces(css: string): (SiteFont & { url: string })[] {
     const style = /font-style:\s*([^;]+);/.exec(block)?.[1]?.trim();
     if (!family || !Object.hasOwn(families, family) || !url || !weight || style !== "normal")
       continue;
+    const resolvedUrl = url.startsWith("//") ? `https:${url}` : url;
+    try {
+      if (new URL(resolvedUrl).protocol !== "https:") continue;
+    } catch {
+      continue;
+    }
     // The API lists the variable face (a weight range) next to static weights; keep the variable one.
     if (!weight.includes(" ")) continue;
     faces.push({
       family,
       weight,
-      url: url.startsWith("//") ? `https:${url}` : url,
+      url: resolvedUrl,
       file: `${families[family]}.woff2`,
     });
   }

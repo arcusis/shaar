@@ -7,6 +7,12 @@
         "he": { "stringUnit": { "state": "translated", "value": "לא ניתן להעתיק את הרכיב שנבחר. כדאי לנסות שוב." } }
       }
     },
+    "Could not get the source details. Try again.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not get the source details. Try again." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לקבל את פרטי המקור. כדאי לנסות שוב." } }
+      }
+    },
     "A11y": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"A11y"}},"he":{"stringUnit":{"state":"translated","value":"נגישות"}}}},
     "Copy context and screenshot (Command-Shift-C)": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy context and screenshot (Command-Shift-C)"}},"he":{"stringUnit":{"state":"translated","value":"העתקת ההקשר וצילום האלמנט (Command-Shift-C)"}}}},
     "Copying…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copying…"}},"he":{"stringUnit":{"state":"translated","value":"ההעתקה מתבצעת…"}}}},

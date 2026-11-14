@@ -294,7 +294,10 @@ def run_visuals(checks: Commands, shard: str) -> None:
     environment = dict(os.environ, ARCUSIS_SIDEBAR_VISUAL_CI="1")
     filters = VISUAL_FILTERS if shard == "all" else VISUAL_SHARDS[shard]
     for name in filters:
-        checks.run(name, ["swift", "test", "--skip-build", "--jobs", "2", "--filter", name], env=environment)
+        run_swift_tests(
+            checks, name, ["swift", "test", "--skip-build", "--jobs", "2", "--filter", name],
+            env=environment,
+        )
 
 
 def run_localization_captures(checks: Commands) -> None:

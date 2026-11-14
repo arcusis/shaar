@@ -200,6 +200,9 @@ public struct ShaarNavigationABITransport: ShaarNavigationSubmitting, @unchecked
     }
     guard status == ShaarStatusCode.ok.rawValue else {
       Unmanaged<ShaarNavigationReplyBox>.fromOpaque(replyContext).release()
+      guard immediateError.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+        throw ShaarEngineError.invalidEvent("short navigation immediate error")
+      }
       let message =
         (try? String(decoding: copyABISlice(immediateError.message), as: UTF8.self)) ?? ""
       try ShaarStatusCode.decode(

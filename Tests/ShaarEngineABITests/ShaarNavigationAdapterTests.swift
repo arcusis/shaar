@@ -161,6 +161,32 @@ private struct FakeShortNavigationErrorSymbols: ShaarSymbolResolving {
   }
 }
 
+@_cdecl("fake_shaar_navigation_submit_short_immediate_error")
+private func fakeShaarNavigationSubmitShortImmediateError(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ args: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard let immediateError else { return shaar_error_code(rawValue: 1) }
+  immediateError.pointee = shaar_error(
+    size: 0, code: shaar_error_code(rawValue: 4), platform_code: 0,
+    message: shaar_bytes(data: nil, size: 0))
+  return shaar_error_code(rawValue: 4)
+}
+
+private struct FakeShortNavigationImmediateErrorSymbols: ShaarSymbolResolving {
+  func symbol(named: String) -> UnsafeRawPointer? {
+    guard named == "shaar_submit" else { return nil }
+    let function = fakeShaarNavigationSubmitShortImmediateError as @convention(c) (
+      OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+      shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+      UnsafeMutablePointer<shaar_error>?
+    ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
+  }
+}
+
 @Suite("Shaar navigation adapter")
 struct ShaarNavigationAdapterTests {
   @Test func commandUsesExactScopeAndVersionedPayload() throws {
@@ -429,5 +455,16 @@ struct ShaarNavigationAdapterTests {
       }
     }
     #expect(result == .failure(.invalidEvent("invalid navigation result payload")))
+  }
+
+  @Test func concreteTransportRejectsShortImmediateError() throws {
+    let transport = try ShaarNavigationABITransport(
+      resolver: FakeShortNavigationImmediateErrorSymbols(), handleResolver: FakeHandleResolver())
+    let adapter = try #require(ShaarNavigationAdapter(implementation: .shaar, transport: transport))
+    #expect(throws: ShaarEngineError.invalidEvent("short navigation immediate error")) {
+      try adapter.submit(
+        .stop, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
+        tabID: "tab", completion: { _ in })
+    }
   }
 }

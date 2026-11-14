@@ -42,4 +42,13 @@ struct DeviceChooserProbeTests {
     let fractional = DeviceChooserProbe.PageSettlement(raw: #"{"ok":true,"count":0.0}"#)
     #expect(fractional?.isChooserDismissal(for: "hid") == false)
   }
+
+  @Test func anErrorFieldCannotResolveHIDAlongsideASuccessCount() {
+    for raw in [
+      #"{"error":"","ok":true,"count":0}"#,
+      #"{"error":null,"ok":true,"count":0}"#,
+    ] {
+      #expect(DeviceChooserProbe.PageSettlement(raw: raw)?.isChooserDismissal(for: "hid") == false)
+    }
+  }
 }

@@ -11,6 +11,22 @@ import Testing
 
 @Suite @MainActor
 struct BrowserEngineDevToolsTests {
+  @Test func closingWindowCancelsDelayedEngineRefreshes() async throws {
+    let store = BrowserStore()
+    let runtime = DevToolsEngineRuntime()
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), windowID: "refresh-window", store: store)
+    var refreshCount = 0
+    engine.scheduleDelayedRefreshes(after: [50], action: { refreshCount += 1 })
+    #expect(engine.pendingDelayedRefreshTaskCount == 1)
+
+    runtime.onWindowClosed?(engine.windowID, false)
+    #expect(engine.pendingDelayedRefreshTaskCount == 0)
+    try await Task.sleep(for: .milliseconds(100))
+
+    #expect(refreshCount == 0)
+  }
+
   @Test func extensionInstallRefreshUsesBackoffInsteadOfFixedPolling() {
     #expect(
       BrowserEngine.extensionInstallRefreshDelaysMilliseconds == [250, 750, 1_500, 3_000, 4_500])

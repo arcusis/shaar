@@ -611,7 +611,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0151-shaar-headless-cgwindow-registry-quit.patch",
-      "sha256": "bc409d50da0b05d5ada4c45df5bd9aa2de46a58e069d3d0a91359b1aa37bcb66"
+      "sha256": "bc6effc976cf1da080bd8c90db9691b13a0427e5e818572394f3e58ec2f78a3c"
     }
   ],
   "devtoolsFrontend157": {

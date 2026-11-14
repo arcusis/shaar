@@ -111,10 +111,12 @@ diff --git a/chrome/browser/shaar/BUILD.gn b/chrome/browser/shaar/BUILD.gn
      "bookmarks/shaar_bookmarks_unittest.cc",
      "devtools/shaar_devtools_unittest.cc",
      "downloads/shaar_downloads_unittest.cc",
-@@ -415,5 +416,6 @@ test("shaar_layer_unittests") {
+@@ -415,6 +416,8 @@ test("shaar_layer_unittests") {
      "//components/download/public/common:test_support",
      "//components/history/core/browser",
      "//components/os_crypt/common:keychain_password_mac",
 +    "//components/remote_cocoa/browser:browser",
      "//components/os_crypt/async/browser:keychain_key_provider",
      "//components/permissions:test_support",
++    "//components/viz/common",
+     "//net:extras",

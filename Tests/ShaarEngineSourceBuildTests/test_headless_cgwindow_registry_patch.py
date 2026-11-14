@@ -27,6 +27,7 @@ class HeadlessCGWindowRegistryPatchTests(unittest.TestCase):
         self.assertIn("+TEST(ScopedCGWindowIDTest, HeadlessWindowsDoNotEnterRegistry)", patch)
         self.assertIn("+TEST(ScopedCGWindowIDTest, ReplacedOwnerCannotEraseNewOwner)", patch)
         self.assertIn("+TEST(ScopedCGWindowIDTest, MissingOwnerCanBeDestroyed)", patch)
+        self.assertIn('+    "//components/viz/common",', patch)
 
 
 if __name__ == "__main__":

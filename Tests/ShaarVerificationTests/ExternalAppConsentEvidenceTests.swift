@@ -42,4 +42,18 @@ import Testing
       #expect(!ExternalAppConsentProbe.isComplete(incomplete))
     }
   }
+
+  @Test func approvalsAndLaunchesRejectExcessWhileDenialsAllowExtraAttempts() {
+    var tooManyApprovals = completeEvidence()
+    tooManyApprovals.approvedRequests = 3
+    #expect(!ExternalAppConsentProbe.isComplete(tooManyApprovals))
+
+    var tooManyLaunches = completeEvidence()
+    tooManyLaunches.launchCount = 3
+    #expect(!ExternalAppConsentProbe.isComplete(tooManyLaunches))
+
+    var extraDenials = completeEvidence()
+    extraDenials.deniedRequests = 7
+    #expect(ExternalAppConsentProbe.isComplete(extraDenials))
+  }
 }

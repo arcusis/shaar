@@ -282,6 +282,11 @@ final class SiteControlsProbe {
   }
 
   private func report(error: Error?) throws {
+    try Self.reportData(phase: phase, checks: checks, error: error)
+      .write(to: root.appending(path: "\(phase)-site-controls.json"), options: .atomic)
+  }
+
+  static func reportData(phase: String, checks: [String], error: Error?) throws -> Data {
     try JSONSerialization.data(
       withJSONObject: [
         "passed": error == nil, "phase": phase, "checks": checks,
@@ -289,7 +294,7 @@ final class SiteControlsProbe {
         "scope":
           "Site permissions, data clearing, reload modes and renderer restart on an authored loopback page in a disposable profile. HTTPS certificates and the native certificate sheet are not exercised.",
       ], options: [.prettyPrinted, .sortedKeys]
-    ).write(to: root.appending(path: "\(phase)-site-controls.json"), options: .atomic)
+    )
   }
 }
 

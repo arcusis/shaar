@@ -136,6 +136,48 @@ final class LibraryProbe {
     try await wait("initial native library snapshots") {
       self.store.library.bookmarks[a] != nil && self.store.library.bookmarks[b] != nil
     }
+    let chromeBookmark = "https://work.example.test/"
+    let chromeHistory = "https://history.example.test/"
+    let safariBookmark = "https://safari.example.test/"
+    let safariHistory = "https://safari-history.example.test/"
+    if phase == "initial" {
+      let chrome = try await BrowserImport.readOffMain(
+        root.appending(path: "library-import/chrome", directoryHint: .isDirectory),
+        source: .chrome)
+      let safari = try await BrowserImport.readOffMain(
+        root.appending(path: "library-import/safari", directoryHint: .isDirectory),
+        source: .safari)
+      try expect(
+        chrome.bookmarks.map(\.address) == [chromeBookmark]
+          && chrome.history.map(\.address) == [chromeHistory]
+          && safari.bookmarks.map(\.address) == [safariBookmark]
+          && safari.history.map(\.address) == [safariHistory],
+        "Chrome and Safari import fixtures preview their bookmarks and history")
+      guard let chromeTree = store.library.bookmarks[a],
+        let safariTree = store.library.bookmarks[b]
+      else { throw LibraryProbeFailure("Imported profile bookmark roots are missing.") }
+      try await importBatch(chrome, profile: a, otherFolderID: chromeTree.otherID)
+      try await importBatch(safari, profile: b, otherFolderID: safariTree.otherID)
+      try await wait("Chrome and Safari imported Library rows") {
+        self.item(address: chromeBookmark, in: a) != nil
+          && self.hasHistory(chromeHistory, in: a)
+          && self.item(address: safariBookmark, in: b) != nil
+          && self.hasHistory(safariHistory, in: b)
+      }
+      try expect(
+        !store.library.bookmarks[a]!.items.contains { $0.address == safariBookmark }
+          && !store.library.bookmarks[b]!.items.contains { $0.address == chromeBookmark }
+          && !hasHistory(safariHistory, in: a) && !hasHistory(chromeHistory, in: b),
+        "Chrome and Safari imported Library rows stay in their selected profile")
+    } else {
+      try await wait("Chrome and Safari imported Library rows survive restart") {
+        self.item(address: chromeBookmark, in: a) != nil
+          && self.hasHistory(chromeHistory, in: a)
+          && self.item(address: safariBookmark, in: b) != nil
+          && self.hasHistory(safariHistory, in: b)
+      }
+      try expect(true, "Chrome and Safari imported bookmarks and history persist after restart")
+    }
     try expect(
       store.library.watchNotices.isEmpty, "native bookmark/history watchers register successfully")
     let limited = try await runtime.history(forProfileID: a.uuidString, limit: 1)
@@ -359,8 +401,14 @@ final class LibraryProbe {
   private func item(_ id: UUID, in profile: UUID) -> BrowserBookmark? {
     store.library.bookmarks[profile]?.items.first { $0.id == id }
   }
+  private func item(address: String, in profile: UUID) -> BrowserBookmark? {
+    store.library.bookmarks[profile]?.items.first { $0.address == address }
+  }
   private func hasHistory(_ url: URL, in profile: UUID) -> Bool {
-    store.library.history[profile]?.contains { $0.address == url.absoluteString } == true
+    hasHistory(url.absoluteString, in: profile)
+  }
+  private func hasHistory(_ address: String, in profile: UUID) -> Bool {
+    store.library.history[profile]?.contains { $0.address == address } == true
   }
   private func url(_ path: String) -> URL {
     var parts = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
@@ -379,6 +427,21 @@ final class LibraryProbe {
     throw LibraryProbeFailure(
       "Timed out: \(label). \(store.library.notice(profile, section: .bookmarks) ?? store.library.notice(profile, section: .history) ?? "No service notice.")"
     )
+  }
+
+  private func importBatch(
+    _ batch: BrowserImportBatch, profile: UUID, otherFolderID: UUID
+  ) async throws {
+    let succeeded = await withCheckedContinuation { continuation in
+      guard store.library.importBrowserData(
+        batch.items, profile: profile, otherFolderID: otherFolderID,
+        completion: { continuation.resume(returning: $0) })
+      else {
+        continuation.resume(returning: false)
+        return
+      }
+    }
+    try expect(succeeded, "\(batch.source.title) import submits bookmarks and history")
   }
 
   private func document(_ id: UUID) async throws -> [String: Any] {
@@ -486,7 +549,7 @@ final class LibraryProbe {
         "passed": error == nil, "checks": checks,
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
-          "Real engine-owned bookmark/history APIs, MV3 visibility/events, account boundaries, restart, and offscreen native layouts. Actual native shortcuts/menu/dialog/pointer input and private-session behavior are not verified.",
+          "Real engine-owned bookmark/history APIs, Chrome and Safari import persistence, MV3 visibility/events, account boundaries, restart, and offscreen native layouts. Actual native shortcuts/menu/dialog/pointer input and private-session behavior are not verified.",
       ], options: [.prettyPrinted, .sortedKeys]
     )
     .write(to: root.appending(path: "\(phase)-library.json"), options: .atomic)

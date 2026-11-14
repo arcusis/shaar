@@ -19,6 +19,7 @@ from pathlib import Path
 import random
 import signal
 import shutil
+import sqlite3
 import socket
 import struct
 import subprocess
@@ -1834,6 +1835,22 @@ def private_search_has_results(search, expected_host):
             and type(search.get('textLength')) is int and search['textLength'] > 100)
 
 
+def prepare_library_import_fixtures(root):
+    fixtures = Path('Tests/BrowserCoreTests/Fixtures/BrowserImport')
+    profiles = root / 'library-import'
+    chrome = profiles / 'chrome'
+    safari = profiles / 'safari'
+    chrome.mkdir(parents=True)
+    safari.mkdir()
+    shutil.copyfile(fixtures / 'ChromiumBookmarks', chrome / 'Bookmarks')
+    shutil.copyfile(fixtures / 'SafariBookmarks.plist', safari / 'Bookmarks.plist')
+    for sql_name, profile, database_name in (
+            ('ChromiumHistory.sql', chrome, 'History'),
+            ('SafariHistory.sql', safari, 'History.db')):
+        with sqlite3.connect(profile / database_name) as database:
+            database.executescript((fixtures / sql_name).read_text())
+
+
 def main(argv=None):
     options = argument_parser().parse_args(argv)
     split_phase = options.probe_phase is not None
@@ -1901,6 +1918,7 @@ def main(argv=None):
         (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
         (root / ".arcusis-probe").chmod(0o600)
         shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
+        prepare_library_import_fixtures(root)
     private_window_run_id = (
         saved_phase_state.get("privateWindowRunID") if saved_phase_state else
         str(uuid.uuid4()).upper() if options.private_window else None)

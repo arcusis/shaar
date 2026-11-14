@@ -17,10 +17,19 @@ from http.server import ThreadingHTTPServer
 from engine_fixture import Fixture
 
 
+def receipt_output_path(value: str) -> Path:
+    path = Path(value)
+    if path.is_symlink():
+        raise argparse.ArgumentTypeError(f"receipt output must not be a symlink: {path}")
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(f"receipt output parent must not be a symlink: {path.parent}")
+    return path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path)
-    parser.add_argument("--receipt", required=True, type=Path)
+    parser.add_argument("--receipt", required=True, type=receipt_output_path)
     options = parser.parse_args()
     app = options.app.resolve()
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:

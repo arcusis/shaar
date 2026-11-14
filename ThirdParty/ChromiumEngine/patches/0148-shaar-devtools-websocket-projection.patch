@@ -1,0 +1,87 @@
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -324,7 +324,12 @@
+   SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_REGISTRATION = 16,
+   SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_VERSION = 17,
+   SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_ERROR = 18,
+-  SHAAR_DEVTOOLS_PANEL_PERFORMANCE_TIMELINE = 19
++  SHAAR_DEVTOOLS_PANEL_PERFORMANCE_TIMELINE = 19,
++  SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CREATED = 31,
++  SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_HANDSHAKE = 32,
++  SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_FRAME_SENT = 33,
++  SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_FRAME_RECEIVED = 34,
++  SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CLOSED = 35
+ } shaar_devtools_panel_event_id;
+ typedef enum {
+   SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS = 1,
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -224,7 +224,39 @@
+     PutString(&data, "url", request ? request->FindString("url") : nullptr,
+               &result->truncated);
+     PutString(&data, "method", request ? request->FindString("method") : nullptr,
++              &result->truncated);
++  } else if (method == "Network.webSocketCreated") {
++    result->id = SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CREATED;
++    PutString(&data, "requestID", params.FindString("requestId"),
++              &result->truncated);
++    PutString(&data, "url", params.FindString("url"), &result->truncated);
++  } else if (method == "Network.webSocketHandshakeResponseReceived") {
++    result->id = SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_HANDSHAKE;
++    const auto* response = params.FindDict("response");
++    PutString(&data, "requestID", params.FindString("requestId"),
++              &result->truncated);
++    if (response) {
++      if (auto status = response->FindInt("status"))
++        data.Set("status", *status);
++    }
++  } else if (method == "Network.webSocketFrameSent" ||
++             method == "Network.webSocketFrameReceived") {
++    result->id = method == "Network.webSocketFrameSent"
++                     ? SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_FRAME_SENT
++                     : SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_FRAME_RECEIVED;
++    const auto* response = params.FindDict("response");
++    PutString(&data, "requestID", params.FindString("requestId"),
+               &result->truncated);
++    if (response) {
++      if (auto opcode = response->FindInt("opcode"))
++        data.Set("opcode", *opcode);
++      PutString(&data, "payload", response->FindString("payloadData"),
++                &result->truncated);
++    }
++  } else if (method == "Network.webSocketClosed") {
++    result->id = SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CLOSED;
++    PutString(&data, "requestID", params.FindString("requestId"),
++              &result->truncated);
+   } else if (method == "Network.responseReceived") {
+     result->id = SHAAR_DEVTOOLS_PANEL_RESPONSE_RECEIVED;
+     const auto* response = params.FindDict("response");
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -948,6 +948,26 @@
+   EXPECT_FALSE(ProjectPanelEventForTesting(
+       R"({"method":"Network.requestWillBeSent","params":{}})",
+       0, &output));
++}
++
++TEST(ShaarDevToolsPanelTest, ProjectsWebSocketLifecycleAndFrames) {
++  std::string output;
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Network.webSocketCreated","params":{"requestId":"ws-1","url":"ws://example.test/socket","initiator":{"type":"script","stack":{"callFrames":[{"url":"secret"}]}}}})",
++      42, &output));
++  EXPECT_NE(std::string::npos, output.find("ws://example.test/socket"));
++  EXPECT_EQ(std::string::npos, output.find("secret"));
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Network.webSocketHandshakeResponseReceived","params":{"requestId":"ws-1","response":{"status":101,"headers":{"Set-Cookie":"secret"}}}})",
++      42, &output));
++  EXPECT_NE(std::string::npos, output.find("101"));
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Network.webSocketFrameReceived","params":{"requestId":"ws-1","response":{"opcode":1,"payloadData":"echo-ready"}}})",
++      42, &output));
++  EXPECT_NE(std::string::npos, output.find("echo-ready"));
++  EXPECT_TRUE(ProjectPanelEventForTesting(
++      R"({"method":"Network.webSocketClosed","params":{"requestId":"ws-1","timestamp":1}})",
++      42, &output));
+ }
+ 
+ TEST(ShaarDevToolsPanelTest, ClipsTextAndRejectsUnboundedProtocolInput) {

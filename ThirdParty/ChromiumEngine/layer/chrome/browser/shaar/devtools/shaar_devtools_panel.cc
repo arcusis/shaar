@@ -225,6 +225,38 @@ bool Project(std::string_view method, const base::DictValue& params,
               &result->truncated);
     PutString(&data, "method", request ? request->FindString("method") : nullptr,
               &result->truncated);
+  } else if (method == "Network.webSocketCreated") {
+    result->id = SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CREATED;
+    PutString(&data, "requestID", params.FindString("requestId"),
+              &result->truncated);
+    PutString(&data, "url", params.FindString("url"), &result->truncated);
+  } else if (method == "Network.webSocketHandshakeResponseReceived") {
+    result->id = SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_HANDSHAKE;
+    const auto* response = params.FindDict("response");
+    PutString(&data, "requestID", params.FindString("requestId"),
+              &result->truncated);
+    if (response) {
+      if (auto status = response->FindInt("status"))
+        data.Set("status", *status);
+    }
+  } else if (method == "Network.webSocketFrameSent" ||
+             method == "Network.webSocketFrameReceived") {
+    result->id = method == "Network.webSocketFrameSent"
+                     ? SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_FRAME_SENT
+                     : SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_FRAME_RECEIVED;
+    const auto* response = params.FindDict("response");
+    PutString(&data, "requestID", params.FindString("requestId"),
+              &result->truncated);
+    if (response) {
+      if (auto opcode = response->FindInt("opcode"))
+        data.Set("opcode", *opcode);
+      PutString(&data, "payload", response->FindString("payloadData"),
+                &result->truncated);
+    }
+  } else if (method == "Network.webSocketClosed") {
+    result->id = SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CLOSED;
+    PutString(&data, "requestID", params.FindString("requestId"),
+              &result->truncated);
   } else if (method == "Network.responseReceived") {
     result->id = SHAAR_DEVTOOLS_PANEL_RESPONSE_RECEIVED;
     const auto* response = params.FindDict("response");

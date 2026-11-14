@@ -215,6 +215,25 @@ struct ShaarExtensionsAdapterTests {
     }
   }
 
+  @Test func extensionBooleanFieldsRejectNumericSubstitutes() async throws {
+    let fake = FakeExtensionsTransport("")
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
+    let fields = ["enabled", "mayDisable", "incognitoEnabled", "fromWebStore"]
+    for field in fields {
+      var row: [String: Any] = [
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Extension", "version": "1",
+        "enabled": true, "mayDisable": true, "incognitoEnabled": false, "source": 4,
+        "fromWebStore": true,
+      ]
+      row[field] = 1
+      let data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "extensions": [row]])
+      await fake.setReply(try #require(String(data: data, encoding: .utf8)))
+      await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+        _ = try await adapter.list(profileID: UUID())
+      }
+    }
+  }
+
   @Test func extensionListRejectsBooleanSchemaVersion() async throws {
     let fake = FakeExtensionsTransport(#"{"schemaVersion":true,"extensions":[]}"#)
     await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("unsupported schema version"))

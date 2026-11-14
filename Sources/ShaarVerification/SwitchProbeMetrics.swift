@@ -7,12 +7,14 @@ import Foundation
 
 struct SwitchProbeMetrics: Codable {
   static let expectedSwitchCount = 20
-  static let expectedSpaceWarmupCount = 2
+  static let expectedSpaceWarmupTabCount = 2
+  static let expectedSpaceWarmupPassCount = 2
+  static let expectedSpaceWarmupCount = expectedSpaceWarmupTabCount * expectedSpaceWarmupPassCount
   static let latencyBudgetMilliseconds = 100.0
   static let warmupDiscardReason =
-    "The first selection of each same-profile tab can include one-time native WebContents activation and first-display setup. Two warm-up switches are measured and reported separately, then excluded from the steady-state Space p95."
+    "The first selections of each same-profile tab can include one-time native WebContents activation and first-display setup. Two complete warm-up passes are measured and reported separately, then excluded from the steady-state Space p95."
   static let measurementScope =
-    "Each phase records two same-profile Space warm-up switches separately, then 20 measured same-profile Space switches and 20 cross-profile switches. Latency is Host-plus-IPC time from native store selection through native selection acknowledgment; measured p95 must be at most 100 ms. Each sample separately records synchronous store update, native selection acknowledgment, and time to the selected page's next requestAnimationFrame after its displayed-WebContents audit. Authored JavaScript snapshots separately verify account, document, and session continuity and are excluded from latency. Excludes physical display scanout, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
+    "Each phase records two complete same-profile Space warm-up passes separately, then 20 measured same-profile Space switches and 20 cross-profile switches. Latency is Host-plus-IPC time from native store selection through native selection acknowledgment; measured p95 must be at most 100 ms. Each sample separately records synchronous store update, native selection acknowledgment, and time to the selected page's next requestAnimationFrame after its displayed-WebContents audit. Authored JavaScript snapshots separately verify account, document, and session continuity and are excluded from latency. Excludes physical display scanout, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
 
   enum SwitchKind: String, Codable {
     case space
@@ -73,7 +75,7 @@ struct SwitchProbeMetrics: Codable {
     }
   }
 
-  let schema = 4
+  let schema = 5
   let phase: String
   let measurementScope = Self.measurementScope
   let expectedSampleCount = Self.expectedSwitchCount
@@ -100,6 +102,16 @@ struct SwitchProbeMetrics: Codable {
       summary.p95Milliseconds ?? .infinity, slowest.iteration, slowest.latencyMilliseconds,
       slowest.storeUpdateMilliseconds, slowest.engineSelectionMilliseconds,
       slowest.firstPaintMilliseconds)
+  }
+
+  static func spaceWarmupSequence(tabIDs: [String], selectedTabID: String?) -> [String]? {
+    guard tabIDs.count == expectedSpaceWarmupTabCount,
+      Set(tabIDs).count == expectedSpaceWarmupTabCount
+    else { return nil }
+    let orderedTabIDs =
+      tabIDs.filter { $0 != selectedTabID }
+      + tabIDs.filter { $0 == selectedTabID }
+    return (0..<expectedSpaceWarmupPassCount).flatMap { _ in orderedTabIDs }
   }
 
   var spaceSwitchWithinBudget: Bool {

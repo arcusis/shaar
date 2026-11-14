@@ -234,6 +234,27 @@ struct ShaarNavigationAdapterTests {
     }
   }
 
+  @Test func snapshotBooleanFieldsRejectNumericValues() {
+    let base =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"committed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false}"#
+    for field in ["loading", "canGoBack", "canGoForward", "sameDocument"] {
+      for numeric in ["0", "1"] {
+        let payload = base.replacingOccurrences(
+          of: #""\#(field)":false"#, with: #""\#(field)":\#(numeric)"#)
+        #expect(throws: ShaarEngineError.self) {
+          try ShaarNavigationSnapshot.decode(Data(payload.utf8))
+        }
+      }
+    }
+    let failed =
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":4,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
+    let numericMainFrame = failed.replacingOccurrences(
+      of: #""isMainFrame":true"#, with: #""isMainFrame":1"#)
+    #expect(throws: ShaarEngineError.self) {
+      try ShaarNavigationSnapshot.decode(Data(numericMainFrame.utf8))
+    }
+  }
+
   @Test func shippingChoiceUsesShaar() {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)
     #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) != nil)

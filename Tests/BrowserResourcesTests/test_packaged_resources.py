@@ -73,6 +73,11 @@ class PackagedResourceSourceTests(unittest.TestCase):
 let value = 1
 """
         self.assertEqual(check.violations_in_source(source, "Sources/BrowserCore/Example.swift"), [])
+    def test_module_references_inside_single_and_multiline_block_comments_are_ignored(self):
+        source = "/* Bundle.module */\n/* explanation\n /* nested Bundle.module */\n*/\nlet url = Bundle.module"
+        violations = check.violations_in_source(source, "Sources/BrowserCore/Example.swift")
+        self.assertEqual(len(violations), 1)
+        self.assertIn(":5:", violations[0])
 
     def test_module_reference_in_interpolated_string_text_is_ignored(self):
         source = 'let message = "Bundle.module is text, not code: \\(label)"'

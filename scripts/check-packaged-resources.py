@@ -139,18 +139,41 @@ def code_lines(lines: list[str]) -> list[str]:
 
 
 def violations_in_source(text: str, path: str) -> list[str]:
-    lines = text.splitlines()
-    code = code_lines(lines)
+    lines = code_lines(text.splitlines())
     errors = []
-    for index, line in enumerate(code):
+    for index, line in enumerate(lines):
         if not MODULE_TOKEN.search(line):
             continue
-        if "Bundle.module" in line or not fallback_only(line, code, index):
+        if "Bundle.module" in line or not fallback_only(line, lines, index):
             errors.append(
                 f"{path}:{index + 1}: Bundle.module in a shipping target must be the "
                 "development fallback passed to PackagedResourceBundle.resolve"
             )
     return errors
+
+
+def without_block_comments(code: str) -> str:
+    masked = []
+    depth = 0
+    index = 0
+    while index < len(code):
+        if depth and code.startswith("/*", index):
+            depth += 1
+            masked.extend("  ")
+            index += 2
+        elif depth and code.startswith("*/", index):
+            depth -= 1
+            masked.extend("  ")
+            index += 2
+        elif not depth and code.startswith("/*", index):
+            depth = 1
+            masked.extend("  ")
+            index += 2
+        else:
+            character = code[index]
+            masked.append("\n" if depth and character == "\n" else " " if depth else character)
+            index += 1
+    return "".join(masked)
 
 def fallback_only(line: str, lines: list[str], index: int) -> bool:
     window = "\n".join(lines[max(0, index - 5) : index + 1])

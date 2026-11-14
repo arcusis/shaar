@@ -118,6 +118,11 @@ import Testing
     #expect(
       !PrivateMultiTabEvidence.liveSearch(
         ["host": "search.example", "ready": "complete", "textLength": 100], host: "search.example"))
+    for invalidLength: Any in [true, 101.5, "101"] {
+      #expect(!PrivateMultiTabEvidence.liveSearch([
+        "host": "search.example", "ready": "complete", "textLength": invalidLength,
+      ], host: "search.example"))
+    }
   }
 
   @Test func bitmapLightSamplesDistinguishWhiteFromBlack() throws {

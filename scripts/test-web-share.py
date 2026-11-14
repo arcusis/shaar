@@ -34,11 +34,15 @@ def write_receipt(path: Path, receipt: dict) -> None:
 
 
 def copy_screenshot(source: Path, destination: Path) -> None:
+    write_screenshot(destination, source.read_bytes())
+
+
+def write_screenshot(destination: Path, data: bytes) -> None:
     if destination.is_symlink():
         raise ValueError(f"web-share screenshot path must not be a symlink: {destination}")
     if destination.exists() and not destination.is_file():
         raise ValueError(f"web-share screenshot path is not a regular file: {destination}")
-    write_output(destination, source.read_bytes())
+    write_output(destination, data)
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -88,6 +92,13 @@ def write_output(path, data):
         output.write(data)
 
 
+def read_probe_file(path):
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as source:
+        return source.read()
+
+
 def run_probe(command, environment, timeout):
     try:
         return subprocess.run(
@@ -107,8 +118,8 @@ def run_probe(command, environment, timeout):
 
 def read_evidence(path):
     try:
-        return json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
+        return json.loads(read_probe_file(path))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
 
 
@@ -148,11 +159,15 @@ def main():
                  "--probe-output", str(report), "--probe-data-dir", str(root),
                  "--probe-url", page], environment, timeout=90)
             evidence = read_evidence(report) if report.is_file() else None
-            shots = {"share-sheet.png": (root / "share-sheet.png").is_file()}
+            source = root / "share-sheet.png"
+            try:
+                screenshot_data = read_probe_file(source)
+            except OSError:
+                screenshot_data = None
+            shots = {"share-sheet.png": screenshot_data is not None}
             if evidence and evidence.get("passed"):
-                source = root / "share-sheet.png"
-                if source.is_file():
-                    copy_screenshot(source, screenshot)
+                if screenshot_data is not None:
+                    write_screenshot(screenshot, screenshot_data)
         server.shutdown()
     crashes = sorted(crash_names() - before)
     receipt = {

@@ -23,10 +23,11 @@ class WebShareProbeOutputPathTests(unittest.TestCase):
         source = SCRIPT.read_text()
         self.assertIn("validate_output_destination(options.receipt)", source)
         self.assertIn("validate_output_destination(screenshot)", source)
-        self.assertIn("write_output(screenshot,", source)
-        self.assertIn("write_output(options.receipt,", source)
+        self.assertIn("write_screenshot(screenshot, screenshot_data)", source)
+        self.assertIn("write_receipt(options.receipt, receipt)", source)
         self.assertIn("process = run_probe(", source)
         self.assertIn("evidence = read_evidence(report)", source)
+        self.assertIn("screenshot_data = read_probe_file(source)", source)
 
     def assert_symlink_output_is_rejected(self, name, data):
         with tempfile.TemporaryDirectory() as temporary:
@@ -71,6 +72,29 @@ class WebShareProbeOutputPathTests(unittest.TestCase):
             report.write_text('{"passed":')
 
             self.assertIsNone(PROBE.read_evidence(report))
+
+    def test_report_symlink_is_not_followed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "private.json"
+            target.write_text('{"passed": true}')
+            report = root / "report.json"
+            report.symlink_to(target)
+
+            self.assertIsNone(PROBE.read_evidence(report))
+            self.assertEqual(target.read_text(), '{"passed": true}')
+
+    def test_screenshot_source_symlink_is_not_read(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "private.png"
+            target.write_bytes(b"private data")
+            screenshot = root / "share-sheet.png"
+            screenshot.symlink_to(target)
+
+            with self.assertRaises(OSError):
+                PROBE.read_probe_file(screenshot)
+            self.assertEqual(target.read_bytes(), b"private data")
 
 
 if __name__ == "__main__":

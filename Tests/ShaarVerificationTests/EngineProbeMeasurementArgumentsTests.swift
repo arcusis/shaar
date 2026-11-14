@@ -63,39 +63,4 @@ import Testing
         arguments: ["--probe-measure-tabs", "10", "--probe-localization"],
         conflictingFlags: modes))
   }
-
-  @Test func measurementModesRequireTheirTabCountAndEagerSleepingBase() {
-    #expect(
-      EngineProbeMeasurementArguments.modeDependencyFailure(arguments: [], tabCount: nil) == nil)
-    #expect(
-      EngineProbeMeasurementArguments.modeDependencyFailure(
-        arguments: ["--probe-measure-eager"], tabCount: nil)
-        == "Eager measurement requires --probe-measure-tabs.")
-    #expect(
-      EngineProbeMeasurementArguments.modeDependencyFailure(
-        arguments: ["--probe-measure-inspector"], tabCount: nil)
-        == "Inspector measurement requires --probe-measure-tabs.")
-    #expect(
-      EngineProbeMeasurementArguments.modeDependencyFailure(
-        arguments: ["--probe-measure-sleeping"], tabCount: nil)
-        == "Sleeping measurement requires eagerly loaded measurement tabs.")
-    #expect(
-      EngineProbeMeasurementArguments.modeDependencyFailure(
-        arguments: ["--probe-measure-sleeping"], tabCount: 10)
-        == "Sleeping measurement requires eagerly loaded measurement tabs.")
-    #expect(
-      EngineProbeMeasurementArguments.modeDependencyFailure(
-        arguments: ["--probe-measure-sleeping", "--probe-measure-eager"], tabCount: 10) == nil)
-  }
-
-  @Test func measurementModeIgnoresItsOwnFlagButRejectsOtherProbeModes() {
-    let modes = ["--probe-measure-tabs", "--probe-localization", "--probe-basic-browsing"]
-    #expect(
-      !EngineProbeMeasurementArguments.conflictsWithOtherMode(
-        arguments: ["--probe-measure-tabs", "10"], conflictingFlags: modes))
-    #expect(
-      EngineProbeMeasurementArguments.conflictsWithOtherMode(
-        arguments: ["--probe-measure-tabs", "10", "--probe-localization"],
-        conflictingFlags: modes))
-  }
 }

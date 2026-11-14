@@ -12,6 +12,10 @@ import Testing
 
 @Suite @MainActor
 struct PageFindTests {
+  @Test func findBarCloseButtonUsesTheCancelShortcut() {
+    #expect(PageFindBar.closeShortcut == .cancelAction)
+  }
+
   private func store() -> BrowserStore {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com/page")!))

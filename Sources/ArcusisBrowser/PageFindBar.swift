@@ -5,6 +5,8 @@
 import SwiftUI
 
 struct PageFindBar: View {
+  static let closeShortcut = KeyboardShortcut.cancelAction
+
   let store: BrowserStore
   let state: PageFindState
   @FocusState private var queryIsFocused: Bool
@@ -48,6 +50,7 @@ struct PageFindBar: View {
       .accessibilityLabel(PanelsL10n.string("Next match"))
       .help(PanelsL10n.string("Next match (Command-G)"))
       Button(PanelsL10n.string("Done")) { close() }
+        .keyboardShortcut(Self.closeShortcut)
         .help(PanelsL10n.string("Close find (Escape)"))
     }
     .controlSize(.small)

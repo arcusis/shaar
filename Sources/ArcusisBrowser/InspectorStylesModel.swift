@@ -469,7 +469,9 @@ final class InspectorStylesModel {
   }
 
   func edit(property: String, value: String, important: Bool) async {
-    guard !busy, let inspector, let selection = inspector.selection, selection.locked else {
+    guard !Task.isCancelled, !busy, let inspector, let selection = inspector.selection,
+      selection.locked
+    else {
       return
     }
     do {

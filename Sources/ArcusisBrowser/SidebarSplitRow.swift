@@ -17,6 +17,14 @@ struct SidebarSplitRow: View {
 
   static let titleMinimumWidth: CGFloat = 64
 
+  static func keyboardActivation(
+    for key: KeyEquivalent, action: () -> Void
+  ) -> KeyPress.Result {
+    guard key == .return || key == .space else { return .ignored }
+    action()
+    return .handled
+  }
+
   static func showsTitles(
     totalWidth: CGFloat, segmentCount: Int, hasStackDragHandle: Bool
   ) -> Bool {
@@ -102,6 +110,10 @@ struct SidebarSplitRow: View {
     .accessibilityAddTraits(raised ? [.isButton, .isSelected] : .isButton)
     .accessibilityAction { onSelect(segment.id) }
     .accessibilityAction(named: ShellL10n.text("Close tab")) { onClose(segment.id) }
+    .focusable()
+    .onKeyPress(keys: [.return, .space], phases: .down) { press in
+      Self.keyboardActivation(for: press.key) { onSelect(segment.id) }
+    }
     .sidebarPageMotion(
       id: segment.id, reduceMotion: reduceMotion || accessibilityOverrides.reduceMotion == true
     )

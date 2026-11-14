@@ -12,6 +12,10 @@ import XCTest
 
 @MainActor
 final class ProfileExtensionsSectionTests: XCTestCase {
+  func testExtensionRowNamesAreVoiceOverHeadings() {
+    XCTAssertEqual(ProfileExtensionsSection.extensionRowHeadingTraits, .isHeader)
+  }
+
   func testProfileNamesFollowShaarsSelectedLanguageOrder() {
     let english = UUID()
     let hebrew = UUID()

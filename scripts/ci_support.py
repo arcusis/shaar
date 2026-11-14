@@ -139,7 +139,7 @@ class Commands:
         self.write_reports()
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
-            with Path(summary).open("a") as output:
+            with output_file(Path(summary)).open("a") as output:
                 output.write(f"### {self.directory.name}\n\nCommit: `{os.environ.get('GITHUB_SHA', 'local')}`\n\n")
                 output.write("| Check | Exit | Seconds |\n| --- | ---: | ---: |\n")
                 for item in self.results:

@@ -42,7 +42,7 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     XCTAssertEqual(count, 10)
   }
 
-  func testFolderPathLookupBenchmark() throws {
+  func testFolderPathLookupPreservesMatchingAncestry() throws {
     let profile = BrowserProfile(name: "Daily")
     let folderIDs = (0..<150).map { _ in UUID() }
     let folders = folderIDs.enumerated().map { index, id in
@@ -63,9 +63,15 @@ final class LibrarySpacesOverviewTests: XCTestCase {
 
     let start = ContinuousClock.now
     for _ in 0..<10 {
-      _ = LibrarySpacesOverviewModel.cards(in: session, query: "Needle")
+      _ = LibrarySpacesOverviewModel.cards(in: session, query: "Folder 149")
     }
     print("librarySpacesFolderPathBenchmark: \(start.duration(to: .now))")
+
+    let card = try XCTUnwrap(LibrarySpacesOverviewModel.cards(in: session, query: "Folder 149").first)
+    let expectedItemIDs = Set(
+      folderIDs.map { "folder-\($0)" }
+        + [149, 299, 449].map { "tab-\(tabs[$0].id)" })
+    XCTAssertEqual(Set(card.items.map(\.id)), expectedItemIDs)
   }
 
   func testTodayFoldersAndNestedTabsAppearInSpaceCard() throws {

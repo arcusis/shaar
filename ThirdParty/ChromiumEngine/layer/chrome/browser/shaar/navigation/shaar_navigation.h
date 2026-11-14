@@ -40,6 +40,9 @@ shaar_error_code Navigate(content::WebContents* contents,
 shaar_error_code Go(content::NavigationController* controller, bool forward);
 shaar_error_code Reload(content::NavigationController* controller,
                         bool bypass_cache);
+// A reload requested while a navigation is pending restarts that destination
+// instead of falling back to the last committed entry.
+GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url);
 shaar_error_code Stop(content::WebContents* contents);
 std::string PageReadableURL(const GURL& url);
 

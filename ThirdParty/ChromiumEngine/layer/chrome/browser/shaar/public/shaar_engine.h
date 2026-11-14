@@ -229,6 +229,8 @@ typedef enum {
   // Testing only: inspect a popup owned by the selected fixture tab.
   SHAAR_OP_PROBE_POPUP_EVALUATE = 1095,
   SHAAR_OP_PROBE_POPUP_CAPTURE = 1096,
+  // Testing only: send a native wheel event to an authored fixture element.
+  SHAAR_OP_PROBE_TRUSTED_SCROLL = 1097,
   // END devtools operation IDs.
 
   // BEGIN media

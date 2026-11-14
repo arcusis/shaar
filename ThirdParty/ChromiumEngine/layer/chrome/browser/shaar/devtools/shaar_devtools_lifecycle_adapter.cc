@@ -17,6 +17,9 @@ extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
                      &shaar::devtools::HandleDevToolsOperation);
   registry->Register(SHAAR_OP_PROBE_TRUSTED_CLICK, SHAAR_OP_PROBE_NODE_LIVE,
                      &shaar::devtools::HandleDevToolsOperation);
+  registry->Register(SHAAR_OP_PROBE_TRUSTED_SCROLL,
+                     SHAAR_OP_PROBE_TRUSTED_SCROLL,
+                     &shaar::devtools::HandleDevToolsOperation);
   registry->Register(SHAAR_OP_PROBE_POPUP_EVALUATE, SHAAR_OP_PROBE_POPUP_CAPTURE,
                      &shaar::devtools::HandleDevToolsOperation);
   registry->Register(SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL,

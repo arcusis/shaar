@@ -75,6 +75,10 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertEqual(PROBE.scenario_result(passed, 0, False, []), "pass")
         empty = {"passed": True, "rows": []}
         self.assertEqual(PROBE.scenario_result(empty, 0, False, []), "fail")
+        unknown = {"passed": True, "rows": [{"status": "skipped"}]}
+        self.assertEqual(PROBE.scenario_result(unknown, 0, False, []), "fail")
+        malformed = {"passed": True, "rows": [None]}
+        self.assertEqual(PROBE.scenario_result(malformed, 0, False, []), "fail")
 
     def test_deliberate_renderer_kill_matches_pid_and_time(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)

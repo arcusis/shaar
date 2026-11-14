@@ -1580,6 +1580,24 @@ class EngineTransferTests(unittest.TestCase):
 
 
 class SwiftExtractionTests(unittest.TestCase):
+    def test_cli_rejects_input_named_coverage_json_without_overwriting_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = root / "coverage.json"
+            original = json.dumps({"#select": {"tuples": [[{
+                "label": str(root / "Sources/App.swift")
+            }]]}})
+            report.write_text(original, encoding="utf-8")
+            error_output = io.StringIO()
+            with (patch.object(EXTRACTION, "ROOT", root),
+                  patch.object(EXTRACTION, "swift_source_files", return_value={"Sources/App.swift"}),
+                  patch.object(sys, "argv", ["check-codeql-extraction.py", str(report)]),
+                  patch.object(sys, "stderr", error_output)):
+                status = EXTRACTION.main()
+            self.assertEqual(status, 2)
+            self.assertIn("input and coverage output paths must differ", error_output.getvalue())
+            self.assertEqual(report.read_text(encoding="utf-8"), original)
+
     def test_cli_reports_malformed_json_without_name_error(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

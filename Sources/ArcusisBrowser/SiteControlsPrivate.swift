@@ -119,11 +119,15 @@ struct PrivateSiteControlsButton: View {
 }
 
 struct PrivateSiteControlsPanel: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
+
   let model: PrivateSiteControlsModel
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      ShellL10n.text("Private site controls").font(.headline)
+      ShellL10n.text("Private site controls")
+        .font(.headline)
+        .accessibilityAddTraits(Self.headingTraits)
       Text(model.origin)
         .font(.caption)
         .foregroundStyle(.secondary)

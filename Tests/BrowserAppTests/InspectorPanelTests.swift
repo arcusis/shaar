@@ -14,6 +14,21 @@ import Testing
     #expect(InspectorPanel.titleAccessibilityTraits.contains(.isHeader))
   }
 
+  @Test func inspectorCopyControlsRevealForVoiceOverFocus() {
+    #expect(
+      InspectorCopyButtonVisibility.isVisible(
+        hovered: false, keyboardFocused: false, accessibilityFocused: true))
+    #expect(
+      InspectorCopyButtonVisibility.isVisible(
+        hovered: true, keyboardFocused: false, accessibilityFocused: false))
+    #expect(
+      InspectorCopyButtonVisibility.isVisible(
+        hovered: false, keyboardFocused: true, accessibilityFocused: false))
+    #expect(
+      !InspectorCopyButtonVisibility.isVisible(
+        hovered: false, keyboardFocused: false, accessibilityFocused: false))
+  }
+
   init() { _ = NSApplication.shared }
 
   @Test func collapsedInspectorSectionsPointTowardTheLogicalCenterInBothDirections() {

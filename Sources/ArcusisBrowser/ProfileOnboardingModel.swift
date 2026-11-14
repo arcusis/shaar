@@ -184,8 +184,11 @@ final class ProfileOnboardingModel {
       outcome = .created(id)
       actions.close(.created(id))
     } catch {
-      failure = SettingsL10n.format(
-        "The profile could not be created. %@", .string(error.localizedDescription))
+      failure = Self.creationFailure()
     }
+  }
+
+  static func creationFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string("Could not create the profile. Try again.", table: "Settings", language: language)
   }
 }

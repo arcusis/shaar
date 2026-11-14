@@ -177,11 +177,19 @@ private struct CreationFailure: Error {}
     advanceToAccount(model)
     model.skip()
     model.continueToNext()
-    #expect(model.failure != nil && model.outcome == nil && recorder.outcomes.isEmpty)
+    #expect(
+      model.failure == SettingsL10n.string("Could not create the profile. Try again.")
+        && model.outcome == nil && recorder.outcomes.isEmpty)
     recorder.creationError = nil
     model.continueToNext()
     #expect(recorder.drafts.count == 2 && recorder.signIns.isEmpty)
     #expect(recorder.outcomes == [.created(recorder.createdID)])
+  }
+
+  @Test func profileCreationFailureHasNaturalHebrewCopy() {
+    #expect(
+      ProfileOnboardingModel.creationFailure(language: .hebrew)
+        == "לא ניתן ליצור את הפרופיל. כדאי לנסות שוב.")
   }
 
   private func advanceToAccount(_ model: ProfileOnboardingModel) {

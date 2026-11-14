@@ -1660,7 +1660,9 @@ enum EngineProbeMeasurementTabCount: Equatable {
   private static let allowed: Set<Int> = [1, 10, 30, 50, 100]
 
   static func parse(arguments: [String]) -> Self {
-    guard let index = arguments.firstIndex(of: "--probe-measure-tabs") else { return .absent }
+    let indexes = arguments.indices.filter { arguments[$0] == "--probe-measure-tabs" }
+    guard !indexes.isEmpty else { return .absent }
+    guard indexes.count == 1, let index = indexes.first else { return .invalid }
     guard arguments.indices.contains(index + 1),
       let count = Int(arguments[index + 1]), allowed.contains(count)
     else { return .invalid }

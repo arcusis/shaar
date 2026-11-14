@@ -15,6 +15,10 @@ import Testing
         == .invalid)
     #expect(
       EngineProbeMeasurementTabCount.parse(arguments: ["--probe-measure-tabs", "12"]) == .invalid)
+    #expect(
+      EngineProbeMeasurementTabCount.parse(
+        arguments: ["--probe-measure-tabs", "10", "--probe-measure-tabs", "50"])
+        == .invalid)
   }
 
   @Test func onlySupportedFootprintCountsAreAccepted() {

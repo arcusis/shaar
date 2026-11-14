@@ -127,22 +127,26 @@ def main() -> int:
     options = parser.parse_args()
     sys.path.insert(0, str(REPOSITORY_ROOT))
     entries = sorted(TESTS_ROOT.iterdir())
-    symlinked_directory = next((path for path in entries if path.is_symlink()), None)
-    if symlinked_directory is not None:
-        print(f"Python test directory must not be a symlink: {symlinked_directory}", file=sys.stderr)
-        return 1
-    test_directories = [path for path in entries if path.is_dir()]
+    symlinked_directories = [path for path in entries if path.is_symlink()]
+    test_directories = [path for path in entries if path.is_dir() and not path.is_symlink()]
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
-    discovered_files = 0
+    discovered_files = len(symlinked_directories)
+    for path in symlinked_directories:
+        suite.addTest(ImportFailureTest(
+            path, ValueError(f"Python test directory must not be a symlink: {path}")
+        ))
 
     for test_directory in test_directories:
         test_files = sorted(test_directory.glob("test_*.py"))
-        symlinked_file = next((path for path in test_files if path.is_symlink()), None)
-        if symlinked_file is not None:
-            print(f"Python test file must not be a symlink: {symlinked_file}", file=sys.stderr)
-            return 1
-        if not test_files:
+        symlinked_files = [path for path in test_files if path.is_symlink()]
+        for path in symlinked_files:
+            suite.addTest(ImportFailureTest(
+                path, ValueError(f"Python test file must not be a symlink: {path}")
+            ))
+        test_files = [path for path in test_files if not path.is_symlink()]
+        discovered_files += len(symlinked_files)
+        if not test_files and not symlinked_files:
             continue
         discovered_files += len(test_files)
         for test_file in test_files:

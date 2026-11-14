@@ -62,6 +62,14 @@ class PipelineGateTests(unittest.TestCase):
         self.assertEqual(GATE.parse_needs('{"engine": {"result": "success"}}'),
                          {"engine": {"result": "success"}})
 
+    def test_ci_gate_reports_invalid_needs_without_traceback(self):
+        with patch.dict(os.environ, {"CI_NEEDS": "[]"}, clear=True), \
+                patch("sys.stderr", new=io.StringIO()) as errors:
+            self.assertEqual(GATE.main(), 1)
+        self.assertIn("CI gate error:", errors.getvalue())
+        self.assertIn("CI_NEEDS must be a JSON object", errors.getvalue())
+        self.assertNotIn("Traceback", errors.getvalue())
+
     def test_ci_evidence_collection_runs_after_failure_but_not_cancellation(self):
         action = (ROOT / ".github/actions/ci-evidence/action.yml").read_text()
         collector = action.split("    - name: Collect scoped native probe reports\n", 1)[1]

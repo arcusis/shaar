@@ -8,6 +8,7 @@
 import json
 import os
 from pathlib import Path
+import sys
 
 
 def advisory_stages(raw: str | None) -> set[str]:
@@ -62,7 +63,11 @@ def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False,
 
 
 def main() -> int:
-    needs = parse_needs(os.environ["CI_NEEDS"])
+    try:
+        needs = parse_needs(os.environ["CI_NEEDS"])
+    except (KeyError, ValueError) as error:
+        print(f"CI gate error: {error}", file=sys.stderr)
+        return 1
     errors = gate_errors(needs, os.environ["CI_FULL"] == "true", os.environ["CI_NIGHTLY"] == "true",
                          os.environ.get("CI_WEBSITE") == "true",
                          os.environ.get("CI_BROWSING") == "true",

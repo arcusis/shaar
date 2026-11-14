@@ -5,6 +5,7 @@
 import SwiftUI
 
 struct JavaScriptDialogSheet: View {
+  static let titleAccessibilityTraits: AccessibilityTraits = .isHeader
   let request: JavaScriptDialogRequest
   let store: BrowserStore
   @State private var input: String
@@ -18,6 +19,7 @@ struct JavaScriptDialogSheet: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       Text(title).font(.title2.weight(.semibold))
+        .accessibilityAddTraits(Self.titleAccessibilityTraits)
       Text(request.origin).font(.callout).foregroundStyle(.secondary)
       if request.kind != .beforeUnload && !request.message.isEmpty {
         Text(request.message).textSelection(.enabled)

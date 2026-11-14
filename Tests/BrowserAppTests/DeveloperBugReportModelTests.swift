@@ -3,12 +3,43 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import BrowserCore
+import ChromiumBridge
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct DeveloperBugReportModelTests {
+  @Test func closingModelDuringArchiveDiscardsTheLateReport() async throws {
+    var session = BrowserSession.fresh()
+    let openedTabID = session.open(URL(string: "https://example.test/report")!)
+    let tabID = try #require(openedTabID)
+    let store = BrowserStore(session: session)
+    let runtime = BugReportModelRuntime()
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), windowID: "report-window", store: store)
+    defer { engine.suspensionTask?.cancel() }
+    runtime.tabWindows[tabID.uuidString] = engine.windowID
+    let target = SiteControlTarget(
+      tabID: tabID, profileID: try #require(store.session.profileID(forTabID: tabID)),
+      url: try #require(store.session.page(forTabID: tabID)?.tab.url))
+    let model = DeveloperPageModel(target: target, engine: engine)
+    let archive = PendingBugReportArchive()
+    let output = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    model.bugReportArchiveWriter = { _, _ in try await archive.save(output) }
+
+    let report = Task { await model.createBugReport() }
+    await archive.waitUntilStarted()
+    model.close()
+    await archive.complete()
+
+    #expect(await report.value == nil)
+    #expect(model.reportURL == nil)
+    #expect(model.reportFailure == nil)
+    #expect(store.sheet == nil)
+  }
+
   @Test func closedModelDoesNotStartBugReport() async throws {
     let model = DeveloperPageModel(
       target: SiteControlTarget(
@@ -67,5 +98,66 @@ struct DeveloperBugReportModelTests {
       #expect(!value.contains(secret), "\(secret)")
     }
     #expect(value.contains("https://report.localhost/callback"))
+  }
+}
+
+private actor PendingBugReportArchive {
+  private var continuation: CheckedContinuation<URL, any Error>?
+  private var startedContinuation: CheckedContinuation<Void, Never>?
+  private var started = false
+  private var output: URL?
+
+  func save(_ output: URL) async throws -> URL {
+    try await withCheckedThrowingContinuation { continuation in
+      self.continuation = continuation
+      self.output = output
+      started = true
+      startedContinuation?.resume()
+      startedContinuation = nil
+    }
+  }
+
+  func waitUntilStarted() async {
+    guard !started else { return }
+    await withCheckedContinuation { startedContinuation = $0 }
+  }
+
+  func complete() {
+    guard let continuation, let output else { return }
+    self.continuation = nil
+    self.output = nil
+    continuation.resume(returning: output)
+  }
+}
+
+@MainActor
+private final class BugReportModelRuntime: ARCChromiumRuntime {
+  nonisolated(unsafe) var tabWindows: [String: String] = [:]
+
+  override func windowID(forTabID tabID: String) -> String? { tabWindows[tabID] }
+  override func downloadsDirectory(forProfileID profileID: String) -> URL? {
+    FileManager.default.temporaryDirectory
+  }
+  override func beginDeveloperSession(
+    forTabID tabID: String, profileID: String, windowID: String
+  ) -> Bool { true }
+  override func endDeveloperSession(forTabID tabID: String, profileID: String, windowID: String) {}
+
+  override func developerCall(
+    _ method: String, params: [AnyHashable: Any], tabID: String, profileID: String,
+    windowID: String,
+    completion: @escaping @MainActor @Sendable ([String: Any]?, (any Error)?) -> Void
+  ) {
+    if method == "Runtime.evaluate" {
+      completion(["result": ["value": [
+        "url": "https://example.test/report", "title": "Example", "console": [],
+        "viewport": [:],
+      ]]], nil)
+    } else if method == "Page.captureScreenshot" {
+      let pngHeader = Data([137, 80, 78, 71, 13, 10, 26, 10]).base64EncodedString()
+      completion(["data": pngHeader], nil)
+    } else {
+      completion(["result": [:]], nil)
+    }
   }
 }

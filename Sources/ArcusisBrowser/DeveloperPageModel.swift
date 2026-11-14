@@ -29,6 +29,10 @@ final class DeveloperPageModel {
   @ObservationIgnored private var builtInToolsOpen = false
   @ObservationIgnored private var mediaMonitor: Task<Void, Never>?
   @ObservationIgnored private var drainTask: Task<Void, Never>?
+  @ObservationIgnored var bugReportArchiveWriter: ([String: Data], URL) async throws -> URL = {
+    files, directory in
+    try await BugReportArchive.save(files: files, directory: directory)
+  }
 
   init(target: SiteControlTarget, engine: BrowserEngine?) {
     self.target = target

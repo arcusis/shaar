@@ -80,7 +80,7 @@ extension DeveloperPageModel {
       guard let encoded = capture["data"] as? String, encoded.utf8.count <= 44 * 1024 * 1024,
         let png = Data(base64Encoded: encoded),
         png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]),
-        destination == target, generation == documentGeneration
+        canCompleteBugReport(for: destination, generation: generation, engine: engine)
       else {
         throw DeveloperModeFailure(
           InspectorToolsL10n.string("The page changed or its screenshot could not be captured."))
@@ -131,7 +131,14 @@ extension DeveloperPageModel {
         "README.txt": Data(
           (BugReportArchive.scope + "\nSensitive HAR headers included: \(includeHeaders).\n").utf8),
       ]
-      let file = try await BugReportArchive.save(files: files, directory: directory)
+      guard canCompleteBugReport(for: destination, generation: generation, engine: engine) else {
+        return nil
+      }
+      let file = try await bugReportArchiveWriter(files, directory)
+      guard canCompleteBugReport(for: destination, generation: generation, engine: engine) else {
+        try? FileManager.default.removeItem(at: file)
+        return nil
+      }
       reportURL = file
       engine.downloads.registerGeneratedFile(file, profileID: destination.profileID)
       if engine.store?.session.selectedSpace.profileID == destination.profileID {
@@ -139,8 +146,19 @@ extension DeveloperPageModel {
       }
       return file
     } catch {
-      reportFailure = InspectorToolsL10n.string("Could not create the bug report. Try again.")
+      if let engine,
+        canCompleteBugReport(for: destination, generation: generation, engine: engine)
+      {
+        reportFailure = InspectorToolsL10n.string("Could not create the bug report. Try again.")
+      }
       return nil
     }
+  }
+
+  private func canCompleteBugReport(
+    for destination: SiteControlTarget, generation: Int, engine: BrowserEngine
+  ) -> Bool {
+    !Task.isCancelled && !closed && !engine.isClosed
+      && destination == target && generation == documentGeneration
   }
 }

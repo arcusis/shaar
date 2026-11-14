@@ -179,6 +179,19 @@ import Testing
     #expect(inspector.styles.failure == nil)
   }
 
+  @Test func cancelledScreenshotDoesNotStartCapture() async throws {
+    let inspector = makeInspector()
+    inspector.open()
+    defer { inspector.close() }
+    try inspector.receive(InspectorPanelTests.fixtureSelection())
+
+    let capture = Task { @MainActor in try await inspector.styles.screenshot() }
+    capture.cancel()
+    await #expect(throws: CancellationError.self) { try await capture.value }
+
+    #expect(!inspector.styles.capturing)
+  }
+
   @Test func nativeCSSPanelRendersGridFlexAndSourceLimitStates() async throws {
     let inspector = makeInspector()
     inspector.open()

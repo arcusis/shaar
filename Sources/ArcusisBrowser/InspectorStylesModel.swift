@@ -634,6 +634,7 @@ final class InspectorStylesModel {
   }
 
   func screenshot() async throws -> Data {
+    guard !Task.isCancelled else { throw CancellationError() }
     guard !capturing else {
       throw InspectorFailure(InspectorL10n.string("An element capture is already in progress."))
     }

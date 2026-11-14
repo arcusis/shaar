@@ -101,9 +101,13 @@ struct DeviceChooserEngineTests {
   private static func event(
     id: String, kind: String, tabID: UUID, profileID: UUID, url: URL
   ) -> [String: Any] {
-    [
+    var origin = URLComponents(url: url, resolvingAgainstBaseURL: false)
+    origin?.path = ""
+    origin?.query = nil
+    origin?.fragment = nil
+    return [
       "schemaVersion": 1, "kind": kind, "id": id, "transport": "usb",
-      "pageURL": url.absoluteString, "origin": url.absoluteString, "options": [],
+      "pageURL": url.absoluteString, "origin": origin?.string ?? url.absoluteString, "options": [],
       "canGrant": false, "profileID": profileID.uuidString,
       "tabID": tabID.uuidString, "windowID": "chooser-window",
     ]

@@ -100,6 +100,9 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (completion) completion(ARCBridgeError(@"Shaar engine unavailable."));
 }
 
+- (void)resolveDeviceChooserRequestID:(NSString *)requestID optionID:(NSString *)optionID {
+}
+
 - (void)discardTabID:(NSString *)tabID {}
 
 - (void)probeTabLifecycleForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {

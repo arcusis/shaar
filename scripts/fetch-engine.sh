@@ -26,6 +26,9 @@ checksum=$(jq -er .sha256 "$pin")
   echo 'Shaar engine asset and tag do not match.' >&2; exit 1;
 }
 archive="$cache/$asset"
+[[ ! -L "$PWD/build" && ! -L "$cache" ]] || {
+  echo 'Refusing symlinked engine cache directory.' >&2; exit 1;
+}
 mkdir -p "$cache"
 if [[ -L "$archive" || -L "$archive.partial" ]]; then
   echo 'Engine archive cache paths must not be symlinks.' >&2

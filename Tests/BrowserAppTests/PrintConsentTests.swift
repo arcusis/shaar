@@ -336,6 +336,64 @@ struct PrintConsentTests {
     #expect(store.sheet == nil)
   }
 
+  @Test func navigationCommitCancelsPrintConsentBeforeFrameCanBeRebound() throws {
+    let store = openedStore()
+    let print = try request(store)
+    let queuedPrint = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decisions: [(String, Bool)] = []
+    store.onPrintDecision = { id, accepted in decisions.append((id, accepted)) }
+
+    #expect(store.requestPrint(print))
+    #expect(store.requestPrint(queuedPrint))
+    store.nativeDocumentCommitted(print.tabID, profileID: print.profileID)
+
+    #expect(decisions.map(\.0) == [print.id, queuedPrint.id])
+    #expect(decisions.map(\.1) == [false, false])
+    #expect(store.sheet == nil)
+
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    store.resolvePrint(print.id, accepted: true)
+    store.resolvePrint(queuedPrint.id, accepted: true)
+    #expect(decisions.map(\.1) == [false, false])
+  }
+
+  @Test func changedFrameBindingCancelsPendingPrintConsent() throws {
+    let store = openedStore()
+    let print = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decisions: [(String, Bool)] = []
+    store.onPrintDecision = { id, accepted in decisions.append((id, accepted)) }
+
+    #expect(store.requestPrint(print))
+    store.rememberPermissionFrame(
+      print.tabID, frameID: "fedcba9876543210fedcba9876543210",
+      origin: URL(string: "https://other.example"))
+
+    #expect(decisions.map(\.0) == [print.id])
+    #expect(decisions.map(\.1) == [false])
+    #expect(store.sheet == nil)
+  }
+
+  @Test func changedOriginBindingCancelsPendingPrintConsent() throws {
+    let store = openedStore()
+    let print = try request(store)
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
+    var decision: Bool?
+    store.onPrintDecision = { _, accepted in decision = accepted }
+
+    #expect(store.requestPrint(print))
+    store.rememberPermissionFrame(
+      print.tabID, frameID: print.frameID, origin: URL(string: "https://other.example"))
+
+    #expect(decision == false)
+    #expect(store.sheet == nil)
+  }
+
   @Test func privatePrintRequestsAreBoundAndUnboundRequestsAreDenied() throws {
     let privateStore = BrowserStore(privateSession: .fresh())
     privateStore.perform(.open(URL(string: "https://example.com/article")!))

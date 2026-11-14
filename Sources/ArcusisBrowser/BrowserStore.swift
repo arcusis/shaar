@@ -864,6 +864,7 @@ final class BrowserStore {
     permissionFrames[id] = nil
     permissionFrameOrigins[id] = nil
     cancelWebSharesInvalidatedByFrame(for: id)
+    cancelPrintsInvalidatedByFrame(for: id)
     guard rendererFailures[id]?.profileID == profileID else { return }
     rendererFailures[id] = nil
   }
@@ -1165,6 +1166,19 @@ final class BrowserStore {
     return request.matches(session, frameID: frameID, origin: origin)
   }
 
+  private func cancelPrintsInvalidatedByFrame(for tabID: UUID) {
+    let staleIDs = consentRequests.compactMap { request -> String? in
+      guard case .print(let printRequest) = request,
+        printRequest.tabID == tabID,
+        !printRequestIsCurrent(printRequest)
+      else { return nil }
+      return request.id
+    }
+    for id in staleIDs {
+      resolveConsent(id, accepted: false)
+    }
+  }
+
   func resolvePrint(_ id: String, accepted: Bool) {
     let sheetID = "print-\(id)"
     guard let request = consentRequests.first(where: { $0.id == sheetID }),
@@ -1264,6 +1278,7 @@ final class BrowserStore {
     permissionFrameOrigins[tabID] = origin
     cancelWebSharesInvalidatedByFrame(for: tabID)
     cancelDesktopCapturesInvalidatedByFrame(for: tabID)
+    cancelPrintsInvalidatedByFrame(for: tabID)
   }
 
   func forgetPermissionFrame(_ tabID: UUID, matching frameID: String?) {

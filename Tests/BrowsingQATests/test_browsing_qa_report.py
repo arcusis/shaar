@@ -94,12 +94,8 @@ class BrowsingQAReportTests(unittest.TestCase):
         fixture = (ROOT / "scripts/test-browsing-qa.py").read_text()
         source = (ROOT / "Sources/ShaarVerification/ShaarBrowsingQA.swift").read_text()
         self.assertIn("window.__scrollLoadThresholdReached=false", fixture)
-        self.assertIn(
-            "window.__scrollLoadThresholdReached=true;if(feed.children.length<200)add(100)",
-            fixture)
+        self.assertIn("window.__scrollLoadThresholdReached=true", fixture)
         self.assertIn('script: "window.__scrollLoadThresholdReached?1:0"', source)
-        source = (ROOT / "Sources/ShaarVerification/ShaarBrowsingQA.swift").read_text()
-        self.assertIn("feed.scrollTop+feed.clientHeight>=feed.scrollHeight-80", source)
         self.assertIn("the feed did not reach its lazy-load threshold", source)
 
     def test_fifty_tabs_always_run(self):

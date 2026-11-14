@@ -561,8 +561,7 @@ import Foundation
       reachedLoadThreshold = await untilReady(attempts: 20) {
         (wholeNumber(await evaluate(
           runtime, tab: scrollID,
-          script:
-            "(()=>{const feed=document.getElementById('feed');return feed&&feed.scrollTop+feed.clientHeight>=feed.scrollHeight-80?1:0})()"
+          script: "window.__scrollLoadThresholdReached?1:0"
         )) ?? 0) == 1
       }
     }

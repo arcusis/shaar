@@ -119,11 +119,11 @@ struct DeviceChooserEngineTests {
 
     var resolvedID: String?
     var resolvedWindowID: String?
-    var resolvedIndex: Int??
-    events.onDeviceChooserResolution = { id, windowID, index in
+    var resolvedOptionID: String??
+    events.onDeviceChooserResolution = { id, windowID, optionID in
       resolvedID = id
       resolvedWindowID = windowID
-      resolvedIndex = .some(index)
+      resolvedOptionID = .some(optionID)
     }
     store = nil
     runtime.onDeviceChooserEvent?(Self.event(
@@ -132,7 +132,7 @@ struct DeviceChooserEngineTests {
 
     #expect(resolvedID == "chooser-store-released")
     #expect(resolvedWindowID == "chooser-window")
-    #expect(resolvedIndex == .some(nil))
+    #expect(resolvedOptionID == .some(nil))
   }
 
   private static func event(

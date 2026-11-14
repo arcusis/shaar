@@ -15,7 +15,7 @@ extension BrowserEngine {
     }
     guard let store else {
       if kind != "deviceChooserDismissed" {
-        events.resolveDeviceChooser(id, windowID: windowID, index: nil)
+        events.resolveDeviceChooser(id, windowID: windowID, optionID: nil)
       }
       return
     }

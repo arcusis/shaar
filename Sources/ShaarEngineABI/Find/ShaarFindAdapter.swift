@@ -12,6 +12,13 @@ private func findInteger(_ value: Any?) -> Int? {
   return Int(exactly: number.doubleValue)
 }
 
+private func findBoolean(_ value: Any?) -> Bool? {
+  guard let number = value as? NSNumber,
+    CFGetTypeID(number) == CFBooleanGetTypeID()
+  else { return nil }
+  return number.boolValue
+}
+
 public enum ShaarFindOperation: UInt32, Sendable {
   case find = 900
   case stop = 901
@@ -100,7 +107,7 @@ public struct ShaarFindUpdate: Equatable, Sendable {
       UInt64(request) == expectedRequestID,
       let count = findInteger(object["matchCount"]),
       let active = findInteger(object["activeMatch"]),
-      let final = object["final"] as? Bool
+      let final = findBoolean(object["final"])
     else { return nil }
     return ShaarFindUpdate(
       requestID: expectedRequestID, matchCount: count,

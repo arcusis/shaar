@@ -115,8 +115,8 @@ public enum ShaarEventCopy {
 
   public init(
     handler: @escaping @MainActor (ShaarCopiedEvent) -> Void,
-    onError: @escaping @MainActor (ShaarEngineError) -> Void = {
-      NSLog("Shaar engine event rejected: %@", String(describing: $0))
+    onError: @escaping @MainActor (ShaarEngineError) -> Void = { _ in
+      NSLog("Shaar engine event rejected")
     }
   ) {
     self.handler = handler

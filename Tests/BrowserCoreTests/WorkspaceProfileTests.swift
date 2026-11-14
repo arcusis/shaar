@@ -24,7 +24,9 @@ import Testing
     let workspace = try BrowserWorkspace(session: session)
 
     let start = ContinuousClock.now
-    for _ in 0..<10 { try workspace.validate() }
+    for _ in 0..<10 {
+      #expect(throws: Never.self) { try workspace.validate() }
+    }
     print("workspacePinValidationBenchmark: \(start.duration(to: .now))")
   }
 

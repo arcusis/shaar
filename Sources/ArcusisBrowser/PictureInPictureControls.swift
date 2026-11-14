@@ -36,7 +36,10 @@ final class PictureInPictureControls {
     view.onGesture = { [weak self] in self?.handle($0) }
   }
 
-  isolated deinit { pendingAttachment?.cancel() }
+  isolated deinit {
+    pendingAttachment?.cancel()
+    detach()
+  }
 
   var isAttached: Bool { panel != nil }
 

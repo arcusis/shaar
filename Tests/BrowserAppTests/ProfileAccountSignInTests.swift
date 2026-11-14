@@ -12,6 +12,10 @@ import Testing
 
 @Suite @MainActor
 struct ProfileAccountSignInTests {
+  @Test func missingSignInPageLoadingLabelIsLocalized() {
+    #expect(ProfileAccountSignInAccessibility.loadingLabel == SettingsL10n.string("Loading sign-in…"))
+  }
+
   @Test func hiddenSignInOwnsItsWindowUntilCancellationAndFinishesOnce() throws {
     let runtime = SignInWindowTestRuntime()
     let profile = BrowserProfile(id: UUID(), name: "Work")

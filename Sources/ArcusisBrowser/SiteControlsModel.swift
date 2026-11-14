@@ -207,6 +207,7 @@ final class SiteControlsModel: Identifiable {
     } catch is CancellationError {
       return false
     } catch {
+      guard !Task.isCancelled else { return false }
       failure = ShellL10n.format(
         "Could not complete the %@ action. Try again.", arguments: [.string(action.title)])
       return false

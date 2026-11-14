@@ -272,6 +272,25 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.savingPermissions.isEmpty)
 }
 
+@MainActor @Test func cancelledSiteActionDoesNotPublishItsLateFailure() async {
+  let backend = FakeSiteBackend()
+  backend.suspendNextAction = true
+  backend.failsWrites = true
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  let action = Task { await model.perform(.reload) }
+  for _ in 0..<100 where backend.finishAction == nil { await Task.yield() }
+  #expect(backend.finishAction != nil)
+
+  action.cancel()
+  backend.finishAction?.resume()
+  let actionSucceeded = await action.value
+  #expect(!actionSucceeded)
+
+  #expect(model.failure == nil)
+  #expect(model.runningAction == nil)
+}
+}
+
 @MainActor @Test func siteControlsDoNotOverlapWritesToTheSamePermission() async {
   let backend = FakeSiteBackend()
   backend.suspendFirstWrite = true

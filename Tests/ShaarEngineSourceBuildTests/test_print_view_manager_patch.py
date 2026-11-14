@@ -28,6 +28,12 @@ class PrintViewManagerPatchTests(unittest.TestCase):
         self.assertIn("is_switching_to_system_dialog_ = false;", patch)
         self.assertIn("OnPrintPreviewRequestRejected(rfh_id);", patch)
 
+    def test_native_handoff_preserves_scripted_print_completion_lifecycle(self):
+        patch = PATCH.read_text()
+        self.assertIn("EXPECT_FALSE(scripted_print_finished);", patch)
+        self.assertIn("print_view_manager->PrintPreviewDone();", patch)
+        self.assertIn("EXPECT_TRUE(scripted_print_finished);", patch)
+
     def test_patch_is_pinned_once_in_application_order(self):
         entries = json.loads(MANIFEST.read_text())["patches"]
         name = str(PATCH.relative_to(ROOT))

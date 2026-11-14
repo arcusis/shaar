@@ -91,7 +91,7 @@ import Testing
     .first { $0.name == "q" }?.value
   #expect(destination.host() == "www.google.com")
   #expect(query == input)
-  #expect(NavigationInput.address(for: "https://alice@example.com")?.host() == "example.com")
+  #expect(NavigationInput.address(for: "https://alice@example.com") == nil)
   #expect(
     NavigationInput.address(for: "example.com/path@alice")?.absoluteString
       == "https://example.com/path@alice")

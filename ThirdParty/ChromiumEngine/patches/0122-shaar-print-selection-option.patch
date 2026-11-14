@@ -1,0 +1,20 @@
+diff --git a/printing/printing_context_mac.mm b/printing/printing_context_mac.mm
+index 000000000000..000000000000 100644
+--- a/printing/printing_context_mac.mm
++++ b/printing/printing_context_mac.mm
+@@ -448,6 +448,14 @@
+     // NSPrintPanelShowsPrintSelection).
+     NSPrintPanel* panel = [NSPrintPanel printPanel];
+     panel.options |= NSPrintPanelShowsPaperSize | NSPrintPanelShowsOrientation |
+-                     NSPrintPanelShowsScaling;
++                     NSPrintPanelShowsScaling | NSPrintPanelShowsCopies |
++                     NSPrintPanelShowsPageRange;
++    // Expose the native selection option only when the page has a selection.
++    // The system panel then carries the user's choice into print settings.
++    if (has_selection) {
++      panel.options |= NSPrintPanelShowsPrintSelection;
++    } else {
++      panel.options &= ~NSPrintPanelShowsPrintSelection;
++    }
+ 
+     // Set the print job title text.

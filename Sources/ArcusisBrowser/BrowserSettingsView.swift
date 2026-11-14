@@ -796,11 +796,15 @@ enum ProfileNameEditPolicy {
 }
 
 struct BrowserLanguageRestartPrompt: View {
+  static let headingTraits: AccessibilityTraits = .isHeader
+
   let onRestart: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text(SettingsL10n.string("Restart Shaar to apply")).font(.headline)
+      Text(SettingsL10n.string("Restart Shaar to apply"))
+        .font(.headline)
+        .accessibilityAddTraits(Self.headingTraits)
       Text(SettingsL10n.string("Your windows and tabs will be restored."))
         .font(.caption).foregroundStyle(.secondary)
       Button(SettingsL10n.string("Restart Shaar"), action: onRestart)

@@ -38,4 +38,19 @@ struct ShaarBrowsingEdgeProbeScalarTests {
     #expect(ShaarBrowsingEdgeProbe.numbers([1, 2.5, true, "4", 5]) == [1, 5])
     #expect(ShaarBrowsingEdgeProbe.numbers("not an array").isEmpty)
   }
+
+  @Test func videoVerdictRejectsPausedFramesEvenWhenTheyHaveDimensions() {
+    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
+      "video": true, "paused": true, "videoWidth": 320,
+    ]))
+    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
+      "video": true, "paused": false, "videoWidth": 0,
+    ]))
+    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
+      "video": true, "videoWidth": 320,
+    ]))
+    #expect(ShaarBrowsingEdgeProbe.videoIsPlaying([
+      "video": true, "paused": false, "videoWidth": 320,
+    ]))
+  }
 }

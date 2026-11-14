@@ -147,3 +147,7 @@ class BrowsingEdgeReportTests(unittest.TestCase):
         source = (ROOT / 'Sources/ShaarVerification/ShaarBrowsingEdgeProbe.swift').read_text()
         self.assertIn('let scrollEndEvents = number(second?["scrollEndEvents"]) ?? 0', source)
         self.assertIn('scrollEvents > 0 && scrollEndEvents > 0', source)
+
+    def test_media_fixture_rejects_a_paused_video_with_dimensions(self):
+        fixture = PROBE.MEDIA.decode()
+        self.assertIn('!video.paused && video.videoWidth > 0', fixture)

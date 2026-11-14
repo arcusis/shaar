@@ -337,22 +337,25 @@ struct PrintConsentTests {
   @Test func navigationCommitCancelsPrintConsentBeforeFrameCanBeRebound() throws {
     let store = openedStore()
     let print = try request(store)
+    let queuedPrint = try request(store)
     store.rememberPermissionFrame(
       print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
     var decisions: [(String, Bool)] = []
     store.onPrintDecision = { id, accepted in decisions.append((id, accepted)) }
 
     #expect(store.requestPrint(print))
+    #expect(store.requestPrint(queuedPrint))
     store.nativeDocumentCommitted(print.tabID, profileID: print.profileID)
 
-    #expect(decisions.map(\.0) == [print.id])
-    #expect(decisions.map(\.1) == [false])
+    #expect(decisions.map(\.0) == [print.id, queuedPrint.id])
+    #expect(decisions.map(\.1) == [false, false])
     #expect(store.sheet == nil)
 
     store.rememberPermissionFrame(
       print.tabID, frameID: print.frameID, origin: print.requestingOrigin)
     store.resolvePrint(print.id, accepted: true)
-    #expect(decisions.map(\.1) == [false])
+    store.resolvePrint(queuedPrint.id, accepted: true)
+    #expect(decisions.map(\.1) == [false, false])
   }
 
   @Test func changedFrameBindingCancelsPendingPrintConsent() throws {

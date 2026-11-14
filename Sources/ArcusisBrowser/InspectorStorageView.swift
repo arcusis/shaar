@@ -2,9 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import SwiftUI
 
 struct InspectorStorageView: View {
+  static func backendFailureMessage(
+    for error: Error, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    InspectorToolsL10n.backendError(error.localizedDescription, language: language)
+  }
+
   static func entryAccessibilityTraits(isSelected: Bool) -> AccessibilityTraits {
     isSelected ? .isSelected : []
   }
@@ -171,7 +178,7 @@ struct InspectorStorageView: View {
         let full = try await model.storageValue(key: row.key)
         guard generation == document, area == model.storageArea, selected == row.id else { return }
         value = full
-      } catch { self.error = InspectorToolsL10n.backendError(error.localizedDescription) }
+      } catch { self.error = Self.backendFailureMessage(for: error) }
       if generation == document, area == model.storageArea, selected == row.id { reading = false }
     }
   }
@@ -179,7 +186,7 @@ struct InspectorStorageView: View {
   private func refresh() {
     Task {
       do { try await model.loadStorage() } catch {
-        self.error = InspectorToolsL10n.backendError(error.localizedDescription)
+        self.error = Self.backendFailureMessage(for: error)
       }
     }
   }

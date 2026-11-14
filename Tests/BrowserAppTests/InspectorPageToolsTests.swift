@@ -20,6 +20,15 @@ import Testing
     #expect(!InspectorStorageView.entryAccessibilityTraits(isSelected: false).contains(.isSelected))
   }
 
+  @Test func storageReadAndRefreshFailuresUseHebrewCatalogCopy() {
+    let error = NSError(
+      domain: "DevTools", code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "Storage could not be read."])
+    #expect(
+      InspectorStorageView.backendFailureMessage(for: error, language: .hebrew)
+        == "לא ניתן לקרוא את האחסון.")
+  }
+
   @Test func backendFailuresUseLocalizedPageToolsRecoveryCopy() {
     let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(

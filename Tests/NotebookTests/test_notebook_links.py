@@ -65,6 +65,14 @@ class NotebookLinksTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("Note not linked from any index: CommentedOut.md", result.stderr)
 
+    def test_html_comment_marker_inside_fence_does_not_hide_following_index_links(self):
+        result = self.run_check({
+            "_INDEX_Main.md": "```html\n<!-- example comment\n```\n[[Visible]]",
+            "Visible.md": "# Visible",
+        })
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_wrong_case_or_missing_target_does_not_count(self):
         result = self.run_check({"_INDEX_Main.md": "[[note]]\n[[Missing]]", "Note.md": ""})
         self.assertEqual(result.returncode, 1)

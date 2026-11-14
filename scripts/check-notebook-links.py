@@ -19,18 +19,43 @@ WIKI_LINK = re.compile(r"(?<!\\)\[\[([^\]\n]+)\]\]")
 
 def index_text(path: Path) -> str:
     """Exclude comments and fenced examples, which are not navigation links."""
-    text = re.sub(r"<!--.*?(?:-->|$)", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
     lines = []
     fence = None
-    for line in text.splitlines():
-        marker = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", line)
+    in_comment = False
+    for line in path.read_text(encoding="utf-8").splitlines():
         if fence is not None:
+            marker = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", line)
             if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
                 fence = None
-        elif marker:
+            continue
+
+        visible = []
+        position = 0
+        while position < len(line):
+            if in_comment:
+                end = line.find("-->", position)
+                if end < 0:
+                    break
+                in_comment = False
+                position = end + 3
+            else:
+                start = line.find("<!--", position)
+                if start < 0:
+                    visible.append(line[position:])
+                    break
+                visible.append(line[position:start])
+                end = line.find("-->", start + 4)
+                if end < 0:
+                    in_comment = True
+                    break
+                position = end + 3
+
+        uncommented = "".join(visible)
+        marker = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", uncommented)
+        if marker:
             fence = marker[1]
         else:
-            lines.append(re.sub(r"(`+).*?\1", "", line))
+            lines.append(re.sub(r"(`+).*?\1", "", uncommented))
     return "\n".join(lines)
 
 

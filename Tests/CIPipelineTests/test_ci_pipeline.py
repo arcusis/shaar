@@ -264,6 +264,12 @@ class PipelineGateTests(unittest.TestCase):
         self.assertIn("`Sources/A.swift:3`", body)
         self.assertIn("high", body)
 
+    def test_code_scanning_issue_sync_bounds_github_api_calls(self):
+        with patch.object(SCANNING_ISSUES.subprocess, "check_output", return_value="[]") as check_output:
+            self.assertEqual(SCANNING_ISSUES.gh("repos/arcusis/shaar/issues"), [])
+        self.assertEqual(check_output.call_args.kwargs["timeout"], SCANNING_ISSUES.GH_API_TIMEOUT_SECONDS)
+        self.assertGreater(SCANNING_ISSUES.GH_API_TIMEOUT_SECONDS, 0)
+
     def test_app_icon_changes_skip_website_jobs_but_logo_changes_keep_them(self):
         self.assertEqual(PLAN.select_stages(["Branding/shaar-logo.svg"], "pull_request"),
                          (False, True, True))

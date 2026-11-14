@@ -11,6 +11,7 @@ import re
 import subprocess
 
 LABEL = "code-scanning"
+GH_API_TIMEOUT_SECONDS = 30
 TITLE_MARKER = re.compile(r"^\[code-scanning #(\d+)\] ")
 
 
@@ -18,7 +19,8 @@ def gh(*args: str, payload: dict | None = None) -> dict | list:
     command = ["gh", "api", *args]
     if payload is not None:
         command += ["--input", "-"]
-    output = subprocess.check_output(command, text=True, input=json.dumps(payload) if payload else None)
+    output = subprocess.check_output(command, text=True, input=json.dumps(payload) if payload else None,
+                                     timeout=GH_API_TIMEOUT_SECONDS)
     return json.loads(output) if output.strip() else {}
 
 

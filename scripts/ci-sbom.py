@@ -78,8 +78,20 @@ def build_document(app: Path, candidate: Path, revision: str, pin: dict, depende
     return document, links
 
 
+def validate_output_paths(directory: Path) -> None:
+    if directory.is_symlink() or not directory.is_dir():
+        raise ValueError(f"SBOM output directory is not a regular directory: {directory}")
+    for name in ("Shaar-unsigned-candidate.zip", "sbom.spdx.json", "symlinks.json", "candidate.sha256"):
+        path = directory / name
+        if path.is_symlink():
+            raise ValueError(f"SBOM output path must not be a symlink: {path}")
+        if path.exists() and not path.is_file():
+            raise ValueError(f"SBOM output path is not a regular file: {path}")
+
+
 def main() -> None:
     directory = ROOT / "build/ci/shipping"
+    validate_output_paths(directory)
     app = ROOT / "build/Shaar.app"
     candidate = directory / "Shaar-unsigned-candidate.zip"
     subprocess.run(["ditto", "-c", "-k", "--keepParent", str(app), str(candidate)], check=True)

@@ -377,7 +377,7 @@ def read_report(path: Path) -> dict:
         return {}
     try:
         value = json.loads(path.read_text())
-    except json.JSONDecodeError:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return {}
     return value if isinstance(value, dict) else {}
 

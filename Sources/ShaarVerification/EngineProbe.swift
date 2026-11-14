@@ -46,6 +46,12 @@ enum EngineProbeMeasurementArguments {
   }
 }
 
+enum EngineProbeSnapshotValidation {
+  static func isAuthoredFixture(_ snapshot: [String: Any]) -> Bool {
+    snapshot["fixture"] as? String == "v1"
+  }
+}
+
 /// Uses only a marked, disposable directory and an authored loopback fixture.
 /// No window is ordered onscreen and no existing browser profiles are opened.
 @MainActor
@@ -472,7 +478,7 @@ final class EngineProbe {
     for _ in 0..<80 {
       if let result = try? await evaluate(tab, script) as? [String: Any] {
         receivedJavaScript = true
-        if result["fixture"] as? String == "v1" { return result }
+        if EngineProbeSnapshotValidation.isAuthoredFixture(result) { return result }
       }
       try await Task.sleep(for: .milliseconds(100))
     }

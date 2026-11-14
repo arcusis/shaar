@@ -353,8 +353,9 @@ private struct LibrarySpaceItemsView: View {
 
 enum LibrarySpaceItemsAccessibility {
   static func tabLabel(title: String, address: String) -> String {
-    let accessibleTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      ? address : title
+    let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedTitle.isEmpty, title != address else { return address }
+    let accessibleTitle = title
     return "\(accessibleTitle), \(address)"
   }
 }

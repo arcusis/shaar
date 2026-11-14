@@ -129,10 +129,11 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     let address = "https://example.com/page"
     XCTAssertEqual(
       LibrarySpaceItemsAccessibility.tabLabel(title: "", address: address),
-      "\(address), \(address)")
+      address)
     XCTAssertEqual(
       LibrarySpaceItemsAccessibility.tabLabel(title: " \n\t", address: address),
-      "\(address), \(address)")
+      address)
+    XCTAssertEqual(LibrarySpaceItemsAccessibility.tabLabel(title: address, address: address), address)
     XCTAssertEqual(
       LibrarySpaceItemsAccessibility.tabLabel(title: " Article ", address: address),
       " Article , \(address)")

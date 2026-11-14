@@ -19,6 +19,32 @@ SPEC.loader.exec_module(REBRAND)
 
 
 class RebrandEngineFrameworkTests(unittest.TestCase):
+    def test_rebrand_rejects_current_version_symlink_that_escapes_framework(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            framework = root / "Chromium Framework.framework"
+            versions = framework / "Versions"
+            versions.mkdir(parents=True)
+            outside = root / "outside-version"
+            resources = outside / "Resources"
+            resources.mkdir(parents=True)
+            framework_info = resources / "Info.plist"
+            framework_info.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.ardia.framework"}))
+            helpers = outside / "Helpers"
+            for name in REBRAND.HELPER_IDS:
+                info = helpers / name / "Contents/Info.plist"
+                info.parent.mkdir(parents=True)
+                info.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.ardia.helper"}))
+            (versions / "Current").symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "Current version escapes Versions"):
+                REBRAND.rebrand(framework)
+
+            self.assertEqual(
+                plistlib.loads(framework_info.read_bytes())["CFBundleIdentifier"],
+                "com.ardia.framework",
+            )
+
     def test_rebrand_rejects_symlinked_helper_bundle_before_modifying_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

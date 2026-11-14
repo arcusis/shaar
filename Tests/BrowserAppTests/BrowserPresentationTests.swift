@@ -31,6 +31,22 @@ struct BrowserPresentationTests {
     #expect(visibility == .hidden)
   }
 
+  @Test func librarySheetsHaveStableDistinctIDsAndAreNotConsentRequests() {
+    let profileID = UUID()
+    let bookmarks = BrowserSheet.library(profileID: profileID, section: .bookmarks)
+    let history = BrowserSheet.library(profileID: profileID, section: .history)
+    let downloads = BrowserSheet.downloads(profileID: profileID)
+
+    #expect(bookmarks.id == "library-\(profileID)-bookmarks")
+    #expect(bookmarks.id == BrowserSheet.library(profileID: profileID, section: .bookmarks).id)
+    #expect(bookmarks.id != history.id)
+    #expect(bookmarks.isConsent == false)
+    #expect(history.isConsent == false)
+    #expect(downloads.isConsent == false)
+    #expect(bookmarks.tabID == nil)
+    #expect(downloads.tabID == nil)
+  }
+
   @Test func librarySheetsHaveProfileScopedIdentityAndAreNotConsent() throws {
     let firstProfile = UUID()
     let secondProfile = UUID()

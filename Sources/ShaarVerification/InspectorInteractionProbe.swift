@@ -16,6 +16,12 @@ enum InspectorInteractionProbeOptions {
   }
 }
 
+enum InspectorInteractionEvidence {
+  static func acceptsInput(trusted: Bool?, activated: Int?, usesDOMEvents: Bool) -> Bool {
+    trusted == !usesDOMEvents && activated == 0
+  }
+}
+
 /// Synthesized AppKit events use the real native hit-test and renderer overlay.
 /// Does not prove physical desktop input or visible-window presentation.
 @MainActor
@@ -64,8 +70,10 @@ struct InspectorInteractionProbe {
       if id == "input-button" { try capturePanel() }
     }
     let trusted = try await model.evaluate("globalThis.inspectorInputTrusted") as? Bool
-    guard trusted == !usesDOMEvents,
-      try await model.evaluate("globalThis.inspectorInputActivated || 0") as? Int == 0
+    guard InspectorInteractionEvidence.acceptsInput(
+      trusted: trusted,
+      activated: try await model.evaluate("globalThis.inspectorInputActivated || 0") as? Int,
+      usesDOMEvents: usesDOMEvents)
     else { throw InspectorFailure("Input was untrusted or activated the inspected page.") }
     model.close()
     try await wait("overlay removal after close") {

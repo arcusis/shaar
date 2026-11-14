@@ -128,6 +128,23 @@ class CatalogValidatorTests(unittest.TestCase):
         ]["plural"]["two"]["stringUnit"]["value"]
         self.assertEqual(two, "שני סוכנים מחוברים")
 
+    def test_clear_history_failure_uses_hebrew_recovery_copy(self):
+        key = "Could not clear history. Try again."
+        catalog = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Settings.xcstrings").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
+            "לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב.",
+        )
+        source = (ROOT / "Sources/ArcusisBrowser/BrowserSettingsView.swift").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('SettingsL10n.string("Could not clear history. Try again.")', source)
+        self.assertNotIn('SettingsL10n.format("Could not clear history: %"', source)
+
     def validate(self, data):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Fixture.xcstrings"
